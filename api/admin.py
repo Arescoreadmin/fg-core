@@ -152,28 +152,6 @@ class TenantTierUpdate(BaseModel):
     )
 
 
-class KeyRotationResponse(BaseModel):
-    """Response for key rotation."""
-
-    success: bool
-    old_key_prefix: str
-    new_key_prefix: Optional[str]
-    grace_period_until: Optional[str]
-    message: str
-
-
-class KeyRotationStatusResponse(BaseModel):
-    """Response for key rotation status."""
-
-    prefix: str
-    status: str
-    created_at: str
-    expires_at: Optional[str]
-    days_until_expiration: Optional[int]
-    rotation_recommended: bool
-    message: Optional[str]
-
-
 class AdminCreateKeyRequest(BaseModel):
     """Request to create a new API key via admin."""
 
@@ -1896,84 +1874,6 @@ async def admin_rotate_key(
         expires_at=result["expires_at"],
         old_key_revoked=result["old_key_revoked"],
     )
-
-
-# =============================================================================
-# Key Rotation Endpoints
-# =============================================================================
-
-
-@router.get(
-    "/keys/{key_prefix}/rotation-status",
-    response_model=KeyRotationStatusResponse,
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-async def get_key_rotation_status(
-    key_prefix: str,
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-) -> KeyRotationStatusResponse:
-    """Get rotation status for an API key."""
-    try:
-        from api.key_rotation import check_key_rotation_status
-    except ImportError:
-        raise HTTPException(
-            status_code=501,
-            detail="Key rotation management not available",
-        )
-
-    info = check_key_rotation_status(key_prefix)
-    if not info:
-        raise HTTPException(status_code=404, detail="Key not found")
-
-    return KeyRotationStatusResponse(
-        prefix=info.prefix,
-        status=info.status.value,
-        created_at=info.created_at.isoformat(),
-        expires_at=info.expires_at.isoformat() if info.expires_at else None,
-        days_until_expiration=info.days_until_expiration,
-        rotation_recommended=info.rotation_recommended,
-        message=info.message,
-    )
-
-
-@router.get(
-    "/keys/needing-rotation",
-    response_model=List[KeyRotationStatusResponse],
-    dependencies=[Depends(require_scopes("admin:read"))],
-)
-async def get_keys_needing_rotation(
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-) -> List[KeyRotationStatusResponse]:
-    """Get all keys that need rotation."""
-    try:
-        from api.key_rotation import get_rotation_manager
-    except ImportError:
-        raise HTTPException(
-            status_code=501,
-            detail="Key rotation management not available",
-        )
-
-    manager = get_rotation_manager()
-    keys = manager.get_keys_needing_rotation()
-
-    return [
-        KeyRotationStatusResponse(
-            prefix=info.prefix,
-            status=info.status.value,
-            created_at=info.created_at.isoformat(),
-            expires_at=info.expires_at.isoformat() if info.expires_at else None,
-            days_until_expiration=info.days_until_expiration,
-            rotation_recommended=info.rotation_recommended,
-            message=info.message,
-        )
-        for info in keys
-    ]
-
-
-# BUG-001 removed: the duplicate POST /keys/{key_prefix}/rotate that called
-# api.key_rotation.rotate_api_key with no tenant enforcement has been deleted.
-# The tenant-enforced route admin_rotate_key (POST /keys/{key_prefix}/rotate,
-# keys:write + key.manage + bind_tenant_id) above is the sole rotation path.
 
 
 # =============================================================================

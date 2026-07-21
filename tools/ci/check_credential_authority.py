@@ -108,6 +108,44 @@ def main() -> int:
         "TenantRepository import confirmed"
     )
 
+    # R4.8: block resurrection of legacy credential modules
+    _RETIRED_MODULES = ("api.credentials", "api.key_rotation", "api.db.api_keys_store")
+    for py_file in sorted(REPO.rglob("*.py")):
+        rel = py_file.relative_to(REPO).as_posix()
+        if any(rel.startswith(p) for p in ("migrations/", "tests/", "tools/ci/")):
+            continue
+        try:
+            src = py_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for mod in _RETIRED_MODULES:
+            if f"from {mod} import" in src or f"import {mod}" in src:
+                print(
+                    f"❌ check-credential-authority: {rel} imports retired module {mod}",
+                    file=sys.stderr,
+                )
+                return 1
+
+    # R4.8: block direct api_keys writes outside allowed paths
+    _LEGACY_WRITE_RE = re.compile(
+        r"\b(?:INSERT\s+INTO|UPDATE)\s+api_keys\b", re.IGNORECASE
+    )
+    _LEGACY_WRITE_ALLOWED = frozenset({"migrations/", "tests/", "tools/ci/"})
+    for py_file in sorted(REPO.rglob("*.py")):
+        rel = py_file.relative_to(REPO).as_posix()
+        if any(rel.startswith(p) for p in _LEGACY_WRITE_ALLOWED):
+            continue
+        try:
+            src = py_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _LEGACY_WRITE_RE.search(src):
+            print(
+                f"❌ check-credential-authority: {rel} writes directly to api_keys table",
+                file=sys.stderr,
+            )
+            return 1
+
     return 0
 
 
