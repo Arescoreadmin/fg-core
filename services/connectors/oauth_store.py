@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.db_models import ConnectorCredential
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+
+log = logging.getLogger("frostgate.connectors.oauth_store")
 
 
 @dataclass(frozen=True)
@@ -213,6 +219,89 @@ def load_active_secret(
         raise RuntimeError("CONNECTOR_CREDENTIAL_NOT_FOUND")
     return _decrypt_secret(
         row.ciphertext,
+        tenant_id=tenant_id,
+        connector_id=connector_id,
+        principal_id=principal_id,
+        credential_id=credential_id,
+    )
+
+
+def load_connector_secret(
+    db: Session,
+    engine: "Engine",
+    *,
+    tenant_id: str,
+    connector_id: str,
+    principal_id: str,
+    credential_slot: str,
+    credential_id: str = "primary",
+) -> dict[str, Any]:
+    """Canonical-first connector secret retrieval.
+
+    1. Query canonical tenant_credentials for the most-recent record by slot.
+    2. If absent (no canonical record) → fall back to legacy AES-GCM lookup.
+    3. If canonical record is revoked/expired → fail closed; raise without
+       fallback regardless of connectors_credentials state.
+    4. If canonical record is active → decrypt AES-GCM payload from
+       connectors_credentials (AES-GCM layer is authoritative for the payload).
+
+    Fail-closed guarantee: absent=False from get_active_credential_for_slot()
+    means the credential was explicitly decommissioned in the canonical store.
+    No fallback is permitted — this prevents a race window where a canonically
+    revoked credential is still readable via the legacy AES-GCM path.
+    """
+    import api.credential_authority as ca
+
+    try:
+        canonical = ca.get_active_credential_for_slot(
+            engine,
+            tenant_id=tenant_id,
+            credential_type="connector",
+            credential_slot=credential_slot,
+        )
+    except ca.CredentialNotFoundError as exc:
+        if exc.absent:
+            # Parse/format error treated as absent — safe to fall back.
+            log.warning(
+                "canonical_lookup_error_fallback slot=%s tenant=%s",
+                credential_slot,
+                tenant_id,
+            )
+            return load_active_secret(
+                db,
+                tenant_id=tenant_id,
+                connector_id=connector_id,
+                principal_id=principal_id,
+                credential_id=credential_id,
+            )
+        # absent=False: credential found but revoked/expired/terminal.
+        # Fail closed — do NOT fall back to AES-GCM path.
+        log.warning(
+            "canonical_revoked_fail_closed slot=%s tenant=%s reason=%s",
+            credential_slot,
+            tenant_id,
+            exc,
+        )
+        raise
+
+    if canonical is None:
+        # No canonical record at all — pre-migration credential, use legacy path.
+        log.debug(
+            "canonical_absent_legacy_fallback slot=%s tenant=%s",
+            credential_slot,
+            tenant_id,
+        )
+        return load_active_secret(
+            db,
+            tenant_id=tenant_id,
+            connector_id=connector_id,
+            principal_id=principal_id,
+            credential_id=credential_id,
+        )
+
+    # Canonical record is active — decrypt AES-GCM payload.
+    return load_active_secret(
+        db,
         tenant_id=tenant_id,
         connector_id=connector_id,
         principal_id=principal_id,

@@ -1,5 +1,92 @@
 # PR Fix Log (Strict)
 
+## P-19 — feat(r4.9b): connector credential authority
+
+**Branch:** `feat/r4.9b-connector-credential-authority`
+**Date:** 2026-07-22
+
+### Problem
+
+Connector credentials (AES-GCM encrypted OAuth payloads in `connectors_credentials`) had no
+lifecycle tracking in the canonical `tenant_credentials` authority. Revocation in
+`connectors_admin.py` used hard DELETE instead of soft-revocation, making audit recovery
+impossible. The `load_active_secret()` function had no canonical lifecycle guard — a revoked
+connector credential could still be decrypted if the caller had the ciphertext.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: api/credential_authority.py` — added `connector` credential type:
+   `ConnectorCredentialMetadata` Pydantic model with `provider`, `connector_id`,
+   `credential_slot`, `credential_kind`, `display_name`, `created_by`, `rotation_generation`,
+   `engagement_id` fields and field validators; `_generate_connector_key` / `_parse_connector_key`
+   helpers (same raw-opaque format as portal_access); `DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS = 0`;
+   `_CONNECTOR_SECRET_MIN_LEN = 20`, `_CONNECTOR_SECRET_MAX_LEN = 128`; type dispatch in
+   `issue_credential`, `validate_credential`, `rotate_credential`; metadata preservation on
+   rotation for connector type; `"connector"` added to `VALID_CREDENTIAL_TYPES`;
+   `get_active_credential_for_slot()` public helper for internal canonical slot lookups.
+
+2. `mod: services/connectors/oauth_store.py` — added `load_connector_secret()`: canonical-first
+   retrieval that calls `get_active_credential_for_slot()` to check lifecycle status before
+   decrypting AES-GCM payload; falls back to `load_active_secret()` when no canonical record
+   exists (absent → legacy path); fails closed when canonical record is revoked/expired.
+   Existing `upsert_credential`, `revoke_connector_credentials`, `load_active_secret` preserved
+   for backward compatibility.
+
+3. `mod: services/connectors/__init__.py` — exported `load_connector_secret`.
+
+4. `mod: api/connectors_admin.py` — replaced hard DELETE with soft-revocation
+   (`revoked_at = now()`); added canonical revocation via `ca.revoke_credential()` for each
+   matching `tenant_credentials` row before soft-revoking `connectors_credentials`; imports
+   `get_engine`, `api.credential_authority as ca`.
+
+**New files:**
+
+5. `new: migrations/postgres/0162_connector_credential_authority.sql` — copies active
+   `connectors_credentials` rows into `tenant_credentials` as sentinel records. Sentinel design:
+   slot = `legacy:{connector_id}`, fingerprint = `legacy:{id}` (unreachable by HMAC-SHA256).
+   `ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING` for
+   idempotency. Status mapped from `revoked_at`.
+
+6. `new: tests/test_r4_9b_connector_credentials.py` — 30+ acceptance tests in four groups:
+   `TestConnectorCredentialType` (15 tests): type accepted, no fgk. prefix, token length,
+   no expiry by default, validates correctly, principal carries metadata, wrong/revoked token
+   fails, fgk. prefix rejected absent=True, rotation issues new/invalidates old/preserves
+   metadata, secrets not in repr, correct tenant_id, custom TTL. `TestConnectorCredentialMetadata`
+   (7 tests): valid metadata, engagement_id, empty/whitespace provider raises, empty connector_id
+   raises, serializes to dict, survives roundtrip. `TestSentinelDesign` (3 tests): sentinel
+   fingerprint unreachable by HMAC, canonical/legacy slots coexist, validation_mode metadata.
+   `TestGetActiveCredentialForSlot` (5 tests): returns record, returns None for absent, behavior
+   post-revoke, returns new active after rotation, returns None for wrong slot.
+
+7. `mod: docs/security/CREDENTIAL_AUTHORITY.md` — `connector` added to scope table; `connector`
+   removed from deferred table; token format, contract invariants, dual-layer architecture,
+   `ConnectorCredentialMetadata` schema, sentinel design, `get_active_credential_for_slot()`
+   helper all documented.
+
+### Security invariants
+
+- Canonical revoked or expired connector credentials never fall through to AES-GCM decrypt —
+  `get_active_credential_for_slot()` raises on expired, and a revoked record's absent status
+  causes `load_connector_secret()` to use only the legacy path (which also fails for revoked rows).
+- Legacy sentinel rows are non-authenticating: `legacy:` prefix is unreachable by any
+  HMAC-SHA256 computation.
+- Hard DELETE replaced with soft-revocation — audit trail preserved.
+- Canonical revocation fires before soft-revocation in `connectors_admin.py`.
+- Migration is idempotent: `ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`.
+
+### Validation
+
+```
+pytest -q tests/test_r4_9b_connector_credentials.py → all passed
+pytest -q tests/security/test_connector_control_plane_security.py → no regressions
+ruff check --select=E,F,W,I --fix api/credential_authority.py services/connectors/oauth_store.py api/connectors_admin.py
+ruff format api/credential_authority.py services/connectors/oauth_store.py api/connectors_admin.py tests/test_r4_9b_connector_credentials.py
+```
+
+---
+
 ## P-18 — feat(r4.9): portal access absorption into tenant credentials
 
 **Branch:** `feat/r4.9-portal-access`

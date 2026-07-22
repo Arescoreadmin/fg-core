@@ -237,3 +237,50 @@ def test_connector_routes_not_public_paths() -> None:
     all_public = set(PUBLIC_PATHS_EXACT) | set(PUBLIC_PATHS_PREFIX)
     assert not any(p.startswith("/admin/connectors") for p in all_public)
     assert not any(p.startswith("/internal/connectors") for p in all_public)
+
+
+def test_revoke_soft_deletes_not_hard_deletes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Revoke must set revoked_at, not hard-DELETE the ConnectorCredential row.
+
+    Hard-delete would destroy the audit trail and break idempotency. The row
+    must remain readable with revoked_at set so the canonical CA can reference
+    it and the ledger remains complete.
+    """
+    monkeypatch.setenv("FG_CONNECTOR_KEK_CURRENT_VERSION", "v1")
+    monkeypatch.setenv(
+        "FG_CONNECTOR_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    )
+    SessionLocal = get_sessionmaker()
+    with SessionLocal() as db:
+        upsert_credential(
+            db,
+            tenant_id="tenant-a",
+            connector_id="slack",
+            principal_id="user-soft-revoke-security",
+            auth_mode="oauth2",
+            secret_payload={"token_hash": "soft-revoke-test"},
+            credential_id="soft-revoke-test",
+        )
+        db.commit()
+
+    with _client() as client:
+        key = mint_key("admin:write", ttl_seconds=3600, tenant_id="tenant-a")
+        resp = client.post(
+            "/admin/connectors/slack/revoke",
+            headers={"x-api-key": key, "Idempotency-Key": "idem-soft-revoke-sec-1"},
+        )
+    assert resp.status_code == 200
+
+    with SessionLocal() as db:
+        row = db.execute(
+            text(
+                "SELECT revoked_at FROM connectors_credentials "
+                "WHERE tenant_id='tenant-a' AND connector_id='slack' "
+                "  AND principal_id='user-soft-revoke-security' "
+                "  AND credential_id='soft-revoke-test'"
+            )
+        ).fetchone()
+    assert row is not None, "ConnectorCredential row was hard-deleted (regression)"
+    assert row[0] is not None, "ConnectorCredential row missing revoked_at after revoke"

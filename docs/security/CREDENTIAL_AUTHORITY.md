@@ -21,11 +21,16 @@
 |-----------------|-------------|
 | `portal_access` | Portal grants issued to clients for time-limited portal authentication. Absorbed from legacy `portal_grants` table. 14-day TTL. Raw opaque token format (no `fgk.` prefix). |
 
+### In scope — R4.9b addition
+
+| Credential class | Description |
+|-----------------|-------------|
+| `connector` | Connector credentials tracking AES-GCM OAuth payload lifecycle. Absorbed from legacy `connectors_credentials` table. No expiry (TTL=0; OAuth lifecycle managed separately). Raw opaque token format (no `fgk.` prefix). Credential slot: `provider:connector_id`. |
+
 ### Explicitly deferred
 
 | Credential class | Deferred to | Reason |
 |-----------------|-------------|--------|
-| `connector_credentials` | R4.9 or later | Connector auth has its own encryption and rotation requirements; boarding with `tenant_api_key` would underspecify it. |
 | `agent_device_credentials` | R4.9 or later | Device trust lifecycle has distinct FSM requirements (see `api/identity_governance/`). |
 | `service_identity` | R4.9 or later | No confirmed current issuer or consumer found in audit. Candidate class only — not promoted into scope without evidence. |
 | `internal_gateway_secret` | R6 | Gateway secret convergence is R6's authority. R4 references R6 boundary but does not absorb it. |
@@ -212,6 +217,64 @@ A real HMAC-SHA256 fingerprint is a 64-character lowercase hex string (`[0-9a-f]
 **Sentinel rows must not be used for authentication.** Authentication for legacy grants during the transition window is handled by the `_authenticate_legacy_portal_grant` fallback path in `portal_grant_service.py`.
 
 **Removal condition:** Remove `_authenticate_legacy_portal_grant` and drop the `portal_grants` table 15 days after the migration deployment date (14-day maximum grant TTL + 1 day buffer). Track in ROADMAP.md `Legacy fallback removal date` column.
+
+### connector (R4.9b)
+
+```python
+class ConnectorCredentialMetadata(BaseModel):
+    tenant_id: str
+    provider: str           # integration provider; max 128 chars
+    connector_id: str       # connector instance identifier; max 255 chars
+    credential_slot: str    # e.g. "microsoft:ms-teams-001"
+    credential_kind: str    # "oauth2", "service_account", "api_key", etc.
+    display_name: str       # human label; max 512 chars
+    created_by: str         # actor who issued the credential
+    rotation_generation: int
+    engagement_id: str | None = None  # set when connector is scoped to an engagement
+```
+
+**Token format:**
+
+```
+<raw_secret>
+```
+
+- No prefix, no structure. A single `secrets.token_urlsafe(32)` value (~43 URL-safe base64 characters).
+- Identical format to `portal_access`. The entire value is the secret input to `HMAC-SHA256(secret, FG_KEY_PEPPER)`.
+- No tenant-hint encoding.
+
+**Contract invariants:**
+
+- No `fgk.` prefix. Any incoming token that begins with `fgk.` is rejected with `absent=True`.
+- Raw secret returned exactly once at issuance. Never stored, never returned on replay, never logged.
+- Minimum 20 chars, maximum 128 chars. Tokens outside this range are rejected with `absent=True`.
+- Default TTL: 0 (no expiry). OAuth token lifecycle is managed separately by the AES-GCM layer.
+- Credential slot: `provider:connector_id` for tenant-scoped connectors; `provider:engagement_id:connector_id` for engagement-scoped.
+
+**Dual-layer architecture:**
+
+The `connector` credential type tracks lifecycle in `tenant_credentials` (canonical authority) while the AES-GCM encrypted OAuth payload (access_token, refresh_token, etc.) continues to be stored in `connectors_credentials`. The `load_connector_secret()` function in `services/connectors/oauth_store.py` provides canonical-first retrieval:
+
+1. Check canonical `tenant_credentials` for active slot → if absent, fall back to legacy AES-GCM lookup.
+2. If canonical record is revoked/expired → fail closed (do not fall back).
+3. If canonical record is active → decrypt AES-GCM payload from `connectors_credentials`.
+
+**Sentinel migration records** (created by `migrations/postgres/0162_connector_credential_authority.sql`):
+
+These rows copy existing active `connectors_credentials` rows into `tenant_credentials` with a non-authenticating sentinel fingerprint.
+
+| Field | Sentinel value |
+|-------|---------------|
+| `credential_slot` | `legacy:{connector_id}` |
+| `lookup_fingerprint` | `legacy:{id}` |
+| `metadata.validation_mode` | `"legacy_only"` |
+| `metadata.source` | `"legacy_connector"` |
+
+A real HMAC-SHA256 fingerprint is a 64-character lowercase hex string (`[0-9a-f]{64}`). The `legacy:` prefix can never be produced by HMAC, so sentinel rows are completely invisible to the canonical fingerprint index lookup.
+
+**`get_active_credential_for_slot()` internal helper:**
+
+An internal function (not a public validation path) that checks canonical status by slot without presenting a token. Used by `load_connector_secret()` to enforce fail-closed on revoked/expired canonical records before decrypting the AES-GCM payload. Does not set `SET LOCAL app.tenant_id` — this is trusted internal code, not a request handler.
 
 ---
 
