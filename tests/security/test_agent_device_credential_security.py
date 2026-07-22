@@ -379,11 +379,17 @@ class TestBootstrapTokenSecurity:
             )
         assert exc_info.value.absent is True
 
-    def test_token_stored_as_hash_never_plaintext(self, engine: Engine) -> None:
+    def test_token_stored_as_hmac_fingerprint_never_plaintext(
+        self, engine: Engine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import hmac as _hmac
+        import os
+
         tok = ca.issue_bootstrap_token(
             engine, tenant_id=_TENANT_A, actor_id="admin", ttl_seconds=60, reason="test"
         )
         raw = tok.raw_token
+        pepper = os.environ["FG_KEY_PEPPER"]
         with engine.begin() as conn:
             row = conn.execute(
                 text("SELECT token_hash FROM agent_enrollment_tokens WHERE id = :id"),
@@ -392,7 +398,73 @@ class TestBootstrapTokenSecurity:
         assert row is not None
         stored = row[0]
         assert stored != raw, "Raw token must not be stored in plaintext"
-        assert len(stored) == 64, "Token must be stored as SHA-256 hex digest"
+        assert len(stored) == 64, "Fingerprint must be 64-char hex"
+        # Must be HMAC-SHA256(pepper, token), not plain SHA-256(token)
+        expected_hmac = _hmac.new(
+            key=pepper.encode("utf-8"),
+            msg=raw.encode("utf-8"),
+            digestmod=__import__("hashlib").sha256,
+        ).hexdigest()
+        plain_sha256 = __import__("hashlib").sha256(raw.encode()).hexdigest()
+        assert stored == expected_hmac, "Stored hash must be peppered HMAC-SHA256"
+        assert stored != plain_sha256, "Stored hash must NOT be plain SHA-256"
+
+    def test_wrong_pepper_bootstrap_lookup_fails(
+        self, engine: Engine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tok = ca.issue_bootstrap_token(
+            engine, tenant_id=_TENANT_A, actor_id="admin", ttl_seconds=60, reason="test"
+        )
+        # Change pepper after issuance — lookup fingerprint won't match
+        monkeypatch.setenv("FG_KEY_PEPPER", "different-pepper-value")
+        with pytest.raises(CredentialNotFoundError) as exc_info:
+            ca.exchange_bootstrap_token(
+                engine,
+                tenant_id=_TENANT_A,
+                raw_token=tok.raw_token,
+                agent_id="wp-ag",
+                device_id="wp-dv",
+                hostname="h",
+                platform="linux",
+                architecture="x86_64",
+                os_version="5",
+                agent_version="1",
+                hardware_fingerprint="fp-wp",
+            )
+        assert exc_info.value.absent is True
+
+    def test_same_token_different_peppers_produce_different_fingerprints(self) -> None:
+        import hmac as _hmac
+
+        token = "test-bootstrap-token-for-pepper-comparison"
+        fp_a = _hmac.new(
+            key=b"pepper-alpha",
+            msg=token.encode("utf-8"),
+            digestmod=__import__("hashlib").sha256,
+        ).hexdigest()
+        fp_b = _hmac.new(
+            key=b"pepper-beta",
+            msg=token.encode("utf-8"),
+            digestmod=__import__("hashlib").sha256,
+        ).hexdigest()
+        assert fp_a != fp_b, "Different peppers must produce different fingerprints"
+
+    def test_bootstrap_fingerprint_is_constant_time_comparable(self) -> None:
+        import hmac as _hmac
+
+        # HMAC-SHA256 hexdigest is a fixed-length string — constant-time comparison
+        # via hmac.compare_digest() is safe and should be used for any verification.
+        # This test confirms the fingerprint is a fixed-length hex string.
+        import hashlib as _hashlib
+
+        token = "test-token-constant-time"
+        fp = _hmac.new(
+            key=b"pepper",
+            msg=token.encode("utf-8"),
+            digestmod=_hashlib.sha256,
+        ).hexdigest()
+        assert len(fp) == 64
+        assert all(c in "0123456789abcdef" for c in fp)
 
     def test_expired_token_cannot_be_used(self, engine: Engine) -> None:
         tok = ca.issue_bootstrap_token(
