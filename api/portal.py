@@ -24,7 +24,10 @@ from api.deps import auth_ctx_db_session
 from api.entitlements import require_capability
 from api.error_contracts import api_error
 from services.field_assessment.audit import audit_atomicity_svc
-from services.portal_grant_service import _list_canonical_engagement_ids, portal_grant_svc
+from services.portal_grant_service import (
+    _list_canonical_engagement_ids,
+    portal_grant_svc,
+)
 from services.identity_resolver import IdentityResolver, IdentityResolutionError
 from api.identity_providers.auth0 import validate_auth0_token
 
@@ -196,7 +199,9 @@ def portal_me(
         client_id=result.client_id or "",
         tenant_id=tenant_id,
     )
-    engagement_ids = list(dict.fromkeys(canonical_ids + legacy_ids))  # dedup, preserve order
+    engagement_ids = list(
+        dict.fromkeys(canonical_ids + legacy_ids)
+    )  # dedup, preserve order
 
     return PortalMeResponse(
         client_id=result.client_id or "",

@@ -162,6 +162,6 @@ SELECT
 
 FROM portal_grants
 
-ON CONFLICT (tenant_id, idempotency_key) DO NOTHING;
+ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
 
 COMMIT;
