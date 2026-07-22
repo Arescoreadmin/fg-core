@@ -28,11 +28,32 @@
 --   Track in: ROADMAP.md R4.9 row, "Legacy fallback removal date" column.
 --
 -- IDEMPOTENCY:
---   ON CONFLICT (credential_id) DO NOTHING ensures safe re-runs.
---   The credential_id is deterministic: sha256('portal-migration:' || id).
+--   ON CONFLICT (idempotency_key) on tenant_credentials ensures safe re-runs.
+--   credential_id uses gen_random_uuid() — not deterministic — so idempotency
+--   is keyed on 'legacy-migration:{id}' which is unique per portal_grants row.
+--   ON CONFLICT DO NOTHING on credential_slots is likewise idempotent.
 
 BEGIN;
 
+-- Step 1: insert credential_slots rows for each legacy portal_grant.
+-- tenant_credentials has a FK to credential_slots(tenant_id, credential_type, credential_slot).
+INSERT INTO credential_slots (
+    tenant_id,
+    credential_type,
+    credential_slot,
+    current_generation,
+    rotation_policy
+)
+SELECT DISTINCT
+    tenant_id,
+    'portal_access',
+    'legacy:' || client_id || ':' || engagement_id || ':' || id,
+    COALESCE(rotation_counter, 0) + 1,
+    'immediate'
+FROM portal_grants
+ON CONFLICT DO NOTHING;
+
+-- Step 2: insert sentinel tenant_credentials rows for each legacy portal_grant.
 INSERT INTO tenant_credentials (
     credential_id,
     tenant_id,
@@ -60,8 +81,10 @@ INSERT INTO tenant_credentials (
     record_hash
 )
 SELECT
-    -- Deterministic credential_id: hex(sha256('portal-migration:' || id))
-    encode(sha256(('portal-migration:' || id)::bytea), 'hex'),
+    -- credential_id must be a valid UUID; gen_random_uuid() satisfies the column type.
+    -- Idempotency is provided by the unique idempotency_key index, not by a
+    -- deterministic credential_id.
+    gen_random_uuid(),
 
     tenant_id,
 
@@ -111,7 +134,7 @@ SELECT
 
     NULL,   -- request_id not captured in portal_grants
 
-    -- Idempotency key ensures safe re-runs
+    -- Idempotency key ensures safe re-runs (unique per portal_grants row)
     'legacy-migration:' || id,
 
     'credential:use',
@@ -126,9 +149,10 @@ SELECT
 
     1,  -- schema_version
 
-    -- Record hash (tamper detection): sha256 of immutable fields
+    -- Record hash (tamper detection): sha256 of immutable fields.
+    -- credential_id is excluded because it is non-deterministic (gen_random_uuid());
+    -- idempotency_key already provides uniqueness per source row.
     encode(sha256((
-        encode(sha256(('portal-migration:' || id)::bytea), 'hex') || E'\n' ||
         tenant_id || E'\n' ||
         'portal_access' || E'\n' ||
         ('legacy:' || client_id || ':' || engagement_id || ':' || id) || E'\n' ||
@@ -138,6 +162,6 @@ SELECT
 
 FROM portal_grants
 
-ON CONFLICT (credential_id) DO NOTHING;
+ON CONFLICT (tenant_id, idempotency_key) DO NOTHING;
 
 COMMIT;

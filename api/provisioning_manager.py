@@ -636,9 +636,9 @@ def complete_workflow(
                 actor_type="provisioning_workflow",
                 reason_code="PORTAL_GRANT_AUTO_PROVISIONED",
                 entity_type="portal_grant",
-                entity_id=portal_grant_result.grant.id,
+                entity_id=portal_grant_result.credential_id,
                 payload={
-                    "grant_id": portal_grant_result.grant.id,
+                    "grant_id": portal_grant_result.credential_id,
                     "client_id": body.client_id,
                     "provisioning_id": provisioning_id,
                 },
@@ -651,10 +651,10 @@ def complete_workflow(
     resp = _workflow_response(wf)
     if portal_grant_result is not None:
         resp["portal_grant"] = {
-            "grant_id": portal_grant_result.grant.id,
-            "client_id": portal_grant_result.grant.client_id,
-            "engagement_id": portal_grant_result.grant.engagement_id,
-            "expires_at": portal_grant_result.grant.expires_at,
+            "grant_id": portal_grant_result.credential_id,
+            "client_id": portal_grant_result.client_id,
+            "engagement_id": portal_grant_result.engagement_id,
+            "expires_at": portal_grant_result.expires_at,
             "raw_secret": portal_grant_result.raw_secret,
         }
     else:

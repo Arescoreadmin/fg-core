@@ -817,8 +817,13 @@ def _list_canonical_engagement_ids(
             credential_type="portal_access",
             status="active",
         )
+        now = datetime.now(timezone.utc)
         ids = []
         for cred in creds:
+            # Filter out credentials whose expiry has passed but whose status
+            # has not yet been updated by the expire_credentials() sweep.
+            if cred.expires_at is not None and cred.expires_at <= now:
+                continue
             meta = cred.metadata or {}
             if (
                 meta.get("client_id") == client_id
