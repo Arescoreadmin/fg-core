@@ -11561,6 +11561,10 @@
             "title": "Client Id",
             "type": "string"
           },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
           "engagement_id": {
             "title": "Engagement Id",
             "type": "string"
@@ -11573,6 +11577,17 @@
             "title": "Grant Id",
             "type": "string"
           },
+          "legacy_grant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Grant Id"
+          },
           "portal_login_url": {
             "title": "Portal Login Url",
             "type": "string"
@@ -11584,9 +11599,15 @@
           "raw_secret": {
             "title": "Raw Secret",
             "type": "string"
+          },
+          "source": {
+            "default": "canonical",
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [
+          "credential_id",
           "grant_id",
           "client_id",
           "engagement_id",
@@ -22319,7 +22340,18 @@
             "type": "string"
           },
           "created_by": {
-            "title": "Created By",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "credential_id": {
+            "title": "Credential Id",
             "type": "string"
           },
           "engagement_id": {
@@ -22353,12 +22385,18 @@
             "title": "Rotation Counter",
             "type": "integer"
           },
+          "source": {
+            "default": "canonical",
+            "title": "Source",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
           }
         },
         "required": [
+          "credential_id",
           "grant_id",
           "client_id",
           "engagement_id",
@@ -106961,7 +106999,7 @@
     },
     "/portal/grants": {
       "get": {
-        "description": "List all portal grants for the authenticated tenant.",
+        "description": "List all portal grants for the authenticated tenant.\n\nReturns canonical credentials (R4.9+) merged with active legacy grants\nthat have not yet been migrated.  Sentinel migration records are excluded.",
         "operationId": "list_portal_grants_portal_grants_get",
         "parameters": [
           {

@@ -7522,9 +7522,9 @@ def qa_approve_report_route(
                 engagement_id=engagement_id,
                 created_by=actor,
             )
-            portal_grant_id = grant_result.grant.id
+            portal_grant_id = grant_result.credential_id
             portal_raw_secret = grant_result.raw_secret
-            portal_expires_at = grant_result.grant.expires_at
+            portal_expires_at = grant_result.expires_at
 
     evidence_lifecycle_svc.lock_evidence_for_engagement(
         db,
@@ -7647,12 +7647,22 @@ def create_portal_grant(
         actor_type="human_operator",
         reason_code="PORTAL_GRANT_CREATED",
         entity_type="portal_grant",
-        entity_id=result.grant.id,
-        payload={"grant_id": result.grant.id, "client_id": eng.client_name},
+        entity_id=result.credential_id,
+        payload={"grant_id": result.credential_id, "client_id": eng.client_name},
     )
     db.commit()
     return CreatePortalGrantResponse(
-        grant=_grant_to_response(result.grant),
+        grant=PortalGrantResponse(
+            id=result.credential_id,
+            engagement_id=result.engagement_id,
+            client_id=result.client_id,
+            grant_type=result.grant_type,
+            status=result.status,
+            created_by=actor,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            expires_at=result.expires_at,
+            rotation_counter=0,
+        ),
         raw_secret=result.raw_secret,
     )
 
@@ -7757,11 +7767,21 @@ def rotate_portal_grant(
         reason_code="PORTAL_GRANT_ROTATED",
         entity_type="portal_grant",
         entity_id=grant_id,
-        payload={"grant_id": grant_id, "new_grant_id": result.grant.id},
+        payload={"grant_id": grant_id, "new_grant_id": result.credential_id},
     )
     db.commit()
     return RotatePortalGrantResponse(
-        grant=_grant_to_response(result.grant),
+        grant=PortalGrantResponse(
+            id=result.credential_id,
+            engagement_id=result.engagement_id,
+            client_id=result.client_id,
+            grant_type=result.grant_type,
+            status=result.status,
+            created_by=actor,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            expires_at=result.expires_at,
+            rotation_counter=0,
+        ),
         raw_secret=result.raw_secret,
     )
 
