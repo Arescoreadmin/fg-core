@@ -130,7 +130,7 @@ def mint_key(
     secret: Optional[str] = None,
 ) -> str:
     """
-    Mint a key and persist it into api_keys.
+    Mint a key and persist it into api_keys (legacy surface; R4.8 grandfathered).
 
     Dispatches to Postgres when FG_DB_BACKEND=postgres; SQLite otherwise.
 
