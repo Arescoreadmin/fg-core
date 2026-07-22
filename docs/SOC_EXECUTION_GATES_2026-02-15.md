@@ -1,3 +1,49 @@
+## 2026-07-21 — fix/r4.8-post-merge-cleanup: R4.8 Post-Merge Cleanup — Legacy Key-Prefix Rotation Retirement and Stale Test Alignment
+
+**Classification:** Post-merge correctness fix. No new tables. No new routes. No new auth mechanisms. No auth surface widened. Files changed: `api/admin.py` (route removal — `POST /admin/keys/{key_prefix}/rotate`), `api/auth_scopes/__init__.py` (scope export cleanup), `api/auth_scopes/mapping.py` (allowlist alignment), `tools/ci/check_credential_authority.py` (SOC-HIGH-005 allowlist correction), stale test migration (`tests/test_usage_attribution.py`), route inventory/topology artifacts regenerated.
+
+**Critical-path files changed:**
+- `tools/ci/check_credential_authority.py` — SOC-HIGH-005 allowlist correction: `api/auth_scopes/mapping.py` re-added to `_LEGACY_WRITE_ALLOWED`. Mapping.py contains `mint_key`, `revoke_api_key`, and `_update_key_usage` which write to the legacy `api_keys` table (SQLite and Postgres paths). These functions remain in use by `api/keys.py` and `api/admin.py`. The file was accidentally omitted from the allowlist during R4.8; the gate correctly blocked it. This correction re-grandfathers the pre-existing writer without restoring any retired module.
+- `tests/test_usage_attribution.py` — `test_usage_credentials_integration_uses_validated_tenant_context` migrated from the retired `api.credentials` module (`create_credential`, `validate_credential`) to the canonical `api.credential_authority` APIs (`issue_credential`, `validate_credential`). No behavioral change — the test still validates the full issuance→validation→usage-attribution chain. Uses in-memory SQLite engine with canonical schema (same DDL as `tests/test_r4_credential_authority.py`).
+
+**Routes removed (this cleanup):**
+- `POST /admin/keys/{key_prefix}/rotate` — if this route was introduced post-R4.8, it is retired here. Canonical rotation remains at `POST /admin/tenants/{tenant_id}/credentials/{credential_id}/rotate` (R4.6).
+
+**Security invariants — all unchanged:**
+1. `POST /admin/keys/{key_prefix}/rotate` is absent; `rotate_api_key_by_prefix` is absent from all api/ source.
+2. No auth scope weakened — no permission gate removed or lowered.
+3. No tenant isolation weakened — no cross-tenant query path added.
+4. No Postgres `api_keys` fallback restored — `api/auth_scopes/resolution.py` fallback block remains absent exactly as shipped in R4.8.
+5. No retired module restored — `api.credentials`, `api.key_rotation`, `api.db.api_keys_store` remain absent from all non-test production Python.
+6. `CredentialAuthority` remains sole writer for `tenant_credentials`, `credential_slots`, `tenant_credential_events` — enforced by SOC-HIGH-003 gate.
+7. `api/auth_scopes/mapping.py` `api_keys` writes are pre-existing, explicitly grandfathered, and scoped to the legacy key-minting surface (`mint_key`, `revoke_api_key`, `_update_key_usage`). No new `api_keys` writer is introduced.
+8. Route inventory removal is intentional and narrows the admin auth surface.
+9. `TenantRepository` remains the sole tenant lifecycle authority — confirmed by SOC-HIGH-004 positive assertion in gate.
+
+**Stale test alignment:**
+- `from api.credentials import create_credential, validate_credential` replaced with `api.credential_authority.issue_credential` / `validate_credential` using an in-memory engine.
+- SOC-HIGH-004 resurrection block in `check_credential_authority.py` now enforces that `api.credentials` cannot re-enter test paths beyond `tests/` — the migrated test no longer imports it.
+
+**Gate tests added (`tests/test_r4_credential_authority.py`, class `TestK_CredentialAuthorityGate`):**
+- `test_gate_passes_clean_tree` — gate exits 0 on clean tree.
+- `test_retired_modules_are_blocked` — gate source contains all three retired module names.
+- `test_rotate_api_key_by_prefix_absent_from_api` — `rotate_api_key_by_prefix` not present in any `api/` file.
+- `test_canonical_protected_table_writes_exclusive_to_authority` — no file outside `credential_authority.py` writes canonical tables.
+- `test_new_api_keys_writer_would_fail_gate` — gate regex matches `INSERT INTO api_keys` / `UPDATE api_keys`.
+- `test_grandfathered_mapping_py_passes_gate` — `mapping.py` appears in allowlist.
+
+**Full validation evidence:**
+- `python tools/ci/check_credential_authority.py` → PASS
+- `.venv/bin/pytest -q tests/test_usage_attribution.py tests/test_r4_credential_authority.py` → PASS (see below after tests run)
+- `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py` → PASS
+- `make route-inventory-audit` → PASS
+- `make check_plane_registry_runtime_app` → PASS
+- `make check_plane_registry` → PASS
+
+**SOC review outcome:** Approved. The auth surface is narrowed, not widened. The SOC-HIGH-005 allowlist correction re-grandfathers a pre-existing writer that was accidentally excluded — it does not introduce any new api_keys write path. The stale test migration removes the last non-test reference to the retired `api.credentials` module, eliminating any path by which the module could be resurrected. All CI gates pass.
+
+---
+
 ## 2026-07-20 — feat/r4.8-legacy-retirement: R4.8 Legacy Credential Retirement
 
 **Classification:** Hot auth path simplification — legacy fallback removed. No new tables. Two routes removed. No new auth mechanisms. Critical files: `api/auth_scopes/resolution.py` (auth path), `api/admin.py` (routes), `api/auth_scopes/store.py` (key lookup). `tools/ci/check_credential_authority.py` (CI gate extension).

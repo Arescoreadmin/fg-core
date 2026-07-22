@@ -19,9 +19,7 @@ import httpx
 
 log = logging.getLogger("frostgate.connectors.msgraph.preflight")
 
-_OIDC_DISCOVERY_TEMPLATE = (
-    "https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration"
-)
+_OIDC_DISCOVERY_TEMPLATE = "https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration"
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

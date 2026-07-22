@@ -48,24 +48,108 @@ def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _git_object_exists(ref: str) -> bool:
+    """Return True only when git can resolve ref to a commit."""
+    result = _run_git(["git", "cat-file", "-e", f"{ref}^{{commit}}"])
+    return result.returncode == 0
+
+
+def _fetch_ref(ref: str) -> subprocess.CompletedProcess[str]:
+    """Attempt to fetch a single ref from origin. Callers must check returncode."""
+    return _run_git(["git", "fetch", "--no-tags", "--depth=1", "origin", ref])
+
+
 def _resolve_diff_range(
     base_ref: str | None, base_sha: str | None, head_sha: str | None
-) -> tuple[str, str]:
+) -> tuple[str, str, list[str]]:
+    diags: list[str] = []
+
+    # Strategy A — PR event SHAs
     if base_sha and head_sha:
-        return base_sha, head_sha
+        base_present = _git_object_exists(base_sha)
+        head_present = _git_object_exists(head_sha)
+        diags.append(
+            f"A: base_sha={base_sha[:12]} present={base_present},"
+            f" head_sha={head_sha[:12]} present={head_present}"
+        )
 
-    if base_ref:
-        _run_git(["git", "fetch", "origin", base_ref, "--depth=200"])
+        if not base_present:
+            fetch_rc = _fetch_ref(base_sha).returncode
+            base_present = _git_object_exists(base_sha)
+            diags.append(
+                f"A: fetch base rc={fetch_rc} post-fetch present={base_present}"
+            )
 
-    mb = _run_git(["git", "merge-base", "origin/main", "HEAD"])
-    if mb.returncode == 0 and mb.stdout.strip():
-        return mb.stdout.strip(), "HEAD"
+        if not head_present:
+            fetch_rc = _fetch_ref(head_sha).returncode
+            head_present = _git_object_exists(head_sha)
+            diags.append(
+                f"A: fetch head rc={fetch_rc} post-fetch present={head_present}"
+            )
 
-    mb_local = _run_git(["git", "merge-base", "main", "HEAD"])
-    if mb_local.returncode == 0 and mb_local.stdout.strip():
-        return mb_local.stdout.strip(), "HEAD"
+        if base_present and head_present:
+            diags.append("A: resolved via event SHAs")
+            return base_sha, head_sha, diags
 
-    return "HEAD~1", "HEAD"
+        diags.append("A: rejected (one or both SHAs unresolvable after fetch)")
+
+    # Strategy B — Explicit base_ref
+    if base_ref is not None:
+        safe_ref = base_ref
+        for prefix in ("refs/heads/", "origin/"):
+            if safe_ref.startswith(prefix):
+                safe_ref = safe_ref[len(prefix) :]
+        fetch_b = _run_git(
+            ["git", "fetch", "--no-tags", "--depth=200", "origin", safe_ref]
+        )
+        mb_b = _run_git(["git", "merge-base", f"origin/{safe_ref}", "HEAD"])
+        diags.append(
+            f"B: base_ref={base_ref!r} safe={safe_ref!r}"
+            f" fetch_rc={fetch_b.returncode} merge-base_rc={mb_b.returncode}"
+        )
+        if mb_b.returncode == 0 and mb_b.stdout.strip():
+            diags.append(
+                f"B: resolved via base_ref merge-base={mb_b.stdout.strip()[:12]}"
+            )
+            return mb_b.stdout.strip(), "HEAD", diags
+
+    # Strategy C — origin/main merge-base
+    if not _git_object_exists("origin/main"):
+        fetch_c = _run_git(
+            ["git", "fetch", "--no-tags", "--depth=200", "origin", "main"]
+        )
+        diags.append(f"C: fetched origin/main rc={fetch_c.returncode}")
+    mb_c = _run_git(["git", "merge-base", "origin/main", "HEAD"])
+    diags.append(f"C: merge-base origin/main rc={mb_c.returncode}")
+    if mb_c.returncode == 0 and mb_c.stdout.strip():
+        diags.append(
+            f"C: resolved via origin/main merge-base={mb_c.stdout.strip()[:12]}"
+        )
+        return mb_c.stdout.strip(), "HEAD", diags
+
+    # Strategy D — Local main merge-base
+    mb_d = _run_git(["git", "merge-base", "main", "HEAD"])
+    diags.append(f"D: merge-base main rc={mb_d.returncode}")
+    if mb_d.returncode == 0 and mb_d.stdout.strip():
+        diags.append(
+            f"D: resolved via local main merge-base={mb_d.stdout.strip()[:12]}"
+        )
+        return mb_d.stdout.strip(), "HEAD", diags
+
+    # Strategy E — HEAD parent
+    if _git_object_exists("HEAD~1"):
+        diags.append("E: resolved via HEAD~1")
+        return "HEAD~1", "HEAD", diags
+
+    diags.append("E: HEAD~1 not resolvable")
+
+    # Strategy F — Fail closed
+    diag_block = "\n".join(f"  {d}" for d in diags)
+    raise SystemExit(
+        "required-tests-gate: unable to resolve changed-file diff; fail-closed\n"
+        f"{diag_block}\n"
+        "  next: git fetch --no-tags origin main"
+    )
 
 
 def _event_pr_shas() -> tuple[str | None, str | None]:
@@ -111,18 +195,25 @@ def _parse_name_status(diff_text: str) -> list[ChangedFile]:
     return sorted(changed, key=lambda x: (x.path, x.status, x.previous_path or ""))
 
 
-def _changed_files(base_ref: str | None) -> list[ChangedFile]:
+def _changed_files(base_ref: str | None) -> tuple[list[ChangedFile], list[str]]:
     event_base_sha, event_head_sha = _event_pr_shas()
-    base, head = _resolve_diff_range(base_ref, event_base_sha, event_head_sha)
-
-    result = _run_git(
-        ["git", "diff", "--name-status", "--find-renames", f"{base}...{head}"]
+    base, head, resolution_diags = _resolve_diff_range(
+        base_ref, event_base_sha, event_head_sha
     )
+
+    cmd = ["git", "diff", "--name-status", "--find-renames", f"{base}...{head}"]
+    result = _run_git(cmd)
     if result.returncode != 0:
+        first_err = result.stderr.splitlines()[0] if result.stderr.strip() else ""
         raise SystemExit(
-            "unable to compute changed files with --name-status; fail-closed"
+            f"required-tests-gate: git diff failed; fail-closed\n"
+            f"  base={base} head={head}\n"
+            f"  command={' '.join(cmd)}\n"
+            f"  returncode={result.returncode}\n"
+            f"  stderr={first_err}\n"
+            f"  resolution: {resolution_diags}"
         )
-    return _parse_name_status(result.stdout)
+    return _parse_name_status(result.stdout), resolution_diags
 
 
 def _match_any(path: str, patterns: list[str]) -> bool:
@@ -238,7 +329,7 @@ def main() -> int:
 
     ownership = _load_yaml(POLICY_DIR / "ownership_map.yaml")
     required_tests = _load_yaml(POLICY_DIR / "required_tests.yaml")
-    changed = _changed_files(args.base_ref)
+    changed, resolution_diags = _changed_files(args.base_ref)
     changed_paths = _category_input_paths(changed)
 
     categories = _required_categories(changed_paths, ownership)
@@ -260,6 +351,7 @@ def main() -> int:
         "required_categories": sorted(categories),
         "new_modules": new_modules,
         "failures": [failure.__dict__ for failure in failures],
+        "diff_resolution": {"diagnostics": resolution_diags},
     }
 
     if args.explain or args.json:

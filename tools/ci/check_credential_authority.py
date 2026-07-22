@@ -112,8 +112,11 @@ def main() -> int:
     # R4.8: block resurrection of legacy credential modules
     _RETIRED_MODULES = ("api.credentials", "api.key_rotation", "api.db.api_keys_store")
     for py_file in sorted(REPO.rglob("*.py")):
-        rel = py_file.relative_to(REPO).as_posix()
-        if any(rel.startswith(p) for p in ("migrations/", "tests/", "tools/ci/", ".claude/")):
+        relative_file = py_file.relative_to(REPO).as_posix()
+        if any(
+            relative_file.startswith(prefix)
+            for prefix in ("migrations/", "tests/", "tools/ci/", ".claude/")
+        ):
             continue
         try:
             src = py_file.read_text(encoding="utf-8")
@@ -122,7 +125,7 @@ def main() -> int:
         for mod in _RETIRED_MODULES:
             if f"from {mod} import" in src or f"import {mod}" in src:
                 print(
-                    f"❌ check-credential-authority: {rel} imports retired module {mod}",
+                    f"❌ check-credential-authority: {relative_file} imports retired module {mod}",
                     file=sys.stderr,
                 )
                 return 1
@@ -133,26 +136,32 @@ def main() -> int:
     _LEGACY_WRITE_RE = re.compile(
         r"\b(?:INSERT\s+INTO|UPDATE)\s+api_keys\b", re.IGNORECASE
     )
-    _LEGACY_WRITE_ALLOWED = frozenset({
-        "migrations/",
-        "tests/",
-        "tools/ci/",
-        ".claude/",  # local dev worktrees — not present in CI
-        # Pre-R4.8 writers not retired in this PR (cleaned up separately)
-        "api/auth_scopes/mapping.py",
-        "api/auth_scopes/resolution.py",
-        "api/auth_scopes/store.py",
-        "api/keys.py",
-        "api/tenant_rbac.py",
-        "api/tripwires.py",
-        "tools/seed/",
-        "tools/scripts/",
-        "tools/patch_chain_and_ui_single_use.py",
-        "scripts/",
-    })
+    _LEGACY_WRITE_ALLOWED = frozenset(
+        {
+            "migrations/",
+            "tests/",
+            "tools/ci/",
+            ".claude/",  # local dev worktrees — not present in CI
+            # Pre-R4.8 writers not retired in this PR (cleaned up separately)
+            # api/auth_scopes/mapping.py: mint_key / revoke_api_key / _update_key_usage
+            # write to the legacy api_keys table (SQLite + Postgres paths).  These
+            # functions are still called at runtime by api/keys.py and api/admin.py
+            # for the legacy key-minting surface.  Retirement tracked separately.
+            "api/auth_scopes/mapping.py",
+            "api/auth_scopes/resolution.py",
+            "api/auth_scopes/store.py",
+            "api/keys.py",
+            "api/tenant_rbac.py",
+            "api/tripwires.py",
+            "tools/seed/",
+            "tools/scripts/",
+            "tools/patch_chain_and_ui_single_use.py",
+            "scripts/",
+        }
+    )
     for py_file in sorted(REPO.rglob("*.py")):
-        rel = py_file.relative_to(REPO).as_posix()
-        if any(rel.startswith(p) for p in _LEGACY_WRITE_ALLOWED):
+        relative_file = py_file.relative_to(REPO).as_posix()
+        if any(relative_file.startswith(prefix) for prefix in _LEGACY_WRITE_ALLOWED):
             continue
         try:
             src = py_file.read_text(encoding="utf-8")
@@ -160,7 +169,7 @@ def main() -> int:
             continue
         if _LEGACY_WRITE_RE.search(src):
             print(
-                f"❌ check-credential-authority: {rel} writes directly to api_keys table",
+                f"❌ check-credential-authority: {relative_file} writes directly to api_keys table",
                 file=sys.stderr,
             )
             return 1

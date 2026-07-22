@@ -422,6 +422,7 @@ def run_migration(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 def _print_readiness_report(result: MigrationResult) -> None:
     """Print a human-readable migration readiness report to stdout."""
     ready = result.tenants_failed == 0 and result.error is None
@@ -446,7 +447,9 @@ def _print_readiness_report(result: MigrationResult) -> None:
         for w in result.warnings:
             print(f"  ⚠  {w}")
         print()
-    status_line = "✅ READY" if ready else "❌ NOT READY — resolve warnings before proceeding"
+    status_line = (
+        "✅ READY" if ready else "❌ NOT READY — resolve warnings before proceeding"
+    )
     print(f"Verdict: {status_line}")
     print()
 

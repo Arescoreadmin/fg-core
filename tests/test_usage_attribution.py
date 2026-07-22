@@ -340,33 +340,124 @@ def test_usage_errors_are_structured_and_non_leaky():
 
 
 def test_usage_credentials_integration_uses_validated_tenant_context(
-    tmp_path, monkeypatch
+    monkeypatch,
 ):
     """Usage attributed via credential validation must carry the credential's tenant.
 
     Simulates the call chain:
-    1) validate_credential(raw_key) → authenticated_tenant_id
-    2) record_usage(trusted_tenant_id=authenticated_tenant_id, ...)
+    1) issue_credential(engine, ...) → IssuanceResult with plaintext_secret
+    2) validate_credential(engine, raw_key) → CredentialPrincipal.tenant_id
+    3) record_usage(trusted_tenant_id=authenticated_tenant_id, ...)
+
+    Uses an in-memory SQLite engine with the canonical credential schema so
+    there is no filesystem state and no dependency on api.credentials (retired).
     """
-    db_path = str(tmp_path / "cred_usage.db")
-    monkeypatch.setenv("FG_SQLITE_PATH", db_path)
-    monkeypatch.setenv("FG_KEY_PEPPER", "test-pepper-cred-usage-12345")
-    monkeypatch.setenv("FG_ENV", "test")
+    import api.credential_authority as ca
+    from argon2 import PasswordHasher
+    from sqlalchemy import create_engine, text
 
-    from api.db import init_db, reset_engine_cache
+    from api.credential_authority import issue_credential, validate_credential
 
-    reset_engine_cache()
-    init_db(sqlite_path=db_path)
+    # Minimum-cost hasher so the test runs fast.
+    monkeypatch.setattr(
+        ca, "_HASHER", PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+    )
+    monkeypatch.setenv("FG_KEY_PEPPER", "test-pepper-cred-usage-ws1")
 
-    from api.credentials import create_credential, validate_credential
+    # Build a minimal in-memory schema — same DDL as test_r4_credential_authority.py.
+    engine = create_engine("sqlite:///:memory:", future=True)
+    schema = """
+    CREATE TABLE IF NOT EXISTS tenants (
+        tenant_id        VARCHAR(128) PRIMARY KEY,
+        display_name     VARCHAR(256) NOT NULL DEFAULT '',
+        lifecycle_state  VARCHAR(32)  NOT NULL DEFAULT 'active',
+        created_at       TEXT, updated_at TEXT, created_by TEXT,
+        metadata         TEXT NOT NULL DEFAULT '{}',
+        canonical_version INTEGER NOT NULL DEFAULT 1,
+        last_reconciled_at TEXT, archived_at TEXT,
+        migration_source TEXT, migration_version TEXT
+    );
+    CREATE TABLE IF NOT EXISTS credential_slots (
+        tenant_id          VARCHAR(128) NOT NULL,
+        credential_type    VARCHAR(64)  NOT NULL,
+        credential_slot    VARCHAR(128) NOT NULL,
+        current_generation INTEGER      NOT NULL DEFAULT 0,
+        rotation_policy    VARCHAR(32)  NOT NULL DEFAULT 'immediate',
+        max_overlap_count  INTEGER      NOT NULL DEFAULT 1,
+        created_at TEXT, updated_at TEXT,
+        PRIMARY KEY (tenant_id, credential_type, credential_slot)
+    );
+    CREATE TABLE IF NOT EXISTS tenant_credentials (
+        credential_id               VARCHAR(64)  NOT NULL PRIMARY KEY,
+        tenant_id                   VARCHAR(128) NOT NULL,
+        credential_type             VARCHAR(64)  NOT NULL,
+        credential_slot             VARCHAR(128) NOT NULL,
+        generation                  INTEGER      NOT NULL DEFAULT 1,
+        lookup_fingerprint          VARCHAR(64)  NOT NULL,
+        lookup_key_version          INTEGER      NOT NULL DEFAULT 1,
+        secret_prefix               VARCHAR(16)  NOT NULL,
+        secret_hash                 TEXT         NOT NULL,
+        hash_algorithm              VARCHAR(32)  NOT NULL DEFAULT 'argon2id',
+        hash_params                 TEXT         NOT NULL,
+        status                      VARCHAR(16)  NOT NULL DEFAULT 'active',
+        expires_at TEXT, issued_at TEXT NOT NULL, activated_at TEXT,
+        rotated_at TEXT, revoked_at TEXT, replaced_by_credential_id VARCHAR(64),
+        created_by_actor_id VARCHAR(256), request_id VARCHAR(128),
+        idempotency_key VARCHAR(256), last_used_at TEXT,
+        approximate_use_count INTEGER NOT NULL DEFAULT 0,
+        scopes_csv TEXT, metadata TEXT,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        record_hash VARCHAR(64),
+        UNIQUE (tenant_id, idempotency_key)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ix_tc_slot_generation
+        ON tenant_credentials (tenant_id, credential_type, credential_slot, generation);
+    CREATE INDEX IF NOT EXISTS ix_tc_lookup_fingerprint
+        ON tenant_credentials (lookup_fingerprint);
+    CREATE TABLE IF NOT EXISTS tenant_credential_events (
+        event_id      VARCHAR(64)  NOT NULL PRIMARY KEY,
+        tenant_id     VARCHAR(128) NOT NULL,
+        credential_id VARCHAR(64), credential_type VARCHAR(64),
+        credential_slot VARCHAR(128), generation INTEGER,
+        event_type    VARCHAR(64)  NOT NULL,
+        actor_id      VARCHAR(256), request_id VARCHAR(128),
+        occurred_at   TEXT NOT NULL,
+        outcome       VARCHAR(16)  NOT NULL DEFAULT 'success',
+        failure_reason TEXT, metadata TEXT,
+        schema_version INTEGER NOT NULL DEFAULT 1
+    )
+    """
+    with engine.begin() as conn:
+        for stmt in schema.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(text(stmt))
+        conn.execute(
+            text(
+                "INSERT INTO tenants (tenant_id, lifecycle_state) VALUES (:tid, 'active')"
+            ),
+            {"tid": "tenant-cred-usage"},
+        )
 
-    _rec, secret = create_credential("tenant-cred-usage")
-    authenticated_tenant = validate_credential(secret)
+    # Issue a credential via the canonical authority.
+    result_issue = issue_credential(
+        engine,
+        tenant_id="tenant-cred-usage",
+        credential_type="tenant_api_key",
+        credential_slot="default",
+    )
+    assert result_issue.plaintext_secret is not None
+    raw_key = result_issue.plaintext_secret
 
-    # trusted_tenant_id comes from validated credential context, not user payload
+    # Validate via the canonical authority — returns a CredentialPrincipal.
+    principal = validate_credential(engine, raw_key)
+    authenticated_tenant = principal.tenant_id
+    assert authenticated_tenant == "tenant-cred-usage"
+
+    # trusted_tenant_id comes from validated credential context, not user payload.
     result = record_usage(
         trusted_tenant_id=authenticated_tenant,
-        customer_id=_rec.credential_id[:16],
+        customer_id=result_issue.record.credential_id[:16],
         action="rag_query",
         units=2,
         source="api.rag",
@@ -380,3 +471,5 @@ def test_usage_credentials_integration_uses_validated_tenant_context(
     records = query_usage("tenant-cred-usage")
     assert len(records) == 1
     assert records[0].tenant_id == "tenant-cred-usage"
+
+    engine.dispose()

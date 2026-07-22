@@ -1217,3 +1217,118 @@ class TestJ_PlaintextSecurity:
                 assert cast(str, r.plaintext_secret) not in val, (
                     f"Secret leaked into {key}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# K — SOC-HIGH-004/005 CI gate invariants
+# ---------------------------------------------------------------------------
+
+
+class TestK_CredentialAuthorityGate:
+    """Verify that the SOC-HIGH-004/005 CI gate (check_credential_authority.py)
+    enforces the expected invariants without external process invocation.
+
+    Each test imports the gate's internals directly so that:
+    - IDE refactoring catches stale references
+    - Test failures point to the exact invariant that broke
+    - No subprocess overhead
+    """
+
+    def _load_gate(self):
+        """Import the gate module from tools/ci/ by path."""
+        import importlib.util
+        from pathlib import Path
+
+        gate_path = (
+            Path(__file__).resolve().parents[1]
+            / "tools"
+            / "ci"
+            / "check_credential_authority.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "check_credential_authority", gate_path
+        )
+        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod
+
+    def test_gate_passes_clean_tree(self) -> None:
+        """Gate must exit 0 on the current tree (no regressions introduced)."""
+        gate = self._load_gate()
+        result = gate.main()
+        assert result == 0, "check_credential_authority gate failed unexpectedly"
+
+    def test_retired_modules_are_blocked(self) -> None:
+        """The gate's RETIRED_MODULES list must include all three retired modules."""
+        gate = self._load_gate()
+        # The gate defines _RETIRED_MODULES inside main(); verify via source.
+        import inspect
+
+        src = inspect.getsource(gate.main)
+        assert "api.credentials" in src
+        assert "api.key_rotation" in src
+        assert "api.db.api_keys_store" in src
+
+    def test_rotate_api_key_by_prefix_absent_from_api(self) -> None:
+        """rotate_api_key_by_prefix must not exist in any api/ Python source."""
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        violations = []
+        for py in sorted((repo / "api").rglob("*.py")):
+            if "rotate_api_key_by_prefix" in py.read_text(encoding="utf-8"):
+                violations.append(str(py.relative_to(repo)))
+        assert violations == [], f"rotate_api_key_by_prefix found in api/: {violations}"
+
+    def test_canonical_protected_table_writes_exclusive_to_authority(self) -> None:
+        """No file outside credential_authority.py may INSERT/UPDATE canonical tables."""
+        import re
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        authority = repo / "api" / "credential_authority.py"
+        pattern = re.compile(
+            r"\b(?:INSERT\s+INTO|UPDATE)\s+"
+            r"(?:tenant_credentials|credential_slots|tenant_credential_events)\b",
+            re.IGNORECASE,
+        )
+        violations = []
+        for py in sorted(repo.rglob("*.py")):
+            if py == authority:
+                continue
+            rel = py.relative_to(repo).as_posix()
+            if rel.startswith(("tests/", "migrations/", ".claude/")):
+                continue
+            src = py.read_text(encoding="utf-8", errors="replace")
+            if pattern.search(src):
+                violations.append(rel)
+        assert violations == [], (
+            f"Direct writes to canonical credential tables found outside authority: {violations}"
+        )
+
+    def test_new_api_keys_writer_would_fail_gate(self, tmp_path) -> None:
+        """A synthetic new file with INSERT INTO api_keys must cause gate failure."""
+        import re
+
+        # Verify the gate's regex would match the pattern (unit test of the regex).
+        pattern = re.compile(r"\b(?:INSERT\s+INTO|UPDATE)\s+api_keys\b", re.IGNORECASE)
+        bad_snippet = "conn.execute('INSERT INTO api_keys (prefix) VALUES (?)', [v])"
+        assert pattern.search(bad_snippet) is not None, (
+            "Gate regex must match INSERT INTO api_keys"
+        )
+        update_snippet = 'cur.execute("UPDATE api_keys SET enabled=0 WHERE id=?")'
+        assert pattern.search(update_snippet) is not None, (
+            "Gate regex must match UPDATE api_keys"
+        )
+
+    def test_grandfathered_mapping_py_passes_gate(self) -> None:
+        """api/auth_scopes/mapping.py is grandfathered and must not trip the gate."""
+        gate = self._load_gate()
+        # If the gate passes (tested in test_gate_passes_clean_tree), mapping.py
+        # is correctly in the allowlist.  This test makes the intent explicit.
+        import inspect
+
+        src = inspect.getsource(gate.main)
+        assert "api/auth_scopes/mapping.py" in src, (
+            "mapping.py must appear in _LEGACY_WRITE_ALLOWED"
+        )

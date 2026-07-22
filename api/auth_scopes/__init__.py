@@ -16,7 +16,6 @@ from .mapping import (
     list_api_keys,
     mint_key,
     revoke_api_key,
-    rotate_api_key_by_prefix,
 )
 from .resolution import (
     _apply_tenant_context,
@@ -57,7 +56,6 @@ __all__ = [
     "log_tenant_denial_event",
     "redact_detail",
     "revoke_api_key",
-    "rotate_api_key_by_prefix",
     "list_api_keys",
     "_extract_key",
     "_validate_tenant_id",
