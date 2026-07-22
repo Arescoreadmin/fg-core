@@ -74,7 +74,7 @@ class EnrollRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bootstrap_token: str = Field(min_length=8, max_length=256)
-    agent_id: str = Field(min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=122)
     device_id: str = Field(min_length=1, max_length=128)
     hostname: str = Field(min_length=1, max_length=255)
     platform: str = Field(min_length=1, max_length=64)
@@ -445,12 +445,19 @@ def get_device_credential(
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
 
+    is_postgres = engine.dialect.name == "postgresql"
+    json_filter = (
+        "metadata ->> 'device_id'"
+        if is_postgres
+        else "JSON_EXTRACT(metadata, '$.device_id')"
+    )
+
     with engine.begin() as conn:
         row = conn.execute(
             text(
                 "SELECT credential_id FROM tenant_credentials "
                 "WHERE tenant_id = :tid AND credential_type = 'agent_device' "
-                "  AND JSON_EXTRACT(metadata, '$.device_id') = :did "
+                f"  AND {json_filter} = :did "
                 "ORDER BY generation DESC LIMIT 1"
             ),
             {"tid": tenant_id, "did": device_id},
@@ -478,12 +485,19 @@ def suspend_device_credential(
     actor = _actor(request)
     engine = get_engine()
 
+    is_postgres = engine.dialect.name == "postgresql"
+    json_filter = (
+        "metadata ->> 'device_id'"
+        if is_postgres
+        else "JSON_EXTRACT(metadata, '$.device_id')"
+    )
+
     with engine.begin() as conn:
         row = conn.execute(
             text(
                 "SELECT credential_id FROM tenant_credentials "
                 "WHERE tenant_id = :tid AND credential_type = 'agent_device' "
-                "  AND JSON_EXTRACT(metadata, '$.device_id') = :did "
+                f"  AND {json_filter} = :did "
                 "  AND status = 'active' "
                 "ORDER BY generation DESC LIMIT 1"
             ),
@@ -517,12 +531,19 @@ def resume_device_credential(
     actor = _actor(request)
     engine = get_engine()
 
+    is_postgres = engine.dialect.name == "postgresql"
+    json_filter = (
+        "metadata ->> 'device_id'"
+        if is_postgres
+        else "JSON_EXTRACT(metadata, '$.device_id')"
+    )
+
     with engine.begin() as conn:
         row = conn.execute(
             text(
                 "SELECT credential_id FROM tenant_credentials "
                 "WHERE tenant_id = :tid AND credential_type = 'agent_device' "
-                "  AND JSON_EXTRACT(metadata, '$.device_id') = :did "
+                f"  AND {json_filter} = :did "
                 "  AND status = 'suspended' "
                 "ORDER BY generation DESC LIMIT 1"
             ),

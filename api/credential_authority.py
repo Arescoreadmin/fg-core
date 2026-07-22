@@ -1913,7 +1913,7 @@ def exchange_bootstrap_token(
             )
 
         # Atomic increment — WHERE clause prevents double-consumption under concurrency.
-        conn.execute(
+        result = conn.execute(
             text(
                 "UPDATE agent_enrollment_tokens "
                 "SET used_count = used_count + 1 "
@@ -1921,6 +1921,10 @@ def exchange_bootstrap_token(
             ),
             {"id": tok_row[0]},
         )
+        if result.rowcount != 1:
+            raise CredentialNotFoundError(
+                "bootstrap token has already been consumed", absent=True
+            )
 
     # Build slot and metadata for the canonical credential.
     credential_slot = f"agent:{agent_id}"

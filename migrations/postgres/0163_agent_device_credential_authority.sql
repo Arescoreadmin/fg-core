@@ -151,4 +151,24 @@ WHERE adk.enabled = true
 
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
 
+-- Extend status constraint to include suspension lifecycle state
+ALTER TABLE tenant_credentials
+    DROP CONSTRAINT IF EXISTS tenant_credentials_status_valid;
+ALTER TABLE tenant_credentials
+    ADD CONSTRAINT tenant_credentials_status_valid CHECK (
+        status IN ('pending', 'active', 'rotated', 'revoked', 'expired', 'suspended')
+    );
+
+-- Extend event-type constraint to include suspend/resume audit events
+ALTER TABLE tenant_credential_events
+    DROP CONSTRAINT IF EXISTS tce_event_type_valid;
+ALTER TABLE tenant_credential_events
+    ADD CONSTRAINT tce_event_type_valid CHECK (
+        event_type IN (
+            'issued', 'rotated', 'revoked', 'expired',
+            'validated', 'validation_failed', 'denied_tenant_state',
+            'suspended', 'resumed'
+        )
+    );
+
 COMMIT;
