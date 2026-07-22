@@ -331,7 +331,9 @@ class TestConnectorCredentialType:
         result = _issue_connector(engine)
         record = get_credential(engine, result.record.credential_id, _TID)
         record_repr = repr(record)
-        assert result.plaintext_secret not in record_repr
+        plaintext_secret = result.plaintext_secret
+        assert plaintext_secret is not None
+        assert plaintext_secret not in record_repr
         assert not hasattr(record, "secret_hash")
 
     def test_connector_principal_tenant_id_correct(self, engine: Engine) -> None:

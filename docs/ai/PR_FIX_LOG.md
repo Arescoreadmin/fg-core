@@ -19800,3 +19800,26 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `pytest -q tests/tools/test_resolver_diff_range.py` → 13 passed
   - `make required-tests-gate` → PASS
 - **Result:** Pass.
+
+## fix/r4.9b-strict-mypy-regressions — bot P1 + mypy typing fixes (2026-07-22)
+
+- **Date:** 2026-07-22
+- **Category:** Bug fix (audit correctness) + typing correctness
+- **Files changed:**
+  - `api/portal.py`
+  - `tests/test_r4_9_portal_access.py`
+  - `tests/test_r4_9b_connector_credentials.py`
+  - `tools/seed/demo_tenants.py`
+- **Reason (bot P1 — audit regression in `api/portal.py`):** The `if engagement_id is not None:` guard introduced to satisfy mypy silently dropped the FA engagement audit (`fa_engagement_audit_events`, event `portal_grant.revoked`) for canonical grants. For canonical grants the `portal_grants` row is absent so `legacy` is None, making `engagement_id = None` and skipping the emit. But `engagement_id` is available in `tenant_credentials.metadata` for every canonical portal grant. Fix: when `legacy` is None, call `ca.get_credential()` to recover `engagement_id` and `client_id` from canonical metadata, then proceed to emit as before. `CredentialNotFoundError` is caught and leaves `engagement_id = None` (safe skip for already-deleted canonical records).
+- **Reason (mypy — Optional str membership, stale GrantCreated caller, Optional engagement_id):** Four strict mypy errors introduced by R4.9b; see commit message for per-error root causes.
+- **Behavioral impact:** Restores FA engagement audit emission for canonical grant revocations. No change to legacy grant path. Typing-only fixes in tests and seed script have no runtime impact.
+- **Security impact:** None. Audit trail correctness improved.
+- **Schema/API impact:** None.
+- **Validation:**
+  - `mypy api/portal.py tests/test_r4_9_portal_access.py tests/test_r4_9b_connector_credentials.py tools/seed/demo_tenants.py` → no issues
+  - `mypy .` → no issues in 2028 source files
+  - `pytest -q tests/test_r4_9b_connector_credentials.py tests/test_r4_9_portal_access.py` → 58 passed
+  - `ruff check` → all checks passed
+  - `ruff format --check` → 4 files already formatted
+  - `required-tests gate` → PASS
+- **Result:** Pass.
