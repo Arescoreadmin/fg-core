@@ -483,18 +483,22 @@ def revoke_portal_grant(
     ).scalar_one_or_none()
     engagement_id = legacy.engagement_id if legacy else None
     client_id = legacy.client_id if legacy else None
-    audit_atomicity_svc.emit(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        event_type="portal_grant.revoked",
-        actor=actor,
-        actor_type="human_operator",
-        reason_code="PORTAL_GRANT_REVOKED",
-        entity_type="portal_grant",
-        entity_id=grant_id,
-        payload={"grant_id": grant_id, "client_id": client_id},
-    )
+    # For canonical grants, portal_grants row is absent and engagement_id is
+    # unknown here; the service-level audit in revoke_grant() already recorded
+    # the event.  Only emit the FA engagement audit for legacy grants.
+    if engagement_id is not None:
+        audit_atomicity_svc.emit(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="portal_grant.revoked",
+            actor=actor,
+            actor_type="human_operator",
+            reason_code="PORTAL_GRANT_REVOKED",
+            entity_type="portal_grant",
+            entity_id=grant_id,
+            payload={"grant_id": grant_id, "client_id": client_id},
+        )
     db.commit()
     return RevokeGrantResponse(ok=True)
 

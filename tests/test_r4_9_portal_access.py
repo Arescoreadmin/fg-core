@@ -355,7 +355,9 @@ class TestPortalAccessType:
         result = _issue_portal(engine)
         record = get_credential(engine, result.record.credential_id, _TID)
         record_repr = repr(record)
-        assert result.plaintext_secret not in record_repr
+        plaintext_secret = result.plaintext_secret
+        assert plaintext_secret is not None
+        assert plaintext_secret not in record_repr
         # Verify secret_hash is not surfaced through public API
         assert not hasattr(record, "secret_hash")
 

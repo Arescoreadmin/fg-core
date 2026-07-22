@@ -1041,7 +1041,7 @@ def _create_portal_grant(
         created_by="demo_seed",
         ttl_days=365,
     )
-    return result.grant.id, result.raw_secret, result.grant.expires_at
+    return result.credential_id, result.raw_secret, result.expires_at
 
 
 def _ensure_tenant_user(db: Session, tenant: DemoTenant) -> None:
