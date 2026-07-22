@@ -481,11 +481,22 @@ def revoke_portal_grant(
             PortalGrant.tenant_id == tenant_id,
         )
     ).scalar_one_or_none()
-    engagement_id = legacy.engagement_id if legacy else None
-    client_id = legacy.client_id if legacy else None
-    # For canonical grants, portal_grants row is absent and engagement_id is
-    # unknown here; the service-level audit in revoke_grant() already recorded
-    # the event.  Only emit the FA engagement audit for legacy grants.
+    if legacy is not None:
+        engagement_id: str | None = legacy.engagement_id
+        client_id: str | None = legacy.client_id
+    else:
+        # Canonical grant: portal_grants row is absent. Recover engagement_id
+        # from tenant_credentials metadata so the FA engagement audit is still
+        # emitted. grant_id == credential_id for canonical grants.
+        try:
+            canonical_meta = (
+                ca.get_credential(get_engine(), grant_id, tenant_id).metadata or {}
+            )
+            engagement_id = canonical_meta.get("engagement_id")
+            client_id = canonical_meta.get("client_id")
+        except ca.CredentialNotFoundError:
+            engagement_id = None
+            client_id = None
     if engagement_id is not None:
         audit_atomicity_svc.emit(
             db,
