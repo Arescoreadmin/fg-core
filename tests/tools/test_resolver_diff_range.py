@@ -38,6 +38,8 @@ def test_event_shas_both_present() -> None:
     head_sha = "11223344aabb" * 3
     rules = [
         ("cat-file", 0, "", ""),
+        # merge-base verification required by Strategy A
+        ("merge-base", 0, "mergebase0000\n", ""),
     ]
     with mock.patch(
         "tools.testing.harness.required_tests_gate._run_git",
@@ -67,6 +69,8 @@ def test_event_base_sha_missing_fetch_succeeds() -> None:
             return mock.Mock(returncode=0, stdout="", stderr="")
         if "fetch" in cmd and base_sha[:12] in cmd:
             return mock.Mock(returncode=0, stdout="", stderr="")
+        if "merge-base" in cmd:
+            return mock.Mock(returncode=0, stdout="verifiedbase\n", stderr="")
         return mock.Mock(returncode=0, stdout="", stderr="")
 
     with mock.patch(
@@ -95,6 +99,8 @@ def test_event_head_sha_missing_fetch_succeeds() -> None:
             return mock.Mock(returncode=0, stdout="", stderr="")
         if "fetch" in cmd and head_sha[:12] in cmd:
             return mock.Mock(returncode=0, stdout="", stderr="")
+        if "merge-base" in cmd:
+            return mock.Mock(returncode=0, stdout="verifiedbase\n", stderr="")
         return mock.Mock(returncode=0, stdout="", stderr="")
 
     with mock.patch(
@@ -105,6 +111,29 @@ def test_event_head_sha_missing_fetch_succeeds() -> None:
 
     assert base == base_sha
     assert head == head_sha
+
+
+def test_event_shas_present_but_no_merge_base_falls_back() -> None:
+    """Objects both locally present but no common ancestor → fall through to C/D."""
+    base_sha = "abcdef001234" * 3
+    head_sha = "fedcba005678" * 3
+    rules = [
+        ("cat-file", 0, "", ""),
+        # Strategy A merge-base check: no common ancestor (shallow PR head)
+        (f"merge-base {base_sha[:12]}", 128, "", "fatal: no merge base"),
+        # Strategy C: origin/main present, merge-base via HEAD succeeds
+        ("merge-base origin/main HEAD", 0, "realmergebase\n", ""),
+    ]
+    with mock.patch(
+        "tools.testing.harness.required_tests_gate._run_git",
+        side_effect=_mock_git(rules),
+    ):
+        base, head, diags = _resolve_diff_range(None, base_sha, head_sha)
+
+    assert base == "realmergebase"
+    assert head == "HEAD"
+    assert any("no common ancestor" in d for d in diags)
+    assert any("C" in d for d in diags)
 
 
 def test_event_shas_fetch_fails_falls_back() -> None:

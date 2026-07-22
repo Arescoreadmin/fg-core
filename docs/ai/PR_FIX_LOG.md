@@ -19610,3 +19610,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `ruff check tools/tenants/migrate_to_postgres.py tools/tenants/registry.py`
   - `git diff --check`
 - **Result:** Pass.
+
+## PR #564 — fix(gate): verify merge-base before Strategy A three-dot diff
+
+- **Date:** 2026-07-22
+- **Category:** CI tooling fix / no behavioral change to product code
+- **Files changed:**
+  - `tools/testing/harness/required_tests_gate.py`
+  - `tests/tools/test_resolver_diff_range.py`
+- **Reason:** In GitHub Actions PR checkout (`refs/pull/N/merge`), the event head SHA is present as a parentless git object (second parent of merge commit). `git cat-file -e` returns 0 but the SHA has no traversable ancestry, so `git diff base...head` (three-dot) fails with "fatal: no merge base". Added `git merge-base` verification to Strategy A; if the common ancestor is not computable, fall through to Strategy C which uses `HEAD` (the merge commit) — `git merge-base origin/main HEAD` always succeeds because origin/main is a direct parent.
+- **Behavioral impact:** None to product. Gate fail-closed behavior preserved; only the diff-range resolution path changes for the parentless-object edge case.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Validation:**
+  - `pytest -q tests/tools/test_resolver_diff_range.py` → 13 passed
+  - `make required-tests-gate` → PASS
+- **Result:** Pass.
