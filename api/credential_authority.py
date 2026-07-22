@@ -61,11 +61,15 @@ log = logging.getLogger("frostgate.credential_authority")
 # Constants
 # ---------------------------------------------------------------------------
 
-VALID_CREDENTIAL_TYPES: frozenset[str] = frozenset({"tenant_api_key", "portal_access"})
+VALID_CREDENTIAL_TYPES: frozenset[str] = frozenset(
+    {"tenant_api_key", "portal_access", "connector"}
+)
 TERMINAL_STATUSES: frozenset[str] = frozenset({"rotated", "revoked", "expired"})
 CREDENTIAL_SCOPE: str = "credential:use"
 DEFAULT_CREDENTIAL_TTL_SECONDS: int = 365 * 24 * 3600
 DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS: int = 14 * 24 * 3600  # 14-day grant window
+# TTL=0: connector OAuth lifecycle is managed separately by the AES-GCM layer.
+DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS: int = 0
 SCHEMA_VERSION: int = 1
 
 # ---------------------------------------------------------------------------
@@ -104,6 +108,47 @@ class PortalAccessMetadata(BaseModel):
         if not v or not v.strip() or len(v) > _MAX_ENGAGEMENT_ID_LEN:
             raise ValueError(
                 f"engagement_id must be 1–{_MAX_ENGAGEMENT_ID_LEN} non-whitespace chars"
+            )
+        return v
+
+
+_MAX_PROVIDER_LEN = 128
+_MAX_CONNECTOR_ID_LEN = 255
+_MAX_DISPLAY_NAME_LEN = 512
+
+
+class ConnectorCredentialMetadata(BaseModel):
+    """Validated metadata stored in tenant_credentials for connector type.
+
+    provider + connector_id form the stable binding. engagement_id is optional
+    for connectors scoped to a specific engagement.
+    """
+
+    tenant_id: str
+    provider: str
+    connector_id: str
+    credential_slot: str
+    credential_kind: str  # "oauth2", "service_account", "api_key", etc.
+    display_name: str
+    created_by: str
+    rotation_generation: int
+    engagement_id: str | None = None
+
+    @field_validator("provider")
+    @classmethod
+    def _check_provider(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_PROVIDER_LEN:
+            raise ValueError(
+                f"provider must be 1–{_MAX_PROVIDER_LEN} non-whitespace chars"
+            )
+        return v
+
+    @field_validator("connector_id")
+    @classmethod
+    def _check_connector_id(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_CONNECTOR_ID_LEN:
+            raise ValueError(
+                f"connector_id must be 1–{_MAX_CONNECTOR_ID_LEN} non-whitespace chars"
             )
         return v
 
@@ -530,6 +575,46 @@ def _parse_portal_key(raw_key: str) -> str:
     return stripped
 
 
+# Connector secret bounds — token_urlsafe(32) produces 43 chars; accept a generous
+# range to allow for future entropy changes without breaking the validator.
+_CONNECTOR_SECRET_MIN_LEN = 20
+_CONNECTOR_SECRET_MAX_LEN = 128
+
+
+def _generate_connector_key(pepper: str) -> tuple[str, str, str, str]:
+    """Generate connector credential key. Same format as portal_access.
+
+    Returns (raw_key, secret_part, secret_prefix, fp).
+    raw_key == secret_part — no fgk. prefix, no encoded payload.
+    The entire token is the secret input for fingerprint derivation.
+    """
+    secret_part = secrets.token_urlsafe(32)
+    fp = _compute_lookup_fingerprint(secret_part, pepper)
+    secret_prefix = fp[:8]
+    return secret_part, secret_part, secret_prefix, fp
+
+
+def _parse_connector_key(raw_key: str) -> str:
+    """Validate and return secret_part for a connector credential token.
+
+    Raises CredentialNotFoundError(absent=True) on: empty, whitespace-only,
+    out-of-range length, or fgk. prefix (caller confused the key type).
+    """
+    if not raw_key:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    stripped = raw_key.strip()
+    if not stripped:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if stripped.startswith("fgk."):
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if (
+        len(stripped) < _CONNECTOR_SECRET_MIN_LEN
+        or len(stripped) > _CONNECTOR_SECRET_MAX_LEN
+    ):
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    return stripped
+
+
 def _hash_secret(secret_part: str) -> tuple[str, dict]:
     """Argon2id hash of secret_part. Returns (phc_string, params_dict)."""
     phc = _HASHER.hash(secret_part)
@@ -828,11 +913,12 @@ def issue_credential(
         # discards it before it can be returned.
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        default_ttl = (
-            DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
-            if credential_type == "portal_access"
-            else DEFAULT_CREDENTIAL_TTL_SECONDS
-        )
+        if credential_type == "portal_access":
+            default_ttl = DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
+        elif credential_type == "connector":
+            default_ttl = DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS
+        else:
+            default_ttl = DEFAULT_CREDENTIAL_TTL_SECONDS
         ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
         expires_dt = (
             None
@@ -843,6 +929,10 @@ def issue_credential(
 
         if credential_type == "portal_access":
             raw_key, secret_part, secret_prefix, fp = _generate_portal_key(
+                _get_pepper()
+            )
+        elif credential_type == "connector":
+            raw_key, secret_part, secret_prefix, fp = _generate_connector_key(
                 _get_pepper()
             )
         else:
@@ -934,6 +1024,9 @@ def validate_credential(
     """
     if credential_type == "portal_access":
         secret_part = _parse_portal_key(raw_key)
+        tenant_id_hint = ""
+    elif credential_type == "connector":
+        secret_part = _parse_connector_key(raw_key)
         tenant_id_hint = ""
     else:
         tenant_id_hint, secret_part = _parse_key(raw_key)
@@ -1154,11 +1247,12 @@ def rotate_credential(
         # New key material.
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        default_ttl = (
-            DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
-            if credential_type == "portal_access"
-            else DEFAULT_CREDENTIAL_TTL_SECONDS
-        )
+        if credential_type == "portal_access":
+            default_ttl = DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
+        elif credential_type == "connector":
+            default_ttl = DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS
+        else:
+            default_ttl = DEFAULT_CREDENTIAL_TTL_SECONDS
         ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
         expires_dt = (
             None
@@ -1169,6 +1263,10 @@ def rotate_credential(
 
         if credential_type == "portal_access":
             raw_key, secret_part, secret_prefix, fp = _generate_portal_key(
+                _get_pepper()
+            )
+        elif credential_type == "connector":
+            raw_key, secret_part, secret_prefix, fp = _generate_connector_key(
                 _get_pepper()
             )
         else:
@@ -1188,9 +1286,12 @@ def rotate_credential(
         )
         scopes_csv = old_record.scopes_csv or CREDENTIAL_SCOPE
 
-        # For portal_access, carry binding metadata into the new generation.
+        # For portal_access and connector, carry binding metadata into the new
+        # generation.
         new_metadata = (
-            old_record.metadata if credential_type == "portal_access" else None
+            old_record.metadata
+            if credential_type in ("portal_access", "connector")
+            else None
         )
 
         # Insert new generation first — never invalidate old before new is safe.
@@ -1586,3 +1687,62 @@ def list_credential_events(
             params,
         ).fetchall()
     return [_row_to_event(r) for r in rows]
+
+
+def get_active_credential_for_slot(
+    engine: Engine,
+    *,
+    tenant_id: str,
+    credential_type: str,
+    credential_slot: str,
+) -> Optional[CredentialRecord]:
+    """Return the active canonical credential for a slot, or None if absent.
+
+    This is for internal lookups (e.g., connector runners) that need to check
+    canonical lifecycle status without presenting a token.
+
+    Return semantics — callers MUST honour both:
+      None               → no canonical record for this slot (safe to fall back
+                           to legacy path during the migration window).
+      CredentialRecord   → canonical record exists and is active.
+      CredentialNotFoundError(absent=False) → canonical record exists but is
+                           revoked, expired, or in another terminal state.
+                           Callers MUST NOT fall through to any legacy path —
+                           the credential has been explicitly decommissioned.
+
+    Querying most-recent generation (not just status='active') is intentional:
+    it is the only way to distinguish "absent" from "revoked" without a second
+    query. A status='active' filter would return None for both cases, making
+    revoked credentials silently fall through to the legacy AES-GCM path.
+
+    NOTE: Does NOT set SET LOCAL app.tenant_id — internal trusted-code path,
+    not a request handler. RLS is not required on this path.
+    """
+    with engine.begin() as conn:
+        # ORDER BY generation DESC LIMIT 1: get the most recent generation so we
+        # can tell "absent" (row is None) from "found but terminal" (row exists,
+        # status != 'active').
+        row = conn.execute(
+            text(
+                f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
+                "WHERE tenant_id = :tid AND credential_type = :ctype "
+                "  AND credential_slot = :slot "
+                "ORDER BY generation DESC LIMIT 1"
+            ),
+            {"tid": tenant_id, "ctype": credential_type, "slot": credential_slot},
+        ).fetchone()
+    if row is None:
+        return None  # Truly absent — safe to fall back to legacy
+    rec = _row_to_record(cast(Row[Any], row))
+    if rec.status != "active":
+        # Found but terminal — fail closed, never fall back.
+        raise CredentialNotFoundError(
+            f"connector credential is {rec.status!r} and cannot be used",
+            absent=False,
+        )
+    if rec.expires_at is not None and rec.expires_at <= datetime.now(timezone.utc):
+        raise CredentialNotFoundError(
+            "connector credential has expired",
+            absent=False,
+        )
+    return rec

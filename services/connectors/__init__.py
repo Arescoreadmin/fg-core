@@ -10,6 +10,7 @@ from .policy import (
 )
 from .oauth_store import (
     load_active_secret,
+    load_connector_secret,
     revoke_connector_credentials,
     upsert_credential,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "set_tenant_policy_version",
     "tenant_policy_version",
     "load_active_secret",
+    "load_connector_secret",
     "revoke_connector_credentials",
     "upsert_credential",
     "audit_connector_action",
