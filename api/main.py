@@ -72,6 +72,11 @@ from api.agent_enrollment import router as agent_enrollment_router
 from api.agent_phase2 import admin_router as agent_phase2_admin_router
 from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
+from api.agents_credential_authority import (
+    admin_router as agents_ca_admin_router,
+    agent_router as agents_ca_agent_router,
+    device_router as agents_ca_device_router,
+)
 from api.workforce import router as workforce_router
 from api.admin_identity import router as admin_identity_router
 from api.assessments import router as assessments_router
@@ -721,6 +726,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
+    app.include_router(agents_ca_admin_router)
+    app.include_router(agents_ca_device_router)
+    app.include_router(agents_ca_agent_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(report_authority_router)
@@ -1199,6 +1207,9 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
+    app.include_router(agents_ca_admin_router)
+    app.include_router(agents_ca_device_router)
+    app.include_router(agents_ca_agent_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(report_authority_router)

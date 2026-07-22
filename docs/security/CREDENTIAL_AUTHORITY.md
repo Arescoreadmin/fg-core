@@ -276,6 +276,84 @@ A real HMAC-SHA256 fingerprint is a 64-character lowercase hex string (`[0-9a-f]
 
 An internal function (not a public validation path) that checks canonical status by slot without presenting a token. Used by `load_connector_secret()` to enforce fail-closed on revoked/expired canonical records before decrypting the AES-GCM payload. Does not set `SET LOCAL app.tenant_id` — this is trusted internal code, not a request handler.
 
+### agent_device (R4.10)
+
+```python
+class AgentDeviceCredentialMetadata(BaseModel):
+    agent_id: str             # logical agent identifier; max 255 chars
+    device_id: str            # device instance identifier; max 255 chars
+    hostname: str
+    platform: str             # linux / windows / darwin / container / unknown
+    architecture: str         # x86_64 / arm64 / etc.
+    os_version: str
+    agent_version: str
+    deployment_environment: str  # prod / staging / dev / ci
+    bootstrap_method: str     # enrollment_token / manual / auto
+    trust_level: str          # full / limited / quarantine
+    credential_slot: str      # agent:{agent_id}
+    issued_by: str
+    rotation_generation: int
+    hardware_fingerprint: str  # required — SHA-256 of hardware identifiers
+    # Optional enrichment
+    device_uuid: str | None = None
+    certificate_serial: str | None = None
+    public_key_fingerprint: str | None = None
+    enrollment_id: str | None = None
+    attestation_hash: str | None = None
+    last_seen: str | None = None
+    last_successful_authentication: str | None = None
+    metadata_version: int = 1
+    future_extensions: dict = {}  # extensible for TPM, FIDO2, SPIFFE
+```
+
+**Token format:** same as `portal_access` and `connector` — raw `token_urlsafe(32)` (~43 chars), no prefix. `HMAC-SHA256(secret, FG_KEY_PEPPER)` for fingerprint lookup.
+
+**Default TTL:** 90 days (`DEFAULT_AGENT_DEVICE_CREDENTIAL_TTL_SECONDS = 90 * 24 * 3600`).
+
+**Credential slot:** `agent:{agent_id}` — one active credential per logical agent. Rotating an agent credential bumps the generation on the same slot and carries all binding metadata forward.
+
+**Bootstrap token flow:**
+
+1. Admin calls `POST /admin/agents/bootstrap` → `ca.issue_bootstrap_token()` → one-time token stored SHA-256 hashed in `agent_enrollment_tokens`.
+2. Agent calls `POST /agents/enroll` with token + device attestation → `ca.exchange_bootstrap_token()` → token consumed atomically (`used_count < max_uses` guard), `agent_device` credential issued with idempotency key `bootstrap:{enrollment_id}:{agent_id}`.
+3. Raw `agent_secret` returned exactly once. Agent must store securely.
+
+**Suspend / resume:**
+
+- `suspend_credential()` — sets `status = 'suspended'`; validation rejects with `absent=False` (fail-closed, opaque error). Idempotent.
+- `resume_credential()` — sets `status = 'active'`; validation resumes normally. Idempotent.
+- Revocation is terminal: a revoked credential cannot be suspended or resumed.
+
+**Device trust state machine:**
+
+11 states: `unknown → pending → bootstrapping → enrolled → active`. Non-terminal: `rotating`, `suspended`, `orphaned`, `failed_attestation`. Terminal: `revoked`, `expired`. `validate_trust_transition(from, to)` enforces the adjacency list in `VALID_TRUST_TRANSITIONS`.
+
+**Sentinel migration records** (created by `migrations/postgres/0163_agent_device_credential_authority.sql`):
+
+Copies active `agent_device_keys` rows into `tenant_credentials` as sentinel records.
+
+| Field | Sentinel value |
+|-------|---------------|
+| `credential_slot` | `legacy:device:{device_id}:{id}` |
+| `lookup_fingerprint` | `legacy:{id}` |
+| `metadata.validation_mode` | `"legacy_only"` |
+| `metadata.source` | `"legacy_agent_device"` |
+
+**API routes (`api/agents_credential_authority.py`):**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/admin/agents/bootstrap` | Issue one-time bootstrap token |
+| `GET` | `/admin/agents/{agent_id}/credential` | Get current credential record |
+| `POST` | `/admin/agents/{agent_id}/rotate` | Rotate credential |
+| `POST` | `/admin/agents/{agent_id}/revoke` | Revoke (terminal) |
+| `POST` | `/admin/agents/{agent_id}/suspend` | Suspend (reversible) |
+| `POST` | `/admin/agents/{agent_id}/resume` | Resume suspended credential |
+| `GET` | `/admin/devices/{device_id}/credential` | Lookup by device_id (metadata) |
+| `POST` | `/admin/devices/{device_id}/suspend` | Suspend by device_id |
+| `POST` | `/admin/devices/{device_id}/resume` | Resume by device_id |
+| `POST` | `/agents/enroll` | Exchange bootstrap token for credential |
+
 ---
 
 ## 5. Validation Path

@@ -44,7 +44,7 @@ import os
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, cast
 
 from argon2 import PasswordHasher
@@ -62,7 +62,7 @@ log = logging.getLogger("frostgate.credential_authority")
 # ---------------------------------------------------------------------------
 
 VALID_CREDENTIAL_TYPES: frozenset[str] = frozenset(
-    {"tenant_api_key", "portal_access", "connector"}
+    {"tenant_api_key", "portal_access", "connector", "agent_device"}
 )
 TERMINAL_STATUSES: frozenset[str] = frozenset({"rotated", "revoked", "expired"})
 CREDENTIAL_SCOPE: str = "credential:use"
@@ -70,6 +70,10 @@ DEFAULT_CREDENTIAL_TTL_SECONDS: int = 365 * 24 * 3600
 DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS: int = 14 * 24 * 3600  # 14-day grant window
 # TTL=0: connector OAuth lifecycle is managed separately by the AES-GCM layer.
 DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS: int = 0
+# 90-day rolling window; rotation is required before expiry.
+DEFAULT_AGENT_DEVICE_CREDENTIAL_TTL_SECONDS: int = 90 * 24 * 3600
+# Bootstrap tokens are short-lived and single-use; default 1 hour.
+DEFAULT_BOOTSTRAP_TOKEN_TTL_SECONDS: int = 3600
 SCHEMA_VERSION: int = 1
 
 # ---------------------------------------------------------------------------
@@ -151,6 +155,158 @@ class ConnectorCredentialMetadata(BaseModel):
                 f"connector_id must be 1–{_MAX_CONNECTOR_ID_LEN} non-whitespace chars"
             )
         return v
+
+
+# ---------------------------------------------------------------------------
+# Agent / Device credential metadata and trust state machine (R4.10)
+# ---------------------------------------------------------------------------
+
+_MAX_AGENT_ID_LEN = 128
+_MAX_DEVICE_ID_LEN = 128
+_MAX_HOSTNAME_LEN = 255
+_MAX_PLATFORM_LEN = 64
+_MAX_ARCH_LEN = 32
+_MAX_OS_VERSION_LEN = 128
+_MAX_AGENT_VERSION_LEN = 64
+_MAX_ENV_LEN = 32
+_MAX_TRUST_LEVEL_LEN = 32
+
+
+class AgentDeviceCredentialMetadata(BaseModel):
+    """Validated metadata stored in tenant_credentials for agent_device type.
+
+    agent_id + device_id form the canonical identity binding. The credential_slot
+    is always "agent:{agent_id}" — one active credential per logical agent.
+
+    Designed for extensibility: new fields may be added without schema changes
+    via future_extensions. metadata_version guards forward compatibility.
+
+    Future-proofed for TPM attestation, FIDO2, SPIFFE, and hardware-backed keys
+    through attestation_hash and future_extensions. No partial implementation.
+    """
+
+    # Core identity — required
+    agent_id: str
+    device_id: str
+    hostname: str
+    platform: str  # linux / windows / darwin / container / unknown
+    architecture: str  # x86_64 / arm64 / etc.
+    os_version: str
+    agent_version: str
+    deployment_environment: str  # prod / staging / dev / ci
+    bootstrap_method: str  # enrollment_token / manual / auto
+    trust_level: str  # full / limited / quarantine
+    credential_slot: str
+    issued_by: str
+    rotation_generation: int
+
+    # Device fingerprinting — required
+    hardware_fingerprint: str  # SHA-256 of hardware identifiers, peppered
+
+    # Optional enrichment
+    device_uuid: str | None = None
+    certificate_serial: str | None = None
+    public_key_fingerprint: str | None = None
+    enrollment_id: str | None = None
+    attestation_hash: str | None = None
+    last_seen: str | None = None
+    last_successful_authentication: str | None = None
+
+    # Extensibility
+    metadata_version: int = 1
+    future_extensions: dict = {}  # type: ignore[type-arg]
+
+    @field_validator("agent_id")
+    @classmethod
+    def _check_agent_id(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_AGENT_ID_LEN:
+            raise ValueError(
+                f"agent_id must be 1–{_MAX_AGENT_ID_LEN} non-whitespace chars"
+            )
+        return v
+
+    @field_validator("device_id")
+    @classmethod
+    def _check_device_id(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_DEVICE_ID_LEN:
+            raise ValueError(
+                f"device_id must be 1–{_MAX_DEVICE_ID_LEN} non-whitespace chars"
+            )
+        return v
+
+    @field_validator("hardware_fingerprint")
+    @classmethod
+    def _check_hw_fingerprint(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("hardware_fingerprint must not be empty")
+        return v
+
+
+# Device trust lifecycle states — ordered from least to most trusted / final.
+DEVICE_TRUST_STATES: frozenset[str] = frozenset(
+    {
+        "unknown",
+        "pending",
+        "bootstrapping",
+        "enrolled",
+        "active",
+        "rotating",
+        "suspended",
+        "revoked",
+        "expired",
+        "orphaned",
+        "failed_attestation",
+    }
+)
+
+# Adjacency list of valid (from_state, to_state) trust transitions.
+# Terminal states (revoked, expired) have no outgoing transitions.
+VALID_TRUST_TRANSITIONS: dict[str, frozenset[str]] = {
+    "unknown": frozenset({"pending"}),
+    "pending": frozenset({"bootstrapping", "revoked"}),
+    "bootstrapping": frozenset({"enrolled", "failed_attestation", "revoked"}),
+    "enrolled": frozenset({"active", "failed_attestation", "revoked"}),
+    "active": frozenset({"rotating", "suspended", "revoked", "expired", "orphaned"}),
+    "rotating": frozenset({"active", "revoked"}),
+    "suspended": frozenset({"active", "revoked"}),
+    "orphaned": frozenset({"active", "revoked"}),  # recovery path
+    "failed_attestation": frozenset({"pending", "revoked"}),  # retry or terminate
+    # Terminal states — no outgoing transitions.
+    "revoked": frozenset(),
+    "expired": frozenset(),
+}
+
+
+def validate_trust_transition(from_state: str, to_state: str) -> None:
+    """Raise CredentialStateError if the trust transition is invalid.
+
+    Both states must be known DEVICE_TRUST_STATES. The transition (from_state
+    → to_state) must appear in VALID_TRUST_TRANSITIONS.
+    """
+    if from_state not in DEVICE_TRUST_STATES:
+        raise CredentialStateError(f"Unknown device trust state: {from_state!r}")
+    if to_state not in DEVICE_TRUST_STATES:
+        raise CredentialStateError(f"Unknown device trust state: {to_state!r}")
+    allowed = VALID_TRUST_TRANSITIONS.get(from_state, frozenset())
+    if to_state not in allowed:
+        raise CredentialStateError(
+            f"Invalid device trust transition: {from_state!r} → {to_state!r}. "
+            f"Allowed: {sorted(allowed) or 'none (terminal state)'}"
+        )
+
+
+@dataclass(frozen=True)
+class BootstrapTokenResult:
+    """Result of issuing a bootstrap token.
+
+    raw_token is shown exactly once — the caller must transmit it to the
+    device immediately. It is never stored and cannot be re-retrieved.
+    """
+
+    raw_token: str
+    tenant_id: str
+    expires_at: datetime
+    enrollment_id: int  # row id in agent_enrollment_tokens
 
 
 # Module-level hasher — tests may monkeypatch with lower parameters to keep
@@ -615,6 +771,46 @@ def _parse_connector_key(raw_key: str) -> str:
     return stripped
 
 
+# Agent/device secret bounds — token_urlsafe(32) produces 43 chars; accept a generous
+# range to allow for future entropy changes without breaking the validator.
+_AGENT_DEVICE_SECRET_MIN_LEN = 20
+_AGENT_DEVICE_SECRET_MAX_LEN = 128
+
+
+def _generate_agent_device_key(pepper: str) -> tuple[str, str, str, str]:
+    """Generate agent_device credential key.
+
+    Returns (raw_key, secret_part, secret_prefix, fp).
+    raw_key == secret_part — raw opaque bearer token, no prefix.
+    Same format as portal_access and connector for uniformity.
+    """
+    secret_part = secrets.token_urlsafe(32)
+    fp = _compute_lookup_fingerprint(secret_part, pepper)
+    secret_prefix = fp[:8]
+    return secret_part, secret_part, secret_prefix, fp
+
+
+def _parse_agent_device_key(raw_key: str) -> str:
+    """Validate and return secret_part for an agent_device credential token.
+
+    Raises CredentialNotFoundError(absent=True) on: empty, whitespace-only,
+    out-of-range length, or fgk. prefix (caller confused the key type).
+    """
+    if not raw_key:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    stripped = raw_key.strip()
+    if not stripped:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if stripped.startswith("fgk."):
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if (
+        len(stripped) < _AGENT_DEVICE_SECRET_MIN_LEN
+        or len(stripped) > _AGENT_DEVICE_SECRET_MAX_LEN
+    ):
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    return stripped
+
+
 def _hash_secret(secret_part: str) -> tuple[str, dict]:
     """Argon2id hash of secret_part. Returns (phc_string, params_dict)."""
     phc = _HASHER.hash(secret_part)
@@ -917,6 +1113,8 @@ def issue_credential(
             default_ttl = DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
         elif credential_type == "connector":
             default_ttl = DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS
+        elif credential_type == "agent_device":
+            default_ttl = DEFAULT_AGENT_DEVICE_CREDENTIAL_TTL_SECONDS
         else:
             default_ttl = DEFAULT_CREDENTIAL_TTL_SECONDS
         ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
@@ -933,6 +1131,10 @@ def issue_credential(
             )
         elif credential_type == "connector":
             raw_key, secret_part, secret_prefix, fp = _generate_connector_key(
+                _get_pepper()
+            )
+        elif credential_type == "agent_device":
+            raw_key, secret_part, secret_prefix, fp = _generate_agent_device_key(
                 _get_pepper()
             )
         else:
@@ -1028,6 +1230,9 @@ def validate_credential(
     elif credential_type == "connector":
         secret_part = _parse_connector_key(raw_key)
         tenant_id_hint = ""
+    elif credential_type == "agent_device":
+        secret_part = _parse_agent_device_key(raw_key)
+        tenant_id_hint = ""
     else:
         tenant_id_hint, secret_part = _parse_key(raw_key)
     fp = _compute_lookup_fingerprint(secret_part, _get_pepper())
@@ -1095,6 +1300,8 @@ def validate_credential(
 
     # Lazy expiration enforcement — status field may still read 'active'
     # if the sweep hasn't run yet; enforce at validation time regardless.
+    # "suspended" is a non-terminal blocking status (not in TERMINAL_STATUSES)
+    # but must be rejected at validation — same opaque error as other failures.
     if rec.status != "active":
         _emit_event_best_effort(
             engine,
@@ -1251,6 +1458,8 @@ def rotate_credential(
             default_ttl = DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
         elif credential_type == "connector":
             default_ttl = DEFAULT_CONNECTOR_CREDENTIAL_TTL_SECONDS
+        elif credential_type == "agent_device":
+            default_ttl = DEFAULT_AGENT_DEVICE_CREDENTIAL_TTL_SECONDS
         else:
             default_ttl = DEFAULT_CREDENTIAL_TTL_SECONDS
         ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
@@ -1267,6 +1476,10 @@ def rotate_credential(
             )
         elif credential_type == "connector":
             raw_key, secret_part, secret_prefix, fp = _generate_connector_key(
+                _get_pepper()
+            )
+        elif credential_type == "agent_device":
+            raw_key, secret_part, secret_prefix, fp = _generate_agent_device_key(
                 _get_pepper()
             )
         else:
@@ -1286,11 +1499,11 @@ def rotate_credential(
         )
         scopes_csv = old_record.scopes_csv or CREDENTIAL_SCOPE
 
-        # For portal_access and connector, carry binding metadata into the new
-        # generation.
+        # Carry binding metadata into the new generation for types where the
+        # identity binding must persist across key rotation.
         new_metadata = (
             old_record.metadata
-            if credential_type in ("portal_access", "connector")
+            if credential_type in ("portal_access", "connector", "agent_device")
             else None
         )
 
@@ -1443,6 +1656,304 @@ def revoke_credential(
 
     assert updated is not None, "credential revocation did not return a row"
     return _row_to_record(updated)
+
+
+# ---------------------------------------------------------------------------
+# Suspend / resume (R4.10 — agent_device lifecycle, generic by credential_id)
+# ---------------------------------------------------------------------------
+
+
+def suspend_credential(
+    engine: Engine,
+    *,
+    credential_id: str,
+    tenant_id: str,
+    actor_id: str,
+    reason: str,
+) -> CredentialRecord:
+    """Suspend an active credential.  Suspension is reversible via resume_credential().
+
+    Suspended credentials are rejected at validation without revealing the
+    suspended status to the caller (same opaque error as revoked/expired).
+
+    Raises:
+        CredentialNotFoundError: credential does not exist or wrong tenant.
+        CredentialStateError:    credential is not active (already suspended,
+            revoked, rotated, or expired).
+    """
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
+                "WHERE credential_id = :cid AND tenant_id = :tid"
+            ),
+            {"cid": credential_id, "tid": tenant_id},
+        ).fetchone()
+        if row is None:
+            raise CredentialNotFoundError(
+                f"Credential {credential_id!r} not found for tenant {tenant_id!r}."
+            )
+        rec = _row_to_record(cast(Row[Any], row))
+
+        if rec.status == "suspended":
+            return rec  # idempotent
+
+        if rec.status != "active":
+            raise CredentialStateError(
+                f"Credential {credential_id!r} is {rec.status!r} and cannot be suspended."
+            )
+
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET status = 'suspended' "
+                "WHERE credential_id = :cid AND tenant_id = :tid AND status = 'active'"
+            ),
+            {"cid": credential_id, "tid": tenant_id},
+        )
+        updated = conn.execute(
+            text(
+                f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
+                "WHERE credential_id = :cid"
+            ),
+            {"cid": credential_id},
+        ).fetchone()
+        _insert_event(
+            conn,
+            tenant_id=tenant_id,
+            credential_id=credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="suspended",
+            actor_id=actor_id,
+            metadata={"reason": reason},
+        )
+
+    assert updated is not None, "credential suspend did not return a row"
+    return _row_to_record(updated)
+
+
+def resume_credential(
+    engine: Engine,
+    *,
+    credential_id: str,
+    tenant_id: str,
+    actor_id: str,
+) -> CredentialRecord:
+    """Resume a suspended credential, restoring it to active.
+
+    Raises:
+        CredentialNotFoundError: credential does not exist or wrong tenant.
+        CredentialStateError:    credential is not suspended.
+    """
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
+                "WHERE credential_id = :cid AND tenant_id = :tid"
+            ),
+            {"cid": credential_id, "tid": tenant_id},
+        ).fetchone()
+        if row is None:
+            raise CredentialNotFoundError(
+                f"Credential {credential_id!r} not found for tenant {tenant_id!r}."
+            )
+        rec = _row_to_record(cast(Row[Any], row))
+
+        if rec.status == "active":
+            return rec  # idempotent
+
+        if rec.status != "suspended":
+            raise CredentialStateError(
+                f"Credential {credential_id!r} is {rec.status!r}; "
+                "only suspended credentials may be resumed."
+            )
+
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET status = 'active' "
+                "WHERE credential_id = :cid AND tenant_id = :tid AND status = 'suspended'"
+            ),
+            {"cid": credential_id, "tid": tenant_id},
+        )
+        updated = conn.execute(
+            text(
+                f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
+                "WHERE credential_id = :cid"
+            ),
+            {"cid": credential_id},
+        ).fetchone()
+        _insert_event(
+            conn,
+            tenant_id=tenant_id,
+            credential_id=credential_id,
+            credential_type=rec.credential_type,
+            credential_slot=rec.credential_slot,
+            generation=rec.generation,
+            event_type="resumed",
+            actor_id=actor_id,
+        )
+
+    assert updated is not None, "credential resume did not return a row"
+    return _row_to_record(updated)
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap token lifecycle (R4.10 — one-time bootstrap for agent enrollment)
+# ---------------------------------------------------------------------------
+
+
+def issue_bootstrap_token(
+    engine: Engine,
+    *,
+    tenant_id: str,
+    actor_id: str,
+    ttl_seconds: int = DEFAULT_BOOTSTRAP_TOKEN_TTL_SECONDS,
+    reason: str = "agent_bootstrap",
+    max_uses: int = 1,
+) -> BootstrapTokenResult:
+    """Issue a one-time bootstrap token for agent enrollment.
+
+    The token is stored hashed (SHA-256) in agent_enrollment_tokens.
+    raw_token is returned exactly once and must never be stored by the caller.
+
+    Raises:
+        TenantNotFoundError:  tenant_id does not exist.
+        TenantLifecycleError: tenant state does not permit issuance.
+    """
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+    expires_iso = expires_at.isoformat()
+
+    with engine.begin() as conn:
+        lifecycle_state = _get_tenant_lifecycle_state(conn, tenant_id)
+        _enforce_lifecycle(lifecycle_state, "issue", tenant_id)
+
+        row = conn.execute(
+            text(
+                "INSERT INTO agent_enrollment_tokens "
+                "(token_hash, tenant_id, created_by, reason, expires_at, max_uses, used_count) "
+                "VALUES (:hash, :tid, :actor, :reason, :exp, :max_uses, 0)"
+            ),
+            {
+                "hash": token_hash,
+                "tid": tenant_id,
+                "actor": actor_id,
+                "reason": reason,
+                "exp": expires_iso,
+                "max_uses": max_uses,
+            },
+        )
+        enrollment_id = row.lastrowid or 0
+
+    return BootstrapTokenResult(
+        raw_token=raw_token,
+        tenant_id=tenant_id,
+        expires_at=expires_at,
+        enrollment_id=enrollment_id,
+    )
+
+
+def exchange_bootstrap_token(
+    engine: Engine,
+    *,
+    tenant_id: str,
+    raw_token: str,
+    agent_id: str,
+    device_id: str,
+    hostname: str,
+    platform: str,
+    architecture: str,
+    os_version: str,
+    agent_version: str,
+    hardware_fingerprint: str,
+    deployment_environment: str = "prod",
+    trust_level: str = "full",
+    actor_id: str = "agent",
+    expires_in_seconds: Optional[int] = None,
+) -> IssuanceResult:
+    """Exchange a bootstrap token for a canonical agent_device credential.
+
+    The bootstrap token is consumed (used_count incremented) atomically before
+    the credential is issued. A consumed token can never be reused.
+
+    Raises:
+        CredentialNotFoundError(absent=True): token invalid, expired, or exhausted.
+        TenantNotFoundError:                 tenant_id does not exist.
+        TenantLifecycleError:                tenant state does not permit issuance.
+    """
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    with engine.begin() as conn:
+        tok_row = conn.execute(
+            text(
+                "SELECT id, tenant_id, expires_at, max_uses, used_count "
+                "FROM agent_enrollment_tokens "
+                "WHERE token_hash = :hash AND tenant_id = :tid"
+            ),
+            {"hash": token_hash, "tid": tenant_id},
+        ).fetchone()
+
+        if tok_row is None:
+            raise CredentialNotFoundError(
+                "bootstrap token invalid or not found", absent=True
+            )
+
+        exp = _parse_dt(tok_row[2])
+        if exp is not None and exp <= now:
+            raise CredentialNotFoundError("bootstrap token has expired", absent=True)
+
+        used_count: int = tok_row[4]
+        max_uses: int = tok_row[3]
+        if used_count >= max_uses:
+            raise CredentialNotFoundError(
+                "bootstrap token has already been consumed", absent=True
+            )
+
+        # Atomic increment — WHERE clause prevents double-consumption under concurrency.
+        conn.execute(
+            text(
+                "UPDATE agent_enrollment_tokens "
+                "SET used_count = used_count + 1 "
+                "WHERE id = :id AND used_count < max_uses"
+            ),
+            {"id": tok_row[0]},
+        )
+
+    # Build slot and metadata for the canonical credential.
+    credential_slot = f"agent:{agent_id}"
+    enrollment_id = str(tok_row[0])
+    meta = AgentDeviceCredentialMetadata(
+        agent_id=agent_id,
+        device_id=device_id,
+        hostname=hostname,
+        platform=platform,
+        architecture=architecture,
+        os_version=os_version,
+        agent_version=agent_version,
+        deployment_environment=deployment_environment,
+        bootstrap_method="enrollment_token",
+        trust_level=trust_level,
+        credential_slot=credential_slot,
+        issued_by=actor_id,
+        rotation_generation=1,
+        hardware_fingerprint=hardware_fingerprint,
+        enrollment_id=enrollment_id,
+    )
+
+    return issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="agent_device",
+        credential_slot=credential_slot,
+        scopes=[CREDENTIAL_SCOPE],
+        metadata=meta.model_dump(),
+        expires_in_seconds=expires_in_seconds,
+        actor_id=actor_id,
+        idempotency_key=f"bootstrap:{enrollment_id}:{agent_id}",
+    )
 
 
 def expire_credentials(
