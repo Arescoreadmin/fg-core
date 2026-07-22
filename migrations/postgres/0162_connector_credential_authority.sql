@@ -7,7 +7,7 @@
 -- credential_id before the transition window closes.
 --
 -- SENTINEL DESIGN (mirrors 0161_portal_access_migration.sql):
---   credential_slot    = 'legacy:{connector_id}'
+--   credential_slot    = 'legacy:{connector_id}:{id}'
 --   lookup_fingerprint = 'legacy:{id}'
 --
 -- A real HMAC-SHA256 fingerprint is a 64-char lowercase hex string (a-f 0-9).
@@ -38,7 +38,7 @@ INSERT INTO credential_slots (
 SELECT DISTINCT
     tenant_id,
     'connector',
-    'legacy:' || connector_id,
+    'legacy:' || connector_id || ':' || id::text,
     1,
     'immediate'
 FROM connectors_credentials
@@ -83,7 +83,10 @@ SELECT
     'connector',
 
     -- Legacy-namespaced slot prevents collision with new canonical slots
-    'legacy:' || connector_id,
+    -- Include row id to ensure uniqueness per connectors_credentials row
+    -- (prevents ix_tc_slot_generation violation when tenant has multiple
+    -- credentials for the same connector_id)
+    'legacy:' || connector_id || ':' || id::text,
 
     1,  -- generation (sentinel rows are generation 1)
 
@@ -145,12 +148,13 @@ SELECT
     encode(sha256((
         tenant_id || E'\n' ||
         'connector' || E'\n' ||
-        ('legacy:' || connector_id) || E'\n' ||
+        ('legacy:' || connector_id || ':' || id::text) || E'\n' ||
         '1' || E'\n' ||
         created_at::text
     )::bytea), 'hex')
 
 FROM connectors_credentials
+WHERE revoked_at IS NULL
 
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
 

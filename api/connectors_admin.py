@@ -48,9 +48,9 @@ def revoke_connector(
             canonical_rows = conn.execute(
                 text(
                     "SELECT credential_id FROM tenant_credentials "
-                    "WHERE tenant_id = :tid AND credential_type = ‘connector’ "
+                    "WHERE tenant_id = :tid AND credential_type = 'connector' "
                     "  AND credential_slot LIKE :slot_suffix "
-                    "  AND status NOT IN (‘revoked’, ‘rotated’, ‘expired’)"
+                    "  AND status NOT IN ('revoked', 'rotated', 'expired')"
                 ),
                 {"tid": tenant_id, "slot_suffix": f"%:{connector_id}"},
             ).fetchall()
@@ -104,7 +104,7 @@ def revoke_connector(
             tenant_id=tenant_id,
             connector_id=connector_id,
             action="credential_revoke",
-            params_hash="",  # keep minimal; don’t leak request contents
+            params_hash="",  # keep minimal; don't leak request contents
             actor=actor,
             request_id=(idempotency_key or ""),
         )
