@@ -88,10 +88,17 @@ def _resolve_diff_range(
             )
 
         if base_present and head_present:
-            diags.append("A: resolved via event SHAs")
-            return base_sha, head_sha, diags
+            mb_a = _run_git(["git", "merge-base", base_sha, head_sha])
+            if mb_a.returncode == 0 and mb_a.stdout.strip():
+                diags.append("A: resolved via event SHAs (merge-base confirmed)")
+                return base_sha, head_sha, diags
+            diags.append(
+                f"A: objects present but no common ancestor"
+                f" (merge-base rc={mb_a.returncode}); falling back"
+            )
 
-        diags.append("A: rejected (one or both SHAs unresolvable after fetch)")
+        else:
+            diags.append("A: rejected (one or both SHAs unresolvable after fetch)")
 
     # Strategy B — Explicit base_ref
     if base_ref is not None:
