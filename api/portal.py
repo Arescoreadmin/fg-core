@@ -16,7 +16,9 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import api.credential_authority as ca
 from api.auth_scopes import require_bound_tenant, require_scopes
+from api.db import get_engine
 from api.db_models_portal import PortalGrant, PortalGrantSession
 from api.deps import auth_ctx_db_session
 from api.entitlements import require_capability
@@ -236,16 +238,18 @@ _VALID_PORTAL_ROLES = frozenset(
 
 
 class GrantItem(BaseModel):
-    grant_id: str
+    credential_id: str
+    grant_id: str  # alias for credential_id — retained for backwards-compatibility
     client_id: str
     engagement_id: str
     portal_role: str
     status: str
-    created_by: str
+    created_by: str | None
     created_at: str
     expires_at: str
     last_used_at: str | None
     rotation_counter: int
+    source: str = "canonical"  # "canonical" | "legacy"
 
 
 class ListGrantsResponse(BaseModel):
@@ -265,9 +269,50 @@ def list_portal_grants(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> ListGrantsResponse:
-    """List all portal grants for the authenticated tenant."""
+    """List all portal grants for the authenticated tenant.
+
+    Returns canonical credentials (R4.9+) merged with active legacy grants
+    that have not yet been migrated.  Sentinel migration records are excluded.
+    """
     tenant_id = require_bound_tenant(request)
-    grants = (
+    items: list[GrantItem] = []
+    canonical_grant_ids: set[str] = set()
+
+    # Canonical grants — filter out legacy sentinel records.
+    try:
+        engine = get_engine()
+        creds = ca.list_credentials(engine, tenant_id, credential_type="portal_access")
+        for cred in creds:
+            meta = cred.metadata or {}
+            if meta.get("validation_mode") == "legacy_fallback_only":
+                continue
+            issued_at = cred.issued_at.isoformat() if cred.issued_at else ""
+            expires_at = cred.expires_at.isoformat() if cred.expires_at else ""
+            last_used = cred.last_used_at.isoformat() if cred.last_used_at else None
+            items.append(
+                GrantItem(
+                    credential_id=cred.credential_id,
+                    grant_id=cred.credential_id,
+                    client_id=meta.get("client_id", ""),
+                    engagement_id=meta.get("engagement_id", ""),
+                    portal_role=_grant_type_to_role("client_portal"),
+                    status=cred.status,
+                    created_by=cred.created_by_actor_id,
+                    created_at=issued_at,
+                    expires_at=expires_at,
+                    last_used_at=last_used,
+                    rotation_counter=max(0, cred.generation - 1),
+                    source="canonical",
+                )
+            )
+            # Track legacy portal_grant_id cross-refs for deduplication below.
+            if meta.get("portal_grant_id"):
+                canonical_grant_ids.add(str(meta["portal_grant_id"]))
+    except Exception:
+        log.exception("list_credentials failed for tenant %s", tenant_id)
+
+    # Legacy grants — only include those not already represented canonically.
+    legacy_grants = (
         db.execute(
             select(PortalGrant)
             .where(PortalGrant.tenant_id == tenant_id)
@@ -276,21 +321,26 @@ def list_portal_grants(
         .scalars()
         .all()
     )
-    items = [
-        GrantItem(
-            grant_id=g.id,
-            client_id=g.client_id,
-            engagement_id=g.engagement_id,
-            portal_role=_grant_type_to_role(g.grant_type),
-            status=g.status,
-            created_by=g.created_by,
-            created_at=g.created_at,
-            expires_at=g.expires_at,
-            last_used_at=g.last_used_at,
-            rotation_counter=g.rotation_counter,
+    for g in legacy_grants:
+        if g.id in canonical_grant_ids:
+            continue
+        items.append(
+            GrantItem(
+                credential_id=g.id,
+                grant_id=g.id,
+                client_id=g.client_id,
+                engagement_id=g.engagement_id,
+                portal_role=_grant_type_to_role(g.grant_type),
+                status=g.status,
+                created_by=g.created_by,
+                created_at=g.created_at,
+                expires_at=g.expires_at,
+                last_used_at=g.last_used_at,
+                rotation_counter=g.rotation_counter,
+                source="legacy",
+            )
         )
-        for g in grants
-    ]
+
     return ListGrantsResponse(items=items, total=len(items))
 
 
@@ -303,13 +353,16 @@ class CreateGrantRequest(BaseModel):
 
 
 class CreateGrantResponse(BaseModel):
-    grant_id: str
+    credential_id: str
+    grant_id: str  # alias for credential_id — retained for backwards-compatibility
     client_id: str
     engagement_id: str
     portal_role: str
     raw_secret: str
     expires_at: str
     portal_login_url: str
+    source: str = "canonical"
+    legacy_grant_id: str | None = None
 
 
 @portal_router.post(
@@ -357,10 +410,10 @@ def create_portal_grant(
         actor_type="human_operator",
         reason_code="PORTAL_GRANT_CREATED",
         entity_type="portal_grant",
-        entity_id=result.grant.id,
+        entity_id=result.credential_id,
         payload={
-            "grant_id": result.grant.id,
-            "client_id": body.client_id,
+            "credential_id": result.credential_id,
+            "client_id": result.client_id,
             "portal_role": role,
         },
     )
@@ -368,13 +421,16 @@ def create_portal_grant(
 
     login_url = f"/login?tenant_id={tenant_id}"
     return CreateGrantResponse(
-        grant_id=result.grant.id,
-        client_id=result.grant.client_id,
-        engagement_id=result.grant.engagement_id,
-        portal_role=_grant_type_to_role(result.grant.grant_type),
+        credential_id=result.credential_id,
+        grant_id=result.credential_id,
+        client_id=result.client_id,
+        engagement_id=result.engagement_id,
+        portal_role=_grant_type_to_role(result.grant_type),
         raw_secret=result.raw_secret,
-        expires_at=result.grant.expires_at,
+        expires_at=result.expires_at,
         portal_login_url=login_url,
+        source="canonical",
+        legacy_grant_id=result.legacy_grant_id,
     )
 
 
@@ -405,23 +461,27 @@ def revoke_portal_grant(
         raise HTTPException(
             status_code=404, detail=api_error("GRANT_NOT_FOUND", "Grant not found")
         )
-    grant = db.execute(
+    # For legacy grants grant_id matches portal_grants.id; for canonical grants it
+    # matches tenant_credentials.credential_id and portal_grants row won't exist.
+    legacy = db.execute(
         select(PortalGrant).where(
             PortalGrant.id == grant_id,
             PortalGrant.tenant_id == tenant_id,
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
+    engagement_id = legacy.engagement_id if legacy else None
+    client_id = legacy.client_id if legacy else None
     audit_atomicity_svc.emit(
         db,
         tenant_id=tenant_id,
-        engagement_id=grant.engagement_id,
+        engagement_id=engagement_id,
         event_type="portal_grant.revoked",
         actor=actor,
         actor_type="human_operator",
         reason_code="PORTAL_GRANT_REVOKED",
         entity_type="portal_grant",
         entity_id=grant_id,
-        payload={"grant_id": grant_id, "client_id": grant.client_id},
+        payload={"grant_id": grant_id, "client_id": client_id},
     )
     db.commit()
     return RevokeGrantResponse(ok=True)

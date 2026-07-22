@@ -15,11 +15,16 @@
 |-----------------|-------------|
 | `tenant_api_key` | API keys issued to tenants for programmatic access to the Core API. Currently stored in `api_keys` table. |
 
+### In scope — R4.9 addition
+
+| Credential class | Description |
+|-----------------|-------------|
+| `portal_access` | Portal grants issued to clients for time-limited portal authentication. Absorbed from legacy `portal_grants` table. 14-day TTL. Raw opaque token format (no `fgk.` prefix). |
+
 ### Explicitly deferred
 
 | Credential class | Deferred to | Reason |
 |-----------------|-------------|--------|
-| `portal_access` | R4.9 (if approved) | Portal keys live in Redis/Upstash; Postgres-authoritative migration requires separate operational planning. Redis is currently the source of truth, not a cache. |
 | `connector_credentials` | R4.9 or later | Connector auth has its own encryption and rotation requirements; boarding with `tenant_api_key` would underspecify it. |
 | `agent_device_credentials` | R4.9 or later | Device trust lifecycle has distinct FSM requirements (see `api/identity_governance/`). |
 | `service_identity` | R4.9 or later | No confirmed current issuer or consumer found in audit. Candidate class only — not promoted into scope without evidence. |
@@ -82,6 +87,23 @@ fgk.<base64url-json-payload>.<secret>
 - `<secret>` — `secrets.token_urlsafe(32)`, cryptographically random. The only security-bearing component.
 
 This format is a published contract. Tests encode it explicitly. Any new issuance path must produce keys in this format or all parsers and tests must be updated simultaneously.
+
+### portal_access format
+
+```
+<raw_secret>
+```
+
+- No prefix, no structure. A single `secrets.token_urlsafe(32)` value (~43 URL-safe base64 characters).
+- The entire value is the secret input to `HMAC-SHA256(secret, FG_KEY_PEPPER)` for fingerprint derivation.
+- No tenant-hint encoding — portal tokens do not carry metadata in the token itself.
+- The entire value is passed to Argon2id for verification.
+
+**Contract invariants:**
+
+- No `fgk.` prefix. Any incoming token that begins with `fgk.` is rejected with `absent=True` (safe fallthrough — wrong type, not a portal credential).
+- Raw secret is returned exactly once at issuance. It is never stored, never returned on idempotency replay, and never logged.
+- Minimum 20 chars, maximum 128 chars. Tokens outside this range are rejected with `absent=True`.
 
 ### Schema fields
 
@@ -163,9 +185,39 @@ class TenantApiKeyMetadata(BaseModel):
     owner_label: str | None = None # human display label, max 128 chars
 ```
 
+### portal_access
+
+```python
+class PortalAccessMetadata(BaseModel):
+    client_id: str           # client the grant authorizes access for; max 128 chars
+    engagement_id: str       # engagement scope for this grant; max 128 chars
+    portal_grant_id: str | None = None  # populated for sentinel migration records only
+```
+
+`portal_grant_id` is set on sentinel rows (copied from `portal_grants.id`) to allow traceability back to the originating legacy record during the transition window. It is `None` on new canonical grants.
+
+**Sentinel migration records** (created by `migrations/postgres/0161_portal_access_migration.sql`):
+
+These rows copy existing `portal_grants` into `tenant_credentials` with a non-authenticating sentinel fingerprint. They exist to give every pre-migration grant a `credential_id` before the transition window closes.
+
+| Field | Sentinel value |
+|-------|---------------|
+| `credential_slot` | `legacy:{client_id}:{engagement_id}:{portal_grant_id}` |
+| `lookup_fingerprint` | `legacy:{portal_grant_id}` |
+| `metadata.validation_mode` | `"legacy_fallback_only"` |
+| `metadata.source` | `"legacy_portal_grant"` |
+
+A real HMAC-SHA256 fingerprint is a 64-character lowercase hex string (`[0-9a-f]{64}`). The `legacy:` prefix can never be produced by HMAC, so sentinel rows are completely invisible to the canonical fingerprint index lookup. `validate_credential()` will never match a sentinel row through fingerprint lookup.
+
+**Sentinel rows must not be used for authentication.** Authentication for legacy grants during the transition window is handled by the `_authenticate_legacy_portal_grant` fallback path in `portal_grant_service.py`.
+
+**Removal condition:** Remove `_authenticate_legacy_portal_grant` and drop the `portal_grants` table 15 days after the migration deployment date (14-day maximum grant TTL + 1 day buffer). Track in ROADMAP.md `Legacy fallback removal date` column.
+
 ---
 
 ## 5. Validation Path
+
+### tenant_api_key
 
 ```
 presented raw key (fgk.<payload>.<secret>)
@@ -179,7 +231,7 @@ indexed lookup:
     FROM tenant_credentials c
     JOIN tenants t ON t.tenant_id = c.tenant_id
     WHERE c.lookup_fingerprint = :fingerprint
-      AND c.credential_type = :type
+      AND c.credential_type = 'tenant_api_key'
         ↓
 verify: Argon2id hash (constant-time)
         ↓
@@ -189,6 +241,50 @@ enforce: status = 'active'
         ↓
 return: CredentialPrincipal (never the raw row)
 ```
+
+### portal_access
+
+```
+presented raw token (opaque, ~43 chars, no prefix)
+        ↓
+parse: reject if starts with "fgk." → CredentialNotFoundError(absent=True)
+       reject if len < 20 or len > 128 → CredentialNotFoundError(absent=True)
+       secret_part = stripped token
+        ↓
+compute: lookup_fingerprint = HMAC-SHA256(secret_part, FG_KEY_PEPPER)
+        ↓
+indexed lookup:
+    SELECT c.*, t.lifecycle_state
+    FROM tenant_credentials c
+    JOIN tenants t ON t.tenant_id = c.tenant_id
+    WHERE c.lookup_fingerprint = :fingerprint
+      AND c.credential_type = 'portal_access'
+        ↓
+  (sentinel rows are invisible — their fingerprint 'legacy:...' can never match)
+        ↓
+verify: Argon2id hash (constant-time)
+        ↓
+enforce: status = 'active'
+         AND (expires_at IS NULL OR expires_at > now())
+         AND tenant lifecycle permits validation
+        ↓
+return: CredentialPrincipal with metadata = {client_id, engagement_id}
+```
+
+**Canonical-first authentication with legacy fallback (portal_grant_service):**
+
+```
+validate_credential(raw_secret, credential_type="portal_access")
+        ↓
+success → check principal.tenant_id matches expected tenant → return session
+        ↓
+CredentialNotFoundError(absent=True)  → try legacy Argon2id scan (portal_grants)
+CredentialNotFoundError(absent=False) → FAIL CLOSED — do not fall through
+any other exception                   → FAIL CLOSED — do not fall through
+```
+
+`absent=True` means nothing matched in the canonical index — safe to check legacy.
+`absent=False` means a canonical record was found but is revoked, expired, or has a hash mismatch — this must never fall through to a less-strict legacy check.
 
 **Tenant lifecycle policy at validation:**
 
@@ -204,7 +300,7 @@ No cache for lifecycle state. The JOIN to `tenants` is authoritative. Cache may 
 **CredentialPrincipal:**
 
 ```python
-@dataclass
+@dataclass(frozen=True)
 class CredentialPrincipal:
     tenant_id: str
     credential_id: str
@@ -213,8 +309,11 @@ class CredentialPrincipal:
     generation: int
     scopes: frozenset[str]
     issued_at: datetime
-    authentication_method: str  # "api_key" for tenant_api_key
+    authentication_method: str = "api_key"
+    metadata: dict | None = None  # per-type binding info; see Section 4
 ```
+
+For `portal_access`, `metadata` contains `client_id` and `engagement_id` from `PortalAccessMetadata`. Callers must use `principal.metadata` to read binding info — they must not re-query the credential table.
 
 Usage attribution must consume `CredentialPrincipal`, not parse raw credential material.
 

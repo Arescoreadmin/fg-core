@@ -1,5 +1,92 @@
 # PR Fix Log (Strict)
 
+## P-18 — feat(r4.9): portal access absorption into tenant credentials
+
+**Branch:** `feat/r4.9-portal-access`
+**Date:** 2026-07-22
+
+### Problem
+
+Portal grants were issued and validated through the legacy `portal_grants`
+authority, leaving portal authentication outside the canonical credential
+lifecycle. Every portal auth decision bypassed `credential_authority.py`,
+`tenant_credentials`, and the credential audit trail.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: api/credential_authority.py` — added `portal_access` credential type:
+   `PortalAccessMetadata` Pydantic model; `_generate_portal_key` / `_parse_portal_key`
+   helpers; `DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS = 14 * 24 * 3600`; type dispatch
+   in `issue_credential`, `validate_credential`, `rotate_credential`; `metadata` column
+   added to `_RECORD_SELECT` / `_row_to_record` (index shift: `stored_hash` row[21],
+   `lifecycle_state` row[22]); `metadata: Optional[dict] = None` on `CredentialPrincipal`
+   and `CredentialRecord`.
+
+2. `mod: services/portal_grant_service.py` — rewritten to delegate lifecycle to
+   `credential_authority`: `create_grant()` → `ca.issue_credential(type="portal_access")`;
+   `authenticate()` canonical-first with `absent=True`-only legacy fallback (fail-closed
+   on `absent=False`, revoked, expired, or any exception); `revoke_grant()` /
+   `rotate_grant()` canonical-first with legacy fallback; `GrantCreated` dataclass
+   replacing legacy return type; module-level helpers for canonical engagement listing
+   and sentinel detection.
+
+3. `mod: api/portal.py` — `CreateGrantResponse` and `GrantItem` include `credential_id`
+   and `source` fields; `list_portal_grants` merges canonical credentials (sentinels
+   filtered by `validation_mode == "legacy_fallback_only"`) with legacy grants not
+   already represented canonically; `revoke_portal_grant` uses `scalar_one_or_none()`
+   for the `portal_grants` lookup (canonical grants have no `portal_grants` row).
+
+4. `mod: ROADMAP.md` — R4.9 row updated; legacy fallback removal condition documented.
+
+**New files:**
+
+5. `new: migrations/postgres/0161_portal_access_migration.sql` — copies `portal_grants`
+   rows into `tenant_credentials` as sentinel records. Sentinel design: slot =
+   `legacy:{client_id}:{engagement_id}:{id}`, fingerprint = `legacy:{id}` (can never
+   match HMAC-SHA256 output). `ON CONFLICT (credential_id) DO NOTHING` for idempotency.
+   Status mapped from `revoked_at` / `expires_at`. Includes explicit removal condition
+   comment (deployment_date + 15 days).
+
+6. `new: tests/test_r4_9_portal_access.py` — 22 acceptance tests: portal_access type
+   accepted; raw token without fgk. prefix; 14-day default TTL; correct token validates;
+   principal carries metadata; wrong / expired / revoked token fails with correct
+   `absent` flag; fgk. prefix rejected absent=True; rotation produces new secret and
+   invalidates old; rotation preserves metadata; secrets absent from CredentialRecord
+   repr; principal.tenant_id is issuing tenant; PortalAccessMetadata validation; sentinel
+   fingerprint cannot match HMAC; canonical and legacy slots coexist without collision.
+
+7. `new: docs/security/CREDENTIAL_AUTHORITY.md` updates — `portal_access` added to
+   scope; `portal_access` token format documented; `PortalAccessMetadata` schema; sentinel
+   design invariants; canonical-first validation path with absent-only fallback semantics.
+
+### Security invariants
+
+- Canonical revoked or expired credentials never fall through to legacy — `absent=False`
+  fails closed immediately.
+- Legacy sentinel rows are non-authenticating: `legacy:` prefix is unreachable by any
+  HMAC-SHA256 computation.
+- Raw portal secrets are not persisted anywhere in the system.
+- Tenant, client, and engagement bindings are preserved through `PortalAccessMetadata`
+  and enforced by the caller checking `principal.tenant_id`.
+- Migration is idempotent: `ON CONFLICT (credential_id) DO NOTHING`.
+- Legacy fallback removal is tied to a concrete deadline: migration deployment + 15 days.
+
+### Validation
+
+```
+pytest -q tests/test_r4_9_portal_access.py → 22 passed
+pytest -q tests/test_r4_credential_authority.py tests/test_r4_lifecycle_integration.py
+        tests/test_r4_credential_events.py → 117 passed (no regressions)
+ruff check / ruff format --check → see run results
+make fg-fast → see run results
+make required-tests-gate → see run results
+make fg-security → see run results
+```
+
+---
+
 ## P-17 — fix(r4.8-post-merge-cleanup): stale test + allowlist correction
 
 **Branch:** `fix/r4.8-post-merge-cleanup`

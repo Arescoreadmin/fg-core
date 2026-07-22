@@ -49,6 +49,7 @@ from typing import Any, List, Optional, cast
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine, Row
 
@@ -60,11 +61,52 @@ log = logging.getLogger("frostgate.credential_authority")
 # Constants
 # ---------------------------------------------------------------------------
 
-VALID_CREDENTIAL_TYPES: frozenset[str] = frozenset({"tenant_api_key"})
+VALID_CREDENTIAL_TYPES: frozenset[str] = frozenset({"tenant_api_key", "portal_access"})
 TERMINAL_STATUSES: frozenset[str] = frozenset({"rotated", "revoked", "expired"})
 CREDENTIAL_SCOPE: str = "credential:use"
 DEFAULT_CREDENTIAL_TTL_SECONDS: int = 365 * 24 * 3600
+DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS: int = 14 * 24 * 3600  # 14-day grant window
 SCHEMA_VERSION: int = 1
+
+# ---------------------------------------------------------------------------
+# Per-type metadata schemas
+# ---------------------------------------------------------------------------
+
+_MAX_CLIENT_ID_LEN = 255
+_MAX_ENGAGEMENT_ID_LEN = 64
+_MAX_GRANT_ID_LEN = 64
+
+
+class PortalAccessMetadata(BaseModel):
+    """Validated metadata stored in tenant_credentials for portal_access type.
+
+    client_id and engagement_id are the stable binding for this credential slot.
+    portal_grant_id links to the originating portal_grants row when set
+    (populated for legacy-migrated rows; None for new canonical credentials).
+    """
+
+    client_id: str
+    engagement_id: str
+    portal_grant_id: str | None = None
+
+    @field_validator("client_id")
+    @classmethod
+    def _check_client_id(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_CLIENT_ID_LEN:
+            raise ValueError(
+                f"client_id must be 1–{_MAX_CLIENT_ID_LEN} non-whitespace chars"
+            )
+        return v
+
+    @field_validator("engagement_id")
+    @classmethod
+    def _check_engagement_id(cls, v: str) -> str:
+        if not v or not v.strip() or len(v) > _MAX_ENGAGEMENT_ID_LEN:
+            raise ValueError(
+                f"engagement_id must be 1–{_MAX_ENGAGEMENT_ID_LEN} non-whitespace chars"
+            )
+        return v
+
 
 # Module-level hasher — tests may monkeypatch with lower parameters to keep
 # the suite fast without changing the production hash parameters.
@@ -272,6 +314,7 @@ class CredentialPrincipal:
     scopes: frozenset[str]
     issued_at: datetime
     authentication_method: str = "api_key"
+    metadata: Optional[dict] = None
 
     def __repr__(self) -> str:
         return (
@@ -305,6 +348,7 @@ class CredentialRecord:
     scopes_csv: Optional[str]
     schema_version: int
     record_hash: Optional[str]
+    metadata: Optional[dict] = None
 
     def __repr__(self) -> str:
         return (
@@ -447,6 +491,45 @@ def _parse_key(raw_key: str) -> tuple[str, str]:
     return tenant_id_hint, parts[-1]
 
 
+# Portal secret bounds — token_urlsafe(32) produces 43 chars; accept a generous
+# range to allow for future entropy changes without breaking the validator.
+_PORTAL_SECRET_MIN_LEN = 20
+_PORTAL_SECRET_MAX_LEN = 128
+
+
+def _generate_portal_key(pepper: str) -> tuple[str, str, str, str]:
+    """Generate a portal_access credential key.
+
+    Returns (raw_key, secret_part, secret_prefix, fp).
+    raw_key == secret_part — no fgk. prefix, no encoded payload.
+    The entire token is the secret input for fingerprint derivation.
+    """
+    secret_part = secrets.token_urlsafe(32)
+    fp = _compute_lookup_fingerprint(secret_part, pepper)
+    secret_prefix = fp[:8]
+    return secret_part, secret_part, secret_prefix, fp
+
+
+def _parse_portal_key(raw_key: str) -> str:
+    """Validate and return the secret_part for a portal_access token.
+
+    Raises CredentialNotFoundError(absent=True) on: empty, whitespace-only,
+    out-of-range length, fgk. prefix (caller confused the key type), or
+    any encoding that cannot plausibly be a raw opaque bearer token.
+    """
+    if not raw_key:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    stripped = raw_key.strip()
+    if not stripped:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if stripped.startswith("fgk."):
+        # Caller passed a tenant_api_key where a portal secret is expected.
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    if len(stripped) < _PORTAL_SECRET_MIN_LEN or len(stripped) > _PORTAL_SECRET_MAX_LEN:
+        raise CredentialNotFoundError("credential authentication failed", absent=True)
+    return stripped
+
+
 def _hash_secret(secret_part: str) -> tuple[str, dict]:
     """Argon2id hash of secret_part. Returns (phc_string, params_dict)."""
     phc = _HASHER.hash(secret_part)
@@ -492,7 +575,7 @@ _RECORD_SELECT = (
     "credential_id, tenant_id, credential_type, credential_slot, generation, "
     "status, expires_at, issued_at, activated_at, rotated_at, revoked_at, "
     "replaced_by_credential_id, created_by_actor_id, request_id, idempotency_key, "
-    "last_used_at, approximate_use_count, scopes_csv, schema_version, record_hash"
+    "last_used_at, approximate_use_count, scopes_csv, metadata, schema_version, record_hash"
 )
 
 # Same columns with tc. prefix for queries that JOIN another table with overlapping names.
@@ -520,8 +603,9 @@ def _row_to_record(row: Row[Any]) -> CredentialRecord:
         last_used_at=_parse_dt(r[15]),
         approximate_use_count=r[16] or 0,
         scopes_csv=r[17],
-        schema_version=r[18] or SCHEMA_VERSION,
-        record_hash=r[19],
+        metadata=_parse_json(r[18]),  # type: ignore[arg-type]
+        schema_version=r[19] or SCHEMA_VERSION,
+        record_hash=r[20],
     )
 
 
@@ -744,11 +828,12 @@ def issue_credential(
         # discards it before it can be returned.
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        ttl = (
-            expires_in_seconds
-            if expires_in_seconds is not None
+        default_ttl = (
+            DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
+            if credential_type == "portal_access"
             else DEFAULT_CREDENTIAL_TTL_SECONDS
         )
+        ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
         expires_dt = (
             None
             if ttl == 0
@@ -756,7 +841,14 @@ def issue_credential(
         )
         expires_iso = expires_dt.isoformat() if expires_dt else None
 
-        raw_key, secret_part, secret_prefix, fp = _generate_key(tenant_id, expires_dt)
+        if credential_type == "portal_access":
+            raw_key, secret_part, secret_prefix, fp = _generate_portal_key(
+                _get_pepper()
+            )
+        else:
+            raw_key, secret_part, secret_prefix, fp = _generate_key(
+                tenant_id, expires_dt
+            )
         phc, hash_params = _hash_secret(secret_part)
 
         cred_id = str(uuid.uuid4())
@@ -840,9 +932,12 @@ def validate_credential(
         CredentialNotFoundError: credential does not exist, hash mismatch,
             expired, revoked, rotated, or tenant lifecycle does not permit.
     """
-    tenant_id_hint, secret_part = _parse_key(raw_key)
-    pepper = _get_pepper()
-    fp = _compute_lookup_fingerprint(secret_part, pepper)
+    if credential_type == "portal_access":
+        secret_part = _parse_portal_key(raw_key)
+        tenant_id_hint = ""
+    else:
+        tenant_id_hint, secret_part = _parse_key(raw_key)
+    fp = _compute_lookup_fingerprint(secret_part, _get_pepper())
 
     is_postgres = engine.dialect.name == "postgresql"
 
@@ -885,8 +980,8 @@ def validate_credential(
         )
         raise CredentialNotFoundError("credential authentication failed", absent=True)
 
-    stored_hash: str = row[20]
-    lifecycle_state: str = row[21]
+    stored_hash: str = row[21]
+    lifecycle_state: str = row[22]
 
     if not _verify_secret(secret_part, stored_hash):
         rec = _row_to_record(cast(Row[Any], row))
@@ -971,6 +1066,7 @@ def validate_credential(
         generation=rec.generation,
         scopes=scopes,
         issued_at=rec.issued_at,
+        metadata=rec.metadata,
     )
 
 
@@ -1058,11 +1154,12 @@ def rotate_credential(
         # New key material.
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
-        ttl = (
-            expires_in_seconds
-            if expires_in_seconds is not None
+        default_ttl = (
+            DEFAULT_PORTAL_CREDENTIAL_TTL_SECONDS
+            if credential_type == "portal_access"
             else DEFAULT_CREDENTIAL_TTL_SECONDS
         )
+        ttl = expires_in_seconds if expires_in_seconds is not None else default_ttl
         expires_dt = (
             None
             if ttl == 0
@@ -1070,7 +1167,14 @@ def rotate_credential(
         )
         expires_iso = expires_dt.isoformat() if expires_dt else None
 
-        raw_key, secret_part, secret_prefix, fp = _generate_key(tenant_id, expires_dt)
+        if credential_type == "portal_access":
+            raw_key, secret_part, secret_prefix, fp = _generate_portal_key(
+                _get_pepper()
+            )
+        else:
+            raw_key, secret_part, secret_prefix, fp = _generate_key(
+                tenant_id, expires_dt
+            )
         phc, hash_params = _hash_secret(secret_part)
 
         new_cred_id = str(uuid.uuid4())
@@ -1083,6 +1187,11 @@ def rotate_credential(
             issued_at=now_iso,
         )
         scopes_csv = old_record.scopes_csv or CREDENTIAL_SCOPE
+
+        # For portal_access, carry binding metadata into the new generation.
+        new_metadata = (
+            old_record.metadata if credential_type == "portal_access" else None
+        )
 
         # Insert new generation first — never invalidate old before new is safe.
         _insert_credential(
@@ -1103,7 +1212,7 @@ def rotate_credential(
             request_id=request_id,
             idempotency_key=idempotency_key,
             scopes_csv=scopes_csv,
-            metadata=None,
+            metadata=new_metadata,
             record_hash=rec_hash,
         )
 
