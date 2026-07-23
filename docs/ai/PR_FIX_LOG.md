@@ -19875,7 +19875,7 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `mypy api/credential_authority.py` → no issues
   - `required-tests gate` → PASS
   - `fg-contract` → PASS
-  - 9 new tests covering: revoked/expired/rotated → N+1 succeeds; active/suspended → rejected; history preservation; generation is exactly N+1; simultaneous reissue → exactly one winner + `current_generation=2`; audit events distinguish revocation from reissue.
+  - 10 new tests covering: revoked/expired/rotated → N+1 succeeds; active/suspended → rejected; history preservation; generation is exactly N+1; simultaneous reissue → exactly one winner + `current_generation=2`; audit events distinguish revocation from reissue; sweep-lag: wall-clock-expired but `status='active'` credential normalised as terminal.
 - **Result:** Pass.
 
 ## PR #569 — fix(credentials): harden agent bootstrap fingerprinting (2026-07-22)
