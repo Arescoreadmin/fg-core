@@ -72,6 +72,23 @@ runs:
         set -euo pipefail
         mkdir -p state artifacts keys
 
+    - name: Compute venv cache key
+      if: ${{ inputs.build-venv == 'true' }}
+      id: venv-key
+      shell: bash
+      run: |
+        set -euo pipefail
+        key=$(sha256sum requirements.txt requirements-dev.txt constraints.txt 2>/dev/null | sha256sum | awk '{print $1}')
+        echo "key=venv-${{ inputs.python-version }}-${key}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore venv cache
+      if: ${{ inputs.build-venv == 'true' }}
+      id: venv-cache
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: ${{ steps.venv-key.outputs.key }}
+
     - name: Build venv + deps
       if: ${{ inputs.build-venv == 'true' }}
       shell: bash
@@ -79,7 +96,6 @@ runs:
         set -euo pipefail
         make venv
 
-        # Expose venv-installed tools (pytest, ruff, etc.) to subsequent workflow steps.
         if [ -d ".venv/bin" ]; then
           echo "$(pwd)/.venv/bin" >> "$GITHUB_PATH"
         else

@@ -571,7 +571,7 @@ jobs:
   hardening:
     name: Hardening Gates (ci-hardening)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     permissions:

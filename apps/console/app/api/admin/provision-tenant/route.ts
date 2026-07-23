@@ -158,7 +158,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired)
+  // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired).
+  // On slot conflict (409) the tenant was partially provisioned before — rotate instead.
   const keyRes = await fetch(
     `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
     {
@@ -173,16 +174,63 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     },
   );
 
-  if (!keyRes.ok) {
+  let keyData: Record<string, unknown>;
+  let wasRotated = false;
+
+  if (keyRes.status === 409) {
+    // Slot already occupied — the tenant was partially provisioned before. Rotate.
+    // A slot conflict implies the tenant definitively existed before this request.
+    wasRotated = true;
+    const listRes = await fetch(
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials?status=active&limit=50`,
+      { method: 'GET', headers: adminHeaders(), cache: 'no-store' },
+    );
+    if (!listRes.ok) {
+      const err = await listRes.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: `Key generation failed (slot conflict, list failed): ${err?.detail ?? listRes.status}` },
+        { status: 500 },
+      );
+    }
+    const list = await listRes.json() as { credentials?: Array<{ credential_id: string; credential_slot: string }> };
+    const existing = (list.credentials ?? []).find(c => c.credential_slot === 'console-bff-key');
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Key generation failed: slot conflict but no active console-bff-key credential found.' },
+        { status: 500 },
+      );
+    }
+    const rotateRes = await fetch(
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(existing.credential_id)}/rotate`,
+      {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ expires_in_seconds: ONE_YEAR_SECONDS }),
+        cache: 'no-store',
+      },
+    );
+    if (!rotateRes.ok) {
+      const err = await rotateRes.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: `Key generation failed (rotate): ${err?.detail ?? rotateRes.status}` },
+        { status: 500 },
+      );
+    }
+    keyData = await rotateRes.json();
+  } else if (!keyRes.ok) {
     const err = await keyRes.json().catch(() => ({}));
     return NextResponse.json(
       { error: `Key generation failed: ${err?.detail ?? keyRes.status}` },
       { status: 500 },
     );
+  } else {
+    keyData = await keyRes.json();
   }
 
-  const keyData = await keyRes.json();
-  const rawKey: string = keyData.plaintext_secret;
+  // A slot conflict means the tenant existed regardless of what Step 1 returned.
+  const alreadyExisted = tenantAlreadyExisted || wasRotated;
+
+  const rawKey: string = keyData.plaintext_secret as string;
 
   // Step 3a: Write display metadata to Edge Config (does NOT store the auth key).
   // Fire-and-forget — Edge Config is for the client list UI, not portal authentication.
@@ -231,14 +279,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     if (!devOverride) {
-      // Production (and any unoverridden non-production) path: revoke dangling credential
-      // and return 503 so the caller knows provisioning did not complete.
-      // R7 will make Postgres the rebuild source so this revocation becomes unnecessary.
+      if (wasRotated) {
+        // The predecessor credential is already superseded — revoking the new one
+        // would leave the tenant with zero usable credentials. Do not revoke.
+        // The new credential exists live in Postgres but has no portal route to it.
+        // Operator must configure persistence and manually reprovision.
+        console.error(
+          '[provision-tenant] persistence failed after rotate — NOT revoking (predecessor already superseded)',
+          { tenantId, credentialId: keyData.credential_id, registryError },
+        );
+        return NextResponse.json(
+          {
+            error: 'PERSISTENCE_UNAVAILABLE',
+            detail:
+              `Credential rotated (${keyData.credential_id as string}) but could not be persisted. ` +
+              'The new credential is live in Postgres but unreachable by the portal. ' +
+              'Configure REDIS_URL or UPSTASH_REDIS_REST_URL, then reprovision to rotate again.',
+          },
+          { status: 503 },
+        );
+      }
+
+      // Fresh create: revoke the dangling credential so Postgres does not accumulate
+      // unreachable credentials. R7 will make Postgres the rebuild source.
       console.error('[provision-tenant] credential persistence failed — revoking and aborting', {
         tenantId,
         registryError,
       });
-      await revokeKey(keyData.credential_id, tenantId);
+      await revokeKey(keyData.credential_id as string, tenantId);
       return NextResponse.json(
         {
           error: 'PERSISTENCE_UNAVAILABLE',
@@ -257,7 +325,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       tenant_id: tenantId,
       name,
-      already_existed: tenantAlreadyExisted,
+      already_existed: alreadyExisted,
       registry_live: false,
       credential_id: keyData.credential_id,
       api_key_expires_at: keyData.expires_at,
@@ -276,7 +344,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({
     tenant_id: tenantId,
     name,
-    already_existed: tenantAlreadyExisted,
+    already_existed: alreadyExisted,
     registry_live: true,
     credential_id: keyData.credential_id,
     api_key_expires_at: keyData.expires_at,
