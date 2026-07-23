@@ -19856,3 +19856,23 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `ruff format --check` → 4 files already formatted
   - `required-tests gate` → PASS
 - **Result:** Pass.
+
+## PR #569 — fix(credentials): harden agent bootstrap fingerprinting (2026-07-22)
+
+- **Date:** 2026-07-22
+- **Category:** Security hardening (credential storage)
+- **Files changed:**
+  - `api/credential_authority.py`
+  - `tests/security/test_agent_device_credential_security.py`
+  - `tests/test_r4_10_agent_device_credentials.py`
+- **Vulnerability fixed:** `issue_bootstrap_token()` and `exchange_bootstrap_token()` stored the agent enrollment token fingerprint as plain `SHA-256(raw_token)` in `agent_enrollment_tokens.token_fingerprint`. Every other credential type in the authority already used `HMAC-SHA256(key=FG_KEY_PEPPER)` via `_compute_lookup_fingerprint()`. The inconsistency exposed bootstrap tokens to: (1) offline matching from a database dump — an attacker with the DB can preimage-search raw tokens without the pepper; (2) cross-environment hash correlation if the same token value appears in two environments with different purposes.
+- **Fix:** Changed both `issue_bootstrap_token()` and `exchange_bootstrap_token()` to call `_compute_lookup_fingerprint(raw_token, _get_pepper())` — HMAC-SHA256 keyed on `FG_KEY_PEPPER` — making bootstrap token storage consistent with all other credential lookup fingerprints.
+- **Behavioral impact:** Bootstrap tokens issued after this change will have HMAC fingerprints. Any token issued before the deploy will fail exchange (correct: old plain-SHA-256 fingerprint will not match). Zero impact on already-exchanged tokens (one-time use, already consumed).
+- **Security impact:** Eliminates offline matching risk and cross-environment hash correlation for bootstrap tokens. Consistent pepper-keyed storage across all credential types.
+- **Schema/API impact:** None. Same `token_fingerprint` column, different hash value.
+- **Validation:**
+  - `python tools/ci/check_route_scopes.py` → OK: all non-public routes declare explicit scope dependencies.
+  - `python scripts/contract_authority_check.py` → Contract authority markers match prod OpenAPI spec.
+  - 3 new security tests: HMAC storage verified, wrong-pepper rejection, cross-environment pepper isolation, constant-time length.
+  - `tests/test_r4_10_agent_device_credentials.py::test_bootstrap_token_stored_as_hmac_fingerprint` updated to assert HMAC not plain SHA-256.
+- **Result:** Pass.
