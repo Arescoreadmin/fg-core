@@ -29,6 +29,14 @@
           "method": "POST",
           "path": "/agent/cert/enroll",
           "permanent": true
+        },
+        {
+          "class_name": "auth_exempt",
+          "expires_at": "",
+          "justification": "R4.10 canonical bootstrap: one-time token IS the credential; consumed atomically.",
+          "method": "POST",
+          "path": "/agents/enroll",
+          "permanent": true
         }
       ],
       "bootstrap_routes": [],
@@ -146,7 +154,8 @@
         "tenant_bound"
       ],
       "route_prefixes": [
-        "/agent"
+        "/agent",
+        "/agents"
       ]
     },
     {
@@ -1269,7 +1278,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-23T00:09:15.153946+00:00",
+  "generated_at": "2026-07-23T00:36:35.886905+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

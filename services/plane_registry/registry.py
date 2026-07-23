@@ -411,7 +411,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
     ),
     PlaneDef(
         plane_id="agent",
-        route_prefixes=("/agent",),
+        route_prefixes=("/agent", "/agents"),
         allowed_dependency_categories=("auth", "tenant", "db", "rate"),
         required_make_targets=("agent-unit",),
         required_ci_gates=COMMON_GATES,
@@ -434,6 +434,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "/agent/cert/enroll",
                 "auth_exempt",
                 "Bootstrap cert enrollment before scoped key issuance.",
+            ),
+            ex(
+                "POST",
+                "/agents/enroll",
+                "auth_exempt",
+                "R4.10 canonical bootstrap: one-time token IS the credential; consumed atomically.",
             ),
         ),
         global_routes=(

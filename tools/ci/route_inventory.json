@@ -2456,8 +2456,8 @@
       "file": "api/agents_credential_authority.py",
       "method": "POST",
       "path": "/agents/enroll",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
+      "plane": "agent",
+      "plane_id": "agent",
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
@@ -20466,7 +20466,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-23T00:08:16.373101+00:00",
+  "generated_at": "2026-07-23T00:36:35.870809+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

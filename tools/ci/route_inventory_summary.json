@@ -307,7 +307,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "plane_coverage": {
-    "agent": 14,
+    "agent": 15,
     "ai": 5,
     "connector": 14,
     "control": 881,
@@ -317,7 +317,6 @@
     "rbac": 5,
     "security": 6,
     "ui": 49,
-    "unmapped": 1,
     "workforce": 17
   },
   "public_exempt": [
