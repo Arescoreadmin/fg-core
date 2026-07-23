@@ -1112,7 +1112,7 @@ def issue_credential(
             # UPDATE below.
             gen_status_row = conn.execute(
                 text(
-                    "SELECT status FROM tenant_credentials "
+                    "SELECT status, expires_at FROM tenant_credentials "
                     "WHERE tenant_id = :tid AND credential_type = :ctype "
                     "  AND credential_slot = :slot AND generation = :gen"
                 ),
@@ -1123,7 +1123,20 @@ def issue_credential(
                     "gen": current_gen,
                 },
             ).fetchone()
-            gen_status = gen_status_row[0] if gen_status_row is not None else None
+            gen_status: Optional[str] = gen_status_row[0] if gen_status_row is not None else None
+            gen_expires_at: Optional[str] = gen_status_row[1] if gen_status_row is not None else None
+
+            # Normalise status for credentials that have passed expires_at but
+            # have not yet been swept by expire_credentials().  The sweep is
+            # scheduled and may lag; a credential past its wall-clock expiry is
+            # functionally terminal for reissue purposes even if the row still
+            # reads 'active'.  This mirrors the validation check in
+            # validate_credential() at line ~1351 and rotate_credential() at ~2289.
+            if gen_status == "active" and gen_expires_at is not None:
+                parsed_exp = _parse_dt(gen_expires_at)
+                if parsed_exp is not None and parsed_exp <= datetime.now(timezone.utc):
+                    gen_status = "expired"
+
             if gen_status not in TERMINAL_STATUSES:
                 # Active (or suspended) slot — must use rotate_credential.
                 # "suspended" is a non-terminal blocking status; it is not

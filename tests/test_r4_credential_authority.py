@@ -1746,3 +1746,46 @@ class TestL_ReissueAfterTerminal:
         gen1_revoked = [e for e in revoked_events if e.generation == 1]
         assert len(gen1_revoked) == 1
         assert gen1_revoked[0].credential_id == r1.record.credential_id
+
+    # ---- 10. sweep-lag: wall-clock expired but status still 'active' ----
+
+    def test_reissue_when_active_but_wall_clock_expired_succeeds(
+        self, engine: Engine
+    ) -> None:
+        """A credential whose expires_at has passed but whose status is still
+        'active' (expire_credentials() sweep not yet run) must be treated as
+        terminal and allow gen N+1 issuance.
+
+        This covers the sweep-lag window: the credential is functionally expired
+        (validation already rejects the secret) but the sweep hasn't updated the
+        row yet.  Normalising via expires_at here mirrors the check already done
+        in validate_credential() and rotate_credential().
+        """
+        r1 = self._issue(engine, slot="sweep-lag")
+
+        # Backdate expires_at to the past WITHOUT calling expire_credentials.
+        # Status stays 'active' — this simulates the sweep-lag window.
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE tenant_credentials SET expires_at = '2000-01-01T00:00:00+00:00' "
+                    "WHERE tenant_id = 'tenant-alpha' AND credential_slot = 'sweep-lag' "
+                    "AND generation = 1"
+                )
+            )
+
+        # Verify the row is still 'active' (sweep hasn't run).
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT status FROM tenant_credentials "
+                    "WHERE tenant_id = 'tenant-alpha' AND credential_slot = 'sweep-lag'"
+                )
+            ).fetchone()
+        assert row is not None and row[0] == "active", "Precondition: row must still be active"
+
+        # issue_credential must treat the wall-clock-expired active row as terminal.
+        r2 = self._issue(engine, slot="sweep-lag")
+        assert r2.record.generation == 2
+        assert r2.record.status == "active"
+        assert r2.plaintext_secret != r1.plaintext_secret
