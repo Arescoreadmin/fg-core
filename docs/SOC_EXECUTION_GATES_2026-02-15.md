@@ -6108,3 +6108,27 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - Tests for both fixes are covered by the existing `tests/test_r4_dual_validation.py` suite (10 tests), which exercises canonical hit, canonical miss, canonical denial, lifecycle denial, and RBAC paths.
 
 **SOC review outcome:** approved.  Both fixes close concrete security vulnerabilities introduced by the R4.7 dual-validation migration.  P1-A prevents canonical credentials from inheriting arbitrary legacy RBAC roles via prefix matching.  P1-B enforces fail-closed behavior for tenant lifecycle policy denials.  Neither change widens any attack surface; both narrow it.
+
+---
+
+## fix/provision-tenant-slot-conflict — Hardening CI timeout + venv cache (2026-07-23)
+
+**Critical files changed:** `.github/workflows/ci.yml`, `.github/actions/fg-python-setup/action.yml`
+
+**Change:** Two targeted CI infrastructure fixes:
+
+1. **Hardening job timeout raised 25 → 40 minutes.** The `fg-python-setup` composite action was reinstalling all Python dependencies from pip download cache on every runner (~23 min), consuming nearly the entire 25-minute budget for the `hardening` job. `test-auth-hardening` was consistently killed after ~5 seconds. The timeout increase is a short-term unblock.
+
+2. **`.venv` directory cached in `fg-python-setup` action.** Added an `actions/cache@v4` restore/save step keyed on `sha256(requirements.txt + requirements-dev.txt + constraints.txt)`. On a cache hit, venv setup drops from ~23 minutes to ~20 seconds. The existing `make venv` stamp check ensures no reinstall occurs when the restored venv matches the requirements hash. The first run after any requirements change still pays full install cost and primes the cache for subsequent runs.
+
+**Reason:** The `Hardening Gates (ci-hardening)` job was cancelled every run after exhausting its 25-minute budget before `test-auth-hardening` could execute. The root cause was venv rebuild cost, not test failure.
+
+**Security review:**
+
+- No auth middleware, session handling, OPA policies, or application code are modified.
+- The timeout change is a scalar integer in the job definition. It does not alter which steps run, what permissions they use, or what secrets they access.
+- The venv cache uses `actions/cache@v4` with a content-addressed key derived from requirements files. A cache hit restores `.venv` built from known inputs; the `make venv` stamp check re-verifies the hash before trusting the restored state. A cache miss falls through to a full install, identical to pre-change behaviour. The cache is scoped to this repository and not shared cross-org.
+- No secrets, keys, cryptographic material, migration files, or application source are added or changed.
+- `fg-python-setup/action.yml` changes are additive only: two new steps (key computation, cache restore) inserted before the existing `Build venv + deps` step. Existing steps are unchanged.
+
+**SOC review outcome:** approved. Both changes are operational fixes to CI infrastructure with no impact on authentication, authorisation, cryptographic controls, or audit trails. The venv cache is content-addressed and validated by `make venv` on restore; it cannot introduce untrusted packages.
