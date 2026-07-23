@@ -17,7 +17,7 @@ interface ProvisionResult {
   registry_live?: boolean;
   registry_error?: string | null;
   api_key: string | null;
-  api_key_prefix: string;
+  credential_id?: string;
 }
 
 // ─── Create Client Modal ──────────────────────────────────────────────────────
