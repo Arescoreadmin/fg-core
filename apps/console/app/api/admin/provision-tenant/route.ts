@@ -181,8 +181,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Slot already occupied — the tenant was partially provisioned before. Rotate.
     // A slot conflict implies the tenant definitively existed before this request.
     wasRotated = true;
+
+    // Query ALL statuses: a revoked credential leaves current_generation > 0 in
+    // credential_slots, so the slot shows as occupied even though it cannot be rotated.
     const listRes = await fetch(
-      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials?status=active&limit=50`,
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials?limit=50`,
       { method: 'GET', headers: adminHeaders(), cache: 'no-store' },
     );
     if (!listRes.ok) {
@@ -192,14 +195,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    const list = await listRes.json() as { credentials?: Array<{ credential_id: string; credential_slot: string }> };
+    const list = await listRes.json() as { credentials?: Array<{ credential_id: string; credential_slot: string; status: string }> };
     const existing = (list.credentials ?? []).find(c => c.credential_slot === 'console-bff-key');
+
     if (!existing) {
       return NextResponse.json(
-        { error: 'Key generation failed: slot conflict but no active console-bff-key credential found.' },
+        { error: 'Key generation failed: slot conflict but no console-bff-key credential found. Manual DB intervention may be required.' },
         { status: 500 },
       );
     }
+
+    // Stuck-slot: the credential exists but is in a terminal state (revoked/expired/rotated)
+    // so rotate_credential will reject it. The credential_slots row still shows generation > 0.
+    // This requires direct DB remediation — the API cannot recover from this state.
+    if (existing.status !== 'active') {
+      return NextResponse.json(
+        {
+          error: 'SLOT_STUCK',
+          detail:
+            `The console-bff-key slot for tenant '${tenantId}' has a ${existing.status} credential ` +
+            `(${existing.credential_id}) that cannot be rotated. ` +
+            'Run the following SQL against the Postgres DB to clear it, then reprovision:\n' +
+            `DELETE FROM tenant_credentials WHERE tenant_id = '${tenantId}' AND credential_slot = 'console-bff-key';\n` +
+            `UPDATE credential_slots SET current_generation = 0 WHERE tenant_id = '${tenantId}' AND credential_slot = 'console-bff-key';`,
+        },
+        { status: 409 },
+      );
+    }
+
     const rotateRes = await fetch(
       `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(existing.credential_id)}/rotate`,
       {
