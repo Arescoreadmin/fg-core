@@ -474,7 +474,7 @@ class TestC_Issuance:
         assert result.record.expires_at is not None
 
     def test_occupied_slot_rejects_second_issue(self, engine: Engine) -> None:
-        """issue_credential on an occupied slot must raise, not silently add a second active row."""
+        """issue_credential on an occupied ACTIVE slot must raise, not silently add a second active row."""
         issue_credential(
             engine,
             tenant_id="tenant-alpha",
@@ -487,6 +487,112 @@ class TestC_Issuance:
                 tenant_id="tenant-alpha",
                 credential_type="tenant_api_key",
                 credential_slot="occupied",
+            )
+
+    def test_reissue_after_revoked_generation_succeeds(self, engine: Engine) -> None:
+        """Issue on a slot whose current generation is revoked must succeed as N+1.
+
+        A revoked credential is terminal but the slot is not.  Blocking reissue
+        permanently on a revoked generation is the invariant defect this test covers.
+        """
+        r1 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="retry-slot",
+        )
+        assert r1.record.generation == 1
+
+        revoke_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_id=r1.record.credential_id,
+            actor_id="system",
+            reason="persistence failure rollback",
+        )
+
+        r2 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="retry-slot",
+        )
+        assert r2.record.generation == 2
+        assert r2.record.status == "active"
+        assert r2.plaintext_secret is not None
+        assert r2.plaintext_secret != r1.plaintext_secret
+
+    def test_reissue_preserves_revoked_history(self, engine: Engine) -> None:
+        """The revoked generation-1 row must remain intact after reissue."""
+        r1 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="history-slot",
+        )
+        revoke_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_id=r1.record.credential_id,
+            actor_id="system",
+            reason="test",
+        )
+        issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="history-slot",
+        )
+
+        history = get_credential_history(engine, tenant_id="tenant-alpha", credential_slot="history-slot")
+        assert len(history) == 2
+        statuses = {r.generation: r.status for r in history}
+        assert statuses[1] == "revoked"
+        assert statuses[2] == "active"
+
+    def test_reissue_after_expired_generation_succeeds(self, engine: Engine) -> None:
+        """Expired generation is also terminal — reissue must produce N+1."""
+        from sqlalchemy import text as _text
+
+        r1 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="expired-slot",
+        )
+        # Backdate expires_at so expire_credentials sweeps it up immediately.
+        with engine.begin() as conn:
+            conn.execute(
+                _text(
+                    "UPDATE tenant_credentials SET expires_at = '2000-01-01T00:00:00+00:00' "
+                    "WHERE credential_id = :cid"
+                ),
+                {"cid": r1.record.credential_id},
+            )
+        expire_credentials(engine)
+        r2 = issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="expired-slot",
+        )
+        assert r2.record.generation == 2
+        assert r2.record.status == "active"
+
+    def test_active_slot_still_rejects_second_issue(self, engine: Engine) -> None:
+        """Regression: an ACTIVE credential in the slot must still raise CredentialStateError."""
+        issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="active-guard",
+        )
+        with pytest.raises(CredentialStateError):
+            issue_credential(
+                engine,
+                tenant_id="tenant-alpha",
+                credential_type="tenant_api_key",
+                credential_slot="active-guard",
             )
 
     def test_issue_on_different_slot_succeeds(self, engine: Engine) -> None:

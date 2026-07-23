@@ -1091,17 +1091,39 @@ def issue_credential(
         ).fetchone()
         current_gen: int = slot_row[0] if slot_row else 0
 
-        # Occupied-slot guard: a slot with an existing generation must go
-        # through rotate_credential, not issue_credential.  Without this
-        # check every call to issue_credential would insert another active
-        # row on the same slot, violating the max_overlap_count=1 invariant
-        # and leaving multiple usable secrets for the same slot.
+        # Occupied-slot guard: distinguish an active credential (must rotate)
+        # from a terminal one (revoked/expired/rotated — safe to reissue as N+1).
+        #
+        # A terminal credential is auditable history; it is never deleted or
+        # modified here.  current_generation advances to N+1 exactly as it
+        # would in a normal rotate, preserving full generation lineage.
+        #
+        # Without this check a revoked credential leaves the slot permanently
+        # stuck: issue rejects it (occupied) and rotate rejects it (not active).
         if current_gen > 0:
-            raise CredentialStateError(
-                f"Slot {credential_slot!r} already has a credential at "
-                f"generation {current_gen}. "
-                "Use rotate_credential() to issue a successor."
-            )
+            current_cred_row = conn.execute(
+                text(
+                    "SELECT status FROM tenant_credentials "
+                    "WHERE tenant_id = :tid AND credential_type = :ctype "
+                    "AND credential_slot = :slot AND generation = :gen"
+                ),
+                {
+                    "tid": tenant_id,
+                    "ctype": credential_type,
+                    "slot": credential_slot,
+                    "gen": current_gen,
+                },
+            ).fetchone()
+            current_status: Optional[str] = current_cred_row[0] if current_cred_row else None
+            if current_status not in TERMINAL_STATUSES:
+                # Active (or unrecognised) credential occupies the slot.
+                # Caller must use rotate_credential() instead.
+                raise CredentialStateError(
+                    f"Slot {credential_slot!r} already has a credential at "
+                    f"generation {current_gen}. "
+                    "Use rotate_credential() to issue a successor."
+                )
+            # Terminal generation — reissue as N+1, preserving history.
 
         new_gen = current_gen + 1
 
