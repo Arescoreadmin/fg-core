@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1017,
+    "contract_count": 1018,
     "contract_only": [],
-    "runtime_count": 1188,
+    "runtime_count": 1198,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -19,6 +19,7 @@
       "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
+      "GET /admin/agents/{agent_id}/credential",
       "GET /admin/audit/search",
       "GET /admin/billing/accounts/{account_id}",
       "GET /admin/billing/explain",
@@ -28,6 +29,7 @@
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
+      "GET /admin/devices/{device_id}/credential",
       "GET /admin/identity/tenants/{tenant_id}/approval-queue",
       "GET /admin/identity/tenants/{tenant_id}/audit-summary",
       "GET /admin/identity/tenants/{tenant_id}/config",
@@ -133,6 +135,11 @@
       "POST /admin/agent/quarantine/{device_id}",
       "POST /admin/agent/unquarantine/{device_id}",
       "POST /admin/agent/update/rollout",
+      "POST /admin/agents/bootstrap",
+      "POST /admin/agents/{agent_id}/resume",
+      "POST /admin/agents/{agent_id}/revoke",
+      "POST /admin/agents/{agent_id}/rotate",
+      "POST /admin/agents/{agent_id}/suspend",
       "POST /admin/audit/export",
       "POST /admin/billing/accounts",
       "POST /admin/billing/meters",
@@ -143,6 +150,8 @@
       "POST /admin/connectors/{connector_id}/revoke",
       "POST /admin/devices/{device_id}/disable",
       "POST /admin/devices/{device_id}/enable",
+      "POST /admin/devices/{device_id}/resume",
+      "POST /admin/devices/{device_id}/suspend",
       "POST /admin/identity/invitations/{invitation_id}/approve",
       "POST /admin/identity/invitations/{invitation_id}/reject-approval",
       "POST /admin/identity/invitations/{invitation_id}/request-approval",
@@ -185,7 +194,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "d290294049051368c3b2f35d09574b0b3b5aeee17e1098e022da0b380f5a1368",
+  "governance_fingerprint": "d9393ab969ea1e0df5be30e898ae608a42050ca94b54e8a4a36623a7dfb7324a",
   "planes": [
     {
       "compat": {
@@ -196,7 +205,8 @@
         "agent-unit"
       ],
       "route_prefixes": [
-        "/agent"
+        "/agent",
+        "/agents"
       ]
     },
     {
@@ -414,7 +424,8 @@
       "POST /agent/key/rotate",
       "POST /agent/log/anchor",
       "POST /agent/update/manifest",
-      "POST /agent/update/report"
+      "POST /agent/update/report",
+      "POST /agents/enroll"
     ],
     "ai": [
       "GET /ai-plane/inference",
@@ -465,6 +476,7 @@
       "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
+      "GET /admin/agents/{agent_id}/credential",
       "GET /admin/audit/search",
       "GET /admin/billing/accounts/{account_id}",
       "GET /admin/billing/explain",
@@ -474,6 +486,7 @@
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
       "GET /admin/devices",
+      "GET /admin/devices/{device_id}/credential",
       "GET /admin/identity/tenants/{tenant_id}/approval-queue",
       "GET /admin/identity/tenants/{tenant_id}/audit-summary",
       "GET /admin/identity/tenants/{tenant_id}/config",
@@ -1017,6 +1030,11 @@
       "POST /admin/agent/quarantine/{device_id}",
       "POST /admin/agent/unquarantine/{device_id}",
       "POST /admin/agent/update/rollout",
+      "POST /admin/agents/bootstrap",
+      "POST /admin/agents/{agent_id}/resume",
+      "POST /admin/agents/{agent_id}/revoke",
+      "POST /admin/agents/{agent_id}/rotate",
+      "POST /admin/agents/{agent_id}/suspend",
       "POST /admin/audit/export",
       "POST /admin/billing/accounts",
       "POST /admin/billing/meters",
@@ -1027,6 +1045,8 @@
       "POST /admin/connectors/{connector_id}/revoke",
       "POST /admin/devices/{device_id}/disable",
       "POST /admin/devices/{device_id}/enable",
+      "POST /admin/devices/{device_id}/resume",
+      "POST /admin/devices/{device_id}/suspend",
       "POST /admin/identity/invitations/{invitation_id}/approve",
       "POST /admin/identity/invitations/{invitation_id}/reject-approval",
       "POST /admin/identity/invitations/{invitation_id}/request-approval",

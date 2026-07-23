@@ -71,11 +71,16 @@ async function writeKeyToUpstash(tenantId: string, apiKey: string): Promise<bool
   }
 }
 
-async function revokeKey(prefix: string, tenantId: string): Promise<void> {
+async function revokeKey(credentialId: string, tenantId: string): Promise<void> {
   try {
     await fetch(
-      `${CORE_API_URL}/admin/keys/${encodeURIComponent(prefix)}/revoke?tenant_id=${encodeURIComponent(tenantId)}`,
-      { method: 'POST', headers: adminHeaders(), cache: 'no-store' },
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(credentialId)}/revoke`,
+      {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ reason: 'provision-tenant: persistence failure rollback' }),
+        cache: 'no-store',
+      },
     );
   } catch (e) {
     console.error('[provision-tenant] revokeKey failed (best-effort):', e instanceof Error ? e.message : e);
@@ -153,18 +158,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Step 2: Create BFF API key scoped to the tenant
-  const keyRes = await fetch(`${CORE_API_URL}/admin/keys`, {
-    method: 'POST',
-    headers: adminHeaders(),
-    body: JSON.stringify({
-      name: 'console-bff-key',
-      scopes: PROVISION_SCOPES,
-      tenant_id: tenantId,
-      ttl_seconds: ONE_YEAR_SECONDS,
-    }),
-    cache: 'no-store',
-  });
+  // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired)
+  const keyRes = await fetch(
+    `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
+    {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        credential_slot: 'console-bff-key',
+        scopes: PROVISION_SCOPES,
+        expires_in_seconds: ONE_YEAR_SECONDS,
+      }),
+      cache: 'no-store',
+    },
+  );
 
   if (!keyRes.ok) {
     const err = await keyRes.json().catch(() => ({}));
@@ -175,7 +182,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const keyData = await keyRes.json();
-  const rawKey: string = keyData.key;
+  const rawKey: string = keyData.plaintext_secret;
 
   // Step 3a: Write display metadata to Edge Config (does NOT store the auth key).
   // Fire-and-forget — Edge Config is for the client list UI, not portal authentication.
@@ -216,7 +223,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tenantId,
       registryError,
     });
-    await revokeKey(keyData.prefix, tenantId);
+    await revokeKey(keyData.credential_id, tenantId);
     return NextResponse.json(
       {
         error: 'PERSISTENCE_UNAVAILABLE',
@@ -238,7 +245,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     name,
     already_existed: tenantAlreadyExisted,
     registry_live: true,
-    api_key_prefix: keyData.prefix,
+    credential_id: keyData.credential_id,
     api_key_expires_at: keyData.expires_at,
   });
 }
