@@ -544,7 +544,9 @@ class TestC_Issuance:
             credential_slot="history-slot",
         )
 
-        history = get_credential_history(engine, tenant_id="tenant-alpha", credential_slot="history-slot")
+        history = get_credential_history(
+            engine, tenant_id="tenant-alpha", credential_slot="history-slot"
+        )
         assert len(history) == 2
         statuses = {r.generation: r.status for r in history}
         assert statuses[1] == "revoked"
@@ -1631,7 +1633,9 @@ class TestL_ReissueAfterTerminal:
         monkeypatch.setattr(
             ca,
             "_HASHER",
-            __import__("argon2").PasswordHasher(time_cost=1, memory_cost=8, parallelism=1),
+            __import__("argon2").PasswordHasher(
+                time_cost=1, memory_cost=8, parallelism=1
+            ),
         )
         monkeypatch.setenv("FG_KEY_PEPPER", "test-pepper-value-for-r4-tests")
 
@@ -1684,9 +1688,9 @@ class TestL_ReissueAfterTerminal:
         # Exactly one success, one error.
         assert len(results) == 1, f"Expected 1 success, got {len(results)}: {results}"
         assert len(errors) == 1, f"Expected 1 error, got {len(errors)}: {errors}"
-        assert isinstance(
-            errors[0], (CredentialConflictError, CredentialStateError)
-        ), f"Expected CredentialConflictError or CredentialStateError, got {type(errors[0])}"
+        assert isinstance(errors[0], (CredentialConflictError, CredentialStateError)), (
+            f"Expected CredentialConflictError or CredentialStateError, got {type(errors[0])}"
+        )
 
         # Reopen the DB to verify the final slot generation.
         teng2 = create_engine(
@@ -1782,7 +1786,9 @@ class TestL_ReissueAfterTerminal:
                     "WHERE tenant_id = 'tenant-alpha' AND credential_slot = 'sweep-lag'"
                 )
             ).fetchone()
-        assert row is not None and row[0] == "active", "Precondition: row must still be active"
+        assert row is not None and row[0] == "active", (
+            "Precondition: row must still be active"
+        )
 
         # issue_credential must treat the wall-clock-expired active row as terminal.
         r2 = self._issue(engine, slot="sweep-lag")

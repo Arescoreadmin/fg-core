@@ -1123,8 +1123,12 @@ def issue_credential(
                     "gen": current_gen,
                 },
             ).fetchone()
-            gen_status: Optional[str] = gen_status_row[0] if gen_status_row is not None else None
-            gen_expires_at: Optional[str] = gen_status_row[1] if gen_status_row is not None else None
+            gen_status: Optional[str] = (
+                gen_status_row[0] if gen_status_row is not None else None
+            )
+            gen_expires_at: Optional[str] = (
+                gen_status_row[1] if gen_status_row is not None else None
+            )
 
             # Normalise status for credentials that have passed expires_at but
             # have not yet been swept by expire_credentials().  The sweep is
