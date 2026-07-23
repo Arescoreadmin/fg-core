@@ -1,5 +1,38 @@
 # PR Fix Log (Strict)
 
+## P-20 — feat(r4.10): agent and device credential authority
+
+**Branch:** `feat/r4.10-agent-device-credential-authority`
+**Date:** 2026-07-22
+
+### Problem
+
+Agent and device credentials (`agent_device_keys`, `agent_enrollment_tokens`) had no canonical lifecycle tracking in `tenant_credentials`. Bootstrap tokens were single-use but lacked canonical revocation audit trails. There was no suspend/resume lifecycle for temporary credential holds. Device identity binding was not preserved across credential rotations.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: api/credential_authority.py` — added `agent_device` credential type: `AgentDeviceCredentialMetadata` Pydantic model (14 required fields + 9 optional, designed for future TPM/FIDO2/SPIFFE extensibility via `future_extensions: dict`); `DEVICE_TRUST_STATES` frozenset (11 states); `VALID_TRUST_TRANSITIONS` adjacency list; `validate_trust_transition()` raises `CredentialStateError` on invalid transitions; `BootstrapTokenResult` frozen dataclass; `_generate_agent_device_key` / `_parse_agent_device_key` helpers (same raw-opaque format as `portal_access` and `connector`); `DEFAULT_AGENT_DEVICE_CREDENTIAL_TTL_SECONDS = 90 * 24 * 3600`; `DEFAULT_BOOTSTRAP_TOKEN_TTL_SECONDS = 3600`; type dispatch in `issue_credential`, `validate_credential`, `rotate_credential`; metadata preserved on rotation for `agent_device` type (same fix as `portal_access` / `connector`); `suspend_credential()` and `resume_credential()` — generic by `credential_id`, emit `suspended`/`resumed` audit events; `issue_bootstrap_token()` — inserts SHA-256 hashed token into `agent_enrollment_tokens`; `exchange_bootstrap_token()` — consumes token atomically (`used_count < max_uses` guard in WHERE clause), builds `AgentDeviceCredentialMetadata`, calls `issue_credential()` with `idempotency_key=bootstrap:{enrollment_id}:{agent_id}`.
+
+2. `new: api/agents_credential_authority.py` — 3 routers: `admin_router` (`/admin/agents`, `admin:write`), `device_router` (`/admin/devices`, `admin:write`), `agent_router` (`/agents`, unauthenticated). 10 routes covering bootstrap, enroll, rotate, revoke, suspend, resume, lookup by agent_id and device_id. Resume bypasses `get_active_credential_for_slot` (which is fail-closed) via direct SQL query for `status = 'suspended'` rows.
+
+3. `mod: api/main.py` — registered `agents_ca_admin_router`, `agents_ca_device_router`, `agents_ca_agent_router` at both app setup points.
+
+4. `new: migrations/postgres/0163_agent_device_credential_authority.sql` — sentinel records for active `agent_device_keys` rows. Slot `legacy:device:{device_id}:{id}`, fingerprint `legacy:{id}` — invisible to canonical HMAC-SHA256 fingerprint lookup. Idempotent via `ON CONFLICT (tenant_id, idempotency_key)`.
+
+5. `new: tests/test_r4_10_agent_device_credentials.py` — 94 tests (groups A–J): type dispatch, metadata validation, trust state machine, bootstrap lifecycle, suspend/resume, slot helper semantics, tenant isolation, audit events, sentinel invariants, edge cases.
+
+6. `new: tests/security/test_agent_device_credential_security.py` — 18 security tests: tenant isolation, fail-closed revoke/suspend, bootstrap replay prevention, token stored as hash, expiry enforcement.
+
+7. `new: tests/security/test_agent_device_credential_contract.py` — 18 contract tests: API surface invariants, function signatures, type constants, sentinel design properties.
+
+8. `mod: docs/security/CREDENTIAL_AUTHORITY.md` — added `agent_device` section with metadata model, token format, bootstrap flow, suspend/resume semantics, trust state machine, sentinel design, API route table.
+
+**Bug fixed during implementation:** `rotate_credential` only carried metadata forward for `portal_access` and `connector` types. Added `agent_device` to the metadata-preservation set so device identity binding (agent_id, device_id, hostname, hardware_fingerprint, etc.) survives key rotation.
+
+---
+
 ## P-19 — feat(r4.9b): connector credential authority
 
 **Branch:** `feat/r4.9b-connector-credential-authority`

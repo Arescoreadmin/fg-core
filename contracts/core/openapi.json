@@ -5476,6 +5476,61 @@
         "title": "Body_upload_document_rag_upload_post",
         "type": "object"
       },
+      "BootstrapTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_uses": {
+            "default": 1,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "agent_bootstrap",
+            "maxLength": 256,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 3600,
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "BootstrapTokenRequest",
+        "type": "object"
+      },
+      "BootstrapTokenResponse": {
+        "properties": {
+          "enrollment_id": {
+            "title": "Enrollment Id",
+            "type": "integer"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "tenant_id",
+          "expires_at",
+          "enrollment_id"
+        ],
+        "title": "BootstrapTokenResponse",
+        "type": "object"
+      },
       "BreakglassSessionCreate": {
         "additionalProperties": false,
         "properties": {
@@ -12899,6 +12954,72 @@
         "title": "CreateWorkflowRequest",
         "type": "object"
       },
+      "CredentialInfoResponse": {
+        "properties": {
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "credential_slot": {
+            "title": "Credential Slot",
+            "type": "string"
+          },
+          "credential_type": {
+            "title": "Credential Type",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "issued_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued At"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "credential_type",
+          "credential_slot",
+          "status",
+          "generation"
+        ],
+        "title": "CredentialInfoResponse",
+        "type": "object"
+      },
       "CreditNoteCreateRequest": {
         "properties": {
           "amount": {
@@ -15036,6 +15157,135 @@
           "schema_version"
         ],
         "title": "EngagementSummaryResponse",
+        "type": "object"
+      },
+      "EnrollRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "maxLength": 122,
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Agent Version",
+            "type": "string"
+          },
+          "architecture": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Architecture",
+            "type": "string"
+          },
+          "bootstrap_token": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Bootstrap Token",
+            "type": "string"
+          },
+          "deployment_environment": {
+            "default": "prod",
+            "maxLength": 32,
+            "title": "Deployment Environment",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "hardware_fingerprint": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hardware Fingerprint",
+            "type": "string"
+          },
+          "hostname": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Hostname",
+            "type": "string"
+          },
+          "os_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Os Version",
+            "type": "string"
+          },
+          "platform": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          },
+          "trust_level": {
+            "default": "full",
+            "maxLength": 32,
+            "title": "Trust Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bootstrap_token",
+          "agent_id",
+          "device_id",
+          "hostname",
+          "platform",
+          "architecture",
+          "os_version",
+          "agent_version",
+          "hardware_fingerprint"
+        ],
+        "title": "EnrollRequest",
+        "type": "object"
+      },
+      "EnrollResponse": {
+        "properties": {
+          "agent_secret": {
+            "title": "Agent Secret",
+            "type": "string"
+          },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "credential_slot": {
+            "title": "Credential Slot",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "credential_id",
+          "agent_secret",
+          "credential_slot"
+        ],
+        "title": "EnrollResponse",
         "type": "object"
       },
       "EnrollmentTokenCreateRequest": {
@@ -36007,6 +36257,19 @@
         "title": "RevokeKeyResponse",
         "type": "object"
       },
+      "RevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "admin_revoke",
+            "maxLength": 256,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "RevokeRequest",
+        "type": "object"
+      },
       "RevokeSessionResponse": {
         "properties": {
           "ok": {
@@ -37119,6 +37382,45 @@
           "raw_secret"
         ],
         "title": "RotatePortalGrantResponse",
+        "type": "object"
+      },
+      "RotateResponse": {
+        "properties": {
+          "agent_secret": {
+            "title": "Agent Secret",
+            "type": "string"
+          },
+          "credential_id": {
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "credential_slot": {
+            "title": "Credential Slot",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "credential_id",
+          "agent_secret",
+          "credential_slot",
+          "generation"
+        ],
+        "title": "RotateResponse",
         "type": "object"
       },
       "RotationOutcome": {
@@ -38803,6 +39105,19 @@
         "title": "StatsSummaryResponse",
         "type": "object"
       },
+      "StatusResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
       "StrategyProfileResponse": {
         "additionalProperties": false,
         "properties": {
@@ -39012,6 +39327,19 @@
           }
         },
         "title": "SuspendOrgRequest",
+        "type": "object"
+      },
+      "SuspendRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "default": "admin_suspend",
+            "maxLength": 256,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "SuspendRequest",
         "type": "object"
       },
       "TelemetryInput": {
@@ -52472,6 +52800,48 @@
         "summary": "Report Update Event",
         "tags": [
           "agent-phase2"
+        ]
+      }
+    },
+    "/agents/enroll": {
+      "post": {
+        "description": "Exchange a bootstrap token for a canonical agent_device credential.\n\nThe bootstrap token is consumed atomically. The returned agent_secret is\nshown exactly once and must be stored securely by the agent.",
+        "operationId": "enroll_agent_agents_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Agent",
+        "tags": [
+          "agent-enrollment"
         ]
       }
     },

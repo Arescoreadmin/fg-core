@@ -1,3 +1,25 @@
+## 2026-07-23 — feat/r4.10-agent-device-credential-authority: R4.10 Agent Device Credential Authority — CI gate fixes
+
+**Classification:** CI artifact update and public-path registration. No new auth mechanism. No auth surface widened beyond explicit design intent.
+
+**Critical-path files changed:**
+- `api/security/public_paths.py` — added `/agents/enroll` to `PUBLIC_PATHS_EXACT`.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — route inventory artifacts regenerated to include the 10 new R4.10 agent credential routes.
+
+**Change:** `/agents/enroll` is the bootstrap token exchange endpoint introduced by R4.10. An agent with no prior credential uses a one-time `agent_enrollment_tokens` token (HMAC-SHA256 fingerprint stored, never plaintext) to obtain a canonical `agent_device` credential. The endpoint is intentionally unauthenticated — the bootstrap token IS the credential for this one call. This is the same pattern as `/identity/invitations/accept` (already in `PUBLIC_PATHS_EXACT`) and `/workforce/users/accept-invite`. After exchange the token is atomically consumed (`used_count = used_count + 1 WHERE used_count < max_uses` + rowcount check) and cannot be reused.
+
+**Security invariants — all unchanged:**
+1. `/agents/enroll` carries no ambient auth; it rejects requests with an invalid or already-consumed token with HTTP 401. No session, no cookie, no API key bypass.
+2. The one-time-use guard is atomic: concurrent calls with the same token are rejected by the rowcount check before `issue_credential` is ever called.
+3. Bootstrap tokens are stored as HMAC-SHA256(key=FG_KEY_PEPPER, msg=raw_token) — the same fingerprint algorithm as all canonical credentials. Plain SHA-256 or cleartext storage is impossible by construction.
+4. No existing authenticated route has its scope requirement removed or weakened.
+5. Route inventory update is a required artifact synchronisation; no security logic changed.
+6. `CredentialAuthority` remains the sole writer to `tenant_credentials`, `credential_slots`, `tenant_credential_events` — enforced by SOC-HIGH-003 gate.
+
+**SOC review outcome:** approved. Adding `/agents/enroll` to public paths is the correct and expected action for a bootstrap token exchange endpoint. The one-time-use guarantee and HMAC-keyed fingerprint storage ensure the public endpoint does not create a persistent unauthenticated surface.
+
+---
+
 ## 2026-07-21 — fix/r4.8-post-merge-cleanup: R4.8 Post-Merge Cleanup — Legacy Key-Prefix Rotation Retirement and Stale Test Alignment
 
 **Classification:** Post-merge correctness fix. No new tables. No new routes. No new auth mechanisms. No auth surface widened. Files changed: `api/admin.py` (route removal — `POST /admin/keys/{key_prefix}/rotate`), `api/auth_scopes/__init__.py` (scope export cleanup), `api/auth_scopes/mapping.py` (allowlist alignment), `tools/ci/check_credential_authority.py` (SOC-HIGH-005 allowlist correction), stale test migration (`tests/test_usage_attribution.py`), route inventory/topology artifacts regenerated.
