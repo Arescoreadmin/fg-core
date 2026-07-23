@@ -215,22 +215,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Fail closed: both persistence paths failed. Revoke the dangling key so Postgres
-  // doesn't accumulate unreachable credentials, then return a structured error.
-  // R7 will make Postgres the rebuild source so this revocation becomes unnecessary.
+  // Fail closed: both persistence paths failed.
   if (!registryLive) {
-    console.error('[provision-tenant] credential persistence failed — revoking key and aborting', {
+    const isProduction = (process.env.FG_ENV ?? '').trim().toLowerCase() === 'production';
+    const devOverride =
+      !isProduction &&
+      (process.env.FG_ALLOW_UNPERSISTED_TENANT_KEYS ?? '').trim().toLowerCase() === 'true';
+
+    if (isProduction && (process.env.FG_ALLOW_UNPERSISTED_TENANT_KEYS ?? '') !== '') {
+      // Hard block: override flag must never be honoured in production.
+      console.error(
+        '[provision-tenant] FG_ALLOW_UNPERSISTED_TENANT_KEYS is set but FG_ENV=production — ignoring override',
+        { tenantId },
+      );
+    }
+
+    if (!devOverride) {
+      // Production (and any unoverridden non-production) path: revoke dangling credential
+      // and return 503 so the caller knows provisioning did not complete.
+      // R7 will make Postgres the rebuild source so this revocation becomes unnecessary.
+      console.error('[provision-tenant] credential persistence failed — revoking and aborting', {
+        tenantId,
+        registryError,
+      });
+      await revokeKey(keyData.credential_id, tenantId);
+      return NextResponse.json(
+        {
+          error: 'PERSISTENCE_UNAVAILABLE',
+          detail: registryError ?? 'Both Redis and Upstash writes failed. Tenant key not persisted.',
+        },
+        { status: 503 },
+      );
+    }
+
+    // Dev/staging explicit override: return the one-time secret so the operator can
+    // wire it manually. Only reachable when FG_ALLOW_UNPERSISTED_TENANT_KEYS=true
+    // AND FG_ENV != production.
+    console.warn('[provision-tenant] persistence skipped via dev override — returning plaintext secret', {
       tenantId,
-      registryError,
     });
-    await revokeKey(keyData.credential_id, tenantId);
-    return NextResponse.json(
-      {
-        error: 'PERSISTENCE_UNAVAILABLE',
-        detail: registryError ?? 'Both Redis and Upstash writes failed. Tenant key not persisted.',
-      },
-      { status: 503 },
-    );
+    return NextResponse.json({
+      tenant_id: tenantId,
+      name,
+      already_existed: tenantAlreadyExisted,
+      registry_live: false,
+      credential_id: keyData.credential_id,
+      api_key_expires_at: keyData.expires_at,
+      api_key: keyData.plaintext_secret,
+      warning: 'Credential was NOT persisted. Set REDIS_URL or UPSTASH_REDIS_REST_URL before provisioning production tenants.',
+    });
   }
 
   // Always write full tenant record to Upstash console registry so the client

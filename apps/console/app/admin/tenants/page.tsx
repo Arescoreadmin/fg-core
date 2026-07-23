@@ -18,6 +18,7 @@ interface ProvisionResult {
   registry_error?: string | null;
   api_key: string | null;
   credential_id?: string;
+  warning?: string;
 }
 
 // ─── Create Client Modal ──────────────────────────────────────────────────────
@@ -116,6 +117,11 @@ function ProvisionResultModal({ result, onClose }: { result: ProvisionResult; on
           </p>
         ) : (
           <>
+            {result.warning && (
+              <div style={{ background: '#7c2d00', color: '#fef3c7', borderRadius: 6, padding: '8px 12px', fontSize: '0.8rem', marginBottom: 8 }}>
+                ⚠ {result.warning}
+              </div>
+            )}
             <p style={{ fontSize: '0.875rem', color: 'var(--muted)', marginTop: 4, lineHeight: 1.6 }}>
               {result.registry_error
                 ? `Registry write failed: ${result.registry_error}`
