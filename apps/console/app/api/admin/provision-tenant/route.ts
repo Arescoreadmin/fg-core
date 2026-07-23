@@ -192,8 +192,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    const list = await listRes.json() as { items?: Array<{ credential_id: string; credential_slot: string }> };
-    const existing = (list.items ?? []).find(c => c.credential_slot === 'console-bff-key');
+    const list = await listRes.json() as { credentials?: Array<{ credential_id: string; credential_slot: string }> };
+    const existing = (list.credentials ?? []).find(c => c.credential_slot === 'console-bff-key');
     if (!existing) {
       return NextResponse.json(
         { error: 'Key generation failed: slot conflict but no active console-bff-key credential found.' },
