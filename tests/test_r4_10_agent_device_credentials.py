@@ -21,6 +21,7 @@ Coverage groups:
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Generator
@@ -715,11 +716,18 @@ class TestBootstrapTokenLifecycle:
         delta = result.expires_at - datetime.now(timezone.utc)
         assert abs(delta.total_seconds() - 3600) < 10
 
-    def test_bootstrap_token_stored_hashed(self, engine: Engine) -> None:
+    def test_bootstrap_token_stored_as_hmac_fingerprint(self, engine: Engine) -> None:
+        import hmac as _hmac
+
         result = ca.issue_bootstrap_token(
             engine, tenant_id=_TID, actor_id="admin", ttl_seconds=60, reason="test"
         )
-        expected_hash = hashlib.sha256(result.raw_token.encode()).hexdigest()
+        pepper = os.environ["FG_KEY_PEPPER"]
+        expected_hash = _hmac.new(
+            key=pepper.encode("utf-8"),
+            msg=result.raw_token.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
         with engine.begin() as conn:
             row = conn.execute(
                 text("SELECT token_hash FROM agent_enrollment_tokens WHERE id = :id"),
@@ -727,6 +735,7 @@ class TestBootstrapTokenLifecycle:
             ).fetchone()
         assert row is not None
         assert row[0] == expected_hash
+        assert row[0] != hashlib.sha256(result.raw_token.encode()).hexdigest()
 
     def test_exchange_bootstrap_token_issues_credential(self, engine: Engine) -> None:
         tok = ca.issue_bootstrap_token(

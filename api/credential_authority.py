@@ -1822,7 +1822,7 @@ def issue_bootstrap_token(
         TenantLifecycleError: tenant state does not permit issuance.
     """
     raw_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    token_hash = _compute_lookup_fingerprint(raw_token, _get_pepper())
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     expires_iso = expires_at.isoformat()
 
@@ -1883,7 +1883,7 @@ def exchange_bootstrap_token(
         TenantNotFoundError:                 tenant_id does not exist.
         TenantLifecycleError:                tenant state does not permit issuance.
     """
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    token_hash = _compute_lookup_fingerprint(raw_token, _get_pepper())
     now = datetime.now(timezone.utc)
 
     with engine.begin() as conn:
