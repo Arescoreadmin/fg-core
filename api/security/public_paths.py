@@ -47,6 +47,9 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/governance-orchestration/health",
     # Governance Intelligence Authority health probe (PR 18.5) — unauthenticated liveness check.
     "/intelligence/health",
+    # Agent bootstrap enrollment: the one-time bootstrap token IS the credential.
+    # Consumed atomically; no prior auth exists. Mirrors /identity/invitations/accept pattern.
+    "/agents/enroll",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
