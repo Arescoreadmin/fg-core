@@ -1438,3 +1438,311 @@ class TestK_CredentialAuthorityGate:
         assert "api/auth_scopes/mapping.py" in src, (
             "mapping.py must appear in _LEGACY_WRITE_ALLOWED"
         )
+
+
+# ---------------------------------------------------------------------------
+# L — Reissue after terminal generation
+# ---------------------------------------------------------------------------
+
+
+class TestL_ReissueAfterTerminal:
+    """Verify issue_credential permits N+1 issuance when generation N is terminal.
+
+    The status check on tenant_credentials runs inside the same transaction
+    that holds the credential_slots row lock, so two concurrent retries on a
+    terminal slot cannot both write generation N+1 — the second raises
+    CredentialConflictError via the conditional UPDATE guard.
+    """
+
+    # ---- helpers ----
+
+    def _issue(
+        self,
+        engine: Engine,
+        slot: str = "reissue-slot",
+        **kw,
+    ) -> IssuanceResult:
+        return issue_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot=slot,
+            **kw,
+        )
+
+    def _revoke(self, engine: Engine, credential_id: str) -> None:
+        revoke_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id="tenant-alpha",
+            actor_id="test-op",
+            reason="terminal-reissue-test",
+        )
+
+    def _force_status(self, engine: Engine, credential_id: str, status: str) -> None:
+        """Directly set the status column for test setup only."""
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE tenant_credentials SET status = :status "
+                    "WHERE credential_id = :cid"
+                ),
+                {"status": status, "cid": credential_id},
+            )
+
+    # ---- 1. revoked → gen 2 ----
+
+    def test_reissue_after_revoked_generation_succeeds(self, engine: Engine) -> None:
+        """Gen 1 revoked → issue_credential issues gen 2 with a new secret."""
+        r1 = self._issue(engine)
+        self._revoke(engine, r1.record.credential_id)
+
+        r2 = self._issue(engine)
+        assert r2.plaintext_secret is not None
+        assert r2.record.credential_id != r1.record.credential_id
+        assert r2.record.generation == 2
+        assert r2.record.status == "active"
+
+    # ---- 2. expired → gen 2 ----
+
+    def test_reissue_after_expired_generation_succeeds(self, engine: Engine) -> None:
+        """Gen 1 expired (via sweep) → issue_credential issues gen 2."""
+        self._issue(engine, expires_in_seconds=-1)
+        expire_credentials(engine, tenant_id="tenant-alpha")
+
+        r2 = self._issue(engine)
+        assert r2.plaintext_secret is not None
+        assert r2.record.generation == 2
+        assert r2.record.status == "active"
+
+    # ---- 3. rotated → gen 3 ----
+
+    def test_reissue_after_rotated_generation_succeeds(self, engine: Engine) -> None:
+        """After rotate_credential leaves gen 1 as 'rotated' and gen 2 as active,
+        revoking gen 2 and then calling issue_credential should produce gen 3.
+
+        rotate_credential marks the predecessor 'rotated' and inserts a new
+        active generation — so 'rotated' is the terminal status set by the
+        rotation path, not by issue_credential.  We simulate a slot whose
+        *current* generation is rotated by directly setting the status of
+        gen 2 to 'rotated' after rotation, to avoid touching rotate_credential's
+        invariants.
+        """
+        # Issue gen 1, rotate → gen 2 active, gen 1 rotated.
+        self._issue(engine)
+        r2 = rotate_credential(
+            engine,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="reissue-slot",
+        )
+        # Force gen 2 (the current_generation the slot points to) to 'rotated'
+        # so that issue_credential sees a terminal current generation.
+        self._force_status(engine, r2.record.credential_id, "rotated")
+
+        r3 = self._issue(engine)
+        assert r3.record.generation == 3
+        assert r3.record.status == "active"
+
+    # ---- 4. active slot still rejects second issue ----
+
+    def test_active_slot_still_rejects_second_issue(self, engine: Engine) -> None:
+        """Regression: an active gen 1 must still raise CredentialStateError."""
+        self._issue(engine, slot="active-guard")
+        with pytest.raises(CredentialStateError):
+            self._issue(engine, slot="active-guard")
+
+    # ---- 5. suspended slot rejects reissue ----
+
+    def test_suspended_slot_rejects_reissue(self, engine: Engine) -> None:
+        """Suspended is not a TERMINAL_STATUS so it must be rejected.
+
+        'suspended' is a reversible, non-terminal status — it blocks
+        validation but can be resumed.  issue_credential must not skip it
+        silently; the caller should resume or revoke before reissuing.
+        TERMINAL_STATUSES = {rotated, revoked, expired} — suspended is absent.
+        """
+        from api.credential_authority import suspend_credential
+
+        r1 = self._issue(engine, slot="suspended-guard")
+        suspend_credential(
+            engine,
+            credential_id=r1.record.credential_id,
+            tenant_id="tenant-alpha",
+            actor_id="test-op",
+            reason="testing suspension block",
+        )
+        with pytest.raises(CredentialStateError):
+            self._issue(engine, slot="suspended-guard")
+
+    # ---- 6. revoked history preserved ----
+
+    def test_reissue_preserves_revoked_history(self, engine: Engine) -> None:
+        """After reissue, gen 1 still exists in the DB with status='revoked'."""
+        r1 = self._issue(engine, slot="hist-preserve")
+        self._revoke(engine, r1.record.credential_id)
+        self._issue(engine, slot="hist-preserve")
+
+        history = get_credential_history(
+            engine,
+            "tenant-alpha",
+            "hist-preserve",
+        )
+        # Both generations must be present.
+        assert len(history) == 2
+        statuses = {rec.generation: rec.status for rec in history}
+        assert statuses[1] == "revoked"
+        assert statuses[2] == "active"
+
+    # ---- 7. generation sequence ----
+
+    def test_reissue_produces_exactly_next_generation(self, engine: Engine) -> None:
+        """Reissue after gen 1 revoked must produce generation == 2, not higher."""
+        r1 = self._issue(engine, slot="gen-seq")
+        self._revoke(engine, r1.record.credential_id)
+
+        r2 = self._issue(engine, slot="gen-seq")
+        assert r2.record.generation == 2
+
+    # ---- 8. concurrency: one winner ----
+
+    def test_simultaneous_reissue_produces_one_winner(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two threads calling issue_credential on a revoked slot must produce
+        exactly one gen 2 success; the other must raise (CredentialConflictError
+        or CredentialStateError).  Final slot state must be current_generation=2.
+
+        Uses a file-based SQLite engine (not the in-memory fixture) because
+        SQLite's SingletonThreadPool does not allow connections created in one
+        thread to be closed from another.  File-based SQLite with
+        check_same_thread=False and StaticPool gives each thread its own
+        connection while sharing the same on-disk state.
+
+        SQLite serialises writes at the database level: the loser will see
+        current_generation=2 (already advanced by the winner) and its
+        conditional UPDATE returns rowcount=0 → CredentialConflictError.
+        Under Postgres the FOR UPDATE row lock achieves the same serialisation.
+        """
+        import concurrent.futures
+
+        from sqlalchemy.pool import NullPool
+
+        monkeypatch.setattr(
+            ca,
+            "_HASHER",
+            __import__("argon2").PasswordHasher(time_cost=1, memory_cost=8, parallelism=1),
+        )
+        monkeypatch.setenv("FG_KEY_PEPPER", "test-pepper-value-for-r4-tests")
+
+        db_path = tmp_path / "concurrent_test.db"
+        teng = create_engine(
+            f"sqlite:///{db_path}",
+            future=True,
+            connect_args={"check_same_thread": False},
+            poolclass=NullPool,
+        )
+        _setup_schema(teng)
+        _insert_tenant(teng, "tenant-alpha")
+
+        # Set up: issue gen 1, revoke it.
+        r1 = issue_credential(
+            teng,
+            tenant_id="tenant-alpha",
+            credential_type="tenant_api_key",
+            credential_slot="concurrent-reissue",
+        )
+        revoke_credential(
+            teng,
+            credential_id=r1.record.credential_id,
+            tenant_id="tenant-alpha",
+            actor_id="test-op",
+            reason="concurrent-test",
+        )
+
+        errors: list[Exception] = []
+        results: list[IssuanceResult] = []
+
+        def _try_issue() -> None:
+            try:
+                res = issue_credential(
+                    teng,
+                    tenant_id="tenant-alpha",
+                    credential_type="tenant_api_key",
+                    credential_slot="concurrent-reissue",
+                )
+                results.append(res)
+            except Exception as exc:
+                errors.append(exc)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(_try_issue), pool.submit(_try_issue)]
+            concurrent.futures.wait(futures)
+
+        teng.dispose()
+
+        # Exactly one success, one error.
+        assert len(results) == 1, f"Expected 1 success, got {len(results)}: {results}"
+        assert len(errors) == 1, f"Expected 1 error, got {len(errors)}: {errors}"
+        assert isinstance(
+            errors[0], (CredentialConflictError, CredentialStateError)
+        ), f"Expected CredentialConflictError or CredentialStateError, got {type(errors[0])}"
+
+        # Reopen the DB to verify the final slot generation.
+        teng2 = create_engine(
+            f"sqlite:///{db_path}",
+            future=True,
+            connect_args={"check_same_thread": False},
+        )
+        with teng2.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT current_generation FROM credential_slots "
+                    "WHERE tenant_id = 'tenant-alpha' "
+                    "  AND credential_type = 'tenant_api_key' "
+                    "  AND credential_slot = 'concurrent-reissue'"
+                )
+            ).fetchone()
+        teng2.dispose()
+
+        assert row is not None
+        assert row[0] == 2, f"Expected current_generation=2, got {row[0]}"
+
+    # ---- 9. audit events distinguish revocation from reissue ----
+
+    def test_audit_events_distinguish_revocation_from_reissue(
+        self, engine: Engine
+    ) -> None:
+        """After gen 1 revoked + gen 2 issued, the audit log contains a 'revoked'
+        event and an 'issued' event as distinct records.
+
+        tenant_credential_events is populated by _insert_event() inside both
+        revoke_credential and issue_credential.  list_credential_events() is
+        the public read-side for that table.
+        """
+        from api.credential_authority import list_credential_events
+
+        r1 = self._issue(engine, slot="audit-distinct")
+        self._revoke(engine, r1.record.credential_id)
+        self._issue(engine, slot="audit-distinct")
+
+        events = list_credential_events(engine, "tenant-alpha")
+        event_types = [e.event_type for e in events]
+
+        assert "revoked" in event_types, "Expected 'revoked' event in audit log"
+        assert "issued" in event_types, "Expected 'issued' event in audit log"
+
+        # The two events must be separate (not the same record).
+        revoked_events = [e for e in events if e.event_type == "revoked"]
+        issued_events = [e for e in events if e.event_type == "issued"]
+        assert len(revoked_events) >= 1
+        assert len(issued_events) >= 2  # gen 1 issuance + gen 2 reissuance
+
+        # The reissue 'issued' event must reference generation 2.
+        gen2_issued = [e for e in issued_events if e.generation == 2]
+        assert len(gen2_issued) == 1, "Expected exactly one 'issued' event for gen 2"
+
+        # The revocation event must reference generation 1 and the original cred ID.
+        gen1_revoked = [e for e in revoked_events if e.generation == 1]
+        assert len(gen1_revoked) == 1
+        assert gen1_revoked[0].credential_id == r1.record.credential_id
