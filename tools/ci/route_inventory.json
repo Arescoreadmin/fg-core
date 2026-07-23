@@ -462,6 +462,114 @@
         "rate",
         "tenant"
       ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/agents/bootstrap",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "GET",
+      "path": "/admin/agents/{agent_id}/credential",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/agents/{agent_id}/resume",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/agents/{agent_id}/revoke",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/agents/{agent_id}/rotate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/agents/{agent_id}/suspend",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/audit/export",
@@ -800,6 +908,24 @@
         "rate",
         "tenant"
       ],
+      "file": "api/agents_credential_authority.py",
+      "method": "GET",
+      "path": "/admin/devices/{device_id}/credential",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/admin/devices/{device_id}/disable",
@@ -821,6 +947,42 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/admin/devices/{device_id}/enable",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/devices/{device_id}/resume",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/admin/devices/{device_id}/suspend",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -2284,6 +2446,18 @@
       "path": "/agent/update/report",
       "plane": "agent",
       "plane_id": "agent",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/agents_credential_authority.py",
+      "method": "POST",
+      "path": "/agents/enroll",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
@@ -20292,7 +20466,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-21T14:25:51.975459+00:00",
+  "generated_at": "2026-07-23T00:08:16.373101+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
