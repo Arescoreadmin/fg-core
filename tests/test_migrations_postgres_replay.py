@@ -93,20 +93,20 @@ def _tx(_mig_engine):
 
 
 def _run_migration_body(conn, filename: str) -> None:
-    """Execute every SQL statement in a migration file, skipping BEGIN/COMMIT."""
+    """Execute every SQL statement in a migration file, skipping BEGIN/COMMIT.
+
+    Single-line comments are stripped before splitting on semicolons to avoid
+    false splits on semicolons embedded in comment text.
+    """
     sql = (_MIGRATIONS_DIR / filename).read_text()
+    # Strip single-line comments first — they may contain semicolons that
+    # would falsely split a statement (e.g. "-- valid UUID; gen_random_uuid()").
+    sql = "\n".join(ln for ln in sql.splitlines() if not ln.strip().startswith("--"))
     for raw in sql.split(";"):
         stmt = raw.strip()
-        if not stmt:
+        if not stmt or stmt.upper() in ("BEGIN", "COMMIT"):
             continue
-        # Strip comment lines to check for bare transaction keywords.
-        non_comment = "\n".join(
-            ln for ln in stmt.splitlines() if not ln.strip().startswith("--")
-        ).strip()
-        if non_comment.upper() in ("BEGIN", "COMMIT"):
-            continue
-        if non_comment:
-            conn.execute(text(stmt))
+        conn.execute(text(stmt))
 
 
 def _uid(prefix: str = "t") -> str:
