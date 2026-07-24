@@ -136,11 +136,13 @@ def _insert_portal_grant(
             """
             INSERT INTO portal_grants
                 (id, tenant_id, client_id, engagement_id, grant_type,
-                 grant_hash, created_by, created_at, expires_at)
+                 grant_hash, created_by, created_at, expires_at,
+                 status, rotation_counter)
             VALUES
                 (:id, :tid, :cid, :eid, 'client_portal',
                  'sentinel-not-for-auth', 'test-actor',
-                 now()::text, (now() + interval '14 days')::text)
+                 now()::text, (now() + interval '14 days')::text,
+                 'active', 0)
             """
         ),
         {"id": grant_id, "tid": tenant_id, "cid": client_id, "eid": engagement_id},
