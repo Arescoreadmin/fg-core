@@ -19876,3 +19876,26 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - 3 new security tests: HMAC storage verified, wrong-pepper rejection, cross-environment pepper isolation, constant-time length.
   - `tests/test_r4_10_agent_device_credentials.py::test_bootstrap_token_stored_as_hmac_fingerprint` updated to assert HMAC not plain SHA-256.
 - **Result:** Pass.
+
+## PR #573 — fix(ci): pin Ruff to deterministic admin lint baseline (2026-07-23)
+
+- **Date:** 2026-07-23
+- **Category:** CI tooling fix / no behavioral change to product code
+- **Files changed:**
+  - `requirements-dev.txt`
+  - `admin_gateway/requirements-dev.txt`
+- **Root cause:** Open-ended Ruff dependency constraints (`ruff>=0.4.0` in root, `ruff>=0.2.0` in `admin_gateway/`) allowed fresh CI environments to resolve Ruff 0.16.0 while cached environments remained on 0.15.11. Ruff 0.16.0 introduced 333 new findings against the existing `admin_gateway/` codebase, causing `admin-lint` to fail. That failure propagated through `ci-admin` → `soc-manifest-verify` → `fg-fast` → `fg-required`, blocking merges including PR #572.
+- **Fix:** Pin `ruff==0.15.11` exactly in both `requirements-dev.txt` and `admin_gateway/requirements-dev.txt`. The existing accepted `admin_gateway/` baseline is fully compatible with 0.15.11. No lint rules were disabled, no suppressions added. Future Ruff upgrades must occur in a deliberate lint-modernization PR that addresses new findings explicitly.
+- **Behavioral impact:** None. Development tooling version only; no runtime, API, auth, authz, persistence, or credential lifecycle changes.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Validation:**
+  - `make admin-lint` → all checks passed
+  - `make admin-test` → 218 passed
+  - `make ci-admin` → PASS
+  - `make soc-manifest-verify` → PASS
+  - `make required-tests-gate` → PASS
+  - `make fg-contract` → PASS
+  - `make fg-fast` → PASS
+  - `make fg-security` → 1198 passed, 1 skipped
+- **Result:** Pass.
