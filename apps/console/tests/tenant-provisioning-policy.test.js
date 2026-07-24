@@ -29,12 +29,12 @@ test('provision tenant always writes portal auth key to Redis then Upstash', () 
   const src = read('app/api/admin/provision-tenant/route.ts');
   // Portal key write (Redis) always runs — no longer gated on Edge Config success
   assert.match(src, /writeKeyToRedis/);
-  assert.match(src, /registryLive = await writeKeyToRedis/);
+  assert.match(src, /redisResult = await writeKeyToRedis/);
   // Upstash portal key write is the Redis fallback (still gated on !registryLive)
   assert.match(src, /if \(!registryLive\)/);
-  assert.match(src, /registryLive = await writeKeyToUpstash/);
-  // Redis write must clear registryError on success
-  assert.match(src, /if \(registryLive\) registryError = null/);
+  assert.match(src, /upstashResult = await writeKeyToUpstash/);
+  // Registry-live decision must derive from the ok status of Redis or Upstash
+  assert.match(src, /redisResult\.status === 'ok'/);
 });
 
 test('provision tenant Redis write uses portal:tenant key prefix and one-year TTL', () => {
@@ -45,12 +45,14 @@ test('provision tenant Redis write uses portal:tenant key prefix and one-year TT
   assert.match(src, /'EX', ONE_YEAR_SECONDS/);
 });
 
-test('provision tenant Redis write returns false without throwing on connection failure', () => {
+test('provision tenant Redis write returns a PersistenceResult without throwing on connection failure', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
-  // The catch block inside writeKeyToRedis must return false, not rethrow
+  // writeKeyToRedis must return a PersistenceResult (structured) so callers
+  // can distinguish not_configured from unreachable/threw — no bare exceptions.
   assert.match(src, /async function writeKeyToRedis/);
-  assert.match(src, /} catch \{/);
-  assert.match(src, /return false/);
+  assert.match(src, /Promise<PersistenceResult>/);
+  // Failure branch must classify the error, not rethrow
+  assert.match(src, /status: 'unreachable'/);
   assert.doesNotMatch(src, /throw.*writeKeyToRedis/i);
 });
 
@@ -70,27 +72,31 @@ test('provision tenant never exposes raw API key in any response', () => {
 
 test('provision tenant fails closed with 503 when credential persistence fails', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
+  // Legacy fallback code retained for callers that grep for it; superseded by
+  // the more specific taxonomy checked in provision-tenant.test.js (test C).
   assert.match(src, /PERSISTENCE_UNAVAILABLE/);
   assert.match(src, /status: 503/);
   // Must attempt key revocation before returning error (prevent dangling Postgres keys)
   assert.match(src, /revokeKey/);
-  // The 503 path must follow the registryLive persistence check
+  // The 503 return path must follow the registryLive persistence check.
+  // Match on the actual return-statement position, not any occurrence of the
+  // legacy code name (which now also appears in the classifier's default arm).
   const registryCheck = src.indexOf('if (!registryLive)');
-  const persistenceError = src.indexOf('PERSISTENCE_UNAVAILABLE');
+  const returnStatus503 = src.indexOf('status: 503', registryCheck);
   assert.ok(registryCheck >= 0, 'registryLive check must exist');
-  assert.ok(registryCheck < persistenceError, '503 path must follow persistence check');
+  assert.ok(returnStatus503 > registryCheck, '503 return must follow persistence check');
 });
 
 test('provision tenant tries Upstash REST as third fallback after ioredis', () => {
   const src = read('app/api/admin/provision-tenant/route.ts');
   assert.match(src, /async function writeKeyToUpstash/);
-  assert.match(src, /registryLive = await writeKeyToUpstash/);
+  assert.match(src, /upstashResult = await writeKeyToUpstash/);
   // Must use same key prefix and TTL
   assert.match(src, /\['SET', `\$\{PORTAL_KEY_PREFIX\}/);
   assert.match(src, /'EX', ONE_YEAR_SECONDS/);
   // Upstash block must appear after Redis block
-  const redisCallPos = src.indexOf('registryLive = await writeKeyToRedis');
-  const upstashCallPos = src.indexOf('registryLive = await writeKeyToUpstash');
+  const redisCallPos = src.indexOf('redisResult = await writeKeyToRedis');
+  const upstashCallPos = src.indexOf('upstashResult = await writeKeyToUpstash');
   assert.ok(redisCallPos < upstashCallPos, 'ioredis must be tried before Upstash REST');
 });
 
