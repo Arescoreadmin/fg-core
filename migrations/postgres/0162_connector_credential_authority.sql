@@ -36,13 +36,14 @@ INSERT INTO credential_slots (
     rotation_policy
 )
 SELECT DISTINCT
-    tenant_id,
+    c.tenant_id,
     'connector',
-    'legacy:' || connector_id || ':' || id::text,
+    'legacy:' || c.connector_id || ':' || c.id::text,
     1,
     'immediate'
-FROM connectors_credentials
-WHERE revoked_at IS NULL
+FROM connectors_credentials c
+JOIN tenants t ON t.tenant_id = c.tenant_id
+WHERE c.revoked_at IS NULL
 ON CONFLICT DO NOTHING;
 
 -- Step 2: insert sentinel tenant_credentials rows for each active connector credential.
@@ -78,7 +79,7 @@ SELECT
     -- deterministic credential_id.
     gen_random_uuid(),
 
-    tenant_id,
+    c.tenant_id,
 
     'connector',
 
@@ -86,18 +87,18 @@ SELECT
     -- Include row id to ensure uniqueness per connectors_credentials row
     -- (prevents ix_tc_slot_generation violation when tenant has multiple
     -- credentials for the same connector_id)
-    'legacy:' || connector_id || ':' || id::text,
+    'legacy:' || c.connector_id || ':' || c.id::text,
 
     1,  -- generation (sentinel rows are generation 1)
 
     -- Sentinel fingerprint — can never match a canonical HMAC-SHA256 fingerprint.
     -- 'legacy:' prefix is unreachable by HMAC-SHA256(secret, pepper).
-    'legacy:' || id::text,
+    'legacy:' || c.id::text,
 
     1,  -- lookup_key_version
 
     -- Display prefix derived from row id (display only, not a lookup key)
-    substring(encode(sha256(id::text::bytea), 'hex'), 1, 8),
+    substring(encode(sha256(c.id::text::bytea), 'hex'), 1, 8),
 
     -- Sentinel hash: not a real Argon2id hash — sentinel rows are never used
     -- for canonical auth. A placeholder value prevents NOT NULL constraint violation.
@@ -110,34 +111,34 @@ SELECT
 
     -- Status: revoked if revoked_at is set, otherwise active
     CASE
-        WHEN revoked_at IS NOT NULL THEN 'revoked'
+        WHEN c.revoked_at IS NOT NULL THEN 'revoked'
         ELSE 'active'
     END,
 
     NULL::timestamptz,  -- connector credentials have no expiry (TTL=0)
 
-    created_at,
+    c.created_at,
 
-    created_at,  -- activated_at = created_at (connector creds are immediately active)
+    c.created_at,  -- activated_at = created_at (connector creds are immediately active)
 
     NULL::timestamptz,  -- rotated_at
 
-    CASE WHEN revoked_at IS NOT NULL THEN revoked_at ELSE NULL END,
+    CASE WHEN c.revoked_at IS NOT NULL THEN c.revoked_at ELSE NULL END,
 
     NULL,  -- created_by_actor_id not captured in connectors_credentials
 
     NULL,  -- request_id not captured in connectors_credentials
 
     -- Idempotency key ensures safe re-runs (unique per connectors_credentials row)
-    'legacy-connector-migration:' || id::text,
+    'legacy-connector-migration:' || c.id::text,
 
     'credential:use',
 
     jsonb_build_object(
-        'connector_id',      connector_id,
-        'tenant_id',         tenant_id,
-        'credential_id',     credential_id,
-        'auth_mode',         auth_mode,
+        'connector_id',      c.connector_id,
+        'tenant_id',         c.tenant_id,
+        'credential_id',     c.credential_id,
+        'auth_mode',         c.auth_mode,
         'source',            'legacy_connector',
         'validation_mode',   'legacy_only'
     ),
@@ -146,15 +147,16 @@ SELECT
 
     -- Record hash (tamper detection): sha256 of immutable fields.
     encode(sha256((
-        tenant_id || E'\n' ||
+        c.tenant_id || E'\n' ||
         'connector' || E'\n' ||
-        ('legacy:' || connector_id || ':' || id::text) || E'\n' ||
+        ('legacy:' || c.connector_id || ':' || c.id::text) || E'\n' ||
         '1' || E'\n' ||
-        created_at::text
+        c.created_at::text
     )::bytea), 'hex')
 
-FROM connectors_credentials
-WHERE revoked_at IS NULL
+FROM connectors_credentials c
+JOIN tenants t ON t.tenant_id = c.tenant_id
+WHERE c.revoked_at IS NULL
 
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
 
