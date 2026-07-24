@@ -19857,6 +19857,27 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `required-tests gate` → PASS
 - **Result:** Pass.
 
+## PR #572 — fix(credentials): allow safe reissue after failed credential provisioning (2026-07-23)
+
+- **Date:** 2026-07-23
+- **Category:** Credential authority correctness / stuck-slot recovery
+- **Files changed:**
+  - `api/credential_authority.py`
+  - `tests/test_r4_credential_authority.py`
+- **Bug fixed:** `issue_credential` raised `CredentialStateError` for **any** `current_generation > 0`, including slots where the current-generation credential is in a terminal state (`revoked`, `expired`, `rotated`). This meant that after a provisioning failure (Redis/Upstash unavailable) the cleanup path revoked the dangling credential, leaving `current_generation = 1` pointing at a revoked row. The slot was permanently stuck: `issue_credential` rejected it (occupied), `rotate_credential` rejected it (not active). Manual SQL intervention was the only recovery.
+- **Fix:** Inside `issue_credential`, while holding the `credential_slots` row lock, query `tenant_credentials` for the status of the credential at `current_gen`. If terminal → proceed as generation N+1, preserving the revoked/expired/rotated row as immutable history. If active (or `suspended`) → raise `CredentialStateError` as before. The status read runs in the same `engine.begin()` transaction that holds the lock; the generation advance uses `WHERE current_generation = :expected_gen` (compare-and-swap), so concurrent retries are serialised: exactly one writer wins, the second gets `CredentialConflictError`.
+- **Error message improvement:** `CredentialStateError` now reports the actual slot status (`"...at generation 1 with status 'active'"`) to accelerate future debugging.
+- **Security impact:** None. Terminal credentials remain immutable; no credential is deleted or modified. Generation lineage is fully preserved as audit evidence.
+- **Schema/API impact:** None. No migration.
+- **Validation:**
+  - `pytest -q tests/test_r4_credential_authority.py` → 92 passed
+  - `ruff check api/credential_authority.py tests/test_r4_credential_authority.py` → all checks passed
+  - `mypy api/credential_authority.py` → no issues
+  - `required-tests gate` → PASS
+  - `fg-contract` → PASS
+  - 10 new tests covering: revoked/expired/rotated → N+1 succeeds; active/suspended → rejected; history preservation; generation is exactly N+1; simultaneous reissue → exactly one winner + `current_generation=2`; audit events distinguish revocation from reissue; sweep-lag: wall-clock-expired but `status='active'` credential normalised as terminal.
+- **Result:** Pass.
+
 ## PR #569 — fix(credentials): harden agent bootstrap fingerprinting (2026-07-22)
 
 - **Date:** 2026-07-22

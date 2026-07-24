@@ -1092,16 +1092,64 @@ def issue_credential(
         current_gen: int = slot_row[0] if slot_row else 0
 
         # Occupied-slot guard: a slot with an existing generation must go
-        # through rotate_credential, not issue_credential.  Without this
-        # check every call to issue_credential would insert another active
-        # row on the same slot, violating the max_overlap_count=1 invariant
-        # and leaving multiple usable secrets for the same slot.
+        # through rotate_credential, not issue_credential — UNLESS the
+        # current generation is in a terminal state (revoked, expired,
+        # rotated), in which case we allow issuance as generation N+1.
+        #
+        # The terminal-status check runs inside this same transaction scope
+        # that already holds the credential_slots row lock (FOR UPDATE on
+        # Postgres; serialised by SQLite's write lock).  This ensures the
+        # read and the subsequent N+1 write are atomic: two simultaneous
+        # retries both reading generation N as terminal cannot both succeed
+        # because _advance_slot_generation uses a conditional UPDATE
+        # (WHERE current_generation = :expected_gen) — the second writer's
+        # rowcount will be 0 and it will raise CredentialConflictError.
         if current_gen > 0:
-            raise CredentialStateError(
-                f"Slot {credential_slot!r} already has a credential at "
-                f"generation {current_gen}. "
-                "Use rotate_credential() to issue a successor."
+            # Read the status of the current generation while holding the
+            # slot lock.  This SELECT must stay inside the same `with
+            # engine.begin() as conn` block so it runs in the same
+            # transaction (and therefore under the same lock) as the slot
+            # UPDATE below.
+            gen_status_row = conn.execute(
+                text(
+                    "SELECT status, expires_at FROM tenant_credentials "
+                    "WHERE tenant_id = :tid AND credential_type = :ctype "
+                    "  AND credential_slot = :slot AND generation = :gen"
+                ),
+                {
+                    "tid": tenant_id,
+                    "ctype": credential_type,
+                    "slot": credential_slot,
+                    "gen": current_gen,
+                },
+            ).fetchone()
+            gen_status: Optional[str] = (
+                gen_status_row[0] if gen_status_row is not None else None
             )
+            gen_expires_at: Optional[str] = (
+                gen_status_row[1] if gen_status_row is not None else None
+            )
+
+            # Normalise status for credentials that have passed expires_at but
+            # have not yet been swept by expire_credentials().  The sweep is
+            # scheduled and may lag; a credential past its wall-clock expiry is
+            # functionally terminal for reissue purposes even if the row still
+            # reads 'active'.  This mirrors the validation check in
+            # validate_credential() at line ~1351 and rotate_credential() at ~2289.
+            if gen_status == "active" and gen_expires_at is not None:
+                parsed_exp = _parse_dt(gen_expires_at)
+                if parsed_exp is not None and parsed_exp <= datetime.now(timezone.utc):
+                    gen_status = "expired"
+
+            if gen_status not in TERMINAL_STATUSES:
+                # Active (or suspended) slot — must use rotate_credential.
+                # "suspended" is a non-terminal blocking status; it is not
+                # in TERMINAL_STATUSES and must not be silently skipped here.
+                raise CredentialStateError(
+                    f"Slot {credential_slot!r} already has a credential at "
+                    f"generation {current_gen} with status {gen_status!r}. "
+                    "Use rotate_credential() to issue a successor."
+                )
 
         new_gen = current_gen + 1
 
