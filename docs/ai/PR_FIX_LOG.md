@@ -19945,6 +19945,38 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `tests/test_r4_10_agent_device_credentials.py::test_bootstrap_token_stored_as_hmac_fingerprint` updated to assert HMAC not plain SHA-256.
 - **Result:** Pass.
 
+## PR (branch: fix/portal-credential-migration-orphans) — fix(migrations): tenant-FK orphan guard for portal/connector/agent credential migrations (2026-07-24)
+
+- **Date:** 2026-07-24
+- **Category:** Migration fix / production blocker
+- **Files changed:**
+  - `migrations/postgres/0161_portal_access_migration.sql`
+  - `migrations/postgres/0162_connector_credential_authority.sql`
+  - `migrations/postgres/0163_agent_device_credential_authority.sql`
+  - `tests/test_migrations_postgres_replay.py`
+  - `docs/ai/PR_FIX_LOG.md` / `ROADMAP.md`
+  - `api/admin.py` exception handler fix scoped out — separate follow-up PR
+- **Root cause:** Railway production is at migration 0160. Migration 0161 failed with `ForeignKeyViolation: credential_slots.tenant_id → tenants.tenant_id` because `portal_grants` contains 4 orphaned legacy demo/seed tenant IDs (`default`, `demo-bank`, `demo-healthcare`, `demo-law`) that have no rows in the canonical `tenants` table. The two INSERT statements in 0161 selected from `portal_grants` without filtering by canonical tenant existence, so the FK on `credential_slots.tenant_id` was violated when inserting slots for orphaned grants. Migrations 0162 and 0163 had the same structural assumption and were hardened proactively.
+- **Fix:**
+  - Added `JOIN tenants t ON t.tenant_id = pg.tenant_id` to both INSERT steps in 0161, so orphaned `portal_grants` rows are silently skipped without being deleted or modified. All column references in the SELECT body qualified with `pg.` alias to eliminate ambiguity after the JOIN.
+  - Applied the same `JOIN tenants t ON t.tenant_id = c.tenant_id` guard to both INSERT steps in 0162 (`connectors_credentials`, alias `c.`).
+  - Applied the same `JOIN tenants t ON t.tenant_id = adk.tenant_id` guard to both INSERT steps in 0163 (`agent_device_keys`, alias `adk.`). 0163 already used `adk.` prefix throughout so no column-reference changes were needed.
+- **Migration immutability check:** `api/db_migrations.py` tracks only `version + applied_at`; no checksums. Rewrites are safe when production has not yet applied the migration. Production is at 0160; 0161–0163 have not run. CI databases contain no demo orphaned `portal_grants` rows, so the original SQL was not failing there.
+- **Sentinel semantics preserved:** `legacy:*` slot names and `legacy:` fingerprint prefix remain unchanged. Orphaned grants are excluded by not inserting sentinel rows for them — not by altering the sentinel format.
+- **Source rows untouched:** Orphaned `portal_grants` rows are left intact in the source table.
+- **Behavioral impact:** None to production data. Orphaned legacy demo rows remain in `portal_grants` and will be cleaned up when the legacy fallback is retired (deployment_date + 15 days after 0161 runs).
+- **Security impact:** None. The sentinel rows being filtered out were not used for canonical authentication.
+- **Schema/API impact:** No schema changes. No API changes in this PR (admin.py fix deferred).
+- **Validation:**
+  - `ruff check` → all checks passed on changed Python files
+  - `mypy` → no issues found in changed Python files
+  - `make required-tests-gate` → PASS
+  - `make fg-contract` → PASS
+  - `make fg-fast` → 489 passed, 2 skipped (after formatter fix)
+  - `make fg-security` → PASS
+  - 8 regression tests (A–H) added to `tests/test_migrations_postgres_replay.py` (skip when `FG_DB_URL` not set)
+- **Result:** Gates green. Migration 0161 is now safe to apply against Railway production. Awaiting `make required-tests-gate`/gate re-run with FG_DB_URL to exercise the new tests.
+
 ## PR #573 — fix(ci): pin Ruff to deterministic admin lint baseline (2026-07-23)
 
 - **Date:** 2026-07-23

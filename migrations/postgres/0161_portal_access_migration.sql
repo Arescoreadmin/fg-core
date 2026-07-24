@@ -37,6 +37,10 @@ BEGIN;
 
 -- Step 1: insert credential_slots rows for each legacy portal_grant.
 -- tenant_credentials has a FK to credential_slots(tenant_id, credential_type, credential_slot).
+--
+-- JOIN tenants: skips orphaned portal_grants whose tenant_id does not exist in
+-- the canonical tenants table (e.g. demo/default seed rows from legacy tooling).
+-- Orphaned rows remain untouched in portal_grants — they are not deleted.
 INSERT INTO credential_slots (
     tenant_id,
     credential_type,
@@ -45,12 +49,13 @@ INSERT INTO credential_slots (
     rotation_policy
 )
 SELECT DISTINCT
-    tenant_id,
+    pg.tenant_id,
     'portal_access',
-    'legacy:' || client_id || ':' || engagement_id || ':' || id,
-    COALESCE(rotation_counter, 0) + 1,
+    'legacy:' || pg.client_id || ':' || pg.engagement_id || ':' || pg.id,
+    COALESCE(pg.rotation_counter, 0) + 1,
     'immediate'
-FROM portal_grants
+FROM portal_grants pg
+JOIN tenants t ON t.tenant_id = pg.tenant_id
 ON CONFLICT DO NOTHING;
 
 -- Step 2: insert sentinel tenant_credentials rows for each legacy portal_grant.
@@ -86,27 +91,27 @@ SELECT
     -- deterministic credential_id.
     gen_random_uuid(),
 
-    tenant_id,
+    pg.tenant_id,
 
     'portal_access',
 
     -- Option B: legacy-namespaced slot prevents collision with new canonical slots
-    'legacy:' || client_id || ':' || engagement_id || ':' || id,
+    'legacy:' || pg.client_id || ':' || pg.engagement_id || ':' || pg.id,
 
     -- Use rotation_counter + 1 as generation (generation is 1-indexed)
-    COALESCE(rotation_counter, 0) + 1,
+    COALESCE(pg.rotation_counter, 0) + 1,
 
     -- Sentinel fingerprint — can never match a canonical HMAC-SHA256 fingerprint
-    'legacy:' || id,
+    'legacy:' || pg.id,
 
     1,  -- lookup_key_version
 
     -- Display prefix derived from grant id (display only, not a lookup key)
-    substring(encode(sha256(id::bytea), 'hex'), 1, 8),
+    substring(encode(sha256(pg.id::bytea), 'hex'), 1, 8),
 
     -- Preserve existing Argon2id hash. Sentinel rows are not used for
     -- canonical auth, but keeping the real hash means the row is not fabricated.
-    grant_hash,
+    pg.grant_hash,
 
     'argon2id',
 
@@ -115,34 +120,34 @@ SELECT
 
     -- Map portal_grants status to canonical status
     CASE
-        WHEN revoked_at IS NOT NULL                           THEN 'revoked'
-        WHEN expires_at::timestamptz < now()                  THEN 'expired'
+        WHEN pg.revoked_at IS NOT NULL                           THEN 'revoked'
+        WHEN pg.expires_at::timestamptz < now()                  THEN 'expired'
         ELSE 'active'
     END,
 
-    expires_at::timestamptz,
+    pg.expires_at::timestamptz,
 
-    created_at::timestamptz,
+    pg.created_at::timestamptz,
 
-    created_at::timestamptz,  -- activated_at = created_at (grants are immediately active)
+    pg.created_at::timestamptz,  -- activated_at = created_at (grants are immediately active)
 
     NULL::timestamptz,  -- rotated_at (rotation produces a new canonical credential)
 
-    CASE WHEN revoked_at IS NOT NULL THEN revoked_at::timestamptz ELSE NULL END,
+    CASE WHEN pg.revoked_at IS NOT NULL THEN pg.revoked_at::timestamptz ELSE NULL END,
 
-    created_by,
+    pg.created_by,
 
     NULL,   -- request_id not captured in portal_grants
 
     -- Idempotency key ensures safe re-runs (unique per portal_grants row)
-    'legacy-migration:' || id,
+    'legacy-migration:' || pg.id,
 
     'credential:use',
 
     jsonb_build_object(
-        'client_id',        client_id,
-        'engagement_id',    engagement_id,
-        'portal_grant_id',  id,
+        'client_id',        pg.client_id,
+        'engagement_id',    pg.engagement_id,
+        'portal_grant_id',  pg.id,
         'source',           'legacy_portal_grant',
         'validation_mode',  'legacy_fallback_only'
     ),
@@ -153,14 +158,15 @@ SELECT
     -- credential_id is excluded because it is non-deterministic (gen_random_uuid());
     -- idempotency_key already provides uniqueness per source row.
     encode(sha256((
-        tenant_id || E'\n' ||
+        pg.tenant_id || E'\n' ||
         'portal_access' || E'\n' ||
-        ('legacy:' || client_id || ':' || engagement_id || ':' || id) || E'\n' ||
-        (COALESCE(rotation_counter, 0) + 1)::text || E'\n' ||
-        created_at
+        ('legacy:' || pg.client_id || ':' || pg.engagement_id || ':' || pg.id) || E'\n' ||
+        (COALESCE(pg.rotation_counter, 0) + 1)::text || E'\n' ||
+        pg.created_at
     )::bytea), 'hex')
 
-FROM portal_grants
+FROM portal_grants pg
+JOIN tenants t ON t.tenant_id = pg.tenant_id
 
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
 

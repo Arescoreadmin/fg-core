@@ -42,6 +42,7 @@ SELECT DISTINCT
     1,
     'immediate'
 FROM agent_device_keys adk
+JOIN tenants t ON t.tenant_id = adk.tenant_id
 WHERE adk.enabled = true
 ON CONFLICT DO NOTHING;
 
@@ -147,6 +148,7 @@ SELECT
     )::bytea), 'hex')
 
 FROM agent_device_keys adk
+JOIN tenants t ON t.tenant_id = adk.tenant_id
 WHERE adk.enabled = true
 
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
