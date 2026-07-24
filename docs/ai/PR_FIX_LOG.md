@@ -1,5 +1,52 @@
 # PR Fix Log (Strict)
 
+## P-21 — fix(console): distinct error taxonomy and structured logs for tenant provisioning
+
+**Branch:** `fix/tenant-provisioning-end-to-end`
+**Date:** 2026-07-23
+
+### Problem
+
+Production console (`console.frostgate.ai`) returned `PERSISTENCE_UNAVAILABLE` on every `POST /api/admin/provision-tenant` for one week, blocking new client onboarding ("The Wick Network" reproducer). The single error code conflated four distinct failure modes:
+
+1. `FG_INTERNAL_GATEWAY_SECRET` absent → route returned 503 with the generic string before reaching persistence
+2. Both persistence backends unconfigured → 503 with no hint which env var to set
+3. Redis unreachable / Upstash unreachable → 503 with no backend attribution
+4. Upstash rejected the token (rotated but not re-deployed) → 503 identical to network failure
+
+Operators had no way to distinguish these from the response body. `writeKeyToRedis` swallowed exceptions silently (`catch { return false }`), and `writeKeyToUpstash` logged only the HTTP status — not the response body, host, or error class. No `request_id` in responses meant server logs could not be correlated with a specific failing request. Additionally, the `internalGatewaySecret()` resolver has four fallback env names, so operators could not confirm from the error whether the gateway secret gate had passed.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: apps/console/app/api/admin/provision-tenant/route.ts` — replaced boolean persistence returns with a `PersistenceResult` discriminated union (`not_configured` / `unreachable` / `auth_failed` / `bad_response` / `threw` / `ok`), classified per-backend. Added `classifyPersistenceFailure()` that emits distinct top-level codes: `INTERNAL_GATEWAY_UNCONFIGURED`, `PERSISTENCE_NOT_CONFIGURED`, `BOTH_PERSISTENCE_UNAVAILABLE`, `UPSTASH_AUTH_FAILED`, `UPSTASH_UNAVAILABLE`, `REDIS_UNAVAILABLE`, plus legacy `PERSISTENCE_UNAVAILABLE` as the safety fallback. Every response now includes `request_id` in body and `x-request-id` header, generated on entry (`req.headers.get('x-request-id') || crypto.randomUUID()`). Added structured `logEvent()` helper that emits one JSON line per lifecycle event (`provision.start`, `provision.tenant.ok`, `provision.credential.ok`, `persistence.redis.ok/threw`, `persistence.upstash.ok/auth_failed/bad_response/threw/command_error/unexpected_result`, `provision.persistence.failed.fresh/rotate`, `provision.ok`, `rollback.revoke.ok/non_ok/threw`, `security.override.ignored_in_production`, `gateway.secret.missing`) with `request_id`, `tenant_id`, `stage`, `error_class`, `rollback_performed`, and `host` (from `safeHost()` — strips credentials and path from URLs). `writeKeyToUpstash` now distinguishes 401/403 as `auth_failed`, reads response body defensively for `bad_response`, and detects Upstash `{"error": ...}` command errors. `writeKeyToRedis` returns a structured result with the error class name so operators can see `ConnectionRefusedError` vs `TimeoutError` in logs. Rotate-vs-fresh persistence-failure paths continue to differ in rollback semantics (rotate never revokes; fresh always revokes) and now log `rollback_performed: false/true` explicitly.
+
+2. `mod: apps/console/tests/tenant-provisioning-policy.test.js` — updated three source-string assertions that referenced the pre-refactor variable names (`registryLive = await writeKeyToRedis` → `redisResult = await writeKeyToRedis`; same for Upstash). Updated the 503-ordering assertion to check the position of the return-statement `status: 503` after `if (!registryLive)`, not the first occurrence of the legacy error string (which now also appears in the classifier default arm).
+
+**New files:**
+
+3. `new: apps/console/tests/provision-tenant.test.js` — 12 new tests covering: (A) `request_id` generation and echo, (B) `INTERNAL_GATEWAY_UNCONFIGURED` distinct from persistence codes, (C/C2) distinct error codes per failure class with correct classifier ordering (`AUTH_FAILED` before generic `UNAVAILABLE`, `NOT_CONFIGURED` before `BOTH_UNAVAILABLE`), (D) structured JSON logs at each stage, (E/E2) no secrets/tokens/raw keys in log fields and no `api_key` in the success response, (F) retry path uses same taxonomy, (G) Upstash 401/403 mapped to `auth_failed` (not `bad_response`), (H) rotate path preserves credential (no `revokeKey`), (I) fresh-create path revokes with `rollback_performed: true`, (J) production hard-blocks the `FG_ALLOW_UNPERSISTED_TENANT_KEYS` override.
+
+### Root cause
+
+The production `PERSISTENCE_UNAVAILABLE` was almost certainly the Upstash write returning a non-`OK` result or throwing an exception that was silently converted to `false`. Because the code logged only `{status}` on non-2xx and gave up on 2xx with unexpected `result`, and because the response body carried no diagnostic beyond the string `PERSISTENCE_UNAVAILABLE`, operators had no way to see whether:
+
+- the token was rotated but not re-deployed to `console.frostgate.ai` (401/403)
+- Upstash was serving requests but returned `null` or an `error` field (bad_response)
+- the fetch itself threw (DNS, TLS, network)
+
+The new code surfaces each of these as a distinct `error` code in the JSON response AND a distinct structured log line, so operators can act without server-log access. The gateway-secret gate now returns `INTERNAL_GATEWAY_UNCONFIGURED` with the full alias list (`FG_INTERNAL_GATEWAY_SECRET` / `FG_ADMIN_GATEWAY_TOKEN` / `FG_INTERNAL_AUTH_SECRET` / `FG_INTERNAL_TOKEN`) so operators do not misread it as a persistence failure.
+
+### Non-changes (audited, confirmed correct)
+
+- `apps/console/lib/tenant-registry.ts` — `getUpstashConfig()` already reads both `BFF_UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_URL` and both `BFF_UPSTASH_REDIS_REST_TOKEN` / `UPSTASH_REDIS_REST_TOKEN`. Matches the provision route. No env-var-name mismatch.
+- `apps/portal/lib/tenant-registry.ts` — reads `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` directly. Compatible with the console write path (both write and read use the same key format `portal:tenant:{id}:key`).
+- `apps/console/lib/internal-gateway-secret.ts` — resolver order (`FG_INTERNAL_GATEWAY_SECRET` → `FG_ADMIN_GATEWAY_TOKEN` → `FG_INTERNAL_AUTH_SECRET` → `FG_INTERNAL_TOKEN`) matches the Python-side `api/config/internal_gateway_secret.py` order for the R6 staged migration.
+- `api/credential_authority.py` `issue_credential()` (~line 1096–1152) — terminal-status → N+1 logic from #572 is present: `revoked`, `expired`, `rotated` allowed to issue as N+1; `active` and `suspended` blocked. Expired-but-still-active (sweep lag) is normalized to `expired`. Rotate path in the route continues to handle only the `active` case (correct).
+
+---
+
 ## P-20 — feat(r4.10): agent and device credential authority
 
 **Branch:** `feat/r4.10-agent-device-credential-authority`
