@@ -90,16 +90,10 @@ async function writeKeyToUpstash(
   apiKey: string,
   requestId: string,
 ): Promise<PersistenceResult> {
-  const url = (
-    process.env.BFF_UPSTASH_REDIS_REST_URL ||
-    process.env.UPSTASH_REDIS_REST_URL ||
-    ''
-  ).trim();
-  const token = (
-    process.env.BFF_UPSTASH_REDIS_REST_TOKEN ||
-    process.env.UPSTASH_REDIS_REST_TOKEN ||
-    ''
-  ).trim();
+  const urlEnvName = process.env.BFF_UPSTASH_REDIS_REST_URL ? 'BFF_UPSTASH_REDIS_REST_URL' : 'UPSTASH_REDIS_REST_URL';
+  const tokenEnvName = process.env.BFF_UPSTASH_REDIS_REST_TOKEN ? 'BFF_UPSTASH_REDIS_REST_TOKEN' : 'UPSTASH_REDIS_REST_TOKEN';
+  const url = (process.env.BFF_UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const token = (process.env.BFF_UPSTASH_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
   if (!url || !token) {
     logEvent('warn', 'persistence.upstash.not_configured', {
       request_id: requestId, tenant_id: tenantId, has_url: !!url, has_token: !!token,
@@ -115,9 +109,10 @@ async function writeKeyToUpstash(
     });
     if (res.status === 401 || res.status === 403) {
       logEvent('error', 'persistence.upstash.auth_failed', {
-        request_id: requestId, tenant_id: tenantId, host, status: res.status, token_len: token.length,
+        request_id: requestId, tenant_id: tenantId, host, status: res.status,
+        token_env: tokenEnvName, url_env: urlEnvName, token_len: token.length,
       });
-      return { status: 'auth_failed', backend: 'upstash', detail: `Upstash rejected token (HTTP ${res.status}); rotate UPSTASH_REDIS_REST_TOKEN`, host };
+      return { status: 'auth_failed', backend: 'upstash', detail: `Upstash rejected token (HTTP ${res.status}); rotate ${tokenEnvName} in Vercel and redeploy`, host };
     }
     if (!res.ok) {
       // Read body defensively; do not include token or key material in log.
@@ -238,7 +233,7 @@ function classifyPersistenceFailure(
     if (upstash.status === 'auth_failed') {
       return {
         code: 'UPSTASH_AUTH_FAILED',
-        detail: upstash.detail ?? 'Upstash rejected the configured token. Rotate UPSTASH_REDIS_REST_TOKEN in Vercel and redeploy.',
+        detail: upstash.detail ?? 'Upstash rejected the configured token. Rotate UPSTASH_REDIS_REST_TOKEN (or BFF_UPSTASH_REDIS_REST_TOKEN if set) in Vercel and redeploy.',
       };
     }
     return {

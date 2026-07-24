@@ -45,7 +45,11 @@ function CreateClientModal({ onClose, onCreated }: { onClose: () => void; onCrea
         body: JSON.stringify({ tenant_id: tenantId, name }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const msg = [data.error ?? `HTTP ${res.status}`, data.detail].filter(Boolean).join(' — ');
+        const rid = data.request_id ? ` (request_id: ${data.request_id})` : '';
+        throw new Error(msg + rid);
+      }
       onCreated(data as ProvisionResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create client');
@@ -203,7 +207,11 @@ export default function ClientRosterPage() {
         body: JSON.stringify({ tenant_id: tenant.tenant_id, name: tenant.label }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const msg = [data.error ?? `HTTP ${res.status}`, data.detail].filter(Boolean).join(' — ');
+        const rid = data.request_id ? ` (request_id: ${data.request_id})` : '';
+        throw new Error(msg + rid);
+      }
       setProvisionResult(data as ProvisionResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to regenerate key');
