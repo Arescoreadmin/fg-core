@@ -99,8 +99,8 @@ test('rate limit and API key tenant authority are server resolved', () => {
   // tenantId is threaded through to both rate limiting and API key lookup
   assert.match(proxy, /enforceRateLimit\(request, requestId, routeGroup, tenantId\)/);
   assert.match(proxy, /proxyToCore\(request, path, requestId, tenantId\)/);
-  // API key lookup uses the server-resolved tenant
-  assert.match(proxy, /resolveCoreAuth\(tenantId\)/);
+  // API key lookup uses the server-resolved tenant and request_id
+  assert.match(proxy, /resolveCoreAuth\(tenantId, requestId\)/);
   assert.match(proxy, /getTenantApiKey\(tenantId\)/);
 });
 

@@ -115,21 +115,38 @@ export async function upsertTenantInUpstash(tenantId: string, record: Omit<Tenan
   }
 }
 
-export async function getTenantApiKey(tenantId: string): Promise<string | null> {
-  // Primary: read from portal:tenant:{id}:key (written by provision-tenant)
+/**
+ * Canonical portal key resolution (R4.8+).
+ *
+ * Reads from `portal:tenant:{id}:key` — the authoritative path written by
+ * provision-tenant. The legacy `TenantRecord.api_key` registry field is
+ * intentionally NOT used here: it stores pre-canonical keys that Core's
+ * credential authority now rejects with 401.
+ *
+ * Returns:
+ *   { key: string }         — key found in Upstash
+ *   { key: null }           — Upstash was reachable but key absent (tenant never provisioned)
+ *   { key: null, unavailable: true } — Upstash unreachable / not configured
+ */
+export async function getTenantApiKey(
+  tenantId: string,
+): Promise<{ key: string | null; unavailable?: true }> {
   const cfg = getUpstashConfig();
-  if (cfg) {
-    try {
-      const result = await upstashCommand(cfg.url, cfg.token, ['GET', `${PORTAL_KEY_PREFIX}:${tenantId}:key`]);
-      if (typeof result === 'string' && result) return result;
-    } catch {
-      // Upstash unavailable — fall through to compatibility read
-    }
+  if (!cfg) {
+    return { key: null, unavailable: true };
   }
-
-  // Compatibility: read api_key from existing console registry entries written before Phase 4
-  const registry = await getTenantRegistry();
-  return registry[tenantId]?.api_key ?? null;
+  try {
+    const result = await upstashCommand(cfg.url, cfg.token, [
+      'GET',
+      `${PORTAL_KEY_PREFIX}:${tenantId}:key`,
+    ]);
+    if (typeof result === 'string' && result) return { key: result };
+    // Upstash returned nil — key absent for this tenant
+    return { key: null };
+  } catch {
+    // Upstash unreachable
+    return { key: null, unavailable: true };
+  }
 }
 
 function parseLegacyEnvKeys(): TenantMap {

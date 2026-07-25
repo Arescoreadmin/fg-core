@@ -117,34 +117,40 @@ test('tenants_api_response_never_exposes_api_key', () => {
   assert.doesNotMatch(src, /api_key/, 'GET /api/tenants must never expose api_key field');
 });
 
-// ─── Test 7: get_tenant_api_key_reads_portal_key_first ───────────────────────
+// ─── Test 7: get_tenant_api_key_reads_portal_key_only ────────────────────────
+// R4.8+: getTenantApiKey is canonical — reads portal:tenant:{id}:key only.
+// The legacy TenantRecord.api_key fallback was removed because it stores
+// pre-canonical keys that Core's credential authority now rejects with 401.
 
-test('get_tenant_api_key_reads_portal_key_first', () => {
+test('get_tenant_api_key_reads_portal_key_only', () => {
   const src = read('lib/tenant-registry.ts');
 
   const fn = src.match(/export async function getTenantApiKey[\s\S]*?\n\}/)?.[0] ?? '';
   assert.ok(fn, 'getTenantApiKey must exist');
 
-  // Must read portal:tenant:{id}:key as the primary path
-  assert.match(fn, /PORTAL_KEY_PREFIX/, 'must read portal key first');
+  // Must read portal:tenant:{id}:key as the primary (and only) path
+  assert.match(fn, /PORTAL_KEY_PREFIX/, 'must read portal key');
   assert.match(fn, /\$\{PORTAL_KEY_PREFIX\}:\$\{tenantId\}:key/, 'must use correct portal key format');
 
-  // Portal key read must come before registry read
-  const portalPos = fn.indexOf('PORTAL_KEY_PREFIX');
-  const registryPos = fn.indexOf('getTenantRegistry');
-  assert.ok(portalPos < registryPos, 'portal key read must precede registry fallback');
+  // Must NOT fall back to the legacy registry api_key field (invariant E)
+  assert.doesNotMatch(fn, /getTenantRegistry/, 'must not fall back to legacy registry');
+  assert.doesNotMatch(fn, /api_key/, 'must not read legacy api_key field from registry');
 });
 
-// ─── Test 8: get_tenant_api_key_falls_back_to_legacy_registry ────────────────
+// ─── Test 8: get_tenant_api_key_returns_structured_result ────────────────────
+// R4.8+: returns { key, unavailable? } so callers can distinguish
+// "key not found" from "persistence unavailable" without catching exceptions.
 
-test('get_tenant_api_key_falls_back_to_legacy_registry', () => {
+test('get_tenant_api_key_returns_structured_result', () => {
   const src = read('lib/tenant-registry.ts');
 
   const fn = src.match(/export async function getTenantApiKey[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'getTenantApiKey must exist');
 
-  // Must fall back to registry api_key for backward compat with pre-Phase-4 tenants
-  assert.match(fn, /getTenantRegistry/, 'must fall back to registry read');
-  assert.match(fn, /api_key/, 'fallback must still read api_key from old registry records');
+  // Must return an object with key field, not a bare string | null
+  assert.match(fn, /Promise<\{ key: string \| null;/, 'must return structured result');
+  // Must distinguish unavailability from absence
+  assert.match(fn, /unavailable: true/, 'must signal persistence unavailability');
 });
 
 // ─── Test 9: logs_and_responses_do_not_expose_api_key_field ──────────────────
