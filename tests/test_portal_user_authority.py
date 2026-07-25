@@ -1137,3 +1137,273 @@ def test_accept_invitation_expired_status_raises_invalid(mock_db):
             oidc_subject="sub|abc",
             email="user@example.com",
         )
+
+
+# ---------------------------------------------------------------------------
+# PR #577 remediation — public-path & middleware boundary tests
+# ---------------------------------------------------------------------------
+#
+# These tests defend the security invariants for the five bot findings:
+#   P1-1  invitation acceptance must be reachable without an API key, but
+#         the admin issuance route must remain protected.
+#   P1-2  a session with portal_membership_id=None must NOT be granted
+#         engagement access via the "engagement_id is None" branch.
+#   P2-5  the named-user middleware branch must commit before closing the
+#         session so that last_validated_at + audit rows persist.
+#
+# P1-3 (MEMBERSHIP_INACTIVE) and P1-4 (PORTAL_USER_SUSPENDED) are already
+# covered by test_validate_session_rejects_inactive_membership and
+# test_validate_session_rejects_suspended_user above.
+
+
+def test_public_paths_covers_invitation_acceptance_but_not_admin_issuance():
+    """P1-1 invariant: acceptance/preflight are public; admin issuance stays gated."""
+    from api.security.public_paths import PUBLIC_PATHS_EXACT, PUBLIC_PATHS_PREFIX
+
+    def _is_public(path: str) -> bool:
+        if path in PUBLIC_PATHS_EXACT:
+            return True
+        return any(path.startswith(p) for p in PUBLIC_PATHS_PREFIX)
+
+    # Acceptance path must be public (invitation token IS the credential).
+    assert _is_public("/portal/invitations/pni1.deadbeef/accept")
+    # Preflight GET on the invitation token must be public.
+    assert _is_public("/portal/invitations/pni1.deadbeef")
+    # Named-user session self-revocation must be public (session token authorizes).
+    assert _is_public("/portal/named-sessions/sess-abc")
+    # CRITICAL: admin issuance route must NOT be public — governance:write required.
+    assert not _is_public("/portal/invitations")
+    # Unrelated portal routes must remain protected.
+    assert not _is_public("/portal/authenticate")
+    assert not _is_public("/portal/named-users/enroll")
+
+
+def test_public_paths_prefix_boundary_admin_route_stays_protected():
+    """The trailing slash in /portal/invitations/ is load-bearing.
+
+    Removing it would make POST /portal/invitations (admin issuance) public,
+    letting any unauthenticated caller mint invitations. Guard against that.
+    """
+    from api.security.public_paths import PUBLIC_PATHS_PREFIX
+
+    assert "/portal/invitations/" in PUBLIC_PATHS_PREFIX
+    # Bare prefix without slash would over-match; ensure it is not present.
+    assert "/portal/invitations" not in PUBLIC_PATHS_PREFIX
+
+
+class _FakeState:
+    def __init__(self, tenant_id):
+        self.tenant_id = tenant_id
+
+
+class _FakeRequest:
+    def __init__(self, path: str, headers: dict, tenant_id: str):
+        self.scope = {"path": path}
+        self.headers = {k.lower(): v for k, v in headers.items()}
+        self.state = _FakeState(tenant_id)
+
+
+async def _call_named_user_scope(
+    tenant_id: str,
+    engagement_id: str,
+    session_token: str,
+    validate_result,
+    *,
+    commit_tracker: list | None = None,
+):
+    """Invoke the middleware with a mocked sessionmaker + mocked validate_session."""
+    from api.middleware import portal_scope as psm
+
+    called_next = {"hit": False}
+
+    async def _next(_req):
+        called_next["hit"] = True
+
+        class R:
+            status_code = 204
+            headers: dict = {}
+
+        return R()
+
+    # Instantiate middleware
+    mw = psm.PortalClientScopeMiddleware(app=lambda: None)
+
+    fake_db = MagicMock()
+    if commit_tracker is not None:
+
+        def _record_commit():
+            commit_tracker.append("commit")
+
+        fake_db.commit.side_effect = _record_commit
+
+    fake_sessionmaker = MagicMock(return_value=fake_db)
+
+    with patch.object(psm, "get_sessionmaker", return_value=fake_sessionmaker):
+        with patch.object(
+            psm, "validate_named_session", return_value=validate_result
+        ) as mock_validate:
+            req = _FakeRequest(
+                path=f"/field-assessment/engagements/{engagement_id}/summary",
+                headers={
+                    "x-portal-source": "client-portal",
+                    "x-fg-portal-session": session_token,
+                },
+                tenant_id=tenant_id,
+            )
+            resp = await mw.dispatch(req, _next)
+            return resp, called_next["hit"], mock_validate, fake_db
+
+
+def test_middleware_denies_when_portal_membership_id_is_none():
+    """P1-2 invariant: no membership → PORTAL_MEMBERSHIP_REQUIRED (fail-closed).
+
+    A session with portal_membership_id=None must NOT be granted access via
+    the "engagement_id is None means tenant-wide" branch.
+    """
+    import asyncio
+    import json
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id=None,  # <-- no membership row
+        tenant_id="tenant-a",
+        engagement_id=None,  # LEFT JOIN returned no membership → None
+        portal_role=None,
+    )
+
+    resp, called_next, _mv, _db = asyncio.run(
+        _call_named_user_scope(
+            tenant_id="tenant-a",
+            engagement_id="eng-42",
+            session_token="pnu1." + "a" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is False
+    assert resp.status_code == 403
+    body = json.loads(bytes(resp.body).decode())
+    assert body["code"] == "PORTAL_MEMBERSHIP_REQUIRED"
+
+
+def test_middleware_allows_tenant_wide_membership():
+    """P1-2 case C: real tenant-wide membership (engagement_id NULL on row) → allowed."""
+    import asyncio
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id="mem-tenantwide",  # membership DOES exist
+        tenant_id="tenant-a",
+        engagement_id=None,  # membership row has engagement_id NULL → tenant-wide
+        portal_role="assessor",
+    )
+    resp, called_next, _mv, _db = asyncio.run(
+        _call_named_user_scope(
+            tenant_id="tenant-a",
+            engagement_id="eng-42",
+            session_token="pnu1." + "b" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is True
+    assert resp.status_code == 204
+
+
+def test_middleware_denies_engagement_mismatch():
+    """P1-2 case B: engagement-scoped membership → denied for different engagement."""
+    import asyncio
+    import json
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id="mem-eng-5",
+        tenant_id="tenant-a",
+        engagement_id="eng-5",  # membership binds to eng-5
+        portal_role="viewer",
+    )
+    resp, called_next, _mv, _db = asyncio.run(
+        _call_named_user_scope(
+            tenant_id="tenant-a",
+            engagement_id="eng-42",  # request targets a different engagement
+            session_token="pnu1." + "c" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is False
+    assert resp.status_code == 403
+    body = json.loads(bytes(resp.body).decode())
+    assert body["code"] == "PORTAL_ENGAGEMENT_MISMATCH"
+
+
+def test_middleware_commits_on_success_path():
+    """P2-5 invariant: middleware commits before closing the SQLAlchemy Session.
+
+    Without commit, last_validated_at + audit event writes performed inside
+    validate_session are rolled back on close.
+    """
+    import asyncio
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id="mem-eng-42",
+        tenant_id="tenant-a",
+        engagement_id="eng-42",
+        portal_role="viewer",
+    )
+    commit_events: list = []
+    resp, called_next, _mv, fake_db = asyncio.run(
+        _call_named_user_scope(
+            tenant_id="tenant-a",
+            engagement_id="eng-42",
+            session_token="pnu1." + "d" * 64,
+            validate_result=result,
+            commit_tracker=commit_events,
+        )
+    )
+    assert called_next is True
+    assert resp.status_code == 204
+    # Commit must have happened at least once (persists last_validated_at + audit).
+    assert commit_events == ["commit"]
+    # Close must always run in finally.
+    fake_db.close.assert_called()
+
+
+def test_middleware_denies_on_named_session_failure():
+    """A denial from validate_session must be surfaced as a 403 with the denial_code."""
+    import asyncio
+    import json
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=False,
+        denial_reason="portal user is suspended or deactivated",
+        denial_code="PORTAL_USER_SUSPENDED",
+    )
+    resp, called_next, _mv, _db = asyncio.run(
+        _call_named_user_scope(
+            tenant_id="tenant-a",
+            engagement_id="eng-42",
+            session_token="pnu1." + "e" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is False
+    assert resp.status_code == 403
+    body = json.loads(bytes(resp.body).decode())
+    assert body["code"] == "PORTAL_USER_SUSPENDED"
