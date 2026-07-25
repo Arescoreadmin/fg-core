@@ -38,11 +38,11 @@ log = logging.getLogger(__name__)
 # Token format constants
 # ---------------------------------------------------------------------------
 
-INVITATION_TOKEN_PREFIX = "pni1."   # portal named invitation v1
-SESSION_TOKEN_PREFIX = "pnu1."      # portal named user session v1
+INVITATION_TOKEN_PREFIX = "pni1."  # portal named invitation v1
+SESSION_TOKEN_PREFIX = "pnu1."  # portal named user session v1
 
-DEFAULT_INVITATION_TTL_SECONDS = 7 * 24 * 3600   # 7 days
-DEFAULT_SESSION_TTL_SECONDS = 14 * 24 * 3600      # 14 days
+DEFAULT_INVITATION_TTL_SECONDS = 7 * 24 * 3600  # 7 days
+DEFAULT_SESSION_TTL_SECONDS = 14 * 24 * 3600  # 14 days
 
 # ---------------------------------------------------------------------------
 # Error classes
@@ -296,7 +296,7 @@ def find_or_create_portal_user(
     ).fetchone()
 
     record = PortalUserRecord(
-        id=_coerce_uuid(row.id),
+        id=_coerce_uuid(row.id) or "",
         tenant_id=str(row.tenant_id),
         oidc_provider=str(row.oidc_provider),
         oidc_issuer=str(row.oidc_issuer),
@@ -360,8 +360,8 @@ def _create_membership(
     ).fetchone()
 
     membership = PortalMembershipRecord(
-        id=_coerce_uuid(row.id),
-        portal_user_id=_coerce_uuid(row.portal_user_id),
+        id=_coerce_uuid(row.id) or "",
+        portal_user_id=_coerce_uuid(row.portal_user_id) or "",
         tenant_id=str(row.tenant_id),
         engagement_id=row.engagement_id,
         portal_role=str(row.portal_role),
@@ -425,8 +425,8 @@ def get_active_membership(
         return None
 
     return PortalMembershipRecord(
-        id=_coerce_uuid(row.id),
-        portal_user_id=_coerce_uuid(row.portal_user_id),
+        id=_coerce_uuid(row.id) or "",
+        portal_user_id=_coerce_uuid(row.portal_user_id) or "",
         tenant_id=str(row.tenant_id),
         engagement_id=row.engagement_id,
         portal_role=str(row.portal_role),
@@ -494,7 +494,7 @@ def create_invitation(
     ).fetchone()
 
     record = PortalInvitationRecord(
-        id=_coerce_uuid(row.id),
+        id=_coerce_uuid(row.id) or "",
         tenant_id=str(row.tenant_id),
         email=str(row.email),
         portal_role=str(row.portal_role),
@@ -528,7 +528,7 @@ def get_invitation_by_token(
     if not raw_token.startswith(INVITATION_TOKEN_PREFIX):
         return None
 
-    token_hex = raw_token[len(INVITATION_TOKEN_PREFIX):]
+    token_hex = raw_token[len(INVITATION_TOKEN_PREFIX) :]
     fingerprint = _compute_lookup_fingerprint(token_hex, _get_pepper())
 
     _set_tenant_rls(db, tenant_id)
@@ -550,7 +550,7 @@ def get_invitation_by_token(
         return None
 
     return PortalInvitationRecord(
-        id=_coerce_uuid(row.id),
+        id=_coerce_uuid(row.id) or "",
         tenant_id=str(row.tenant_id),
         email=str(row.email),
         portal_role=str(row.portal_role),
@@ -590,7 +590,7 @@ def accept_invitation(
     if not raw_token.startswith(INVITATION_TOKEN_PREFIX):
         raise PortalInvitationInvalidError("token format invalid: wrong prefix")
 
-    token_hex = raw_token[len(INVITATION_TOKEN_PREFIX):]
+    token_hex = raw_token[len(INVITATION_TOKEN_PREFIX) :]
     fingerprint = _compute_lookup_fingerprint(token_hex, _get_pepper())
 
     _set_tenant_rls(db, tenant_id)
@@ -615,10 +615,10 @@ def accept_invitation(
     inv_status = str(inv_row.status)
 
     if inv_status == "accepted":
-        raise PortalInvitationAlreadyAcceptedError(_coerce_uuid(inv_row.id))
+        raise PortalInvitationAlreadyAcceptedError(_coerce_uuid(inv_row.id) or "")
 
     if inv_status == "revoked":
-        raise PortalInvitationRevokedError(_coerce_uuid(inv_row.id))
+        raise PortalInvitationRevokedError(_coerce_uuid(inv_row.id) or "")
 
     if inv_status == "expired":
         raise PortalInvitationInvalidError("invitation has expired")
@@ -632,7 +632,7 @@ def accept_invitation(
     if expires_at <= datetime.now(tz=timezone.utc):
         raise PortalInvitationInvalidError("invitation has expired")
 
-    invitation_id = _coerce_uuid(inv_row.id)
+    invitation_id = _coerce_uuid(inv_row.id) or ""
 
     # Step 2: find or create the portal user
     portal_user = find_or_create_portal_user(
@@ -803,9 +803,9 @@ def create_session(
     ).fetchone()
 
     record = PortalSessionRecord(
-        id=_coerce_uuid(row.id),
+        id=_coerce_uuid(row.id) or "",
         tenant_id=str(row.tenant_id),
-        portal_user_id=_coerce_uuid(row.portal_user_id),
+        portal_user_id=_coerce_uuid(row.portal_user_id) or "",
         portal_membership_id=_coerce_uuid(row.portal_membership_id),
         auth_version_snapshot=int(row.auth_version_snapshot),
         session_type=str(row.session_type),
@@ -846,7 +846,7 @@ def validate_session(
             denial_code="PORTAL_SESSION_INVALID",
         )
 
-    token_hex = raw_token[len(SESSION_TOKEN_PREFIX):]
+    token_hex = raw_token[len(SESSION_TOKEN_PREFIX) :]
 
     try:
         fingerprint = _compute_lookup_fingerprint(token_hex, _get_pepper())
@@ -936,7 +936,11 @@ def validate_session(
         )
 
     # Membership must still be active (explicit deactivation invalidates sessions).
-    if portal_membership_id is not None and row.membership_active is not None and not row.membership_active:
+    if (
+        portal_membership_id is not None
+        and row.membership_active is not None
+        and not row.membership_active
+    ):
         _emit_audit(
             db,
             event_type="portal_session_rejected_version_mismatch",

@@ -31,6 +31,12 @@ RUNTIME_ROUTE_ALIAS_ALLOWLIST: set[tuple[str, str]] = {
 # These are intentionally public, read-only integrity verification surfaces.
 EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
+    # Invitation acceptance is intentionally unauthenticated — the pni1. token IS
+    # the authorization. No service-account scope required.
+    ("POST", "/portal/invitations/{token}/accept"),
+    # Named-session revocation authorizes via the session's own pnu1. token in
+    # X-FG-Portal-Session; no separate service-account scope dependency.
+    ("DELETE", "/portal/named-sessions/{session_id}"),
 }
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
@@ -41,6 +47,13 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     ("POST", "/portal/authenticate"),
     ("GET", "/portal/me"),
     ("DELETE", "/portal/sessions/{session_id}"),
+    # PR A named-user routes: tenant is resolved via _resolve_tenant(request) which
+    # reads request.state.tenant_id — enforced by AuthGateMiddleware, not a
+    # Depends() parameter the AST scanner recognises.
+    ("POST", "/portal/named-users/enroll"),
+    ("POST", "/portal/invitations"),
+    ("POST", "/portal/invitations/{token}/accept"),
+    ("DELETE", "/portal/named-sessions/{session_id}"),
 }
 
 

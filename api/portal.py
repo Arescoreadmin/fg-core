@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import api.credential_authority as ca
+import api.portal_user_authority as pua
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from api.db_models_portal import PortalGrant, PortalGrantSession
@@ -607,8 +608,6 @@ def portal_identity_login(
 # tenant_users; OIDC maps into portal_users, never tenant_users).
 # ---------------------------------------------------------------------------
 
-import api.portal_user_authority as pua
-
 
 class PortalEnrollBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -676,7 +675,9 @@ def portal_named_user_enroll(
         )
 
     # Find the active tenant-wide membership (engagement_id=None) if one exists.
-    membership = pua.get_active_membership(db, portal_user_id=user.id, tenant_id=tenant_id)
+    membership = pua.get_active_membership(
+        db, portal_user_id=user.id, tenant_id=tenant_id
+    )
 
     session = pua.create_session(
         db,
@@ -812,19 +813,34 @@ def portal_accept_invitation(
 
     # Preflight: verify the invitation exists and is pending before creating any rows.
     # get_invitation_by_token requires tenant_id to set RLS — BFF provides it in body.
-    inv_preview = pua.get_invitation_by_token(db, raw_token=token, tenant_id=body.tenant_id)
+    inv_preview = pua.get_invitation_by_token(
+        db, raw_token=token, tenant_id=body.tenant_id
+    )
     if inv_preview is None:
         raise HTTPException(
             status_code=404,
-            detail=api_error("PORTAL_INVITATION_NOT_FOUND", "Invitation not found or expired"),
+            detail=api_error(
+                "PORTAL_INVITATION_NOT_FOUND", "Invitation not found or expired"
+            ),
         )
     if inv_preview.status != "pending":
         status_map = {
-            "accepted": (409, "PORTAL_INVITATION_ALREADY_ACCEPTED", "Invitation already used"),
-            "revoked": (410, "PORTAL_INVITATION_REVOKED", "Invitation has been revoked"),
+            "accepted": (
+                409,
+                "PORTAL_INVITATION_ALREADY_ACCEPTED",
+                "Invitation already used",
+            ),
+            "revoked": (
+                410,
+                "PORTAL_INVITATION_REVOKED",
+                "Invitation has been revoked",
+            ),
             "expired": (410, "PORTAL_INVITATION_EXPIRED", "Invitation has expired"),
         }
-        code, err_code, msg = status_map.get(inv_preview.status, (400, "PORTAL_INVITATION_INVALID", "Invitation not valid"))
+        code, err_code, msg = status_map.get(
+            inv_preview.status,
+            (400, "PORTAL_INVITATION_INVALID", "Invitation not valid"),
+        )
         raise HTTPException(status_code=code, detail=api_error(err_code, msg))
 
     try:
@@ -847,12 +863,16 @@ def portal_accept_invitation(
     except pua.PortalInvitationAlreadyAcceptedError:
         raise HTTPException(
             status_code=409,
-            detail=api_error("PORTAL_INVITATION_ALREADY_ACCEPTED", "Invitation already used"),
+            detail=api_error(
+                "PORTAL_INVITATION_ALREADY_ACCEPTED", "Invitation already used"
+            ),
         )
     except pua.PortalInvitationRevokedError:
         raise HTTPException(
             status_code=410,
-            detail=api_error("PORTAL_INVITATION_REVOKED", "Invitation has been revoked"),
+            detail=api_error(
+                "PORTAL_INVITATION_REVOKED", "Invitation has been revoked"
+            ),
         )
 
     session = pua.create_session(
@@ -896,14 +916,18 @@ def portal_revoke_named_session(
     if not raw_token:
         raise HTTPException(
             status_code=401,
-            detail=api_error("PORTAL_SESSION_REQUIRED", "X-FG-Portal-Session header required"),
+            detail=api_error(
+                "PORTAL_SESSION_REQUIRED", "X-FG-Portal-Session header required"
+            ),
         )
     # Validate the token before allowing revocation (prevents CSRF-style blind revoke).
     vr = pua.validate_session(db, raw_token=raw_token, tenant_id=tenant_id)
     if not vr.ok:
         raise HTTPException(
             status_code=403,
-            detail=api_error(vr.denial_code or "PORTAL_SESSION_INVALID", vr.denial_reason or ""),
+            detail=api_error(
+                vr.denial_code or "PORTAL_SESSION_INVALID", vr.denial_reason or ""
+            ),
         )
     # Cross-check: token must own the session_id in the path (prevents using
     # a valid pnu1. token to blindly revoke a different session).

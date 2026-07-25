@@ -64,4 +64,8 @@ PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     # API-key auth exists for an external invitee. Covers /{token}/accept and /{token} preflight.
     # The admin POST /portal/invitations (no trailing slash) is NOT matched by this prefix.
     "/portal/invitations/",
+    # Named-user session self-revocation: the pnu1. session token in X-FG-Portal-Session IS
+    # the authorization credential. The route validates the token before revoking; no
+    # separate service-account scope is required (same self-auth pattern as invitation acceptance).
+    "/portal/named-sessions/",
 )

@@ -16798,8 +16798,64 @@
         "auth"
       ],
       "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/invitations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/invitations/{token}/accept",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/portal.py",
       "method": "GET",
       "path": "/portal/me",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/portal.py",
+      "method": "DELETE",
+      "path": "/portal/named-sessions/{session_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/portal.py",
+      "method": "POST",
+      "path": "/portal/named-users/enroll",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -20466,7 +20522,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-23T00:36:35.870809+00:00",
+  "generated_at": "2026-07-25T18:00:15.679311+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

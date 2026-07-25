@@ -24,7 +24,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -35,11 +35,8 @@ from api.portal_user_authority import (
     PortalInvitationAlreadyAcceptedError,
     PortalInvitationInvalidError,
     PortalInvitationRevokedError,
-    PortalSessionRecord,
     PortalUserSuspendedError,
-    SessionValidationResult,
     _compute_lookup_fingerprint,
-    _get_pepper,
     accept_invitation,
     create_invitation,
     create_session,
@@ -108,20 +105,25 @@ def test_invitation_token_prefix_constant():
 def test_get_pepper_raises_when_absent(monkeypatch):
     monkeypatch.delenv("FG_KEY_PEPPER", raising=False)
     # Temporarily un-patch _get_pepper by calling the real function
-    with patch.object(pua, "_get_pepper", side_effect=pua.__dict__["_get_pepper"].__wrapped__ if hasattr(pua.__dict__["_get_pepper"], "__wrapped__") else RuntimeError):
+    with patch.object(
+        pua,
+        "_get_pepper",
+        side_effect=pua.__dict__["_get_pepper"].__wrapped__
+        if hasattr(pua.__dict__["_get_pepper"], "__wrapped__")
+        else RuntimeError,
+    ):
         pass
     # Call the real module-level function directly
-    import importlib
     import os
+
     os.environ.pop("FG_KEY_PEPPER", None)
-    import api.portal_user_authority as real_pua
-    real_fn = real_pua.__dict__["_get_pepper"]  # bypass any mock
     # We can't easily un-patch autouse here, so test via direct env manipulation
     # The autouse patch replaces _get_pepper; test the underlying logic instead
     env_backup = os.environ.pop("FG_KEY_PEPPER", None)
     try:
         # Call actual implementation by importing the function source directly
-        import hashlib, hmac as _hmac_mod, os as _os
+        import os as _os
+
         pepper = _os.environ.get("FG_KEY_PEPPER", "")
         assert pepper == ""  # confirms env var is absent
     finally:
@@ -134,6 +136,7 @@ def test_get_pepper_raises_when_absent_direct(monkeypatch):
     monkeypatch.delenv("FG_KEY_PEPPER", raising=False)
     # Call the actual function bypassing the autouse patch
     import os
+
     orig = os.environ.pop("FG_KEY_PEPPER", None)
     try:
         # Directly test the real implementation
@@ -141,11 +144,16 @@ def test_get_pepper_raises_when_absent_direct(monkeypatch):
         # The real _get_pepper raises when pepper is empty
         assert real_pepper == ""
         # Verify that calling the real function raises RuntimeError
-        import importlib
         import api.portal_user_authority as m
+
         # Temporarily bypass the mock for this one call
-        with patch.object(m, "_get_pepper", wraps=lambda: (_ for _ in ()).throw(
-                RuntimeError("FG_KEY_PEPPER not configured"))):
+        with patch.object(
+            m,
+            "_get_pepper",
+            wraps=lambda: (_ for _ in ()).throw(
+                RuntimeError("FG_KEY_PEPPER not configured")
+            ),
+        ):
             with pytest.raises(RuntimeError, match="FG_KEY_PEPPER"):
                 m._get_pepper()
     finally:
@@ -224,13 +232,13 @@ def test_validate_session_version_mismatch(mock_db):
         tenant_id=TENANT_ID,
         portal_user_id=USER_UUID,
         portal_membership_id=membership_id,
-        auth_version_snapshot=1,        # issued at version 1
+        auth_version_snapshot=1,  # issued at version 1
         session_type="named_user_v1",
         status="active",
         expires_at=FUTURE,
         engagement_id="eng-1",
         portal_role="viewer",
-        membership_auth_version=2,       # bumped to 2 → mismatch
+        membership_auth_version=2,  # bumped to 2 → mismatch
         membership_active=True,
         portal_user_status="active",
     )
@@ -372,7 +380,9 @@ def test_create_invitation_raw_token_present_at_issuance(mock_db):
         expires_at=FUTURE,
     )
 
-    record = create_invitation(mock_db, tenant_id=TENANT_ID, email="invitee@example.com")
+    record = create_invitation(
+        mock_db, tenant_id=TENANT_ID, email="invitee@example.com"
+    )
     assert record.raw_token is not None  # raw_token IS returned at issuance
 
 
@@ -397,7 +407,9 @@ def test_create_invitation_db_does_not_store_raw_token(mock_db):
 
     mock_db.execute.side_effect = capture_execute
 
-    record = create_invitation(mock_db, tenant_id=TENANT_ID, email="invitee@example.com")
+    record = create_invitation(
+        mock_db, tenant_id=TENANT_ID, email="invitee@example.com"
+    )
 
     # The fingerprint stored in DB must differ from the raw_token
     assert "token_fingerprint" in captured_params
@@ -682,7 +694,7 @@ def test_validate_session_happy_path(mock_db):
         expires_at=FUTURE,
         engagement_id="eng-1",
         portal_role="assessor",
-        membership_auth_version=1,   # matches snapshot
+        membership_auth_version=1,  # matches snapshot
         membership_active=True,
         portal_user_status="active",
     )
@@ -716,7 +728,7 @@ def test_validate_session_version_mismatch_denial_code(mock_db):
         expires_at=FUTURE,
         engagement_id=None,
         portal_role="viewer",
-        membership_auth_version=99,   # bumped — mismatch
+        membership_auth_version=99,  # bumped — mismatch
         membership_active=True,
         portal_user_status="active",
     )
@@ -848,7 +860,7 @@ def test_accept_invitation_concurrent_only_one_wins():
             result.fetchall.return_value = []
             call_count[0] += 1
             n = call_count[0]
-            if n == 2:   # SELECT FOR UPDATE
+            if n == 2:  # SELECT FOR UPDATE
                 result.fetchone.return_value = inv_row
             elif n == 4:  # UPSERT user
                 result.fetchone.return_value = user_row
@@ -873,7 +885,7 @@ def test_accept_invitation_concurrent_only_one_wins():
             result.fetchall.return_value = []
             call_count[0] += 1
             n = call_count[0]
-            if n == 2:   # SELECT FOR UPDATE
+            if n == 2:  # SELECT FOR UPDATE
                 result.fetchone.return_value = inv_row
             elif n == 4:  # UPSERT user
                 result.fetchone.return_value = user_row
@@ -1033,6 +1045,7 @@ def test_validate_session_no_version_check_skips_membership_version(mock_db):
 
 def test_portal_user_svc_singleton_is_authority_instance():
     from api.portal_user_authority import portal_user_svc, PortalUserAuthority
+
     assert isinstance(portal_user_svc, PortalUserAuthority)
 
 
@@ -1075,8 +1088,8 @@ def test_validate_session_rejects_inactive_membership(mock_db):
         expires_at=FUTURE,
         engagement_id="eng-1",
         portal_role="viewer",
-        membership_auth_version=1,   # version unchanged — only deactivated
-        membership_active=False,     # deactivated
+        membership_auth_version=1,  # version unchanged — only deactivated
+        membership_active=False,  # deactivated
         portal_user_status="active",
     )
     mock_db.execute.return_value.fetchone.return_value = session_row
