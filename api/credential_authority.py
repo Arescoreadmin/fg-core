@@ -866,7 +866,7 @@ _RECORD_SELECT_TC = ", ".join(f"tc.{c.strip()}" for c in _RECORD_SELECT.split(",
 def _row_to_record(row: Row[Any]) -> CredentialRecord:
     r = row
     return CredentialRecord(
-        credential_id=r[0],
+        credential_id=str(r[0]),
         tenant_id=r[1],
         credential_type=r[2],
         credential_slot=r[3],
@@ -1623,7 +1623,7 @@ def rotate_credential(
             event_type="rotated",
             actor_id=actor_id,
             request_id=request_id,
-            metadata={"replaced_credential_id": old_record.credential_id},
+            metadata={"replaced_credential_id": str(old_record.credential_id)},
         )
 
     assert new_row is not None, "credential rotation did not return a row"
