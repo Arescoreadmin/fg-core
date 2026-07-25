@@ -600,3 +600,318 @@ def portal_identity_login(
         "membership_id": principal.membership_id,
         "membership_version": principal.membership_version,
     }
+
+
+# ---------------------------------------------------------------------------
+# Portal Named-User Identity Authority (PR A — portal_users distinct from
+# tenant_users; OIDC maps into portal_users, never tenant_users).
+# ---------------------------------------------------------------------------
+
+import api.portal_user_authority as pua
+
+
+class PortalEnrollBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    access_token: str
+    oidc_provider: str = "auth0"
+
+
+class PortalEnrollResponse(BaseModel):
+    portal_user_id: str
+    email: str
+    display_name: str | None
+    session_token: str
+    expires_at: str
+    membership_id: str | None
+
+
+@portal_router.post(
+    "/named-users/enroll",
+    response_model=PortalEnrollResponse,
+    status_code=200,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def portal_named_user_enroll(
+    body: PortalEnrollBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PortalEnrollResponse:
+    """OIDC callback: resolve/create a portal_users record, issue a named-user session.
+
+    Maps OIDC identity into portal_users (NOT tenant_users). Called server-side
+    by the portal BFF after Auth0 code exchange. Requires governance:read scope
+    (BFF service account authentication).
+
+    Returns a pnu1. prefixed session token. The BFF stores this in a dedicated
+    cookie (separate from grant-based sessions).
+    """
+    tenant_id = _resolve_tenant(request)
+
+    try:
+        actor = validate_auth0_token(body.access_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_token", "reason": str(exc)},
+        )
+
+    domain = (os.getenv("FG_AUTH0_DOMAIN") or "").strip().rstrip("/")
+    issuer = f"https://{domain}/" if domain else (actor.tenant_id or "")
+
+    try:
+        user = pua.find_or_create_portal_user(
+            db,
+            tenant_id=tenant_id,
+            oidc_provider=body.oidc_provider,
+            oidc_issuer=issuer,
+            oidc_subject=actor.subject,
+            email=actor.email or "",
+            display_name=getattr(actor, "name", None),
+            request_id=request.headers.get("x-request-id"),
+        )
+    except pua.PortalUserSuspendedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("PORTAL_USER_SUSPENDED", str(exc)),
+        )
+
+    # Find the active tenant-wide membership (engagement_id=None) if one exists.
+    membership = pua.get_active_membership(db, portal_user_id=user.id, tenant_id=tenant_id)
+
+    session = pua.create_session(
+        db,
+        portal_user_id=user.id,
+        portal_membership_id=membership.id if membership else None,
+        tenant_id=tenant_id,
+        auth_version_snapshot=membership.auth_version if membership else 0,
+        ip_address=_client_ip(request),
+        user_agent=(request.headers.get("user-agent") or "")[:512],
+        request_id=request.headers.get("x-request-id"),
+    )
+
+    db.commit()
+    return PortalEnrollResponse(
+        portal_user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        session_token=session.raw_token,  # type: ignore[arg-type]
+        expires_at=session.expires_at,
+        membership_id=membership.id if membership else None,
+    )
+
+
+class PortalIssueInvitationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+    portal_role: str = "viewer"
+    engagement_id: str | None = None
+    ttl_seconds: int | None = None
+    idempotency_key: str | None = None
+
+
+class PortalIssueInvitationResponse(BaseModel):
+    invitation_id: str
+    token: str
+    expires_at: str
+    email: str
+    portal_role: str
+    engagement_id: str | None
+
+
+@portal_router.post(
+    "/invitations",
+    response_model=PortalIssueInvitationResponse,
+    status_code=201,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def portal_issue_invitation(
+    body: PortalIssueInvitationBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PortalIssueInvitationResponse:
+    """Issue a named-user invitation token.
+
+    Requires governance:write scope (admin/operator action).
+    Returns the raw pni1. token — caller must deliver it to the invitee.
+    Token is stored as HMAC-SHA256 fingerprint only; the raw value is not
+    recoverable after this response.
+    """
+    tenant_id = _resolve_tenant(request)
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    actor_id = getattr(auth, "actor_id", None) or getattr(auth, "tenant_id", None)
+
+    kwargs: dict = dict(
+        tenant_id=tenant_id,
+        email=body.email,
+        portal_role=body.portal_role,
+        engagement_id=body.engagement_id,
+        invited_by_actor_id=str(actor_id) if actor_id else None,
+        request_id=request.headers.get("x-request-id"),
+        idempotency_key=body.idempotency_key,
+    )
+    if body.ttl_seconds is not None:
+        kwargs["ttl_seconds"] = body.ttl_seconds
+
+    inv = pua.create_invitation(db, **kwargs)
+    db.commit()
+    return PortalIssueInvitationResponse(
+        invitation_id=inv.id,
+        token=inv.raw_token,  # type: ignore[arg-type]
+        expires_at=inv.expires_at,
+        email=inv.email,
+        portal_role=inv.portal_role,
+        engagement_id=inv.engagement_id,
+    )
+
+
+class PortalAcceptInvitationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    access_token: str
+    oidc_provider: str = "auth0"
+    tenant_id: str  # BFF must pass; no service-account header on this route
+
+
+class PortalAcceptInvitationResponse(BaseModel):
+    portal_user_id: str
+    membership_id: str
+    session_token: str
+    expires_at: str
+    portal_role: str
+    engagement_id: str | None
+
+
+@portal_router.post(
+    "/invitations/{token}/accept",
+    response_model=PortalAcceptInvitationResponse,
+    status_code=200,
+)
+def portal_accept_invitation(
+    token: str,
+    body: PortalAcceptInvitationBody,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> PortalAcceptInvitationResponse:
+    """Accept a portal invitation.
+
+    No service-account auth required — the invitation token IS the authorization.
+    Validates the Auth0 access_token to establish the acceptor's OIDC identity,
+    then atomically accepts the invitation and creates the portal_user + membership.
+
+    Concurrent acceptance: SELECT FOR UPDATE ensures exactly one winner.
+    """
+    try:
+        actor = validate_auth0_token(body.access_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "invalid_token", "reason": str(exc)},
+        )
+
+    domain = (os.getenv("FG_AUTH0_DOMAIN") or "").strip().rstrip("/")
+    issuer = f"https://{domain}/" if domain else (actor.tenant_id or "")
+
+    # Preflight: verify the invitation exists and is pending before creating any rows.
+    # get_invitation_by_token requires tenant_id to set RLS — BFF provides it in body.
+    inv_preview = pua.get_invitation_by_token(db, raw_token=token, tenant_id=body.tenant_id)
+    if inv_preview is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("PORTAL_INVITATION_NOT_FOUND", "Invitation not found or expired"),
+        )
+    if inv_preview.status != "pending":
+        status_map = {
+            "accepted": (409, "PORTAL_INVITATION_ALREADY_ACCEPTED", "Invitation already used"),
+            "revoked": (410, "PORTAL_INVITATION_REVOKED", "Invitation has been revoked"),
+            "expired": (410, "PORTAL_INVITATION_EXPIRED", "Invitation has expired"),
+        }
+        code, err_code, msg = status_map.get(inv_preview.status, (400, "PORTAL_INVITATION_INVALID", "Invitation not valid"))
+        raise HTTPException(status_code=code, detail=api_error(err_code, msg))
+
+    try:
+        user, membership, _inv = pua.accept_invitation(
+            db,
+            raw_token=token,
+            tenant_id=body.tenant_id,
+            oidc_provider=body.oidc_provider,
+            oidc_issuer=issuer,
+            oidc_subject=actor.subject,
+            email=actor.email or "",
+            display_name=getattr(actor, "name", None),
+            request_id=request.headers.get("x-request-id"),
+        )
+    except pua.PortalInvitationInvalidError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=api_error("PORTAL_INVITATION_INVALID", exc.reason),
+        )
+    except pua.PortalInvitationAlreadyAcceptedError:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("PORTAL_INVITATION_ALREADY_ACCEPTED", "Invitation already used"),
+        )
+    except pua.PortalInvitationRevokedError:
+        raise HTTPException(
+            status_code=410,
+            detail=api_error("PORTAL_INVITATION_REVOKED", "Invitation has been revoked"),
+        )
+
+    session = pua.create_session(
+        db,
+        portal_user_id=user.id,
+        portal_membership_id=membership.id,
+        tenant_id=membership.tenant_id,
+        auth_version_snapshot=membership.auth_version,
+        ip_address=_client_ip(request),
+        user_agent=(request.headers.get("user-agent") or "")[:512],
+        request_id=request.headers.get("x-request-id"),
+    )
+
+    db.commit()
+    return PortalAcceptInvitationResponse(
+        portal_user_id=user.id,
+        membership_id=membership.id,
+        session_token=session.raw_token,  # type: ignore[arg-type]
+        expires_at=session.expires_at,
+        portal_role=membership.portal_role,
+        engagement_id=membership.engagement_id,
+    )
+
+
+@portal_router.delete(
+    "/named-sessions/{session_id}",
+    status_code=204,
+)
+def portal_revoke_named_session(
+    session_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> None:
+    """Revoke a named-user portal session (logout).
+
+    Requires the session's own pnu1. token in X-FG-Portal-Session — the session
+    authorizes its own revocation without a separate service account.
+    """
+    tenant_id = _resolve_tenant(request)
+    raw_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+    if not raw_token:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("PORTAL_SESSION_REQUIRED", "X-FG-Portal-Session header required"),
+        )
+    # Validate the token before allowing revocation (prevents CSRF-style blind revoke).
+    vr = pua.validate_session(db, raw_token=raw_token, tenant_id=tenant_id)
+    if not vr.ok:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(vr.denial_code or "PORTAL_SESSION_INVALID", vr.denial_reason or ""),
+        )
+    # Cross-check: token must own the session_id in the path (prevents using
+    # a valid pnu1. token to blindly revoke a different session).
+    if vr.session_id != session_id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("PORTAL_SESSION_MISMATCH", "Token does not match session"),
+        )
+
+    pua.revoke_session(db, session_id=session_id, tenant_id=tenant_id)
+    db.commit()
