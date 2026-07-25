@@ -1,0 +1,52 @@
+compassionate-integrity PROJECT RETIREMENT AUDIT
+Generated: 2026-07-24
+Retired by: Claude Code session (post-domain-migration validation)
+
+PROJECT DETAILS
+===============
+Project ID:       a5bfd408-4d7a-470a-bfa4-07f47f220f78
+Project Name:     compassionate-integrity
+Account:          arescoreadmin's Projects
+
+SERVICES (production environment)
+==================================
+Service Name:     frostgate-core
+Service ID:       1a0edba4-f16d-456c-b835-a38c9e9900c4
+Status:           SUCCESS (STALE — last deployed 2026-05-28T21:39:16Z)
+Replicas:         1 running (idle, serving no traffic)
+Volumes:          [] (NONE)
+Region:           sfo
+
+CUSTOM DOMAINS
+==============
+api.frostgate.ai: NOT ATTACHED (already migrated to frostgate-core project)
+Result: [] (confirmed via: railway domain list --project ... --service frostgate-core)
+
+VOLUMES
+=======
+None attached to any service.
+
+DATABASES
+=========
+No Postgres or Redis services present in project.
+Current production DB lives in frostgate-core project (postgres-volume service).
+
+RETIREMENT DECISION
+===================
+Safe to delete because:
+  1. api.frostgate.ai not attached (confirmed: domains: [])
+  2. No volumes (no data loss risk)
+  3. No databases (shared DB is in frostgate-core project, unaffected)
+  4. Service last deployed 2026-05-28 — nearly 2 months stale
+  5. All production traffic confirmed routed to frostgate-core
+  6. 10/10 readiness 200 on frostgate-core before this deletion
+  7. Migration assertions passed on frostgate-core
+
+CURRENT PRODUCTION (frostgate-core)
+=====================================
+Project ID:       b3a27473-9d07-4ef1-ad2f-898cc4f6d5a9
+api Service ID:   1dbe2a7b-44b6-429f-b853-1e53e44f5161
+Environment ID:   06a5d6b3-f3b4-4e6d-b4af-b6f8409f869d
+Domain:           api.frostgate.ai (active, TLS valid)
+Env:              FG_ENV=prod, FG_DB_MIGRATIONS_REQUIRED=1
+Migrations:       0001-0163 applied

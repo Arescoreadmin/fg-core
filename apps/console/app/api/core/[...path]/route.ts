@@ -103,6 +103,31 @@ function jsonError(message: string, status: number, requestId: string) {
 }
 
 /**
+ * Canonical BFF credential error responses.
+ * Returns structured JSON with a stable error code and request_id — never raw
+ * Core error bodies, never key material, never stack traces.
+ */
+function credentialError(
+  code:
+    | 'CORE_AUTH_MISSING'
+    | 'CORE_AUTH_REJECTED'
+    | 'CREDENTIAL_NOT_FOUND'
+    | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE'
+    | 'TENANT_NOT_FOUND'
+    | 'CORE_UNAVAILABLE',
+  status: number,
+  requestId: string,
+  tenantId?: string,
+) {
+  const body: Record<string, string> = { error: code, request_id: requestId };
+  if (tenantId) body.tenant_id = tenantId;
+  return NextResponse.json(body, {
+    status,
+    headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId },
+  });
+}
+
+/**
  * Build the rate-limit key in the format:
  *   fg:bff:rl:{route_group}:{tenant_id}:{client_identity}
  *
@@ -197,12 +222,28 @@ function resolveAuthorizedTenant(
   return jsonError('Forbidden: not authorized to act on behalf of this tenant', 403, requestId);
 }
 
-async function resolveCoreAuth(tenantId: string): Promise<{ tenantId: string; apiKey: string | null }> {
+type CoreAuthResolution =
+  | { tenantId: string; apiKey: string }
+  | { tenantId: string; apiKey: null; errorCode: 'CORE_AUTH_MISSING' | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' };
+
+async function resolveCoreAuth(tenantId: string, requestId: string): Promise<CoreAuthResolution> {
   if (!tenantId || tenantId === CORE_TENANT_ID) {
-    return { tenantId, apiKey: CORE_API_KEY || null };
+    if (CORE_API_KEY) return { tenantId, apiKey: CORE_API_KEY };
+    console.warn(`[core-proxy] CORE_AUTH_MISSING env key absent request_id=${requestId}`);
+    return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
   }
-  const key = await getTenantApiKey(tenantId);
-  return { tenantId, apiKey: key };
+  const result = await getTenantApiKey(tenantId);
+  if (result.key) return { tenantId, apiKey: result.key };
+  if (result.unavailable) {
+    console.warn(
+      `[core-proxy] CREDENTIAL_PERSISTENCE_UNAVAILABLE tenant_id=${tenantId} request_id=${requestId}`,
+    );
+    return { tenantId, apiKey: null, errorCode: 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' };
+  }
+  console.warn(
+    `[core-proxy] CORE_AUTH_MISSING tenant_id=${tenantId} request_id=${requestId}`,
+  );
+  return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
 }
 
 function buildCoreUrl(path: string[], request: NextRequest, tenantId: string): string {
@@ -276,8 +317,16 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
   } else {
-    const coreAuth = await resolveCoreAuth(tenantId);
-    if (!coreAuth.apiKey) return jsonError('Tenant API key is not configured', 500, requestId);
+    const coreAuth = await resolveCoreAuth(tenantId, requestId);
+    if (coreAuth.apiKey === null) {
+      const errRes = coreAuth as Extract<CoreAuthResolution, { apiKey: null }>;
+      return credentialError(
+        errRes.errorCode,
+        errRes.errorCode === 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' ? 503 : 401,
+        requestId,
+        tenantId,
+      );
+    }
     headers.set('X-API-Key', coreAuth.apiKey);
     if (coreAuth.tenantId) headers.set('X-Tenant-ID', coreAuth.tenantId);
   }
@@ -313,6 +362,25 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
 
   const response = await fetch(target, init);
+
+  // Translate Core auth rejections and upstream outages into structured BFF errors.
+  // Never pass raw 401/403 or 5xx bodies back to the browser — they may contain
+  // key hints or internal detail. Always include request_id for traceability.
+  if (!isAdminPath) {
+    if (response.status === 401 || response.status === 403) {
+      console.warn(
+        `[core-proxy] CORE_AUTH_REJECTED status=${response.status} tenant_id=${tenantId} target=${target} request_id=${requestId}`,
+      );
+      return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
+    }
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      console.warn(
+        `[core-proxy] CORE_UNAVAILABLE status=${response.status} tenant_id=${tenantId} request_id=${requestId}`,
+      );
+      return credentialError('CORE_UNAVAILABLE', response.status, requestId, tenantId);
+    }
+  }
+
   const body = await response.text();
   const out = new NextResponse(body, {
     status: response.status,
