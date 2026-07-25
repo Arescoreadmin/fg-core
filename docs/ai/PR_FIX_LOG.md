@@ -1,5 +1,30 @@
 # PR Fix Log (Strict)
 
+## P-22 — fix(portal): normalize named-user authority lint and typing style
+
+**Branch:** `fix/portal-named-user-authority-lint-cleanup`
+**Date:** 2026-07-25
+
+### Problem
+
+Post-merge lint/typing hygiene for PR #577 (named-user portal authority). No runtime or security behavior changed.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: api/portal_user_authority.py` — `Optional[T]` → `T | None` union syntax throughout; `Optional` import removed; `timezone.utc` → `datetime.UTC` with import adjusted to `from datetime import UTC, datetime`; `log.error(..., exc_info=True)` and `log.warning(..., exc_info=True)` inside except blocks replaced with `log.exception(...)` (3 sites, semantics identical).
+
+2. `mod: tests/test_portal_user_authority.py` — same `Optional` → union and `timezone.utc` → `UTC` modernization; nested `with patch.object(...)` blocks folded into single parenthesised form (SIM117); `dict(...)` kwargs → `{...}` literal (C408).
+
+### Root cause
+
+Ruff modernization rules (UP045, UP017, G201, SIM117, C408, I001) not yet applied to PR #577 files at merge time.
+
+### Behavioral impact
+
+None. All changes are type annotation syntax, import aliases, and logger sugar. All security invariants (pnu1 discriminator, membership-required auth, inactive-membership fail-closed, portal-user-status fail-closed, auth_version enforcement, RLS, audit append-only) unchanged.
+
 ## P-21 — fix(console): distinct error taxonomy and structured logs for tenant provisioning
 
 **Branch:** `fix/tenant-provisioning-end-to-end`
