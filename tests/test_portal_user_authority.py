@@ -22,7 +22,7 @@ FG_KEY_PEPPER is patched to a fixed test value for determinism.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -58,8 +58,8 @@ INVITE_UUID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 MEMBERSHIP_UUID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 SESSION_UUID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 
-FUTURE = datetime.now(tz=timezone.utc) + timedelta(days=7)
-PAST = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+FUTURE = datetime.now(tz=UTC) + timedelta(days=7)
+PAST = datetime.now(tz=UTC) - timedelta(seconds=1)
 
 
 def _make_row(**kwargs):
@@ -147,15 +147,17 @@ def test_get_pepper_raises_when_absent_direct(monkeypatch):
         import api.portal_user_authority as m
 
         # Temporarily bypass the mock for this one call
-        with patch.object(
-            m,
-            "_get_pepper",
-            wraps=lambda: (_ for _ in ()).throw(
-                RuntimeError("FG_KEY_PEPPER not configured")
+        with (
+            patch.object(
+                m,
+                "_get_pepper",
+                wraps=lambda: (_ for _ in ()).throw(
+                    RuntimeError("FG_KEY_PEPPER not configured")
+                ),
             ),
+            pytest.raises(RuntimeError, match="FG_KEY_PEPPER"),
         ):
-            with pytest.raises(RuntimeError, match="FG_KEY_PEPPER"):
-                m._get_pepper()
+            m._get_pepper()
     finally:
         if orig:
             os.environ["FG_KEY_PEPPER"] = orig
@@ -901,14 +903,14 @@ def test_accept_invitation_concurrent_only_one_wins():
         return db
 
     raw_token = INVITATION_TOKEN_PREFIX + "7" * 64
-    kwargs = dict(
-        raw_token=raw_token,
-        tenant_id=TENANT_ID,
-        oidc_provider="auth0",
-        oidc_issuer="https://example.auth0.com/",
-        oidc_subject="sub|abc",
-        email="user@example.com",
-    )
+    kwargs = {
+        "raw_token": raw_token,
+        "tenant_id": TENANT_ID,
+        "oidc_provider": "auth0",
+        "oidc_issuer": "https://example.auth0.com/",
+        "oidc_subject": "sub|abc",
+        "email": "user@example.com",
+    }
 
     # Winner succeeds
     winner_result = accept_invitation(make_db_for_winner(), **kwargs)
@@ -1238,20 +1240,22 @@ async def _call_named_user_scope(
 
     fake_sessionmaker = MagicMock(return_value=fake_db)
 
-    with patch.object(psm, "get_sessionmaker", return_value=fake_sessionmaker):
-        with patch.object(
+    with (
+        patch.object(psm, "get_sessionmaker", return_value=fake_sessionmaker),
+        patch.object(
             psm, "validate_named_session", return_value=validate_result
-        ) as mock_validate:
-            req = _FakeRequest(
-                path=f"/field-assessment/engagements/{engagement_id}/summary",
-                headers={
-                    "x-portal-source": "client-portal",
-                    "x-fg-portal-session": session_token,
-                },
-                tenant_id=tenant_id,
-            )
-            resp = await mw.dispatch(req, _next)
-            return resp, called_next["hit"], mock_validate, fake_db
+        ) as mock_validate,
+    ):
+        req = _FakeRequest(
+            path=f"/field-assessment/engagements/{engagement_id}/summary",
+            headers={
+                "x-portal-source": "client-portal",
+                "x-fg-portal-session": session_token,
+            },
+            tenant_id=tenant_id,
+        )
+        resp = await mw.dispatch(req, _next)
+        return resp, called_next["hit"], mock_validate, fake_db
 
 
 def test_middleware_denies_when_portal_membership_id_is_none():

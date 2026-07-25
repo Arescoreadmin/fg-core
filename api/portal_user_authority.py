@@ -27,8 +27,7 @@ import os
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 
@@ -97,7 +96,7 @@ class PortalUserRecord:
     oidc_issuer: str
     oidc_subject: str
     email: str
-    display_name: Optional[str]
+    display_name: str | None
     status: str
 
 
@@ -106,7 +105,7 @@ class PortalMembershipRecord:
     id: str
     portal_user_id: str
     tenant_id: str
-    engagement_id: Optional[str]
+    engagement_id: str | None
     portal_role: str
     auth_version: int
     active: bool
@@ -118,10 +117,10 @@ class PortalInvitationRecord:
     tenant_id: str
     email: str
     portal_role: str
-    engagement_id: Optional[str]
+    engagement_id: str | None
     status: str
     expires_at: str
-    raw_token: Optional[str]  # only set at issuance; never stored in DB
+    raw_token: str | None  # only set at issuance; never stored in DB
 
 
 @dataclass(frozen=True)
@@ -129,25 +128,25 @@ class PortalSessionRecord:
     id: str
     tenant_id: str
     portal_user_id: str
-    portal_membership_id: Optional[str]
+    portal_membership_id: str | None
     auth_version_snapshot: int
     session_type: str
     status: str
     expires_at: str
-    raw_token: Optional[str]  # only set at issuance; never stored in DB
+    raw_token: str | None  # only set at issuance; never stored in DB
 
 
 @dataclass(frozen=True)
 class SessionValidationResult:
     ok: bool
-    session_id: Optional[str] = None
-    portal_user_id: Optional[str] = None
-    portal_membership_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    engagement_id: Optional[str] = None
-    portal_role: Optional[str] = None
-    denial_reason: Optional[str] = None
-    denial_code: Optional[str] = None
+    session_id: str | None = None
+    portal_user_id: str | None = None
+    portal_membership_id: str | None = None
+    tenant_id: str | None = None
+    engagement_id: str | None = None
+    portal_role: str | None = None
+    denial_reason: str | None = None
+    denial_code: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -176,10 +175,10 @@ def _compute_lookup_fingerprint(secret_part: str, pepper: str) -> str:
 
 def _now_iso() -> str:
     """Return current UTC time as ISO-8601 string."""
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
-def _coerce_uuid(val) -> Optional[str]:
+def _coerce_uuid(val) -> str | None:
     """Coerce uuid.UUID → str; leave str/None unchanged."""
     if val is None:
         return None
@@ -193,11 +192,11 @@ def _emit_audit(
     *,
     event_type: str,
     tenant_id: str,
-    portal_user_id: Optional[str] = None,
-    actor_id: Optional[str] = None,
-    request_id: Optional[str] = None,
+    portal_user_id: str | None = None,
+    actor_id: str | None = None,
+    request_id: str | None = None,
     outcome: str = "success",
-    metadata: Optional[str] = None,
+    metadata: str | None = None,
 ) -> None:
     """Best-effort INSERT into portal_user_audit_events.  Never raises."""
     try:
@@ -226,11 +225,10 @@ def _emit_audit(
             },
         )
     except Exception:
-        log.warning(
+        log.exception(
             "portal_user_authority: failed to emit audit event %s for tenant %s",
             event_type,
             tenant_id,
-            exc_info=True,
         )
 
 
@@ -255,8 +253,8 @@ def find_or_create_portal_user(
     oidc_issuer: str,
     oidc_subject: str,
     email: str,
-    display_name: Optional[str] = None,
-    request_id: Optional[str] = None,
+    display_name: str | None = None,
+    request_id: str | None = None,
 ) -> PortalUserRecord:
     """
     UPSERT a portal_user row by (tenant_id, oidc_issuer, oidc_subject).
@@ -326,10 +324,10 @@ def _create_membership(
     portal_user_id: str,
     tenant_id: str,
     portal_role: str,
-    engagement_id: Optional[str] = None,
-    granted_by_actor_id: Optional[str] = None,
-    invitation_id: Optional[str] = None,
-    request_id: Optional[str] = None,
+    engagement_id: str | None = None,
+    granted_by_actor_id: str | None = None,
+    invitation_id: str | None = None,
+    request_id: str | None = None,
 ) -> PortalMembershipRecord:
     """
     Insert a portal_user_memberships row.  Caller must have already set RLS.
@@ -385,8 +383,8 @@ def get_active_membership(
     *,
     portal_user_id: str,
     tenant_id: str,
-    engagement_id: Optional[str] = None,
-) -> Optional[PortalMembershipRecord]:
+    engagement_id: str | None = None,
+) -> PortalMembershipRecord | None:
     """Return the active membership for a portal user, or None.
 
     If engagement_id is None, returns the tenant-wide membership (engagement_id IS NULL).
@@ -441,11 +439,11 @@ def create_invitation(
     tenant_id: str,
     email: str,
     portal_role: str = "viewer",
-    engagement_id: Optional[str] = None,
-    invited_by_actor_id: Optional[str] = None,
+    engagement_id: str | None = None,
+    invited_by_actor_id: str | None = None,
     ttl_seconds: int = DEFAULT_INVITATION_TTL_SECONDS,
-    request_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
+    request_id: str | None = None,
+    idempotency_key: str | None = None,
 ) -> PortalInvitationRecord:
     """
     Issue a new portal invitation.
@@ -520,7 +518,7 @@ def get_invitation_by_token(
     *,
     raw_token: str,
     tenant_id: str,
-) -> Optional[PortalInvitationRecord]:
+) -> PortalInvitationRecord | None:
     """
     Look up an invitation by raw token.  Returns None if not found.
     Does NOT validate status or expiry — callers should check those fields.
@@ -570,8 +568,8 @@ def accept_invitation(
     oidc_issuer: str,
     oidc_subject: str,
     email: str,
-    display_name: Optional[str] = None,
-    request_id: Optional[str] = None,
+    display_name: str | None = None,
+    request_id: str | None = None,
 ) -> tuple:
     """
     Accept a portal invitation.
@@ -628,8 +626,8 @@ def accept_invitation(
     if isinstance(expires_at, str):
         expires_at = datetime.fromisoformat(expires_at)
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at <= datetime.now(tz=timezone.utc):
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= datetime.now(tz=UTC):
         raise PortalInvitationInvalidError("invitation has expired")
 
     invitation_id = _coerce_uuid(inv_row.id) or ""
@@ -705,8 +703,8 @@ def revoke_invitation(
     *,
     invitation_id: str,
     tenant_id: str,
-    actor_id: Optional[str] = None,
-    request_id: Optional[str] = None,
+    actor_id: str | None = None,
+    request_id: str | None = None,
 ) -> bool:
     """
     Revoke a pending invitation.
@@ -751,11 +749,11 @@ def create_session(
     portal_user_id: str,
     tenant_id: str,
     auth_version_snapshot: int,
-    portal_membership_id: Optional[str] = None,
+    portal_membership_id: str | None = None,
     ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    request_id: Optional[str] = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    request_id: str | None = None,
 ) -> PortalSessionRecord:
     """
     Issue a new portal session token.
@@ -892,7 +890,7 @@ def validate_session(
         ).fetchone()
 
     except Exception as exc:
-        log.error("validate_session: DB error during lookup: %s", exc, exc_info=True)
+        log.exception("validate_session: DB error during lookup: %s", exc)
         return SessionValidationResult(
             ok=False,
             denial_reason="internal error during session lookup",
@@ -998,10 +996,9 @@ def validate_session(
             {"id": session_id},
         )
     except Exception:
-        log.warning(
+        log.exception(
             "validate_session: failed to update last_validated_at for session %s",
             session_id,
-            exc_info=True,
         )
 
     _emit_audit(
@@ -1028,7 +1025,7 @@ def revoke_session(
     *,
     session_id: str,
     tenant_id: str,
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
 ) -> bool:
     """
     Revoke an active session.
