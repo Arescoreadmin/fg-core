@@ -6132,3 +6132,62 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - `fg-python-setup/action.yml` changes are additive only: two new steps (key computation, cache restore) inserted before the existing `Build venv + deps` step. Existing steps are unchanged.
 
 **SOC review outcome:** approved. Both changes are operational fixes to CI infrastructure with no impact on authentication, authorisation, cryptographic controls, or audit trails. The venv cache is content-addressed and validated by `make venv` on restore; it cannot introduce untrusted packages.
+
+---
+
+## feat/portal-production-named-user-enrollment — PR #577 named-user portal authority (2026-07-25)
+
+**Critical files changed:** `api/security/public_paths.py`, `api/middleware/portal_scope.py`, `tools/ci/audit_exceptions.yaml`, `tools/ci/check_plane_registry.py`, `tools/ci/contract_routes.json`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`.
+
+**Change scope:** PR A of the two-part portal named-user rollout. Introduces the `portal_users` / `portal_user_memberships` / `portal_user_invitations` / `portal_user_sessions` authority (`api/portal_user_authority.py`), the `pni1.` invitation and `pnu1.` session token discriminators, four new routes (`POST /portal/named-users/enroll`, `POST /portal/invitations`, `POST /portal/invitations/{token}/accept`, `DELETE /portal/named-sessions/{session_id}`), and the middleware branch in `PortalClientScopeMiddleware` that routes `pnu1.` tokens to the named-user validator. Production login UI is **not** changed by PR A; the BFF-side wiring lands in a separate PR B.
+
+**Security invariants enforced by this change:**
+
+1. **Public invitation acceptance boundary (P1-1).** `PUBLIC_PATHS_PREFIX` gains `/portal/invitations/` (trailing slash) and `/portal/named-sessions/` (trailing slash). The trailing slash is load-bearing: it matches `/portal/invitations/{token}` preflight and `/portal/invitations/{token}/accept`, but does **not** match the bare admin route `POST /portal/invitations` — that route retains its `governance:write` scope requirement via `require_scopes()`. Named-user session self-revocation (`DELETE /portal/named-sessions/{session_id}`) is likewise public because the `pnu1.` session token IS the authorization credential; the handler validates the token *and* verifies the token's `session_id` matches the path parameter before revoking (prevents blind revocation of another session with a valid unrelated token).
+
+2. **Membership-required authorization invariant (P1-2).** `PortalClientScopeMiddleware` distinguishes "no membership" from "tenant-wide membership":
+   - `portal_membership_id is None` (LEFT JOIN returned no membership row for the session) → **403 `PORTAL_MEMBERSHIP_REQUIRED`** *before* the engagement-binding check.
+   - `portal_membership_id` set but `engagement_id is None` on the membership row → tenant-wide access (allowed for any engagement).
+   - `portal_membership_id` set and `engagement_id` set → allowed only when the request path's engagement matches (`PORTAL_ENGAGEMENT_MISMATCH` on mismatch).
+   This closes the "no-membership session escalates to tenant-wide" bypass that would have existed if we relied solely on the `engagement_id is not None` check.
+
+3. **Inactive-membership fail-closed behavior (P1-3).** `validate_session` returns denial code `MEMBERSHIP_INACTIVE` when `portal_user_memberships.active = false`, without requiring a corresponding `auth_version` bump. Deactivation invalidates sessions immediately; `auth_version` remains the mechanism for revoking sessions after an active-membership state change.
+
+4. **Portal-user-status fail-closed behavior (P1-4).** `validate_session` now `JOIN`s `portal_users` (INNER — the session cannot exist without a user) and selects `pu.status`. Any status other than `'active'` (`'suspended'` or `'deactivated'`) returns denial code `PORTAL_USER_SUSPENDED` before any protected-data query runs. Status transitions after session issuance invalidate existing sessions on the next validation call.
+
+5. **Membership `auth_version` enforcement.** `portal_user_sessions.auth_version_snapshot` is captured at session creation; validation compares it to the current `portal_user_memberships.auth_version` and returns `SESSION_REVOKED_VERSION_MISMATCH` on drift. Callers wanting to invalidate a session without deactivating the membership bump `auth_version`; deactivating the membership takes precedence via #3 above.
+
+6. **Tenant / engagement isolation.** `_set_tenant_rls` sets `app.tenant_id` via `pg_catalog.set_config()` (SET LOCAL rejects bound params in psycopg3) at the top of every authority call. The middleware passes the request's `tenant_id` (from `AuthGateMiddleware` via `request.state.tenant_id`) into `validate_named_session`; the WHERE clause is `pus.tenant_id = :tenant_id` in addition to RLS. Cross-tenant token replay therefore fails both at RLS and at the SQL predicate.
+
+7. **Named-user vs legacy session discriminator.** The middleware branches on the deterministic `pnu1.` prefix; tokens without the prefix fall through to the legacy `portal_grant_svc.validate_session` (C7 opaque grant-session ID). The two authorities remain independent; no shared row or column is used.
+
+8. **Audit transaction / persistence behavior (P2-5).** `validate_named_session` writes `last_validated_at` and inserts a `portal_session_validated` (or denial-type) row into `portal_user_audit_events`. The middleware issues `db.commit()` immediately after a successful `validate_named_session` return, before the `finally: db.close()` — without this commit, both writes are rolled back when the SQLAlchemy `Session` closes. `_emit_audit` is defensive (`try/except log.warning`); an audit-write failure never blocks the request or converts a success into a denial. The commit is scoped to the named-user branch only; the grant-session branch is unchanged.
+
+9. **RLS posture.** Migration `0164_portal_user_identity_authority.sql` enables row-level security on `portal_users`, `portal_user_memberships`, `portal_user_invitations`, `portal_user_sessions`, and `portal_user_audit_events`, with `tenant_id = current_setting('app.tenant_id')::uuid` policies. All authority functions call `_set_tenant_rls` before any query that reads or writes tenant-scoped rows.
+
+10. **Residual legacy grant-session coexistence risk.** Legacy C7 grant sessions and named-user sessions live in disjoint tables (`portal_grants` vs `portal_user_sessions`); their prefixes are disjoint (opaque UUID-like vs `pnu1.`). A named-user session cannot be validated against the grant-service path and vice versa. Migration paths for existing engagements remain via the grant model until PR B decommissions it; there is no dual-write or shared-state hazard.
+
+11. **Production login UI is not changed by PR A.** No frontend code, no `apps/console/` code, no login route in the BFF is touched. All new routes are core-side APIs behind either the invitation-token boundary (public) or `governance:*` scopes (admin). PR B (portal BFF wiring) is out of scope for this record.
+
+**Audit exception coverage:** PR #577 adds `EXC-PORTAL-004` (`portal_named_user_enroll`), `EXC-PORTAL-005` (`portal_issue_invitation`), `EXC-PORTAL-006` (`portal_accept_invitation`), and `EXC-PORTAL-007` (`portal_revoke_named_session`) to `tools/ci/audit_exceptions.yaml`. All four routes emit portal-identity audit rows via `portal_user_authority._emit_audit()` into `portal_user_audit_events`; the `check_audit_coverage.py` scanner only recognizes `emit_engagement_audit_event`, `audit_atomicity_svc`, and `_c6_write_audit_event`, so per-authority audit tables must be documented via exception. Portal identity events are architecturally not engagement-scoped (invitation issuance and enrollment predate any engagement binding), so wiring them into `audit_atomicity_svc` would produce semantically incorrect events. Exceptions expire 2026-09-24. `EXC-PORTAL-001` through `EXC-PORTAL-003` are unaffected by this PR.
+
+**Security review:**
+
+- No existing valid session becomes invalid solely because of this change; the new denial paths (`PORTAL_MEMBERSHIP_REQUIRED`, `MEMBERSHIP_INACTIVE`, `PORTAL_USER_SUSPENDED`) only reject sessions that were already unsafe (no membership, deactivated membership, suspended user).
+- No auth middleware ordering is changed; `AuthGateMiddleware` still runs before `PortalClientScopeMiddleware` and continues to populate `request.state.tenant_id`.
+- No OPA policy files, no cryptographic key material, no secret handling code, and no CI workflow files are modified by this SOC entry. `tools/ci/audit_exceptions.yaml` is a policy input, not executable CI code.
+- New public paths are narrowly scoped: `/portal/invitations/{...}` covers only invitation preflight and acceptance (both idempotent under RLS + token fingerprint); `/portal/named-sessions/{...}` covers only session revocation (self-authorizing).
+- Token material never lands in the DB: invitations and sessions are stored as HMAC-SHA256 fingerprints (peppered via `FG_KEY_PEPPER`); the raw `pni1.`/`pnu1.` tokens are returned exactly once at issuance.
+- Middleware-level regression tests were added to `tests/test_portal_user_authority.py`:
+  - `test_public_paths_covers_invitation_acceptance_but_not_admin_issuance` — admin issuance stays protected.
+  - `test_public_paths_prefix_boundary_admin_route_stays_protected` — trailing slash on `/portal/invitations/` is asserted as a constant.
+  - `test_middleware_denies_when_portal_membership_id_is_none` — P1-2 fail-closed guard.
+  - `test_middleware_allows_tenant_wide_membership` — P1-2 case C (tenant-wide membership).
+  - `test_middleware_denies_engagement_mismatch` — P1-2 case B (wrong engagement).
+  - `test_middleware_commits_on_success_path` — P2-5 (audit + `last_validated_at` persist).
+  - `test_middleware_denies_on_named_session_failure` — denial codes propagate to clients.
+  Plus `test_validate_session_rejects_inactive_membership` (P1-3) and `test_validate_session_rejects_suspended_user` (P1-4) already present.
+- Session and invitation TTLs remain the defaults (14 days / 7 days respectively) and are validated by the DB `expires_at > now()` clause plus a Python belt-and-suspenders check on the acceptance path.
+- No route inventory / plane registry / topology hash change enlarges the attack surface beyond the four PR A routes explicitly registered here; the accompanying `tools/ci/*.json` and `.sha256` updates are the auto-generated register of these four routes, not policy changes.
+
+**SOC review outcome:** approved. PR A introduces the named-user authority as an isolated identity population with its own audit table, its own token discriminators, and no shared authorization rows with the workforce authority. The five bot-review findings (P1-1 through P2-5) close known session-validation bypasses; no gate is weakened. Production login UI is untouched. Legacy grant-session coexistence carries no dual-write hazard because the two authorities occupy disjoint tables and disjoint token namespaces.

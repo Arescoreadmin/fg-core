@@ -19999,3 +19999,71 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `make fg-fast` → PASS
   - `make fg-security` → 1198 passed, 1 skipped
 - **Result:** Pass.
+
+## PR #577 (branch: feat/portal-production-named-user-enrollment) — feat(portal): establish external user identity and session authority (PR A) — bot review fixes (2026-07-25)
+
+- **Date:** 2026-07-25
+- **Category:** Auth / identity authority / schema — bot review P1+P2 fixes
+- **Files changed:**
+  - `api/security/public_paths.py`
+  - `api/portal_user_authority.py`
+  - `api/middleware/portal_scope.py`
+  - `docs/ai/PR_FIX_LOG.md`
+- **Root cause (four P1s + one P2 from bot reviewer):**
+  1. **P1 — invitation acceptance route unprotected**: `POST /portal/invitations/{token}/accept` was registered in the router but absent from `public_paths.py`. `AuthGateMiddleware` therefore returned 401 to external invitees before the Auth0 token and invitation fingerprint were evaluated.
+  2. **P1 — portal_membership_id=None treated as tenant-wide**: In `portal_scope.py`, the engagement binding check only tested `result.engagement_id is not None`. A session issued without a membership (`portal_membership_id=None`, which happens when `find_or_create_portal_user` finds no active membership during `/named-users/enroll`) returns `engagement_id=None` from the LEFT JOIN, making the middleware grant access to all engagements — as if the user had a tenant-wide membership.
+  3. **P1 — inactive memberships not rejected**: `validate_session` fetched `pum.active` in the SELECT but never checked it. A deactivated membership without an `auth_version` bump continued authorizing engagement requests.
+  4. **P1 — suspended portal users not rejected during session validation**: The SELECT only joined `portal_user_memberships`, never `portal_users`. A user suspended or deactivated after session issuance kept all active sessions until 14-day expiry.
+  5. **P2 — audit events and last_validated_at rolled back**: `validate_named_session` writes `last_validated_at` and inserts a `portal_session_validated` audit event, but the middleware closed the SQLAlchemy session without committing, rolling back both writes.
+- **Fix:**
+  1. Added `/portal/invitations/` to `PUBLIC_PATHS_PREFIX`. This prefix matches `/{token}/accept` and `/{token}` preflight GETs but NOT the admin `POST /portal/invitations` (no trailing slash). Pattern follows existing entries (`/workforce/users/accept-invite`, `/identity/invitations/accept`, `/agents/enroll`).
+  2. Added explicit `portal_membership_id is None` guard in middleware before the engagement binding check: sessions without a membership are denied with `PORTAL_MEMBERSHIP_REQUIRED` (not `PORTAL_ENGAGEMENT_MISMATCH`).
+  3. Added `membership_active` check in `validate_session` between the user-status check and the auth_version check. Deactivated membership → `MEMBERSHIP_INACTIVE`.
+  4. Changed the SELECT in `validate_session` from `LEFT JOIN portal_user_memberships` to also `JOIN portal_users` (INNER), selecting `pu.status AS portal_user_status`. Added check before auth_version: `portal_user_status != 'active'` → `PORTAL_USER_SUSPENDED`.
+  5. Added `db.commit()` in the middleware's named-user session path immediately after `validate_named_session` returns, before the `finally: db.close()`.
+- **Behavioral impact:** Breaking-in-a-good-way for the auth path: sessions issued to users without memberships, to suspended users, or backed by deactivated memberships now correctly fail. No existing valid sessions are affected.
+- **Security impact:** High positive. Fixes three session-validation bypasses.
+- **Schema/API impact:** None. No new tables or routes.
+- **Validation:**
+  - `python -m pytest tests/test_portal_user_authority.py` → 38 passed
+  - Syntax check all modified Python files → OK
+- **Result:** Pending CI re-run.
+
+## PR #577 (branch: feat/portal-production-named-user-enrollment) — fix(portal): harden named-user authorization and audit lifecycle (2026-07-25)
+
+- **Date:** 2026-07-25
+- **Category:** Auth / identity authority / SOC review — five-finding remediation surgical fix
+- **Files changed:**
+  - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+  - `tests/test_portal_user_authority.py`
+  - `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** After the previous three PR #577 commits (`4749665a`, `ccf6785e`, `5a8249df`, `93af8a32`) the five bot findings P1-1..P1-4 and P2-5 were fixed in code, but two gates still failed:
+  1. `soc-review-sync` (SOC-HIGH-002): changes to `api/security/public_paths.py`, `api/middleware/portal_scope.py`, and `tools/ci/*` were not accompanied by an entry in `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+  2. Middleware-level regression coverage for the P1-2 (`PORTAL_MEMBERSHIP_REQUIRED`) and P2-5 (`db.commit()` after `validate_named_session`) invariants was missing — only authority-level tests existed.
+- **Fix:**
+  1. Appended a `feat/portal-production-named-user-enrollment — PR #577 named-user portal authority (2026-07-25)` section to `docs/SOC_EXECUTION_GATES_2026-02-15.md` covering all eleven required narrative points (invitation-acceptance boundary, membership-required invariant, inactive-membership fail-closed, portal-user-status fail-closed, `auth_version` enforcement, tenant/engagement isolation, named-user vs legacy discriminator, audit transaction/persistence, RLS posture, residual legacy grant-session coexistence, explicit statement that production login UI is not changed by PR A) plus review of audit exceptions `EXC-PORTAL-004..007`.
+  2. Added seven middleware/public-path tests to `tests/test_portal_user_authority.py`:
+     - `test_public_paths_covers_invitation_acceptance_but_not_admin_issuance` — asserts `/portal/invitations/{token}/accept`, `/portal/invitations/{token}`, and `/portal/named-sessions/{id}` are public while `POST /portal/invitations` is not.
+     - `test_public_paths_prefix_boundary_admin_route_stays_protected` — pins the load-bearing trailing slash in `PUBLIC_PATHS_PREFIX`.
+     - `test_middleware_denies_when_portal_membership_id_is_none` — P1-2 fail-closed guard returns `PORTAL_MEMBERSHIP_REQUIRED`.
+     - `test_middleware_allows_tenant_wide_membership` — P1-2 case C (real tenant-wide membership → allowed).
+     - `test_middleware_denies_engagement_mismatch` — P1-2 case B (wrong engagement → 403).
+     - `test_middleware_commits_on_success_path` — P2-5 (middleware calls `db.commit()` on the named-user success path so `last_validated_at` + audit event persist).
+     - `test_middleware_denies_on_named_session_failure` — denial codes propagate through the 403 body.
+- **Classification per finding:**
+  - **P1-1** ALREADY FIXED in `ccf6785e` (`/portal/invitations/` added to `PUBLIC_PATHS_PREFIX`); test-coverage gap closed here.
+  - **P1-2** ALREADY FIXED in `ccf6785e` (explicit `portal_membership_id is None` guard in `portal_scope.py`); test-coverage gap closed here.
+  - **P1-3** ALREADY FIXED in `ccf6785e` (`membership_active` check in `validate_session`; `MEMBERSHIP_INACTIVE` denial code); existing test `test_validate_session_rejects_inactive_membership` covers it.
+  - **P1-4** ALREADY FIXED in `ccf6785e` (INNER JOIN `portal_users`, `portal_user_status != 'active'` check, `PORTAL_USER_SUSPENDED` denial code); existing test `test_validate_session_rejects_suspended_user` covers it.
+  - **P2-5** ALREADY FIXED in `ccf6785e` (`db.commit()` in middleware after `validate_named_session` returns, before `finally: db.close()`); test-coverage gap closed here.
+- **Audit exceptions:** `EXC-PORTAL-004` through `EXC-PORTAL-007` retained as justified. Each of the four routes (`portal_named_user_enroll`, `portal_issue_invitation`, `portal_accept_invitation`, `portal_revoke_named_session`) does emit portal-identity events into `portal_user_audit_events` via `portal_user_authority._emit_audit()`; the `check_audit_coverage.py` scanner only recognizes the engagement-audit trio (`emit_engagement_audit_event`, `audit_atomicity_svc`, `_c6_write_audit_event`), so per-authority audit tables must be documented via exception. Portal identity events are not engagement-scoped (invitations and enrollment predate any engagement binding); wiring them into `audit_atomicity_svc` would produce semantically incorrect events. Exceptions expire 2026-09-24 and will be revisited as part of the per-authority audit unification work.
+- **Behavioral impact:** None. All changes are test coverage and documentation; no production code path changes.
+- **Security impact:** None net-new; consolidates SOC review record for the already-shipped remediations.
+- **Schema/API impact:** None.
+- **Validation:**
+  - `python -m pytest tests/test_portal_user_authority.py` → 47 passed (40 baseline + 7 new).
+  - `ruff check` + `ruff format --check` on all modified files → clean.
+  - `mypy api/portal_user_authority.py api/portal.py api/middleware/portal_scope.py` → 0 issues.
+  - `make required-tests-gate`, `make fg-contract`, `make soc-manifest-verify`, `python -m tools.ci.check_audit_coverage` → pass.
+  - `make soc-review-sync` will pass once this commit lands, because `docs/SOC_EXECUTION_GATES_2026-02-15.md` will then appear in the `origin/main...HEAD` diff.
+- **Result:** Pass.

@@ -28,6 +28,10 @@ from starlette.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from api.db import get_sessionmaker
+from api.portal_user_authority import (
+    SESSION_TOKEN_PREFIX,
+    validate_session as validate_named_session,
+)
 from services.portal_grant_service import portal_grant_svc
 
 _PORTAL_ENGAGEMENT_RE = re.compile(r"^/field-assessment/engagements/([^/]+)")
@@ -173,20 +177,69 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
             request.state.portal_engagement_id = engagement_id
             return await call_next(request)
 
-        # Grant-based path (C7): opaque session token
-        session_id = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
-        if not session_id:
+        session_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+        if not session_token:
             return _json_403(
                 "Portal session required for engagement access",
                 "PORTAL_SESSION_REQUIRED",
             )
 
+        # Named-user session path (PR A): token prefix pnu1. discriminates deterministically.
+        if session_token.startswith(SESSION_TOKEN_PREFIX):
+            SessionLocal = get_sessionmaker()
+            db = SessionLocal()
+            try:
+                named_result = validate_named_session(
+                    db,
+                    raw_token=session_token,
+                    tenant_id=str(tenant_id),
+                )
+                db.commit()  # persist last_validated_at + audit event
+            except Exception:
+                db.close()
+                return _json_403(
+                    "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                )
+            finally:
+                db.close()
+
+            if not named_result.ok:
+                return _json_403(
+                    named_result.denial_reason or "Access denied",
+                    named_result.denial_code or "PORTAL_ACCESS_DENIED",
+                )
+
+            # A session without a membership has no engagement scope — deny access.
+            # This distinguishes "no membership" (portal_membership_id=None) from
+            # "tenant-wide membership" (engagement_id=None on the membership row).
+            if named_result.portal_membership_id is None:
+                return _json_403(
+                    "Session has no active membership for engagement access",
+                    "PORTAL_MEMBERSHIP_REQUIRED",
+                )
+
+            # Engagement binding: membership engagement_id=None means tenant-wide access.
+            if (
+                named_result.engagement_id is not None
+                and named_result.engagement_id != engagement_id
+            ):
+                return _json_403(
+                    "Session not authorized for this engagement",
+                    "PORTAL_ENGAGEMENT_MISMATCH",
+                )
+
+            request.state.portal_user_id = named_result.portal_user_id
+            request.state.portal_membership_id = named_result.portal_membership_id
+            request.state.portal_engagement_id = engagement_id
+            return await call_next(request)
+
+        # Grant-based path (C7): opaque session token (no versioned prefix).
         SessionLocal = get_sessionmaker()
         db = SessionLocal()
         try:
             result = portal_grant_svc.validate_session(
                 db,
-                session_id=session_id,
+                session_id=session_token,
                 tenant_id=str(tenant_id),
                 engagement_id=engagement_id,
             )

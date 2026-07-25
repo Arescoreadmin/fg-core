@@ -5101,8 +5101,32 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/portal/invitations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/invitations/{token}/accept",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/portal/me",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/portal/named-sessions/{session_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/named-users/enroll",
       "scopes": [],
       "source": "contract"
     },
@@ -6109,7 +6133,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-07-23T00:08:16.399034+00:00",
+  "generated_at": "2026-07-25T18:00:15.703817+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

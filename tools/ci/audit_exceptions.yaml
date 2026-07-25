@@ -306,3 +306,79 @@ exceptions:
       is the correct long-term solution.
     approval_date: "2026-06-16"
     approved_by: jcosat
+
+  - id: EXC-PORTAL-004
+    function_name: portal_named_user_enroll
+    file: api/portal.py
+    reason: >
+      Portal named-user enrollment route. Audit events are emitted to
+      portal_user_audit_events via portal_user_authority._emit_audit(). The gate
+      detects only audit_atomicity_svc.emit / emit_engagement_audit_event; engagement-
+      scoped audit is architecturally inappropriate for portal identity events (no
+      engagement_id exists at enrollment time). portal_user_audit_events is the
+      correct per-authority audit mechanism for this identity population.
+    owner: identity-team
+    expiration_date: "2026-09-24"
+    approval_reference: PR-577
+    jira_ticket: null
+    business_justification: >
+      portal_user_audit_events provides full event coverage for this route.
+      Engagement-scoped audit (audit_atomicity_svc) is structurally incompatible
+      with portal identity operations that predate and are independent of any
+      engagement. Wiring both would produce duplicate, semantically incorrect events.
+    approval_date: "2026-07-25"
+    approved_by: jcosat
+
+  - id: EXC-PORTAL-005
+    function_name: portal_issue_invitation
+    file: api/portal.py
+    reason: >
+      Portal invitation issuance route. Audit events are emitted to
+      portal_user_audit_events via portal_user_authority._emit_audit(). The gate
+      detects only audit_atomicity_svc.emit / emit_engagement_audit_event; the
+      invitation event belongs to the portal identity authority, not the engagement
+      audit plane. Same architectural rationale as EXC-PORTAL-004.
+    owner: identity-team
+    expiration_date: "2026-09-24"
+    approval_reference: PR-577
+    jira_ticket: null
+    business_justification: Same per-authority audit justification as EXC-PORTAL-004.
+    approval_date: "2026-07-25"
+    approved_by: jcosat
+
+  - id: EXC-PORTAL-006
+    function_name: portal_accept_invitation
+    file: api/portal.py
+    reason: >
+      Portal invitation acceptance route. Unauthenticated endpoint (invite token IS
+      the credential); no service-account scope exists to call audit_atomicity_svc.
+      Audit events are emitted to portal_user_audit_events via
+      portal_user_authority._emit_audit() inside the atomic accept_invitation() CAS.
+      Same architectural rationale as EXC-PORTAL-004.
+    owner: identity-team
+    expiration_date: "2026-09-24"
+    approval_reference: PR-577
+    jira_ticket: null
+    business_justification: >
+      Route is intentionally unauthenticated (PUBLIC_PATHS_PREFIX). Calling
+      audit_atomicity_svc.emit() requires a tenant context that does not exist at
+      this layer. portal_user_audit_events captures the event with full fidelity.
+    approval_date: "2026-07-25"
+    approved_by: jcosat
+
+  - id: EXC-PORTAL-007
+    function_name: portal_revoke_named_session
+    file: api/portal.py
+    reason: >
+      Portal named-user session self-revocation route. The pnu1. session token IS
+      the authorization credential; no service-account scope exists to call
+      audit_atomicity_svc. Audit events are emitted to portal_user_audit_events via
+      portal_user_authority._emit_audit(). Same architectural rationale as
+      EXC-PORTAL-004.
+    owner: identity-team
+    expiration_date: "2026-09-24"
+    approval_reference: PR-577
+    jira_ticket: null
+    business_justification: Same per-authority audit justification as EXC-PORTAL-006.
+    approval_date: "2026-07-25"
+    approved_by: jcosat

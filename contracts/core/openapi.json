@@ -28755,6 +28755,75 @@
         "title": "PolicyVersionResponse",
         "type": "object"
       },
+      "PortalAcceptInvitationBody": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "oidc_provider": {
+            "default": "auth0",
+            "title": "Oidc Provider",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "tenant_id"
+        ],
+        "title": "PortalAcceptInvitationBody",
+        "type": "object"
+      },
+      "PortalAcceptInvitationResponse": {
+        "properties": {
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "membership_id": {
+            "title": "Membership Id",
+            "type": "string"
+          },
+          "portal_role": {
+            "title": "Portal Role",
+            "type": "string"
+          },
+          "portal_user_id": {
+            "title": "Portal User Id",
+            "type": "string"
+          },
+          "session_token": {
+            "title": "Session Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portal_user_id",
+          "membership_id",
+          "session_token",
+          "expires_at",
+          "portal_role",
+          "engagement_id"
+        ],
+        "title": "PortalAcceptInvitationResponse",
+        "type": "object"
+      },
       "PortalApprovalSummary": {
         "properties": {
           "approval_type": {
@@ -29358,6 +29427,77 @@
         "title": "PortalControlSummary",
         "type": "object"
       },
+      "PortalEnrollBody": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "oidc_provider": {
+            "default": "auth0",
+            "title": "Oidc Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token"
+        ],
+        "title": "PortalEnrollBody",
+        "type": "object"
+      },
+      "PortalEnrollResponse": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "membership_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Id"
+          },
+          "portal_user_id": {
+            "title": "Portal User Id",
+            "type": "string"
+          },
+          "session_token": {
+            "title": "Session Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portal_user_id",
+          "email",
+          "display_name",
+          "session_token",
+          "expires_at",
+          "membership_id"
+        ],
+        "title": "PortalEnrollResponse",
+        "type": "object"
+      },
       "PortalEvidenceDetailResponse": {
         "properties": {
           "control_id": {
@@ -29652,6 +29792,103 @@
           "access_token"
         ],
         "title": "PortalIdentityLoginBody",
+        "type": "object"
+      },
+      "PortalIssueInvitationBody": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "portal_role": {
+            "default": "viewer",
+            "title": "Portal Role",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "PortalIssueInvitationBody",
+        "type": "object"
+      },
+      "PortalIssueInvitationResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invitation_id": {
+            "title": "Invitation Id",
+            "type": "string"
+          },
+          "portal_role": {
+            "title": "Portal Role",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "token",
+          "expires_at",
+          "email",
+          "portal_role",
+          "engagement_id"
+        ],
+        "title": "PortalIssueInvitationResponse",
         "type": "object"
       },
       "PortalMeResponse": {
@@ -107592,6 +107829,119 @@
         ]
       }
     },
+    "/portal/invitations": {
+      "post": {
+        "description": "Issue a named-user invitation token.\n\nRequires governance:write scope (admin/operator action).\nReturns the raw pni1. token \u2014 caller must deliver it to the invitee.\nToken is stored as HMAC-SHA256 fingerprint only; the raw value is not\nrecoverable after this response.",
+        "operationId": "portal_issue_invitation_portal_invitations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalIssueInvitationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalIssueInvitationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Issue Invitation",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/invitations/{token}/accept": {
+      "post": {
+        "description": "Accept a portal invitation.\n\nNo service-account auth required \u2014 the invitation token IS the authorization.\nValidates the Auth0 access_token to establish the acceptor's OIDC identity,\nthen atomically accepts the invitation and creates the portal_user + membership.\n\nConcurrent acceptance: SELECT FOR UPDATE ensures exactly one winner.",
+        "operationId": "portal_accept_invitation_portal_invitations__token__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalAcceptInvitationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalAcceptInvitationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Accept Invitation",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
     "/portal/me": {
       "get": {
         "description": "Return session identity and accessible engagement IDs.",
@@ -107637,6 +107987,102 @@
           }
         },
         "summary": "Portal Me",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/named-sessions/{session_id}": {
+      "delete": {
+        "description": "Revoke a named-user portal session (logout).\n\nRequires the session's own pnu1. token in X-FG-Portal-Session \u2014 the session\nauthorizes its own revocation without a separate service account.",
+        "operationId": "portal_revoke_named_session_portal_named_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Revoke Named Session",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/named-users/enroll": {
+      "post": {
+        "description": "OIDC callback: resolve/create a portal_users record, issue a named-user session.\n\nMaps OIDC identity into portal_users (NOT tenant_users). Called server-side\nby the portal BFF after Auth0 code exchange. Requires governance:read scope\n(BFF service account authentication).\n\nReturns a pnu1. prefixed session token. The BFF stores this in a dedicated\ncookie (separate from grant-based sessions).",
+        "operationId": "portal_named_user_enroll_portal_named_users_enroll_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalEnrollBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalEnrollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portal Named User Enroll",
         "tags": [
           "portal"
         ]
