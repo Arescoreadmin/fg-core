@@ -1289,8 +1289,10 @@ def validate_credential(
 
     with engine.begin() as conn:
         if is_postgres and tenant_id_hint:
+            # SET LOCAL does not accept bound parameters in psycopg3; use
+            # pg_catalog.set_config() which does.
             conn.execute(
-                text("SET LOCAL app.tenant_id = :tid"),
+                text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
                 {"tid": tenant_id_hint},
             )
 
