@@ -232,6 +232,7 @@ def test_validate_session_version_mismatch(mock_db):
         portal_role="viewer",
         membership_auth_version=2,       # bumped to 2 → mismatch
         membership_active=True,
+        portal_user_status="active",
     )
     mock_db.execute.return_value.fetchone.return_value = session_row
 
@@ -683,6 +684,7 @@ def test_validate_session_happy_path(mock_db):
         portal_role="assessor",
         membership_auth_version=1,   # matches snapshot
         membership_active=True,
+        portal_user_status="active",
     )
     mock_db.execute.return_value.fetchone.return_value = session_row
 
@@ -716,6 +718,7 @@ def test_validate_session_version_mismatch_denial_code(mock_db):
         portal_role="viewer",
         membership_auth_version=99,   # bumped — mismatch
         membership_active=True,
+        portal_user_status="active",
     )
     mock_db.execute.return_value.fetchone.return_value = session_row
 
@@ -1013,6 +1016,7 @@ def test_validate_session_no_version_check_skips_membership_version(mock_db):
         portal_role="viewer",
         membership_auth_version=99,  # mismatch — but check disabled
         membership_active=True,
+        portal_user_status="active",
     )
     mock_db.execute.return_value.fetchone.return_value = session_row
 
@@ -1030,6 +1034,58 @@ def test_validate_session_no_version_check_skips_membership_version(mock_db):
 def test_portal_user_svc_singleton_is_authority_instance():
     from api.portal_user_authority import portal_user_svc, PortalUserAuthority
     assert isinstance(portal_user_svc, PortalUserAuthority)
+
+
+def test_validate_session_rejects_suspended_user(mock_db):
+    """Suspended portal user → PORTAL_USER_SUSPENDED even if session is active."""
+    session_row = _make_row(
+        session_id=SESSION_UUID,
+        tenant_id=TENANT_ID,
+        portal_user_id=USER_UUID,
+        portal_membership_id=MEMBERSHIP_UUID,
+        auth_version_snapshot=1,
+        session_type="named_user_v1",
+        status="active",
+        expires_at=FUTURE,
+        engagement_id="eng-1",
+        portal_role="viewer",
+        membership_auth_version=1,
+        membership_active=True,
+        portal_user_status="suspended",  # user was suspended after session issuance
+    )
+    mock_db.execute.return_value.fetchone.return_value = session_row
+
+    raw_token = SESSION_TOKEN_PREFIX + "b" * 64
+    result = validate_session(mock_db, raw_token=raw_token, tenant_id=TENANT_ID)
+
+    assert result.ok is False
+    assert result.denial_code == "PORTAL_USER_SUSPENDED"
+
+
+def test_validate_session_rejects_inactive_membership(mock_db):
+    """Deactivated membership → MEMBERSHIP_INACTIVE even without auth_version bump."""
+    session_row = _make_row(
+        session_id=SESSION_UUID,
+        tenant_id=TENANT_ID,
+        portal_user_id=USER_UUID,
+        portal_membership_id=MEMBERSHIP_UUID,
+        auth_version_snapshot=1,
+        session_type="named_user_v1",
+        status="active",
+        expires_at=FUTURE,
+        engagement_id="eng-1",
+        portal_role="viewer",
+        membership_auth_version=1,   # version unchanged — only deactivated
+        membership_active=False,     # deactivated
+        portal_user_status="active",
+    )
+    mock_db.execute.return_value.fetchone.return_value = session_row
+
+    raw_token = SESSION_TOKEN_PREFIX + "d" * 64
+    result = validate_session(mock_db, raw_token=raw_token, tenant_id=TENANT_ID)
+
+    assert result.ok is False
+    assert result.denial_code == "MEMBERSHIP_INACTIVE"
 
 
 def test_accept_invitation_expired_status_raises_invalid(mock_db):

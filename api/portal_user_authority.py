@@ -875,8 +875,11 @@ def validate_session(
                     pum.engagement_id         AS engagement_id,
                     pum.portal_role           AS portal_role,
                     pum.auth_version          AS membership_auth_version,
-                    pum.active                AS membership_active
+                    pum.active                AS membership_active,
+                    pu.status                 AS portal_user_status
                 FROM   portal_user_sessions pus
+                JOIN   portal_users pu
+                       ON pu.id = pus.portal_user_id
                 LEFT JOIN portal_user_memberships pum
                        ON pum.id = pus.portal_membership_id
                 WHERE  pus.token_fingerprint = :fp
@@ -913,6 +916,43 @@ def validate_session(
     session_id = _coerce_uuid(row.session_id)
     portal_user_id = _coerce_uuid(row.portal_user_id)
     portal_membership_id = _coerce_uuid(row.portal_membership_id)
+
+    # Portal user must still be active (suspension/deactivation post-issuance).
+    if row.portal_user_status != "active":
+        _emit_audit(
+            db,
+            event_type="portal_session_rejected_version_mismatch",
+            tenant_id=tenant_id,
+            portal_user_id=portal_user_id,
+            outcome="denied",
+            metadata=f"portal_user status={row.portal_user_status}",
+        )
+        return SessionValidationResult(
+            ok=False,
+            portal_user_id=portal_user_id,
+            tenant_id=tenant_id,
+            denial_reason="portal user is suspended or deactivated",
+            denial_code="PORTAL_USER_SUSPENDED",
+        )
+
+    # Membership must still be active (explicit deactivation invalidates sessions).
+    if portal_membership_id is not None and row.membership_active is not None and not row.membership_active:
+        _emit_audit(
+            db,
+            event_type="portal_session_rejected_version_mismatch",
+            tenant_id=tenant_id,
+            portal_user_id=portal_user_id,
+            outcome="denied",
+            metadata="membership deactivated",
+        )
+        return SessionValidationResult(
+            ok=False,
+            portal_user_id=portal_user_id,
+            portal_membership_id=portal_membership_id,
+            tenant_id=tenant_id,
+            denial_reason="membership has been deactivated",
+            denial_code="MEMBERSHIP_INACTIVE",
+        )
 
     # Version-mismatch check (auth_version bump invalidates all existing sessions)
     if (

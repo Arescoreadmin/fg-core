@@ -19999,3 +19999,32 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `make fg-fast` → PASS
   - `make fg-security` → 1198 passed, 1 skipped
 - **Result:** Pass.
+
+## PR #577 (branch: feat/portal-production-named-user-enrollment) — feat(portal): establish external user identity and session authority (PR A) — bot review fixes (2026-07-25)
+
+- **Date:** 2026-07-25
+- **Category:** Auth / identity authority / schema — bot review P1+P2 fixes
+- **Files changed:**
+  - `api/security/public_paths.py`
+  - `api/portal_user_authority.py`
+  - `api/middleware/portal_scope.py`
+  - `docs/ai/PR_FIX_LOG.md`
+- **Root cause (four P1s + one P2 from bot reviewer):**
+  1. **P1 — invitation acceptance route unprotected**: `POST /portal/invitations/{token}/accept` was registered in the router but absent from `public_paths.py`. `AuthGateMiddleware` therefore returned 401 to external invitees before the Auth0 token and invitation fingerprint were evaluated.
+  2. **P1 — portal_membership_id=None treated as tenant-wide**: In `portal_scope.py`, the engagement binding check only tested `result.engagement_id is not None`. A session issued without a membership (`portal_membership_id=None`, which happens when `find_or_create_portal_user` finds no active membership during `/named-users/enroll`) returns `engagement_id=None` from the LEFT JOIN, making the middleware grant access to all engagements — as if the user had a tenant-wide membership.
+  3. **P1 — inactive memberships not rejected**: `validate_session` fetched `pum.active` in the SELECT but never checked it. A deactivated membership without an `auth_version` bump continued authorizing engagement requests.
+  4. **P1 — suspended portal users not rejected during session validation**: The SELECT only joined `portal_user_memberships`, never `portal_users`. A user suspended or deactivated after session issuance kept all active sessions until 14-day expiry.
+  5. **P2 — audit events and last_validated_at rolled back**: `validate_named_session` writes `last_validated_at` and inserts a `portal_session_validated` audit event, but the middleware closed the SQLAlchemy session without committing, rolling back both writes.
+- **Fix:**
+  1. Added `/portal/invitations/` to `PUBLIC_PATHS_PREFIX`. This prefix matches `/{token}/accept` and `/{token}` preflight GETs but NOT the admin `POST /portal/invitations` (no trailing slash). Pattern follows existing entries (`/workforce/users/accept-invite`, `/identity/invitations/accept`, `/agents/enroll`).
+  2. Added explicit `portal_membership_id is None` guard in middleware before the engagement binding check: sessions without a membership are denied with `PORTAL_MEMBERSHIP_REQUIRED` (not `PORTAL_ENGAGEMENT_MISMATCH`).
+  3. Added `membership_active` check in `validate_session` between the user-status check and the auth_version check. Deactivated membership → `MEMBERSHIP_INACTIVE`.
+  4. Changed the SELECT in `validate_session` from `LEFT JOIN portal_user_memberships` to also `JOIN portal_users` (INNER), selecting `pu.status AS portal_user_status`. Added check before auth_version: `portal_user_status != 'active'` → `PORTAL_USER_SUSPENDED`.
+  5. Added `db.commit()` in the middleware's named-user session path immediately after `validate_named_session` returns, before the `finally: db.close()`.
+- **Behavioral impact:** Breaking-in-a-good-way for the auth path: sessions issued to users without memberships, to suspended users, or backed by deactivated memberships now correctly fail. No existing valid sessions are affected.
+- **Security impact:** High positive. Fixes three session-validation bypasses.
+- **Schema/API impact:** None. No new tables or routes.
+- **Validation:**
+  - `python -m pytest tests/test_portal_user_authority.py` → 38 passed
+  - Syntax check all modified Python files → OK
+- **Result:** Pending CI re-run.

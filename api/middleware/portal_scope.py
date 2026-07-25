@@ -191,6 +191,7 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                     raw_token=session_token,
                     tenant_id=str(tenant_id),
                 )
+                db.commit()  # persist last_validated_at + audit event
             except Exception:
                 db.close()
                 return _json_403("Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED")
@@ -203,8 +204,16 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                     result.denial_code or "PORTAL_ACCESS_DENIED",
                 )
 
-            # Engagement binding: session membership must cover the requested engagement.
-            # NULL engagement_id on the membership = tenant-wide access (all engagements).
+            # A session without a membership has no engagement scope — deny access.
+            # This distinguishes "no membership" (portal_membership_id=None) from
+            # "tenant-wide membership" (engagement_id=None on the membership row).
+            if result.portal_membership_id is None:
+                return _json_403(
+                    "Session has no active membership for engagement access",
+                    "PORTAL_MEMBERSHIP_REQUIRED",
+                )
+
+            # Engagement binding: membership engagement_id=None means tenant-wide access.
             if result.engagement_id is not None and result.engagement_id != engagement_id:
                 return _json_403(
                     "Session not authorized for this engagement",

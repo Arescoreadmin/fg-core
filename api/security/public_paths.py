@@ -60,4 +60,8 @@ PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     "/_legacy",
     "/ui",
     "/field-assessment/reports/verify/",
+    # Portal named-user invitation token flow: the pni1. token IS the credential; no prior
+    # API-key auth exists for an external invitee. Covers /{token}/accept and /{token} preflight.
+    # The admin POST /portal/invitations (no trailing slash) is NOT matched by this prefix.
+    "/portal/invitations/",
 )
