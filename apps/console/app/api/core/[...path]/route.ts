@@ -111,6 +111,7 @@ function credentialError(
   code:
     | 'CORE_AUTH_MISSING'
     | 'CORE_AUTH_REJECTED'
+    | 'CORE_ACCESS_DENIED'
     | 'CREDENTIAL_NOT_FOUND'
     | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE'
     | 'TENANT_NOT_FOUND'
@@ -367,11 +368,17 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   // Never pass raw 401/403 or 5xx bodies back to the browser — they may contain
   // key hints or internal detail. Always include request_id for traceability.
   if (!isAdminPath) {
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       console.warn(
-        `[core-proxy] CORE_AUTH_REJECTED status=${response.status} tenant_id=${tenantId} target=${target} request_id=${requestId}`,
+        `[core-proxy] CORE_AUTH_REJECTED status=401 tenant_id=${tenantId} target=${target} request_id=${requestId}`,
       );
       return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
+    }
+    if (response.status === 403) {
+      console.warn(
+        `[core-proxy] CORE_ACCESS_DENIED status=403 tenant_id=${tenantId} target=${target} request_id=${requestId}`,
+      );
+      return credentialError('CORE_ACCESS_DENIED', 403, requestId, tenantId);
     }
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       console.warn(

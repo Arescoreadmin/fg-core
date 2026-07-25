@@ -11,6 +11,7 @@
  *   EDGE_CONFIG            — connection string (auto-set when you connect the store in Vercel dashboard)
  *   VERCEL_API_TOKEN       — a Vercel API token with edge-config write access
  */
+import Redis from 'ioredis';
 
 export interface TenantRecord {
   label: string;
@@ -118,35 +119,62 @@ export async function upsertTenantInUpstash(tenantId: string, record: Omit<Tenan
 /**
  * Canonical portal key resolution (R4.8+).
  *
- * Reads from `portal:tenant:{id}:key` — the authoritative path written by
+ * Reads `portal:tenant:{id}:key` from Upstash REST first, then ioredis
+ * (BFF_REDIS_URL / REDIS_URL) as fallback — mirroring the write priority in
  * provision-tenant. The legacy `TenantRecord.api_key` registry field is
- * intentionally NOT used here: it stores pre-canonical keys that Core's
- * credential authority now rejects with 401.
+ * intentionally NOT consulted: it stores pre-canonical keys that Core's
+ * credential authority rejects with 401.
  *
  * Returns:
- *   { key: string }         — key found in Upstash
- *   { key: null }           — Upstash was reachable but key absent (tenant never provisioned)
- *   { key: null, unavailable: true } — Upstash unreachable / not configured
+ *   { key: string }              — key found in Upstash or Redis
+ *   { key: null }                — at least one backend confirmed key absent
+ *   { key: null, unavailable: true } — all configured backends unreachable / none configured
  */
 export async function getTenantApiKey(
   tenantId: string,
 ): Promise<{ key: string | null; unavailable?: true }> {
+  const portalKey = `${PORTAL_KEY_PREFIX}:${tenantId}:key`;
+  let cleanNil = false; // at least one backend was reachable and returned nil
+
+  // Try Upstash REST first
   const cfg = getUpstashConfig();
-  if (!cfg) {
-    return { key: null, unavailable: true };
+  if (cfg) {
+    try {
+      const result = await upstashCommand(cfg.url, cfg.token, ['GET', portalKey]);
+      if (typeof result === 'string' && result) return { key: result };
+      cleanNil = true; // reachable but key absent — still check Redis
+    } catch {
+      // Upstash unreachable — fall through to Redis
+    }
   }
-  try {
-    const result = await upstashCommand(cfg.url, cfg.token, [
-      'GET',
-      `${PORTAL_KEY_PREFIX}:${tenantId}:key`,
-    ]);
-    if (typeof result === 'string' && result) return { key: result };
-    // Upstash returned nil — key absent for this tenant
-    return { key: null };
-  } catch {
-    // Upstash unreachable
-    return { key: null, unavailable: true };
+
+  // Try ioredis fallback (mirrors BFF_REDIS_URL / REDIS_URL write path in provision-tenant)
+  const redisUrl = (process.env.BFF_REDIS_URL || process.env.REDIS_URL || '').trim();
+  if (redisUrl) {
+    let client: InstanceType<typeof Redis> | null = null;
+    try {
+      client = new Redis(redisUrl, {
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+        enableOfflineQueue: false,
+        lazyConnect: true,
+      });
+      await client.connect();
+      const val = await client.get(portalKey);
+      if (val) return { key: val };
+      cleanNil = true; // reachable but key absent
+    } catch {
+      // Redis unreachable
+    } finally {
+      try { client?.disconnect(); } catch { /* ignore */ }
+    }
   }
+
+  // A clean nil from any reachable backend means the key is genuinely absent
+  if (cleanNil) return { key: null };
+
+  // All configured backends failed, or none are configured
+  return { key: null, unavailable: true };
 }
 
 function parseLegacyEnvKeys(): TenantMap {

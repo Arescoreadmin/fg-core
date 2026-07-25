@@ -3,25 +3,24 @@
 /**
  * core-credential-resolution.test.js
  *
- * 13 regression tests (A–M) for the Console BFF canonical Core credential
+ * 14 regression tests (A–M + F2) for the Console BFF canonical Core credential
  * resolution path. All Core, Redis, and Upstash calls are mocked inline —
  * no live network dependencies.
  *
- * Each test mirrors the invariants defined in the Phase 4 mission spec:
- *
- *   A  canonical fgk. key from portal:tenant:{id}:key → Core 200 → BFF 200
- *   B  Upstash returns key, Redis unavailable → resolves correctly
- *   C  Redis returns key, Upstash unavailable → resolves correctly
- *   D  Both persistence backends unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE 503
- *   E  Key absent in both backends (tenant never provisioned) → CORE_AUTH_MISSING 401
- *   F  Core returns 401 for the key → CORE_AUTH_REJECTED 401 (not passthrough)
- *   G  Core returns 502 → CORE_UNAVAILABLE 502
- *   H  tenant_id in key path MUST match query param — mismatch → reject
- *   I  response body never contains fgk. key substring
- *   J  response always carries request_id
- *   K  stale key → Core 401 → CORE_AUTH_REJECTED, no auto-rotation from read
- *   L  legacy TenantRecord.api_key is NOT used for Core auth
- *   M  provision-tenant writes full fgk.{payload}.{secret} format
+ *   A   canonical fgk. key from portal:tenant:{id}:key → Core 200 → BFF 200
+ *   B   Upstash nil → Redis fallback resolves key → Core 200 → BFF 200
+ *   C   Upstash throws (unreachable) → Redis has key → Core 200 → BFF 200
+ *   D   Both Upstash and Redis unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE 503
+ *   E   Key absent in both backends → CORE_AUTH_MISSING 401
+ *   F   Core returns 401 → CORE_AUTH_REJECTED 401 (not passthrough)
+ *   F2  Core returns 403 → CORE_ACCESS_DENIED 403 (not rewritten to 401)
+ *   G   Core returns 502 → CORE_UNAVAILABLE 502
+ *   H   tenant_id in key path MUST match query param — mismatch → reject
+ *   I   response body never contains fgk. key substring
+ *   J   response always carries request_id
+ *   K   stale key → Core 401 → CORE_AUTH_REJECTED, no auto-rotation from read
+ *   L   legacy TenantRecord.api_key is NOT used for Core auth
+ *   M   provision-tenant writes full fgk.{payload}.{secret} format
  */
 
 const assert = require('node:assert/strict');
@@ -39,8 +38,17 @@ const ROUTE_SRC = read('app/api/core/[...path]/route.ts');
 const REGISTRY_SRC = read('lib/tenant-registry.ts');
 const PROVISION_SRC = read('app/api/admin/provision-tenant/route.ts');
 
-/** Minimal inline mock of the credential resolution logic from route.ts */
-function buildMockResolveCoreAuth({ upstashKey, upstashUnavailable, coreApiKey } = {}) {
+/**
+ * Minimal inline mock of the credential resolution logic from route.ts +
+ * tenant-registry.ts. Simulates the two-backend (Upstash → Redis) fallback.
+ */
+function buildMockResolveCoreAuth({
+  upstashKey,
+  upstashUnavailable = false,
+  redisKey,
+  redisUnavailable = false,
+  coreApiKey,
+} = {}) {
   return async function resolveCoreAuth(tenantId, requestId) {
     const CORE_TENANT_ID = 'operator-default';
     const CORE_API_KEY = coreApiKey || null;
@@ -50,14 +58,25 @@ function buildMockResolveCoreAuth({ upstashKey, upstashUnavailable, coreApiKey }
       return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
     }
 
-    // Simulate getTenantApiKey
-    if (upstashUnavailable) {
-      return { tenantId, apiKey: null, errorCode: 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' };
+    // Simulate getTenantApiKey two-backend logic (mirrors tenant-registry.ts)
+    let cleanNil = false;
+
+    // Upstash attempt
+    if (!upstashUnavailable) {
+      if (typeof upstashKey === 'string' && upstashKey) return { tenantId, apiKey: upstashKey };
+      cleanNil = true; // Upstash reachable, key absent
     }
-    if (typeof upstashKey === 'string' && upstashKey) {
-      return { tenantId, apiKey: upstashKey };
+
+    // Redis fallback
+    if (!redisUnavailable && (redisKey !== undefined || !upstashUnavailable)) {
+      if (typeof redisKey === 'string' && redisKey) return { tenantId, apiKey: redisKey };
+      if (redisKey === null) cleanNil = true; // Redis reachable, key absent
+    } else if (!redisUnavailable && redisKey === undefined && upstashUnavailable) {
+      // Redis not configured (undefined = not present in this test)
     }
-    return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
+
+    if (cleanNil) return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
+    return { tenantId, apiKey: null, errorCode: 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' };
   };
 }
 
@@ -80,13 +99,17 @@ async function simulateProxy(opts = {}) {
     tenantId = 'lace-money-group',
     upstashKey,
     upstashUnavailable = false,
+    redisKey,
+    redisUnavailable = false,
     coreApiKey,
     coreStatus = 200,
     coreBody,
     requestId = 'test-req-' + Math.random().toString(36).slice(2),
   } = opts;
 
-  const resolveCoreAuth = buildMockResolveCoreAuth({ upstashKey, upstashUnavailable, coreApiKey });
+  const resolveCoreAuth = buildMockResolveCoreAuth({
+    upstashKey, upstashUnavailable, redisKey, redisUnavailable, coreApiKey,
+  });
   const mockFetch = buildMockProxyResult({ coreStatus, coreBody });
 
   const coreAuth = await resolveCoreAuth(tenantId, requestId);
@@ -105,10 +128,20 @@ async function simulateProxy(opts = {}) {
   const coreResponse = await mockFetch();
 
   // Structured error translation (mirrors proxyToCore)
-  if (coreResponse.status === 401 || coreResponse.status === 403) {
+  // 401 → CORE_AUTH_REJECTED (invalid/missing credential)
+  // 403 → CORE_ACCESS_DENIED (valid credential but insufficient scope/policy)
+  if (coreResponse.status === 401) {
     return {
       status: 401,
       body: { error: 'CORE_AUTH_REJECTED', request_id: requestId, tenant_id: tenantId },
+      headers: { 'x-request-id': requestId, 'Cache-Control': 'no-store' },
+      sentKey,
+    };
+  }
+  if (coreResponse.status === 403) {
+    return {
+      status: 403,
+      body: { error: 'CORE_ACCESS_DENIED', request_id: requestId, tenant_id: tenantId },
       headers: { 'x-request-id': requestId, 'Cache-Control': 'no-store' },
       sentKey,
     };
@@ -142,45 +175,55 @@ test('A: canonical fgk. key from portal:tenant:{id}:key → Core 200 → BFF 200
   assert.ok(!result.body.error, 'no error in success response');
 });
 
-// ─── Test B: Upstash returns key, Redis unavailable → resolves correctly ──────
-// In the current architecture, getTenantApiKey reads from Upstash only.
-// This test verifies the source still uses Upstash as the authority.
+// ─── Test B: Upstash nil → Redis fallback hit → BFF 200 ───────────────────────
+// provision-tenant writes to both Redis and Upstash. If Upstash is absent/nil
+// but Redis has the key, the request must succeed (not 503).
 
-test('B: Upstash is the authoritative key source (no Redis fallback in getTenantApiKey)', () => {
-  const getTenantApiKeyFn = REGISTRY_SRC.match(
-    /export async function getTenantApiKey[\s\S]*?\n\}/,
-  )?.[0] ?? '';
+test('B: Upstash nil → Redis fallback resolves key → Core 200 → BFF 200', async () => {
+  const redisKey = 'fgk.redisbackup.secret';
+  // Upstash is reachable but returns nil (upstashKey=undefined, upstashUnavailable=false)
+  const result = await simulateProxy({
+    upstashKey: undefined,
+    upstashUnavailable: false,
+    redisKey,
+    coreStatus: 200,
+  });
 
-  assert.ok(getTenantApiKeyFn, 'getTenantApiKey must exist in tenant-registry.ts');
-  // Must call upstashCommand to retrieve the key
-  assert.match(getTenantApiKeyFn, /upstashCommand/, 'must read from Upstash');
-  // Must use the portal:tenant:{id}:key path
-  assert.match(getTenantApiKeyFn, /\$\{PORTAL_KEY_PREFIX\}:\$\{tenantId\}:key/);
-  // Must NOT call ioredis or require('ioredis') — Redis is not a read-path backend
-  assert.doesNotMatch(getTenantApiKeyFn, /ioredis/, 'ioredis must not be used in getTenantApiKey');
-  assert.doesNotMatch(getTenantApiKeyFn, /new Redis\(/, 'ioredis must not be used in getTenantApiKey');
+  assert.equal(result.status, 200, 'must succeed when Redis has the key');
+  assert.equal(result.sentKey, redisKey, 'must send the Redis key to Core');
+
+  // Verify source: getTenantApiKey uses both Upstash and Redis
+  const fn = REGISTRY_SRC.match(/export async function getTenantApiKey[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(fn, 'getTenantApiKey must exist');
+  assert.match(fn, /upstashCommand/, 'must read Upstash first');
+  assert.match(fn, /new Redis\(/, 'must fall back to ioredis');
+  assert.match(fn, /BFF_REDIS_URL.*REDIS_URL/, 'must use BFF_REDIS_URL/REDIS_URL env vars');
+  assert.match(fn, /\$\{PORTAL_KEY_PREFIX\}:\$\{tenantId\}:key/, 'must use correct portal key format');
 });
 
-// ─── Test C: Upstash unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE ─────────
+// ─── Test C: Upstash throws → Redis has key → BFF 200 ─────────────────────────
 
-test('C: Upstash unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE returned', async () => {
-  const result = await simulateProxy({ upstashUnavailable: true });
+test('C: Upstash throws (unreachable) → Redis has key → Core 200 → BFF 200', async () => {
+  const redisKey = 'fgk.redisonly.secret';
+  const result = await simulateProxy({
+    upstashUnavailable: true,
+    redisKey,
+    coreStatus: 200,
+  });
+
+  assert.equal(result.status, 200, 'must succeed when only Redis is reachable');
+  assert.equal(result.sentKey, redisKey);
+});
+
+// ─── Test D: Both Upstash and Redis unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE ──
+
+test('D: both Upstash and Redis unavailable → CREDENTIAL_PERSISTENCE_UNAVAILABLE 503', async () => {
+  const result = await simulateProxy({ upstashUnavailable: true, redisUnavailable: true });
 
   assert.equal(result.status, 503);
   assert.equal(result.body.error, 'CREDENTIAL_PERSISTENCE_UNAVAILABLE');
   assert.ok(result.body.request_id, 'must include request_id');
-});
-
-// ─── Test D: Both persistence backends unavailable → structured 503 ───────────
-
-test('D: persistence unavailable returns CREDENTIAL_PERSISTENCE_UNAVAILABLE 503', async () => {
-  const result = await simulateProxy({ upstashUnavailable: true });
-
-  assert.equal(result.status, 503);
-  assert.equal(result.body.error, 'CREDENTIAL_PERSISTENCE_UNAVAILABLE');
-  assert.ok(result.body.request_id, 'must include request_id');
-  // Must NOT be a raw Core error passthrough
-  assert.doesNotMatch(JSON.stringify(result.body), /fgk\./);
+  assert.doesNotMatch(JSON.stringify(result.body), /fgk\./, 'must not leak key material');
 });
 
 // ─── Test E: Key absent in both backends → CORE_AUTH_MISSING 401 ──────────────
@@ -208,6 +251,33 @@ test('F: Core 401 → CORE_AUTH_REJECTED 401 (never raw passthrough)', async () 
   // Response body must not be a raw passthrough of Core's 401 body
   assert.ok(!result.body.detail?.includes('api') && !result.body.detail?.includes('key'),
     'must not leak Core error detail about key material');
+});
+
+// ─── Test F2: Core 403 → CORE_ACCESS_DENIED 403 (scope/policy denial) ─────────
+// Core uses 403 for require_api_key_always scope failures and policy denials.
+// These are distinct from 401 (invalid credential) — users should be told
+// access is denied, not that their key is invalid.
+
+test('F2: Core 403 → CORE_ACCESS_DENIED 403 (not rewritten to 401)', async () => {
+  const result = await simulateProxy({
+    upstashKey: 'fgk.validkey.secret',
+    coreStatus: 403,
+  });
+
+  assert.equal(result.status, 403, 'must preserve 403 status');
+  assert.equal(result.body.error, 'CORE_ACCESS_DENIED', 'must use CORE_ACCESS_DENIED not CORE_AUTH_REJECTED');
+  assert.ok(result.body.request_id, 'must include request_id');
+
+  // Verify source: route.ts splits 401 and 403 handlers
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  assert.match(routeSrc, /CORE_ACCESS_DENIED/, 'route.ts must define CORE_ACCESS_DENIED error code');
+  const proxyFn = routeSrc.match(/async function proxyToCore[\s\S]*?^}/m)?.[0] ??
+    routeSrc.match(/async function proxyToCore[\s\S]*/)?.[0] ?? '';
+  // 401 and 403 must be separate branches
+  const auth401 = proxyFn.match(/response\.status === 401/);
+  const access403 = proxyFn.match(/response\.status === 403/);
+  assert.ok(auth401, 'must have dedicated 401 branch');
+  assert.ok(access403, 'must have dedicated 403 branch separate from 401');
 });
 
 // ─── Test G: Core returns 502 → CORE_UNAVAILABLE structured error ─────────────
