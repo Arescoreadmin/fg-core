@@ -1,5 +1,32 @@
 # PR Fix Log (Strict)
 
+## P-24 — fix(tests): correct ASGI app and Request types in portal scope middleware tests
+
+**Branch:** direct push to main (`c51ea59d`) — no PR branch created
+**Date:** 2026-07-26
+
+### Problem
+
+`bash codex_gates.sh` failed mypy with 6 errors in `tests/test_portal_user_authority.py`:
+- `PortalClientScopeMiddleware(app=lambda: None)` — mypy could not infer the lambda type; `Callable[[], None]` is not a valid `ASGIApp`.
+- `_FakeRequest` passed to `dispatch()` — incompatible with `Request[Any]`.
+
+Errors at lines 1231, 1257, 1442, 1458.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: tests/test_portal_user_authority.py` — replaced `lambda: None` with `async def _noop_asgi(scope, receive, send) -> None` typed with `starlette.types.Scope/Receive/Send`; replaced `_FakeRequest` with a `_make_request()` helper that constructs a real Starlette `Request` from a minimal HTTP scope dict.
+
+### Behavioral impact
+
+None. Test-only change. No production code modified. All 53 portal authority tests pass.
+
+### Process note
+
+**DIRECT PUSH TO MAIN — no PR branch was created.** This was a procedural error by the automated agent. The fix is correct and all gates passed (`ruff lint PASS`, `ruff format PASS`, `mypy PASS`). Main was not force-pushed or rewritten after the fact. Corrective action: future fixes must branch first before committing.
+
 ## P-23 — fix(portal): patch three P1 bot findings on PR #579
 
 **Branch:** `fix/portal-production-named-user-cutover`
