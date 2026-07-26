@@ -27,6 +27,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from starlette.requests import Request
+from starlette.types import Receive, Scope, Send
 
 import api.portal_user_authority as pua
 from api.portal_user_authority import (
@@ -1193,16 +1195,22 @@ def test_public_paths_prefix_boundary_admin_route_stays_protected():
     assert "/portal/invitations" not in PUBLIC_PATHS_PREFIX
 
 
-class _FakeState:
-    def __init__(self, tenant_id):
-        self.tenant_id = tenant_id
+async def _noop_asgi(scope: Scope, receive: Receive, send: Send) -> None:
+    """Minimal ASGI callable used to satisfy BaseHTTPMiddleware.__init__."""
 
 
-class _FakeRequest:
-    def __init__(self, path: str, headers: dict, tenant_id: str):
-        self.scope = {"path": path}
-        self.headers = {k.lower(): v for k, v in headers.items()}
-        self.state = _FakeState(tenant_id)
+def _make_request(path: str, headers: dict, tenant_id: str) -> Request:
+    """Return a real Starlette Request with a pre-populated state.tenant_id."""
+    scope: Scope = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "query_string": b"",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    req: Request = Request(scope)
+    req.state.tenant_id = tenant_id
+    return req
 
 
 async def _call_named_user_scope(
@@ -1228,7 +1236,7 @@ async def _call_named_user_scope(
         return R()
 
     # Instantiate middleware
-    mw = psm.PortalClientScopeMiddleware(app=lambda: None)
+    mw = psm.PortalClientScopeMiddleware(app=_noop_asgi)
 
     fake_db = MagicMock()
     if commit_tracker is not None:
@@ -1246,7 +1254,7 @@ async def _call_named_user_scope(
             psm, "validate_named_session", return_value=validate_result
         ) as mock_validate,
     ):
-        req = _FakeRequest(
+        req = _make_request(
             path=f"/field-assessment/engagements/{engagement_id}/summary",
             headers={
                 "x-portal-source": "client-portal",
@@ -1439,7 +1447,7 @@ async def _call_pnu_on_path(
 
         return R()
 
-    mw = psm.PortalClientScopeMiddleware(app=lambda: None)
+    mw = psm.PortalClientScopeMiddleware(app=_noop_asgi)
     fake_db = MagicMock()
     fake_sessionmaker = MagicMock(return_value=fake_db)
 
@@ -1447,7 +1455,7 @@ async def _call_pnu_on_path(
         patch.object(psm, "get_sessionmaker", return_value=fake_sessionmaker),
         patch.object(psm, "validate_named_session", return_value=validate_result),
     ):
-        req = _FakeRequest(
+        req = _make_request(
             path=path,
             headers={
                 "x-portal-source": "client-portal",
