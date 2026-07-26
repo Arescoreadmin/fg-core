@@ -811,6 +811,92 @@ def test_revoke_session_already_revoked_returns_false(mock_db):
 
 
 # ---------------------------------------------------------------------------
+# 25b. revoke_session_by_token — browser-driven self-revocation (PR C)
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_session_by_token_rejects_wrong_prefix(mock_db):
+    """Non-pnu1. tokens must return revoked=False without touching the DB."""
+    result = pua.revoke_session_by_token(mock_db, raw_token="pni1.deadbeef")
+    assert result.revoked is False
+    assert result.session_id is None
+    assert result.tenant_id is None
+    mock_db.execute.assert_not_called()
+
+
+def test_revoke_session_by_token_active_returns_revoked_true(mock_db):
+    """Happy path: active row is flipped to revoked and audit is emitted."""
+    mock_db.execute.return_value.fetchall.return_value = [
+        _make_row(id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+    ]
+
+    result = pua.revoke_session_by_token(
+        mock_db,
+        raw_token="pnu1." + ("a" * 64),
+        request_id="req-1",
+    )
+
+    assert result.revoked is True
+    assert result.session_id == str(SESSION_UUID)
+    assert result.portal_user_id == str(USER_UUID)
+    assert result.tenant_id == TENANT_ID
+    # Two execute calls: the UPDATE and the audit INSERT.
+    assert mock_db.execute.call_count >= 2
+    audit_call = mock_db.execute.call_args_list[-1]
+    audit_params = audit_call.args[1]
+    assert audit_params["event_type"] == "portal_session_revoked"
+    assert audit_params["tenant_id"] == TENANT_ID
+    assert audit_params["portal_user_id"] == str(USER_UUID)
+    assert audit_params["request_id"] == "req-1"
+
+
+def test_revoke_session_by_token_unknown_token_is_idempotent(mock_db):
+    """Well-formed pnu1. token with no matching row returns revoked=False, no raise."""
+    mock_db.execute.return_value.fetchall.return_value = []
+
+    result = pua.revoke_session_by_token(
+        mock_db,
+        raw_token="pnu1." + ("b" * 64),
+    )
+
+    assert result.revoked is False
+    assert result.session_id is None
+    # Only the UPDATE ran; no audit emitted for a no-op revocation.
+    assert mock_db.execute.call_count == 1
+
+
+def test_revoke_session_by_token_db_error_returns_revoked_false(mock_db):
+    """DB errors must be swallowed so BFF logout stays fail-open."""
+    mock_db.execute.side_effect = RuntimeError("db down")
+
+    result = pua.revoke_session_by_token(
+        mock_db,
+        raw_token="pnu1." + ("c" * 64),
+    )
+
+    assert result.revoked is False
+    assert result.session_id is None
+
+
+def test_revoke_session_by_token_computes_fingerprint_not_raw_lookup(mock_db):
+    """The UPDATE must key on token_fingerprint (HMAC), never the raw token."""
+    mock_db.execute.return_value.fetchall.return_value = []
+    raw_token = "pnu1." + ("d" * 64)
+    expected_fp = _compute_lookup_fingerprint("d" * 64, TEST_PEPPER)
+
+    pua.revoke_session_by_token(mock_db, raw_token=raw_token)
+
+    call = mock_db.execute.call_args_list[0]
+    sql_text = str(call.args[0])
+    params = call.args[1]
+    assert "token_fingerprint" in sql_text
+    assert params["fp"] == expected_fp
+    # Raw token or hex must never appear in the bound params.
+    assert raw_token not in params.values()
+    assert ("d" * 64) not in params.values()
+
+
+# ---------------------------------------------------------------------------
 # 26. Concurrency: simulate two concurrent accept_invitation calls
 # ---------------------------------------------------------------------------
 

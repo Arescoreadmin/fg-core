@@ -382,3 +382,23 @@ exceptions:
     business_justification: Same per-authority audit justification as EXC-PORTAL-006.
     approval_date: "2026-07-25"
     approved_by: jcosat
+
+  - id: EXC-PORTAL-008
+    function_name: portal_revoke_named_session_self
+    file: api/portal.py
+    reason: >
+      Browser-driven portal named-user session self-revocation route (PR C, the
+      companion to portal_revoke_named_session). The pnu1. session token IS the
+      authorization credential; the route is intentionally unauthenticated
+      (PUBLIC_PATHS_PREFIX '/portal/named-sessions/') so no service-account scope
+      exists to call audit_atomicity_svc. Audit events are emitted to
+      portal_user_audit_events via
+      portal_user_authority.revoke_session_by_token → _emit_audit(). Same
+      architectural rationale as EXC-PORTAL-007.
+    owner: identity-team
+    expiration_date: "2026-09-24"
+    approval_reference: PR-C-portal-named-user-session-revocation
+    jira_ticket: null
+    business_justification: Same per-authority audit justification as EXC-PORTAL-007.
+    approval_date: "2026-07-25"
+    approved_by: jcosat

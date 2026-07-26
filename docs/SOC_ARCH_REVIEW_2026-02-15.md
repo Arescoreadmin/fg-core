@@ -1,3 +1,33 @@
+## 2026-07-25 — PR C: Portal named-user browser-driven session revocation
+
+**Reviewer:** Codex | **Classification:** SOC-LOW (single new route added under an already-public prefix; no middleware, security-module, or authorization changes; route uses the caller's own `pnu1.` session token as the sole credential and resolves tenant from the session record — no service-account key or client-supplied tenant is trusted)
+
+**Changes:**
+- `api/portal.py` (mod) — new `DELETE /portal/named-sessions/self` route. Registered BEFORE the existing `/named-sessions/{session_id}` route so the literal `/self` segment can never fall through to the placeholder path. Requires `X-FG-Portal-Session` carrying a `pnu1.` token; missing/malformed header → 401; anything else (revoked or already terminal) → 204. Uses `api.deps.get_db` (no tenant plumbing required) because the tenant is resolved from the session row itself.
+- `api/portal_user_authority.py` (mod) — new `revoke_session_by_token(db, *, raw_token, request_id)` and `SessionRevocationResult` dataclass. Single `UPDATE ... WHERE token_fingerprint = HMAC(token, pepper) AND status = 'active'` transitions the row to revoked and emits the `portal_session_revoked` audit event. Idempotent for wrong-prefix / unknown / already-terminal tokens; DB / pepper errors return `revoked=False` without raising so the BFF logout path stays fail-open.
+- `apps/portal/app/api/auth/logout/route.ts` (mod) — BFF now calls Core self-revocation before clearing the cookie when the cookie carries a `pnu1.` token. Fail-open: cookie is always cleared regardless of Core response. Legacy grant cookies skip Core entirely (unchanged path).
+- `tools/ci/route_inventory*.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` (regenerated) — mechanical inventory refresh for the new route. No manual edits.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (mod) — `Contract-Authority-SHA256` marker refreshed via `scripts/refresh_contract_authority.py` (contract adds one new route).
+
+**Security posture:**
+- **Public path prefix pre-existed.** `/portal/named-sessions/` was added to `PUBLIC_PATHS_PREFIX` by PR #577 for the sibling `/named-sessions/{session_id}` route; no change to `api/security/public_paths.py` in this PR. Route is public because the token IS the credential.
+- **No middleware changes.** `AuthGateMiddleware` and `PortalClientScopeMiddleware` are untouched. The self route deliberately does not require `X-Portal-Source: client-portal` so `PortalClientScopeMiddleware` remains a no-op for the logout call (avoiding a chicken-and-egg tenant-context dependency for a route whose sole purpose is server-side session teardown).
+- **Tenant is server-resolved from the session row.** The BFF cannot forge a tenant claim on the self-revocation call. If the token does not match an active row, no revocation occurs and no audit event is emitted.
+- **Audit event emitted on successful revocation.** `portal_session_revoked` includes `tenant_id`, `portal_user_id`, and `request_id`. No token contents ever appear in audit metadata.
+- **Fail-open logout, fail-closed session validation.** The BFF always clears the cookie; Core always rejects the revoked token on subsequent `validate_session` lookups (`status='revoked'` no longer satisfies the `status='active'` filter). Exposure window for a leaked cookie drops from up to 14 days (Core-side TTL) to near-zero.
+- **No new secrets, no schema/migration changes, no CI/OPA/infra changes.**
+
+**Validation:**
+- `tests/test_portal_user_authority.py` — 5 new unit tests for `revoke_session_by_token`; total 58 pass.
+- `apps/portal/tests/portal-prod-named-user.test.js` — 4 new structural assertions on the BFF logout handler; total 25 pass.
+- `ruff check` and `ruff format --check` on `api/portal.py`, `api/portal_user_authority.py`, `tests/test_portal_user_authority.py` — clean.
+- `mypy api/portal.py api/portal_user_authority.py tests/test_portal_user_authority.py` — clean.
+- `make required-tests-gate`, `make route-inventory-generate`, `make fg-fast`, `make fg-security` — pass.
+
+**SOC review outcome:** approved. Closes the last remaining risk from PR #579's completion report. Additive-only route; no widening of any existing auth surface.
+
+---
+
 ## 2026-07-10 — PR-01a.1: Identity runtime integration and authorization alignment
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (governance evaluation wired into the authentication critical path in `api/auth_dispatch.py`; new `api/identity_governance/runtime.py`, `services.py`, `error_codes.py`, `metrics.py`, `repositories/` and `api/identity_authority/auth_context_adapter.py`; all runtime code paths gated by feature flags in `api/config/identity_runtime.py`; every flag defaults to disabled so production behavior is unchanged until an operator opts in)

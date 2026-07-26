@@ -21,7 +21,7 @@ import api.portal_user_authority as pua
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from api.db_models_portal import PortalGrant, PortalGrantSession
-from api.deps import auth_ctx_db_session
+from api.deps import auth_ctx_db_session, get_db
 from api.entitlements import require_capability
 from api.error_contracts import api_error
 from services.field_assessment.audit import audit_atomicity_svc
@@ -900,6 +900,55 @@ def portal_accept_invitation(
         portal_role=membership.portal_role,
         engagement_id=membership.engagement_id,
     )
+
+
+@portal_router.delete(
+    "/named-sessions/self",
+    status_code=204,
+)
+def portal_revoke_named_session_self(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> None:
+    """Revoke the caller's own named-user portal session (browser logout).
+
+    Requires the session's own pnu1. token in X-FG-Portal-Session — the token
+    IS the credential; no service-account API key or tenant header is trusted.
+    Tenant is resolved server-side from the session record.
+
+    Semantics:
+      - Valid active token → mark session revoked; emit audit; 204
+      - Well-formed but unknown/expired/already-revoked token → 204 (idempotent)
+      - Malformed token → 401
+      - Missing header → 401
+
+    Callers (portal BFF logout handler) treat this route as fire-and-forget for
+    cookie clearing: any non-2xx still results in the browser cookie being
+    cleared, so a leaked cookie replay is bounded by the Core-side record.
+    """
+    raw_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+    if not raw_token:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error(
+                "PORTAL_SESSION_REQUIRED", "X-FG-Portal-Session header required"
+            ),
+        )
+    if not raw_token.startswith("pnu1."):
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("PORTAL_SESSION_INVALID", "session token format invalid"),
+        )
+
+    # Idempotent by design: revoke_session_by_token returns revoked=False for
+    # unknown/terminal tokens. Either outcome yields 204 so the BFF can always
+    # clear the cookie without differentiating "already revoked" from success.
+    pua.revoke_session_by_token(
+        db,
+        raw_token=raw_token,
+        request_id=request.headers.get("x-request-id"),
+    )
+    db.commit()
 
 
 @portal_router.delete(

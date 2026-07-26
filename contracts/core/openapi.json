@@ -107992,6 +107992,21 @@
         ]
       }
     },
+    "/portal/named-sessions/self": {
+      "delete": {
+        "description": "Revoke the caller's own named-user portal session (browser logout).\n\nRequires the session's own pnu1. token in X-FG-Portal-Session \u2014 the token\nIS the credential; no service-account API key or tenant header is trusted.\nTenant is resolved server-side from the session record.\n\nSemantics:\n  - Valid active token \u2192 mark session revoked; emit audit; 204\n  - Well-formed but unknown/expired/already-revoked token \u2192 204 (idempotent)\n  - Malformed token \u2192 401\n  - Missing header \u2192 401\n\nCallers (portal BFF logout handler) treat this route as fire-and-forget for\ncookie clearing: any non-2xx still results in the browser cookie being\ncleared, so a leaked cookie replay is bounded by the Core-side record.",
+        "operationId": "portal_revoke_named_session_self_portal_named_sessions_self_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portal Revoke Named Session Self",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
     "/portal/named-sessions/{session_id}": {
       "delete": {
         "description": "Revoke a named-user portal session (logout).\n\nRequires the session's own pnu1. token in X-FG-Portal-Session \u2014 the session\nauthorizes its own revocation without a separate service account.",
