@@ -74,6 +74,75 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.scope.get("path", "")
+        session_token_raw = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+
+        # ── pnu1. catch-all (P1-A) ────────────────────────────────────────────
+        # Any portal request that carries a pnu1. session token MUST be validated
+        # server-side regardless of path. Previously only engagement/remediation
+        # paths validated the token, which allowed a forged pnu1. cookie to
+        # reach non-engagement handlers (e.g. /governance/assets/*) unchecked.
+        # Path-specific engagement binding is applied after the session is proven
+        # valid; other portal paths simply require a valid session.
+        if session_token_raw.startswith(SESSION_TOKEN_PREFIX):
+            tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
+            if not tenant_id:
+                return _json_403("Missing tenant context", "PORTAL_TENANT_MISSING")
+
+            SessionLocal = get_sessionmaker()
+            db = SessionLocal()
+            try:
+                named_result = validate_named_session(
+                    db,
+                    raw_token=session_token_raw,
+                    tenant_id=str(tenant_id),
+                )
+                db.commit()  # persist last_validated_at + audit event
+            except Exception:
+                db.close()
+                return _json_403(
+                    "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                )
+            finally:
+                db.close()
+
+            if not named_result.ok:
+                return _json_403(
+                    named_result.denial_reason or "Access denied",
+                    named_result.denial_code or "PORTAL_ACCESS_DENIED",
+                )
+
+            m_pnu = _PORTAL_ENGAGEMENT_RE.match(path)
+            if m_pnu:
+                engagement_id_pnu = m_pnu.group(1)
+                # A session without a membership has no engagement scope — deny.
+                # Distinguishes "no membership" (portal_membership_id=None) from
+                # "tenant-wide membership" (engagement_id=None on membership row).
+                if named_result.portal_membership_id is None:
+                    return _json_403(
+                        "Session has no active membership for engagement access",
+                        "PORTAL_MEMBERSHIP_REQUIRED",
+                    )
+                # Engagement binding: membership engagement_id=None → tenant-wide.
+                if (
+                    named_result.engagement_id is not None
+                    and named_result.engagement_id != engagement_id_pnu
+                ):
+                    return _json_403(
+                        "Session not authorized for this engagement",
+                        "PORTAL_ENGAGEMENT_MISMATCH",
+                    )
+                request.state.portal_user_id = named_result.portal_user_id
+                request.state.portal_membership_id = named_result.portal_membership_id
+                request.state.portal_engagement_id = engagement_id_pnu
+            else:
+                # Non-engagement portal path (e.g. /governance/*, /portal/remediation).
+                # Session is validated; expose portal identity for downstream handlers.
+                request.state.portal_user_id = named_result.portal_user_id
+                request.state.portal_membership_id = named_result.portal_membership_id
+
+            return await call_next(request)
+
+        # ── Legacy grant path (non-pnu1. tokens) ─────────────────────────────
         m = _PORTAL_ENGAGEMENT_RE.match(path)
         if not m:
             if not _PORTAL_REMEDIATION_RE.match(path):
@@ -184,54 +253,10 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                 "PORTAL_SESSION_REQUIRED",
             )
 
-        # Named-user session path (PR A): token prefix pnu1. discriminates deterministically.
-        if session_token.startswith(SESSION_TOKEN_PREFIX):
-            SessionLocal = get_sessionmaker()
-            db = SessionLocal()
-            try:
-                named_result = validate_named_session(
-                    db,
-                    raw_token=session_token,
-                    tenant_id=str(tenant_id),
-                )
-                db.commit()  # persist last_validated_at + audit event
-            except Exception:
-                db.close()
-                return _json_403(
-                    "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
-                )
-            finally:
-                db.close()
-
-            if not named_result.ok:
-                return _json_403(
-                    named_result.denial_reason or "Access denied",
-                    named_result.denial_code or "PORTAL_ACCESS_DENIED",
-                )
-
-            # A session without a membership has no engagement scope — deny access.
-            # This distinguishes "no membership" (portal_membership_id=None) from
-            # "tenant-wide membership" (engagement_id=None on the membership row).
-            if named_result.portal_membership_id is None:
-                return _json_403(
-                    "Session has no active membership for engagement access",
-                    "PORTAL_MEMBERSHIP_REQUIRED",
-                )
-
-            # Engagement binding: membership engagement_id=None means tenant-wide access.
-            if (
-                named_result.engagement_id is not None
-                and named_result.engagement_id != engagement_id
-            ):
-                return _json_403(
-                    "Session not authorized for this engagement",
-                    "PORTAL_ENGAGEMENT_MISMATCH",
-                )
-
-            request.state.portal_user_id = named_result.portal_user_id
-            request.state.portal_membership_id = named_result.portal_membership_id
-            request.state.portal_engagement_id = engagement_id
-            return await call_next(request)
+        # Note: pnu1. named-user sessions are handled by the catch-all at the
+        # top of dispatch() so that they are validated on ALL portal paths
+        # (not just engagement paths). If we reach this point, the token is a
+        # legacy (non-pnu1.) grant-session opaque ID.
 
         # Grant-based path (C7): opaque session token (no versioned prefix).
         SessionLocal = get_sessionmaker()

@@ -4,7 +4,48 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { setStoredEngagementId } from '@/lib/engagementStore';
 
-function LoginForm() {
+// Named-user cutover (PR B): browser-side production flag is a UI hint only.
+// The BFF still enforces isProdLikeEnv() server-side, so demo endpoints fail
+// closed even if a client forces DEMO=1.
+const IS_PROD_UI =
+  process.env.NEXT_PUBLIC_FG_ENV === 'prod' ||
+  process.env.NEXT_PUBLIC_FG_ENV === 'production' ||
+  process.env.NEXT_PUBLIC_FG_ENV === 'staging';
+
+function NamedUserLoginPanel() {
+  const params = useSearchParams();
+  const errorCode = params.get('error');
+  const next = params.get('next') ?? '/';
+  const oidcUrl = `/api/auth/oidc?returnTo=${encodeURIComponent(next)}`;
+
+  return (
+    <div className="rounded border border-border bg-surface-2 p-6 space-y-4">
+      <div className="space-y-1.5">
+        <p className="text-sm text-foreground">
+          Sign in with your organization identity provider.
+        </p>
+        <p className="text-xs text-muted">
+          Access is granted by named-user invitation only.
+        </p>
+      </div>
+
+      {errorCode && (
+        <p role="alert" className="text-xs text-red-400">
+          Sign-in failed: {errorCode.replace(/[^a-z0-9_ .-]/gi, '')}
+        </p>
+      )}
+
+      <a
+        href={oidcUrl}
+        className="block w-full rounded bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      >
+        Sign in with SSO
+      </a>
+    </div>
+  );
+}
+
+function DemoLoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') ?? '/';
@@ -107,6 +148,16 @@ function LoginForm() {
   );
 }
 
+function LoginBody() {
+  if (IS_PROD_UI) return <NamedUserLoginPanel />;
+  return (
+    <>
+      <NamedUserLoginPanel />
+      <DemoLoginForm />
+    </>
+  );
+}
+
 export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -117,7 +168,7 @@ export default function LoginPage() {
         </div>
 
         <Suspense fallback={null}>
-          <LoginForm />
+          <LoginBody />
         </Suspense>
 
         <p className="text-center text-xs text-muted">

@@ -1411,3 +1411,241 @@ def test_middleware_denies_on_named_session_failure():
     assert resp.status_code == 403
     body = json.loads(bytes(resp.body).decode())
     assert body["code"] == "PORTAL_USER_SUSPENDED"
+
+
+# ---------------------------------------------------------------------------
+# P1-A regression: pnu1. session must be validated on ALL portal paths
+# (not just /field-assessment/engagements/*)
+# ---------------------------------------------------------------------------
+
+
+async def _call_pnu_on_path(
+    path: str,
+    tenant_id: str,
+    session_token: str,
+    validate_result,
+):
+    """Invoke the middleware for an arbitrary portal path with a pnu1. token."""
+    from api.middleware import portal_scope as psm
+
+    called_next = {"hit": False}
+
+    async def _next(_req):
+        called_next["hit"] = True
+
+        class R:
+            status_code = 204
+            headers: dict = {}
+
+        return R()
+
+    mw = psm.PortalClientScopeMiddleware(app=lambda: None)
+    fake_db = MagicMock()
+    fake_sessionmaker = MagicMock(return_value=fake_db)
+
+    with (
+        patch.object(psm, "get_sessionmaker", return_value=fake_sessionmaker),
+        patch.object(psm, "validate_named_session", return_value=validate_result),
+    ):
+        req = _FakeRequest(
+            path=path,
+            headers={
+                "x-portal-source": "client-portal",
+                "x-fg-portal-session": session_token,
+            },
+            tenant_id=tenant_id,
+        )
+        resp = await mw.dispatch(req, _next)
+        return resp, called_next["hit"]
+
+
+def test_pnu1_token_validated_on_non_engagement_path():
+    """P1-A: a forged pnu1. token on a non-engagement portal path must be rejected.
+
+    Regression: previously the middleware only validated pnu1. tokens on
+    /field-assessment/engagements/{id}/* and /portal/remediation*. Any other
+    portal-source request (e.g. /governance/assets/*) was passed through
+    without server-side session validation, letting a forged cookie reach
+    the route handler because AuthGateMiddleware only saw the API key.
+    """
+    import asyncio
+    import json
+
+    from api.portal_user_authority import SessionValidationResult
+
+    # validate_session returns "not found" for the forged token.
+    result = SessionValidationResult(
+        ok=False,
+        denial_reason="Portal session invalid or expired",
+        denial_code="PORTAL_SESSION_INVALID",
+    )
+
+    resp, called_next = asyncio.run(
+        _call_pnu_on_path(
+            path="/governance/assets/some-asset-id",
+            tenant_id="tenant-a",
+            session_token="pnu1." + "f" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is False, "forged pnu1. token must not reach the handler"
+    assert resp.status_code == 403
+    body = json.loads(bytes(resp.body).decode())
+    assert body["code"] == "PORTAL_SESSION_INVALID"
+
+
+def test_pnu1_token_allowed_on_non_engagement_path_when_valid():
+    """P1-A: a valid pnu1. token on a non-engagement portal path passes through.
+
+    The catch-all validator must not accidentally block legitimate portal
+    traffic. When validate_session returns ok=True, the request proceeds and
+    portal identity is exposed on request.state (no engagement binding).
+    """
+    import asyncio
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id="mem-1",
+        tenant_id="tenant-a",
+        engagement_id=None,  # tenant-wide membership
+        portal_role="viewer",
+    )
+
+    resp, called_next = asyncio.run(
+        _call_pnu_on_path(
+            path="/governance/assets/some-asset-id",
+            tenant_id="tenant-a",
+            session_token="pnu1." + "0" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is True
+    assert resp.status_code == 204
+
+
+def test_pnu1_engagement_binding_still_enforced_after_catch_all_move():
+    """P1-A regression: moving the pnu1. path to the top must not weaken
+    engagement binding when the request DOES target an engagement path.
+
+    An engagement-scoped session must still be denied on a mismatching
+    engagement, exactly as before the refactor.
+    """
+    import asyncio
+    import json
+
+    from api.portal_user_authority import SessionValidationResult
+
+    result = SessionValidationResult(
+        ok=True,
+        session_id="sess-1",
+        portal_user_id="user-1",
+        portal_membership_id="mem-eng-5",
+        tenant_id="tenant-a",
+        engagement_id="eng-5",  # membership scoped to eng-5
+        portal_role="viewer",
+    )
+
+    resp, called_next = asyncio.run(
+        _call_pnu_on_path(
+            # request targets a DIFFERENT engagement
+            path="/field-assessment/engagements/eng-42/summary",
+            tenant_id="tenant-a",
+            session_token="pnu1." + "1" * 64,
+            validate_result=result,
+        )
+    )
+    assert called_next is False
+    assert resp.status_code == 403
+    body = json.loads(bytes(resp.body).decode())
+    assert body["code"] == "PORTAL_ENGAGEMENT_MISMATCH"
+
+
+# ---------------------------------------------------------------------------
+# P1-C regression: get_best_active_membership resolves engagement-scoped
+# memberships when no tenant-wide membership exists.
+# ---------------------------------------------------------------------------
+
+
+def test_get_best_active_membership_returns_engagement_scoped_when_only_scoped(
+    mock_db,
+):
+    """P1-C: user with only an engagement-scoped membership must resolve it.
+
+    Regression against get_active_membership()'s tenant-wide-only default
+    (engagement_id IS NULL), which returned None for engagement-scoped invitees
+    and produced PORTAL_MEMBERSHIP_REQUIRED on every subsequent request.
+    """
+    mock_db.execute.return_value.fetchone.return_value = _make_row(
+        id=MEMBERSHIP_UUID,
+        portal_user_id=USER_UUID,
+        tenant_id=TENANT_ID,
+        engagement_id="eng-42",
+        portal_role="viewer",
+        auth_version=1,
+        active=True,
+    )
+
+    record = pua.get_best_active_membership(
+        mock_db,
+        portal_user_id=str(USER_UUID),
+        tenant_id=TENANT_ID,
+    )
+
+    assert record is not None
+    assert record.id == str(MEMBERSHIP_UUID)
+    assert record.engagement_id == "eng-42"
+    assert record.active is True
+
+
+def test_get_best_active_membership_returns_none_when_no_active(mock_db):
+    """P1-C: no active membership → None (unchanged from get_active_membership)."""
+    mock_db.execute.return_value.fetchone.return_value = None
+
+    record = pua.get_best_active_membership(
+        mock_db,
+        portal_user_id=str(USER_UUID),
+        tenant_id=TENANT_ID,
+    )
+
+    assert record is None
+
+
+def test_get_best_active_membership_sql_prefers_tenant_wide_ordering(mock_db):
+    """P1-C: verify the ORDER BY places (engagement_id IS NULL) DESC first.
+
+    Any user with BOTH a tenant-wide and an engagement-scoped membership must
+    get the tenant-wide one. This is checked at the SQL level because the
+    fetchone() mock cannot distinguish rows; verifying the ORDER BY clause in
+    the emitted SQL is the tightest available guarantee.
+    """
+    mock_db.execute.return_value.fetchone.return_value = _make_row(
+        id=MEMBERSHIP_UUID,
+        portal_user_id=USER_UUID,
+        tenant_id=TENANT_ID,
+        engagement_id=None,
+        portal_role="assessor",
+        auth_version=1,
+        active=True,
+    )
+
+    pua.get_best_active_membership(
+        mock_db,
+        portal_user_id=str(USER_UUID),
+        tenant_id=TENANT_ID,
+    )
+
+    # Locate the SELECT call among the emitted execute() calls.
+    select_calls = [
+        c
+        for c in mock_db.execute.call_args_list
+        if c.args and "portal_user_memberships" in str(c.args[0])
+    ]
+    assert select_calls, "expected a SELECT from portal_user_memberships"
+    sql = str(select_calls[0].args[0])
+    # ORDER BY must prefer tenant-wide, then most recently created.
+    assert "(engagement_id IS NULL) DESC" in sql
+    assert "created_at DESC" in sql

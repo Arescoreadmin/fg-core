@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { COOKIE_NAME, getSessionUser, getGrantSession } from '@/lib/session';
+import {
+  COOKIE_NAME,
+  getSessionUser,
+  getGrantSession,
+  getPnuSessionToken,
+  isProdLikeEnv,
+} from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 import { getPortalTenantApiKey } from '@/lib/tenant-registry';
 
@@ -34,9 +40,15 @@ const DEMO_TENANT_API_KEYS = parseDemoTenantKeys(
 async function resolveAuth(
   grantSession: { sessionId: string; tenantId: string | null } | null,
 ): Promise<{ tenantId: string | null; apiKey: string | null }> {
+  // Prod cutover (PR B): grant sessions may only steer tenant selection in
+  // dev/test. In prod-like environments the only trusted tenant context is
+  // the one bound to the pnu1. session server-side (validated by the core
+  // portal_scope middleware). This function is called for BOTH pnu1 and grant
+  // paths, but in prod the pnu1 path is the only supported live surface.
+  const allowDemoTenantSteering = !isProdLikeEnv();
   const sessionTenantId = grantSession?.tenantId ?? null;
 
-  if (sessionTenantId) {
+  if (sessionTenantId && allowDemoTenantSteering) {
     // 1. Env var allowlist (no I/O, fast path)
     if (DEMO_TENANT_ALLOWLIST.includes(sessionTenantId)) {
       return { tenantId: sessionTenantId, apiKey: DEMO_TENANT_API_KEYS[sessionTenantId] || null };
@@ -48,7 +60,9 @@ async function resolveAuth(
     }
   }
 
-  // 3. Static fallback
+  // 3. Static fallback — the BFF service-account key against the console-
+  // provisioned default tenant. Core still enforces tenant/engagement scoping
+  // via the pnu1. session's membership record.
   return { tenantId: CORE_TENANT_ID || null, apiKey: CORE_API_KEY || null };
 }
 
@@ -167,8 +181,13 @@ async function proxyToCore(
   }
 
   const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
-  const sessionUser = await getSessionUser(sessionToken);
-  const grantSession = await getGrantSession(sessionToken);
+  // Named-user path (PR B): the pnu1. cookie value IS the raw session token
+  // that core validates against portal_user_sessions.token_fingerprint. If
+  // present, prefer it over the legacy grant session; there is NO silent
+  // fallback between the two — deterministic, token-prefix-discriminated.
+  const pnuToken = getPnuSessionToken(sessionToken);
+  const sessionUser = pnuToken ? null : await getSessionUser(sessionToken);
+  const grantSession = pnuToken ? null : await getGrantSession(sessionToken);
   const sessionId = grantSession?.sessionId ?? null;
   const { tenantId, apiKey: coreApiKey } = await resolveAuth(grantSession);
   if (!tenantId) return jsonError('CORE_TENANT_ID is not configured', 500, requestId);
@@ -190,7 +209,13 @@ async function proxyToCore(
   headers.set('X-Request-ID', requestId);
   headers.set('X-Portal-Source', 'client-portal');
 
-  if (sessionId) {
+  if (pnuToken) {
+    // Named-user session — forward the raw pnu1. token; core middleware
+    // (portal_scope.PortalClientScopeMiddleware) dispatches on the pnu1.
+    // prefix and validates membership + auth_version + engagement binding.
+    headers.set('X-FG-Portal-Session', pnuToken);
+  } else if (sessionId) {
+    // Legacy grant session (dev/test only in prod-like env — see resolveAuth).
     headers.set('X-FG-Portal-Session', sessionId);
   }
   if (sessionUser) {

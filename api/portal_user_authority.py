@@ -433,6 +433,56 @@ def get_active_membership(
     )
 
 
+def get_best_active_membership(
+    db,
+    *,
+    portal_user_id: str,
+    tenant_id: str,
+) -> PortalMembershipRecord | None:
+    """Return the best active membership for a portal user, or None.
+
+    Used at SSO/enrollment time when the specific engagement is not yet known.
+    Priority order:
+      1. Tenant-wide membership (engagement_id IS NULL)
+      2. Most recently created engagement-scoped membership
+
+    Returns None if no active membership exists. Callers that need an exact
+    engagement-scoped lookup should use ``get_active_membership`` with the
+    ``engagement_id`` argument.
+    """
+    _set_tenant_rls(db, tenant_id)
+    row = db.execute(
+        text(
+            """
+            SELECT id, portal_user_id, tenant_id, engagement_id,
+                   portal_role, auth_version, active
+            FROM   portal_user_memberships
+            WHERE  portal_user_id = :portal_user_id
+              AND  tenant_id      = :tenant_id
+              AND  active         = true
+            ORDER BY
+                   (engagement_id IS NULL) DESC,
+                   created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"portal_user_id": portal_user_id, "tenant_id": tenant_id},
+    ).fetchone()
+
+    if row is None:
+        return None
+
+    return PortalMembershipRecord(
+        id=_coerce_uuid(row.id) or "",
+        portal_user_id=_coerce_uuid(row.portal_user_id) or "",
+        tenant_id=str(row.tenant_id),
+        engagement_id=row.engagement_id,
+        portal_role=str(row.portal_role),
+        auth_version=int(row.auth_version),
+        active=bool(row.active),
+    )
+
+
 def create_invitation(
     db,
     *,

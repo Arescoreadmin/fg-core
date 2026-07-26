@@ -674,8 +674,13 @@ def portal_named_user_enroll(
             detail=api_error("PORTAL_USER_SUSPENDED", str(exc)),
         )
 
-    # Find the active tenant-wide membership (engagement_id=None) if one exists.
-    membership = pua.get_active_membership(
+    # Find the best active membership for this user in this tenant.
+    # Prefers tenant-wide (engagement_id IS NULL); falls back to the most
+    # recently created engagement-scoped membership so that a repeat SSO login
+    # by an engagement-scoped invitee resolves to their real membership row
+    # instead of returning None (which would produce PORTAL_MEMBERSHIP_REQUIRED
+    # on every subsequent engagement request).
+    membership = pua.get_best_active_membership(
         db, portal_user_id=user.id, tenant_id=tenant_id
     )
 

@@ -1,6 +1,46 @@
 export const COOKIE_NAME = 'fg_portal_session';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
+// ─── Production-mode gate (fail closed) ───────────────────────────────────────
+// Named-user cutover: FG_ENV=prod (or unknown/missing env in a build that lacks
+// explicit dev/test opt-in) disables the legacy demo/shared-password path.
+// Mirrors apps/console/lib/rateLimitStore.ts isDevOrTestEnv() semantics.
+export function isDevOrTestEnv(): boolean {
+  const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
+  const fgEnv = (process.env.FG_ENV || '').toLowerCase();
+  if (nodeEnv === 'development' || nodeEnv === 'test') return true;
+  if (['dev', 'development', 'local', 'test'].includes(fgEnv)) return true;
+  return false;
+}
+
+export function isProdLikeEnv(): boolean {
+  // Fail closed: any environment that is not explicitly dev/test is production.
+  return !isDevOrTestEnv();
+}
+
+// ─── Portal named-user session (pnu1.) — opaque token in HttpOnly cookie ──────
+// The cookie value IS the raw pnu1. token issued by the core API. The token is
+// stored server-side only as HMAC-SHA256(token, FG_KEY_PEPPER) fingerprint;
+// disclosure risk is bounded by the standard bearer-cookie contract.
+export const PNU_TOKEN_PREFIX = 'pnu1.';
+// Format: pnu1. + 64 lowercase hex chars (32-byte secrets.token_hex).
+// Enforced defense-in-depth at the BFF edge so trivially malformed tokens
+// never reach Core. Core still owns authoritative HMAC-fingerprint validation.
+export const PNU_TOKEN_RE = /^pnu1\.[0-9a-f]{64}$/;
+
+export function isPnuSessionCookie(value: string | undefined): boolean {
+  return typeof value === 'string' && value.startsWith(PNU_TOKEN_PREFIX);
+}
+
+export function isPnuSessionCookieWellFormed(value: string | undefined): boolean {
+  return typeof value === 'string' && PNU_TOKEN_RE.test(value);
+}
+
+/** Returns the raw pnu1. token if the cookie carries one, else null. */
+export function getPnuSessionToken(cookieValue: string | undefined): string | null {
+  return isPnuSessionCookie(cookieValue) ? (cookieValue as string) : null;
+}
+
 export interface SessionUser {
   userId: string;
   email: string;
@@ -91,6 +131,14 @@ export async function createUserSessionToken(user: SessionUser): Promise<string>
 
 export async function verifySessionToken(token: string | undefined): Promise<boolean> {
   if (!token) return false;
+  // Named-user session (pnu1.) — the token itself is the authorization.
+  // Middleware treats it as valid at the edge; every downstream /api/core
+  // request is re-validated server-side by portal_scope middleware via
+  // validate_session (DB lookup by HMAC fingerprint, membership + auth_version
+  // + status checks, fail-closed). Defense-in-depth: reject malformed pnu1.
+  // tokens (bad length / non-hex chars) at the BFF edge so trivially forged
+  // cookies never reach Core.
+  if (isPnuSessionCookie(token)) return isPnuSessionCookieWellFormed(token);
   const key = await getKey();
   if (!key) return false;
   try {

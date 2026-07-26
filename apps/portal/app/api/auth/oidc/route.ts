@@ -56,6 +56,30 @@ export async function GET(req: NextRequest) {
   const state = toBase64Url(stateBytes.buffer);
 
   const returnTo = req.nextUrl.searchParams.get('returnTo') || '/';
+  // Invitation-acceptance mode: after Auth0 hands us back an access_token, the
+  // callback branches to /accept-invite instead of enrolling. inviteToken and
+  // tenantId travel inside the HttpOnly fg_oidc_state cookie — never in the
+  // OAuth `state` query param (Auth0 relays that to the browser URL bar).
+  const mode = req.nextUrl.searchParams.get('mode') === 'accept' ? 'accept' : 'login';
+  const inviteToken = (req.nextUrl.searchParams.get('inviteToken') || '').trim();
+  const tenantIdHint = (req.nextUrl.searchParams.get('tenantId') || '').trim();
+  if (mode === 'accept') {
+    // Format validation: pni1. prefix + 64 hex chars from portal_user_authority.
+    // Reject anything else to bound state-cookie inflation and to fail fast
+    // before Auth0 redirect (bad tokens can't survive core validation anyway).
+    if (!/^pni1\.[0-9a-f]{64}$/.test(inviteToken)) {
+      return NextResponse.json(
+        { error: 'invalid invite token format', code: 'PORTAL_ACCEPT_TOKEN_INVALID' },
+        { status: 400 },
+      );
+    }
+    if (tenantIdHint && !/^[a-zA-Z0-9_-]{1,128}$/.test(tenantIdHint)) {
+      return NextResponse.json(
+        { error: 'invalid tenant id', code: 'PORTAL_ACCEPT_TENANT_INVALID' },
+        { status: 400 },
+      );
+    }
+  }
 
   const paramsObj: Record<string, string> = {
     response_type: 'code',
@@ -76,7 +100,14 @@ export async function GET(req: NextRequest) {
 
   const authUrl = `https://${domain}/authorize?${params}`;
 
-  const statePayload = JSON.stringify({ state, codeVerifier, returnTo });
+  const statePayload = JSON.stringify({
+    state,
+    codeVerifier,
+    returnTo,
+    ...(mode === 'accept'
+      ? { mode: 'accept', inviteToken, tenantId: tenantIdHint || undefined }
+      : {}),
+  });
   const res = NextResponse.redirect(authUrl);
   res.cookies.set('fg_oidc_state', statePayload, {
     httpOnly: true,
