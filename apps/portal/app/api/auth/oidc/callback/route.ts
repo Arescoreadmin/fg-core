@@ -1,14 +1,21 @@
 /**
  * GET /api/auth/oidc/callback
  *
- * Auth0 OIDC callback handler for portal named users (P1).
+ * Auth0 OIDC callback handler for portal named users.
  *
- * Flow:
+ * Flow (PR B — production named-user cutover):
  *   1. Validates CSRF state from fg_oidc_state cookie.
  *   2. Exchanges authorization code for tokens (Auth0 /oauth/token).
- *   3. Calls POST /portal/identity/login on the core API with the access_token.
- *      Core API verifies the JWT via JWKS and resolves tenant_users membership.
- *   4. On success: issues a signed fg_portal_session cookie (createUserSessionToken).
+ *   3. Branches on state.mode:
+ *      - mode='accept' → sets a short-lived HttpOnly bootstrap cookie carrying
+ *        the Auth0 access_token, then redirects to /accept-invite?token=...
+ *        The invitation page's server-side handler consumes and clears the
+ *        cookie during POST /api/auth/accept-invite. The access_token never
+ *        touches browser JS.
+ *      - default (login) → POST /portal/named-users/enroll on the core API
+ *        with the access_token. Core resolves/creates the portal_users row
+ *        (distinct from tenant_users) and returns a pnu1. session token.
+ *   4. On enroll success: sets fg_portal_session cookie to the raw pnu1. token.
  *   5. On failure: redirects to /login with a typed error param.
  *
  * Required environment variables:
@@ -21,9 +28,15 @@
  *   CORE_TENANT_ID             — tenant to resolve membership against
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { COOKIE_NAME, createUserSessionToken, type SessionUser } from '@/lib/session';
+import { COOKIE_NAME } from '@/lib/session';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
+
+/** Short-lived bootstrap cookie used to hand off the Auth0 access_token from
+ *  this callback to the invitation acceptance handler. Never sent to the
+ *  browser JS; consumed and cleared inside the /api/auth/accept-invite route. */
+const OIDC_BOOTSTRAP_COOKIE = 'fg_oidc_bootstrap';
+const OIDC_BOOTSTRAP_TTL_SECONDS = 300; // 5 minutes
 
 function getConfig() {
   return {
@@ -41,6 +54,21 @@ function loginError(req: NextRequest, code: string): NextResponse {
   const url = new URL('/login', req.url);
   url.searchParams.set('error', code);
   return NextResponse.redirect(url);
+}
+
+function acceptInviteError(req: NextRequest, token: string, code: string): NextResponse {
+  const url = new URL('/accept-invite', req.url);
+  if (token) url.searchParams.set('token', token);
+  url.searchParams.set('error', code);
+  return NextResponse.redirect(url);
+}
+
+/** Validate an internal returnTo path — must be site-relative, no protocol. */
+function safeReturnTo(candidate: string | undefined): string {
+  if (!candidate) return '/';
+  if (!candidate.startsWith('/')) return '/';
+  if (candidate.startsWith('//')) return '/';
+  return candidate;
 }
 
 export async function GET(req: NextRequest) {
@@ -69,7 +97,14 @@ export async function GET(req: NextRequest) {
     return loginError(req, 'session_expired');
   }
 
-  let statePayload: { state: string; codeVerifier: string; returnTo?: string };
+  let statePayload: {
+    state: string;
+    codeVerifier: string;
+    returnTo?: string;
+    mode?: string;
+    inviteToken?: string;
+    tenantId?: string;
+  };
   try {
     statePayload = JSON.parse(rawStateCookie);
   } catch {
@@ -105,59 +140,66 @@ export async function GET(req: NextRequest) {
     return loginError(req, 'token_exchange_failed');
   }
 
-  // Verify membership via core API
+  // ─── Invitation-acceptance branch ──────────────────────────────────────────
+  // Hand the access_token to the accept-invite handler via a short-lived
+  // HttpOnly cookie; do NOT put the access_token in the URL or in browser JS.
+  if (statePayload.mode === 'accept') {
+    const inviteToken = (statePayload.inviteToken || '').trim();
+    if (!inviteToken) {
+      return acceptInviteError(req, '', 'missing_invite_token');
+    }
+
+    const dest = new URL('/accept-invite', req.url);
+    dest.searchParams.set('token', inviteToken);
+    if (statePayload.tenantId) dest.searchParams.set('tenant_id', statePayload.tenantId);
+
+    const res = NextResponse.redirect(dest);
+    res.cookies.delete('fg_oidc_state');
+    res.cookies.set(OIDC_BOOTSTRAP_COOKIE, accessToken, {
+      httpOnly: true,
+      secure: IS_PROD,
+      sameSite: 'lax',
+      maxAge: OIDC_BOOTSTRAP_TTL_SECONDS,
+      path: '/',
+    });
+    return res;
+  }
+
+  // ─── Standard login branch — enroll and mint a pnu1. session ───────────────
   if (!cfg.coreApiUrl || !cfg.coreApiKey || !cfg.coreTenantId) {
     return loginError(req, 'core_api_not_configured');
   }
 
-  let userInfo: {
-    user_id: string;
-    email: string;
-    display_name: string;
-    role: string;
-    tenant_id: string;
-    membership_id: string;
-    membership_version: number;
-  };
+  let sessionToken: string;
   try {
-    const identityResp = await fetch(`${cfg.coreApiUrl}/portal/identity/login`, {
+    const enrollResp = await fetch(`${cfg.coreApiUrl}/portal/named-users/enroll`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': cfg.coreApiKey,
         'X-Tenant-ID': cfg.coreTenantId,
       },
-      body: JSON.stringify({ access_token: accessToken }),
+      body: JSON.stringify({ access_token: accessToken, oidc_provider: 'auth0' }),
       cache: 'no-store',
     });
 
-    if (identityResp.status === 401) return loginError(req, 'invalid_token');
-    if (identityResp.status === 403) return loginError(req, 'membership_inactive');
-    if (identityResp.status === 404) return loginError(req, 'membership_not_found');
-    if (!identityResp.ok) return loginError(req, 'identity_verification_failed');
+    if (enrollResp.status === 401) return loginError(req, 'invalid_token');
+    if (enrollResp.status === 403) return loginError(req, 'membership_inactive');
+    if (enrollResp.status === 404) return loginError(req, 'membership_not_found');
+    if (!enrollResp.ok) return loginError(req, 'identity_verification_failed');
 
-    userInfo = await identityResp.json();
+    const enroll = (await enrollResp.json()) as { session_token?: string };
+    sessionToken = (enroll.session_token || '').trim();
+    if (!sessionToken.startsWith('pnu1.')) throw new Error('malformed session_token');
   } catch {
     return loginError(req, 'identity_verification_failed');
   }
 
-  // Issue signed portal session cookie
-  const sessionUser: SessionUser = {
-    userId: userInfo.user_id,
-    email: userInfo.email,
-    displayName: userInfo.display_name,
-    role: userInfo.role,
-    membershipVersion: userInfo.membership_version ?? 0,
-  };
-
-  const sessionToken = await createUserSessionToken(sessionUser);
-
-  const returnTo = statePayload.returnTo && statePayload.returnTo.startsWith('/') && !statePayload.returnTo.startsWith('//')
-    ? statePayload.returnTo
-    : '/';
-
-  const res = NextResponse.redirect(new URL(returnTo, req.url));
+  const res = NextResponse.redirect(new URL(safeReturnTo(statePayload.returnTo), req.url));
   res.cookies.delete('fg_oidc_state');
+  // Store the raw pnu1. token as the session cookie value. The token is a
+  // random 32-byte hex string; the core API stores only its HMAC-SHA256
+  // fingerprint. Bearer disclosure risk is standard-session-cookie shaped.
   res.cookies.set(COOKIE_NAME, sessionToken, {
     httpOnly: true,
     secure: IS_PROD,

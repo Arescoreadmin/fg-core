@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createGrantSession, COOKIE_NAME } from '@/lib/session';
+import { createGrantSession, COOKIE_NAME, isProdLikeEnv } from '@/lib/session';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
@@ -58,6 +58,19 @@ function clearLoginAttempts(ip: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // Production cutover (PR B): shared-password/demo authentication is disabled
+  // in prod-like environments. Fail closed: unknown/missing FG_ENV is treated
+  // as production. Named-user OIDC (/api/auth/oidc) is the only login path.
+  if (isProdLikeEnv()) {
+    return NextResponse.json(
+      {
+        error: 'Password-based portal login is disabled in production.',
+        code: 'PORTAL_DEMO_AUTH_DISABLED',
+      },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
   const sessionSecret = process.env.PORTAL_SESSION_SECRET;
   const coreApiUrl = (process.env.CORE_API_URL || '').replace(/\/$/, '');
   const coreApiKey = process.env.CORE_API_KEY;

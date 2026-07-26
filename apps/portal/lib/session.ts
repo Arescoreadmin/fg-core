@@ -1,6 +1,38 @@
 export const COOKIE_NAME = 'fg_portal_session';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
+// ─── Production-mode gate (fail closed) ───────────────────────────────────────
+// Named-user cutover: FG_ENV=prod (or unknown/missing env in a build that lacks
+// explicit dev/test opt-in) disables the legacy demo/shared-password path.
+// Mirrors apps/console/lib/rateLimitStore.ts isDevOrTestEnv() semantics.
+export function isDevOrTestEnv(): boolean {
+  const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
+  const fgEnv = (process.env.FG_ENV || '').toLowerCase();
+  if (nodeEnv === 'development' || nodeEnv === 'test') return true;
+  if (['dev', 'development', 'local', 'test'].includes(fgEnv)) return true;
+  return false;
+}
+
+export function isProdLikeEnv(): boolean {
+  // Fail closed: any environment that is not explicitly dev/test is production.
+  return !isDevOrTestEnv();
+}
+
+// ─── Portal named-user session (pnu1.) — opaque token in HttpOnly cookie ──────
+// The cookie value IS the raw pnu1. token issued by the core API. The token is
+// stored server-side only as HMAC-SHA256(token, FG_KEY_PEPPER) fingerprint;
+// disclosure risk is bounded by the standard bearer-cookie contract.
+export const PNU_TOKEN_PREFIX = 'pnu1.';
+
+export function isPnuSessionCookie(value: string | undefined): boolean {
+  return typeof value === 'string' && value.startsWith(PNU_TOKEN_PREFIX);
+}
+
+/** Returns the raw pnu1. token if the cookie carries one, else null. */
+export function getPnuSessionToken(cookieValue: string | undefined): string | null {
+  return isPnuSessionCookie(cookieValue) ? (cookieValue as string) : null;
+}
+
 export interface SessionUser {
   userId: string;
   email: string;
@@ -91,6 +123,12 @@ export async function createUserSessionToken(user: SessionUser): Promise<string>
 
 export async function verifySessionToken(token: string | undefined): Promise<boolean> {
   if (!token) return false;
+  // Named-user session (pnu1.) — the token itself is the authorization.
+  // Middleware treats it as valid at the edge; every downstream /api/core
+  // request is re-validated server-side by portal_scope middleware via
+  // validate_session (DB lookup by HMAC fingerprint, membership + auth_version
+  // + status checks, fail-closed). No local signature required.
+  if (isPnuSessionCookie(token)) return true;
   const key = await getKey();
   if (!key) return false;
   try {
