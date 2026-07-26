@@ -23,9 +23,17 @@ export function isProdLikeEnv(): boolean {
 // stored server-side only as HMAC-SHA256(token, FG_KEY_PEPPER) fingerprint;
 // disclosure risk is bounded by the standard bearer-cookie contract.
 export const PNU_TOKEN_PREFIX = 'pnu1.';
+// Format: pnu1. + 64 lowercase hex chars (32-byte secrets.token_hex).
+// Enforced defense-in-depth at the BFF edge so trivially malformed tokens
+// never reach Core. Core still owns authoritative HMAC-fingerprint validation.
+export const PNU_TOKEN_RE = /^pnu1\.[0-9a-f]{64}$/;
 
 export function isPnuSessionCookie(value: string | undefined): boolean {
   return typeof value === 'string' && value.startsWith(PNU_TOKEN_PREFIX);
+}
+
+export function isPnuSessionCookieWellFormed(value: string | undefined): boolean {
+  return typeof value === 'string' && PNU_TOKEN_RE.test(value);
 }
 
 /** Returns the raw pnu1. token if the cookie carries one, else null. */
@@ -127,8 +135,10 @@ export async function verifySessionToken(token: string | undefined): Promise<boo
   // Middleware treats it as valid at the edge; every downstream /api/core
   // request is re-validated server-side by portal_scope middleware via
   // validate_session (DB lookup by HMAC fingerprint, membership + auth_version
-  // + status checks, fail-closed). No local signature required.
-  if (isPnuSessionCookie(token)) return true;
+  // + status checks, fail-closed). Defense-in-depth: reject malformed pnu1.
+  // tokens (bad length / non-hex chars) at the BFF edge so trivially forged
+  // cookies never reach Core.
+  if (isPnuSessionCookie(token)) return isPnuSessionCookieWellFormed(token);
   const key = await getKey();
   if (!key) return false;
   try {

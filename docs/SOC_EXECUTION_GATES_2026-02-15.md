@@ -6191,3 +6191,49 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No route inventory / plane registry / topology hash change enlarges the attack surface beyond the four PR A routes explicitly registered here; the accompanying `tools/ci/*.json` and `.sha256` updates are the auto-generated register of these four routes, not policy changes.
 
 **SOC review outcome:** approved. PR A introduces the named-user authority as an isolated identity population with its own audit table, its own token discriminators, and no shared authorization rows with the workforce authority. The five bot-review findings (P1-1 through P2-5) close known session-validation bypasses; no gate is weakened. Production login UI is untouched. Legacy grant-session coexistence carries no dual-write hazard because the two authorities occupy disjoint tables and disjoint token namespaces.
+
+---
+
+## fix/portal-production-named-user-cutover — PR #579 P1 bot-review patches (2026-07-25)
+
+**Critical files changed:** `api/middleware/portal_scope.py`
+
+**Change scope:** Three P1 bot-review findings on PR #579 (portal production named-user cutover). Only the middleware file is SOC-critical; the accompanying application changes (`api/portal.py`, `api/portal_user_authority.py`, `apps/portal/app/api/auth/oidc/callback/route.ts`, `apps/portal/lib/session.ts`) are behavioural fixes recorded under `docs/ai/PR_FIX_LOG.md` P-23. No migrations, no CI, no OPA policies, no cryptographic material, no route additions.
+
+**Security invariants enforced by this change:**
+
+1. **P1-A — pnu1. catch-all session validation.** Previously `PortalClientScopeMiddleware.dispatch()` only routed pnu1. tokens to `validate_session()` when the request path matched `/field-assessment/engagements/{id}/*` or `/portal/remediation*`. For every other portal-source request (e.g. `GET /governance/assets/*`), the middleware called `return await call_next(request)` without any pnu1. validation, relying solely on `AuthGateMiddleware` — which only inspects the tenant API key. A forged `fg_portal_session=pnu1.<anything>` cookie proxied by the BFF (which unconditionally sets `X-Portal-Source: client-portal` and `X-API-Key: CORE_API_KEY`) therefore reached the route handler with the correct tenant identity. This change moves the pnu1. branch to the top of `dispatch()` as a catch-all: any request bearing a pnu1. token is validated server-side by `validate_named_session()` against the DB (HMAC fingerprint + membership + status + `auth_version` + `expires_at`) before any path-specific branching. Engagement-scoped requests still receive the additional engagement-binding check that was already required (`PORTAL_MEMBERSHIP_REQUIRED` when the session has no active membership, `PORTAL_ENGAGEMENT_MISMATCH` when the membership binds to a different engagement). Non-engagement portal paths now populate `request.state.portal_user_id` and `request.state.portal_membership_id` so downstream handlers can trust portal identity without re-querying.
+
+2. **P1-A defense-in-depth (BFF edge).** `apps/portal/lib/session.ts` now enforces a format check (`^pnu1\.[0-9a-f]{64}$`) in `verifySessionToken()` before treating the cookie as valid. This rejects trivially malformed forgeries at the Next.js middleware before they ever reach Core. Core remains the authoritative validator; the BFF check is layered protection, not a replacement.
+
+3. **P1-B — invitation acceptance redirect includes `from=oidc` marker.** The OIDC callback route's `mode === 'accept'` branch now sets `dest.searchParams.set('from', 'oidc')` on the redirect back to `/accept-invite`. Without this marker the accept-invite page sees `arrivedFromOidc = false` and renders "Continue with SSO", which re-triggers the OIDC redirect — an infinite loop that blocks every new named-user from ever completing their invitation. No authorization semantics change; the marker only distinguishes "first landing" from "returning from OIDC" so the client-side UI can render the correct button. Server-side acceptance still requires the HttpOnly `fg_oidc_bootstrap` cookie carrying the access_token.
+
+4. **P1-C — engagement-scoped membership resolution at enrollment.** `portal_named_user_enroll` in `api/portal.py` previously called `pua.get_active_membership(db, portal_user_id=..., tenant_id=...)` with no engagement_id, which defaults to `WHERE engagement_id IS NULL` (tenant-wide only). Users invited with an engagement-scoped membership got `membership=None`; the resulting session had `portal_membership_id=None`, causing `PORTAL_MEMBERSHIP_REQUIRED` on every subsequent engagement request. This change adds `pua.get_best_active_membership()` which returns the most-appropriate active membership in this order: (1) tenant-wide (engagement_id IS NULL), (2) most-recently-created engagement-scoped. Rationale: at SSO enrollment time the specific target engagement is not known — the user has not yet clicked into an engagement — so the enrollment must resolve to a membership that will actually authorize downstream requests. The middleware's engagement-binding check remains authoritative: an engagement-scoped session for `eng-A` still cannot access `eng-B`. Only the default-selection at enrollment time is broadened. No new SQL predicate is introduced; RLS on `portal_user_memberships` remains in effect via `_set_tenant_rls(db, tenant_id)` at the top of the new function.
+
+**Non-changes (audited, confirmed correct):**
+
+- Legacy grant-session path (`portal_grant_svc.validate_session`) is untouched. Non-pnu1. tokens continue to require an engagement or remediation path prefix and retain their existing validation flow.
+- Named-user path via `X-FG-Membership-Id` + `X-FG-Membership-Version` headers (P1.1 legacy internal BFF protocol) is untouched — still requires `global_key` auth reason.
+- `AuthGateMiddleware` ordering is unchanged. It still runs before `PortalClientScopeMiddleware` and populates `request.state.tenant_id`.
+- `get_active_membership()` remains available for callers that need an exact-match lookup (either tenant-wide or a specific engagement).
+- `create_session()` continues to store `auth_version_snapshot` from the resolved membership; `validate_session()` continues to reject on version drift.
+- Session TTL, HMAC-SHA256 fingerprint storage, `FG_KEY_PEPPER` handling, and audit-event emission are unchanged.
+
+**Security review:**
+
+- No existing valid session becomes invalid: pnu1. tokens that previously passed engagement/remediation validation continue to pass; tokens that previously escaped validation on non-engagement paths (the vulnerability) are now correctly validated and only fail if the token itself is invalid.
+- No new denial code is introduced. Denials on the catch-all path reuse existing codes: `PORTAL_TENANT_MISSING`, `PORTAL_ACCESS_CHECK_FAILED`, `PORTAL_ACCESS_DENIED`, `PORTAL_SESSION_INVALID` (from `validate_session()`), `PORTAL_MEMBERSHIP_REQUIRED`, `PORTAL_ENGAGEMENT_MISMATCH`.
+- No middleware ordering change, no new middleware, no removed middleware.
+- Regression tests added to `tests/test_portal_user_authority.py`:
+  - `test_pnu1_token_validated_on_non_engagement_path` — forged pnu1. on `/governance/assets/*` returns 403 (P1-A).
+  - `test_pnu1_token_allowed_on_non_engagement_path_when_valid` — valid pnu1. on a non-engagement path proceeds (P1-A no-regression).
+  - `test_pnu1_engagement_binding_still_enforced_after_catch_all_move` — engagement mismatch still returns 403 after the refactor (P1-A no-regression).
+  - `test_get_best_active_membership_returns_engagement_scoped_when_only_scoped` — P1-C fix.
+  - `test_get_best_active_membership_returns_none_when_no_active` — P1-C boundary.
+  - `test_get_best_active_membership_sql_prefers_tenant_wide_ordering` — P1-C SQL ORDER BY invariant.
+- Portal regression test added to `apps/portal/tests/portal-prod-named-user.test.js`:
+  - `OIDC callback accept branch sets from=oidc marker on the redirect (P1-B)`.
+  - `verifySessionToken enforces pnu1. token format at the edge (P1-A defense-in-depth)`.
+- No OPA policy files, no cryptographic key material, no secret handling code, no CI workflow files, no migrations are modified.
+
+**SOC review outcome:** approved. All three P1 findings close real bypasses without altering the authority model or introducing new attack surface. Existing invariants documented in the PR #577 SOC entry (P1-1 through P2-5) remain in force. The catch-all move is a strengthening of validation coverage, not a change to what validation does; the enrollment membership-resolution broadening is a functional bug fix that does not weaken engagement-binding enforcement (which the middleware still applies on every engagement-scoped request).

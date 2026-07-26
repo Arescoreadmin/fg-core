@@ -152,6 +152,10 @@ export async function GET(req: NextRequest) {
     const dest = new URL('/accept-invite', req.url);
     dest.searchParams.set('token', inviteToken);
     if (statePayload.tenantId) dest.searchParams.set('tenant_id', statePayload.tenantId);
+    // Marker so the accept-invite page shows "Complete acceptance" instead of
+    // re-triggering the OIDC redirect. Without this the page assumes it is
+    // the first landing and loops back to Auth0.
+    dest.searchParams.set('from', 'oidc');
 
     const res = NextResponse.redirect(dest);
     res.cookies.delete('fg_oidc_state');

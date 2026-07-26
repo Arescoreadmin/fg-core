@@ -1,5 +1,67 @@
 # PR Fix Log (Strict)
 
+## P-23 — fix(portal): patch three P1 bot findings on PR #579
+
+**Branch:** `fix/portal-production-named-user-cutover`
+**Date:** 2026-07-25
+
+### Problem
+
+Three P1 security findings raised against PR #579 (portal production named-user cutover). All three are real bugs verified against the merged code on the branch:
+
+1. **P1-A — forged pnu1. token bypasses validation on non-engagement paths.** `PortalClientScopeMiddleware.dispatch()` validated pnu1. session tokens only when the request path matched `/field-assessment/engagements/{id}/*` or `/portal/remediation*`. For every other portal-source request (e.g. `GET /governance/assets/*`), the middleware called `return await call_next(request)` without calling `validate_session()`. The BFF proxy at `apps/portal/app/api/core/[...path]/route.ts` unconditionally attaches `X-Portal-Source: client-portal` and `X-API-Key: CORE_API_KEY` to every core request, so a forged `fg_portal_session=pnu1.anything` cookie:
+   - passed `verifySessionToken()` at the Next.js middleware (which only checked the `pnu1.` prefix),
+   - was forwarded by the proxy with a real tenant API key and `X-FG-Portal-Session: pnu1.anything`,
+   - passed `AuthGateMiddleware` on the strength of the tenant API key,
+   - and passed `PortalClientScopeMiddleware` because the path was not engagement/remediation.
+   The route handler then returned tenant-scoped data to an unauthenticated caller.
+
+2. **P1-B — missing `from=oidc` marker on OIDC-callback invitation redirect.** `apps/portal/app/api/auth/oidc/callback/route.ts` in the `mode === 'accept'` branch built a redirect back to `/accept-invite?token=<pni1...>&tenant_id=<...>` but omitted `from=oidc`. The accept-invite page (line 30) reads `searchParams.get('from') === 'oidc'` to decide whether to show "Complete acceptance" (calls the acceptance BFF) or "Continue with SSO" (re-triggers OIDC). Without the marker every returning user was pushed back through Auth0, forming an infinite loop that no named-user could ever escape.
+
+3. **P1-C — engagement-scoped membership not resolved for repeat SSO logins.** `api/portal.py::portal_named_user_enroll` called `pua.get_active_membership(db, portal_user_id=..., tenant_id=...)` with no `engagement_id`. That function's default branch resolves `WHERE engagement_id IS NULL` (tenant-wide only), so a user invited with an engagement-scoped membership got `membership=None`, `create_session()` stored `portal_membership_id=None`, and `PortalClientScopeMiddleware` then rejected every request with `PORTAL_MEMBERSHIP_REQUIRED`. The first-login path worked (the client accepted through the invitation endpoint which does resolve the correct membership), but every subsequent SSO login broke access.
+
+### Resolution
+
+**Modified files:**
+
+1. `mod: api/middleware/portal_scope.py` — moved the `pnu1.` branch to the top of `dispatch()` as a catch-all. Any portal request bearing a `pnu1.` token is now validated by `validate_session()` before any path-specific branching. Engagement-scoped requests still receive the additional `PORTAL_MEMBERSHIP_REQUIRED` / `PORTAL_ENGAGEMENT_MISMATCH` checks. Non-engagement portal paths now populate `request.state.portal_user_id` and `request.state.portal_membership_id` for downstream handlers. Legacy grant-session handling (non-`pnu1.` tokens) is unchanged; the internal-BFF `X-FG-Membership-*` path (P1.1 protocol) is unchanged.
+
+2. `mod: api/portal_user_authority.py` — added `get_best_active_membership()` which returns the most-appropriate active membership: (1) tenant-wide (`engagement_id IS NULL`), (2) most-recently-created engagement-scoped. `_set_tenant_rls()` is applied to the caller's session before the query. `get_active_membership()` is unchanged and still available for exact-match lookups (either tenant-wide or a specific engagement).
+
+3. `mod: api/portal.py` — swapped the enrollment call from `pua.get_active_membership(db, portal_user_id=..., tenant_id=...)` to `pua.get_best_active_membership(db, portal_user_id=..., tenant_id=...)`. Added inline rationale for the change.
+
+4. `mod: apps/portal/app/api/auth/oidc/callback/route.ts` — one line added to the `mode === 'accept'` branch: `dest.searchParams.set('from', 'oidc')` so the accept-invite page recognizes the second hop and renders "Complete acceptance" instead of re-triggering OIDC.
+
+5. `mod: apps/portal/lib/session.ts` — added `PNU_TOKEN_RE = /^pnu1\.[0-9a-f]{64}$/` and `isPnuSessionCookieWellFormed()`. `verifySessionToken()` now enforces the format check for `pnu1.` tokens (defense-in-depth at the BFF edge). Core remains the authoritative validator.
+
+6. `mod: tests/test_portal_user_authority.py` — added six regression tests covering P1-A (three: non-engagement rejection, non-engagement allowance, engagement-binding no-regression) and P1-C (three: engagement-scoped resolution, none-when-no-active, SQL ORDER BY invariant).
+
+7. `mod: apps/portal/tests/portal-prod-named-user.test.js` — added two regression tests: one asserts the `from=oidc` marker in the OIDC callback (P1-B), one asserts the `PNU_TOKEN_RE` format check and its use in `verifySessionToken()` (P1-A defense-in-depth).
+
+### Root cause
+
+- **P1-A.** The path-matching structure was written in the order: "check if engagement path; else check if remediation path; else pass through". Session validation was attached to each branch instead of running unconditionally when a `pnu1.` token was present. The pass-through path assumed that non-engagement/non-remediation portal traffic did not exist yet, but the BFF proxy stamps `X-Portal-Source: client-portal` on every core request the browser makes, so any authenticated portal page could reach unvalidated territory. The fix inverts the structure: validate the session first, then apply engagement-binding when the path demands it.
+- **P1-B.** The redirect construction copied a template that predated the `from=oidc` marker; the corresponding client-side code was written expecting the marker. Neither side had a test that asserted the marker's presence in the redirect URL.
+- **P1-C.** `get_active_membership()`'s signature (`engagement_id: str | None = None`) reads naturally as "if you don't care about engagement, give me any membership", but the SQL is stricter: `NULL` argument means `engagement_id IS NULL` (tenant-wide only). The enrollment code was written before this asymmetry was documented and had no test for the engagement-scoped-only case.
+
+### Non-changes (audited, confirmed correct)
+
+- Legacy grant-session path (`portal_grant_svc.validate_session`) — unchanged. Non-`pnu1.` tokens continue through the pre-existing remediation/engagement branches.
+- `AuthGateMiddleware` — unchanged. It still runs before `PortalClientScopeMiddleware` and populates `request.state.tenant_id`.
+- Internal `X-FG-Membership-Id` + `X-FG-Membership-Version` protocol (P1.1) — unchanged. Still requires `global_key` auth reason and validates against `tenant_users.identity_binding_status='bound'`.
+- `create_session()`, `validate_session()`, session TTL, HMAC-SHA256 fingerprint storage, `FG_KEY_PEPPER` handling, audit-event emission — unchanged.
+- `get_active_membership()` — kept as-is for callers that need exact-match lookups (either tenant-wide or a specific engagement). Only the enrollment call site was updated.
+- Migration `0164_portal_user_identity_authority.sql` — no schema change required. `portal_user_memberships.created_at TIMESTAMPTZ NOT NULL DEFAULT now()` already exists (line 120).
+- SOC review record: `docs/SOC_EXECUTION_GATES_2026-02-15.md` gets a new entry documenting the `api/middleware/portal_scope.py` change (critical file); the other four modified files are non-critical.
+
+### Behavioral impact
+
+- Forged `pnu1.` cookies that previously reached `/governance/*` (and any other non-engagement portal path) now correctly return 403 `PORTAL_SESSION_INVALID` (or the specific denial code from `validate_session()`).
+- Valid `pnu1.` sessions on non-engagement portal paths continue to pass through, and now expose `request.state.portal_user_id` / `request.state.portal_membership_id` to downstream handlers.
+- Existing valid engagement-scoped `pnu1.` sessions are unaffected; the engagement-binding check still runs on engagement paths.
+- New OIDC-accept flows no longer loop back to Auth0 after invitation acceptance.
+- Engagement-scoped invitees can now log in via SSO after their initial invitation acceptance and reach engagement pages without hitting `PORTAL_MEMBERSHIP_REQUIRED` on every request.
+
 ## P-22 — fix(portal): normalize named-user authority lint and typing style
 
 **Branch:** `fix/portal-named-user-authority-lint-cleanup`

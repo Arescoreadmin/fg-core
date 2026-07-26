@@ -83,6 +83,14 @@ test('OIDC callback invitation-accept branch does not leak access_token to URL/J
   assert.match(src, /OIDC_BOOTSTRAP_COOKIE[\s\S]*httpOnly:\s*true/);
 });
 
+test('OIDC callback accept branch sets from=oidc marker on the redirect (P1-B)', () => {
+  // Regression: the /accept-invite page shows "Continue with SSO" until it
+  // sees ?from=oidc. Without this marker the page loops back to Auth0
+  // forever after invitation acceptance.
+  const src = read('app/api/auth/oidc/callback/route.ts');
+  assert.match(src, /dest\.searchParams\.set\('from',\s*'oidc'\)/);
+});
+
 // ---------------------------------------------------------------------------
 // Accept-invite BFF wired to portal named-user acceptance
 // ---------------------------------------------------------------------------
@@ -137,9 +145,13 @@ test('BFF proxy forwards the raw pnu1. token as X-FG-Portal-Session', () => {
 // Session cookie discipline
 // ---------------------------------------------------------------------------
 
-test('verifySessionToken accepts pnu1. cookies without requiring HMAC', () => {
+test('verifySessionToken enforces pnu1. token format at the edge (P1-A defense-in-depth)', () => {
   const src = read('lib/session.ts');
-  assert.match(src, /if \(isPnuSessionCookie\(token\)\) return true/);
+  // Format check (64 hex chars) short-circuits verify. Core still owns the
+  // authoritative fingerprint validation; this rejects trivially malformed
+  // tokens before they reach the /api/core proxy.
+  assert.match(src, /export const PNU_TOKEN_RE = \/\^pnu1\\\.\[0-9a-f\]\{64\}\$\//);
+  assert.match(src, /if \(isPnuSessionCookie\(token\)\) return isPnuSessionCookieWellFormed\(token\)/);
 });
 
 test('lib/session exports pnu1. discriminator helpers', () => {
