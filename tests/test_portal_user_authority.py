@@ -897,6 +897,55 @@ def test_revoke_session_by_token_computes_fingerprint_not_raw_lookup(mock_db):
 
 
 # ---------------------------------------------------------------------------
+# 25c. issue → validate success → revoke → validate same token → denied
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_then_validate_same_token_is_denied(mock_db):
+    """After revoke_session_by_token succeeds, validate_session must deny
+    the exact same raw token.  Proves replay after logout is rejected."""
+    raw_token = SESSION_TOKEN_PREFIX + ("e" * 64)
+    expected_fp = _compute_lookup_fingerprint("e" * 64, TEST_PEPPER)
+
+    # Phase 1: revoke — UPDATE returns one row (session was active).
+    mock_db.execute.return_value.fetchall.return_value = [
+        _make_row(id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+    ]
+    revoke_result = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
+    assert revoke_result.revoked is True
+    mock_db.reset_mock()
+
+    # Phase 2: validate — DB WHERE status='active' now returns nothing (row is
+    # revoked).  validate_session must return ok=False.
+    mock_db.execute.return_value.fetchone.return_value = None
+    val_result = validate_session(mock_db, raw_token=raw_token, tenant_id=TENANT_ID)
+
+    assert val_result.ok is False
+    assert val_result.denial_code == "PORTAL_SESSION_NOT_FOUND"
+    # Confirm validate also keyed on the fingerprint, not the raw token.
+    # call_args_list[0] is _set_tenant_rls (tid param); [1] is the SELECT.
+    validate_sql_params = mock_db.execute.call_args_list[1].args[1]
+    assert validate_sql_params.get("fp") == expected_fp
+    assert raw_token not in validate_sql_params.values()
+
+
+# ---------------------------------------------------------------------------
+# 25d. non-pnu1. (grant-format) token cannot invoke self-revocation
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_session_by_token_rejects_grant_format_without_db_access(mock_db):
+    """A legacy grant session token (base64.sig format, no pnu1. prefix) must
+    be silently rejected without any DB access.  /self cannot be weaponised to
+    revoke grant sessions."""
+    grant_like_token = "eyJvayI6dHJ1ZX0=.c29tZXNpZw=="  # base64-ish, no prefix
+    result = pua.revoke_session_by_token(mock_db, raw_token=grant_like_token)
+
+    assert result.revoked is False
+    mock_db.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # 26. Concurrency: simulate two concurrent accept_invitation calls
 # ---------------------------------------------------------------------------
 
