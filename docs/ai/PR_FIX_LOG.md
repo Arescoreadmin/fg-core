@@ -1,5 +1,110 @@
 # PR Fix Log (Strict)
 
+## P-26 — fix(portal): RLS-safe pnu1. self-revocation via SECURITY DEFINER function
+
+**Branch:** `fix/portal-named-user-session-revocation` (PR #580)
+**Date:** 2026-07-26
+
+### Problem
+
+`revoke_session_by_token` executed a bare `UPDATE portal_user_sessions WHERE token_fingerprint = :fp`. `portal_user_sessions` has tenant-scoped RLS (`USING (tenant_id = current_setting('app.tenant_id', true))`). The self-revocation path (`DELETE /portal/named-sessions/self`) arrives without a known tenant context, so `app.tenant_id` is unset and the RLS policy hides every row — the UPDATE returned 0 rows, the route returned 204, and the session remained active.
+
+### Resolution
+
+**New file:**
+
+1. `new: migrations/postgres/0165_portal_session_self_revocation_fn.sql` — `SECURITY DEFINER` function `revoke_portal_session_by_fingerprint(p_fingerprint TEXT)` that atomically revokes the session (bypasses RLS as function owner, who owns the table). Returns `(session_id UUID, tenant_id TEXT, portal_user_id UUID)` so the caller can set RLS context before the audit INSERT.
+
+**Modified files:**
+
+2. `mod: api/portal_user_authority.py` — `revoke_session_by_token` now calls the SECURITY DEFINER function instead of the bare UPDATE; then calls `_set_tenant_rls(db, tenant_id)` with the resolved tenant before `_emit_audit()` so the audit INSERT also satisfies RLS.
+
+3. `mod: tests/test_portal_user_authority.py` — Updated mock row attribute from `id=` to `session_id=` (matching the function's aliased RETURNING column); updated fingerprint test to assert `revoke_portal_session_by_fingerprint` is called (not a bare UPDATE); updated call-count comment (3 calls: fn + set_config + audit).
+
+### Behavioral impact
+
+Server-side session revocation now works correctly in RLS-enforced deployments. Logout clears the session record in DB; a captured token replayed after logout is denied by `validate_session` (`PORTAL_SESSION_NOT_FOUND`). Fail-open semantics (cookie always cleared) unchanged.
+
+## P-25 — fix(portal): wire BFF logout to Core named-user session revocation
+
+**Branch:** `fix/portal-named-user-session-revocation`
+**Date:** 2026-07-25
+
+### Problem
+
+PR #579 completed the production named-user portal cutover but left one gap
+documented in its completion report: `POST /api/auth/logout` only cleared the
+`fg_portal_session` cookie. The server-side `portal_user_sessions` row for the
+`pnu1.` token stayed `status='active'` until (a) its 14-day TTL expired,
+(b) an admin explicitly revoked it via `DELETE /portal/named-sessions/{id}`,
+or (c) the membership `auth_version` was bumped.
+
+A leaked or replayed cookie was therefore accepted by Core for up to 14 days
+after the browser-side logout even though the user believed they had signed
+out. The BFF could not call the existing admin revocation route because it
+only holds the raw token from the cookie — never the `session_id` UUID.
+
+### Resolution
+
+**New Core route** — `DELETE /portal/named-sessions/self`:
+
+1. `mod: api/portal_user_authority.py` — new `revoke_session_by_token()` helper
+   and `SessionRevocationResult` dataclass. Computes the HMAC lookup fingerprint
+   from the raw `pnu1.` token, does a single `UPDATE ... RETURNING id, tenant_id,
+   portal_user_id WHERE token_fingerprint = :fp AND status = 'active'`, and
+   emits the `portal_session_revoked` audit event when a row was actually
+   flipped. Idempotent: unknown or already-terminal tokens return
+   `revoked=False` without raising. Pepper-missing / DB errors return
+   `revoked=False` so BFF logout stays fail-open.
+
+2. `mod: api/portal.py` — new `DELETE /portal/named-sessions/self` route
+   registered BEFORE the existing `/named-sessions/{session_id}` route so the
+   literal `/self` path never falls into the `{session_id}` placeholder. The
+   token in `X-FG-Portal-Session` is the credential; tenant is resolved from
+   the session record, so no `X-API-Key` or `X-Tenant-ID` header is trusted.
+   Missing / malformed header → 401. Any other outcome (revoked or already
+   revoked) → 204 (idempotent contract for the BFF).
+
+The prefix `/portal/named-sessions/` is already in `PUBLIC_PATHS_PREFIX`
+(added with PR #577), so no `api/security/public_paths.py` change is needed.
+
+**BFF logout** — `mod: apps/portal/app/api/auth/logout/route.ts`:
+
+The handler now detects the `pnu1.` cookie via `getPnuSessionToken()` and, when
+present, `fetch()`es `DELETE /portal/named-sessions/self` with the raw token
+in `X-FG-Portal-Session` and no service-account key. Fail-open contract:
+
+- 204/2xx → cookie cleared, `{ ok: true }` returned.
+- 404 → treated as idempotent success (already expired/revoked); cookie cleared.
+- Any other status / network error / abort → logged server-side; cookie still
+  cleared; `{ ok: true }` still returned.
+
+An `AbortController` with a bounded `PORTAL_LOGOUT_REVOKE_TIMEOUT_MS` timeout
+(default 2000 ms) prevents a slow Core from blocking the browser response.
+
+Legacy grant-session cookies (non-`pnu1.` prefix) skip the Core call entirely
+— unchanged behavior for that path.
+
+### Tests
+
+- `mod: tests/test_portal_user_authority.py` — 5 new unit tests around
+  `revoke_session_by_token`: wrong-prefix rejection, happy-path revoke +
+  audit, idempotent no-match, DB-error swallow, fingerprint (never raw token)
+  lookup.
+- `mod: apps/portal/tests/portal-prod-named-user.test.js` — 4 new structural
+  tests asserting the BFF logout handler calls the self-revocation endpoint,
+  always clears the cookie regardless of upstream status, bounds the call
+  with `AbortController`, and gates the Core call inside `if (pnuToken)`.
+
+### Behavioral impact
+
+- Named-user logout now reduces the Core-side session exposure window from up
+  to 14 days to near-zero (single UPDATE on the row).
+- Fail-open guarantee preserved: a Core outage never leaves a user unable to
+  clear their local cookie.
+- Legacy grant sessions unaffected.
+- No schema/migration/CI/infra changes. No secrets touched.
+
 ## P-24 — fix(tests): correct ASGI app and Request types in portal scope middleware tests
 
 **Branch:** direct push to main (`c51ea59d`) — no PR branch created

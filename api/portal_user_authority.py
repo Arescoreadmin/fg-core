@@ -1114,6 +1114,95 @@ def revoke_session(
     return False
 
 
+@dataclass(frozen=True)
+class SessionRevocationResult:
+    """Outcome of a token-authenticated self-revocation."""
+
+    # True if an active row was flipped to revoked; False if already terminal or unknown.
+    revoked: bool
+    session_id: str | None = None
+    portal_user_id: str | None = None
+    tenant_id: str | None = None
+
+
+def revoke_session_by_token(
+    db,
+    *,
+    raw_token: str,
+    request_id: str | None = None,
+) -> SessionRevocationResult:
+    """
+    Revoke an active portal_user_sessions row identified by its raw pnu1. token.
+
+    The token itself is the credential — this function is intended for
+    browser-driven logout where the BFF holds only the token (not the
+    session_id UUID). Tenant is resolved from the session record itself, so no
+    caller-supplied tenant_id is trusted.
+
+    Idempotent: if the token has an invalid format, matches no row, or matches
+    a row already in a terminal state, returns revoked=False without raising.
+
+    RLS note
+    --------
+    portal_user_sessions has tenant-scoped RLS. Self-revocation arrives without
+    a known tenant context, so a plain UPDATE would find zero rows. The UPDATE
+    is delegated to revoke_portal_session_by_fingerprint(), a SECURITY DEFINER
+    function (migration 0165) that runs as the table owner and therefore bypasses
+    RLS for this single atomic operation. The resolved tenant_id is then bound
+    via _set_tenant_rls() before the audit INSERT so audit-event RLS is satisfied.
+    """
+    if not raw_token.startswith(SESSION_TOKEN_PREFIX):
+        return SessionRevocationResult(revoked=False)
+
+    token_hex = raw_token[len(SESSION_TOKEN_PREFIX) :]
+
+    try:
+        fingerprint = _compute_lookup_fingerprint(token_hex, _get_pepper())
+    except RuntimeError:
+        # Pepper not configured — treat as no-op so logout still clears the cookie.
+        return SessionRevocationResult(revoked=False)
+
+    try:
+        # Delegate the UPDATE to the SECURITY DEFINER function so the
+        # fingerprint lookup is not hidden by the unscoped RLS policy.
+        rows = db.execute(
+            text(
+                "SELECT session_id, tenant_id, portal_user_id"
+                " FROM revoke_portal_session_by_fingerprint(:fp)"
+            ),
+            {"fp": fingerprint},
+        ).fetchall()
+    except Exception as exc:
+        log.exception("revoke_session_by_token: DB error during revoke: %s", exc)
+        return SessionRevocationResult(revoked=False)
+
+    if not rows:
+        return SessionRevocationResult(revoked=False)
+
+    session_id = _coerce_uuid(rows[0].session_id)
+    portal_user_id = _coerce_uuid(rows[0].portal_user_id)
+    tenant_id = str(rows[0].tenant_id) if rows[0].tenant_id is not None else None
+
+    if tenant_id is not None:
+        # Set RLS context before the audit INSERT (portal_user_audit_events also
+        # has RLS). The tenant was resolved server-side from the session record.
+        _set_tenant_rls(db, tenant_id)
+        _emit_audit(
+            db,
+            event_type="portal_session_revoked",
+            tenant_id=tenant_id,
+            portal_user_id=portal_user_id,
+            request_id=request_id,
+        )
+
+    return SessionRevocationResult(
+        revoked=True,
+        session_id=session_id,
+        portal_user_id=portal_user_id,
+        tenant_id=tenant_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Module-level singleton (stateless — all state lives in the DB session)
 # ---------------------------------------------------------------------------
@@ -1135,6 +1224,7 @@ class PortalUserAuthority:
     create_session = staticmethod(create_session)
     validate_session = staticmethod(validate_session)
     revoke_session = staticmethod(revoke_session)
+    revoke_session_by_token = staticmethod(revoke_session_by_token)
 
 
 portal_user_svc = PortalUserAuthority()

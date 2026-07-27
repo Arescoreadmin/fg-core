@@ -5120,6 +5120,12 @@
     },
     {
       "method": "DELETE",
+      "path": "/portal/named-sessions/self",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
       "path": "/portal/named-sessions/{session_id}",
       "scopes": [],
       "source": "contract"
@@ -6133,7 +6139,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-07-25T18:00:15.703817+00:00",
+  "generated_at": "2026-07-26T21:05:32.022793+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

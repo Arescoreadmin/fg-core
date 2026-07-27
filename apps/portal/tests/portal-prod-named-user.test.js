@@ -224,3 +224,53 @@ test('middleware public prefixes cover both /login, /accept-invite, and /api/aut
   assert.match(src, /'\/api\/auth'/);
   assert.match(src, /'\/accept-invite'/);
 });
+
+// ---------------------------------------------------------------------------
+// PR C — logout revokes the Core-side named-user session record
+// ---------------------------------------------------------------------------
+
+test('logout BFF calls Core DELETE /portal/named-sessions/self for pnu1. cookies', () => {
+  const src = read('app/api/auth/logout/route.ts');
+  // Uses the pnu1.-discriminated getter, not a raw string prefix check.
+  assert.match(src, /getPnuSessionToken/);
+  // Targets the self-revocation endpoint (not the /{session_id} variant —
+  // the BFF only holds the token, not the session_id UUID).
+  assert.match(src, /\/portal\/named-sessions\/self/);
+  assert.match(src, /method:\s*'DELETE'/);
+  // Forwards the raw token as X-FG-Portal-Session (Core resolves tenant from
+  // the session record — no service-account key or X-Tenant-ID header).
+  assert.match(src, /'X-FG-Portal-Session':\s*pnuToken/);
+});
+
+test('logout BFF always clears the fg_portal_session cookie (fail-open)', () => {
+  const src = read('app/api/auth/logout/route.ts');
+  // The cookies.delete call must live outside any Core-response conditional
+  // so a Core 500 / timeout / network error still results in cookie clear.
+  assert.match(src, /res\.cookies\.delete\(COOKIE_NAME\)/);
+  // Contract comment must document the fail-open guarantee explicitly.
+  assert.match(src, /[Ff]ail-open/);
+  // Non-2xx Core responses are logged but not returned to the client, and
+  // the 404 branch is treated as idempotent (already revoked).
+  assert.match(src, /status\s*!==\s*404/);
+});
+
+test('logout BFF bounds Core revocation with an AbortController timeout', () => {
+  const src = read('app/api/auth/logout/route.ts');
+  // A hung Core must never leave the browser waiting for its logout response.
+  assert.match(src, /AbortController/);
+  assert.match(src, /setTimeout\(/);
+  assert.match(src, /signal:\s*controller\.signal/);
+});
+
+test('logout BFF does NOT call the pnu1. self-revocation endpoint for legacy grant sessions', () => {
+  const src = read('app/api/auth/logout/route.ts');
+  // The Core call must be inside an `if (pnuToken)` branch — legacy grant
+  // cookies (which do not start with pnu1.) must not reach the pnu1. route.
+  assert.match(src, /if\s*\(\s*pnuToken\s*\)/);
+  // The fetch() call that targets the self-revocation URL must appear after
+  // the pnuToken gate (search for the fetch invocation itself, not the URL
+  // which may also appear in a header docstring above).
+  const fetchIdx = src.indexOf('await fetch(');
+  const gateIdx = src.indexOf('if (pnuToken)');
+  assert.ok(gateIdx >= 0 && fetchIdx > gateIdx, 'self-revoke fetch must be inside if (pnuToken) block');
+});
