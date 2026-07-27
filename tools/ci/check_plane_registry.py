@@ -37,6 +37,9 @@ EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
     # Named-session revocation authorizes via the session's own pnu1. token in
     # X-FG-Portal-Session; no separate service-account scope dependency.
     ("DELETE", "/portal/named-sessions/{session_id}"),
+    # Self-revocation variant: same auth pattern as /{session_id} — the pnu1.
+    # token in X-FG-Portal-Session IS the credential; no service-account scope.
+    ("DELETE", "/portal/named-sessions/self"),
 }
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
@@ -54,6 +57,9 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     ("POST", "/portal/invitations"),
     ("POST", "/portal/invitations/{token}/accept"),
     ("DELETE", "/portal/named-sessions/{session_id}"),
+    # Self-revocation: tenant is resolved server-side from the session record via
+    # the SECURITY DEFINER function; no Depends() tenant parameter for the scanner.
+    ("DELETE", "/portal/named-sessions/self"),
 }
 
 
