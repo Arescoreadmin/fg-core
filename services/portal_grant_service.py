@@ -34,6 +34,8 @@ from typing import Optional
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError as _SAOperationalError
+from sqlalchemy.exc import ProgrammingError as _SAProgrammingError
 from sqlalchemy.orm import Session
 
 import api.credential_authority as ca
@@ -854,8 +856,12 @@ class PortalGrantService:
                         revoked_at=g.revoked_at,
                     )
                 )
-        except Exception:
-            pass  # portal_grants table may not exist in all environments
+        except (_SAOperationalError, _SAProgrammingError):
+            # portal_grants table absent (SQLite: OperationalError "no such table";
+            # Postgres: ProgrammingError "relation does not exist").  All other
+            # exceptions propagate — they indicate a real failure, not a
+            # missing-table compatibility condition.
+            pass
 
         # Sort newest first (canonical credentials already are; legacy interleaves).
         views.sort(key=lambda v: v.created_at, reverse=True)

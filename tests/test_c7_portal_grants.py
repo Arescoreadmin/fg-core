@@ -983,3 +983,134 @@ def test_fixture_db_has_canonical_tenant_lifecycle_state(
                 f"tenant {tenant_id!r} has lifecycle_state={row[0]!r}; "
                 "portal grants require 'active' lifecycle state"
             )
+
+
+# ---------------------------------------------------------------------------
+# list_grants legacy-fallback exception-narrowing tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_db(raise_on_execute: Exception | None = None) -> object:
+    """Return a minimal mock Session whose execute() either raises or returns empty."""
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    if raise_on_execute is not None:
+        db.execute.side_effect = raise_on_execute
+    else:
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        db.execute.return_value = result
+    return db
+
+
+def test_list_grants_canonical_path_succeeds_without_legacy_table(
+    client: TestClient,
+) -> None:
+    """Canonical tenant_credentials read succeeds; legacy fallback is not required."""
+    eng = _create_engagement(client)
+    _create_grant(client, eng["id"])
+    resp = client.get(f"/field-assessment/engagements/{eng['id']}/portal-grants")
+    assert resp.status_code == 200
+    grants = resp.json()
+    assert len(grants) >= 1
+    # No secret material in list response.
+    for g in grants:
+        assert "raw_secret" not in g
+        assert "grant_hash" not in g
+        assert "secret" not in g
+
+
+def test_list_grants_no_secret_in_response(client: TestClient) -> None:
+    """list_grants must never expose raw credential secrets."""
+    eng = _create_engagement(client)
+    data = _create_grant(client, eng["id"])
+    secret = data.get("raw_secret", "")
+    resp = client.get(f"/field-assessment/engagements/{eng['id']}/portal-grants")
+    assert resp.status_code == 200
+    body = resp.text
+    if secret:
+        assert secret not in body
+
+
+def test_list_grants_legacy_fallback_swallows_operational_error() -> None:
+    """OperationalError (SQLite 'no such table') is silenced by the legacy fallback."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+    from sqlalchemy.exc import OperationalError
+
+    db = _make_mock_db(
+        raise_on_execute=OperationalError("no such table: portal_grants", None, None)
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        result = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id=_TENANT_ID,
+            engagement_id="eng-fallback-test",
+        )
+
+    assert result == []
+
+
+def test_list_grants_legacy_fallback_swallows_programming_error() -> None:
+    """ProgrammingError (Postgres 'relation does not exist') is silenced by the legacy fallback."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+    from sqlalchemy.exc import ProgrammingError
+
+    db = _make_mock_db(
+        raise_on_execute=ProgrammingError(
+            'relation "portal_grants" does not exist', None, None
+        )
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        result = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id=_TENANT_ID,
+            engagement_id="eng-fallback-test",
+        )
+
+    assert result == []
+
+
+def test_list_grants_unrelated_exception_propagates() -> None:
+    """Exceptions unrelated to missing-table are NOT swallowed — they propagate."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    db = _make_mock_db(
+        raise_on_execute=RuntimeError("unexpected serialization failure")
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        with pytest.raises(RuntimeError, match="unexpected serialization failure"):
+            portal_grant_svc.list_grants(
+                db,  # type: ignore[arg-type]
+                tenant_id=_TENANT_ID,
+                engagement_id="eng-fallback-test",
+            )
+
+
+def test_list_grants_tenant_isolation(client: TestClient, client_b: TestClient) -> None:
+    """Grants from tenant A must not appear in tenant B's list."""
+    eng_a = _create_engagement(client)
+    _create_grant(client, eng_a["id"])
+    resp_a = client.get(f"/field-assessment/engagements/{eng_a['id']}/portal-grants")
+    assert resp_a.status_code == 200
+    ids_a = {g["id"] for g in resp_a.json()}
+
+    eng_b = _create_engagement(client_b)
+    _create_grant(client_b, eng_b["id"])
+    resp_b = client_b.get(f"/field-assessment/engagements/{eng_b['id']}/portal-grants")
+    assert resp_b.status_code == 200
+    ids_b = {g["id"] for g in resp_b.json()}
+
+    assert ids_a.isdisjoint(ids_b), "Grant IDs leaked across tenant boundary"
