@@ -1042,11 +1042,24 @@ def issue_credential(
     actor_id: Optional[str] = None,
     request_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    conn: Optional[Connection] = None,
 ) -> IssuanceResult:
     """Issue a new credential for a tenant slot.
 
     Returns IssuanceResult with plaintext_secret set exactly once.
     On idempotency replay, plaintext_secret is None.
+
+    When ``conn`` is provided (caller-owned connection), all writes are
+    performed on that connection and the transaction is NOT committed or
+    closed here — the caller retains full ownership.  This avoids opening
+    a second concurrent writer on SQLite (which would raise
+    ``OperationalError: database is locked``) when the caller already
+    holds an open write transaction (e.g. provisioning_manager completing
+    a workflow while also issuing a portal grant).
+
+    When ``conn`` is None (default), a fresh connection is opened from
+    ``engine`` via ``engine.begin()`` as before — existing callers are
+    unaffected.
 
     Raises:
         CredentialTypeError:    credential_type not recognised.
@@ -1059,7 +1072,7 @@ def issue_credential(
 
     is_postgres = engine.dialect.name == "postgresql"
 
-    with engine.begin() as conn:
+    def _do_issue(conn: Connection) -> IssuanceResult:
         # Idempotency: scoped to tenant so cross-tenant replay is impossible.
         if idempotency_key:
             existing = conn.execute(
@@ -1256,8 +1269,15 @@ def issue_credential(
             request_id=request_id,
         )
 
-    assert record is not None, "credential insert did not return a row"
-    return IssuanceResult(record=_row_to_record(record), plaintext_secret=raw_key)
+        assert record is not None, "credential insert did not return a row"
+        return IssuanceResult(record=_row_to_record(record), plaintext_secret=raw_key)
+
+    # Dispatch: use the caller-provided connection (no commit/close) or open
+    # a fresh one-shot connection from the engine (original behaviour).
+    if conn is not None:
+        return _do_issue(conn)
+    with engine.begin() as _conn:
+        return _do_issue(_conn)
 
 
 def validate_credential(

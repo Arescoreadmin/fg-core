@@ -191,6 +191,16 @@ class PortalGrantService:
         grant_type = _portal_role_to_grant_type(portal_role)
 
         engine = get_engine()
+        # Pass the caller's existing connection so that all credential writes
+        # share the same SQLite writer connection.  SQLite allows only one
+        # concurrent writer; opening a second engine.begin() while the ORM
+        # session already holds a write transaction causes:
+        #   OperationalError: database is locked
+        # By reusing the session's underlying connection (db.connection()), the
+        # credential INSERTs join the caller's transaction — no second writer is
+        # opened, and a rollback from the caller unwinds ALL writes atomically.
+        # Transaction ownership stays with the caller (we do not commit/close).
+        _sa_conn = db.connection()
         result = ca.issue_credential(
             engine,
             tenant_id=tenant_id,
@@ -200,6 +210,7 @@ class PortalGrantService:
             metadata=meta.model_dump(),
             expires_in_seconds=ttl_days * 86400,
             actor_id=created_by,
+            conn=_sa_conn,
         )
 
         self._audit(

@@ -20328,3 +20328,18 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Security impact:** P1 fix closes a gap where a revocation action had no effect on the credential that was actually authorizing access.
 - **Schema/API impact:** `list_credentials` gains an `offset` parameter (additive, backward compatible).
 - **Result:** Pass.
+
+## P-29 — fix(provisioning): pass caller connection to CredentialAuthority to prevent SQLite lock contention
+
+- **PR/Branch:** `fix/portal-provisioning-sqlite-transaction-atomicity`
+- **Date:** 2026-07-26
+- **Files changed:** `api/credential_authority.py`, `services/portal_grant_service.py`, `tests/test_p1_provisioning_deterministic.py`
+- **Root cause:** `complete_workflow` calls `provisioning_store.complete_provisioning_workflow(db, ...)` which flushes workflow state + audit events on the SQLAlchemy `Session` (opening an implicit SQLite write transaction). Then `portal_grant_svc.create_grant()` called `ca.issue_credential(engine, ...)`, which opened a **second** writer connection via `engine.begin()`. SQLite only allows one concurrent writer — the second `BEGIN` raises `OperationalError: database is locked`. Tests `test_P1_2` and `test_P1_3` both hit this on every run.
+- **Fix:** Added `conn: Optional[Connection] = None` to `issue_credential()`. When `conn` is provided, all writes use it directly (no commit or close). When `conn` is None, opens a fresh connection as before (existing behaviour unchanged). In `portal_grant_svc.create_grant()`, extracted the session's underlying connection via `db.connection()` and passed it as `conn=_sa_conn`. All credential writes now share the caller's write transaction, eliminating the concurrent-writer contention. Transaction ownership stays with the caller (`provisioning_manager`); a rollback from that layer unwinds all writes atomically.
+- **Tests added:** 7 regression tests in `tests/test_p1_provisioning_deterministic.py` (P1-A through P1-G) covering: no lock error, canonical auth, tenant_credentials row presence, slot/credential co-commit atomicity, partial-failure rollback (provisioning state), portal grant audit rollback on failure, and standalone `conn=None` path.
+- **Security impact:** None — fix is purely transactional plumbing. No auth logic, no secret handling, no schema change. The `conn=None` default preserves all existing standalone callers unchanged.
+- **API contract impact:** `issue_credential()` gains one optional keyword-only parameter `conn`. All existing callers continue to work with zero changes.
+- **Postgres impact:** Safe — `engine.begin()` opens a new connection (as before) when `conn=None`. When `conn` is provided on Postgres, it reuses the caller's psycopg connection. No behavioural difference for non-SQLite backends.
+- **Rollback before fix:** Credential write failure left workflow state flushed but not committed (ORM session rolled back workflow too). However, the OperationalError itself surfaced as 500 to the client.
+- **Rollback after fix:** All writes (workflow completion, credential slot, credential row, credential event, portal grant audit) are in one transaction. Any exception causes `db.rollback()` in the route handler to unwind everything atomically.
+- **Result:** Pass. `test_P1_2`, `test_P1_3` (previously failing), plus 7 new regression tests all pass.
