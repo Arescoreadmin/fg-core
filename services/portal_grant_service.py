@@ -87,8 +87,31 @@ class GrantCreated:
     status: str
     expires_at: str
     raw_secret: str  # Shown once to operator — never persisted
+    # generation of the underlying credential (1-based); rotation_counter = generation - 1.
+    generation: int = 1
     # Legacy field: set only when the underlying record is from portal_grants.
     legacy_grant_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PortalGrantView:
+    """Unified read-only view of a portal grant (canonical or legacy).
+
+    Returned by list_grants; contains no secret material.
+    rotation_counter = generation - 1 (canonical), or g.rotation_counter (legacy).
+    """
+
+    id: str
+    engagement_id: str
+    client_id: str
+    grant_type: str
+    status: str
+    created_by: str
+    created_at: str
+    expires_at: str
+    rotation_counter: int
+    last_used_at: Optional[str] = None
+    revoked_at: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -151,7 +174,11 @@ class PortalGrantService:
         The caller must store the secret immediately; it is not re-retrievable.
         """
         meta = PortalAccessMetadata(client_id=client_id, engagement_id=engagement_id)
-        credential_slot = f"{client_id}:{engagement_id}"
+        # Each portal grant is an independent credential — the slot must be
+        # unique per grant so that multiple concurrent grants to the same
+        # (client, engagement) pair are permitted.  A random 8-byte suffix
+        # guarantees uniqueness without exposing internal state.
+        credential_slot = f"{client_id}:{engagement_id}:{secrets.token_hex(8)}"
         grant_type = _portal_role_to_grant_type(portal_role)
 
         engine = get_engine()
@@ -190,6 +217,7 @@ class PortalGrantService:
             status="active",
             expires_at=expires_str,
             raw_secret=result.plaintext_secret,
+            generation=result.record.generation,
         )
 
     def revoke_grant(
@@ -297,7 +325,9 @@ class PortalGrantService:
             self._audit(
                 db,
                 tenant_id=tenant_id,
-                grant_id=result.record.credential_id,
+                # Audit under the OLD grant_id so callers can trace the event
+                # by the grant they submitted for rotation.
+                grant_id=grant_id,
                 event_type="grant.rotated",
                 actor_id=rotated_by,
                 reason=f"rotation_of:{grant_id}",
@@ -316,6 +346,7 @@ class PortalGrantService:
                 status="active",
                 expires_at=expires_str,
                 raw_secret=result.plaintext_secret,
+                generation=result.record.generation,
             )
 
         # Legacy path: find in portal_grants, revoke, and create new canonical.
@@ -745,19 +776,90 @@ class PortalGrantService:
         *,
         tenant_id: str,
         engagement_id: str,
-    ) -> list[PortalGrant]:
-        return list(
-            db.execute(
-                select(PortalGrant)
-                .where(
-                    PortalGrant.tenant_id == tenant_id,
-                    PortalGrant.engagement_id == engagement_id,
-                )
-                .order_by(PortalGrant.created_at.desc())
-            )
-            .scalars()
-            .all()
+    ) -> list[PortalGrantView]:
+        """Return all portal grants for an engagement (canonical + legacy).
+
+        Canonical credentials (stored in tenant_credentials) are returned first,
+        followed by any legacy portal_grants rows not already in the canonical set.
+        No secrets are ever included.
+        """
+        engine = get_engine()
+
+        # --- Canonical path: read from tenant_credentials via credential_authority ---
+        all_creds = ca.list_credentials(
+            engine,
+            tenant_id,
+            credential_type="portal_access",
+            limit=200,
         )
+        views: list[PortalGrantView] = []
+        for cred in all_creds:
+            meta = cred.metadata or {}
+            if meta.get("engagement_id") != engagement_id:
+                continue
+            exp = cred.expires_at
+            exp_str = exp.isoformat() if exp is not None else ""
+            rev = cred.revoked_at
+            rev_str = rev.isoformat() if rev is not None else None
+            lu = cred.last_used_at
+            lu_str = lu.isoformat() if lu is not None else None
+            issued = cred.issued_at
+            created_str = issued.isoformat() if issued is not None else ""
+            views.append(
+                PortalGrantView(
+                    id=cred.credential_id,
+                    engagement_id=engagement_id,
+                    client_id=meta.get("client_id", ""),
+                    grant_type=_portal_role_to_grant_type("general"),
+                    status=cred.status,
+                    created_by=cred.created_by_actor_id or "",
+                    created_at=created_str,
+                    expires_at=exp_str,
+                    rotation_counter=max(0, cred.generation - 1),
+                    last_used_at=lu_str,
+                    revoked_at=rev_str,
+                )
+            )
+
+        # --- Legacy path: portal_grants rows (transition window only) ---
+        canonical_ids = {v.id for v in views}
+        try:
+            legacy_grants = list(
+                db.execute(
+                    select(PortalGrant)
+                    .where(
+                        PortalGrant.tenant_id == tenant_id,
+                        PortalGrant.engagement_id == engagement_id,
+                    )
+                    .order_by(PortalGrant.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            for g in legacy_grants:
+                if g.id in canonical_ids:
+                    continue  # already captured above
+                views.append(
+                    PortalGrantView(
+                        id=g.id,
+                        engagement_id=g.engagement_id,
+                        client_id=g.client_id,
+                        grant_type=g.grant_type,
+                        status=g.status,
+                        created_by=g.created_by,
+                        created_at=g.created_at,
+                        expires_at=g.expires_at,
+                        rotation_counter=g.rotation_counter,
+                        last_used_at=g.last_used_at,
+                        revoked_at=g.revoked_at,
+                    )
+                )
+        except Exception:
+            pass  # portal_grants table may not exist in all environments
+
+        # Sort newest first (canonical credentials already are; legacy interleaves).
+        views.sort(key=lambda v: v.created_at, reverse=True)
+        return views
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -870,7 +972,7 @@ def _has_canonical_grant(
     engagement_id: str,
     tenant_id: str,
 ) -> bool:
-    """Return True if an active canonical portal_access credential exists for the binding."""
+    """Return True if an active, non-expired canonical portal_access credential exists."""
     try:
         engine = get_engine()
         creds = ca.list_credentials(
@@ -879,7 +981,12 @@ def _has_canonical_grant(
             credential_type="portal_access",
             status="active",
         )
+        now = datetime.now(timezone.utc)
         for cred in creds:
+            # Credentials whose expiry has passed are effectively invalid even if
+            # the expire_credentials() sweep has not yet updated their status.
+            if cred.expires_at is not None and cred.expires_at <= now:
+                continue
             meta = cred.metadata or {}
             if (
                 meta.get("client_id") == client_id

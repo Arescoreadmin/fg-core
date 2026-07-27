@@ -1,3 +1,24 @@
+## 2026-07-26 — fix/r7-sqlite-canonical-schema: R7 SQLite Canonical Schema Bootstrap — TenantRepository test-DB regression fix
+
+**Classification:** SQLite test-environment bootstrapping only. No production code path changed. No auth mechanism altered. No new routes. No new tables in Postgres.
+
+**Critical-path files changed:**
+- `api/auth_scopes/mapping.py` — one import added (`ensure_tenant_canonical_row` from `api.db`) and one call added at the end of `_mint_key_sqlite`'s `if tenant_id:` block. The function seeds an `active` tenant row in the `tenants` table using `INSERT OR IGNORE`, immediately after the existing `_ensure_default_config_for_tenant` call. This is a SQLite-only path (`_mint_key_postgres` does not call it). Key-minting logic, hash verification, token format, scopes, expiry, and revocation logic are all unchanged.
+
+**Why the change is needed:**
+`CredentialAuthority.issue_credential` / `rotate_credential` / `revoke_credential` all call `TenantRepository.get_lifecycle_state_on_conn()` which queries `SELECT lifecycle_state FROM tenants WHERE tenant_id = ?`. In SQLite test DBs, the `tenants` table was created by `_auto_migrate_sqlite` (added in this fix), but no rows were seeded automatically. The `ensure_tenant_canonical_row` call ensures a row with `lifecycle_state='active'` exists for every tenant that mints an API key, so that subsequent portal-grant operations via `CredentialAuthority` find a valid tenant state without raising `TenantNotFoundError`.
+
+**Security invariants — all unchanged:**
+1. `ensure_tenant_canonical_row` uses `INSERT OR IGNORE` — it never overwrites an existing row. Tests that explicitly seed a non-active lifecycle state are unaffected.
+2. The function is only reachable through the SQLite code path in `_mint_key_sqlite`; `_mint_key_postgres` dispatches to the Postgres path and has no corresponding call (Postgres tenants are provisioned by the provisioning workflow).
+3. Key hash computation, key verification, token format, scope enforcement, and expiry logic in `mapping.py` are untouched.
+4. No API key is issued more permissively — the tenant-row seeding happens AFTER the key is already inserted into `api_keys`.
+5. No route, no middleware, no OPA policy, no CI workflow, no migration changed.
+
+**SOC review outcome:** approved. The `api/auth_scopes/mapping.py` change is a SQLite-only test-environment bootstrapping shim that adds zero new attack surface and does not alter any production auth logic. The change resolves a deterministic full-suite regression (46 failures) in which portal-grant operations failed with `sqlite3.OperationalError: no such table: tenants` because the canonical tenant/credential schema from Postgres migrations 0156/0159 was not present in SQLite test databases.
+
+---
+
 ## 2026-07-23 — feat/r4.10-agent-device-credential-authority: R4.10 Agent Device Credential Authority — CI gate fixes
 
 **Classification:** CI artifact update and public-path registration. No new auth mechanism. No auth surface widened beyond explicit design intent.

@@ -1679,10 +1679,154 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 """
             )
 
+        # R7/R4 — canonical tenant + credential authority tables.
+        # These tables exist only in Postgres migrations 0156/0159 and are NOT
+        # in any ORM model, so Base.metadata.create_all() does NOT create them
+        # for SQLite test databases.  Adding them here ensures every SQLite DB
+        # initialised by init_db() (including all build_app fixture DBs) has
+        # the tables required by TenantRepository and CredentialAuthority.
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenants (
+                tenant_id           VARCHAR(128) PRIMARY KEY,
+                display_name        TEXT         NOT NULL DEFAULT '',
+                lifecycle_state     VARCHAR(32)  NOT NULL DEFAULT 'active',
+                created_at          TEXT,
+                updated_at          TEXT,
+                created_by          TEXT,
+                metadata            TEXT         NOT NULL DEFAULT '{}',
+                canonical_version   INTEGER      NOT NULL DEFAULT 1,
+                last_reconciled_at  TEXT,
+                archived_at         TEXT,
+                migration_source    TEXT,
+                migration_version   TEXT
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tenants_lifecycle_state "
+            "ON tenants (lifecycle_state)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS credential_slots (
+                tenant_id           VARCHAR(128) NOT NULL,
+                credential_type     VARCHAR(64)  NOT NULL,
+                credential_slot     VARCHAR(128) NOT NULL,
+                current_generation  INTEGER      NOT NULL DEFAULT 0,
+                rotation_policy     VARCHAR(32)  NOT NULL DEFAULT 'immediate',
+                max_overlap_count   INTEGER      NOT NULL DEFAULT 1,
+                created_at          TEXT,
+                updated_at          TEXT,
+                PRIMARY KEY (tenant_id, credential_type, credential_slot)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_credentials (
+                credential_id               VARCHAR(64)  NOT NULL PRIMARY KEY,
+                tenant_id                   VARCHAR(128) NOT NULL,
+                credential_type             VARCHAR(64)  NOT NULL,
+                credential_slot             VARCHAR(128) NOT NULL,
+                generation                  INTEGER      NOT NULL DEFAULT 1,
+                lookup_fingerprint          VARCHAR(64)  NOT NULL,
+                lookup_key_version          INTEGER      NOT NULL DEFAULT 1,
+                secret_prefix               VARCHAR(16)  NOT NULL,
+                secret_hash                 TEXT         NOT NULL,
+                hash_algorithm              VARCHAR(32)  NOT NULL DEFAULT 'argon2id',
+                hash_params                 TEXT         NOT NULL,
+                status                      VARCHAR(16)  NOT NULL DEFAULT 'active',
+                expires_at                  TEXT,
+                issued_at                   TEXT         NOT NULL,
+                activated_at                TEXT,
+                rotated_at                  TEXT,
+                revoked_at                  TEXT,
+                replaced_by_credential_id   VARCHAR(64),
+                created_by_actor_id         VARCHAR(256),
+                request_id                  VARCHAR(128),
+                idempotency_key             VARCHAR(256),
+                last_used_at                TEXT,
+                approximate_use_count       INTEGER      NOT NULL DEFAULT 0,
+                scopes_csv                  TEXT,
+                metadata                    TEXT,
+                schema_version              INTEGER      NOT NULL DEFAULT 1,
+                record_hash                 VARCHAR(64),
+                UNIQUE (tenant_id, idempotency_key)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_tc_slot_generation "
+            "ON tenant_credentials (tenant_id, credential_type, credential_slot, generation)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tc_lookup_fingerprint "
+            "ON tenant_credentials (lookup_fingerprint)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tc_tenant_status "
+            "ON tenant_credentials (tenant_id, status)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_credential_events (
+                event_id          VARCHAR(64)  NOT NULL PRIMARY KEY,
+                tenant_id         VARCHAR(128) NOT NULL,
+                credential_id     VARCHAR(64),
+                credential_type   VARCHAR(64),
+                credential_slot   VARCHAR(128),
+                generation        INTEGER,
+                event_type        VARCHAR(64)  NOT NULL,
+                actor_id          VARCHAR(256),
+                request_id        VARCHAR(128),
+                occurred_at       TEXT         NOT NULL,
+                outcome           VARCHAR(16)  NOT NULL DEFAULT 'success',
+                failure_reason    TEXT,
+                metadata          TEXT,
+                schema_version    INTEGER      NOT NULL DEFAULT 1
+            )
+            """
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------
+
+
+def ensure_tenant_canonical_row(sqlite_path: str, tenant_id: str) -> None:
+    """Ensure the tenant row exists in the canonical `tenants` table.
+
+    TenantRepository.get_lifecycle_state_on_conn() queries this table for every
+    credential issuance/rotation/revocation.  For SQLite test databases the table
+    is created by _auto_migrate_sqlite (called from init_db), but no rows are
+    seeded automatically.
+
+    Semantics:
+    - Only for SQLite backends; Postgres tenants are seeded by the provisioning
+      workflow.
+    - Uses INSERT OR IGNORE — idempotent and never overwrites an existing row
+      (e.g. a test that explicitly sets 'suspended').
+    - Does NOT create the table; that is _auto_migrate_sqlite's job.
+    """
+    if not tenant_id or not sqlite_path:
+        return
+
+    import sqlite3 as _sqlite3
+
+    con = _sqlite3.connect(sqlite_path)
+    try:
+        con.execute(
+            """
+            INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)
+            VALUES (?, ?, 'active')
+            """,
+            (tenant_id, tenant_id),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 def init_db(*, sqlite_path: Optional[str] = None) -> None:

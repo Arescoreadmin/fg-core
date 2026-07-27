@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1022,
+    "contract_count": 1023,
     "contract_only": [],
-    "runtime_count": 1202,
+    "runtime_count": 1203,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -194,7 +194,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "3c050fc54ba05c3d2204ad38f339c80714030c579a708220e3e03045289c23de",
+  "governance_fingerprint": "a841daa3466001d44cde936f3e4b202af74ef69992198ba310d12cf20684bd32",
   "planes": [
     {
       "compat": {
@@ -460,6 +460,7 @@
       "DELETE /intelligence/federation/{federation_id}",
       "DELETE /intelligence/simulations/{simulation_id}",
       "DELETE /portal/grants/{grant_id}",
+      "DELETE /portal/named-sessions/self",
       "DELETE /portal/named-sessions/{session_id}",
       "DELETE /portal/sessions/{session_id}",
       "DELETE /remediation/tasks/{task_id}",

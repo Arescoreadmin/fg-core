@@ -184,7 +184,10 @@ from services.connectors.safe_target_validator import (
     SafeTargetValidationService as _SafeValidator,
 )
 from api.db_models_portal import PortalGrant
-from services.portal_grant_service import portal_grant_svc as _portal_grant_svc
+from services.portal_grant_service import (
+    PortalGrantView as _PortalGrantView,
+    portal_grant_svc as _portal_grant_svc,
+)
 from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
@@ -7583,7 +7586,7 @@ class RotatePortalGrantResponse(BaseModel):
     raw_secret: str
 
 
-def _grant_to_response(g: PortalGrant) -> PortalGrantResponse:
+def _grant_to_response(g: PortalGrant | _PortalGrantView) -> PortalGrantResponse:
     return PortalGrantResponse(
         id=g.id,
         engagement_id=g.engagement_id,
@@ -7780,7 +7783,7 @@ def rotate_portal_grant(
             created_by=actor,
             created_at=datetime.now(timezone.utc).isoformat(),
             expires_at=result.expires_at,
-            rotation_counter=0,
+            rotation_counter=max(0, result.generation - 1),
         ),
         raw_secret=result.raw_secret,
     )

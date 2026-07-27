@@ -238,9 +238,8 @@ def test_l2_session_id_is_64_hex_chars(client: TestClient) -> None:
 def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
     """Expired grant (expires_at in the past) is rejected at authenticate time."""
     from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
-    from api.db_models_portal import PortalGrant
-    from sqlalchemy import select
+    from api.db import get_engine
+    from sqlalchemy import text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -249,14 +248,18 @@ def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
     eng = _create_engagement(c)
     data = _create_grant(c, eng["id"])
     raw_secret = data["raw_secret"]
+    credential_id = data["grant"]["id"]
 
-    SM = get_sessionmaker()
-    with SM() as db:
-        grant = db.execute(
-            select(PortalGrant).where(PortalGrant.id == data["grant"]["id"])
-        ).scalar_one()
-        grant.expires_at = "2020-01-01T00:00:00+00:00"
-        db.commit()
+    # Canonical grants live in tenant_credentials, not portal_grants.
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET expires_at = :exp "
+                "WHERE credential_id = :cid"
+            ),
+            {"exp": "2020-01-01T00:00:00+00:00", "cid": credential_id},
+        )
 
     code, _ = _authenticate(c, raw_secret)
     assert code == 401
@@ -265,9 +268,8 @@ def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
 def test_l3_expired_grant_blocks_middleware_access(build_app: object) -> None:
     """Middleware re-validates grant per request; expired grant denies access mid-session."""
     from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
-    from api.db_models_portal import PortalGrant
-    from sqlalchemy import select
+    from api.db import get_engine
+    from sqlalchemy import text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -280,14 +282,18 @@ def test_l3_expired_grant_blocks_middleware_access(build_app: object) -> None:
     data = _create_grant(c, eng["id"])
     auth = c.post("/portal/authenticate", json={"secret": data["raw_secret"]}).json()
     session_id = auth["session_id"]
+    credential_id = data["grant"]["id"]
 
-    SM = get_sessionmaker()
-    with SM() as db:
-        grant = db.execute(
-            select(PortalGrant).where(PortalGrant.id == data["grant"]["id"])
-        ).scalar_one()
-        grant.expires_at = "2020-01-01T00:00:00+00:00"
-        db.commit()
+    # Canonical grants live in tenant_credentials, not portal_grants.
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET expires_at = :exp "
+                "WHERE credential_id = :cid"
+            ),
+            {"exp": "2020-01-01T00:00:00+00:00", "cid": credential_id},
+        )
 
     resp = portal.get(
         f"/field-assessment/engagements/{eng['id']}",
@@ -930,3 +936,50 @@ def test_custom_ttl_grant_expiry_is_honoured(client: TestClient) -> None:
     expires = datetime.fromisoformat(data["grant"]["expires_at"].replace("Z", "+00:00"))
     diff = expires - datetime.now(timezone.utc)
     assert timedelta(days=6) <= diff <= timedelta(days=8)
+
+
+# ---------------------------------------------------------------------------
+# Regression: fixture DB contains canonical tenant lifecycle state
+# ---------------------------------------------------------------------------
+
+
+def test_fixture_db_has_canonical_tenant_lifecycle_state(
+    build_app: object,
+) -> None:
+    """Regression guard: the SQLite DB created by build_app must contain a row
+    in the canonical `tenants` table for each tenant used by portal-grant tests.
+
+    Before the R7/R4 SQLite schema fix, the `tenants` table was absent from
+    all SQLite test databases (it existed only in Postgres migrations 0156/0159).
+    This caused every portal-grant operation — which goes through
+    CredentialAuthority → TenantRepository.get_lifecycle_state_on_conn() —
+    to fail with sqlite3.OperationalError: no such table: tenants.
+
+    This test proves the fix is in place and will catch any regression.
+    """
+    from api.auth_scopes import mint_key
+    from api.db import get_engine
+    from sqlalchemy import text
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    _ = app  # ensure DB is initialised via init_db
+
+    # Both tenant IDs used across the C7 portal-grant suite.
+    for tenant_id in (_TENANT_ID, _TENANT_B_ID):
+        mint_key("governance:read", "governance:write", tenant_id=tenant_id)
+
+    engine = get_engine()
+    with engine.connect() as conn:
+        for tenant_id in (_TENANT_ID, _TENANT_B_ID):
+            row = conn.execute(
+                text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+                {"tid": tenant_id},
+            ).fetchone()
+            assert row is not None, (
+                f"tenants row missing for {tenant_id!r}; "
+                "canonical schema not bootstrapped in SQLite test DB"
+            )
+            assert row[0] == "active", (
+                f"tenant {tenant_id!r} has lifecycle_state={row[0]!r}; "
+                "portal grants require 'active' lifecycle state"
+            )
