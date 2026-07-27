@@ -829,7 +829,9 @@ def test_revoke_session_by_token_active_returns_revoked_true(mock_db):
     # The function returns (session_id, tenant_id, portal_user_id) — column name
     # is session_id (aliased in the SQL function), not id.
     mock_db.execute.return_value.fetchall.return_value = [
-        _make_row(session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+        _make_row(
+            session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID
+        )
     ]
 
     result = pua.revoke_session_by_token(
@@ -913,7 +915,9 @@ def test_revoke_then_validate_same_token_is_denied(mock_db):
 
     # Phase 1: revoke — SECURITY DEFINER fn returns one row (session was active).
     mock_db.execute.return_value.fetchall.return_value = [
-        _make_row(session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+        _make_row(
+            session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID
+        )
     ]
     revoke_result = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
     assert revoke_result.revoked is True
