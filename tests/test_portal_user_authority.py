@@ -825,9 +825,11 @@ def test_revoke_session_by_token_rejects_wrong_prefix(mock_db):
 
 
 def test_revoke_session_by_token_active_returns_revoked_true(mock_db):
-    """Happy path: active row is flipped to revoked and audit is emitted."""
+    """Happy path: SECURITY DEFINER function revokes the row; audit is emitted."""
+    # The function returns (session_id, tenant_id, portal_user_id) — column name
+    # is session_id (aliased in the SQL function), not id.
     mock_db.execute.return_value.fetchall.return_value = [
-        _make_row(id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+        _make_row(session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
     ]
 
     result = pua.revoke_session_by_token(
@@ -840,8 +842,8 @@ def test_revoke_session_by_token_active_returns_revoked_true(mock_db):
     assert result.session_id == str(SESSION_UUID)
     assert result.portal_user_id == str(USER_UUID)
     assert result.tenant_id == TENANT_ID
-    # Two execute calls: the UPDATE and the audit INSERT.
-    assert mock_db.execute.call_count >= 2
+    # Three execute calls: SECURITY DEFINER fn, _set_tenant_rls (set_config), audit INSERT.
+    assert mock_db.execute.call_count >= 3
     audit_call = mock_db.execute.call_args_list[-1]
     audit_params = audit_call.args[1]
     assert audit_params["event_type"] == "portal_session_revoked"
@@ -879,7 +881,8 @@ def test_revoke_session_by_token_db_error_returns_revoked_false(mock_db):
 
 
 def test_revoke_session_by_token_computes_fingerprint_not_raw_lookup(mock_db):
-    """The UPDATE must key on token_fingerprint (HMAC), never the raw token."""
+    """Revocation must call the SECURITY DEFINER fn keyed on the HMAC fingerprint,
+    never the raw token or its hex component."""
     mock_db.execute.return_value.fetchall.return_value = []
     raw_token = "pnu1." + ("d" * 64)
     expected_fp = _compute_lookup_fingerprint("d" * 64, TEST_PEPPER)
@@ -889,7 +892,8 @@ def test_revoke_session_by_token_computes_fingerprint_not_raw_lookup(mock_db):
     call = mock_db.execute.call_args_list[0]
     sql_text = str(call.args[0])
     params = call.args[1]
-    assert "token_fingerprint" in sql_text
+    # SQL must call the SECURITY DEFINER function, not a bare UPDATE.
+    assert "revoke_portal_session_by_fingerprint" in sql_text
     assert params["fp"] == expected_fp
     # Raw token or hex must never appear in the bound params.
     assert raw_token not in params.values()
@@ -907,9 +911,9 @@ def test_revoke_then_validate_same_token_is_denied(mock_db):
     raw_token = SESSION_TOKEN_PREFIX + ("e" * 64)
     expected_fp = _compute_lookup_fingerprint("e" * 64, TEST_PEPPER)
 
-    # Phase 1: revoke — UPDATE returns one row (session was active).
+    # Phase 1: revoke — SECURITY DEFINER fn returns one row (session was active).
     mock_db.execute.return_value.fetchall.return_value = [
-        _make_row(id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
+        _make_row(session_id=SESSION_UUID, tenant_id=TENANT_ID, portal_user_id=USER_UUID)
     ]
     revoke_result = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
     assert revoke_result.revoked is True

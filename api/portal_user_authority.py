@@ -1141,6 +1141,15 @@ def revoke_session_by_token(
 
     Idempotent: if the token has an invalid format, matches no row, or matches
     a row already in a terminal state, returns revoked=False without raising.
+
+    RLS note
+    --------
+    portal_user_sessions has tenant-scoped RLS. Self-revocation arrives without
+    a known tenant context, so a plain UPDATE would find zero rows. The UPDATE
+    is delegated to revoke_portal_session_by_fingerprint(), a SECURITY DEFINER
+    function (migration 0165) that runs as the table owner and therefore bypasses
+    RLS for this single atomic operation. The resolved tenant_id is then bound
+    via _set_tenant_rls() before the audit INSERT so audit-event RLS is satisfied.
     """
     if not raw_token.startswith(SESSION_TOKEN_PREFIX):
         return SessionRevocationResult(revoked=False)
@@ -1154,20 +1163,15 @@ def revoke_session_by_token(
         return SessionRevocationResult(revoked=False)
 
     try:
-        result = db.execute(
+        # Delegate the UPDATE to the SECURITY DEFINER function so the
+        # fingerprint lookup is not hidden by the unscoped RLS policy.
+        rows = db.execute(
             text(
-                """
-                UPDATE portal_user_sessions
-                SET    status     = 'revoked',
-                       revoked_at = now()
-                WHERE  token_fingerprint = :fp
-                  AND  status            = 'active'
-                RETURNING id, tenant_id, portal_user_id
-                """
+                "SELECT session_id, tenant_id, portal_user_id"
+                " FROM revoke_portal_session_by_fingerprint(:fp)"
             ),
             {"fp": fingerprint},
-        )
-        rows = result.fetchall()
+        ).fetchall()
     except Exception as exc:
         log.exception("revoke_session_by_token: DB error during revoke: %s", exc)
         return SessionRevocationResult(revoked=False)
@@ -1175,11 +1179,14 @@ def revoke_session_by_token(
     if not rows:
         return SessionRevocationResult(revoked=False)
 
-    session_id = _coerce_uuid(rows[0].id)
+    session_id = _coerce_uuid(rows[0].session_id)
     portal_user_id = _coerce_uuid(rows[0].portal_user_id)
     tenant_id = str(rows[0].tenant_id) if rows[0].tenant_id is not None else None
 
     if tenant_id is not None:
+        # Set RLS context before the audit INSERT (portal_user_audit_events also
+        # has RLS). The tenant was resolved server-side from the session record.
+        _set_tenant_rls(db, tenant_id)
         _emit_audit(
             db,
             event_type="portal_session_revoked",

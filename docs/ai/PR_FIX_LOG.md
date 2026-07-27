@@ -1,5 +1,30 @@
 # PR Fix Log (Strict)
 
+## P-26 — fix(portal): RLS-safe pnu1. self-revocation via SECURITY DEFINER function
+
+**Branch:** `fix/portal-named-user-session-revocation` (PR #580)
+**Date:** 2026-07-26
+
+### Problem
+
+`revoke_session_by_token` executed a bare `UPDATE portal_user_sessions WHERE token_fingerprint = :fp`. `portal_user_sessions` has tenant-scoped RLS (`USING (tenant_id = current_setting('app.tenant_id', true))`). The self-revocation path (`DELETE /portal/named-sessions/self`) arrives without a known tenant context, so `app.tenant_id` is unset and the RLS policy hides every row — the UPDATE returned 0 rows, the route returned 204, and the session remained active.
+
+### Resolution
+
+**New file:**
+
+1. `new: migrations/postgres/0165_portal_session_self_revocation_fn.sql` — `SECURITY DEFINER` function `revoke_portal_session_by_fingerprint(p_fingerprint TEXT)` that atomically revokes the session (bypasses RLS as function owner, who owns the table). Returns `(session_id UUID, tenant_id TEXT, portal_user_id UUID)` so the caller can set RLS context before the audit INSERT.
+
+**Modified files:**
+
+2. `mod: api/portal_user_authority.py` — `revoke_session_by_token` now calls the SECURITY DEFINER function instead of the bare UPDATE; then calls `_set_tenant_rls(db, tenant_id)` with the resolved tenant before `_emit_audit()` so the audit INSERT also satisfies RLS.
+
+3. `mod: tests/test_portal_user_authority.py` — Updated mock row attribute from `id=` to `session_id=` (matching the function's aliased RETURNING column); updated fingerprint test to assert `revoke_portal_session_by_fingerprint` is called (not a bare UPDATE); updated call-count comment (3 calls: fn + set_config + audit).
+
+### Behavioral impact
+
+Server-side session revocation now works correctly in RLS-enforced deployments. Logout clears the session record in DB; a captured token replayed after logout is denied by `validate_session` (`PORTAL_SESSION_NOT_FOUND`). Fail-open semantics (cookie always cleared) unchanged.
+
 ## P-25 — fix(portal): wire BFF logout to Core named-user session revocation
 
 **Branch:** `fix/portal-named-user-session-revocation`
