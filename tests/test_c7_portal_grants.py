@@ -238,9 +238,8 @@ def test_l2_session_id_is_64_hex_chars(client: TestClient) -> None:
 def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
     """Expired grant (expires_at in the past) is rejected at authenticate time."""
     from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
-    from api.db_models_portal import PortalGrant
-    from sqlalchemy import select
+    from api.db import get_engine
+    from sqlalchemy import text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -249,14 +248,18 @@ def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
     eng = _create_engagement(c)
     data = _create_grant(c, eng["id"])
     raw_secret = data["raw_secret"]
+    credential_id = data["grant"]["id"]
 
-    SM = get_sessionmaker()
-    with SM() as db:
-        grant = db.execute(
-            select(PortalGrant).where(PortalGrant.id == data["grant"]["id"])
-        ).scalar_one()
-        grant.expires_at = "2020-01-01T00:00:00+00:00"
-        db.commit()
+    # Canonical grants live in tenant_credentials, not portal_grants.
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET expires_at = :exp "
+                "WHERE credential_id = :cid"
+            ),
+            {"exp": "2020-01-01T00:00:00+00:00", "cid": credential_id},
+        )
 
     code, _ = _authenticate(c, raw_secret)
     assert code == 401
@@ -265,9 +268,8 @@ def test_l3_expired_grant_cannot_authenticate(build_app: object) -> None:
 def test_l3_expired_grant_blocks_middleware_access(build_app: object) -> None:
     """Middleware re-validates grant per request; expired grant denies access mid-session."""
     from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
-    from api.db_models_portal import PortalGrant
-    from sqlalchemy import select
+    from api.db import get_engine
+    from sqlalchemy import text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -280,14 +282,18 @@ def test_l3_expired_grant_blocks_middleware_access(build_app: object) -> None:
     data = _create_grant(c, eng["id"])
     auth = c.post("/portal/authenticate", json={"secret": data["raw_secret"]}).json()
     session_id = auth["session_id"]
+    credential_id = data["grant"]["id"]
 
-    SM = get_sessionmaker()
-    with SM() as db:
-        grant = db.execute(
-            select(PortalGrant).where(PortalGrant.id == data["grant"]["id"])
-        ).scalar_one()
-        grant.expires_at = "2020-01-01T00:00:00+00:00"
-        db.commit()
+    # Canonical grants live in tenant_credentials, not portal_grants.
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credentials SET expires_at = :exp "
+                "WHERE credential_id = :cid"
+            ),
+            {"exp": "2020-01-01T00:00:00+00:00", "cid": credential_id},
+        )
 
     resp = portal.get(
         f"/field-assessment/engagements/{eng['id']}",
@@ -930,3 +936,337 @@ def test_custom_ttl_grant_expiry_is_honoured(client: TestClient) -> None:
     expires = datetime.fromisoformat(data["grant"]["expires_at"].replace("Z", "+00:00"))
     diff = expires - datetime.now(timezone.utc)
     assert timedelta(days=6) <= diff <= timedelta(days=8)
+
+
+# ---------------------------------------------------------------------------
+# Regression: fixture DB contains canonical tenant lifecycle state
+# ---------------------------------------------------------------------------
+
+
+def test_fixture_db_has_canonical_tenant_lifecycle_state(
+    build_app: object,
+) -> None:
+    """Regression guard: the SQLite DB created by build_app must contain a row
+    in the canonical `tenants` table for each tenant used by portal-grant tests.
+
+    Before the R7/R4 SQLite schema fix, the `tenants` table was absent from
+    all SQLite test databases (it existed only in Postgres migrations 0156/0159).
+    This caused every portal-grant operation — which goes through
+    CredentialAuthority → TenantRepository.get_lifecycle_state_on_conn() —
+    to fail with sqlite3.OperationalError: no such table: tenants.
+
+    This test proves the fix is in place and will catch any regression.
+    """
+    from api.auth_scopes import mint_key
+    from api.db import get_engine
+    from sqlalchemy import text
+
+    app = build_app(auth_enabled=True)  # type: ignore[operator]
+    _ = app  # ensure DB is initialised via init_db
+
+    # Both tenant IDs used across the C7 portal-grant suite.
+    for tenant_id in (_TENANT_ID, _TENANT_B_ID):
+        mint_key("governance:read", "governance:write", tenant_id=tenant_id)
+
+    engine = get_engine()
+    with engine.connect() as conn:
+        for tenant_id in (_TENANT_ID, _TENANT_B_ID):
+            row = conn.execute(
+                text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+                {"tid": tenant_id},
+            ).fetchone()
+            assert row is not None, (
+                f"tenants row missing for {tenant_id!r}; "
+                "canonical schema not bootstrapped in SQLite test DB"
+            )
+            assert row[0] == "active", (
+                f"tenant {tenant_id!r} has lifecycle_state={row[0]!r}; "
+                "portal grants require 'active' lifecycle state"
+            )
+
+
+# ---------------------------------------------------------------------------
+# list_grants legacy-fallback exception-narrowing tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_db(raise_on_execute: Exception | None = None) -> object:
+    """Return a minimal mock Session whose execute() either raises or returns empty."""
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    if raise_on_execute is not None:
+        db.execute.side_effect = raise_on_execute
+    else:
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        db.execute.return_value = result
+    return db
+
+
+def test_list_grants_canonical_path_succeeds_without_legacy_table(
+    client: TestClient,
+) -> None:
+    """Canonical tenant_credentials read succeeds; legacy fallback is not required."""
+    eng = _create_engagement(client)
+    _create_grant(client, eng["id"])
+    resp = client.get(f"/field-assessment/engagements/{eng['id']}/portal-grants")
+    assert resp.status_code == 200
+    grants = resp.json()
+    assert len(grants) >= 1
+    # No secret material in list response.
+    for g in grants:
+        assert "raw_secret" not in g
+        assert "grant_hash" not in g
+        assert "secret" not in g
+
+
+def test_list_grants_no_secret_in_response(client: TestClient) -> None:
+    """list_grants must never expose raw credential secrets."""
+    eng = _create_engagement(client)
+    data = _create_grant(client, eng["id"])
+    secret = data.get("raw_secret", "")
+    resp = client.get(f"/field-assessment/engagements/{eng['id']}/portal-grants")
+    assert resp.status_code == 200
+    body = resp.text
+    if secret:
+        assert secret not in body
+
+
+def test_list_grants_legacy_fallback_swallows_operational_error() -> None:
+    """OperationalError (SQLite 'no such table') is silenced by the legacy fallback."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+    from sqlalchemy.exc import OperationalError
+
+    db = _make_mock_db(
+        raise_on_execute=OperationalError(
+            "no such table: portal_grants",
+            None,
+            Exception("no such table: portal_grants"),
+        )
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        result = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id=_TENANT_ID,
+            engagement_id="eng-fallback-test",
+        )
+
+    assert result == []
+
+
+def test_list_grants_legacy_fallback_swallows_programming_error() -> None:
+    """ProgrammingError (Postgres 'relation does not exist') is silenced by the legacy fallback."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+    from sqlalchemy.exc import ProgrammingError
+
+    db = _make_mock_db(
+        raise_on_execute=ProgrammingError(
+            'relation "portal_grants" does not exist',
+            None,
+            Exception('relation "portal_grants" does not exist'),
+        )
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        result = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id=_TENANT_ID,
+            engagement_id="eng-fallback-test",
+        )
+
+    assert result == []
+
+
+def test_list_grants_unrelated_exception_propagates() -> None:
+    """Exceptions unrelated to missing-table are NOT swallowed — they propagate."""
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    db = _make_mock_db(
+        raise_on_execute=RuntimeError("unexpected serialization failure")
+    )
+
+    with patch.object(ca_mod, "list_credentials", return_value=[]):
+        with pytest.raises(RuntimeError, match="unexpected serialization failure"):
+            portal_grant_svc.list_grants(
+                db,  # type: ignore[arg-type]
+                tenant_id=_TENANT_ID,
+                engagement_id="eng-fallback-test",
+            )
+
+
+def test_list_grants_tenant_isolation(client: TestClient, client_b: TestClient) -> None:
+    """Grants from tenant A must not appear in tenant B's list."""
+    eng_a = _create_engagement(client)
+    _create_grant(client, eng_a["id"])
+    resp_a = client.get(f"/field-assessment/engagements/{eng_a['id']}/portal-grants")
+    assert resp_a.status_code == 200
+    ids_a = {g["id"] for g in resp_a.json()}
+
+    eng_b = _create_engagement(client_b)
+    _create_grant(client_b, eng_b["id"])
+    resp_b = client_b.get(f"/field-assessment/engagements/{eng_b['id']}/portal-grants")
+    assert resp_b.status_code == 200
+    ids_b = {g["id"] for g in resp_b.json()}
+
+    assert ids_a.isdisjoint(ids_b), "Grant IDs leaked across tenant boundary"
+
+
+# ---------------------------------------------------------------------------
+# Bot finding fixes: P1 sentinel dedup, P2 pagination, P2 slot length
+# ---------------------------------------------------------------------------
+
+
+def test_list_grants_excludes_migration_sentinel_credentials() -> None:
+    """Migration-0161 sentinel credentials (validation_mode=legacy_fallback_only)
+    must not appear in list_grants — surfacing them allows revoking a UUID that
+    doesn't cancel the underlying legacy secret.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    sentinel_cred = MagicMock()
+    sentinel_cred.metadata = {
+        "engagement_id": "eng-x",
+        "validation_mode": "legacy_fallback_only",
+        "portal_grant_id": "legacy-grant-uuid",
+    }
+    sentinel_cred.credential_id = "sentinel-cred-id"
+    sentinel_cred.status = "active"
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = []
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", return_value=[sentinel_cred]):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-sentinel-test",
+            engagement_id="eng-x",
+        )
+
+    assert views == [], "sentinel credential must not appear in list_grants"
+
+
+def test_list_grants_deduplicates_absorbed_legacy_rows() -> None:
+    """A legacy row whose portal_grants.id matches a sentinel's portal_grant_id
+    must not appear in the output — the sentinel already tracks it.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    sentinel_cred = MagicMock()
+    sentinel_cred.metadata = {
+        "engagement_id": "eng-dedup",
+        "validation_mode": "legacy_fallback_only",
+        "portal_grant_id": "legacy-grant-abc",
+    }
+    sentinel_cred.credential_id = "sentinel-xyz"
+
+    legacy_row = MagicMock()
+    legacy_row.id = "legacy-grant-abc"  # matches portal_grant_id in sentinel
+    legacy_row.engagement_id = "eng-dedup"
+    legacy_row.tenant_id = "tenant-dedup"
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = [legacy_row]
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", return_value=[sentinel_cred]):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-dedup",
+            engagement_id="eng-dedup",
+        )
+
+    assert views == [], "legacy row absorbed by sentinel must not appear in output"
+
+
+def test_list_grants_paginates_beyond_200_credentials() -> None:
+    """list_grants must paginate until all canonical credentials are collected.
+    A tenant with >200 portal credentials must not silently drop older entries.
+    """
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    def _make_cred(i: int) -> object:
+        from unittest.mock import MagicMock
+
+        c = MagicMock()
+        c.metadata = {"engagement_id": "eng-paginate", "client_id": "Client"}
+        c.credential_id = f"cred-{i}"
+        c.status = "active"
+        c.expires_at = None
+        c.revoked_at = None
+        c.last_used_at = None
+        c.issued_at = None
+        c.generation = 1
+        c.created_by_actor_id = "actor"
+        return c
+
+    # Simulate 250 credentials: first call returns 200, second returns 50.
+    batch_1 = [_make_cred(i) for i in range(200)]
+    batch_2 = [_make_cred(i) for i in range(200, 250)]
+    call_batches = [batch_1, batch_2]
+
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = []
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", side_effect=call_batches):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-paginate",
+            engagement_id="eng-paginate",
+        )
+
+    assert len(views) == 250, f"expected 250 grants across two pages, got {len(views)}"
+
+
+def test_create_grant_slot_stays_within_varchar_128(client: TestClient) -> None:
+    """credential_slot must never exceed 128 chars even with a max-length client_id."""
+    import api.credential_authority as ca_mod
+    from unittest.mock import patch
+
+    slots_seen: list[str] = []
+    real_issue = ca_mod.issue_credential
+
+    def _capture_slot(*args, **kwargs):  # type: ignore[no-untyped-def]
+        slots_seen.append(kwargs.get("credential_slot", ""))
+        return real_issue(*args, **kwargs)
+
+    long_client_body = {
+        "client_name": "A" * 128,  # longest plausible client name
+        "assessor_id": "assessor-c7",
+        "assessment_type": "ai_governance",
+    }
+    eng2 = _create_engagement(client, long_client_body)
+
+    with patch.object(ca_mod, "issue_credential", side_effect=_capture_slot):
+        _create_grant(client, eng2["id"])
+
+    for slot in slots_seen:
+        assert len(slot) <= 128, (
+            f"credential_slot length {len(slot)} exceeds VARCHAR(128): {slot[:60]}…"
+        )

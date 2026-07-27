@@ -2117,10 +2117,11 @@ def list_credentials(
     credential_type: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[CredentialRecord]:
     """List credentials for a tenant, newest first."""
     clauses = ["tenant_id = :tid"]
-    params: dict = {"tid": tenant_id, "limit": limit}
+    params: dict = {"tid": tenant_id, "limit": limit, "offset": offset}
     if credential_type is not None:
         clauses.append("credential_type = :ctype")
         params["ctype"] = credential_type
@@ -2135,7 +2136,7 @@ def list_credentials(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
                 f"WHERE {where} "
                 "ORDER BY issued_at DESC "
-                "LIMIT :limit"
+                "LIMIT :limit OFFSET :offset"
             ),
             params,
         ).fetchall()

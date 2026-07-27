@@ -20286,3 +20286,45 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `make required-tests-gate`, `make fg-contract`, `make soc-manifest-verify`, `python -m tools.ci.check_audit_coverage` → pass.
   - `make soc-review-sync` will pass once this commit lands, because `docs/SOC_EXECUTION_GATES_2026-02-15.md` will then appear in the `origin/main...HEAD` diff.
 - **Result:** Pass.
+
+---
+
+## P-27 — fix(portal): narrow legacy grant fallback exceptions — commit cf9c93cf
+
+- **PR/Branch:** `fix/portal-sqlite-test-infrastructure` (#581)
+- **Date:** 2026-07-27
+- **Files changed:** `services/portal_grant_service.py`, `tests/test_c7_portal_grants.py`
+- **Root cause:** `list_grants` legacy compatibility fallback used `except Exception: pass` to tolerate environments where the `portal_grants` table is absent. This was too broad — it silently swallowed any exception from the legacy DB query path, including programming errors, serialization failures, and bugs.
+- **Fix:** Replaced `except Exception: pass` with `except (OperationalError, ProgrammingError): pass`. These are the only two SQLAlchemy exception types that represent a missing-table compatibility condition (SQLite: `OperationalError: no such table`; Postgres: `ProgrammingError: relation does not exist`). All other exceptions now propagate.
+- **Tests added:** 6 tests in `tests/test_c7_portal_grants.py`:
+  - `test_list_grants_canonical_path_succeeds_without_legacy_table` — canonical path returns grants without requiring legacy table.
+  - `test_list_grants_no_secret_in_response` — raw_secret never appears in list response body.
+  - `test_list_grants_legacy_fallback_swallows_operational_error` — `OperationalError` silenced.
+  - `test_list_grants_legacy_fallback_swallows_programming_error` — `ProgrammingError` silenced.
+  - `test_list_grants_unrelated_exception_propagates` — `RuntimeError` propagates (was swallowed before).
+  - `test_list_grants_tenant_isolation` — tenant A grants not visible from tenant B.
+- **Behavioral impact:** Minimal. Legacy fallback behavior for table-not-found is unchanged. Previously undetected exceptions from the legacy path now surface instead of disappearing silently.
+- **Security impact:** None. Canonical `list_grants` path (reads `tenant_credentials` via `CredentialAuthority`) is unchanged. No credential secrets exposed.
+- **Schema/API impact:** None.
+- **Validation:** `pytest tests/test_c7_portal_grants.py` → 53 passed. `ruff check/format` clean. `mypy` clean.
+- **Result:** Pass.
+
+---
+
+## P-28 — fix(portal): address three bot findings on list_grants and credential_slot — commit 7aafad99
+
+- **PR/Branch:** `fix/portal-sqlite-test-infrastructure` (#581)
+- **Date:** 2026-07-27
+- **Files changed:** `services/portal_grant_service.py`, `api/credential_authority.py`, `tests/test_c7_portal_grants.py`
+- **Root cause:**
+  1. **P1 — Sentinel dedup**: Migration 0161 sentinels (`validation_mode=legacy_fallback_only`) were included in `list_grants` output. Revoking the sentinel UUID does not revoke the underlying legacy secret, so both grants appeared revocable when only one actually was. The later ID-based dedup used credential_id vs portal_grants.id (different ID spaces), so the legacy row was not filtered.
+  2. **P2a — Pagination**: `ca.list_credentials(limit=200)` applied tenant-wide before `engagement_id` filtering; tenants with >200 portal credentials silently dropped grants for older engagements.
+  3. **P2b — Slot length**: `f"{client_id}:{engagement_id}:{token_hex(8)}"` can reach 337 chars; `credential_slot` column is `VARCHAR(128)`. Grant creation would fail with a DB error for long client names.
+- **Fix:**
+  1. Skip credentials where `meta.get("validation_mode") == "legacy_fallback_only"`; collect their `portal_grant_id` into `absorbed_portal_grant_ids` for legacy dedup.
+  2. Added `offset: int = 0` to `list_credentials`; `list_grants` now paginates in 200-record batches until the batch is smaller than 200.
+  3. Replaced raw concatenation with `sha256(client_id:engagement_id)[:80] + ":" + token_hex(8)` = 97 chars max, safely under 128.
+- **Tests added:** 4 tests in `tests/test_c7_portal_grants.py` covering each finding plus dedup behavior.
+- **Security impact:** P1 fix closes a gap where a revocation action had no effect on the credential that was actually authorizing access.
+- **Schema/API impact:** `list_credentials` gains an `offset` parameter (additive, backward compatible).
+- **Result:** Pass.

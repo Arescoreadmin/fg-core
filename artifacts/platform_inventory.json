@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1018,
+    "contract_count": 1023,
     "contract_only": [],
-    "runtime_count": 1198,
+    "runtime_count": 1203,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -194,7 +194,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "d9393ab969ea1e0df5be30e898ae608a42050ca94b54e8a4a36623a7dfb7324a",
+  "governance_fingerprint": "a841daa3466001d44cde936f3e4b202af74ef69992198ba310d12cf20684bd32",
   "planes": [
     {
       "compat": {
@@ -460,6 +460,8 @@
       "DELETE /intelligence/federation/{federation_id}",
       "DELETE /intelligence/simulations/{simulation_id}",
       "DELETE /portal/grants/{grant_id}",
+      "DELETE /portal/named-sessions/self",
+      "DELETE /portal/named-sessions/{session_id}",
       "DELETE /portal/sessions/{session_id}",
       "DELETE /remediation/tasks/{task_id}",
       "GET /_debug/routes",
@@ -1296,6 +1298,9 @@
       "POST /portal/governance/acknowledgements",
       "POST /portal/grants",
       "POST /portal/identity/login",
+      "POST /portal/invitations",
+      "POST /portal/invitations/{token}/accept",
+      "POST /portal/named-users/enroll",
       "POST /portal/remediation/tasks/{task_id}/acknowledge",
       "POST /portal/remediation/tasks/{task_id}/comments",
       "POST /portal/remediation/tasks/{task_id}/evidence",

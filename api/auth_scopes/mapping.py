@@ -9,7 +9,7 @@ import time
 from typing import Optional
 
 from api.config_versioning import canonicalize_config, hash_config
-from api.db import _resolve_sqlite_path, init_db
+from api.db import _resolve_sqlite_path, ensure_tenant_canonical_row, init_db
 
 from .definitions import DEFAULT_TTL_SECONDS
 from .helpers import (
@@ -326,6 +326,7 @@ def _mint_key_sqlite(
 
     if tenant_id:
         _ensure_default_config_for_tenant(sqlite_path, tenant_id)
+        ensure_tenant_canonical_row(sqlite_path, tenant_id)
 
     return f"{prefix}.{token}.{secret}"
 

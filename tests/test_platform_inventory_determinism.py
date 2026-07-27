@@ -11,6 +11,10 @@ FILES = [
     Path("artifacts/PLATFORM_INVENTORY.md"),
     Path("artifacts/PLATFORM_GAPS.md"),
     Path("artifacts/platform_inventory.json"),
+    # det.json must be preserved so test_mcim_docs::test_full_mcim_check_passes
+    # (which runs validate_changed_paths via git status) does not see this file
+    # as unexpectedly modified after the gate run.
+    Path("artifacts/platform_inventory.det.json"),
 ]
 
 
