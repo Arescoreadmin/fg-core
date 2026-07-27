@@ -23,6 +23,7 @@ Legacy fallback removal condition:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import secrets
 import threading
@@ -178,9 +179,15 @@ class PortalGrantService:
         meta = PortalAccessMetadata(client_id=client_id, engagement_id=engagement_id)
         # Each portal grant is an independent credential — the slot must be
         # unique per grant so that multiple concurrent grants to the same
-        # (client, engagement) pair are permitted.  A random 8-byte suffix
-        # guarantees uniqueness without exposing internal state.
-        credential_slot = f"{client_id}:{engagement_id}:{secrets.token_hex(8)}"
+        # (client, engagement) pair are permitted.
+        # SHA-256(client_id:engagement_id)[:80] + random suffix.
+        # Keeps the slot traceable while bounding to 80+1+16=97 chars,
+        # safely under VARCHAR(128).  (client_id allows up to 255 chars;
+        # a raw concatenation with the suffix can overflow the column.)
+        _binding_hash = hashlib.sha256(
+            f"{client_id}:{engagement_id}".encode()
+        ).hexdigest()[:80]
+        credential_slot = f"{_binding_hash}:{secrets.token_hex(8)}"
         grant_type = _portal_role_to_grant_type(portal_role)
 
         engine = get_engine()
@@ -788,16 +795,37 @@ class PortalGrantService:
         engine = get_engine()
 
         # --- Canonical path: read from tenant_credentials via credential_authority ---
-        all_creds = ca.list_credentials(
-            engine,
-            tenant_id,
-            credential_type="portal_access",
-            limit=200,
-        )
+        # Paginate to avoid the default limit truncating results for busy tenants.
+        _BATCH = 200
+        _offset = 0
+        all_creds = []
+        while True:
+            batch = ca.list_credentials(
+                engine,
+                tenant_id,
+                credential_type="portal_access",
+                limit=_BATCH,
+                offset=_offset,
+            )
+            all_creds.extend(batch)
+            if len(batch) < _BATCH:
+                break
+            _offset += _BATCH
+
         views: list[PortalGrantView] = []
+        # portal_grant_ids that migration 0161 absorbed into canonical sentinels.
+        # The sentinel credential is validation_mode="legacy_fallback_only" — it is
+        # a read-only marker and must not be surfaced as a revocable grant (revoking
+        # the sentinel UUID does not revoke the underlying legacy secret).
+        absorbed_portal_grant_ids: set[str] = set()
         for cred in all_creds:
             meta = cred.metadata or {}
             if meta.get("engagement_id") != engagement_id:
+                continue
+            if meta.get("validation_mode") == "legacy_fallback_only":
+                pg_id = meta.get("portal_grant_id")
+                if pg_id:
+                    absorbed_portal_grant_ids.add(pg_id)
                 continue
             exp = cred.expires_at
             exp_str = exp.isoformat() if exp is not None else ""
@@ -839,8 +867,10 @@ class PortalGrantService:
                 .all()
             )
             for g in legacy_grants:
-                if g.id in canonical_ids:
-                    continue  # already captured above
+                if g.id in canonical_ids or g.id in absorbed_portal_grant_ids:
+                    # Already captured by the canonical path, or absorbed by a
+                    # migration-0161 sentinel (dedup by metadata.portal_grant_id).
+                    continue
                 views.append(
                     PortalGrantView(
                         id=g.id,

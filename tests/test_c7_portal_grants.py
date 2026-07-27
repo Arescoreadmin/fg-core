@@ -1120,3 +1120,153 @@ def test_list_grants_tenant_isolation(client: TestClient, client_b: TestClient) 
     ids_b = {g["id"] for g in resp_b.json()}
 
     assert ids_a.isdisjoint(ids_b), "Grant IDs leaked across tenant boundary"
+
+
+# ---------------------------------------------------------------------------
+# Bot finding fixes: P1 sentinel dedup, P2 pagination, P2 slot length
+# ---------------------------------------------------------------------------
+
+
+def test_list_grants_excludes_migration_sentinel_credentials() -> None:
+    """Migration-0161 sentinel credentials (validation_mode=legacy_fallback_only)
+    must not appear in list_grants — surfacing them allows revoking a UUID that
+    doesn't cancel the underlying legacy secret.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    sentinel_cred = MagicMock()
+    sentinel_cred.metadata = {
+        "engagement_id": "eng-x",
+        "validation_mode": "legacy_fallback_only",
+        "portal_grant_id": "legacy-grant-uuid",
+    }
+    sentinel_cred.credential_id = "sentinel-cred-id"
+    sentinel_cred.status = "active"
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = []
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", return_value=[sentinel_cred]):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-sentinel-test",
+            engagement_id="eng-x",
+        )
+
+    assert views == [], "sentinel credential must not appear in list_grants"
+
+
+def test_list_grants_deduplicates_absorbed_legacy_rows() -> None:
+    """A legacy row whose portal_grants.id matches a sentinel's portal_grant_id
+    must not appear in the output — the sentinel already tracks it.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    sentinel_cred = MagicMock()
+    sentinel_cred.metadata = {
+        "engagement_id": "eng-dedup",
+        "validation_mode": "legacy_fallback_only",
+        "portal_grant_id": "legacy-grant-abc",
+    }
+    sentinel_cred.credential_id = "sentinel-xyz"
+
+    legacy_row = MagicMock()
+    legacy_row.id = "legacy-grant-abc"  # matches portal_grant_id in sentinel
+    legacy_row.engagement_id = "eng-dedup"
+    legacy_row.tenant_id = "tenant-dedup"
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = [legacy_row]
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", return_value=[sentinel_cred]):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-dedup",
+            engagement_id="eng-dedup",
+        )
+
+    assert views == [], "legacy row absorbed by sentinel must not appear in output"
+
+
+def test_list_grants_paginates_beyond_200_credentials() -> None:
+    """list_grants must paginate until all canonical credentials are collected.
+    A tenant with >200 portal credentials must not silently drop older entries.
+    """
+    from unittest.mock import patch
+
+    import api.credential_authority as ca_mod
+    from services.portal_grant_service import portal_grant_svc
+
+    def _make_cred(i: int) -> object:
+        from unittest.mock import MagicMock
+
+        c = MagicMock()
+        c.metadata = {"engagement_id": "eng-paginate", "client_id": "Client"}
+        c.credential_id = f"cred-{i}"
+        c.status = "active"
+        c.expires_at = None
+        c.revoked_at = None
+        c.last_used_at = None
+        c.issued_at = None
+        c.generation = 1
+        c.created_by_actor_id = "actor"
+        return c
+
+    # Simulate 250 credentials: first call returns 200, second returns 50.
+    batch_1 = [_make_cred(i) for i in range(200)]
+    batch_2 = [_make_cred(i) for i in range(200, 250)]
+    call_batches = [batch_1, batch_2]
+
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = []
+    db.execute.return_value = result_mock
+
+    with patch.object(ca_mod, "list_credentials", side_effect=call_batches):
+        views = portal_grant_svc.list_grants(
+            db,  # type: ignore[arg-type]
+            tenant_id="tenant-paginate",
+            engagement_id="eng-paginate",
+        )
+
+    assert len(views) == 250, f"expected 250 grants across two pages, got {len(views)}"
+
+
+def test_create_grant_slot_stays_within_varchar_128(client: TestClient) -> None:
+    """credential_slot must never exceed 128 chars even with a max-length client_id."""
+    import api.credential_authority as ca_mod
+    from unittest.mock import patch
+
+    slots_seen: list[str] = []
+    real_issue = ca_mod.issue_credential
+
+    def _capture_slot(*args, **kwargs):  # type: ignore[no-untyped-def]
+        slots_seen.append(kwargs.get("credential_slot", ""))
+        return real_issue(*args, **kwargs)
+
+    long_client_body = {
+        "client_name": "A" * 128,  # longest plausible client name
+        "assessor_id": "assessor-c7",
+        "assessment_type": "ai_governance",
+    }
+    eng2 = _create_engagement(client, long_client_body)
+
+    with patch.object(ca_mod, "issue_credential", side_effect=_capture_slot):
+        _create_grant(client, eng2["id"])
+
+    for slot in slots_seen:
+        assert len(slot) <= 128, (
+            f"credential_slot length {len(slot)} exceeds VARCHAR(128): {slot[:60]}…"
+        )
