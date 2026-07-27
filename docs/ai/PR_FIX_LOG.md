@@ -20286,3 +20286,25 @@ returns the tenant — filesystem can be empty and tenants resolve.
   - `make required-tests-gate`, `make fg-contract`, `make soc-manifest-verify`, `python -m tools.ci.check_audit_coverage` → pass.
   - `make soc-review-sync` will pass once this commit lands, because `docs/SOC_EXECUTION_GATES_2026-02-15.md` will then appear in the `origin/main...HEAD` diff.
 - **Result:** Pass.
+
+---
+
+## P-27 — fix(portal): narrow legacy grant fallback exceptions — commit cf9c93cf
+
+- **PR/Branch:** `fix/portal-sqlite-test-infrastructure` (#581)
+- **Date:** 2026-07-27
+- **Files changed:** `services/portal_grant_service.py`, `tests/test_c7_portal_grants.py`
+- **Root cause:** `list_grants` legacy compatibility fallback used `except Exception: pass` to tolerate environments where the `portal_grants` table is absent. This was too broad — it silently swallowed any exception from the legacy DB query path, including programming errors, serialization failures, and bugs.
+- **Fix:** Replaced `except Exception: pass` with `except (OperationalError, ProgrammingError): pass`. These are the only two SQLAlchemy exception types that represent a missing-table compatibility condition (SQLite: `OperationalError: no such table`; Postgres: `ProgrammingError: relation does not exist`). All other exceptions now propagate.
+- **Tests added:** 6 tests in `tests/test_c7_portal_grants.py`:
+  - `test_list_grants_canonical_path_succeeds_without_legacy_table` — canonical path returns grants without requiring legacy table.
+  - `test_list_grants_no_secret_in_response` — raw_secret never appears in list response body.
+  - `test_list_grants_legacy_fallback_swallows_operational_error` — `OperationalError` silenced.
+  - `test_list_grants_legacy_fallback_swallows_programming_error` — `ProgrammingError` silenced.
+  - `test_list_grants_unrelated_exception_propagates` — `RuntimeError` propagates (was swallowed before).
+  - `test_list_grants_tenant_isolation` — tenant A grants not visible from tenant B.
+- **Behavioral impact:** Minimal. Legacy fallback behavior for table-not-found is unchanged. Previously undetected exceptions from the legacy path now surface instead of disappearing silently.
+- **Security impact:** None. Canonical `list_grants` path (reads `tenant_credentials` via `CredentialAuthority`) is unchanged. No credential secrets exposed.
+- **Schema/API impact:** None.
+- **Validation:** `pytest tests/test_c7_portal_grants.py` → 53 passed. `ruff check/format` clean. `mypy` clean.
+- **Result:** Pass.
