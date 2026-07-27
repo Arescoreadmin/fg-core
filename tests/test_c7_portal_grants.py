@@ -1042,7 +1042,11 @@ def test_list_grants_legacy_fallback_swallows_operational_error() -> None:
     from sqlalchemy.exc import OperationalError
 
     db = _make_mock_db(
-        raise_on_execute=OperationalError("no such table: portal_grants", None, None)
+        raise_on_execute=OperationalError(
+            "no such table: portal_grants",
+            None,
+            Exception("no such table: portal_grants"),
+        )
     )
 
     with patch.object(ca_mod, "list_credentials", return_value=[]):
@@ -1065,7 +1069,9 @@ def test_list_grants_legacy_fallback_swallows_programming_error() -> None:
 
     db = _make_mock_db(
         raise_on_execute=ProgrammingError(
-            'relation "portal_grants" does not exist', None, None
+            'relation "portal_grants" does not exist',
+            None,
+            Exception('relation "portal_grants" does not exist'),
         )
     )
 
