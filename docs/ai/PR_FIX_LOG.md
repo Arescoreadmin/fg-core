@@ -20308,3 +20308,23 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Validation:** `pytest tests/test_c7_portal_grants.py` → 53 passed. `ruff check/format` clean. `mypy` clean.
 - **Result:** Pass.
+
+---
+
+## P-28 — fix(portal): address three bot findings on list_grants and credential_slot — commit 7aafad99
+
+- **PR/Branch:** `fix/portal-sqlite-test-infrastructure` (#581)
+- **Date:** 2026-07-27
+- **Files changed:** `services/portal_grant_service.py`, `api/credential_authority.py`, `tests/test_c7_portal_grants.py`
+- **Root cause:**
+  1. **P1 — Sentinel dedup**: Migration 0161 sentinels (`validation_mode=legacy_fallback_only`) were included in `list_grants` output. Revoking the sentinel UUID does not revoke the underlying legacy secret, so both grants appeared revocable when only one actually was. The later ID-based dedup used credential_id vs portal_grants.id (different ID spaces), so the legacy row was not filtered.
+  2. **P2a — Pagination**: `ca.list_credentials(limit=200)` applied tenant-wide before `engagement_id` filtering; tenants with >200 portal credentials silently dropped grants for older engagements.
+  3. **P2b — Slot length**: `f"{client_id}:{engagement_id}:{token_hex(8)}"` can reach 337 chars; `credential_slot` column is `VARCHAR(128)`. Grant creation would fail with a DB error for long client names.
+- **Fix:**
+  1. Skip credentials where `meta.get("validation_mode") == "legacy_fallback_only"`; collect their `portal_grant_id` into `absorbed_portal_grant_ids` for legacy dedup.
+  2. Added `offset: int = 0` to `list_credentials`; `list_grants` now paginates in 200-record batches until the batch is smaller than 200.
+  3. Replaced raw concatenation with `sha256(client_id:engagement_id)[:80] + ":" + token_hex(8)` = 97 chars max, safely under 128.
+- **Tests added:** 4 tests in `tests/test_c7_portal_grants.py` covering each finding plus dedup behavior.
+- **Security impact:** P1 fix closes a gap where a revocation action had no effect on the credential that was actually authorizing access.
+- **Schema/API impact:** `list_credentials` gains an `offset` parameter (additive, backward compatible).
+- **Result:** Pass.
