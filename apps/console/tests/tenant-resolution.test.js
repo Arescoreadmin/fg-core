@@ -37,14 +37,35 @@ function read(relPath) {
 
 const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 
-function fakeJsonError(message, status) {
-  return { __error: true, status, message };
+function fakeJsonError(message, status, code) {
+  const error = { __error: true, status, message };
+  if (code) error.code = code;
+  return error;
 }
 
-function resolveAuthorizedTenant(rawTenantIdParam, claims, requestId = 'test') {
+function isProdLikeEnv(env) {
+  const nodeEnv = (env.NODE_ENV || '').trim().toLowerCase();
+  const fgEnv = (env.FG_ENV || '').trim().toLowerCase();
+  return nodeEnv === 'production' || ['prod', 'production', 'staging'].includes(fgEnv);
+}
+
+function resolveConfiguredOperatorTenant(env = {}) {
+  const tenantId = (env.CORE_TENANT_ID || '').trim();
+  if (!isProdLikeEnv(env)) return { tenantId };
+  if (!tenantId) return fakeJsonError('Tenant context missing', 500, 'TENANT_CONTEXT_MISSING');
+  if (tenantId.toLowerCase() === 'default') {
+    return fakeJsonError('Tenant context invalid', 500, 'TENANT_CONTEXT_INVALID');
+  }
+  if (!TENANT_ID_RE.test(tenantId)) {
+    return fakeJsonError('Tenant context invalid', 500, 'TENANT_CONTEXT_INVALID');
+  }
+  return { tenantId };
+}
+
+function resolveAuthorizedTenant(rawTenantIdParam, claims, env = {}) {
   // rawTenantIdParam: value from url.searchParams.get('tenant_id') — null if absent
   if (rawTenantIdParam === null) {
-    return { tenantId: 'operator-default' };
+    return resolveConfiguredOperatorTenant(env);
   }
 
   const tenantId = rawTenantIdParam.trim();
@@ -122,16 +143,49 @@ test('unauthorized_client_cannot_access_other_tenant', () => {
 
 // ─── Test 4: missing_tenant_id_uses_operator_fallback ────────────────────────
 
-test('missing_tenant_id_uses_operator_fallback', () => {
-  // null means the URL param was absent
-  const result = resolveAuthorizedTenant(null, internalClaims());
-  assert.ok(!result.__error, 'missing tenant_id must not error');
-  assert.equal(result.tenantId, 'operator-default');
+test('missing_tenant_id_uses_configured_operator_tenant', () => {
+  // null means the URL param was absent; this PR intentionally keeps operator fallback
+  // authority on CORE_TENANT_ID instead of switching to session tenant authority.
+  const env = { NODE_ENV: 'production', CORE_TENANT_ID: 'lace-money-group' };
+  const result = resolveAuthorizedTenant(null, internalClaims(), env);
+  assert.ok(!result.__error, 'valid configured operator tenant must not error');
+  assert.equal(result.tenantId, 'lace-money-group');
 
-  // Same behavior for client users — no param means use default
-  const result2 = resolveAuthorizedTenant(null, clientClaims('acme-corp'));
+  const result2 = resolveAuthorizedTenant(null, clientClaims('acme-corp'), env);
   assert.ok(!result2.__error);
-  assert.equal(result2.tenantId, 'operator-default');
+  assert.equal(result2.tenantId, 'lace-money-group');
+});
+
+test('production_missing_core_tenant_id_fails_closed', () => {
+  for (const env of [
+    { NODE_ENV: 'production' },
+    { NODE_ENV: 'production', CORE_TENANT_ID: '' },
+    { NODE_ENV: 'production', CORE_TENANT_ID: '   ' },
+    { FG_ENV: 'staging', CORE_TENANT_ID: '' },
+  ]) {
+    const result = resolveAuthorizedTenant(null, internalClaims(), env);
+    assert.ok(result.__error, 'missing production CORE_TENANT_ID must error');
+    assert.equal(result.status, 500);
+    assert.equal(result.code, 'TENANT_CONTEXT_MISSING');
+  }
+});
+
+test('production_default_core_tenant_id_fails_closed', () => {
+  for (const value of ['default', 'Default', ' default ']) {
+    const result = resolveAuthorizedTenant(null, internalClaims(), {
+      NODE_ENV: 'production',
+      CORE_TENANT_ID: value,
+    });
+    assert.ok(result.__error, 'literal default must not be a production operator tenant');
+    assert.equal(result.status, 500);
+    assert.equal(result.code, 'TENANT_CONTEXT_INVALID');
+  }
+});
+
+test('development_missing_core_tenant_id_preserves_local_empty_operator_context', () => {
+  const result = resolveAuthorizedTenant(null, internalClaims(), { NODE_ENV: 'development' });
+  assert.ok(!result.__error, 'development fallback must remain local-only compatible');
+  assert.equal(result.tenantId, '');
 });
 
 // ─── Test 5: malformed_tenant_id_returns_422 ─────────────────────────────────
@@ -231,4 +285,56 @@ test('rate_limit_key_uses_resolved_tenant_not_env_constant', () => {
 
   // tenantId param must appear in the key string
   assert.match(keyFn, /tenantId/);
+});
+
+
+// ─── Production tenant-context fail-closed invariants ─────────────────────────
+
+test('production_core_tenant_id_default_is_rejected_before_core_fetch', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  assert.match(routeSrc, /function resolveConfiguredOperatorTenant/);
+  assert.match(routeSrc, /TENANT_CONTEXT_MISSING/);
+  assert.match(routeSrc, /TENANT_CONTEXT_INVALID/);
+  assert.match(routeSrc, /CORE_TENANT_ID=default/);
+
+  const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId\);/)?.[0] ?? '';
+  assert.ok(handleFn, 'handle() must include tenant resolution and proxy call');
+  assert.ok(
+    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore'),
+    'tenant context validation must happen before contacting Core',
+  );
+});
+
+test('core_api_key_operator_path_requires_valid_configured_tenant', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  assert.match(routeSrc, /const CORE_TENANT_ID = \(process\.env\.CORE_TENANT_ID \|\| ''\)\.trim\(\);/);
+  assert.match(routeSrc, /function configuredOperatorTenantContextError/);
+  assert.match(routeSrc, /tenantId === CORE_TENANT_ID/);
+
+  const authFn = routeSrc.match(/async function resolveCoreAuth[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(authFn, 'resolveCoreAuth must exist');
+  assert.ok(
+    authFn.indexOf('configuredOperatorTenantContextError') < authFn.indexOf('CORE_API_KEY'),
+    'configured tenant context must be validated before CORE_API_KEY can be used',
+  );
+  assert.match(routeSrc, /TENANT_CONTEXT_MISSING/);
+  assert.match(routeSrc, /TENANT_CONTEXT_INVALID/);
+  assert.match(authFn, /tenantContextCode/);
+  assert.match(authFn, /if \(CORE_API_KEY\) return \{ tenantId, apiKey: CORE_API_KEY \};/);
+});
+
+test('browser_query_tenant_rules_remain_authorized_by_session_claims', () => {
+  const own = resolveAuthorizedTenant('acme-corp', clientClaims('acme-corp'), {
+    NODE_ENV: 'production',
+    CORE_TENANT_ID: 'lace-money-group',
+  });
+  assert.ok(!own.__error);
+  assert.equal(own.tenantId, 'acme-corp');
+
+  const other = resolveAuthorizedTenant('other-corp', clientClaims('acme-corp'), {
+    NODE_ENV: 'production',
+    CORE_TENANT_ID: 'lace-money-group',
+  });
+  assert.ok(other.__error);
+  assert.equal(other.status, 403);
 });

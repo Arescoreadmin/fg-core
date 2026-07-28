@@ -100,6 +100,20 @@ function BillingPanel({
 
 // ─── Core status banner ───────────────────────────────────────────────────────
 
+function coreStatusLabel(error: string): string {
+  if (error.includes('TENANT_CONTEXT_MISSING') || error.includes('TENANT_CONTEXT_INVALID')) {
+    return 'Tenant context invalid';
+  }
+  if (error.includes('CORE_AUTH_REJECTED')) return 'Core authentication rejected';
+  if (error.includes('CORE_ACCESS_DENIED')) return 'Core access denied';
+  if (error.includes('CORE_AUTH_MISSING') || error.includes('CREDENTIAL_NOT_FOUND')) {
+    return 'Core credential missing';
+  }
+  if (error.includes('CREDENTIAL_PERSISTENCE_UNAVAILABLE')) return 'Core credential unavailable';
+  if (error.includes('CORE_UNAVAILABLE')) return 'Core unavailable';
+  return 'Core request failed';
+}
+
 function CoreStatusBanner({
   snapshotResult,
 }: {
@@ -111,8 +125,7 @@ function CoreStatusBanner({
         className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger flex items-center gap-2"
         aria-label="core-unreachable"
       >
-        {/* string literal preserved for test anchor */}
-        Core unreachable — {snapshotResult.error}
+        {coreStatusLabel(snapshotResult.error)} — {snapshotResult.error}
       </div>
     );
   }
@@ -134,7 +147,7 @@ export default async function DashboardOverviewPage() {
 
   // Parallel data fetching — billing-ready / billing-not-ready / billing-error come from getBillingReadiness()
   // events-loading state is used for feed data
-  // Core unreachable from health check failure
+  // Core status failures are mapped by category in CoreStatusBanner
   // getBillingReadiness() → /health/ready (BFF proxy)
   const [
     snapshotSettled,

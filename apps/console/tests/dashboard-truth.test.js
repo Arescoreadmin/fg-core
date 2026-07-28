@@ -139,7 +139,7 @@ test('dashboard_shows_loading_state', () => {
 test('dashboard_shows_error_state', () => {
   const page = read('app/dashboard/page.tsx');
   assert.match(page, /billing-error/);
-  assert.match(page, /Core unreachable/);
+  assert.match(page, /coreStatusLabel/);
   // Feed errors handled by SafeResult: feedResult.ok false → empty items passed to widgets
   assert.match(page, /feedResult\.ok/);
 });
@@ -149,6 +149,19 @@ test('dashboard_shows_empty_state_for_events', () => {
   // Server component: empty feed safely produces [] passed to widgets
   assert.match(page, /feedItems/);
   assert.match(page, /feedResult\.ok \? feedResult\.data\.items : \[\]/);
+});
+
+
+
+test('dashboard_distinguishes_core_auth_and_unavailable_errors', () => {
+  const page = read('app/dashboard/page.tsx');
+  assert.match(page, /CORE_AUTH_REJECTED/);
+  assert.match(page, /Core authentication rejected/);
+  assert.match(page, /CORE_UNAVAILABLE/);
+  assert.match(page, /Core unavailable/);
+  assert.match(page, /TENANT_CONTEXT_MISSING/);
+  assert.match(page, /Tenant context invalid/);
+  assert.doesNotMatch(page, /Core unreachable —/);
 });
 
 // ─── SafeResult pattern ───────────────────────────────────────────────────────

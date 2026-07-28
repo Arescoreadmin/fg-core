@@ -18,7 +18,7 @@ test('client API uses BFF /api/core and does not depend on NEXT_PUBLIC_CORE_API_
 test('dashboard loads core health ready endpoint', () => {
   const page = read('app/dashboard/page.tsx');
   assert.match(page, /\/health\/ready/);
-  assert.match(page, /Core unreachable/);
+  assert.match(page, /coreStatusLabel/);
 });
 
 test('decisions page calls /api/core/decisions with pagination and filters', () => {
