@@ -261,10 +261,10 @@ test('tenant_resolution_runs_before_proxy_call', () => {
   assert.ok(handleFn, 'handle() must exist');
 
   const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
-  const proxyPos = handleFn.indexOf('proxyToCore');
+  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)');
   assert.ok(resolvePos > -1, 'resolveAuthorizedTenant must be called in handle()');
-  assert.ok(proxyPos > -1, 'proxyToCore must be called in handle()');
-  assert.ok(resolvePos < proxyPos, 'resolveAuthorizedTenant must precede proxyToCore');
+  assert.ok(tenantScopedProxyPos > -1, 'tenant-scoped proxyToCore call must be in handle()');
+  assert.ok(resolvePos < tenantScopedProxyPos, 'resolveAuthorizedTenant must precede tenant-scoped proxyToCore');
 
   // Error path must short-circuit
   assert.match(handleFn, /instanceof NextResponse/);
@@ -298,11 +298,29 @@ test('production_core_tenant_id_default_is_rejected_before_core_fetch', () => {
   assert.match(routeSrc, /CORE_TENANT_ID=default/);
 
   const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId\);/)?.[0] ?? '';
-  assert.ok(handleFn, 'handle() must include tenant resolution and proxy call');
+  assert.ok(handleFn, 'handle() must include tenant resolution and tenant-scoped proxy call');
   assert.ok(
-    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore'),
-    'tenant context validation must happen before contacting Core',
+    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)'),
+    'tenant context validation must happen before tenant-scoped Core proxying',
   );
+});
+
+test('tenant_independent_admin_and_artifact_paths_skip_operator_tenant_validation', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  const handleFn = routeSrc.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
+  assert.ok(handleFn, 'handle() must exist');
+
+  const alignmentPos = handleFn.indexOf('isAlignmentArtifact(path)');
+  const adminPos = handleFn.indexOf('if (isAdminPath)');
+  const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
+  assert.ok(alignmentPos > -1, 'alignment artifact branch must exist');
+  assert.ok(adminPos > -1, 'admin gateway branch must exist');
+  assert.ok(resolvePos > -1, 'tenant-scoped resolution branch must exist');
+  assert.ok(alignmentPos < resolvePos, 'alignment artifact must be handled before operator tenant validation');
+  assert.ok(adminPos < resolvePos, 'admin gateway paths must be handled before operator tenant validation');
+  assert.match(handleFn, /return getAlignmentArtifact\(requestId\);/);
+  assert.match(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
+  assert.match(routeSrc, /tenantIndependentRateLimitTenant/);
 });
 
 test('core_api_key_operator_path_requires_valid_configured_tenant', () => {

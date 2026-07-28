@@ -340,6 +340,12 @@ function buildAdminUrl(path: string[], request: NextRequest): string {
   return `${CORE_API_URL}/${path.join('/')}${qs ? `?${qs}` : ''}`;
 }
 
+function tenantIndependentRateLimitTenant(path: string[]): string {
+  if (isAlignmentArtifact(path)) return 'alignment-artifact';
+  if (isCrossTenantAdminPath(path)) return 'admin-gateway';
+  return 'tenant-independent';
+}
+
 function isProxyPathAllowed(path: string[], method: string): boolean {
   const joined = path.join('/');
   const rule = PROXY_RULES.find((item) => joined === item.prefix || joined.startsWith(`${item.prefix}/`));
@@ -522,11 +528,34 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const requestId = getRequestId(request);
   const path = params.path || [];
   const routeGroup = path[0] || 'unknown';
+  const isAdminPath = isCrossTenantAdminPath(path);
 
   const session = await auth();
   if (!session?.user) return jsonError('Unauthorized', 401, requestId);
   if (!canAccessCoreApiPath(path, request.method, session)) {
     return jsonError('Forbidden for this console role', 403, requestId);
+  }
+
+  if (!path.length) return jsonError('Missing path', 400, requestId);
+  if (isAlignmentArtifact(path) && request.method === 'GET') {
+    const rate = await enforceRateLimit(
+      request,
+      requestId,
+      routeGroup,
+      tenantIndependentRateLimitTenant(path),
+    );
+    if (rate) return rate;
+    return getAlignmentArtifact(requestId);
+  }
+  if (isAdminPath) {
+    const rate = await enforceRateLimit(
+      request,
+      requestId,
+      routeGroup,
+      tenantIndependentRateLimitTenant(path),
+    );
+    if (rate) return rate;
+    return proxyToCore(request, path, requestId, '');
   }
 
   const tenantResolution = resolveAuthorizedTenant(request, session, requestId);
@@ -535,9 +564,6 @@ async function handle(request: NextRequest, { params }: { params: { path: string
 
   const rate = await enforceRateLimit(request, requestId, routeGroup, tenantId);
   if (rate) return rate;
-
-  if (!path.length) return jsonError('Missing path', 400, requestId);
-  if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact(requestId);
 
   // Explicit 410 tombstone: legacy raw-token accept-invite endpoint removed in PR5
   if (isLegacyAcceptInvite(path, request.method)) {
