@@ -116,6 +116,8 @@ function credentialError(
     | 'CREDENTIAL_NOT_FOUND'
     | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE'
     | 'TENANT_NOT_FOUND'
+    | 'OPERATOR_TENANT_NOT_ALLOWED'
+    | 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE'
     | 'CORE_UNAVAILABLE',
   status: number,
   requestId: string,
@@ -274,7 +276,11 @@ type CoreAuthResolution =
         | 'CORE_AUTH_MISSING'
         | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE'
         | 'TENANT_CONTEXT_MISSING'
-        | 'TENANT_CONTEXT_INVALID';
+        | 'TENANT_CONTEXT_INVALID'
+        | 'TENANT_NOT_FOUND'
+        | 'OPERATOR_TENANT_NOT_ALLOWED'
+        | 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE'
+        | 'CORE_UNAVAILABLE';
     };
 
 function configuredOperatorTenantContextError(): 'TENANT_CONTEXT_MISSING' | 'TENANT_CONTEXT_INVALID' | null {
@@ -285,6 +291,78 @@ function configuredOperatorTenantContextError(): 'TENANT_CONTEXT_MISSING' | 'TEN
   return null;
 }
 
+type OperatorAuthorityValidation =
+  | { ok: true }
+  | {
+      ok: false;
+      errorCode:
+        | 'TENANT_NOT_FOUND'
+        | 'OPERATOR_TENANT_NOT_ALLOWED'
+        | 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE'
+        | 'CORE_UNAVAILABLE';
+    };
+
+let operatorAuthorityCache: { tenantId: string; result: OperatorAuthorityValidation; expiresAt: number } | null = null;
+const OPERATOR_AUTHORITY_CACHE_MS = 30_000;
+
+async function validateConfiguredOperatorAuthority(requestId: string): Promise<OperatorAuthorityValidation> {
+  if (!isProdLikeEnv()) return { ok: true };
+
+  const now = Date.now();
+  if (operatorAuthorityCache && operatorAuthorityCache.tenantId === CORE_TENANT_ID && operatorAuthorityCache.expiresAt > now) {
+    return operatorAuthorityCache.result;
+  }
+
+  if (!ADMIN_GATEWAY_TOKEN) {
+    console.warn(`[core-proxy] OPERATOR_TENANT_VALIDATION_UNAVAILABLE admin token absent request_id=${requestId}`);
+    return { ok: false, errorCode: 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE' };
+  }
+
+  const validationUrl = `${CORE_API_URL}/admin/tenants/${encodeURIComponent(CORE_TENANT_ID)}/operator-authority`;
+  let result: OperatorAuthorityValidation;
+  try {
+    const response = await fetch(validationUrl, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        'X-API-Key': ADMIN_GATEWAY_TOKEN,
+        'X-FG-Internal-Token': ADMIN_GATEWAY_TOKEN,
+        'X-Admin-Gateway-Internal': 'true',
+        'X-Request-ID': requestId,
+      },
+    });
+
+    if (response.ok) {
+      const payload = await response.json().catch(() => null) as {
+        tenant_kind?: string;
+        lifecycle_state?: string;
+        operator_authority_allowed?: boolean;
+      } | null;
+      const allowed =
+        payload?.tenant_kind === 'internal_platform' &&
+        payload?.lifecycle_state === 'active' &&
+        payload?.operator_authority_allowed === true;
+      result = allowed ? { ok: true } : { ok: false, errorCode: 'OPERATOR_TENANT_NOT_ALLOWED' };
+    } else if (response.status === 404) {
+      result = { ok: false, errorCode: 'TENANT_NOT_FOUND' };
+    } else if (response.status === 401 || response.status === 403) {
+      result = { ok: false, errorCode: 'OPERATOR_TENANT_NOT_ALLOWED' };
+    } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+      result = { ok: false, errorCode: 'CORE_UNAVAILABLE' };
+    } else {
+      result = { ok: false, errorCode: 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE' };
+    }
+  } catch {
+    result = { ok: false, errorCode: 'CORE_UNAVAILABLE' };
+  }
+
+  operatorAuthorityCache = { tenantId: CORE_TENANT_ID, result, expiresAt: now + OPERATOR_AUTHORITY_CACHE_MS };
+  if (!result.ok) {
+    console.warn(`[core-proxy] ${result.errorCode} configured operator tenant rejected tenant_id=${CORE_TENANT_ID} request_id=${requestId}`);
+  }
+  return result;
+}
+
 async function resolveCoreAuth(tenantId: string, requestId: string): Promise<CoreAuthResolution> {
   if (!tenantId || tenantId === CORE_TENANT_ID) {
     const tenantContextCode = configuredOperatorTenantContextError();
@@ -292,6 +370,8 @@ async function resolveCoreAuth(tenantId: string, requestId: string): Promise<Cor
       console.warn(`[core-proxy] ${tenantContextCode} before CORE_API_KEY use request_id=${requestId}`);
       return { tenantId, apiKey: null, errorCode: tenantContextCode };
     }
+    const authority = await validateConfiguredOperatorAuthority(requestId);
+    if (!authority.ok) return { tenantId, apiKey: null, errorCode: authority.errorCode };
     if (CORE_API_KEY) return { tenantId, apiKey: CORE_API_KEY };
     console.warn(`[core-proxy] CORE_AUTH_MISSING env key absent request_id=${requestId}`);
     return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
@@ -395,7 +475,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       }
       return credentialError(
         errRes.errorCode,
-        errRes.errorCode === 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' ? 503 : 401,
+        errRes.errorCode === 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' || errRes.errorCode === 'CORE_UNAVAILABLE' || errRes.errorCode === 'OPERATOR_TENANT_VALIDATION_UNAVAILABLE' ? 503 : errRes.errorCode === 'TENANT_NOT_FOUND' ? 404 : errRes.errorCode === 'OPERATOR_TENANT_NOT_ALLOWED' ? 403 : 401,
         requestId,
         tenantId,
       );

@@ -189,3 +189,11 @@ test('tenants_api_does_not_synthesize_default_in_production', () => {
     'production tenants route must not silently synthesize default operator tenant',
   );
 });
+
+
+test('tenants_api_does_not_synthesize_operator_tenant_into_customer_selector', () => {
+  const src = read('app/api/tenants/route.ts');
+  assert.doesNotMatch(src, /Default \(operator\)/);
+  assert.doesNotMatch(src, /is_default: true/);
+  assert.match(src, /filter\(\(\[id\]\) => id !== operatorTenantId\)/);
+});

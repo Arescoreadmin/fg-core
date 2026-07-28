@@ -25,6 +25,7 @@ from api.deps import auth_ctx_db_session, get_db
 from api.entitlements import require_capability
 from api.error_contracts import api_error
 from services.field_assessment.audit import audit_atomicity_svc
+from api.tenant_authority import TenantKindError, tenant_kind_http_error
 from services.portal_grant_service import (
     _list_canonical_engagement_ids,
     portal_grant_svc,
@@ -405,15 +406,18 @@ def create_portal_grant(
             ),
         )
 
-    result = portal_grant_svc.create_grant(
-        db,
-        tenant_id=tenant_id,
-        client_id=body.client_id,
-        engagement_id=body.engagement_id,
-        created_by=actor,
-        ttl_days=body.ttl_days,
-        portal_role=role,
-    )
+    try:
+        result = portal_grant_svc.create_grant(
+            db,
+            tenant_id=tenant_id,
+            client_id=body.client_id,
+            engagement_id=body.engagement_id,
+            created_by=actor,
+            ttl_days=body.ttl_days,
+            portal_role=role,
+        )
+    except TenantKindError as exc:
+        raise tenant_kind_http_error(exc) from exc
     audit_atomicity_svc.emit(
         db,
         tenant_id=tenant_id,

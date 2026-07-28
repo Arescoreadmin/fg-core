@@ -2143,6 +2143,23 @@
     {
       "dependency_categories": [
         "auth",
+        "rate"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/operator-authority",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -20536,7 +20553,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-07-26T21:05:31.998499+00:00",
+  "generated_at": "2026-07-28T10:48:33.660216+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

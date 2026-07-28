@@ -104,6 +104,8 @@ function coreStatusLabel(error: string): string {
   if (error.includes('TENANT_CONTEXT_MISSING') || error.includes('TENANT_CONTEXT_INVALID')) {
     return 'Tenant context invalid';
   }
+  if (error.includes('OPERATOR_TENANT_NOT_ALLOWED')) return 'Operator tenant not allowed';
+  if (error.includes('OPERATOR_TENANT_VALIDATION_UNAVAILABLE')) return 'Operator tenant validation unavailable';
   if (error.includes('CORE_AUTH_REJECTED')) return 'Core authentication rejected';
   if (error.includes('CORE_ACCESS_DENIED')) return 'Core access denied';
   if (error.includes('CORE_AUTH_MISSING') || error.includes('CREDENTIAL_NOT_FOUND')) {

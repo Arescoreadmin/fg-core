@@ -71,6 +71,12 @@ from api.security_audit import (
     audit_key_created,
     audit_key_revoked,
 )
+from api.tenant_authority import (
+    TenantKind,
+    TenantKindError,
+    policy_for_tenant_kind,
+    tenant_kind_http_error,
+)
 
 log = logging.getLogger("frostgate.admin")
 
@@ -1174,8 +1180,19 @@ class TenantRecord(BaseModel):
     tenant_id: str
     name: str
     status: str
+    tenant_kind: TenantKind = "customer"
     created_at: str
     updated_at: str
+
+
+class OperatorTenantAuthorityResponse(BaseModel):
+    tenant_id: str
+    tenant_kind: TenantKind
+    lifecycle_state: str
+    operator_authority_allowed: bool
+    customer_visible: bool
+    portal_enabled: bool
+    billing_eligible: bool
 
 
 @router.post(
@@ -1263,6 +1280,7 @@ async def create_tenant(
             tenant_id=pg_record.tenant_id,
             name=pg_record.display_name,
             status=pg_record.lifecycle_state,
+            tenant_kind=pg_record.tenant_kind,
             created_at=str(pg_record.created_at),
             updated_at=str(pg_record.updated_at),
         )
@@ -1320,6 +1338,7 @@ async def create_tenant(
         tenant_id=record.tenant_id,
         name=record.name,
         status=record.status,
+        tenant_kind="customer",
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -1347,6 +1366,7 @@ async def list_tenants(
                     "tenant_id": r.tenant_id,
                     "name": r.display_name,
                     "status": r.lifecycle_state,
+                    "tenant_kind": r.tenant_kind,
                     "created_at": str(r.created_at),
                     "updated_at": str(r.updated_at),
                 }
@@ -1371,6 +1391,7 @@ async def list_tenants(
                 "tenant_id": r.tenant_id,
                 "name": r.name,
                 "status": r.status,
+                "tenant_kind": "customer",
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
             }
@@ -1378,6 +1399,71 @@ async def list_tenants(
         ],
         "total": len(records),
     }
+
+
+@router.get(
+    "/tenants/{tenant_id}/operator-authority",
+    response_model=OperatorTenantAuthorityResponse,
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def validate_operator_tenant_authority(
+    tenant_id: str,
+    request: Request,
+) -> OperatorTenantAuthorityResponse:
+    """Validate whether a tenant may act as configured Console operator authority."""
+    if not _TENANT_ID_RE.fullmatch(tenant_id):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "TENANT_ID_FORMAT_INVALID",
+                "tenant_id does not match required format",
+            ),
+        )
+
+    from api.tenant_repository import get_tenant_repository
+
+    repo = get_tenant_repository()
+    if repo is None:
+        raise HTTPException(
+            status_code=503,
+            detail=api_error(
+                "TENANT_AUTHORITY_UNAVAILABLE",
+                "tenant authority repository is unavailable",
+            ),
+        )
+
+    record = repo.get(tenant_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("TENANT_NOT_FOUND", f"tenant not found: {tenant_id}"),
+        )
+
+    try:
+        policy = policy_for_tenant_kind(record.tenant_kind)
+    except TenantKindError as exc:
+        raise tenant_kind_http_error(exc) from exc
+
+    if record.lifecycle_state != "active" or not policy.operator_authority_allowed:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OPERATOR_TENANT_NOT_ALLOWED",
+                "tenant_id": tenant_id,
+                "tenant_kind": record.tenant_kind,
+                "lifecycle_state": record.lifecycle_state,
+            },
+        )
+
+    return OperatorTenantAuthorityResponse(
+        tenant_id=record.tenant_id,
+        tenant_kind=record.tenant_kind,
+        lifecycle_state=record.lifecycle_state,
+        operator_authority_allowed=policy.operator_authority_allowed,
+        customer_visible=policy.customer_visible,
+        portal_enabled=policy.portal_enabled,
+        billing_eligible=policy.billing_eligible,
+    )
 
 
 @router.get(
@@ -1419,6 +1505,7 @@ async def get_tenant(
             tenant_id=pg_record.tenant_id,
             name=pg_record.display_name,
             status=pg_record.lifecycle_state,
+            tenant_kind=pg_record.tenant_kind,
             created_at=str(pg_record.created_at),
             updated_at=str(pg_record.updated_at),
         )
@@ -1447,6 +1534,7 @@ async def get_tenant(
         tenant_id=record.tenant_id,
         name=record.name,
         status=record.status,
+        tenant_kind="customer",
         created_at=record.created_at,
         updated_at=record.updated_at,
     )

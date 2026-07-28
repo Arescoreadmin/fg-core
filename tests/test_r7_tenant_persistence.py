@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS tenants (
     tenant_id           VARCHAR(128)    PRIMARY KEY,
     display_name        TEXT            NOT NULL,
     lifecycle_state     VARCHAR(32)     NOT NULL DEFAULT 'active',
+    tenant_kind         VARCHAR(32)     NOT NULL DEFAULT 'customer'
+        CHECK (tenant_kind IN ('customer', 'internal_platform', 'validation', 'demo')),
     created_at          TEXT            NOT NULL DEFAULT (datetime('now')),
     updated_at          TEXT            NOT NULL DEFAULT (datetime('now')),
     created_by          TEXT,
@@ -120,12 +122,53 @@ def test_repository_create_and_get(sqlite_engine):
     assert row.tenant_id == "acme"
     assert row.display_name == "Acme Corp"
     assert row.lifecycle_state == "active"
+    assert row.tenant_kind == "customer"
     assert row.created_by == "test-actor"
 
     fetched = repo.get("acme")
     assert fetched is not None
     assert fetched.tenant_id == "acme"
     assert fetched.display_name == "Acme Corp"
+    assert fetched.tenant_kind == "customer"
+
+
+def test_repository_create_explicit_validation_kind(sqlite_engine):
+    repo = _make_repo(sqlite_engine)
+    row = repo.create(
+        "validation-tenant", "Validation Tenant", tenant_kind="validation"
+    )
+    assert row.tenant_kind == "validation"
+
+
+def test_repository_create_explicit_demo_kind(sqlite_engine):
+    repo = _make_repo(sqlite_engine)
+    row = repo.create("demo-tenant", "Demo Tenant", tenant_kind="demo")
+    assert row.tenant_kind == "demo"
+
+
+def test_repository_generic_create_rejects_internal_platform(sqlite_engine):
+    repo = _make_repo(sqlite_engine)
+    with pytest.raises(ValueError, match="internal_platform"):
+        repo.create(
+            "internal-tenant", "Internal Tenant", tenant_kind="internal_platform"
+        )
+
+
+def test_repository_privileged_create_allows_internal_platform(sqlite_engine):
+    repo = _make_repo(sqlite_engine)
+    row = repo.create(
+        "internal-tenant",
+        "Internal Tenant",
+        tenant_kind="internal_platform",
+        allow_internal_platform=True,
+    )
+    assert row.tenant_kind == "internal_platform"
+
+
+def test_repository_invalid_tenant_kind_rejected(sqlite_engine):
+    repo = _make_repo(sqlite_engine)
+    with pytest.raises(ValueError, match="tenant_kind"):
+        repo.create("bad-kind", "Bad Kind", tenant_kind="operator")
 
 
 def test_repository_create_duplicate_raises(sqlite_engine):
@@ -324,6 +367,7 @@ def test_json_fallback_when_not_in_postgres(sqlite_engine, monkeypatch):
     assert row.tenant_id == "json-only-tenant"
     assert row.display_name == "JSON Only"
     assert row.migration_source == "json"
+    assert row.tenant_kind == "customer"
 
 
 def test_postgres_takes_priority_over_json(sqlite_engine, monkeypatch):

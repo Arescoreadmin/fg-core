@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.tenant_authority import ensure_billing_eligible
 from api.db import get_engine
 from services.subscriptions.engine import SubscriptionEngine
 from services.subscriptions.models import (
@@ -59,6 +60,7 @@ def create_contract(
     eng = get_engine()
     with Session(eng) as db:
         try:
+            ensure_billing_eligible(db, tenant_id)
             contract = _engine.create_contract(
                 db,
                 tenant_id=tenant_id,
@@ -159,6 +161,7 @@ def create_item(
     eng = get_engine()
     with Session(eng) as db:
         try:
+            ensure_billing_eligible(db, tenant_id)
             item = _engine.create_item(
                 db,
                 contract_id=contract_id,

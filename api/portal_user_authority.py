@@ -31,6 +31,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import text
 
+from api.tenant_authority import ensure_portal_enabled
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -502,6 +504,7 @@ def create_invitation(
     delivered to the invitee by the caller (e.g. via email).  It is never
     stored in the database.
     """
+    ensure_portal_enabled(db, tenant_id)
     _set_tenant_rls(db, tenant_id)
 
     token_hex = secrets.token_hex(32)

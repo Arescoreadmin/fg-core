@@ -3659,3 +3659,35 @@ The following `tools/ci/` files were regenerated as a routine consequence:
 - `pytest tests/test_field_assessment.py`: no regression
 
 **SOC review outcome:** approved. No auth, OPA, session, middleware, or security files changed. All 9 routes require `governance:read` or `governance:write` via existing `require_scopes()` + `require_bound_tenant()`. Delivery events are append-only at both ORM and PG layers. Route inventory update is purely additive. Migration 0150 adds 2 tables + RLS + append-only triggers — backward compatible, safe to apply under live traffic.
+
+
+---
+
+## 2026-07-28 — PR 584: Tenant Authority Classification Foundation
+
+Reviewer: Codex. Classification: SOC-HIGH for tenant authority model, Console/Core operator authority validation, canonical tenant schema, and route inventory governance artifacts.
+
+Scope: Adds first-class tenant_kind classification to the canonical tenants table with database-level enforcement for customer, internal_platform, validation, and demo. Existing tenants default safely to customer; exact-ID validation tenants are mapped in migration only; no runtime name inference is introduced. No frostgate-internal tenant is provisioned and no production tenant is reclassified by code.
+
+Security posture: Customer tenants cannot become Console operator authority merely by having a valid credential. Validation and demo tenants are not operator authority. internal_platform is excluded from customer-visible Console tenant selectors, portal enrollment and grant flows, and billing, subscription, and entitlement creation through centralized tenant-kind policy. tenant_kind does not grant scopes, does not bypass RLS, does not change CredentialAuthority lifecycle checks, and does not create a hidden global tenant.
+
+Critical-path files changed:
+- migrations/postgres/0166_tenant_authority_classification.sql: additive tenant_kind column, non-null default, CHECK constraint, deterministic exact-ID validation mapping.
+- api/tenant_authority.py: centralized immutable tenant-kind policy and enforcement helpers.
+- api/tenant_repository.py: tenant_kind typed persistence and generic-create guard preventing accidental internal_platform creation.
+- api/admin.py: additive admin response field plus GET /admin/tenants/{tenant_id}/operator-authority validation endpoint.
+- apps/console/app/api/core/[...path]/route.ts: configured operator tenant must pass Core authority validation before CORE_API_KEY is used for tenant-scoped operator calls.
+- api/portal.py, api/portal_user_authority.py, services/portal_grant_service.py: portal enrollment and grants blocked for non-portal-enabled tenant kinds.
+- api/billing_v2.py, api/subscriptions.py, api/entitlements.py: billing, subscription, and entitlement creation blocked for non-billing-eligible tenant kinds.
+- tools/ci/check_plane_registry.py: exact tenant-binding exception for the internal admin-gateway operator-authority validation route; candidate tenant_id is the authority under review, not caller tenant binding.
+- tools/ci/check_mcim_docs.py: exact changed-path allowlist block for the PR 584 tenant authority classification files required by the strict MCIM documentation gate.
+- tools/ci/route_inventory.json, tools/ci/route_inventory_summary.json, tools/ci/plane_registry_snapshot.json, tools/ci/topology.sha256: regenerated via make route-inventory-generate for the additive operator-authority endpoint.
+
+Validation evidence:
+- Targeted tenant repository and classification tests pass.
+- Impacted entitlements, billing, subscription, portal grant, portal user authority, and tenant admin tests pass.
+- Console targeted tests, typecheck, lint, and build pass.
+- make required-tests-gate and make fg-contract pass.
+- make route-inventory-generate completed before this SOC entry.
+
+SOC review outcome: approved. The new route is internal/admin-gateway only and read-only. The schema change is additive and deterministic. Customer is the safe legacy default. No credentials are issued, rotated, revoked, exposed, or selected by this migration. No production tenant is created or promoted to internal_platform. Lace Money Group remains an ordinary customer tenant.

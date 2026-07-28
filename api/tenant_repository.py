@@ -21,6 +21,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from api.tenant_authority import (
+    DEFAULT_TENANT_KIND,
+    TenantKind,
+    normalize_tenant_kind,
+    validate_tenant_kind_for_generic_create,
+)
+
 log = logging.getLogger("frostgate.tenant_repository")
 
 # Valid lifecycle states (R3 owns the transition workflow; R7 only enumerates them).
@@ -48,6 +55,7 @@ class TenantRow:
     tenant_id: str
     display_name: str
     lifecycle_state: str
+    tenant_kind: TenantKind
     created_at: Any  # datetime or ISO string depending on driver
     updated_at: Any
     created_by: Optional[str]
@@ -103,12 +111,18 @@ class TenantRepository:
         tenant_id: str,
         display_name: str,
         *,
+        tenant_kind: str = DEFAULT_TENANT_KIND,
+        allow_internal_platform: bool = False,
         created_by: Optional[str] = None,
         migration_source: Optional[str] = None,
         migration_version: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> TenantRow:
         """Insert a new tenant row; raise ValueError if already exists."""
+        normalized_kind = validate_tenant_kind_for_generic_create(
+            tenant_kind,
+            allow_internal_platform=allow_internal_platform,
+        )
         now = _now_iso()
         meta_json = json.dumps(metadata or {})
         with self._engine.begin() as conn:
@@ -123,12 +137,12 @@ class TenantRepository:
                 text(
                     """
                     INSERT INTO tenants (
-                        tenant_id, display_name, lifecycle_state,
+                        tenant_id, display_name, lifecycle_state, tenant_kind,
                         created_at, updated_at, created_by,
                         metadata, canonical_version,
                         migration_source, migration_version
                     ) VALUES (
-                        :tid, :name, 'active',
+                        :tid, :name, 'active', :tenant_kind,
                         :now, :now, :created_by,
                         :meta, 1,
                         :msrc, :mver
@@ -138,6 +152,7 @@ class TenantRepository:
                 {
                     "tid": tenant_id,
                     "name": display_name,
+                    "tenant_kind": normalized_kind,
                     "now": now,
                     "created_by": created_by,
                     "meta": meta_json,
@@ -155,6 +170,8 @@ class TenantRepository:
         display_name: str,
         *,
         lifecycle_state: str = "active",
+        tenant_kind: str = DEFAULT_TENANT_KIND,
+        allow_internal_platform: bool = False,
         created_by: Optional[str] = None,
         migration_source: Optional[str] = None,
         migration_version: Optional[str] = None,
@@ -162,6 +179,10 @@ class TenantRepository:
         original_created_at: Optional[str] = None,
     ) -> Tuple[TenantRow, bool]:
         """Insert or reconcile.  Returns (row, created)."""
+        normalized_kind = validate_tenant_kind_for_generic_create(
+            tenant_kind,
+            allow_internal_platform=allow_internal_platform,
+        )
         now = _now_iso()
         meta_json = json.dumps(metadata or {})
         with self._engine.begin() as conn:
@@ -200,13 +221,13 @@ class TenantRepository:
                 text(
                     """
                     INSERT INTO tenants (
-                        tenant_id, display_name, lifecycle_state,
+                        tenant_id, display_name, lifecycle_state, tenant_kind,
                         created_at, updated_at, created_by,
                         metadata, canonical_version,
                         last_reconciled_at,
                         migration_source, migration_version
                     ) VALUES (
-                        :tid, :name, :state,
+                        :tid, :name, :state, :tenant_kind,
                         :cat, :now, :created_by,
                         :meta, 1,
                         :now,
@@ -218,6 +239,7 @@ class TenantRepository:
                     "tid": tenant_id,
                     "name": display_name,
                     "state": lifecycle_state,
+                    "tenant_kind": normalized_kind,
                     "cat": created_at,
                     "now": now,
                     "created_by": created_by,
@@ -251,6 +273,7 @@ class TenantRepository:
                     f"""
                     SELECT
                         tenant_id, display_name, lifecycle_state,
+                        tenant_kind,
                         created_at, updated_at, created_by,
                         metadata, canonical_version,
                         last_reconciled_at, archived_at,
@@ -318,6 +341,7 @@ class TenantRepository:
                     """
                     SELECT
                         tenant_id, display_name, lifecycle_state,
+                        tenant_kind,
                         created_at, updated_at, created_by,
                         metadata, canonical_version,
                         last_reconciled_at, archived_at,
@@ -351,6 +375,7 @@ class TenantRepository:
             lifecycle_state=rec.status
             if rec.status in _SUPPORTED_LIFECYCLE_STATES
             else "active",
+            tenant_kind=DEFAULT_TENANT_KIND,
             created_at=rec.created_at,
             updated_at=rec.updated_at,
             created_by=None,
@@ -366,7 +391,7 @@ class TenantRepository:
     def _row_to_dataclass(row: Any) -> TenantRow:
         """Map a SQL row tuple (by position) to TenantRow."""
         # metadata may come back as dict (psycopg3) or JSON string (SQLite).
-        raw_meta = row[6]
+        raw_meta = row[7]
         if isinstance(raw_meta, str):
             try:
                 meta = json.loads(raw_meta)
@@ -381,15 +406,16 @@ class TenantRepository:
             tenant_id=row[0],
             display_name=row[1],
             lifecycle_state=row[2],
-            created_at=row[3],
-            updated_at=row[4],
-            created_by=row[5],
+            tenant_kind=normalize_tenant_kind(row[3]),
+            created_at=row[4],
+            updated_at=row[5],
+            created_by=row[6],
             metadata=meta,
-            canonical_version=row[7],
-            last_reconciled_at=row[8],
-            archived_at=row[9],
-            migration_source=row[10],
-            migration_version=row[11],
+            canonical_version=row[8],
+            last_reconciled_at=row[9],
+            archived_at=row[10],
+            migration_source=row[11],
+            migration_version=row[12],
         )
 
 
