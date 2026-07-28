@@ -303,5 +303,5 @@ test('existing dashboard page retains billing and feed states', () => {
   assert.match(page, /billing-ready/);
   assert.match(page, /billing-error/);
   assert.match(page, /events-loading/);
-  assert.match(page, /Core unreachable/);
+  assert.match(page, /coreStatusLabel/);
 });

@@ -305,10 +305,10 @@ test('H: key path tenant_id locked to authorized tenant — mismatch rejected', 
   // resolveAuthorizedTenant must be called before proxyToCore in handle()
   const handleFn = routeSrc.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? routeSrc.match(/async function handle[\s\S]*/)?.[0] ?? '';
   const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
-  const proxyPos = handleFn.indexOf('proxyToCore');
+  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)');
   assert.ok(resolvePos > -1, 'resolveAuthorizedTenant must be in handle()');
-  assert.ok(proxyPos > -1, 'proxyToCore must be in handle()');
-  assert.ok(resolvePos < proxyPos, 'resolveAuthorizedTenant must precede proxyToCore');
+  assert.ok(tenantScopedProxyPos > -1, 'tenant-scoped proxyToCore must be in handle()');
+  assert.ok(resolvePos < tenantScopedProxyPos, 'resolveAuthorizedTenant must precede tenant-scoped proxyToCore');
 
   // resolveCoreAuth receives tenantId from proxyToCore's parameter (already authorized)
   assert.match(routeSrc, /getTenantApiKey\(tenantId\)/,

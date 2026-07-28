@@ -18,7 +18,7 @@ test('client API uses BFF /api/core and does not depend on NEXT_PUBLIC_CORE_API_
 test('dashboard loads core health ready endpoint', () => {
   const page = read('app/dashboard/page.tsx');
   assert.match(page, /\/health\/ready/);
-  assert.match(page, /Core unreachable/);
+  assert.match(page, /coreStatusLabel/);
 });
 
 test('decisions page calls /api/core/decisions with pagination and filters', () => {
@@ -161,4 +161,19 @@ test('control tower snapshot and action routes are allowlisted in BFF', () => {
   for (const route of requiredPaths) {
     assert.match(proxy, new RegExp(route.replace(/[-/]/g, (m) => `\\${m}`)));
   }
+});
+
+
+test('alignment artifact bypasses operator tenant validation', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  const handleFn = proxy.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
+  assert.ok(handleFn.indexOf('return getAlignmentArtifact(requestId);') < handleFn.indexOf('resolveAuthorizedTenant'));
+});
+
+test('admin gateway paths bypass operator tenant validation but not access policy', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  const handleFn = proxy.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
+  assert.ok(handleFn.indexOf('canAccessCoreApiPath') < handleFn.indexOf('if (isAdminPath)'));
+  assert.ok(handleFn.indexOf('if (isAdminPath)') < handleFn.indexOf('resolveAuthorizedTenant'));
+  assert.match(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
 });

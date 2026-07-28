@@ -173,3 +173,19 @@ test('logs_and_responses_do_not_expose_api_key_field', () => {
   assert.match(provisionSrc, /PERSISTENCE_UNAVAILABLE/, '503 path required when persistence fails');
   assert.match(provisionSrc, /status: 503/, '503 status required when persistence fails');
 });
+
+
+// ─── Test 10: tenants API fail-closed operator context ───────────────────────
+
+test('tenants_api_does_not_synthesize_default_in_production', () => {
+  const src = read('app/api/tenants/route.ts');
+  assert.match(src, /function resolveConfiguredOperatorTenant/);
+  assert.match(src, /TENANT_CONTEXT_MISSING/);
+  assert.match(src, /TENANT_CONTEXT_INVALID/);
+  assert.match(src, /CORE_TENANT_ID=default/);
+  assert.doesNotMatch(
+    src,
+    /process\.env\.CORE_TENANT_ID \|\| 'default'/,
+    'production tenants route must not silently synthesize default operator tenant',
+  );
+});

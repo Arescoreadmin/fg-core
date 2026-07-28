@@ -8,12 +8,13 @@ import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
-const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
+const CORE_TENANT_ID = (process.env.CORE_TENANT_ID || '').trim();
 
 // Allowable tenant_id character set: matches provision-tenant validation
 const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ADMIN_GATEWAY_TOKEN = internalGatewaySecret();
+const PROD_LIKE_FG_ENVS = new Set(['prod', 'production', 'staging']);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -128,6 +129,47 @@ function credentialError(
   });
 }
 
+function isProdLikeEnv(): boolean {
+  const nodeEnv = (process.env.NODE_ENV || '').trim().toLowerCase();
+  const fgEnv = (process.env.FG_ENV || '').trim().toLowerCase();
+  return nodeEnv === 'production' || PROD_LIKE_FG_ENVS.has(fgEnv);
+}
+
+function tenantContextError(
+  code: 'TENANT_CONTEXT_MISSING' | 'TENANT_CONTEXT_INVALID',
+  requestId: string,
+  tenantId?: string,
+) {
+  const body: Record<string, string> = {
+    error: code,
+    request_id: requestId,
+  };
+  if (tenantId) body.tenant_id = tenantId;
+  return NextResponse.json(body, {
+    status: 500,
+    headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId },
+  });
+}
+
+function resolveConfiguredOperatorTenant(requestId: string): { tenantId: string } | NextResponse {
+  const tenantId = CORE_TENANT_ID;
+  if (!isProdLikeEnv()) return { tenantId };
+
+  if (!tenantId) {
+    console.warn(`[core-proxy] TENANT_CONTEXT_MISSING CORE_TENANT_ID absent request_id=${requestId}`);
+    return tenantContextError('TENANT_CONTEXT_MISSING', requestId);
+  }
+  if (tenantId.toLowerCase() === 'default') {
+    console.warn(`[core-proxy] TENANT_CONTEXT_INVALID CORE_TENANT_ID=default request_id=${requestId}`);
+    return tenantContextError('TENANT_CONTEXT_INVALID', requestId, tenantId);
+  }
+  if (!TENANT_ID_RE.test(tenantId)) {
+    console.warn(`[core-proxy] TENANT_CONTEXT_INVALID malformed CORE_TENANT_ID request_id=${requestId}`);
+    return tenantContextError('TENANT_CONTEXT_INVALID', requestId);
+  }
+  return { tenantId };
+}
+
 /**
  * Build the rate-limit key in the format:
  *   fg:bff:rl:{route_group}:{tenant_id}:{client_identity}
@@ -198,7 +240,7 @@ function resolveAuthorizedTenant(
   const raw = url.searchParams.get('tenant_id');
 
   if (raw === null) {
-    return { tenantId: CORE_TENANT_ID || '' };
+    return resolveConfiguredOperatorTenant(requestId);
   }
 
   const tenantId = raw.trim();
@@ -225,10 +267,31 @@ function resolveAuthorizedTenant(
 
 type CoreAuthResolution =
   | { tenantId: string; apiKey: string }
-  | { tenantId: string; apiKey: null; errorCode: 'CORE_AUTH_MISSING' | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' };
+  | {
+      tenantId: string;
+      apiKey: null;
+      errorCode:
+        | 'CORE_AUTH_MISSING'
+        | 'CREDENTIAL_PERSISTENCE_UNAVAILABLE'
+        | 'TENANT_CONTEXT_MISSING'
+        | 'TENANT_CONTEXT_INVALID';
+    };
+
+function configuredOperatorTenantContextError(): 'TENANT_CONTEXT_MISSING' | 'TENANT_CONTEXT_INVALID' | null {
+  if (!isProdLikeEnv()) return null;
+  if (!CORE_TENANT_ID) return 'TENANT_CONTEXT_MISSING';
+  if (CORE_TENANT_ID.toLowerCase() === 'default') return 'TENANT_CONTEXT_INVALID';
+  if (!TENANT_ID_RE.test(CORE_TENANT_ID)) return 'TENANT_CONTEXT_INVALID';
+  return null;
+}
 
 async function resolveCoreAuth(tenantId: string, requestId: string): Promise<CoreAuthResolution> {
   if (!tenantId || tenantId === CORE_TENANT_ID) {
+    const tenantContextCode = configuredOperatorTenantContextError();
+    if (tenantContextCode) {
+      console.warn(`[core-proxy] ${tenantContextCode} before CORE_API_KEY use request_id=${requestId}`);
+      return { tenantId, apiKey: null, errorCode: tenantContextCode };
+    }
     if (CORE_API_KEY) return { tenantId, apiKey: CORE_API_KEY };
     console.warn(`[core-proxy] CORE_AUTH_MISSING env key absent request_id=${requestId}`);
     return { tenantId, apiKey: null, errorCode: 'CORE_AUTH_MISSING' };
@@ -277,6 +340,12 @@ function buildAdminUrl(path: string[], request: NextRequest): string {
   return `${CORE_API_URL}/${path.join('/')}${qs ? `?${qs}` : ''}`;
 }
 
+function tenantIndependentRateLimitTenant(path: string[]): string {
+  if (isAlignmentArtifact(path)) return 'alignment-artifact';
+  if (isCrossTenantAdminPath(path)) return 'admin-gateway';
+  return 'tenant-independent';
+}
+
 function isProxyPathAllowed(path: string[], method: string): boolean {
   const joined = path.join('/');
   const rule = PROXY_RULES.find((item) => joined === item.prefix || joined.startsWith(`${item.prefix}/`));
@@ -321,6 +390,9 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {
       const errRes = coreAuth as Extract<CoreAuthResolution, { apiKey: null }>;
+      if (errRes.errorCode === 'TENANT_CONTEXT_MISSING' || errRes.errorCode === 'TENANT_CONTEXT_INVALID') {
+        return tenantContextError(errRes.errorCode, requestId, tenantId);
+      }
       return credentialError(
         errRes.errorCode,
         errRes.errorCode === 'CREDENTIAL_PERSISTENCE_UNAVAILABLE' ? 503 : 401,
@@ -456,11 +528,34 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const requestId = getRequestId(request);
   const path = params.path || [];
   const routeGroup = path[0] || 'unknown';
+  const isAdminPath = isCrossTenantAdminPath(path);
 
   const session = await auth();
   if (!session?.user) return jsonError('Unauthorized', 401, requestId);
   if (!canAccessCoreApiPath(path, request.method, session)) {
     return jsonError('Forbidden for this console role', 403, requestId);
+  }
+
+  if (!path.length) return jsonError('Missing path', 400, requestId);
+  if (isAlignmentArtifact(path) && request.method === 'GET') {
+    const rate = await enforceRateLimit(
+      request,
+      requestId,
+      routeGroup,
+      tenantIndependentRateLimitTenant(path),
+    );
+    if (rate) return rate;
+    return getAlignmentArtifact(requestId);
+  }
+  if (isAdminPath) {
+    const rate = await enforceRateLimit(
+      request,
+      requestId,
+      routeGroup,
+      tenantIndependentRateLimitTenant(path),
+    );
+    if (rate) return rate;
+    return proxyToCore(request, path, requestId, '');
   }
 
   const tenantResolution = resolveAuthorizedTenant(request, session, requestId);
@@ -469,9 +564,6 @@ async function handle(request: NextRequest, { params }: { params: { path: string
 
   const rate = await enforceRateLimit(request, requestId, routeGroup, tenantId);
   if (rate) return rate;
-
-  if (!path.length) return jsonError('Missing path', 400, requestId);
-  if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact(requestId);
 
   // Explicit 410 tombstone: legacy raw-token accept-invite endpoint removed in PR5
   if (isLegacyAcceptInvite(path, request.method)) {
