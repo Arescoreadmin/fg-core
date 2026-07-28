@@ -146,14 +146,14 @@ test('unauthorized_client_cannot_access_other_tenant', () => {
 test('missing_tenant_id_uses_configured_operator_tenant', () => {
   // null means the URL param was absent; this PR intentionally keeps operator fallback
   // authority on CORE_TENANT_ID instead of switching to session tenant authority.
-  const env = { NODE_ENV: 'production', CORE_TENANT_ID: 'lace-money-group' };
+  const env = { NODE_ENV: 'production', CORE_TENANT_ID: 'fg-internal-operator' };
   const result = resolveAuthorizedTenant(null, internalClaims(), env);
   assert.ok(!result.__error, 'valid configured operator tenant must not error');
-  assert.equal(result.tenantId, 'lace-money-group');
+  assert.equal(result.tenantId, 'fg-internal-operator');
 
   const result2 = resolveAuthorizedTenant(null, clientClaims('acme-corp'), env);
   assert.ok(!result2.__error);
-  assert.equal(result2.tenantId, 'lace-money-group');
+  assert.equal(result2.tenantId, 'fg-internal-operator');
 });
 
 test('production_missing_core_tenant_id_fails_closed', () => {
@@ -344,15 +344,35 @@ test('core_api_key_operator_path_requires_valid_configured_tenant', () => {
 test('browser_query_tenant_rules_remain_authorized_by_session_claims', () => {
   const own = resolveAuthorizedTenant('acme-corp', clientClaims('acme-corp'), {
     NODE_ENV: 'production',
-    CORE_TENANT_ID: 'lace-money-group',
+    CORE_TENANT_ID: 'fg-internal-operator',
   });
   assert.ok(!own.__error);
   assert.equal(own.tenantId, 'acme-corp');
 
   const other = resolveAuthorizedTenant('other-corp', clientClaims('acme-corp'), {
     NODE_ENV: 'production',
-    CORE_TENANT_ID: 'lace-money-group',
+    CORE_TENANT_ID: 'fg-internal-operator',
   });
   assert.ok(other.__error);
   assert.equal(other.status, 403);
+});
+
+test('configured operator tenant requires core authority validation before env key use', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  assert.match(routeSrc, /validateConfiguredOperatorAuthority/);
+  assert.match(routeSrc, /\/admin\/tenants\/\$\{encodeURIComponent\(CORE_TENANT_ID\)\}\/operator-authority/);
+  assert.match(routeSrc, /tenant_kind === 'internal_platform'/);
+  assert.match(routeSrc, /lifecycle_state === 'active'/);
+  assert.match(routeSrc, /operator_authority_allowed === true/);
+  assert.ok(
+    routeSrc.indexOf('validateConfiguredOperatorAuthority(requestId)') < routeSrc.indexOf('if (CORE_API_KEY) return'),
+    'operator authority must be validated before CORE_API_KEY use',
+  );
+});
+
+test('customer tenant fixture is not normalized as operator authority', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  const credentialTests = read('tests/core-credential-resolution.test.js');
+  assert.doesNotMatch(routeSrc, /lace-money-group/);
+  assert.doesNotMatch(credentialTests, /lace-money-group/);
 });

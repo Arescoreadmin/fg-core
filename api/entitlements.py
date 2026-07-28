@@ -39,6 +39,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.tenant_authority import (
+    TenantKindError,
+    ensure_billing_eligible,
+    tenant_kind_http_error,
+)
 from api.db import get_engine, set_tenant_context
 from api.db_models import (
     PolicyBundle,
@@ -1122,6 +1127,10 @@ def create_tenant_subscription(
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as db:
+        try:
+            ensure_billing_eligible(db, tenant_id)
+        except TenantKindError as exc:
+            raise tenant_kind_http_error(exc) from exc
         sub = TenantSubscription(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,

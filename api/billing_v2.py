@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
+from api.tenant_authority import ensure_billing_eligible
 from api.db import get_engine
 from api.db_models_billing import BillingEventLedger, BillingSubscriptionLink
 from api.observability.metrics import (
@@ -96,6 +97,7 @@ def create_billing_account(
     eng = get_engine()
     with Session(eng) as db:
         try:
+            ensure_billing_eligible(db, tenant_id)
             account = _engine.create_billing_account(
                 db,
                 tenant_id=tenant_id,
@@ -193,6 +195,7 @@ def create_subscription_link(
     eng = get_engine()
     with Session(eng) as db:
         try:
+            ensure_billing_eligible(db, body.tenant_id)
             link = _engine.create_subscription_link(
                 db,
                 tenant_id=body.tenant_id,

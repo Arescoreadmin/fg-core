@@ -1278,7 +1278,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-26T21:05:32.013438+00:00",
+  "generated_at": "2026-07-28T10:51:24.885437+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

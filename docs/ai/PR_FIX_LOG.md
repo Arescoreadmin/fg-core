@@ -1,5 +1,100 @@
 # PR Fix Log (Strict)
 
+## P-27 — feat(tenancy): establish first-class tenant authority classification
+
+**Branch:** `feat/tenant-authority-classification` (PR #584)
+**Date:** 2026-07-28
+
+### Problem
+
+FrostGate did not have a first-class tenant authority discriminator. Customer,
+validation, demo, and future internal platform tenants could only be separated by
+convention, metadata, or external configuration discipline. After PR #583 made
+Console fail closed on invalid `CORE_TENANT_ID`, the next required foundation was
+to prevent a customer tenant such as Lace Money Group from ever being treated as
+Console operator authority merely because it exists, is active, or has a valid
+canonical credential.
+
+### Resolution
+
+**New files:**
+
+1. `new: api/tenant_authority.py` — central immutable tenant-kind policy helper.
+   The canonical tenant row stores only `tenant_kind`; derived booleans
+   (`customer_visible`, `portal_enabled`, `billing_eligible`,
+   `operator_authority_allowed`) are not independently persisted, preventing
+   impossible states such as `tenant_kind='internal_platform'` with
+   customer-visible behavior.
+
+2. `new: migrations/postgres/0166_tenant_authority_classification.sql` — adds
+   non-null `tenants.tenant_kind` with allowed values `customer`,
+   `internal_platform`, `validation`, and `demo`. Existing rows default safely to
+   `customer`; exact reviewed validation IDs are mapped to `validation`. The
+   migration does not create `frostgate-internal`, mutate lifecycle state, or
+   touch credentials.
+
+3. `new: tests/test_tenant_authority_classification.py` — covers schema
+   constraints, migration semantics, repository round-trips, policy completeness,
+   portal/billing eligibility, and operator-authority invariants.
+
+**Modified files:**
+
+4. `mod: api/tenant_repository.py` — tenant rows now include `tenant_kind`.
+   Generic tenant creation defaults to `customer` and rejects
+   `internal_platform` unless an explicit privileged path opts in.
+
+5. `mod: api/admin.py` — admin tenant responses expose `tenant_kind`
+   additively. Added an internal admin-gateway operator-authority validation
+   endpoint that requires an active `internal_platform` tenant and returns
+   derived policy flags only.
+
+6. `mod: apps/console/app/api/core/[...path]/route.ts` — Console keeps
+   configured `CORE_TENANT_ID` as the near-term bridge, but tenant-scoped
+   operator calls now validate that configured tenant through Core before using
+   `CORE_API_KEY`. Customer, validation, demo, missing, blank, malformed, and
+   `default` tenants fail closed.
+
+7. `mod: apps/console/app/api/tenants/route.ts` and
+   `mod: apps/console/app/dashboard/page.tsx` — ordinary Console tenant lists do
+   not synthesize operator authority as a customer tenant, and dashboard copy
+   distinguishes operator-tenant rejection from Core unavailability.
+
+8. `mod: api/billing_v2.py`, `mod: api/entitlements.py`,
+   `mod: api/subscriptions.py` — billing/subscription/entitlement mutation
+   paths require billing eligibility from the derived tenant-kind policy.
+
+9. `mod: api/portal.py`, `mod: api/portal_user_authority.py`,
+   `mod: services/portal_grant_service.py` — portal enrollment/grant flows
+   require portal eligibility from the derived tenant-kind policy.
+
+10. `mod: docs/SOC_ARCH_REVIEW_2026-02-15.md`,
+    `mod: tools/ci/check_mcim_docs.py`, `mod: tools/ci/check_plane_registry.py`,
+    `mod: tools/ci/plane_registry_snapshot.json`,
+    `mod: tools/ci/route_inventory.json`,
+    `mod: tools/ci/route_inventory_summary.json`,
+    `mod: tools/ci/topology.sha256` — governance artifacts updated for the new
+    admin authority-validation route and changed critical CI/documentation
+    surfaces.
+
+### Behavioral impact
+
+- `customer` is the safe legacy default; unknown existing tenants are not
+  promoted to platform authority.
+- Lace Money Group, The Wick Network, The Trust Group, and other customer
+  tenants remain ordinary isolated customer tenants.
+- Validation and demo tenants cannot act as production Console operator
+  authority.
+- `internal_platform` tenants are excluded from customer-visible tenant lists,
+  portal enrollment/grant flows, and automatic billing/entitlement creation by
+  central policy.
+- `tenant_kind` does not bypass RLS, grant scopes, or create a hidden global
+  tenant.
+- CredentialAuthority remains the canonical credential authority; no legacy
+  credential fallback was introduced.
+- No production tenant was created or reclassified. No production credential was
+  issued, rotated, revoked, or exposed. No Vercel/Railway configuration changed.
+  No deployment occurred. `frostgate-internal` was not provisioned.
+
 ## P-26 — fix(portal): RLS-safe pnu1. self-revocation via SECURITY DEFINER function
 
 **Branch:** `fix/portal-named-user-session-revocation` (PR #580)

@@ -70,15 +70,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const operatorTenant = resolveConfiguredOperatorTenant(requestId);
   if (operatorTenant instanceof NextResponse) return operatorTenant;
 
-  const defaultId = operatorTenant.tenantId;
+  const operatorTenantId = operatorTenant.tenantId;
   const registry = await getTenantRegistry();
 
-  const tenants: TenantEntry[] = [
-    { tenant_id: defaultId, label: 'Default (operator)', is_default: true },
-    ...Object.entries(registry)
-      .filter(([id]) => id !== defaultId)
-      .map(([id, rec]) => ({ tenant_id: id, label: rec.label, is_default: false })),
-  ];
+  const tenants: TenantEntry[] = Object.entries(registry)
+    .filter(([id]) => id !== operatorTenantId)
+    .map(([id, rec]) => ({ tenant_id: id, label: rec.label, is_default: false }));
 
   return NextResponse.json({ tenants });
 }

@@ -46,6 +46,7 @@ from api.credential_authority import (
 )
 from api.db import get_engine
 from api.db_models_portal import PortalGrant, PortalGrantAuditEvent, PortalGrantSession
+from api.tenant_authority import ensure_portal_enabled
 
 log = logging.getLogger("frostgate.portal_grant_service")
 
@@ -176,6 +177,7 @@ class PortalGrantService:
         Returns a GrantCreated with raw_secret set exactly once.
         The caller must store the secret immediately; it is not re-retrievable.
         """
+        ensure_portal_enabled(db, tenant_id)
         meta = PortalAccessMetadata(client_id=client_id, engagement_id=engagement_id)
         # Each portal grant is an independent credential — the slot must be
         # unique per grant so that multiple concurrent grants to the same

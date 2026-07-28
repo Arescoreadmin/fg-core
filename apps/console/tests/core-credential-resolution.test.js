@@ -96,7 +96,7 @@ function buildMockProxyResult({ coreStatus, coreBody } = {}) {
 // Simulate the full proxy decision: resolve key → set header → call Core → return response
 async function simulateProxy(opts = {}) {
   const {
-    tenantId = 'lace-money-group',
+    tenantId = 'fg-internal-operator',
     upstashKey,
     upstashUnavailable = false,
     redisKey,

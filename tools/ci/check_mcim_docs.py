@@ -216,6 +216,31 @@ ALLOWED_CHANGED_PATHS = {
     "docs/architecture/CUSTOMER_PORTAL_18_6_6.md",
     # PR 18.6.6 P2 — Portal Client-State Hardening
     "apps/portal/lib/engagementStore.ts",
+    # PR 584 — Tenant Authority Classification Foundation
+    "api/admin.py",
+    "api/billing_v2.py",
+    "api/entitlements.py",
+    "api/portal.py",
+    "api/portal_user_authority.py",
+    "api/subscriptions.py",
+    "api/tenant_authority.py",
+    "api/tenant_repository.py",
+    "apps/console/app/api/core/[...path]/route.ts",
+    "apps/console/app/api/tenants/route.ts",
+    "apps/console/app/dashboard/page.tsx",
+    "apps/console/tests/core-credential-resolution.test.js",
+    "apps/console/tests/tenant-registry-metadata.test.js",
+    "apps/console/tests/tenant-resolution.test.js",
+    "docs/SOC_ARCH_REVIEW_2026-02-15.md",
+    "migrations/postgres/0166_tenant_authority_classification.sql",
+    "services/portal_grant_service.py",
+    "tests/test_r7_tenant_persistence.py",
+    "tests/test_tenant_authority_classification.py",
+    "tools/ci/check_plane_registry.py",
+    "tools/ci/plane_registry_snapshot.json",
+    "tools/ci/route_inventory.json",
+    "tools/ci/route_inventory_summary.json",
+    "tools/ci/topology.sha256",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
