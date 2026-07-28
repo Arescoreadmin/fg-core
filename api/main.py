@@ -371,6 +371,34 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 if _auth_sqlite_path:
                     _ensure_api_keys_sqlite(_auth_sqlite_path)
 
+            _engine = get_engine()
+            if _db_backend == "postgres" and _engine.dialect.name == "postgresql":
+                try:
+                    from api.internal_platform_authority import (
+                        bootstrap_internal_platform_authority,
+                        validate_configured_core_tenant_id,
+                    )
+
+                    authority_status = bootstrap_internal_platform_authority(
+                        _engine,
+                        request_id="startup",
+                    )
+                    app.state.internal_platform_authority = authority_status
+                    if (
+                        is_production
+                        or is_strict_env_required()
+                        or bool((os.getenv("CORE_TENANT_ID") or "").strip())
+                    ):
+                        validate_configured_core_tenant_id(
+                            _engine,
+                            request_id="startup",
+                        )
+                except Exception as authority_exc:
+                    app.state.internal_platform_authority = None
+                    log.exception("Internal platform authority bootstrap failed")
+                    if is_production or is_strict_env_required():
+                        raise authority_exc
+
             app.state.db_init_ok = True
             app.state.db_init_error = None
         except Exception as exc:

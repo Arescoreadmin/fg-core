@@ -386,6 +386,14 @@
         {
           "class_name": "global_admin",
           "expires_at": "",
+          "justification": "Internal operator authority status view; protected by admin scope plus internal gateway and not scoped to a customer tenant.",
+          "method": "GET",
+          "path": "/admin/system/internal-authority",
+          "permanent": true
+        },
+        {
+          "class_name": "global_admin",
+          "expires_at": "",
           "justification": "Global operator key rotation report.",
           "method": "GET",
           "path": "/admin/keys/needing-rotation",
@@ -1278,7 +1286,7 @@
       ]
     }
   ],
-  "generated_at": "2026-07-28T10:51:24.885437+00:00",
+  "generated_at": "2026-07-28T23:56:13.540307+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

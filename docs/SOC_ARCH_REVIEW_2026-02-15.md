@@ -1,3 +1,68 @@
+## 2026-07-28 — PR #585: Internal platform authority bootstrap foundation
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (tenant authority bootstrap,
+Postgres migration, startup fail-closed behavior, internal admin endpoint, and
+credential lifecycle audit mirroring touch platform authority and Core startup
+boundaries)
+
+**Changes:**
+- `api/internal_platform_authority.py` (new) — deterministic bootstrap and
+  validation authority for the first internal platform tenant. The canonical
+  identifier is `frostgate-internal`; runtime proof remains `tenant_kind` plus
+  the central tenant-authority policy, never name inference.
+- `migrations/postgres/0167_internal_platform_authority_bootstrap.sql` (new) —
+  creates append-only `internal_platform_authority_events`, adds a unique
+  partial index limiting `internal_platform` tenants to one, and inserts
+  `frostgate-internal` only when no internal platform authority exists. No
+  credential material is created by SQL.
+- `api/main.py` (mod) — Postgres startup bootstraps authority and validates
+  `CORE_TENANT_ID` in prod/strict or when configured.
+- `api/admin.py` (mod) — safe internal-only `/admin/system/internal-authority`
+  status endpoint, authority-validation audit emission, internal credential
+  lifecycle audit mirroring, and canonical operator credential slot guard.
+- `api/tenant_repository.py` (mod) — `list_by_kind()` repository helper for
+  policy-based internal authority lookup.
+- `tests/test_internal_platform_authority.py` (new) — focused coverage for
+  bootstrap, config rejection, credential slot behavior, audit, no secret
+  exposure, and migration invariants.
+- `services/plane_registry/registry.py` (mod) — registers the internal-only
+  authority status route as `global_admin` control-plane metadata; access is
+  enforced by admin scope plus internal gateway rather than customer tenant
+  binding.
+- `tools/ci/check_plane_registry.py` (mod) — removes the checker-local exception
+  so the canonical route classification comes from plane registry metadata.
+- `tools/ci/route_inventory*.json`, `tools/ci/plane_registry_snapshot.json`,
+  `tools/ci/topology.sha256` (regenerated) — route inventory refresh for the
+  new internal admin route.
+
+**Security posture:**
+- `tenant_kind == internal_platform` is required for operator authority; customer,
+  demo, validation, unknown, missing, malformed, and `default` tenants fail
+  closed.
+- The internal authority does not grant scopes by tenant kind alone; the operator
+  credential remains canonical, tenant-bound, and validated by CredentialAuthority.
+- `internal_platform` tenants remain non-customer-visible, portal-disabled, and
+  billing-ineligible by PR #584 policy.
+- No service-principal or workload-identity semantics are introduced. PR #586
+  remains the service-principal implementation.
+- No customer tenant is reclassified by runtime name inference. Lace Money Group
+  remains an ordinary customer tenant.
+- No production tenant was created by this local implementation work, no
+  production credential was issued/rotated/revoked, no environment configuration
+  was changed, and no deployment occurred.
+
+**Validation:**
+- Focused authority/repository/admin credential tests: 67 passed.
+- Billing/portal targeted suite: 240 passed.
+- Console tenant/credential resolution tests: 66 passed.
+- Postgres migration replay: 1 passed.
+
+**SOC review outcome:** approved for PR review pending full standard and strict
+CI gates. The change is security-forward and deterministic, with explicit
+non-goals for service principals and future actor/service/target attribution.
+
+---
+
 ## 2026-07-25 — PR C: Portal named-user browser-driven session revocation
 
 **Reviewer:** Codex | **Classification:** SOC-LOW (single new route added under an already-public prefix; no middleware, security-module, or authorization changes; route uses the caller's own `pnu1.` session token as the sole credential and resolves tenant from the session record — no service-account key or client-supplied tenant is trusted)

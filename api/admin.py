@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from api.config.internal_gateway_secret import resolve_internal_gateway_secret
@@ -59,6 +59,14 @@ from api.credential_authority import (
 )
 from api.error_contracts import api_error
 from api.db import get_engine
+from api.internal_platform_authority import (
+    OPERATOR_CREDENTIAL_SLOT,
+    OPERATOR_CREDENTIAL_TYPE,
+    InternalPlatformAuthorityError,
+    emit_internal_authority_event,
+    emit_internal_credential_event_if_applicable,
+    read_internal_platform_authority_status,
+)
 from api.db_models import SecurityAuditLog
 from api.keys import (
     CreateKeyResponse,
@@ -938,6 +946,54 @@ class RevokeCredentialRequest(BaseModel):
     request_id: Optional[str] = None
 
 
+def _request_id_from_request(
+    request: Request, explicit: Optional[str] = None
+) -> Optional[str]:
+    return explicit or getattr(getattr(request, "state", None), "request_id", None)
+
+
+def _emit_internal_authority_event_best_effort(engine, **kwargs: Any) -> None:
+    try:
+        with engine.begin() as conn:
+            emit_internal_authority_event(conn, **kwargs)
+    except (OperationalError, ProgrammingError):
+        log.debug("internal_platform_authority_events table unavailable", exc_info=True)
+
+
+def _operator_policy_for_tenant(engine, tenant_id: str):
+    from api.tenant_repository import TenantRepository
+
+    try:
+        record = TenantRepository(engine).get(tenant_id)
+    except (OperationalError, ProgrammingError):
+        return None, None
+    if record is None:
+        return None, None
+    return record, policy_for_tenant_kind(record.tenant_kind)
+
+
+def _reject_extra_internal_operator_credential_slots(
+    engine,
+    tenant_id: str,
+    credential_type: str,
+    credential_slot: str,
+) -> None:
+    record, policy = _operator_policy_for_tenant(engine, tenant_id)
+    if record is None or policy is None or not policy.operator_authority_allowed:
+        return
+    if (
+        credential_type != OPERATOR_CREDENTIAL_TYPE
+        or credential_slot != OPERATOR_CREDENTIAL_SLOT
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "INTERNAL_OPERATOR_CREDENTIAL_SLOT_FORBIDDEN",
+                "internal platform authority may only use the canonical operator credential slot",
+            ),
+        )
+
+
 def _credential_record_dict(rec) -> Dict[str, Any]:
     return {
         "credential_id": rec.credential_id,
@@ -992,6 +1048,9 @@ async def issue_tenant_credential(
     """Issue a new credential for a tenant slot. Plaintext secret returned once only."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     engine = get_engine()
+    _reject_extra_internal_operator_credential_slots(
+        engine, tenant_id, req.credential_type, req.credential_slot
+    )
     try:
         result = issue_credential(
             engine,
@@ -1012,6 +1071,19 @@ async def issue_tenant_credential(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+    emit_internal_credential_event_if_applicable(
+        engine,
+        tenant_id=tenant_id,
+        event_type="credential_issued",
+        actor_id=actor_ctx.subject,
+        request_id=_request_id_from_request(request, req.request_id),
+        credential_id=result.record.credential_id,
+        credential_type=result.record.credential_type,
+        credential_slot=result.record.credential_slot,
+        generation=result.record.generation,
+        metadata={"admin_route": "issue", "plaintext_exposed_once": True},
+    )
 
     resp: Dict[str, Any] = _credential_record_dict(result.record)
     resp["plaintext_secret"] = result.plaintext_secret  # None on idempotency replay
@@ -1071,6 +1143,19 @@ async def rotate_tenant_credential(
     except CredentialStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
+    emit_internal_credential_event_if_applicable(
+        engine,
+        tenant_id=tenant_id,
+        event_type="credential_rotated",
+        actor_id=actor_ctx.subject,
+        request_id=_request_id_from_request(request, req.request_id),
+        credential_id=result.record.credential_id,
+        credential_type=result.record.credential_type,
+        credential_slot=result.record.credential_slot,
+        generation=result.record.generation,
+        metadata={"admin_route": "rotate", "replaced_credential_id": credential_id},
+    )
+
     resp: Dict[str, Any] = _credential_record_dict(result.record)
     resp["plaintext_secret"] = result.plaintext_secret
     return resp
@@ -1103,6 +1188,19 @@ async def revoke_tenant_credential(
         raise HTTPException(status_code=404, detail=str(exc))
     except CredentialStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+    emit_internal_credential_event_if_applicable(
+        engine,
+        tenant_id=tenant_id,
+        event_type="credential_revoked",
+        actor_id=actor_ctx.subject,
+        request_id=_request_id_from_request(request, req.request_id),
+        credential_id=rec.credential_id,
+        credential_type=rec.credential_type,
+        credential_slot=rec.credential_slot,
+        generation=rec.generation,
+        metadata={"admin_route": "revoke", "reason": req.reason},
+    )
     return _credential_record_dict(rec)
 
 
@@ -1193,6 +1291,21 @@ class OperatorTenantAuthorityResponse(BaseModel):
     customer_visible: bool
     portal_enabled: bool
     billing_eligible: bool
+
+
+class InternalPlatformAuthorityResponse(BaseModel):
+    authority_exists: bool
+    tenant_id: Optional[str]
+    tenant_kind: Optional[str]
+    lifecycle_state: Optional[str]
+    authority_version: Optional[int]
+    bootstrap_status: str
+    credential_type: str
+    credential_slot: str
+    credential_current_generation: int
+    credential_status: Optional[str]
+    credential_id: Optional[str]
+    credential_issued: bool = False
 
 
 @router.post(
@@ -1444,7 +1557,24 @@ async def validate_operator_tenant_authority(
     except TenantKindError as exc:
         raise tenant_kind_http_error(exc) from exc
 
+    engine = get_engine()
+    request_id = _request_id_from_request(request)
     if record.lifecycle_state != "active" or not policy.operator_authority_allowed:
+        _emit_internal_authority_event_best_effort(
+            engine,
+            event_type="authority_denied",
+            actor_id="admin-gateway",
+            service_id="console-bff",
+            target_tenant_id=tenant_id,
+            authority_tenant_id=record.tenant_id,
+            request_id=request_id,
+            outcome="denied",
+            failure_reason="OPERATOR_TENANT_NOT_ALLOWED",
+            metadata={
+                "tenant_kind": record.tenant_kind,
+                "lifecycle_state": record.lifecycle_state,
+            },
+        )
         raise HTTPException(
             status_code=403,
             detail={
@@ -1454,6 +1584,20 @@ async def validate_operator_tenant_authority(
                 "lifecycle_state": record.lifecycle_state,
             },
         )
+
+    _emit_internal_authority_event_best_effort(
+        engine,
+        event_type="authority_validated",
+        actor_id="admin-gateway",
+        service_id="console-bff",
+        target_tenant_id=tenant_id,
+        authority_tenant_id=record.tenant_id,
+        request_id=request_id,
+        metadata={
+            "tenant_kind": record.tenant_kind,
+            "lifecycle_state": record.lifecycle_state,
+        },
+    )
 
     return OperatorTenantAuthorityResponse(
         tenant_id=record.tenant_id,
@@ -1927,6 +2071,29 @@ async def admin_revoke_key(
 # =============================================================================
 # System Health and Diagnostics
 # =============================================================================
+
+
+@router.get(
+    "/system/internal-authority",
+    response_model=InternalPlatformAuthorityResponse,
+    dependencies=[
+        Depends(require_scopes("admin:read")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def get_internal_platform_authority(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> InternalPlatformAuthorityResponse:
+    """Return safe internal platform authority bootstrap status."""
+    try:
+        status = read_internal_platform_authority_status(get_engine())
+    except InternalPlatformAuthorityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(exc.code, str(exc)),
+        ) from exc
+    return InternalPlatformAuthorityResponse(**status.safe_dict())
 
 
 @router.get(
