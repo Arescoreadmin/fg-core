@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from api.tenant_authority import (
+    TENANT_KINDS,
     TENANT_KIND_POLICIES,
     ensure_billing_eligible,
     ensure_portal_enabled,
@@ -68,6 +69,19 @@ def test_policy_matrix_is_explicit_and_non_contradictory():
         policy = policy_for_tenant_kind(kind)
         assert policy.billing_eligible is False
         assert policy.operator_authority_allowed is False
+
+
+def test_every_tenant_kind_has_policy():
+    assert set(TENANT_KIND_POLICIES.keys()) == set(TENANT_KINDS)
+
+
+def test_every_tenant_kind_policy_has_complete_boolean_flags():
+    for kind in TENANT_KINDS:
+        policy = policy_for_tenant_kind(kind)
+        assert isinstance(policy.customer_visible, bool)
+        assert isinstance(policy.portal_enabled, bool)
+        assert isinstance(policy.billing_eligible, bool)
+        assert isinstance(policy.operator_authority_allowed, bool)
 
 
 def test_migration_adds_non_null_constrained_tenant_kind_with_safe_defaults():
