@@ -5,7 +5,9 @@ import { upsertTenantInRegistry, isRegistryConfigured, upsertTenantInUpstash } f
 import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 import Redis from 'ioredis';
 
-const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// startup-validation.ts (via instrumentation.ts) guarantees CORE_API_URL is
+// set in production before the first request reaches this handler.
+const CORE_API_URL = ((process.env.CORE_API_URL || '').trim() || 'http://localhost:8000').replace(/\/$/, '');
 
 const PROVISION_SCOPES = [
   'governance:read',
@@ -297,12 +299,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   logEvent('info', 'provision.start', { request_id: requestId, tenant_id: tenantId, stage: 'begin' });
 
   // Step 1: Create tenant record (skip 409 — tenant already exists, just regenerate key)
-  const tenantRes = await fetch(`${CORE_API_URL}/admin/tenants`, {
-    method: 'POST',
-    headers: adminHeaders(),
-    body: JSON.stringify({ tenant_id: tenantId, name }),
-    cache: 'no-store',
-  });
+  let tenantRes: Response;
+  try {
+    tenantRes = await fetch(`${CORE_API_URL}/admin/tenants`, {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ tenant_id: tenantId, name }),
+      cache: 'no-store',
+    });
+  } catch (fetchErr) {
+    logEvent('error', 'provision.upstream.unreachable', {
+      request_id: requestId, tenant_id: tenantId, stage: 'tenant_create',
+      core_api_url_set: Boolean(process.env.CORE_API_URL),
+      error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+    });
+    return NextResponse.json(
+      { error: 'CORE_API_UNAVAILABLE', detail: 'Backend unreachable — check CORE_API_URL in Vercel.', request_id: requestId },
+      { status: 503, headers: { 'x-request-id': requestId } },
+    );
+  }
 
   const tenantAlreadyExisted = tenantRes.status === 409;
 
@@ -323,19 +338,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired).
   // On slot conflict (409) the tenant was partially provisioned before — rotate instead.
-  const keyRes = await fetch(
-    `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
-    {
-      method: 'POST',
-      headers: adminHeaders(),
-      body: JSON.stringify({
-        credential_slot: 'console-bff-key',
-        scopes: PROVISION_SCOPES,
-        expires_in_seconds: ONE_YEAR_SECONDS,
-      }),
-      cache: 'no-store',
-    },
-  );
+  let keyRes: Response;
+  try {
+    keyRes = await fetch(
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
+      {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          credential_slot: 'console-bff-key',
+          scopes: PROVISION_SCOPES,
+          expires_in_seconds: ONE_YEAR_SECONDS,
+        }),
+        cache: 'no-store',
+      },
+    );
+  } catch (fetchErr) {
+    logEvent('error', 'provision.upstream.unreachable', {
+      request_id: requestId, tenant_id: tenantId, stage: 'credential_create',
+      error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+    });
+    return NextResponse.json(
+      { error: 'CORE_API_UNAVAILABLE', detail: 'Backend unreachable during credential creation — check CORE_API_URL in Vercel.', request_id: requestId },
+      { status: 503, headers: { 'x-request-id': requestId } },
+    );
+  }
 
   let keyData: Record<string, unknown>;
   let wasRotated = false;
@@ -347,10 +374,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Query ALL statuses: a revoked credential leaves current_generation > 0 in
     // credential_slots, so the slot shows as occupied even though it cannot be rotated.
-    const listRes = await fetch(
-      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials?limit=50`,
-      { method: 'GET', headers: adminHeaders(), cache: 'no-store' },
-    );
+    let listRes: Response;
+    try {
+      listRes = await fetch(
+        `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials?limit=50`,
+        { method: 'GET', headers: adminHeaders(), cache: 'no-store' },
+      );
+    } catch (fetchErr) {
+      logEvent('error', 'provision.upstream.unreachable', {
+        request_id: requestId, tenant_id: tenantId, stage: 'credential_list',
+        error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+      });
+      return NextResponse.json(
+        { error: 'CORE_API_UNAVAILABLE', detail: 'Backend unreachable during credential list.', request_id: requestId },
+        { status: 503, headers: { 'x-request-id': requestId } },
+      );
+    }
     if (!listRes.ok) {
       const err = await listRes.json().catch(() => ({}));
       return NextResponse.json(
@@ -387,15 +426,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const rotateRes = await fetch(
-      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(existing.credential_id)}/rotate`,
-      {
-        method: 'POST',
-        headers: adminHeaders(),
-        body: JSON.stringify({ expires_in_seconds: ONE_YEAR_SECONDS }),
-        cache: 'no-store',
-      },
-    );
+    let rotateRes: Response;
+    try {
+      rotateRes = await fetch(
+        `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(existing.credential_id)}/rotate`,
+        {
+          method: 'POST',
+          headers: adminHeaders(),
+          body: JSON.stringify({ expires_in_seconds: ONE_YEAR_SECONDS }),
+          cache: 'no-store',
+        },
+      );
+    } catch (fetchErr) {
+      logEvent('error', 'provision.upstream.unreachable', {
+        request_id: requestId, tenant_id: tenantId, stage: 'credential_rotate',
+        error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+      });
+      return NextResponse.json(
+        { error: 'CORE_API_UNAVAILABLE', detail: 'Backend unreachable during credential rotation.', request_id: requestId },
+        { status: 503, headers: { 'x-request-id': requestId } },
+      );
+    }
     if (!rotateRes.ok) {
       const err = await rotateRes.json().catch(() => ({}));
       return NextResponse.json(

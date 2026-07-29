@@ -21,6 +21,8 @@
  *   H. Rotate path preserves credential and does NOT revoke on persistence failure
  *   I. Fresh-create path revokes the dangling credential on persistence failure
  *   J. FG_ALLOW_UNPERSISTED_TENANT_KEYS override still hard-blocked in production
+ *   K. Production config validated centrally in startup-validation.ts — route delegates
+ *   L. All four upstream fetch calls wrapped — CORE_API_UNAVAILABLE 503, not unhandled exception
  */
 
 const assert = require('node:assert/strict');
@@ -222,4 +224,57 @@ test('provision-tenant.J: production hard-blocks the FG_ALLOW_UNPERSISTED_TENANT
   const prodBlock = src.match(/if \(isProduction && \(process\.env\.FG_ALLOW_UNPERSISTED_TENANT_KEYS[\s\S]*?\}/);
   assert.ok(prodBlock, 'production override guard must exist');
   assert.doesNotMatch(prodBlock[0], /api_key: keyData\.plaintext_secret/);
+});
+
+// ─── K. Production startup validation is centralized in startup-validation.ts ─
+
+test('provision-tenant.K: production config is validated centrally — route delegates to startup-validation.ts', () => {
+  const routeSrc = read(ROUTE);
+  const validationSrc = read('lib/startup-validation.ts');
+  const instrumentSrc = read('instrumentation.ts');
+
+  // startup-validation.ts must define the consolidated validator
+  assert.match(validationSrc, /function validateProductionConfig/);
+  // Must validate all three required production env vars
+  assert.match(validationSrc, /CORE_API_URL/);
+  assert.match(validationSrc, /CORE_TENANT_ID/);
+  assert.match(validationSrc, /internalGatewaySecret/);
+  // Must detect the legacy "default" value that caused TENANT_CONTEXT_INVALID
+  assert.match(validationSrc, /"default"/);
+  // Error must be consolidated so operators see all gaps in one deployment cycle
+  assert.match(validationSrc, /Production configuration invalid/);
+  assert.match(validationSrc, /Console startup aborted/);
+  // instrumentation.ts wires the validator into Next.js server startup
+  assert.match(instrumentSrc, /register/);
+  assert.match(instrumentSrc, /validateProductionConfig/);
+  // Route must NOT carry a per-route startup throw — it delegates to the centralised check
+  assert.doesNotMatch(routeSrc, /throw new Error\('CORE_API_URL is required in production/);
+  // Route still falls back to localhost for non-prod development
+  assert.match(routeSrc, /localhost:8000/);
+});
+
+// ─── L. Upstream fetch failures return 503 CORE_API_UNAVAILABLE ──────────────
+
+test('provision-tenant.L: all upstream fetch calls are wrapped — network failures return 503 not unhandled exception', () => {
+  const src = read(ROUTE);
+  // Must return CORE_API_UNAVAILABLE (not a generic 500 or unhandled throw)
+  assert.match(src, /error: 'CORE_API_UNAVAILABLE'/);
+  // All three critical fetch stages must be covered
+  assert.match(src, /'provision\.upstream\.unreachable'/);
+  // The error code must appear in a 503 response (not 500/502)
+  const unavailableBlocks = src.match(/error: 'CORE_API_UNAVAILABLE'[\s\S]*?status: 503/g) || [];
+  assert.ok(unavailableBlocks.length >= 1, 'CORE_API_UNAVAILABLE must be returned with status 503');
+  // Logs must include which stage failed (all four upstream fetch stages)
+  assert.match(src, /stage: 'tenant_create'/);
+  assert.match(src, /stage: 'credential_create'/);
+  assert.match(src, /stage: 'credential_list'/);
+  assert.match(src, /stage: 'credential_rotate'/);
+  // Logs must NOT include the gateway secret or authorization headers
+  const logLines = src.match(/logEvent\([^)]+\)/g) || [];
+  for (const line of logLines) {
+    assert.doesNotMatch(line, /FG_INTERNAL_GATEWAY_SECRET/, 'secret must not appear in log calls');
+    assert.doesNotMatch(line, /adminHeaders\(\)/, 'auth headers must not appear in log calls');
+  }
+  // The diagnostic detail must hint at the fix without exposing sensitive config
+  assert.match(src, /check CORE_API_URL in Vercel/);
 });
