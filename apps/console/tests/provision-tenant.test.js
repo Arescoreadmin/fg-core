@@ -21,8 +21,8 @@
  *   H. Rotate path preserves credential and does NOT revoke on persistence failure
  *   I. Fresh-create path revokes the dangling credential on persistence failure
  *   J. FG_ALLOW_UNPERSISTED_TENANT_KEYS override still hard-blocked in production
- *   K. CORE_API_URL required at startup in production (fail-fast guard)
- *   L. Upstream fetch failures return CORE_API_UNAVAILABLE 503, not unhandled exception
+ *   K. Production config validated centrally in startup-validation.ts — route delegates
+ *   L. All four upstream fetch calls wrapped — CORE_API_UNAVAILABLE 503, not unhandled exception
  */
 
 const assert = require('node:assert/strict');
@@ -226,22 +226,31 @@ test('provision-tenant.J: production hard-blocks the FG_ALLOW_UNPERSISTED_TENANT
   assert.doesNotMatch(prodBlock[0], /api_key: keyData\.plaintext_secret/);
 });
 
-// ─── K. CORE_API_URL required at startup in production ───────────────────────
+// ─── K. Production startup validation is centralized in startup-validation.ts ─
 
-test('provision-tenant.K: CORE_API_URL absence in production throws at module init, not at request time', () => {
-  const src = read(ROUTE);
-  // Must detect prod-like env and throw before the route handler is ever called
-  assert.match(src, /_IS_PROD_LIKE/);
-  assert.match(src, /if \(_IS_PROD_LIKE && !_RAW_CORE_API_URL\)/);
-  // Error must name the variable so operators know exactly what to set
-  assert.match(src, /CORE_API_URL is required in production/);
-  // The throw must happen at module scope, not inside the POST handler
-  const handlerIdx = src.indexOf('export async function POST');
-  const throwIdx = src.indexOf('throw new Error(\'CORE_API_URL is required in production');
-  assert.ok(throwIdx >= 0, 'startup throw must exist');
-  assert.ok(throwIdx < handlerIdx, 'startup throw must precede POST handler definition');
-  // The final CORE_API_URL constant must fall back to localhost only in dev
-  assert.match(src, /CORE_API_URL = \(_RAW_CORE_API_URL \|\| 'http:\/\/localhost:8000'\)/);
+test('provision-tenant.K: production config is validated centrally — route delegates to startup-validation.ts', () => {
+  const routeSrc = read(ROUTE);
+  const validationSrc = read('lib/startup-validation.ts');
+  const instrumentSrc = read('instrumentation.ts');
+
+  // startup-validation.ts must define the consolidated validator
+  assert.match(validationSrc, /function validateProductionConfig/);
+  // Must validate all three required production env vars
+  assert.match(validationSrc, /CORE_API_URL/);
+  assert.match(validationSrc, /CORE_TENANT_ID/);
+  assert.match(validationSrc, /internalGatewaySecret/);
+  // Must detect the legacy "default" value that caused TENANT_CONTEXT_INVALID
+  assert.match(validationSrc, /"default"/);
+  // Error must be consolidated so operators see all gaps in one deployment cycle
+  assert.match(validationSrc, /Production configuration invalid/);
+  assert.match(validationSrc, /Console startup aborted/);
+  // instrumentation.ts wires the validator into Next.js server startup
+  assert.match(instrumentSrc, /register/);
+  assert.match(instrumentSrc, /validateProductionConfig/);
+  // Route must NOT carry a per-route startup throw — it delegates to the centralised check
+  assert.doesNotMatch(routeSrc, /throw new Error\('CORE_API_URL is required in production/);
+  // Route still falls back to localhost for non-prod development
+  assert.match(routeSrc, /localhost:8000/);
 });
 
 // ─── L. Upstream fetch failures return 503 CORE_API_UNAVAILABLE ──────────────
@@ -255,8 +264,9 @@ test('provision-tenant.L: all upstream fetch calls are wrapped — network failu
   // The error code must appear in a 503 response (not 500/502)
   const unavailableBlocks = src.match(/error: 'CORE_API_UNAVAILABLE'[\s\S]*?status: 503/g) || [];
   assert.ok(unavailableBlocks.length >= 1, 'CORE_API_UNAVAILABLE must be returned with status 503');
-  // Logs must include which stage failed (tenant_create / credential_list / credential_rotate)
+  // Logs must include which stage failed (all four upstream fetch stages)
   assert.match(src, /stage: 'tenant_create'/);
+  assert.match(src, /stage: 'credential_create'/);
   assert.match(src, /stage: 'credential_list'/);
   assert.match(src, /stage: 'credential_rotate'/);
   // Logs must NOT include the gateway secret or authorization headers

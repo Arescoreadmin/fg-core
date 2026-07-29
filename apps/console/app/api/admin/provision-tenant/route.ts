@@ -5,14 +5,9 @@ import { upsertTenantInRegistry, isRegistryConfigured, upsertTenantInUpstash } f
 import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 import Redis from 'ioredis';
 
-const _RAW_CORE_API_URL = (process.env.CORE_API_URL || '').trim();
-const _IS_PROD_LIKE = ['production', 'prod', 'staging'].includes(
-  (process.env.FG_ENV || process.env.NODE_ENV || '').trim().toLowerCase(),
-);
-if (_IS_PROD_LIKE && !_RAW_CORE_API_URL) {
-  throw new Error('CORE_API_URL is required in production — set it in Vercel and redeploy');
-}
-const CORE_API_URL = (_RAW_CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// startup-validation.ts (via instrumentation.ts) guarantees CORE_API_URL is
+// set in production before the first request reaches this handler.
+const CORE_API_URL = ((process.env.CORE_API_URL || '').trim() || 'http://localhost:8000').replace(/\/$/, '');
 
 const PROVISION_SCOPES = [
   'governance:read',
@@ -343,19 +338,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired).
   // On slot conflict (409) the tenant was partially provisioned before — rotate instead.
-  const keyRes = await fetch(
-    `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
-    {
-      method: 'POST',
-      headers: adminHeaders(),
-      body: JSON.stringify({
-        credential_slot: 'console-bff-key',
-        scopes: PROVISION_SCOPES,
-        expires_in_seconds: ONE_YEAR_SECONDS,
-      }),
-      cache: 'no-store',
-    },
-  );
+  let keyRes: Response;
+  try {
+    keyRes = await fetch(
+      `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials`,
+      {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          credential_slot: 'console-bff-key',
+          scopes: PROVISION_SCOPES,
+          expires_in_seconds: ONE_YEAR_SECONDS,
+        }),
+        cache: 'no-store',
+      },
+    );
+  } catch (fetchErr) {
+    logEvent('error', 'provision.upstream.unreachable', {
+      request_id: requestId, tenant_id: tenantId, stage: 'credential_create',
+      error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+    });
+    return NextResponse.json(
+      { error: 'CORE_API_UNAVAILABLE', detail: 'Backend unreachable during credential creation — check CORE_API_URL in Vercel.', request_id: requestId },
+      { status: 503, headers: { 'x-request-id': requestId } },
+    );
+  }
 
   let keyData: Record<string, unknown>;
   let wasRotated = false;
