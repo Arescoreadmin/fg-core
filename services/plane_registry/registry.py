@@ -161,6 +161,13 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex(
                 "GET",
+                "/admin/system/internal-authority",
+                "global_admin",
+                "Internal operator authority status view; protected by admin "
+                "scope plus internal gateway and not scoped to a customer tenant.",
+            ),
+            ex(
+                "GET",
                 "/admin/keys/needing-rotation",
                 "global_admin",
                 "Global operator key rotation report.",

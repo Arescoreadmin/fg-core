@@ -240,6 +240,14 @@ ALLOWED_CHANGED_PATHS = {
     "tools/ci/plane_registry_snapshot.json",
     "tools/ci/route_inventory.json",
     "tools/ci/route_inventory_summary.json",
+    # PR 585 — Internal Platform Authority Bootstrap Foundation
+    "api/internal_platform_authority.py",
+    "api/main.py",
+    "services/plane_registry/registry.py",
+    "tools/ci/check_plane_registry.py",
+    "migrations/postgres/0167_internal_platform_authority_bootstrap.sql",
+    "tests/test_internal_platform_authority.py",
+    "docs/ai/PR_FIX_LOG.md",
     "tools/ci/topology.sha256",
 }
 

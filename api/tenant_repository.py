@@ -287,6 +287,48 @@ class TenantRepository:
             ).fetchall()
         return [self._row_to_dataclass(r) for r in rows]
 
+    def list_by_kind(
+        self,
+        tenant_kind: str,
+        *,
+        include_archived: bool = False,
+    ) -> List[TenantRow]:
+        """Return tenants matching a canonical tenant_kind."""
+        normalized_kind = normalize_tenant_kind(tenant_kind)
+        if include_archived:
+            states = list(_SUPPORTED_LIFECYCLE_STATES)
+        else:
+            states = [
+                s
+                for s in _SUPPORTED_LIFECYCLE_STATES
+                if s not in {"archived", "deleted"}
+            ]
+
+        placeholders = ", ".join(f":s{i}" for i in range(len(states)))
+        params: Dict[str, Any] = {f"s{i}": s for i, s in enumerate(states)}
+        params["tenant_kind"] = normalized_kind
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    f"""
+                    SELECT
+                        tenant_id, display_name, lifecycle_state,
+                        tenant_kind,
+                        created_at, updated_at, created_by,
+                        metadata, canonical_version,
+                        last_reconciled_at, archived_at,
+                        migration_source, migration_version
+                    FROM tenants
+                    WHERE tenant_kind = :tenant_kind
+                      AND lifecycle_state IN ({placeholders})
+                    ORDER BY tenant_id
+                    """
+                ),
+                params,
+            ).fetchall()
+        return [self._row_to_dataclass(r) for r in rows]
+
     def set_lifecycle_state(self, tenant_id: str, state: str) -> TenantRow:
         """UPDATE lifecycle_state; raise ValueError for unknown state, KeyError if not found."""
         if state not in _SUPPORTED_LIFECYCLE_STATES:

@@ -1,5 +1,92 @@
 # PR Fix Log (Strict)
 
+## P-28 — feat(tenancy): provision canonical internal platform authority bootstrap
+
+**Branch:** `feat/internal-platform-authority-bootstrap` (PR #585)
+**Date:** 2026-07-28
+
+### Problem
+
+PR #584 established `tenant_kind` as the canonical authority discriminator, but
+FrostGate still had no first-class internal platform authority row to use as the
+near-term Console/Core operator bridge. Without a deterministic bootstrap, an
+operator could still be tempted to point `CORE_TENANT_ID` at an ordinary customer
+or validation tenant that happened to have a valid broad credential. That would
+preserve tenant-authority ambiguity and weaken audit attribution.
+
+### Resolution
+
+**New files:**
+
+1. `new: api/internal_platform_authority.py` — canonical bootstrap and
+   validation module for the internal platform authority. The documented
+   canonical identifier is `frostgate-internal`, but runtime authorization still
+   flows through `tenant_kind -> tenant_authority.py -> derived policy`; tenant
+   names and substrings are never used as authority proof.
+
+2. `new: migrations/postgres/0167_internal_platform_authority_bootstrap.sql` —
+   creates append-only `internal_platform_authority_events`, adds a unique
+   partial index allowing at most one `internal_platform` tenant, and inserts
+   `frostgate-internal` only when no internal platform authority already exists.
+   If an internal platform authority already exists, it is reused. The migration
+   does not write credential material or mutate customer credentials.
+
+3. `new: tests/test_internal_platform_authority.py` — covers deterministic
+   bootstrap, idempotency, config rejection for missing/default/customer/demo/
+   validation/unknown tenants, credential slot behavior, credential audit
+   mirroring, no secret exposure, policy rejection, and migration invariants.
+
+**Modified files:**
+
+4. `mod: api/tenant_repository.py` — adds `list_by_kind()` so internal authority
+   lookup uses the canonical repository and `tenant_kind`, not tenant-name
+   inference.
+
+5. `mod: api/main.py` — Postgres startup bootstraps the internal platform
+   authority and validates configured `CORE_TENANT_ID` in prod/strict or when
+   explicitly configured. Fail-closed behavior is preserved for production while
+   SQLite/dev compatibility remains intact.
+
+6. `mod: api/admin.py` — adds internal-only `GET /admin/system/internal-authority`
+   safe status endpoint; mirrors internal-authority credential issue/rotation/
+   revocation events; rejects non-canonical extra credential slots for
+   `internal_platform` tenants.
+
+7. `mod: tools/ci/route_inventory*.json`, `mod: tools/ci/plane_registry_snapshot.json`,
+   `mod: tools/ci/topology.sha256` — regenerated for the new admin route.
+
+8. `mod: services/plane_registry/registry.py` — registers the internal-only
+   authority status route as `global_admin` control-plane metadata so it is
+   classified as an explicit internal/system endpoint rather than an unbound
+   tenant endpoint.
+
+9. `mod: tools/ci/check_plane_registry.py` — removes the checker-local exception
+   for the internal authority status route; the canonical route classification
+   now comes from the plane registry metadata.
+
+10. `mod: docs/SOC_ARCH_REVIEW_2026-02-15.md`, `mod: tools/ci/check_mcim_docs.py`,
+   `mod: docs/ai/PR_FIX_LOG.md` — governance memory and changed-path docs updated
+   for this authority foundation PR.
+
+### Behavioral impact
+
+- Exactly one `internal_platform` tenant can exist by database constraint.
+- `frostgate-internal` is created only when no internal platform authority
+  already exists; otherwise the existing internal platform tenant is reused.
+- Customer, demo, validation, unknown, missing, malformed, and `default` tenants
+  are rejected for configured Core operator authority.
+- The operator credential uses the existing CredentialAuthority as a tenant-bound
+  `tenant_api_key` in slot `console-bff-key`; no customer credential is reused.
+- Bootstrap discards plaintext credential material and never exposes secrets in
+  status responses or audit events.
+- Credential rotation and revocation continue through existing CredentialAuthority
+  and are mirrored into the internal authority audit stream when the tenant is an
+  operator-authority tenant.
+- No service principals, machine identities, workload identity, customer
+  lifecycle changes, assessment ownership changes, billing redesign, deployment,
+  or production credential rotation are included.
+
+
 ## P-27 — feat(tenancy): establish first-class tenant authority classification
 
 **Branch:** `feat/tenant-authority-classification` (PR #584)
