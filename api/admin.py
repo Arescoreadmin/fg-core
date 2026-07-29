@@ -1336,6 +1336,10 @@ class ServicePrincipalStatusResponse(BaseModel):
     granted_permissions: List[str] = []
 
 
+class ServicePrincipalRotationResponse(ServicePrincipalStatusResponse):
+    new_credential_value: Optional[str] = None
+
+
 class ServicePrincipalLifecycleResponse(BaseModel):
     action: str
     lifecycle_state: str
@@ -2150,7 +2154,7 @@ async def get_service_principal(
 
 @router.post(
     "/system/service-principal/rotate",
-    response_model=ServicePrincipalStatusResponse,
+    response_model=ServicePrincipalRotationResponse,
     dependencies=[
         Depends(require_scopes("admin:write")),
         Depends(require_internal_admin_gateway),
@@ -2159,12 +2163,12 @@ async def get_service_principal(
 async def rotate_service_principal(
     request: Request,
     actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
-) -> ServicePrincipalStatusResponse:
+) -> ServicePrincipalRotationResponse:
     """Rotate the platform service principal credential."""
     actor_id = actor_ctx.subject or "admin:rotate"
     request_id = getattr(getattr(request, "state", None), "request_id", None)
     try:
-        status = rotate_service_principal_credential(
+        result = rotate_service_principal_credential(
             get_engine(),
             actor_id=actor_id,
             request_id=request_id,
@@ -2174,7 +2178,10 @@ async def rotate_service_principal(
             status_code=409,
             detail=api_error(exc.code, str(exc)),
         ) from exc
-    return ServicePrincipalStatusResponse(**status.safe_dict())
+    return ServicePrincipalRotationResponse(
+        **result.status.safe_dict(),
+        new_credential_value=result.plaintext_secret,
+    )
 
 
 @router.post(

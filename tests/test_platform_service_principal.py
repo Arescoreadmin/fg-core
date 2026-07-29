@@ -471,12 +471,12 @@ def test_rotation_succeeds_and_invalidates_prior_credential(
     original_cred_id = result.credential_id
     assert original_cred_id is not None
 
-    status = rotate_service_principal_credential(
+    rotation = rotate_service_principal_credential(
         engine_with_authority, actor_id="admin", request_id="req-rotate"
     )
 
-    assert status.credential_status == "active"
-    assert status.credential_generation == 2
+    assert rotation.status.credential_status == "active"
+    assert rotation.status.credential_generation == 2
     assert "credential_rotated" in _event_types(engine_with_authority)
 
     # Prior credential should now be rotated/inactive
@@ -1247,7 +1247,10 @@ def test_concurrent_bootstrap_race_returns_reused(
 def test_rotation_no_two_active_credentials(engine_with_authority: Engine) -> None:
     """After rotation exactly one active credential exists for the PSP slot."""
     bootstrap_platform_service_principal(engine_with_authority)
-    rotate_service_principal_credential(engine_with_authority, actor_id="admin")
+    rotation = rotate_service_principal_credential(
+        engine_with_authority, actor_id="admin"
+    )
+    assert rotation.status is not None
 
     with engine_with_authority.connect() as conn:
         active_count = conn.execute(
@@ -1271,7 +1274,10 @@ def test_rotation_old_credential_no_longer_active(
     old_cred_id = result.credential_id
     assert old_cred_id is not None
 
-    rotate_service_principal_credential(engine_with_authority, actor_id="admin")
+    rotation = rotate_service_principal_credential(
+        engine_with_authority, actor_id="admin"
+    )
+    assert rotation.status is not None
 
     with engine_with_authority.connect() as conn:
         old_status = conn.execute(
@@ -1284,15 +1290,20 @@ def test_rotation_old_credential_no_longer_active(
     )
 
 
-def test_rotation_response_contains_no_raw_secret(
+def test_rotation_returns_plaintext_secret(
     engine_with_authority: Engine,
 ) -> None:
-    """rotate_service_principal_credential returns no secret material."""
+    """rotate_service_principal_credential returns the new plaintext secret."""
     bootstrap_platform_service_principal(engine_with_authority)
-    status = rotate_service_principal_credential(
+    rotation = rotate_service_principal_credential(
         engine_with_authority, actor_id="admin"
     )
-    d = status.safe_dict()
+
+    assert rotation.plaintext_secret is not None
+    assert isinstance(rotation.plaintext_secret, str)
+    assert len(rotation.plaintext_secret) > 0
+
+    d = rotation.status.safe_dict()
 
     forbidden_keys = {
         "secret",
@@ -1307,12 +1318,12 @@ def test_rotation_response_contains_no_raw_secret(
     }
     for key in d:
         assert key not in forbidden_keys, (
-            f"Forbidden field {key!r} found in rotation response"
+            f"Forbidden field {key!r} found in rotation status"
         )
     for val in d.values():
         if isinstance(val, str):
             assert "fgk." not in val, (
-                f"Raw key material (fgk. prefix) found in rotation response value: {val!r}"
+                f"Raw key material (fgk. prefix) found in rotation status value: {val!r}"
             )
 
 
@@ -1356,12 +1367,12 @@ def test_get_status_response_contains_no_secrets(engine_with_authority: Engine) 
 
 
 def test_rotate_response_contains_no_secrets(engine_with_authority: Engine) -> None:
-    """POST /system/service-principal/rotate response body contains no secret material."""
+    """POST /system/service-principal/rotate status dict contains no secret material."""
     bootstrap_platform_service_principal(engine_with_authority)
-    status = rotate_service_principal_credential(
+    rotation = rotate_service_principal_credential(
         engine_with_authority, actor_id="admin"
     )
-    _assert_no_secrets_in_dict(status.safe_dict(), "rotate response")
+    _assert_no_secrets_in_dict(rotation.status.safe_dict(), "rotate response")
 
 
 def test_lifecycle_responses_contain_no_secrets(engine_with_authority: Engine) -> None:
@@ -1403,3 +1414,30 @@ def test_audit_events_no_secret_fields(engine_with_authority: Engine) -> None:
                         )
                 except (ValueError, TypeError):
                     pass
+
+
+# ── Conditional UPDATE guard tests ───────────────────────────────────────────
+
+
+def test_suspend_respects_state_guard(engine_with_authority: Engine) -> None:
+    """suspend UPDATE includes lifecycle_state = 'active' guard; no phantom transition."""
+    import inspect
+
+    from api.platform_service_principal import suspend_service_principal as _suspend
+
+    src = inspect.getsource(_suspend)
+    assert "lifecycle_state = 'active'" in src, (
+        "suspend_service_principal UPDATE must guard with lifecycle_state = 'active'"
+    )
+
+
+def test_resume_respects_state_guard(engine_with_authority: Engine) -> None:
+    """resume UPDATE includes lifecycle_state = 'suspended' guard; no phantom transition."""
+    import inspect
+
+    from api.platform_service_principal import resume_service_principal as _resume
+
+    src = inspect.getsource(_resume)
+    assert "lifecycle_state = 'suspended'" in src, (
+        "resume_service_principal UPDATE must guard with lifecycle_state = 'suspended'"
+    )

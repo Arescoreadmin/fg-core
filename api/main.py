@@ -399,6 +399,27 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     if is_production or is_strict_env_required():
                         raise authority_exc
 
+                try:
+                    from api.platform_service_principal import (
+                        bootstrap_platform_service_principal,
+                    )
+
+                    psp_status = bootstrap_platform_service_principal(
+                        _engine,
+                        request_id="startup",
+                    )
+                    app.state.platform_service_principal = psp_status
+                    log.info(
+                        "platform_service_principal bootstrap=%s lifecycle=%s",
+                        psp_status.status,
+                        psp_status.lifecycle_state,
+                    )
+                except Exception as psp_exc:
+                    app.state.platform_service_principal = None
+                    log.exception("Platform service principal bootstrap failed")
+                    if is_production or is_strict_env_required():
+                        raise psp_exc
+
             app.state.db_init_ok = True
             app.state.db_init_error = None
         except Exception as exc:

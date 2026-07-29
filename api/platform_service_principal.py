@@ -148,6 +148,14 @@ class ServicePrincipalBootstrapResult:
 
 
 @dataclass(frozen=True)
+class RotationResult:
+    """Returned by rotate_service_principal_credential."""
+
+    status: "PlatformServicePrincipalStatus"
+    plaintext_secret: Optional[str]
+
+
+@dataclass(frozen=True)
 class PlatformServicePrincipalStatus:
     """Safe, secret-free status snapshot for API responses and logging."""
 
@@ -807,11 +815,11 @@ def rotate_service_principal_credential(
     *,
     actor_id: str,
     request_id: Optional[str] = None,
-) -> PlatformServicePrincipalStatus:
+) -> RotationResult:
     """Rotate the PSP credential via CredentialAuthority.
 
     Revoked or missing PSPs fail closed.
-    Returns the updated (secret-free) status.
+    Returns a RotationResult with the updated status and the new plaintext secret.
     """
     psp = _fetch_active_psp(engine)
 
@@ -857,7 +865,10 @@ def rotate_service_principal_credential(
             request_id=request_id,
         )
 
-    return read_service_principal_status(engine)
+    return RotationResult(
+        status=read_service_principal_status(engine),
+        plaintext_secret=rotated.plaintext_secret,
+    )
 
 
 def suspend_service_principal(
@@ -892,14 +903,19 @@ def suspend_service_principal(
                 text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
                 {"tid": psp.authority_tenant_id},
             )
-        conn.execute(
+        result_proxy = conn.execute(
             text(
                 "UPDATE platform_service_principals "
                 "SET lifecycle_state = 'suspended', suspended_at = :now, "
-                "updated_at = :now WHERE id = :psp_id"
+                "updated_at = :now WHERE id = :psp_id AND lifecycle_state = 'active'"
             ),
             {"now": now, "psp_id": psp.id},
         )
+        if result_proxy.rowcount == 0:
+            raise PlatformServicePrincipalError(
+                "SERVICE_PRINCIPAL_CONCURRENT_TRANSITION",
+                "lifecycle state changed concurrently; re-read and retry",
+            )
         emit_service_principal_event(
             conn,
             event_type="principal_suspended",
@@ -943,14 +959,20 @@ def resume_service_principal(
                 text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
                 {"tid": psp.authority_tenant_id},
             )
-        conn.execute(
+        result_proxy = conn.execute(
             text(
                 "UPDATE platform_service_principals "
                 "SET lifecycle_state = 'active', suspended_at = NULL, "
-                "activated_at = :now, updated_at = :now WHERE id = :psp_id"
+                "activated_at = :now, updated_at = :now "
+                "WHERE id = :psp_id AND lifecycle_state = 'suspended'"
             ),
             {"now": now, "psp_id": psp.id},
         )
+        if result_proxy.rowcount == 0:
+            raise PlatformServicePrincipalError(
+                "SERVICE_PRINCIPAL_CONCURRENT_TRANSITION",
+                "lifecycle state changed concurrently; re-read and retry",
+            )
         emit_service_principal_event(
             conn,
             event_type="principal_resumed",
