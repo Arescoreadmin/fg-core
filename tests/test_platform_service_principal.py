@@ -14,7 +14,9 @@ Covers:
   - No raw secret in status or audit records
   - Duplicate canonical PSP impossible
   - Revocation is irreversible
-  - Target tenant authorization remains caller-side (not bypassed here)
+  - Target tenant authorization enforced: explicit non-empty target required,
+      nonexistent target fails closed, suspended/archived target denied,
+      authority tenant cannot be used as target
 - Permission registry: ALL_PERMISSIONS contains all PSP permissions
 - Migration: documents canonical stable_key, PSP table, no credentials in SQL
 """
@@ -210,6 +212,19 @@ def engine_with_authority(engine: Engine) -> Engine:
         allow_internal_platform=True,
     )
     return engine
+
+
+@pytest.fixture()
+def engine_with_targets(engine_with_authority: Engine) -> Engine:
+    """Authority engine plus active customer tenants for authorization tests."""
+    repo = TenantRepository(engine_with_authority)
+    for tid, name in [
+        ("customer-x", "Customer X"),
+        ("target-tenant-abc", "Target Tenant ABC"),
+        ("any-tenant", "Any Tenant"),
+    ]:
+        repo.create(tid, name, tenant_kind="customer")
+    return engine_with_authority
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -612,11 +627,11 @@ def test_resume_active_principal_is_no_op(engine_with_authority: Engine) -> None
 # ── Authorization tests ───────────────────────────────────────────────────────
 
 
-def test_granted_permission_allowed(engine_with_authority: Engine) -> None:
-    bootstrap_platform_service_principal(engine_with_authority)
+def test_granted_permission_allowed(engine_with_targets: Engine) -> None:
+    bootstrap_platform_service_principal(engine_with_targets)
 
     result = authorize_service_principal(
-        engine_with_authority,
+        engine_with_targets,
         actor_id="workload",
         permission="platform.tenants.read",
         target_tenant_id="customer-x",
@@ -624,14 +639,14 @@ def test_granted_permission_allowed(engine_with_authority: Engine) -> None:
 
     assert result.allowed is True
     assert result.denial_code is None
-    assert "authorization_allowed" in _event_types(engine_with_authority)
+    assert "authorization_allowed" in _event_types(engine_with_targets)
 
 
-def test_missing_permission_denied(engine_with_authority: Engine) -> None:
-    bootstrap_platform_service_principal(engine_with_authority)
+def test_missing_permission_denied(engine_with_targets: Engine) -> None:
+    bootstrap_platform_service_principal(engine_with_targets)
 
     result = authorize_service_principal(
-        engine_with_authority,
+        engine_with_targets,
         actor_id="workload",
         permission="assessment.create",
         target_tenant_id="customer-x",
@@ -639,17 +654,17 @@ def test_missing_permission_denied(engine_with_authority: Engine) -> None:
 
     assert result.allowed is False
     assert result.denial_code == "PERMISSION_NOT_GRANTED"
-    assert "authorization_denied" in _event_types(engine_with_authority)
+    assert "authorization_denied" in _event_types(engine_with_targets)
 
 
 def test_suspended_principal_authorization_denied(
-    engine_with_authority: Engine,
+    engine_with_targets: Engine,
 ) -> None:
-    bootstrap_platform_service_principal(engine_with_authority)
-    suspend_service_principal(engine_with_authority, actor_id="admin")
+    bootstrap_platform_service_principal(engine_with_targets)
+    suspend_service_principal(engine_with_targets, actor_id="admin")
 
     result = authorize_service_principal(
-        engine_with_authority,
+        engine_with_targets,
         actor_id="workload",
         permission="platform.tenants.read",
         target_tenant_id="customer-x",
@@ -658,18 +673,18 @@ def test_suspended_principal_authorization_denied(
     assert result.allowed is False
 
 
-def test_authorization_records_target_tenant(engine_with_authority: Engine) -> None:
-    bootstrap_platform_service_principal(engine_with_authority)
+def test_authorization_records_target_tenant(engine_with_targets: Engine) -> None:
+    bootstrap_platform_service_principal(engine_with_targets)
 
     authorize_service_principal(
-        engine_with_authority,
+        engine_with_targets,
         actor_id="workload",
         permission="platform.tenants.read",
         target_tenant_id="target-tenant-abc",
         request_id="req-authz",
     )
 
-    with engine_with_authority.connect() as conn:
+    with engine_with_targets.connect() as conn:
         row = conn.execute(
             text(
                 "SELECT target_tenant_id, permission, request_id "
@@ -684,8 +699,8 @@ def test_authorization_records_target_tenant(engine_with_authority: Engine) -> N
     assert str(row[2]) == "req-authz"
 
 
-def test_psp_is_not_global_superuser(engine_with_authority: Engine) -> None:
-    bootstrap_platform_service_principal(engine_with_authority)
+def test_psp_is_not_global_superuser(engine_with_targets: Engine) -> None:
+    bootstrap_platform_service_principal(engine_with_targets)
 
     # Permissions not in PLATFORM_SERVICE_DEFAULT_PERMISSIONS must be denied
     non_psp_permissions = [
@@ -698,7 +713,7 @@ def test_psp_is_not_global_superuser(engine_with_authority: Engine) -> None:
     ]
     for perm in non_psp_permissions:
         result = authorize_service_principal(
-            engine_with_authority,
+            engine_with_targets,
             actor_id="workload",
             permission=perm,
             target_tenant_id="any-tenant",
@@ -957,3 +972,434 @@ def test_migration_documents_pr_context() -> None:
         "credential material is created" in sql.lower()
         or "no credential" in sql.lower()
     )
+
+
+def test_migration_documents_identity_continuity() -> None:
+    sql = MIGRATION.read_text(encoding="utf-8")
+    assert "uq_psp_stable_key" in sql
+    # Non-partial uniqueness index enforces identity continuity
+    assert (
+        "lifecycle_state"
+        not in sql.split("uq_psp_stable_key")[1].split("uq_psp_authority_kind_active")[
+            0
+        ]
+    )
+
+
+# ── platform.admin route-access permission tests ─────────────────────────────
+
+
+def test_platform_admin_permission_exists_in_registry() -> None:
+    """platform.admin must be a registered permission so routes are reachable."""
+    from api.actor_context import ALL_PERMISSIONS
+
+    assert "platform.admin" in ALL_PERMISSIONS, (
+        "platform.admin missing from ALL_PERMISSIONS — PSP admin routes are unreachable"
+    )
+
+
+def test_psp_actor_lacks_platform_admin() -> None:
+    """PSP permissions do not include platform.admin — PSP cannot self-administer."""
+    from api.actor_context import ActorContext
+
+    psp_actor = ActorContext(
+        subject="system:psp",
+        email="",
+        name="Platform Service Principal",
+        permissions=frozenset(PLATFORM_SERVICE_DEFAULT_PERMISSIONS),
+        roles=[],
+        auth_source="api_key",
+        tenant_id="frostgate-internal",
+    )
+    assert not psp_actor.has_permission("platform.admin"), (
+        "PSP actor must not hold platform.admin — self-administration is prohibited"
+    )
+
+
+def test_human_operator_actor_can_hold_platform_admin() -> None:
+    """An internal operator ActorContext with platform.admin can reach admin routes."""
+    from api.actor_context import ActorContext
+
+    operator_actor = ActorContext(
+        subject="operator@frostgate.io",
+        email="operator@frostgate.io",
+        name="Internal Operator",
+        permissions=frozenset(["platform.admin"]),
+        roles=["internal_operator"],
+        auth_source="oidc_auth0",
+        tenant_id="frostgate-internal",
+    )
+    assert operator_actor.has_permission("platform.admin")
+
+
+def test_customer_actor_lacks_platform_admin() -> None:
+    """Customer tenant actor does not have platform.admin."""
+    from api.actor_context import ActorContext
+
+    customer_actor = ActorContext(
+        subject="customer-user@example.com",
+        email="customer-user@example.com",
+        name="Customer",
+        permissions=frozenset(["assessment.create", "finding.view"]),
+        roles=["client_user"],
+        auth_source="oidc_auth0",
+        tenant_id="customer-a",
+    )
+    assert not customer_actor.has_permission("platform.admin")
+
+
+def test_require_permission_denies_missing_platform_admin() -> None:
+    """require_permission('platform.admin') raises 403 for actors without it."""
+    from fastapi import HTTPException
+
+    from api.auth_dispatch import require_permission
+    from api.actor_context import ActorContext
+
+    psp_actor = ActorContext(
+        subject="system:psp",
+        email="",
+        name="PSP",
+        permissions=frozenset(PLATFORM_SERVICE_DEFAULT_PERMISSIONS),
+        roles=[],
+        auth_source="api_key",
+        tenant_id="frostgate-internal",
+    )
+    dep = require_permission("platform.admin")
+    with pytest.raises(HTTPException) as exc_info:
+        dep(psp_actor)
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "PERMISSION_DENIED"
+
+
+# ── Target-tenant authorization enforcement tests ─────────────────────────────
+
+
+def test_psp_permission_does_not_bypass_target_tenant_authorization(
+    engine_with_authority: Engine,
+) -> None:
+    """platform.tenants.operate does not bypass target-tenant enforcement.
+
+    A nonexistent target tenant must be denied even when the PSP holds the
+    required permission — the PSP cannot operate on tenants that don't exist.
+    """
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.operate",
+        target_tenant_id="nonexistent-customer",
+    )
+
+    assert result.allowed is False
+    assert result.denial_code in ("TARGET_TENANT_NOT_FOUND", "TARGET_TENANT_NOT_ACTIVE")
+
+
+def test_psp_authorization_requires_explicit_target_tenant(
+    engine_with_authority: Engine,
+) -> None:
+    """authorize_service_principal denies when target_tenant_id is None."""
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.read",
+        target_tenant_id=None,
+    )
+
+    assert result.allowed is False
+    assert result.denial_code == "TARGET_TENANT_REQUIRED"
+
+
+def test_psp_authorization_denies_empty_target_tenant(
+    engine_with_authority: Engine,
+) -> None:
+    """authorize_service_principal denies when target_tenant_id is empty string."""
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.read",
+        target_tenant_id="",
+    )
+
+    assert result.allowed is False
+    assert result.denial_code == "TARGET_TENANT_REQUIRED"
+
+
+def test_psp_authority_tenant_cannot_be_target_tenant(
+    engine_with_authority: Engine,
+) -> None:
+    """The platform authority tenant cannot be used as target_tenant_id.
+
+    Prevents authority_tenant_id from silently becoming the target, which
+    would allow the PSP to issue operations against its own authority tenant.
+    """
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.read",
+        target_tenant_id="frostgate-internal",
+    )
+
+    assert result.allowed is False
+    assert result.denial_code == "AUTHORITY_TENANT_CANNOT_BE_TARGET"
+
+
+def test_psp_authorization_denied_for_suspended_target_tenant(
+    engine_with_authority: Engine,
+) -> None:
+    """Suspended target tenant is denied — PSP must not operate on suspended tenants."""
+    repo = TenantRepository(engine_with_authority)
+    repo.create("suspended-customer", "Suspended Customer", tenant_kind="customer")
+    repo.set_lifecycle_state("suspended-customer", "suspended")
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.read",
+        target_tenant_id="suspended-customer",
+    )
+
+    assert result.allowed is False
+    assert result.denial_code is not None
+    assert (
+        "SUSPENDED" in result.denial_code
+        or "NOT_ACTIVE" in result.denial_code
+        or result.denial_code == "TARGET_TENANT_SUSPENDED"
+    )
+
+
+def test_psp_authorization_denied_for_archived_target_tenant(
+    engine_with_authority: Engine,
+) -> None:
+    """Archived target tenant is denied."""
+    repo = TenantRepository(engine_with_authority)
+    repo.create("archived-customer", "Archived Customer", tenant_kind="customer")
+    repo.set_lifecycle_state("archived-customer", "archived")
+    bootstrap_platform_service_principal(engine_with_authority)
+
+    result = authorize_service_principal(
+        engine_with_authority,
+        actor_id="workload",
+        permission="platform.tenants.read",
+        target_tenant_id="archived-customer",
+    )
+
+    assert result.allowed is False
+    assert result.denial_code is not None
+
+
+# ── Concurrent bootstrap (race condition) tests ───────────────────────────────
+
+
+def test_concurrent_bootstrap_race_returns_reused(
+    engine_with_authority: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """IntegrityError from concurrent INSERT is resolved to 'reused', not 'conflict'.
+
+    Simulates the concurrent race: _fetch_by_stable_key returns None on first
+    call (as if the PSP didn't exist yet), causing bootstrap to attempt INSERT.
+    Since another concurrent bootstrapper already created the PSP, the INSERT
+    raises IntegrityError.  The new code reloads the existing record, validates
+    the authority binding matches, and returns 'reused' — not 'conflict'.
+    Note: Postgres partial unique index behavior and row locking are exercised
+    only in the full Postgres integration test suite (requires live Postgres).
+    """
+    import api.platform_service_principal as psp_mod
+
+    # Pre-create the PSP (simulates the winner of the concurrent race).
+    first = bootstrap_platform_service_principal(engine_with_authority)
+    assert first.status == "created"
+
+    original_fetch = psp_mod._fetch_by_stable_key
+    call_count = [0]
+
+    def patched_fetch(conn: object, stable_key: str) -> object:
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # Pretend PSP doesn't exist → bootstrap will attempt INSERT
+            return None
+        # Subsequent calls (reload after IntegrityError) return the real record
+        return original_fetch(conn, stable_key)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(psp_mod, "_fetch_by_stable_key", patched_fetch)
+
+    result = bootstrap_platform_service_principal(engine_with_authority)
+
+    # Must be "reused" — not "conflict" — because the existing PSP matches the authority
+    assert result.status == "reused", (
+        f"Expected 'reused' after concurrent race, got {result.status!r}. "
+        "IntegrityError from a concurrent same-authority bootstrap must resolve to reused."
+    )
+    assert result.credential_issued is False
+
+
+# ── Credential rotation atomicity tests ──────────────────────────────────────
+
+
+def test_rotation_no_two_active_credentials(engine_with_authority: Engine) -> None:
+    """After rotation exactly one active credential exists for the PSP slot."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    rotate_service_principal_credential(engine_with_authority, actor_id="admin")
+
+    with engine_with_authority.connect() as conn:
+        active_count = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM tenant_credentials "
+                "WHERE credential_slot = :slot AND status = 'active'"
+            ),
+            {"slot": PSP_CREDENTIAL_SLOT},
+        ).scalar_one()
+
+    assert active_count == 1, (
+        f"Expected exactly 1 active credential after rotation, found {active_count}"
+    )
+
+
+def test_rotation_old_credential_no_longer_active(
+    engine_with_authority: Engine,
+) -> None:
+    """Old credential transitions out of 'active' after rotation."""
+    result = bootstrap_platform_service_principal(engine_with_authority)
+    old_cred_id = result.credential_id
+    assert old_cred_id is not None
+
+    rotate_service_principal_credential(engine_with_authority, actor_id="admin")
+
+    with engine_with_authority.connect() as conn:
+        old_status = conn.execute(
+            text("SELECT status FROM tenant_credentials WHERE credential_id = :id"),
+            {"id": old_cred_id},
+        ).scalar_one()
+
+    assert old_status != "active", (
+        f"Old credential {old_cred_id!r} is still active after rotation"
+    )
+
+
+def test_rotation_response_contains_no_raw_secret(
+    engine_with_authority: Engine,
+) -> None:
+    """rotate_service_principal_credential returns no secret material."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    status = rotate_service_principal_credential(
+        engine_with_authority, actor_id="admin"
+    )
+    d = status.safe_dict()
+
+    forbidden_keys = {
+        "secret",
+        "raw_secret",
+        "plaintext_secret",
+        "credential_value",
+        "api_key",
+        "token",
+        "password",
+        "secret_hash",
+        "lookup_fingerprint",
+    }
+    for key in d:
+        assert key not in forbidden_keys, (
+            f"Forbidden field {key!r} found in rotation response"
+        )
+    for val in d.values():
+        if isinstance(val, str):
+            assert "fgk." not in val, (
+                f"Raw key material (fgk. prefix) found in rotation response value: {val!r}"
+            )
+
+
+# ── Route-level secret scanning tests ────────────────────────────────────────
+
+
+_SECRET_FIELD_NAMES = {
+    "secret",
+    "raw_secret",
+    "plaintext_secret",
+    "credential_value",
+    "api_key",
+    "token",
+    "password",
+    "secret_hash",
+    "lookup_fingerprint",
+}
+
+
+def _assert_no_secrets_in_dict(d: dict, label: str) -> None:
+    for key in d:
+        assert key not in _SECRET_FIELD_NAMES, (
+            f"[{label}] Forbidden field {key!r} in response"
+        )
+    for val in d.values():
+        if isinstance(val, str):
+            assert "fgk." not in val, (
+                f"[{label}] Raw key material in value for field containing: {val!r}"
+            )
+        elif isinstance(val, list):
+            for item in val:
+                if isinstance(item, str):
+                    assert "fgk." not in item
+
+
+def test_get_status_response_contains_no_secrets(engine_with_authority: Engine) -> None:
+    """GET /system/service-principal response body contains no secret material."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    status = read_service_principal_status(engine_with_authority)
+    _assert_no_secrets_in_dict(status.safe_dict(), "GET status")
+
+
+def test_rotate_response_contains_no_secrets(engine_with_authority: Engine) -> None:
+    """POST /system/service-principal/rotate response body contains no secret material."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    status = rotate_service_principal_credential(
+        engine_with_authority, actor_id="admin"
+    )
+    _assert_no_secrets_in_dict(status.safe_dict(), "rotate response")
+
+
+def test_lifecycle_responses_contain_no_secrets(engine_with_authority: Engine) -> None:
+    """Suspend/resume lifecycle response bodies contain no secret material."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    suspend_status = suspend_service_principal(engine_with_authority, actor_id="admin")
+    _assert_no_secrets_in_dict(suspend_status.safe_dict(), "suspend response")
+    resume_status = resume_service_principal(engine_with_authority, actor_id="admin")
+    _assert_no_secrets_in_dict(resume_status.safe_dict(), "resume response")
+
+
+def test_audit_events_no_secret_fields(engine_with_authority: Engine) -> None:
+    """Audit events never contain any secret field names or key material."""
+    bootstrap_platform_service_principal(engine_with_authority)
+    rotate_service_principal_credential(engine_with_authority, actor_id="admin")
+
+    with engine_with_authority.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT event_type, metadata, failure_reason, actor_id, service_id "
+                "FROM platform_service_principal_events"
+            )
+        ).fetchall()
+
+    for row in rows:
+        for field_val in row:
+            s = str(field_val or "").lower()
+            for forbidden in ("fgk.", "raw_secret", "plaintext_secret"):
+                assert forbidden not in s, (
+                    f"Forbidden pattern {forbidden!r} in audit event field: {field_val!r}"
+                )
+            # Check that metadata JSON doesn't contain forbidden keys
+            if field_val and isinstance(field_val, str) and field_val.startswith("{"):
+                try:
+                    parsed = json.loads(field_val)
+                    for k in parsed:
+                        assert k not in _SECRET_FIELD_NAMES, (
+                            f"Secret field {k!r} found in audit event metadata"
+                        )
+                except (ValueError, TypeError):
+                    pass

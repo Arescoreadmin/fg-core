@@ -18,13 +18,22 @@ This module owns:
 - Idempotent deterministic bootstrap (created / reused / conflict / invalid_authority)
 - Authority binding validation (internal_platform only; customer/demo/validation fail closed)
 - Credential lifecycle delegation to CredentialAuthority
-- Immutable audit event emission (platform_service_principal_events)
+- Append-only audit event emission (platform_service_principal_events; mutation-protected by DB trigger)
 - Authentication (credential + lifecycle check)
-- Authorization (explicit permission check; never a global superuser)
+- Authorization (explicit permission check; target-tenant enforcement; never a global superuser)
 - Request context fields for PR #587 actor attribution
 
 PR #587 extends actor/service/target-tenant attribution.
 PR #588 adds cryptographic provenance attestation.
+
+Identity continuity model:
+    The canonical PSP uses a single stable_key ("frostgate-platform-service") that is
+    globally unique across all lifecycle states.  uq_psp_stable_key is a non-partial
+    index, so a revoked PSP is permanently terminal — the identity slot is exhausted.
+    Revocation cannot be undone by bootstrapping a replacement with the same stable_key.
+    Recovery from revocation requires explicit operator intervention to insert a new row
+    under a different stable_key, which the application bootstrap code does not support
+    by design.  This prevents silent identity resurrection.
 """
 
 from __future__ import annotations
@@ -354,7 +363,11 @@ def emit_service_principal_event(
     failure_reason: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Append an immutable audit event to platform_service_principal_events.
+    """Append an audit event to platform_service_principal_events.
+
+    The table is append-only and mutation-protected by a database trigger
+    (pspe_prevent_mutation raises restrict_violation on UPDATE or DELETE).
+    Cryptographic provenance (hash chaining, signatures) is deferred to PR #588.
 
     No credential material (secrets, hashes) is ever stored here.
     actor/service/target-tenant attribution is extended in PR #587.
@@ -638,7 +651,48 @@ def bootstrap_platform_service_principal(
                 request_id=request_id,
                 metadata={"authority_version": PSP_AUTHORITY_VERSION},
             )
-    except IntegrityError as exc:
+    except IntegrityError:
+        # Concurrent bootstrap: another request won the INSERT race.
+        # Reload to distinguish a legitimate concurrent bootstrap (same authority →
+        # return "reused") from a genuine conflict (different authority → "conflict").
+        with engine.connect() as conn:
+            concurrent_psp = _fetch_by_stable_key(conn, CANONICAL_PSP_STABLE_KEY)
+
+        if (
+            concurrent_psp is not None
+            and concurrent_psp.authority_tenant_id == authority.tenant_id
+        ):
+            # Legitimate race: the other bootstrapper created the exact same identity.
+            with engine.begin() as conn:
+                emit_service_principal_event(
+                    conn,
+                    event_type="bootstrap_reused",
+                    actor_id=actor_id,
+                    service_id=service_id,
+                    authority_tenant_id=authority.tenant_id,
+                    service_principal_id=concurrent_psp.id,
+                    stable_key=concurrent_psp.stable_key,
+                    request_id=request_id,
+                    metadata={"authority_version": concurrent_psp.authority_version},
+                )
+            with engine.connect() as conn:
+                cred_row = _fetch_credential_row(
+                    conn,
+                    authority.tenant_id,
+                    PSP_CREDENTIAL_TYPE,
+                    PSP_CREDENTIAL_SLOT,
+                )
+            return ServicePrincipalBootstrapResult(
+                status="reused",
+                principal_id=concurrent_psp.id,
+                stable_key=concurrent_psp.stable_key,
+                authority_tenant_id=concurrent_psp.authority_tenant_id,
+                lifecycle_state=concurrent_psp.lifecycle_state,
+                credential_id=str(cred_row[0]) if cred_row and cred_row[0] else None,
+                credential_issued=False,
+            )
+
+        # Genuine conflict: PSP was created concurrently for a different authority.
         with engine.begin() as conn:
             emit_service_principal_event(
                 conn,
@@ -648,19 +702,25 @@ def bootstrap_platform_service_principal(
                 authority_tenant_id=authority.tenant_id,
                 request_id=request_id,
                 outcome="failure",
-                failure_reason="integrity_conflict",
-                metadata={"detail": str(exc)[:256]},
+                failure_reason="integrity_conflict_different_authority",
+                metadata={
+                    "existing_authority": (
+                        concurrent_psp.authority_tenant_id if concurrent_psp else None
+                    )
+                },
             )
         return ServicePrincipalBootstrapResult(
             status="conflict",
-            principal_id=None,
+            principal_id=concurrent_psp.id if concurrent_psp else None,
             stable_key=CANONICAL_PSP_STABLE_KEY,
             authority_tenant_id=authority.tenant_id,
-            lifecycle_state=None,
+            lifecycle_state=concurrent_psp.lifecycle_state if concurrent_psp else None,
             credential_id=None,
             credential_issued=False,
             error_code="BOOTSTRAP_INTEGRITY_CONFLICT",
-            error_message="concurrent bootstrap detected; retry to get reused result",
+            error_message=(
+                "concurrent bootstrap created a PSP bound to a different authority"
+            ),
         )
 
     # Issue credential
@@ -1133,14 +1193,28 @@ def authorize_service_principal(
 ) -> ServicePrincipalAuthzResult:
     """Check that the canonical PSP is authenticated and has the requested permission.
 
-    This never grants wildcard authority. The PSP must:
-    1. Exist and be active (authentication check)
-    2. Hold the explicit permission in its granted_permissions set
-    3. Have a valid target_tenant_id (target tenant authorization remains enforced
-       by the calling route — this function records the check, not the final decision)
+    This function is a complete authorization gate — it enforces:
+    1. PSP existence and active lifecycle (authentication)
+    2. Explicit permission in granted_permissions (RBAC)
+    3. target_tenant_id is non-None, non-empty, and not the authority tenant
+    4. Target tenant exists and is active (tenant lifecycle gate)
+
+    Passing this gate does NOT bypass further route-level policy checks
+    (e.g. RLS must still be set to the target tenant's context on each query).
 
     Emits authorization_allowed or authorization_denied audit events.
     """
+    # Gate 1: target_tenant_id must be explicit and non-empty.
+    if not target_tenant_id or not target_tenant_id.strip():
+        return ServicePrincipalAuthzResult(
+            allowed=False,
+            principal_id=None,
+            authority_tenant_id=None,
+            permission=permission,
+            target_tenant_id=target_tenant_id,
+            denial_code="TARGET_TENANT_REQUIRED",
+        )
+
     auth = authenticate_service_principal(
         engine,
         actor_id=actor_id,
@@ -1156,6 +1230,94 @@ def authorize_service_principal(
             permission=permission,
             target_tenant_id=target_tenant_id,
             denial_code=auth.denial_code,
+        )
+
+    # Gate 2: authority tenant must not silently become the target tenant.
+    if auth.authority_tenant_id and target_tenant_id == auth.authority_tenant_id:
+        try:
+            with engine.begin() as conn:
+                emit_service_principal_event(
+                    conn,
+                    event_type="authorization_denied",
+                    actor_id=actor_id,
+                    service_id=service_id,
+                    authority_tenant_id=auth.authority_tenant_id,
+                    service_principal_id=auth.principal_id,
+                    target_tenant_id=target_tenant_id,
+                    permission=permission,
+                    request_id=request_id,
+                    outcome="denied",
+                    failure_reason="AUTHORITY_TENANT_CANNOT_BE_TARGET",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return ServicePrincipalAuthzResult(
+            allowed=False,
+            principal_id=auth.principal_id,
+            authority_tenant_id=auth.authority_tenant_id,
+            permission=permission,
+            target_tenant_id=target_tenant_id,
+            denial_code="AUTHORITY_TENANT_CANNOT_BE_TARGET",
+        )
+
+    # Gate 3: target tenant must exist and be active.
+    try:
+        target_record = TenantRepository(engine).get(target_tenant_id)
+    except Exception:  # noqa: BLE001
+        target_record = None
+
+    if target_record is None:
+        try:
+            with engine.begin() as conn:
+                emit_service_principal_event(
+                    conn,
+                    event_type="authorization_denied",
+                    actor_id=actor_id,
+                    service_id=service_id,
+                    authority_tenant_id=auth.authority_tenant_id,
+                    service_principal_id=auth.principal_id,
+                    target_tenant_id=target_tenant_id,
+                    permission=permission,
+                    request_id=request_id,
+                    outcome="denied",
+                    failure_reason="TARGET_TENANT_NOT_FOUND",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return ServicePrincipalAuthzResult(
+            allowed=False,
+            principal_id=auth.principal_id,
+            authority_tenant_id=auth.authority_tenant_id,
+            permission=permission,
+            target_tenant_id=target_tenant_id,
+            denial_code="TARGET_TENANT_NOT_FOUND",
+        )
+
+    if target_record.lifecycle_state not in ("active",):
+        try:
+            with engine.begin() as conn:
+                emit_service_principal_event(
+                    conn,
+                    event_type="authorization_denied",
+                    actor_id=actor_id,
+                    service_id=service_id,
+                    authority_tenant_id=auth.authority_tenant_id,
+                    service_principal_id=auth.principal_id,
+                    target_tenant_id=target_tenant_id,
+                    permission=permission,
+                    request_id=request_id,
+                    outcome="denied",
+                    failure_reason=f"TARGET_TENANT_{target_record.lifecycle_state.upper()}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return ServicePrincipalAuthzResult(
+            allowed=False,
+            principal_id=auth.principal_id,
+            authority_tenant_id=auth.authority_tenant_id,
+            permission=permission,
+            target_tenant_id=target_tenant_id,
+            denial_code=f"TARGET_TENANT_{target_record.lifecycle_state.upper()}",
         )
 
     with engine.connect() as conn:

@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS platform_service_principals (
     PRIMARY KEY (id)
 );
 
--- Exactly one stable_key globally.
+-- Identity continuity: one stable_key across ALL lifecycle states (non-partial).
+-- A revoked canonical PSP is permanently terminal — the identity slot is exhausted.
+-- Bootstrapping a new PSP with the same stable_key is not possible after revocation.
+-- This prevents silent identity resurrection; recovery requires explicit operator action.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_psp_stable_key
     ON platform_service_principals (stable_key);
 
