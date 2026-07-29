@@ -1068,7 +1068,9 @@ def test_require_permission_denies_missing_platform_admin() -> None:
     with pytest.raises(HTTPException) as exc_info:
         dep(psp_actor)
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["code"] == "PERMISSION_DENIED"
+    detail = exc_info.value.detail
+    assert isinstance(detail, dict)
+    assert detail["code"] == "PERMISSION_DENIED"
 
 
 # ── Target-tenant authorization enforcement tests ─────────────────────────────
