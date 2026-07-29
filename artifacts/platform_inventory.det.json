@@ -10,7 +10,7 @@
   "governance": {
     "contract_count": 1023,
     "contract_only": [],
-    "runtime_count": 1203,
+    "runtime_count": 1210,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
@@ -57,6 +57,8 @@
       "GET /admin/subscriptions/items/{item_id}",
       "GET /admin/subscriptions/items/{item_id}/ledger",
       "GET /admin/system/health",
+      "GET /admin/system/internal-authority",
+      "GET /admin/system/service-principal",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/billing/account",
@@ -68,6 +70,7 @@
       "GET /admin/tenants/{tenant_id}/credentials/{credential_id}",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/lifecycle-history",
+      "GET /admin/tenants/{tenant_id}/operator-authority",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
@@ -164,6 +167,10 @@
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/subscriptions/contracts",
       "POST /admin/subscriptions/contracts/{contract_id}/items",
+      "POST /admin/system/service-principal/resume",
+      "POST /admin/system/service-principal/revoke",
+      "POST /admin/system/service-principal/rotate",
+      "POST /admin/system/service-principal/suspend",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
       "POST /admin/tenants/{tenant_id}/archive",
@@ -194,7 +201,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "a841daa3466001d44cde936f3e4b202af74ef69992198ba310d12cf20684bd32",
+  "governance_fingerprint": "37ddb7ce8de3ace1088b6c9616be42b9ad0d33e5621fe67b5445db5a5b44a38b",
   "planes": [
     {
       "compat": {
@@ -516,6 +523,8 @@
       "GET /admin/subscriptions/items/{item_id}",
       "GET /admin/subscriptions/items/{item_id}/ledger",
       "GET /admin/system/health",
+      "GET /admin/system/internal-authority",
+      "GET /admin/system/service-principal",
       "GET /admin/tenants",
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/billing/account",
@@ -527,6 +536,7 @@
       "GET /admin/tenants/{tenant_id}/credentials/{credential_id}",
       "GET /admin/tenants/{tenant_id}/entitlements",
       "GET /admin/tenants/{tenant_id}/lifecycle-history",
+      "GET /admin/tenants/{tenant_id}/operator-authority",
       "GET /admin/tenants/{tenant_id}/subscriptions/contracts",
       "GET /admin/tenants/{tenant_id}/subscriptions/items",
       "GET /admin/tenants/{tenant_id}/usage",
@@ -1061,6 +1071,10 @@
       "POST /admin/keys/{key_prefix}/revoke",
       "POST /admin/subscriptions/contracts",
       "POST /admin/subscriptions/contracts/{contract_id}/items",
+      "POST /admin/system/service-principal/resume",
+      "POST /admin/system/service-principal/revoke",
+      "POST /admin/system/service-principal/rotate",
+      "POST /admin/system/service-principal/suspend",
       "POST /admin/tenants",
       "POST /admin/tenants/{tenant_id}/activate",
       "POST /admin/tenants/{tenant_id}/archive",

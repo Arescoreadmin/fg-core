@@ -67,6 +67,14 @@ from api.internal_platform_authority import (
     emit_internal_credential_event_if_applicable,
     read_internal_platform_authority_status,
 )
+from api.platform_service_principal import (
+    PlatformServicePrincipalError,
+    read_service_principal_status,
+    resume_service_principal,
+    revoke_service_principal,
+    rotate_service_principal_credential,
+    suspend_service_principal,
+)
 from api.db_models import SecurityAuditLog
 from api.keys import (
     CreateKeyResponse,
@@ -1308,6 +1316,33 @@ class InternalPlatformAuthorityResponse(BaseModel):
     credential_issued: bool = False
 
 
+class ServicePrincipalStatusResponse(BaseModel):
+    exists: bool
+    id: Optional[str]
+    stable_key: Optional[str]
+    display_name: Optional[str]
+    principal_kind: Optional[str]
+    lifecycle_state: Optional[str]
+    authority_tenant_id: Optional[str]
+    authority_version: Optional[int]
+    credential_type: Optional[str]
+    credential_slot: Optional[str]
+    credential_id: Optional[str]
+    credential_status: Optional[str]
+    credential_generation: int = 0
+    last_rotated_at: Optional[str]
+    created_at: Optional[str]
+    updated_at: Optional[str]
+    granted_permissions: List[str] = []
+
+
+class ServicePrincipalLifecycleResponse(BaseModel):
+    action: str
+    lifecycle_state: str
+    service_principal_id: Optional[str]
+    stable_key: Optional[str]
+
+
 @router.post(
     "/tenants",
     response_model=TenantRecord,
@@ -2094,6 +2129,158 @@ async def get_internal_platform_authority(
             detail=api_error(exc.code, str(exc)),
         ) from exc
     return InternalPlatformAuthorityResponse(**status.safe_dict())
+
+
+@router.get(
+    "/system/service-principal",
+    response_model=ServicePrincipalStatusResponse,
+    dependencies=[
+        Depends(require_scopes("admin:read")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def get_service_principal(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> ServicePrincipalStatusResponse:
+    """Return safe, secret-free status of the canonical platform service principal."""
+    status = read_service_principal_status(get_engine())
+    return ServicePrincipalStatusResponse(**status.safe_dict())
+
+
+@router.post(
+    "/system/service-principal/rotate",
+    response_model=ServicePrincipalStatusResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def rotate_service_principal(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> ServicePrincipalStatusResponse:
+    """Rotate the platform service principal credential."""
+    actor_id = actor_ctx.subject or "admin:rotate"
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        status = rotate_service_principal_credential(
+            get_engine(),
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+    except PlatformServicePrincipalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(exc.code, str(exc)),
+        ) from exc
+    return ServicePrincipalStatusResponse(**status.safe_dict())
+
+
+@router.post(
+    "/system/service-principal/suspend",
+    response_model=ServicePrincipalLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def suspend_service_principal_route(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> ServicePrincipalLifecycleResponse:
+    """Suspend the canonical platform service principal."""
+    actor_id = actor_ctx.subject or "admin:suspend"
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        status = suspend_service_principal(
+            get_engine(),
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+    except PlatformServicePrincipalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(exc.code, str(exc)),
+        ) from exc
+    return ServicePrincipalLifecycleResponse(
+        action="suspended",
+        lifecycle_state=status.lifecycle_state or "unknown",
+        service_principal_id=status.id,
+        stable_key=status.stable_key,
+    )
+
+
+@router.post(
+    "/system/service-principal/resume",
+    response_model=ServicePrincipalLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def resume_service_principal_route(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> ServicePrincipalLifecycleResponse:
+    """Resume a suspended platform service principal."""
+    actor_id = actor_ctx.subject or "admin:resume"
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        status = resume_service_principal(
+            get_engine(),
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+    except PlatformServicePrincipalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(exc.code, str(exc)),
+        ) from exc
+    return ServicePrincipalLifecycleResponse(
+        action="resumed",
+        lifecycle_state=status.lifecycle_state or "unknown",
+        service_principal_id=status.id,
+        stable_key=status.stable_key,
+    )
+
+
+@router.post(
+    "/system/service-principal/revoke",
+    response_model=ServicePrincipalLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def revoke_service_principal_route(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> ServicePrincipalLifecycleResponse:
+    """Permanently revoke the canonical platform service principal.
+
+    This action is irreversible. The credential is also revoked.
+    A new PSP must be bootstrapped to recover.
+    """
+    actor_id = actor_ctx.subject or "admin:revoke"
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        status = revoke_service_principal(
+            get_engine(),
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+    except PlatformServicePrincipalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(exc.code, str(exc)),
+        ) from exc
+    return ServicePrincipalLifecycleResponse(
+        action="revoked",
+        lifecycle_state=status.lifecycle_state or "revoked",
+        service_principal_id=status.id,
+        stable_key=status.stable_key,
+    )
 
 
 @router.get(
