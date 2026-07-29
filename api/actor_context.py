@@ -70,6 +70,13 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "tenant.configure",
         # Platform
         "platform.admin",
+        # Platform service principal — explicit machine-identity permissions (PR #586)
+        # These are granted to the canonical PSP; never inferred from human roles.
+        "platform.authority.verify",
+        "platform.tenants.read",
+        "platform.tenants.operate",
+        "platform.credentials.rotate",
+        "platform.audit.write",
         # Actor attribution — read and write non-repudiation records (SoD: separate from governance)
         "actor.read",
         "actor.write",
@@ -237,6 +244,32 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "display_name": "Platform Administration",
         "description": "Full platform access including cross-tenant operations",
         "risk_level": "critical",
+    },
+    # Platform service principal (PR #586)
+    "platform.authority.verify": {
+        "display_name": "Verify Platform Authority",
+        "description": "Verify operator authority binding for platform service workloads",
+        "risk_level": "high",
+    },
+    "platform.tenants.read": {
+        "display_name": "Read Platform Tenant Metadata",
+        "description": "Read platform-wide tenant metadata (non-customer-PII only)",
+        "risk_level": "medium",
+    },
+    "platform.tenants.operate": {
+        "display_name": "Operate Against Target Tenant",
+        "description": "Issue platform operations against a target tenant (RBAC still applies)",
+        "risk_level": "high",
+    },
+    "platform.credentials.rotate": {
+        "display_name": "Rotate Platform Service Credentials",
+        "description": "Rotate credentials for platform service principals",
+        "risk_level": "critical",
+    },
+    "platform.audit.write": {
+        "display_name": "Write Platform Audit Records",
+        "description": "Emit immutable audit events on behalf of platform services",
+        "risk_level": "high",
     },
     # Actor attribution
     "actor.read": {
@@ -413,6 +446,10 @@ class ActorContext:
     membership_id: Optional[str] = (
         None  # tenant_users.id — populated after resolver lookup
     )
+    # PR #586: machine identity fields — populated when the caller is a service principal.
+    # PR #587 will use these for actor/service/target-tenant audit attribution.
+    service_principal_id: Optional[str] = None
+    authority_tenant_id: Optional[str] = None
 
     def has_permission(self, perm: str) -> bool:
         return perm in self.permissions

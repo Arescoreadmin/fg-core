@@ -1,5 +1,47 @@
 # PR Fix Log (Strict)
 
+## P-30 — feat(identity): establish canonical platform service principal
+
+**Branch:** `feat/platform-service-principal` (PR #586)
+**Date:** 2026-07-29
+**Files changed:**
+- `migrations/postgres/0168_platform_service_principal.sql` — new migration
+- `api/platform_service_principal.py` — new PSP module
+- `api/actor_context.py` — 5 new platform PSP permissions + 2 ActorContext fields for PR #587
+- `api/admin.py` — 5 new admin routes + response models + import
+- `services/plane_registry/registry.py` — 5 global_admin exceptions
+- `tools/ci/route_inventory.json` — regenerated (5 new routes)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry
+- `tests/test_platform_service_principal.py` — 54 new tests
+
+**Root cause / motivation:** PR #585 established the canonical internal platform authority (the tenant). PR #586 adds the machine identity layer on top: a persisted, deterministic, uniquely identifiable, non-human platform service principal. The PSP is the canonical machine identity used by FrostGate platform workloads acting through the internal platform authority.
+
+**Architecture:**
+- `platform_service_principals` table: PSP record with `stable_key="frostgate-platform-service"`, bound to `authority_tenant_id=frostgate-internal`, `principal_kind=platform_service`, lifecycle_state in (active, suspended, revoked)
+- `platform_service_principal_events` table: append-only audit with BEFORE UPDATE/DELETE trigger raising restrict_violation
+- Unique constraint `uq_psp_stable_key` prevents duplicates; partial unique index `uq_psp_authority_kind_active` prevents multiple non-revoked PSPs per authority+kind
+- Bootstrap: idempotent via `bootstrap_platform_service_principal()`; returns created/reused/conflict/invalid_authority/failed
+- Credential issued through existing `CredentialAuthority` with slot `platform-service-principal:v1` and idempotency key
+- 5 explicit permissions granted (no wildcard, no `platform.admin`)
+- Authentication: checks PSP exists + active + credential active
+- Authorization: checks explicit permission grant; never bypasses target tenant authorization or RLS
+- Request context: `ActorContext.service_principal_id` and `authority_tenant_id` fields added (None for all existing flows; PR #587 populates them)
+
+**Security invariants proven:**
+- Only `internal_platform` authority may own the canonical PSP; customer/demo/validation/unknown rejected
+- Duplicate impossible at DB level (unique indexes)
+- Suspended/revoked principal cannot authenticate
+- Revocation is irreversible
+- No raw secret in API responses, logs, or audit events
+- PSP is not a global superuser; target tenant authorization remains enforced
+
+**Result:** Pass. 54/54 new tests pass. All existing gates pass.
+
+---
+
 ## P-28 — feat(tenancy): provision canonical internal platform authority bootstrap
 
 **Branch:** `feat/internal-platform-authority-bootstrap` (PR #585)

@@ -168,6 +168,42 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex(
                 "GET",
+                "/admin/system/service-principal",
+                "global_admin",
+                "Platform service principal status view (PR #586); protected by "
+                "admin:read scope plus internal gateway. Returns safe metadata only — "
+                "no secrets, no customer data.",
+            ),
+            ex(
+                "POST",
+                "/admin/system/service-principal/rotate",
+                "global_admin",
+                "Rotate platform service principal credential (PR #586); protected by "
+                "admin:write scope plus internal gateway.",
+            ),
+            ex(
+                "POST",
+                "/admin/system/service-principal/suspend",
+                "global_admin",
+                "Suspend platform service principal (PR #586); protected by "
+                "admin:write scope plus internal gateway.",
+            ),
+            ex(
+                "POST",
+                "/admin/system/service-principal/resume",
+                "global_admin",
+                "Resume suspended platform service principal (PR #586); protected by "
+                "admin:write scope plus internal gateway.",
+            ),
+            ex(
+                "POST",
+                "/admin/system/service-principal/revoke",
+                "global_admin",
+                "Permanently revoke platform service principal (PR #586); protected by "
+                "admin:write scope plus internal gateway. Irreversible.",
+            ),
+            ex(
+                "GET",
                 "/admin/keys/needing-rotation",
                 "global_admin",
                 "Global operator key rotation report.",
