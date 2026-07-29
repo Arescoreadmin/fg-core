@@ -501,6 +501,7 @@ def verify_api_key_detailed(
                 tenant_id=_ca_principal.tenant_id,
                 scopes=_ca_scopes,
                 credential_id=_ca_principal.credential_id,
+                credential_slot=_ca_principal.credential_slot,
             )
 
     # R4.8: Postgres has no legacy fallback — canonical path is the only valid path.

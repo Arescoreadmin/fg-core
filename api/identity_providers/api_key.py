@@ -16,14 +16,96 @@ existing service keys continue to function during the migration period.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext, roles_to_permissions
 
 log = logging.getLogger("frostgate.identity.api_key")
+
+# Imported lazily inside _resolve_psp_fields to avoid circular imports at
+# module load time.  The constant value is duplicated here so the check is
+# free (no import) on every non-PSP request.
+_PSP_CREDENTIAL_SLOT = "platform-service-principal:v1"
+
+
+def _resolve_psp_fields(
+    tenant_id: str,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Return (service_principal_id, authority_tenant_id) for the canonical PSP.
+
+    Queries platform_service_principals for the single active PSP whose
+    credential_slot matches the PSP slot and whose authority_tenant_id is
+    the credential's owning tenant.
+
+    Fail-open: returns (None, None) on any error so that attribution gaps
+    never block an otherwise valid request.
+    """
+    try:
+        from api.db import get_engine as _get_engine
+
+        engine = _get_engine()
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id, authority_tenant_id"
+                    " FROM platform_service_principals"
+                    " WHERE credential_slot = :slot"
+                    "   AND authority_tenant_id = :tid"
+                    "   AND lifecycle_state = 'active'"
+                    " LIMIT 1"
+                ),
+                {"slot": _PSP_CREDENTIAL_SLOT, "tid": tenant_id},
+            ).fetchone()
+        if row:
+            return str(row[0]), str(row[1])
+    except Exception as exc:
+        log.warning(
+            "psp_resolve.failed",
+            extra={"tenant_id": tenant_id, "exc": str(exc)},
+        )
+    return None, None
+
+
+def _emit_psp_auth_event(
+    service_principal_id: str,
+    authority_tenant_id: str,
+    request_id: Optional[str],
+) -> None:
+    """Emit authentication_success to platform_service_principal_events.
+
+    Best-effort: any failure is logged and swallowed.  This is the
+    API-key-middleware path counterpart to the explicit
+    authenticate_service_principal() lifecycle-check path.
+    """
+    try:
+        from api.db import get_engine as _get_engine
+        from api.platform_service_principal import (
+            PSP_ACTOR,
+            PSP_SERVICE,
+            emit_service_principal_event,
+        )
+
+        engine = _get_engine()
+        with engine.begin() as conn:
+            emit_service_principal_event(
+                conn,
+                event_type="authentication_success",
+                service_principal_id=service_principal_id,
+                actor_id=PSP_ACTOR,
+                service_id=PSP_SERVICE,
+                authority_tenant_id=authority_tenant_id,
+                request_id=request_id,
+                outcome="success",
+            )
+    except Exception as exc:
+        log.warning(
+            "psp_auth_event.failed",
+            extra={"service_principal_id": service_principal_id, "exc": str(exc)},
+        )
 
 # Maps legacy tenant_rbac.py role names → new enterprise role names.
 # Existing key assignments are honoured without requiring re-assignment.
@@ -89,6 +171,7 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
     tenant_id: str = getattr(auth, "tenant_id", None) or ""
     key_prefix: str = getattr(auth, "key_prefix", None) or ""
     key_db_id: Optional[int] = getattr(auth, "key_db_id", None)
+    credential_slot: Optional[str] = getattr(auth, "credential_slot", None)
 
     # The global service-account key (FG_API_KEY env var) carries no DB row or
     # scopes, so no fallback fires without this explicit check. Treat it as
@@ -103,6 +186,19 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
             auth_source="api_key",
             tenant_id=tenant_id or None,
         )
+
+    # PSP attribution: if this credential belongs to the platform service
+    # principal, resolve its identity and populate the ActorContext fields.
+    # This makes PSP-authenticated requests distinguishable in the audit trail.
+    service_principal_id: Optional[str] = None
+    psp_authority_tenant_id: Optional[str] = None
+    if credential_slot == _PSP_CREDENTIAL_SLOT and tenant_id:
+        request_id: Optional[str] = getattr(
+            getattr(request, "state", None), "request_id", None
+        )
+        service_principal_id, psp_authority_tenant_id = _resolve_psp_fields(tenant_id)
+        if service_principal_id:
+            _emit_psp_auth_event(service_principal_id, psp_authority_tenant_id or tenant_id, request_id)
 
     raw_role: Optional[str] = None
     if key_db_id is not None and tenant_id:
@@ -134,4 +230,6 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
         roles=roles,
         auth_source="api_key",
         tenant_id=tenant_id or None,
+        service_principal_id=service_principal_id,
+        authority_tenant_id=psp_authority_tenant_id,
     )

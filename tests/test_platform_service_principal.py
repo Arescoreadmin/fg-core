@@ -1443,3 +1443,247 @@ def test_resume_respects_state_guard(engine_with_authority: Engine) -> None:
     assert "lifecycle_state = 'suspended'" in src, (
         "resume_service_principal UPDATE must guard with lifecycle_state = 'suspended'"
     )
+
+
+# ── PR #588 Actor/Service/Target Attribution tests ────────────────────────────
+#
+# Tests PSP-01 through PSP-07 verify that the API-key-middleware path correctly
+# populates service_principal_id / authority_tenant_id in ActorContext when a
+# PSP credential is presented, and that require_psp_actor() enforces PSP identity.
+
+
+class _FakeAuth:
+    """Minimal stand-in for AuthResult used in api_key.py path."""
+
+    def __init__(self, **kwargs: object) -> None:
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+class _FakeRequest:
+    """Minimal stand-in for FastAPI Request."""
+
+    def __init__(self, auth: object) -> None:
+        from types import SimpleNamespace
+        self.state = SimpleNamespace(auth=auth, request_id="req-psp-test")
+
+
+def test_psp_key_populates_service_principal_id(
+    engine_with_authority: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PSP-01: PSP credential slot → service_principal_id + authority_tenant_id set."""
+    # Bootstrap the PSP so a row exists in platform_service_principals
+    result = bootstrap_platform_service_principal(engine_with_authority, request_id="psp-01")
+    assert result.principal_id is not None
+
+    # Patch the DB lookup inside _resolve_psp_fields to use the test engine
+    import api.identity_providers.api_key as _mod
+
+    def _patched_resolve(tenant_id: str):
+        from sqlalchemy import text as _text
+        with engine_with_authority.connect() as c:
+            row = c.execute(
+                _text(
+                    "SELECT id, authority_tenant_id"
+                    " FROM platform_service_principals"
+                    " WHERE credential_slot = :slot AND lifecycle_state = 'active'"
+                    " LIMIT 1"
+                ),
+                {"slot": PSP_CREDENTIAL_SLOT},
+            ).fetchone()
+        return (str(row[0]), str(row[1])) if row else (None, None)
+
+    monkeypatch.setattr(_mod, "_resolve_psp_fields", _patched_resolve)
+    monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
+
+    from unittest.mock import MagicMock
+    auth = _FakeAuth(
+        valid=True,
+        reason="canonical_validated",
+        key_prefix="fgk.test",
+        tenant_id="frostgate-internal",
+        scopes={"admin:write"},
+        key_db_id=None,
+        credential_slot=PSP_CREDENTIAL_SLOT,
+    )
+    request = _FakeRequest(auth)
+    conn = MagicMock()
+
+    from api.identity_providers.api_key import extract_api_key_actor
+    actor = extract_api_key_actor(request, conn)
+
+    assert actor is not None
+    assert actor.service_principal_id == result.principal_id, (
+        "service_principal_id must match the bootstrapped PSP UUID"
+    )
+    assert actor.authority_tenant_id == "frostgate-internal", (
+        "authority_tenant_id must be the PSP's authority tenant"
+    )
+
+
+def test_non_psp_key_leaves_service_principal_id_none(
+    engine_with_authority: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PSP-02: Non-PSP credential slot → service_principal_id stays None."""
+    import api.identity_providers.api_key as _mod
+    monkeypatch.setattr(_mod, "_resolve_psp_fields", lambda tid: (_ for _ in ()).throw(AssertionError("must not be called")))
+
+    from unittest.mock import MagicMock
+    auth = _FakeAuth(
+        valid=True,
+        reason="canonical_validated",
+        key_prefix="fgk.other",
+        tenant_id="some-tenant",
+        scopes={"governance:read"},
+        key_db_id=None,
+        credential_slot="console-bff-key",
+    )
+    request = _FakeRequest(auth)
+
+    from api.identity_providers.api_key import extract_api_key_actor
+    actor = extract_api_key_actor(request, MagicMock())
+
+    assert actor is not None
+    assert actor.service_principal_id is None
+    assert actor.authority_tenant_id is None
+
+
+def test_psp_resolve_fails_gracefully_when_no_psp_row(
+    engine_with_authority: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PSP-03: PSP slot but no active PSP row → service_principal_id stays None (fail-open)."""
+    import api.identity_providers.api_key as _mod
+    monkeypatch.setattr(_mod, "_resolve_psp_fields", lambda tid: (None, None))
+    monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
+
+    from unittest.mock import MagicMock
+    auth = _FakeAuth(
+        valid=True,
+        reason="canonical_validated",
+        key_prefix="fgk.ghost",
+        tenant_id="frostgate-internal",
+        scopes=set(),
+        key_db_id=None,
+        credential_slot=PSP_CREDENTIAL_SLOT,
+    )
+    request = _FakeRequest(auth)
+
+    from api.identity_providers.api_key import extract_api_key_actor
+    actor = extract_api_key_actor(request, MagicMock())
+
+    assert actor is not None
+    assert actor.service_principal_id is None
+    assert actor.authority_tenant_id is None
+
+
+def test_require_psp_actor_denies_non_psp() -> None:
+    """PSP-04: require_psp_actor() raises 403 PSP_ACTOR_REQUIRED for non-PSP ActorContext."""
+    import pytest
+    from fastapi import HTTPException
+
+    from api.actor_context import ActorContext
+    from api.auth_dispatch import require_psp_actor
+
+    actor = ActorContext(
+        subject="human@example.com",
+        email="human@example.com",
+        name="Human",
+        permissions=frozenset({"platform.admin"}),
+        roles=["platform_admin"],
+        auth_source="oidc_auth0",
+        tenant_id="frostgate-internal",
+        service_principal_id=None,  # not a PSP
+    )
+
+    dep = require_psp_actor()
+
+    with pytest.raises(HTTPException) as exc_info:
+        dep(actor=actor)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "PSP_ACTOR_REQUIRED"
+
+
+def test_require_psp_actor_passes_for_psp() -> None:
+    """PSP-05: require_psp_actor() returns the ActorContext unchanged for PSP callers."""
+    from api.actor_context import ActorContext
+    from api.auth_dispatch import require_psp_actor
+
+    actor = ActorContext(
+        subject="fgk.psp-prefix",
+        email="",
+        name="",
+        permissions=frozenset({"platform.tenants.operate"}),
+        roles=[],
+        auth_source="api_key",
+        tenant_id="frostgate-internal",
+        service_principal_id="12345678-0000-0000-0000-000000000001",
+        authority_tenant_id="frostgate-internal",
+    )
+
+    dep = require_psp_actor()
+    result = dep(actor=actor)
+
+    assert result is actor, "require_psp_actor must return the ActorContext unchanged"
+    assert result.service_principal_id == "12345678-0000-0000-0000-000000000001"
+
+
+def test_authentication_success_event_emitted_on_psp_key_auth(
+    engine_with_authority: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PSP-06: PSP credential validation emits authentication_success event."""
+    bootstrap_platform_service_principal(engine_with_authority, request_id="psp-06")
+
+    import api.identity_providers.api_key as _mod
+    from sqlalchemy import text as _text
+
+    captured: list[dict] = []
+
+    def _fake_emit(spid: str, auth_tid: str, req_id) -> None:
+        captured.append({"spid": spid, "auth_tid": auth_tid, "req_id": req_id})
+
+    def _patched_resolve(tenant_id: str):
+        with engine_with_authority.connect() as c:
+            row = c.execute(
+                _text(
+                    "SELECT id, authority_tenant_id"
+                    " FROM platform_service_principals"
+                    " WHERE credential_slot = :slot AND lifecycle_state = 'active'"
+                    " LIMIT 1"
+                ),
+                {"slot": PSP_CREDENTIAL_SLOT},
+            ).fetchone()
+        return (str(row[0]), str(row[1])) if row else (None, None)
+
+    monkeypatch.setattr(_mod, "_resolve_psp_fields", _patched_resolve)
+    monkeypatch.setattr(_mod, "_emit_psp_auth_event", _fake_emit)
+
+    from unittest.mock import MagicMock
+    auth = _FakeAuth(
+        valid=True,
+        reason="canonical_validated",
+        key_prefix="fgk.psp",
+        tenant_id="frostgate-internal",
+        scopes=set(),
+        key_db_id=None,
+        credential_slot=PSP_CREDENTIAL_SLOT,
+    )
+    request = _FakeRequest(auth)
+
+    from api.identity_providers.api_key import extract_api_key_actor
+    extract_api_key_actor(request, MagicMock())
+
+    assert len(captured) == 1, "authentication event must be emitted once"
+    assert captured[0]["auth_tid"] == "frostgate-internal"
+
+
+def test_target_tenant_id_not_on_actor_context() -> None:
+    """PSP-07: ActorContext has no target_tenant_id — target is per-request, not per-actor."""
+    from api.actor_context import ActorContext
+    import dataclasses
+
+    field_names = {f.name for f in dataclasses.fields(ActorContext)}
+    assert "target_tenant_id" not in field_names, (
+        "target_tenant_id must not be on ActorContext — "
+        "target is per-request; actor identity does not change per operation"
+    )
