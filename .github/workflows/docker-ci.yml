@@ -214,6 +214,7 @@ jobs:
           FG_DEBUG=false
           FG_LOG_LEVEL=info
           FG_ENFORCEMENT_MODE=enforce
+          CORE_TENANT_ID=frostgate-internal
 
           FG_DB_BACKEND=postgres
           FG_DB_URL=postgresql+psycopg://fg_user:${POSTGRES_PASSWORD}@postgres:5432/frostgate
@@ -282,6 +283,8 @@ jobs:
           FG_DEBUG=false
           FG_LOG_LEVEL=info
           FG_ENFORCEMENT_MODE=enforce
+
+          CORE_TENANT_ID=frostgate-internal
 
           POSTGRES_USER=postgres
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
