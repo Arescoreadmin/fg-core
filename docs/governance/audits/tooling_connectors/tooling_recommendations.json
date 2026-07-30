@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-07-29T00:00:00Z",
+  "repository_commit": "61aa749e",
+  "methodology": "Scores are 1-10 per criterion, expressed as 'goodness' in every case (including maintenance_burden, data_risk_exposure, and vendor_lock_in_risk, where 10 = lowest burden/risk). Weighted priority score = sum(criterion_score * weight), weights: strategic_fit 0.15, immediate_roi 0.15, quality_improvement 0.10, security_improvement 0.10, production_reliability 0.10, enterprise_readiness 0.10, commercial_value 0.10, moat_contribution 0.10, implementation_simplicity 0.05, maintenance_burden 0.03, data_risk_exposure 0.01, vendor_lock_in_risk 0.01. Recommendations array is sorted by weighted_priority_score descending, then name ascending. All entries are evidence-derived from static repository inspection only; no installation, configuration, or connection occurred during this audit.",
+  "current_tools": [
+    {"name": "GitHub Actions (6 workflows)", "path": ".github/workflows/", "classification": "active_and_well_integrated"},
+    {"name": "fg-python-setup / fg-secrets composite actions", "path": ".github/actions/", "classification": "active_and_well_integrated"},
+    {"name": "pytest suite (600+ files)", "path": "tests/", "classification": "active_and_well_integrated"},
+    {"name": "pip-audit", "path": "Makefile", "classification": "active_but_narrow"},
+    {"name": "custom secret scanner", "path": "tools/ci/check_no_plaintext_secrets.py", "classification": "active_and_well_integrated"},
+    {"name": "custom SBOM generator", "path": "scripts/generate_sbom.py", "classification": "active_hand_rolled"},
+    {"name": "custom CIS/SCAP checks", "path": "scripts/cis_check.py,scripts/scap_scan.py", "classification": "active_hand_rolled_ci_only"},
+    {"name": "contract-authority gate", "path": "scripts/contract_authority_check.py", "classification": "active_and_well_integrated"},
+    {"name": "pre-commit (ruff + local hooks)", "path": ".pre-commit-config.yaml", "classification": "partially_configured"},
+    {"name": "mypy", "path": "mypy.ini", "classification": "active_but_not_ci_blocking"},
+    {"name": "OpenTelemetry SDK", "path": "api/observability/tracing.py", "classification": "active_missing_verification"},
+    {"name": "prometheus-client + Grafana dashboards", "path": "deploy/grafana/dashboards/", "classification": "partially_configured"},
+    {"name": "Sentry SDK", "path": "api/main.py", "classification": "active_missing_verification"},
+    {"name": "repo-tools MCP server", "path": "tools/mcp/repo_tools_server.py", "classification": "active_well_scoped_local_only"},
+    {"name": "Claude Code hooks", "path": ".claude/hooks/", "classification": "active_and_well_integrated"},
+    {"name": "duplicate Helm chart trees", "path": "deploy/helm/frostgatecore,deploy/frostgate-core", "classification": "duplicated"},
+    {"name": "Keycloak dev IdP", "path": "keycloak/,docker-compose.yml", "classification": "local_only"},
+    {"name": "Dependabot", "path": null, "classification": "missing"},
+    {"name": "CodeQL/SAST", "path": null, "classification": "missing"},
+    {"name": "Container image scanning", "path": null, "classification": "missing"},
+    {"name": "Browser/E2E testing", "path": null, "classification": "missing"},
+    {"name": "npm audit", "path": null, "classification": "missing"},
+    {"name": "coverage reporting", "path": "requirements-dev.txt (pytest-cov, unused)", "classification": "underused"},
+    {"name": "CI duplication self-diagnosis and fix", "path": "docs/ci/CI_OPTIMIZATION_PLAN.md,tools/testing/harness/lane_runner.py", "classification": "active_and_well_integrated_already_fixed"}
+  ],
+  "recommendations": [
+    {"name": "GitHub MCP server (read-only)", "category": "claude_code_mcp", "recommendation": "INSTALL NOW", "weighted_priority_score": 7.34, "access_mode": "read_only", "risk": "low", "effort": "1 hour"},
+    {"name": "Microsoft Defender/Sentinel via Graph Security API connector", "category": "frostgate_native_connector", "recommendation": "PLAN", "weighted_priority_score": 7.2, "access_mode": "product_feature_delegated_oauth", "risk": "medium", "effort": "1-2 weeks"},
+    {"name": "Postgres MCP (local-only, read-only)", "category": "claude_code_mcp", "recommendation": "PILOT", "weighted_priority_score": 6.5, "access_mode": "local_read_only", "risk": "low", "effort": "2-4 hours"},
+    {"name": "Okta native connector", "category": "frostgate_native_connector", "recommendation": "PLAN", "weighted_priority_score": 6.38, "access_mode": "product_feature_oauth2", "risk": "medium", "effort": "2-3 weeks"},
+    {"name": "AWS Organizations/Config/Security Hub/CloudTrail bundle", "category": "frostgate_native_connector", "recommendation": "PLAN", "weighted_priority_score": 6.02, "access_mode": "product_feature_cross_account_role", "risk": "high", "effort": "4-6 weeks"},
+    {"name": "Dependabot (security updates only)", "category": "github_ci_addon", "recommendation": "INSTALL NOW", "weighted_priority_score": 5.65, "access_mode": "github_native", "risk": "low", "effort": "30 minutes"},
+    {"name": "Playwright (console login flow pilot)", "category": "claude_code_mcp", "recommendation": "PILOT", "weighted_priority_score": 5.55, "access_mode": "local_dev_seeded_tenant", "risk": "low", "effort": "1-2 days"},
+    {"name": "Trivy container image scan", "category": "github_ci_addon", "recommendation": "PILOT", "weighted_priority_score": 5.49, "access_mode": "ci_non_blocking_pilot", "risk": "low", "effort": "1 day"},
+    {"name": "CodeQL (Python + JS/TS)", "category": "github_ci_addon", "recommendation": "PILOT", "weighted_priority_score": 5.24, "access_mode": "github_native_report_only", "risk": "medium", "effort": "contingent on GHAS licensing"},
+    {"name": "Jira/ServiceNow bidirectional remediation sync", "category": "frostgate_native_connector", "recommendation": "PLAN", "weighted_priority_score": 4.74, "access_mode": "product_feature_bidirectional_write", "risk": "medium", "effort": "4-5 weeks"},
+    {"name": "npm audit (console/portal/root)", "category": "github_ci_addon", "recommendation": "INSTALL NOW", "weighted_priority_score": 4.71, "access_mode": "ci_non_blocking_first", "risk": "low", "effort": "1-2 hours"},
+    {"name": "Slack/Teams alerting connector", "category": "frostgate_native_connector", "recommendation": "PLAN", "weighted_priority_score": 4.35, "access_mode": "product_feature_webhook", "risk": "low", "effort": "small, opportunistic"},
+    {"name": "Sentry connector (contingent on DSN + PII-scrub verification)", "category": "production_operations", "recommendation": "DEFER", "weighted_priority_score": 3.98, "access_mode": "read_only_prod_scoped_contingent", "risk": "medium", "effort": "contingent"},
+    {"name": "Coverage reporting (self-hosted pytest-cov artifact)", "category": "github_ci_addon", "recommendation": "INSTALL NOW", "weighted_priority_score": 3.97, "access_mode": "ci_artifact", "risk": "low", "effort": "1 hour"},
+    {"name": "Vercel MCP (project-scoped, read-only)", "category": "claude_code_mcp", "recommendation": "PILOT", "weighted_priority_score": 3.86, "access_mode": "read_only_project_scoped", "risk": "low_to_medium", "effort": "30 minutes (post-OAuth)"}
+  ],
+  "rejected_recommendations": [
+    {"name": "Gitleaks / TruffleHog", "category": "github_ci_addon", "reason": "Duplicates a purpose-built custom secret scanner (tools/ci/check_no_plaintext_secrets.py, check_secret_history.py) already tuned to this repo's env-file conventions; would add noise, not coverage."},
+    {"name": "SonarCloud / Snyk", "category": "github_ci_addon", "reason": "Redundant with ruff/mypy/pip-audit/CodeQL; introduces an unreviewed third-party source-code data-egress path for an enterprise governance/evidence platform serving regulated-industry clients."},
+    {"name": "Renovate", "category": "github_ci_addon", "reason": "Overlaps Dependabot; conflicts with this repo's strict == version-pinning discipline visible across requirements*.txt."},
+    {"name": "OSSF Scorecard", "category": "github_ci_addon", "reason": "Designed to signal supply-chain hygiene to external consumers of a public project; not applicable to a private enterprise repo."},
+    {"name": "Mutation testing (mutmut/cosmic-ray)", "category": "github_ci_addon", "reason": "High CI-time cost on top of an already long critical path the team is actively shrinking; lower priority than closing the browser-E2E coverage gap."},
+    {"name": "Broad/write-capable GitHub MCP", "category": "claude_code_mcp", "reason": "No repository-evidenced task requires Claude Code to write to GitHub directly; PR creation/push already goes through the existing user-approved gh/git flow."},
+    {"name": "Generic/broad filesystem or semantic-code-search MCP", "category": "claude_code_mcp", "reason": "Would duplicate the existing repo-tools grep_code (ripgrep) tool and the built-in Explore agent at this repo's current size; broad indexers also risk including denied paths (.env*, secrets/**) if misconfigured."},
+    {"name": "Production Postgres MCP / any AI-agent access to production Postgres or Redis", "category": "production_operations", "reason": "Multi-tenant regulated-industry (healthcare, legal, govcon) customer evidence data must never enter an AI model's context; this is outside the audit's authority to approve at any access level, including read-only."},
+    {"name": "Auth0 Management API connector (unscoped, speculative)", "category": "production_operations", "reason": "No recurring repository-evidenced debugging workflow justifies provisioning now; Auth0 logs contain login metadata for real end users across potentially all client tenants. Deferred, not installed, pending a specific identified need."},
+    {"name": "OneTrust / Archer / Drata / Vanta evidence-import connector", "category": "frostgate_native_connector", "reason": "Strategic-positioning conflict with FOUNDER_DIRECTIVE.md's explicit GRC-displacement framing against these named competitors; requires an explicit founder decision, not an engineering-readiness call."},
+    {"name": "Wiz / Palo Alto CSPM importer", "category": "frostgate_native_connector", "reason": "Redundant with the first-party AWS Organizations/Config/Security Hub connector, which delivers equivalent cloud-posture evidence without depending on the client already owning a separate CSPM license."}
+  ],
+  "roadmap": {
+    "immediate_0_7_days": [
+      "Enable Dependabot (security updates only)",
+      "Add npm audit to CI (non-blocking first)",
+      "Turn on coverage reporting (self-hosted pytest-cov artifact)",
+      "Install GitHub MCP server (read-only, repo-scoped)"
+    ],
+    "near_term_8_30_days": [
+      "Trivy container image scan (non-blocking pilot)",
+      "Postgres MCP (local-only, read-only) pilot",
+      "Playwright first flow: console login to dashboard",
+      "Vercel MCP (read-only, project-scoped), contingent on user completing OAuth",
+      "Confirm GitHub Advanced Security licensing status before scheduling CodeQL"
+    ],
+    "medium_term_31_90_days": [
+      "Okta native connector implementation",
+      "Microsoft Defender/Sentinel via Graph Security API connector implementation",
+      "Begin AWS connector credential-infrastructure design and dedicated security review",
+      "Slack/Teams alerting connector (opportunistic, low effort)"
+    ],
+    "strategic_90_plus_days": [
+      "AWS Organizations/Config/Security Hub/CloudTrail bundle implementation (split: credential infra PR, then data-collection PRs)",
+      "Jira/ServiceNow bidirectional remediation sync (first write-capable connector; explicit design review before implementation)",
+      "Re-evaluate Google Workspace, CrowdStrike, Snowflake, GitHub/GitLab connectors against actual client-pipeline demand",
+      "Founder decision required before scheduling: OneTrust/Archer/Drata/Vanta evidence-import connector"
+    ]
+  },
+  "risks": [
+    {"recommendation": "GitHub MCP (read-only)", "risk": "Token over-scoped beyond the single repo", "likelihood": "low", "impact": "medium", "residual_risk": "low", "approval_requirement": "repo owner approval before token creation"},
+    {"recommendation": "Postgres MCP (local-only)", "risk": "Connection string misconfigured to point at production instead of local compose", "likelihood": "low", "impact": "high", "residual_risk": "low_with_startup_assertion", "approval_requirement": "owner review of exact connection configuration"},
+    {"recommendation": "Playwright MCP (local dev)", "risk": "Test credentials or captured state accidentally reference a real client engagement", "likelihood": "low", "impact": "medium", "residual_risk": "low", "approval_requirement": "standard PR review"},
+    {"recommendation": "Vercel MCP", "risk": "OAuth grant is org-wide rather than project-scoped", "likelihood": "medium", "impact": "medium", "residual_risk": "medium_until_scoping_confirmed", "approval_requirement": "owner approval before completing OAuth"},
+    {"recommendation": "CodeQL", "risk": "Unbudgeted GitHub Advanced Security licensing cost for a private repo", "likelihood": "medium", "impact": "low", "residual_risk": "low_once_confirmed", "approval_requirement": "owner approval (cost) before enabling"},
+    {"recommendation": "Sentry connector (contingent)", "risk": "Prod error events may contain tenant-identifying PHI/PII for regulated-industry clients", "likelihood": "medium", "impact": "high", "residual_risk": "medium_pending_verification", "approval_requirement": "owner approval contingent on documented PII-scrubbing verification"},
+    {"recommendation": "Production Postgres/Redis access for any AI agent", "risk": "Direct exposure of regulated-industry multi-tenant customer evidence data to a model context window", "likelihood": "low_rejected", "impact": "critical", "residual_risk": "not_applicable_rejected", "approval_requirement": "explicit founder and legal approval, outside this audit's scope"},
+    {"recommendation": "AWS native connector credential infrastructure", "risk": "Cross-account IAM role assumption is a materially higher-privilege credential model than any existing connector", "likelihood": "medium", "impact": "high", "residual_risk": "medium_managed_by_mitigations", "approval_requirement": "dedicated security review before merge"},
+    {"recommendation": "Jira/ServiceNow bidirectional sync", "risk": "First write-capable connector; sync bug could create duplicate tickets or incorrectly mark a finding remediated", "likelihood": "medium", "impact": "medium", "residual_risk": "medium_bounded_by_defensive_design", "approval_requirement": "explicit design review before implementation begins"},
+    {"recommendation": "OneTrust/Archer/Drata/Vanta import connector", "risk": "Strategic-positioning conflict with GRC-displacement narrative", "likelihood": "not_applicable", "impact": "not_applicable", "residual_risk": "not_applicable", "approval_requirement": "founder decision required before entering PR sequence"}
+  ]
+}
