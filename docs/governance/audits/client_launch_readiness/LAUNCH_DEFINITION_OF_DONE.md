@@ -1,8 +1,8 @@
 # Definition of Done for Launch
 
-**Purpose:** a binary checkpoint. Not tasks — outcomes. Every item is pass/fail with a named verification method and a durable evidence artifact. The design partner is not onboarded until **every Launch DoD item is checked**; the first full-price cohort (Stage 2) is not onboarded until every Stage 2 DoD item is checked.
+**Purpose:** a binary checkpoint. Not tasks — outcomes. Every item is pass/fail with a named verification method and a durable evidence artifact. The design partner is not onboarded until **every Launch DoD item is checked**; the rollout does not scale past Stage 2 into Stage 3 (up to 10 clients) until every **Stage 2 Exit DoD** item is checked. *(Gate semantics clarified per PR #593 review — Codex P2: the S-items were previously labeled as gating Stage 2 entry while the rollout plan scheduled that same work during Stage 2. Resolution: S1–S6 gate Stage 2 → Stage 3, preserving the recorded rev-1.1 intent that Operator Home, the journey shell, and Report v2 are built during Stage 2, shaped by real client feedback, without stalling full-price revenue behind an 8.5-day build.)*
 
-Scope note: the founder's review draft of this checklist included "Portal journey is driven by `journeyState`." The full state-machine stepper is budgeted in the Stage 2→3 package (2.5d; putting it pre-launch would exceed the 20-day cap), so it appears here in the **Stage 2 DoD**, with a defined v0 next-action requirement in the Launch DoD. This is a deliberate trade, recorded so it can be overruled deliberately.
+Scope note: the founder's review draft of this checklist included "Portal journey is driven by `journeyState`." The full state-machine stepper is budgeted in the Stage 2→3 package (2.5d; putting it pre-launch would exceed the 20-day cap), so it appears here in the **Stage 2 Exit DoD**, with a defined v0 next-action requirement in the Launch DoD. This is a deliberate trade, recorded so it can be overruled deliberately.
 
 ---
 
@@ -11,7 +11,7 @@ Scope note: the founder's review draft of this checklist included "Portal journe
 | # | Outcome (binary) | Verified by | Evidence artifact | Findings closed |
 |---|------------------|-------------|-------------------|-----------------|
 | L1 | A real external identity completes a full engagement journey in production — invite → email → accept → OIDC login → engagement pages → evidence view → logout with Core-side session revocation — **without engineering intervention** | Cold external mailbox test during dry run | Dry-run log §portal, session + revocation records | FG-LR-002 |
-| L2 | The full H1–H18 flow passes on the current production stack, including `migration_status` clean against prod and the client-access-code delivery rehearsal | Timed dry run | Dated H1–H18 log in `docs/operators/` | FG-LR-001 |
+| L2 | The full H1–H18 flow passes on the current production stack, including `migration_status` clean against prod and a rehearsal of the **real** portal-access handoff (named-user invite — `credential_delivery.md` rewritten first: its `PORTAL_PASSWORD` instructions deliver a credential production rejects, and `client_access_code` is consumed by no auth path) | Timed dry run | Dated H1–H18 log in `docs/operators/` | FG-LR-001 |
 | L3 | A report is generated, Ed25519-signed, QA-approved (SoD-gated), delivered, and the PDF passes the section QA checklist (no placeholders, advisory language, manifest hash, data-collected appendix populated) | Human QA against checklist on dry-run artifact | Signed-off checklist stored with dry-run log | FG-LR-011 |
 | L4 | A production database backup has been restored successfully into a scratch database with row-count verification of a known engagement | Restore drill | `docs/operators/backup_restore.md` + dated restore log | FG-LR-003 |
 | L5 | A remediation item has been tracked to completion through the portal: client marks resolved with evidence note → observation + evidence link created → NIST response updated → roadmap re-phased | Dry-run step H15–H16 | Finding history + audit events for the test item | (part of L2) |
@@ -20,7 +20,7 @@ Scope note: the founder's review draft of this checklist included "Portal journe
 | L8 | Console navigation equals the launch IA: ≤9 items, one dashboard; an operator completes an engagement end-to-end using only visible navigation | Scripted click-through | Nav registry diff + walkthrough note | FG-LR-007 |
 | L9 | Every visible portal page renders real data (no permanent empty states); the dashboard leads with concrete discoveries before charts; every screen state presents one obvious next action (v0: Immediate Actions card) | Click-through of every visible nav item on the dry-run engagement | Walkthrough note + screenshots | FG-LR-008, FG-LR-028 (min) |
 | L10 | Infrastructure headroom is proven: full scan suite + report generation concurrently with ≥30% memory headroom; one orphan-recovery cycle observed | Load check on prod plan | Metrics capture in dry-run log | FG-LR-004 |
-| L11 | The retention purge runbook has been executed once against test data, respecting lifecycle locks and legal holds; DPA language matches actual practice | Purge rehearsal in staging | Purge runbook + execution log | FG-LR-006 |
+| L11 | The deletion runbook covers **all three DPA triggers** — day-90 retention expiry, early deletion within 5 business days of request (DPA §5), deletion within 10 business days of termination (DPA §10) — each with a named trigger, owner, and deadline; executed once against test data, respecting lifecycle locks and legal holds | Purge rehearsal in staging | Deletion runbook + execution log | FG-LR-006 |
 | L12 | Top-5 blast-radius secrets rotated; rotation procedure documented; Anthropic auto-recharge enabled | Config review | `docs/operators/secret_rotation.md`; billing console screenshot | FG-LR-012, FG-LR-013 |
 | L13 | **No P0 finding remains open** — FG-LR-001…005 exit criteria all met (this row is the roll-up assertion) | Audit findings review | Updated `audit_findings.json` statuses | FG-LR-001–005 |
 | L14 | Commercial paper ready: price card ($3.5k–5.5k anchor), CG v0 one-pager, response-time expectation in letter #1, Stripe invoice flow confirmed | Founder review | Updated letters + proposal template | founder track |
@@ -43,7 +43,7 @@ Task IDs follow execution order v2 (T1–T14, per `IMPLEMENTATION_SANITY_PASS.md
 | L6 | T6 (CG v0 drift rehearsal) | L13 | Roll-up of T1, T4, T5, T6, T8 |
 | L7 | T8 (incident/rollback drill) | L14 | Founder commercial track |
 
-## Stage 2 DoD — gate to first full-price cohort
+## Stage 2 Exit DoD — gate to Stage 3 (scaling past the first full-price cohort)
 
 | # | Outcome (binary) | Verified by | Findings closed |
 |---|------------------|-------------|-----------------|

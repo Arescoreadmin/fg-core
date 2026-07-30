@@ -3,7 +3,7 @@
 **Purpose:** the operational script for FrostGate's first design-partner engagement. Not a technical document — the technical procedures live in the runbooks it links. This is what the founder-operator follows, says, sends, and measures, start to finish.
 **Living document:** annotate it after every engagement (retro §9 feeds it directly) — mark what was wrong, what was unnecessary, what was missing, dated inline. The value of this playbook is the accumulated corrections, not the first draft; expect to simplify it by client #5 and to be surprised by it at client #20.
 **Preconditions:** every Launch DoD item checked (`docs/governance/audits/client_launch_readiness/LAUNCH_DEFINITION_OF_DONE.md`). If any L-item is unchecked, this playbook does not start.
-**Companion documents:** `first_client_prep.md` (day-of pre-flight) · `onboarding_runbook.md` (scan procedures) · `console_user_guide.md` · `credential_delivery.md` · `letters/` #1–#6 · DPA template.
+**Companion documents:** `first_client_prep.md` (day-of pre-flight) · `onboarding_runbook.md` (scan procedures) · `console_user_guide.md` · `credential_delivery.md` (⚠ rewrite pending, plan T14 — its PORTAL_PASSWORD instructions predate the named-user cutover and are rejected by production) · `letters/` #1–#6 · DPA template.
 
 ---
 
@@ -47,7 +47,7 @@ Before first contact → signed paper → technical setup, in order:
 | 3–4 | Portal invite accepted; client sees "assessment in progress" | Client contact |
 | 5 | **On-site/remote meeting (75–90 min):** device-code scans + interviews (agenda §4) | Operator + client |
 | 6–8 | Questionnaire completion, evidence curation, findings review | Operator |
-| 9 | Report generated → QA checklist → QA approve → engagement `delivered`; access code delivered per `credential_delivery.md` (split channel) | Operator |
+| 9 | Report generated → QA checklist → QA approve → engagement `delivered`; confirm client portal access is live (named-user session — the console-displayed access code is not consumed by production auth; see `credential_delivery.md` rewrite, plan T14) | Operator |
 | 10 | **Delivery meeting (45–60 min):** report walkthrough + portal tour + CG v0 pitch (§6) | Operator + client |
 | 10–24 | Client works remediation in portal; operator monitors (≤1h/week) | Client |
 | ~30 | 30-day follow-up (letter #5) + verification re-scan | Operator |
@@ -74,7 +74,7 @@ Before first contact → signed paper → technical setup, in order:
 |--------|---------|----------|
 | Proposal / authorization / data handling | Email | Letters #1–#3 |
 | Portal invite | System (Resend) | Built-in; verify delivery personally |
-| Access code | Split channel per `credential_delivery.md` | — |
+| Portal access | Named-user invite (verify received; walk through accept-invite on a call if needed) | — |
 | Report delivered | Email | Letter #4 |
 | Weekly during remediation window | Short personal email (manual — this is CG v0 practice) | 3 sentences: what changed, what's next, one ask |
 | 30-day follow-up | Email + call | Letter #5 |

@@ -46,6 +46,7 @@ Gates are evidence-based: no stage advances on calendar time alone. All stages a
 ## Stage 3 — Up to 10 clients (~Q4 2026)
 
 - **Profile:** widen to secondary segments (credit unions, insurance, mid-market tech); still M365-centric; first CMMC-track client allowed **only** with the dedicated CMMC playbook validated in a dry run.
+- **Hard entry gate: Stage 2 Exit DoD S1–S6 all pass** (`LAUNCH_DEFINITION_OF_DONE.md`) — the Stage 2→3 investment package (Operator Home, journey shell, Report v2) is built *during* Stage 2 and must be done before scaling here (gate semantics per PR #593 review disposition).
 - **Gate work required to enter (P2 backlog, ~9 days):** automated retention purge honoring legal holds; client email digests + scheduled re-scan (FG-LR-014) — **this is also the CG v0→v1 automation: the manual drift/review steps the CG clients have been receiving become system-delivered, and the `/changes` stub becomes the client-facing delta view**; metrics scraping + 3 SLOs (FG-LR-017); Redis-backed explainer cache if scaling instances (FG-LR-016); failed-scan-job triage (arrives with Operator Home, FG-LR-027).
 - **CG economics check at this stage:** with up to 10 clients, manual CG (~2–3 h/client/month) approaches the solo support ceiling — automation is not optional here, which is why FG-LR-014 sits in this gate and not later.
 - **Success metrics:** ≥8/10 renewals or expansions in conversation; ≤4h/week aggregate support; SLO adherence ≥99% monthly uptime on portal.

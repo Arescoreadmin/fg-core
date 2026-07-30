@@ -27,7 +27,7 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 
 | # | Task | Finding | Days | Exit criteria |
 |---|------|---------|------|---------------|
-| T6 | Full H1–H18 production dry run on the final stack (includes `migration_status` check against prod, then clear `FG_DB_MIGRATIONS_RISK_ACCEPTED`; client-access-code delivery rehearsal; **one manual CG v0 drift-cycle rehearsal** — re-scan + delta summary, DoD item L6). **Closes with a written defect list; fixes draw from the buffer, never ad-hoc mid-run patching** | FG-LR-001, FG-LR-020 (v0) | 3.0 | All 18 steps pass; dated log in docs/operators/; delta summary produced; defect list captured |
+| T6 | Full H1–H18 production dry run on the final stack (includes `migration_status` check against prod, then clear `FG_DB_MIGRATIONS_RISK_ACCEPTED`; rehearsal of the **real** portal-access handoff — named-user invite, not the vestigial access code (PR #593 review); **one manual CG v0 drift-cycle rehearsal** — re-scan + delta summary, DoD item L6). **Closes with a written defect list; fixes draw from the buffer, never ad-hoc mid-run patching** | FG-LR-001, FG-LR-020 (v0) | 3.0 | All 18 steps pass; dated log in docs/operators/; delta summary produced; defect list captured |
 | T7 | Report/PDF QA on dry-run artifact: section checklist (no placeholders, advisory language, manifest hash, data-collected appendix); fix defects | FG-LR-011 | 1.0 | Checklist signed off |
 | T8 | Incident/rollback runbook + one timed Railway rollback drill + client-comms template. **Drill ends only when the current deploy is restored and health + golden-path smoke pass; low-traffic window, never same-day as dry-run steps (S-4)** | FG-LR-005 | 1.0 | Rollback < 15 min, documented, prod restored |
 
@@ -41,7 +41,7 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 | T10 | Portal launch-mode gating: hide `/changes`, unavailable export options, trim nav to 6 (+conditional Assistant); NIST tooltip lines; friendly fallback for hidden URLs; **discoveries-first dashboard hero** (FG-LR-028 minimum); post-gating client-view click-through (S-3) | FG-LR-008 (+028 min) | 1.5 | Every visible portal item shows real data; dashboard leads with named discoveries |
 | T11 | Hide self-serve funnel links + Stripe checkout path | FG-LR-023 | 0.5 | No public path to checkout |
 | T12 | Alert triage doc + Sentry notification rule + test alert acknowledged | FG-LR-010 | 0.5 | Documented triage path, alert received on phone |
-| T13 | Manual retention purge runbook + tested script on dry-run engagement data (respect lifecycle locks/legal hold); calendar control | FG-LR-006 | 0.5 | Purge executed once on test data |
+| T13 | Manual deletion runbook covering **all three DPA triggers** — day-90 expiry, early request (5 business days, DPA §5), termination (10 business days, DPA §10) — + tested script on dry-run engagement data (respect lifecycle locks/legal hold); calendar control for day-90, on-request procedure for the other two | FG-LR-006 | 0.5 | Runbook covers all 3 triggers; purge executed once on test data |
 
 **Week 3 subtotal: 5.0**
 
@@ -49,7 +49,7 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 
 | # | Task | Finding | Days | Exit criteria |
 |---|------|---------|------|---------------|
-| T14 | Secret-rotation runbook (documenting T3's procedure) + docs truth pass: SYSTEM.md v1.3 security-relevant corrections (auth model, migration count, tenant-context mechanism, prod topology incl. admin_gateway decision one-paragraph), CLIENT_READINESS re-dated | FG-LR-012 (doc), FG-LR-009 (+019 min) | 1.5 | Rotation doc exists; doc claims match code spot-checks |
+| T14 | Secret-rotation runbook (documenting T3's procedure) + docs truth pass: SYSTEM.md v1.3 security-relevant corrections (auth model, migration count, tenant-context mechanism, prod topology incl. admin_gateway decision one-paragraph), CLIENT_READINESS re-dated, **`credential_delivery.md` rewritten for the named-user flow** (its PORTAL_PASSWORD instructions are rejected by production — PR #593 review) + access-code disposition decided (wire it or remove it from console display) | FG-LR-012 (doc), FG-LR-009 (+019 min) | 1.5 | Rotation doc exists; doc claims match code spot-checks; credential doc matches production auth |
 | — | **Buffer** for dry-run-discovered defects (July incident base-rate says expect 2–3) | — | 2.4 | Burn-down logged |
 
 **Week 4 subtotal: 3.9**
@@ -81,4 +81,4 @@ If the Week-2 dry run surfaces defects consuming more than the 2.4-day buffer, *
 
 ## The gate
 
-This plan is the *work*; **`LAUNCH_DEFINITION_OF_DONE.md` is the *gate*** — 14 binary Launch DoD outcomes (L1–L14) that must all be checked before the design partner is onboarded, and 6 Stage 2 DoD outcomes (S1–S6) before the first full-price cohort. The plan can flex task order and days; the gate does not flex. Plan complete + DoD item failing = the date moves.
+This plan is the *work*; **`LAUNCH_DEFINITION_OF_DONE.md` is the *gate*** — 14 binary Launch DoD outcomes (L1–L14) that must all be checked before the design partner is onboarded, and 6 Stage 2 Exit DoD outcomes (S1–S6) before scaling past Stage 2 into Stage 3. The plan can flex task order and days; the gate does not flex. Plan complete + DoD item failing = the date moves.
