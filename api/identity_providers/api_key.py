@@ -37,12 +37,22 @@ def _resolve_psp_fields(
 ) -> Tuple[Optional[str], Optional[str]]:
     """Return (service_principal_id, authority_tenant_id) for the canonical PSP.
 
-    Queries platform_service_principals for the single active PSP whose
-    credential_slot matches the PSP slot and whose authority_tenant_id is
-    the credential's owning tenant.
+    Binding by BOTH credential_slot AND authority_tenant_id is intentional:
+    the slot name alone is not sufficient to establish PSP identity.  A key
+    issued under a different authority tenant with the same slot string must
+    not resolve as the canonical platform service principal.
 
-    Fail-open: returns (None, None) on any error so that attribution gaps
-    never block an otherwise valid request.
+    The partial unique index uq_psp_authority_kind_active guarantees at most
+    one non-revoked PSP per authority+kind combination, so LIMIT 1 is
+    defensive (the DB cannot return duplicates).  lifecycle_state='active'
+    further narrows to excludes suspended/revoked PSPs, which should not
+    receive attribution.
+
+    Fail-open: returns (None, None) on ANY failure — DB unavailable, query
+    error, unexpected schema.  Attribution gaps must never invalidate an
+    otherwise correctly validated API key.  Callers relying on non-None
+    service_principal_id (e.g. require_psp_actor) will correctly deny such
+    requests via their own fail-closed path.
     """
     try:
         from api.db import get_engine as _get_engine
@@ -75,11 +85,28 @@ def _emit_psp_auth_event(
     authority_tenant_id: str,
     request_id: Optional[str],
 ) -> None:
-    """Emit authentication_success to platform_service_principal_events.
+    """Emit per-request authentication_success to platform_service_principal_events.
 
-    Best-effort: any failure is logged and swallowed.  This is the
-    API-key-middleware path counterpart to the explicit
-    authenticate_service_principal() lifecycle-check path.
+    Audit design intent: this is REQUEST authentication — one event per
+    incoming API request authenticated as the PSP.  It is distinct from
+    LIFECYCLE authentication (authenticate_service_principal(), which is called
+    explicitly when a route needs to verify PSP state and emits its own event).
+    Both paths use event_type='authentication_success'; request_id provides
+    per-request correlation.
+
+    Retention note: this table is append-only with no automated archival.
+    Event volume scales with PSP request rate.  Operators should define a
+    retention policy (e.g. pg_partman rolling partition or periodic archival)
+    before deploying workloads that make PSP-authenticated requests at high
+    frequency.  The ix_pspe_principal_occurred index covers the primary query
+    pattern (audit queries by principal + time window).
+
+    Session behaviour: uses engine.begin() (application singleton engine),
+    which auto-commits on exit and rolls back + closes on any exception.
+    No credential material (key prefix, token, secret) is ever included.
+
+    Best-effort: failures are logged and swallowed.  A telemetry problem must
+    not invalidate an otherwise valid authenticated request.
     """
     try:
         from api.db import get_engine as _get_engine
