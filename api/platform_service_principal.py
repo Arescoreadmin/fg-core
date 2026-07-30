@@ -378,7 +378,7 @@ def emit_service_principal_event(
     Cryptographic provenance (hash chaining, signatures) is deferred to PR #588.
 
     No credential material (secrets, hashes) is ever stored here.
-    actor/service/target-tenant attribution is extended in PR #587.
+    actor/service/target-tenant attribution extended in PR #588.
     """
     if authority_tenant_id and conn.dialect.name == "postgresql":
         conn.execute(

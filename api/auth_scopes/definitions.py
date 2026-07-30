@@ -17,6 +17,7 @@ class AuthResult:
         "scopes",
         "key_db_id",
         "credential_id",
+        "credential_slot",
     )
 
     def __init__(
@@ -28,6 +29,7 @@ class AuthResult:
         scopes: Optional[Set[str]] = None,
         key_db_id: Optional[int] = None,
         credential_id: Optional[str] = None,
+        credential_slot: Optional[str] = None,
     ):
         self.valid = valid
         self.reason = reason
@@ -36,6 +38,7 @@ class AuthResult:
         self.scopes = scopes or set()
         self.key_db_id = key_db_id
         self.credential_id = credential_id
+        self.credential_slot = credential_slot
 
     @property
     def is_missing_key(self) -> bool:

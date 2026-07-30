@@ -342,3 +342,37 @@ def require_permission(*required_perms: str):
         return actor
 
     return _dep
+
+
+def require_psp_actor():
+    """FastAPI dependency factory: asserts the request is authenticated as the PSP.
+
+    Checks that actor.service_principal_id is non-None, which is only true when
+    the canonical platform service principal's API key was used.  Human OIDC
+    tokens, global keys, and dev-bypass actors all have service_principal_id=None.
+
+    Raises 403 PSP_ACTOR_REQUIRED for any non-PSP caller.  Returns the ActorContext
+    so route handlers can use service_principal_id / authority_tenant_id directly.
+
+    Usage:
+        actor: ActorContext = Depends(require_psp_actor())
+    """
+
+    def _dep(
+        actor: ActorContext = Depends(get_actor_context),
+    ) -> ActorContext:
+        if not actor.service_principal_id:
+            log.warning(
+                "psp_actor_required.denied",
+                extra={
+                    "actor_subject": actor.subject,
+                    "actor_auth_source": actor.auth_source,
+                },
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "PSP_ACTOR_REQUIRED"},
+            )
+        return actor
+
+    return _dep

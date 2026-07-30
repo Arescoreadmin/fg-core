@@ -1,3 +1,36 @@
+## 2026-07-30 — feature/pr-588-actor-service-target-attribution: PR #588 Actor/Service/Target Attribution
+
+**Critical files changed:** `api/auth_dispatch.py`, `api/auth_scopes/definitions.py`, `api/auth_scopes/resolution.py`
+
+**Change scope:** Actor attribution for the Platform Service Principal (PSP) API key path. These three files form the auth data flow from key validation result through to the `ActorContext` returned to route handlers.
+
+**Security invariants enforced by this change:**
+
+1. **`AuthResult.credential_slot` (`api/auth_scopes/definitions.py`, `resolution.py`):** Adds `credential_slot: Optional[str]` to `AuthResult.__slots__` and propagates the value from the credential authority lookup result. This is a read-only field passed through the existing validation pipeline — it does not bypass, weaken, or modify any existing auth check. Slot value is set only after the credential is fully validated.
+
+2. **`require_psp_actor()` (`api/auth_dispatch.py`):** New FastAPI dependency factory. Fails **closed**: raises `403 PSP_ACTOR_REQUIRED` when `actor.service_principal_id is None`. `service_principal_id` is non-None only when the canonical PSP's credential was used AND the PSP row is `active` in the DB. Human OIDC tokens, global keys, dev-bypass actors, and ordinary API keys all have `service_principal_id=None` and are therefore denied. This dependency gates new routes that must only be called by the platform automation workload — it does not replace existing guards, it adds a new stricter one.
+
+3. **PSP attribution does not grant any permissions:** `_resolve_psp_fields()` and `_emit_psp_auth_event()` (in `api/identity_providers/api_key.py`, not a SOC-critical prefix) run only after the key is fully validated and only populate attribution fields on `ActorContext`. They do not modify `permissions` or `roles`. Fail-open on DB error means attribution gaps produce `service_principal_id=None` — `require_psp_actor()` then denies those requests fail-closed.
+
+4. **RLS binding (`api/identity_providers/api_key.py`):** `set_config('app.tenant_id', :tid, true)` is executed on PostgreSQL connections before the PSP SELECT, matching the pattern used by all existing PSP write paths and ensuring the RLS policy on `platform_service_principals` is satisfied for non-BYPASSRLS runtime roles.
+
+5. **No credential material in attribution path:** `credential_slot` is a non-secret label (`"platform-service-principal:v1"`). No key prefix, token, or secret hash is stored on `AuthResult`, passed to `ActorContext`, or included in emitted audit events. Confirmed by PSP-10 test.
+
+6. **Cross-tenant PSP impersonation impossible:** `_resolve_psp_fields` binds both `credential_slot` AND `authority_tenant_id`. A key issued under a different authority tenant with the same slot name cannot resolve as the canonical PSP. Confirmed by PSP-11 test.
+
+**Non-changes (audited, confirmed correct):**
+
+- `get_actor_context()` resolution order is unchanged. JWT path still takes priority; API key path falls through only when no Bearer token is present.
+- `require_permission()` is unchanged. PSP-authenticated requests still go through the normal permission check when using `require_permission()`; `require_psp_actor()` is an additional gate, not a replacement.
+- No OPA policy files, no crypto key handling, no CI workflow files, no migrations are modified.
+- `AuthGateMiddleware` and `require_scopes()` are unchanged.
+
+**Tests:** 12 new tests (PSP-01..PSP-12) covering the complete attribution data flow, denial paths, suspended/wrong-tenant non-resolution, DB failure graceful degradation, per-request event emission, credential-material exclusion, and PostgreSQL tenant binding.
+
+**SOC review outcome:** approved. The change adds a new stricter denial path (`require_psp_actor()`), propagates a non-secret label through the auth pipeline for attribution purposes, and does not weaken any existing guard. All existing auth invariants remain in force. No new permissions are granted.
+
+---
+
 ## 2026-07-29 — feat/platform-service-principal: PR #586 Platform Service Principal
 
 **Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
