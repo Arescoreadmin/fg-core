@@ -62,4 +62,67 @@ def test_startup_passes_minisign_key_present(monkeypatch):
 
     result = next((r for r in report.results if r.name == "minisign_secret_key"), None)
     assert result is not None
-    assert result.passed
+
+
+def test_startup_warns_missing_observability_config_in_production_never_raises(
+    monkeypatch,
+):
+    """SENTRY_DSN / FG_OTEL_ENDPOINT are recommended, not required: missing
+    either in prod must surface as a warning and must never fail startup."""
+    monkeypatch.delenv("SENTRY_DSN", raising=False)
+    monkeypatch.delenv("FG_OTEL_ENDPOINT", raising=False)
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    v.env = "prod"
+    v.is_production = True
+    report = v.validate()
+
+    sentry_result = next(
+        (r for r in report.results if r.name == "sentry_dsn_missing"), None
+    )
+    otel_result = next(
+        (r for r in report.results if r.name == "otel_endpoint_missing"), None
+    )
+    assert sentry_result is not None
+    assert not sentry_result.passed
+    assert sentry_result.severity == "warning"
+    assert otel_result is not None
+    assert not otel_result.passed
+    assert otel_result.severity == "warning"
+
+
+def test_startup_observability_check_skipped_outside_production(monkeypatch):
+    monkeypatch.delenv("SENTRY_DSN", raising=False)
+    monkeypatch.delenv("FG_OTEL_ENDPOINT", raising=False)
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    v.env = "dev"
+    v.is_production = False
+    report = v.validate()
+
+    assert not any(
+        r.name in {"sentry_dsn_missing", "otel_endpoint_missing"}
+        for r in report.results
+    )
+
+
+def test_startup_passes_observability_config_present(monkeypatch):
+    monkeypatch.setenv("SENTRY_DSN", "https://example@o0.ingest.sentry.io/0")
+    monkeypatch.setenv("FG_OTEL_ENDPOINT", "http://otel-collector:4318/v1/traces")
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    v.env = "prod"
+    v.is_production = True
+    report = v.validate()
+
+    sentry_result = next(
+        (r for r in report.results if r.name == "sentry_dsn_configured"), None
+    )
+    otel_result = next(
+        (r for r in report.results if r.name == "otel_endpoint_configured"), None
+    )
+    assert sentry_result is not None and sentry_result.passed
+    assert otel_result is not None and otel_result.passed
