@@ -1,6 +1,6 @@
 # FrostGate Launch Readiness — Executive Decision
 
-**Audit date:** 2026-07-30
+**Audit date:** 2026-07-30 · **Revision 1.1** (same day — prescriptive deepening, see addendum at end)
 **Scope:** Entire `fg-core` repository at `cd79f1f` (main lineage), production topology per `CLIENT_READINESS.md`
 **Method:** Direct repository inspection with code-level evidence (see `EVIDENCE_INDEX.md`). Documentation claims were verified against implementation, not trusted.
 **Constraint applied:** 20 effective engineering days pre-launch.
@@ -10,7 +10,7 @@
 ## VERDICT: READY WITH CONDITIONS
 
 **CONFIDENCE: MEDIUM**
-**PRE-LAUNCH EFFORT: 18.5 engineering days** (plan in `THIRTY_DAY_LAUNCH_PLAN.md`; 16.1 committed + 2.4 buffer)
+**PRE-LAUNCH EFFORT: 19.0 engineering days** (plan in `THIRTY_DAY_LAUNCH_PLAN.md`; 16.6 committed + 2.4 buffer)
 **RECOMMENDED FIRST CLIENT DATE: 2026-08-27** (30 days out), Stage 1 design partner; first *full-price* clients (Stage 2) ~2 weeks after a clean design-partner engagement.
 
 ### TOP FIVE NON-NEGOTIABLE ACTIONS
@@ -26,13 +26,13 @@
 ## Answers to the thirteen decision questions
 
 **1. Is FrostGate ready to accept a paying client in 30 days?**
-Yes, conditionally. The product surface for an assessor-led field assessment is genuinely built and deep: 13 scan types, NIST AI RMF questionnaire, findings with plain-language explanations, remediation closed loop, signed reports with PDF export, evidence lifecycle locks, append-only audit ledgers, RLS-enforced tenant isolation — all verified in code, not just docs. What is missing is *proof the assembled system works end-to-end on today's production stack*, plus baseline operational safety (backups, incident response, retention). Those fit in 18.5 days.
+Yes, conditionally. The product surface for an assessor-led field assessment is genuinely built and deep: 13 scan types, NIST AI RMF questionnaire, findings with plain-language explanations, remediation closed loop, signed reports with PDF export, evidence lifecycle locks, append-only audit ledgers, RLS-enforced tenant isolation — all verified in code, not just docs. What is missing is *proof the assembled system works end-to-end on today's production stack*, plus baseline operational safety (backups, incident response, retention). Those fit in 19 days.
 
 **2. What are the true launch blockers?**
 Five (full detail in `LAUNCH_BLOCKERS.md`): unverified current-stack E2E flow (FG-LR-001); unproven portal named-user login in prod (FG-LR-002); no tested DB backup/restore (FG-LR-003); unverified hobby-tier infrastructure headroom with in-process background work (FG-LR-004); no incident/rollback runbook (FG-LR-005). None require building new product. All are verification and operationalization.
 
 **3. What must be completed before client one?**
-The five blockers, plus: manual retention-purge runbook to honor the DPA's 90-day commitment (FG-LR-006), launch-mode UI gating (FG-LR-007/008), report/PDF QA on real dry-run data (FG-LR-011), alert triage doc (FG-LR-010), Anthropic auto-recharge (FG-LR-013). Total: 16.1 days.
+The five blockers, plus: manual retention-purge runbook to honor the DPA's 90-day commitment (FG-LR-006), launch-mode UI gating (FG-LR-007/008), report/PDF QA on real dry-run data (FG-LR-011), alert triage doc (FG-LR-010), Anthropic auto-recharge (FG-LR-013), and the discoveries-first portal dashboard reorder (FG-LR-028 minimum). Total: 16.6 days.
 
 **4. What can safely wait until after client three?**
 Docs reconciliation beyond the security-relevant corrections (FG-LR-009 remainder), secret rotation full inventory (FG-LR-012 beyond top-5), automated retention purge, admin_gateway topology decision (FG-LR-019), removal of legacy `/remediation` routes (FG-LR-025).
@@ -56,7 +56,7 @@ A Central Florida SMB/mid-market org (25–500 employees) on Microsoft 365, in a
 Cross-tenant data exposure of any kind; evidence/audit-chain integrity failure (verification bundle tamper flag on untampered data); loss of client data with no restore path; portal lockout affecting a paying client >24h; AI-generated report content presenting fabricated compliance claims. Full stop/rollback matrix in `STAGGERED_ROLLOUT_PLAN.md`.
 
 **11. What is the total pre-launch engineering effort?**
-18.5 days against a 20-day budget: 8.5 (P0 blockers) + 7.6 (P1 pre-client-one) + 2.4 buffer for dry-run-discovered defects. Arithmetic in `THIRTY_DAY_LAUNCH_PLAN.md`.
+19.0 days against a 20-day budget: 8.5 (P0 blockers) + 8.1 (P1 pre-client-one) + 2.4 buffer for dry-run-discovered defects. Arithmetic in `THIRTY_DAY_LAUNCH_PLAN.md`.
 
 **12. What are the 10 highest-ROI actions?**
 See `TOP_ROI_ACTIONS.md`. Top three: production dry run (10), named-user portal proof (10), Anthropic auto-recharge (9 — trivial cost, prevents an in-meeting failure).
@@ -103,7 +103,7 @@ The moat thesis — deterministic evidence chain + assessor-led field evidence +
 
 VERDICT: **READY WITH CONDITIONS**
 CONFIDENCE: **MEDIUM**
-PRE-LAUNCH EFFORT: **18.5 engineering days**
+PRE-LAUNCH EFFORT: **19.0 engineering days**
 RECOMMENDED FIRST CLIENT DATE: **2026-08-27 (Stage 1 design partner)**
 
 TOP FIVE NON-NEGOTIABLE ACTIONS:
@@ -112,3 +112,18 @@ TOP FIVE NON-NEGOTIABLE ACTIONS:
 3. Verified Postgres backup + one tested restore + runbook — FG-LR-003
 4. Launch-mode gating of Console and Portal surfaces — FG-LR-007/008
 5. Incident/rollback runbook drilled once + alert triage ownership — FG-LR-005/010
+
+---
+
+## Addendum — Revision 1.1 (founder review response)
+
+Founder review of revision 1.0 identified six areas where the audit critiqued without prescribing. This revision adds the prescriptions in place; **verdict unchanged, budget 18.5 → 19.0 days** (one 0.5-day launch item absorbed: the discoveries-first portal dashboard reorder).
+
+1. **Console target design** — `CONSOLE_UX_AUDIT.md` §5 now specifies the destination: a 7-zone **Operator Home** work-queue (today's engagements · waiting on client · evidence needing review · reports pending approval · high-risk findings · governance alerts · system health), each zone mapped to an existing endpoint, plus a 6-destination target screen map. New finding FG-LR-027 (3d, Stage 2→3).
+2. **Portal continuous journey** — `PORTAL_UX_AUDIT.md` §5 specifies the 9-step carried journey (Login → Welcome → … → Schedule follow-up) with a BFF-computed `journeyState` stepper over existing pages. New finding FG-LR-028 (2.5d, Stage 2→3; 0.5d minimum in launch).
+3. **Customer psychology** — `PORTAL_UX_AUDIT.md` §5.2 maps the confidence curve, including the minute-five "worth paying for" moment; its cheapest fix (lead the dashboard with concrete discoveries, not charts) moved *into* the launch plan.
+4. **Executive report specification** — `CUSTOMER_COMMERCIAL_READINESS.md` now specifies the 7-chapter enterprise spine (Exec Summary → Business Risk → Financial Impact → Top-10 Actions → Roadmap → Technical Appendix → Evidence) mapped against the current PDF. New finding FG-LR-026 (Report v2, 3d, Stage 2).
+5. **Operating-model math** — `CUSTOMER_COMMERCIAL_READINESS.md` now quantifies: ~13.5 operator-hours/engagement, 1–2 engagements/week capacity (independently confirming the rollout caps), $3.5k–5.5k pricing floor, ~2-week delivery cycle, support-load ceiling at 10 clients, and calendar-anchored renewal/upsell triggers (delivery, day-30, day-90 retention decision, quarterly).
+6. **Continuous governance repositioned** — revision 1.0 wrongly filed CG under "later." FG-LR-020 is re-cut: the *scheduler* stays deferred, but **CG v0 launches at Stage 1 with zero engineering days** — baseline (delivered report + verification bundle) → monthly manual drift re-scan + delta email → quarterly review call + report regeneration → renewal at the day-90 retention touchpoint. Priced $750–1,500/mo against ~2–3 operator-hours/mo, pitched at report delivery. It starts the longitudinal drift history — the non-backfillable moat asset — from client one. Stage-3 automation (FG-LR-014 + the `/changes` delta view) replaces the manual steps once real CG clients define what to automate first.
+
+The Stage 2→3 investment package (Operator Home 3d + journey shell 2.5d + Report v2 3d ≈ 8.5d) is sequenced in `STAGGERED_ROLLOUT_PLAN.md` and deliberately kept out of the pre-launch window.

@@ -1,7 +1,7 @@
 # 30-Day Launch Plan (20 engineering-day budget)
 
 **Window:** 2026-07-31 → 2026-08-27 (recommended first Stage-1 client date).
-**Budget:** 20 effective engineering days. **Committed: 16.1 · Buffer: 2.4 · Total: 18.5 ≤ 20.** Founder-only commercial tasks are listed separately and cost no engineering days.
+**Budget:** 20 effective engineering days. **Committed: 16.6 · Buffer: 2.4 · Total: 19.0 ≤ 20.** Founder-only commercial tasks are listed separately and cost no engineering days.
 
 Rule for the window: **no new product surface, no refactors, no trust-layer PRs.** Verification, gating, and operationalization only.
 
@@ -33,12 +33,12 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 | # | Task | Finding | Days | Exit criteria |
 |---|------|---------|------|---------------|
 | 8 | Console launch-mode nav gating (≤9 items; hide legacy decision-engine wing + 3 of 4 dashboards); smoke click-through | FG-LR-007 | 2.0 | Operator completes engagement using visible nav only |
-| 9 | Portal launch-mode gating: hide `/changes`, unavailable export options, trim nav to 6 (+conditional Assistant); NIST tooltip lines on coverage; friendly fallback for hidden URLs | FG-LR-008 | 1.0 | Every visible portal item shows real data |
+| 9 | Portal launch-mode gating: hide `/changes`, unavailable export options, trim nav to 6 (+conditional Assistant); NIST tooltip lines on coverage; friendly fallback for hidden URLs; **discoveries-first dashboard hero** (lead with 2–3 concrete plain-language findings before charts — the minute-five confidence fix, FG-LR-028 minimum) | FG-LR-008 (+028 min) | 1.5 | Every visible portal item shows real data; dashboard leads with named discoveries |
 | 10 | Hide self-serve funnel links + Stripe checkout path | FG-LR-023 | 0.5 | No public path to checkout |
 | 11 | Alert triage doc + Sentry notification rule + test alert acknowledged | FG-LR-010 | 0.5 | Documented triage path, alert received on phone |
 | 12 | Manual retention purge runbook + tested script on dry-run engagement (respect lifecycle locks/legal hold); calendar control | FG-LR-006 | 0.5 | Purge executed once on test data |
 
-**Week 3 subtotal: 4.5**
+**Week 3 subtotal: 5.0**
 
 ## Week 4 — Truth + hardening margin (days 16–20)
 
@@ -55,11 +55,15 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 | Bucket | Days |
 |--------|------|
 | P0 blockers (tasks 1,3,4,5,7) | 8.5 |
-| P1 pre-client-one (tasks 2,6,8,9,10,11,12,13,14) | 7.6 |
+| P1 pre-client-one (tasks 2,6,8,9,10,11,12,13,14) | 8.1 |
 | Buffer | 2.4 |
-| **Total** | **18.5 / 20** |
+| **Total** | **19.0 / 20** |
 
-Check: week subtotals 4.6 + 5.0 + 4.5 + 4.4 = 18.5 ✓; buckets 8.5 + 7.6 + 2.4 = 18.5 ✓.
+Check: week subtotals 4.6 + 5.0 + 5.0 + 4.4 = 19.0 ✓; buckets 8.5 + 8.1 + 2.4 = 19.0 ✓.
+
+## Stage 2→3 investment package (post-launch, NOT in this budget)
+
+The prescriptive designs added in revision 1.1 (Operator Home, portal journey shell, Report v2) are deliberately **excluded** from the pre-launch window — they are the first post-launch build package (~8.5 days: FG-LR-027 3.0 + FG-LR-028 remainder 2.5 + FG-LR-026 3.0), sequenced in `STAGGERED_ROLLOUT_PLAN.md` Stage 2→3. CG v0 (FG-LR-020) costs 0 engineering days and runs from Stage 1 as a founder motion.
 
 Deliberately **not** in the plan (competed and lost): automated retention job (manual runbook suffices — stage 3), email digests/re-scan automation (FG-LR-014), Prometheus dashboards (FG-LR-017), field_assessment.py split (FG-LR-015), repo hygiene (FG-LR-018), open trust-layer/billing PRs (FG-LR-021/022/024), legacy route removal (FG-LR-025), global search, accessibility pass. Rationale per item in `DEFER_REMOVE_MERGE.md`.
 

@@ -46,7 +46,7 @@ Auth/OIDC plumbing, dashboards, PDF generation, Stripe billing, uptime monitorin
 
 **More (post-launch order):**
 1. Client-visible before/after delta (turns the drift asset into perceived value — feeds retention).
-2. Continuous-governance package on existing manual triggers (starts the longitudinal clock — the irreversible asset).
+2. CG v0 is already a launch motion, not post-launch (revision 1.1 — FG-LR-020): the manual baseline/drift/quarterly-review subscription starts the longitudinal clock — the irreversible asset — from client one. The post-launch investment here is its automation (FG-LR-014, the /changes delta view).
 3. Report/explanation polish (the compounding *trust* channel with buyers).
 4. Second-operator enablement (console gating → training → the operational advantage becomes transferable, i.e., a business not a founder).
 

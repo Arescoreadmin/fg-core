@@ -1,6 +1,6 @@
 # Staggered Rollout Plan
 
-Gates are evidence-based: no stage advances on calendar time alone. All stages assume the 18.5-day pre-launch plan is complete.
+Gates are evidence-based: no stage advances on calendar time alone. All stages assume the 19-day pre-launch plan is complete.
 
 ---
 
@@ -27,16 +27,18 @@ Gates are evidence-based: no stage advances on calendar time alone. All stages a
 - **Failure thresholds:** portal lockout >24h; report defect the client catches before we do; any data-loss event.
 - **Stop conditions (immediate, all stages):** cross-tenant exposure of any kind; evidence/audit-chain integrity failure on untampered data; unrecoverable data loss; AI report content asserting fabricated compliance claims. On stop: freeze onboarding, incident runbook, client comms within 24h, root-cause before resuming.
 - **Rollback conditions:** repeated scan failures in-meeting → fall back to pre-collected evidence + manual walkthrough (runbook already splits phases).
-- **Evidence to proceed:** signed report delivery + the success metrics above + retro doc listing every manual intervention.
+- **Commercial motion:** **CG v0 offered at report delivery** (baseline → monthly manual drift re-scan + delta email → quarterly review → renewal; 0 engineering days — see `CUSTOMER_COMMERCIAL_READINESS.md` CG section). The design partner is the first CG v0 candidate; extend the H18 timer to full-engagement time tracking to replace the operating-model hour estimates with actuals.
+- **Evidence to proceed:** signed report delivery + the success metrics above + retro doc listing every manual intervention + actual hours-per-engagement recorded.
 - **Max concurrent:** 1. **Review cadence:** weekly + engagement-day standup with self.
 
 ## Stage 2 — First 3 paying clients (+~6 weeks after clean Stage 1)
 
 - **Profile:** same as Stage 1 but full price; up to 3 concurrent; may include one referral outside the friendly circle.
-- **Newly enabled:** 30-day follow-up re-scan (manual trigger, becomes standard); testimonial/reference ask.
-- **Still disabled:** SLAs; continuous-governance contract; self-serve.
+- **Newly enabled:** 30-day follow-up re-scan (manual trigger, becomes standard); testimonial/reference ask; **CG v0 contracts** (manual delivery is now proven from Stage 1).
+- **Still disabled:** SLAs; automated continuous governance; self-serve.
 - **Pre-stage gate work (from backlog):** admin_gateway topology decision (FG-LR-019, 0.5d); close/land open WIP PRs to stop drift (FG-LR-024).
-- **Success metrics:** 3 engagements delivered with <1 buffer-day of unplanned engineering each; ≥2 clients active in portal at day 30; ≥1 expansion conversation started; support load ≤2h/client/week after delivery week.
+- **During-stage build (the Stage 2→3 investment package, ~8.5d as delivery allows):** Operator Home v1 (FG-LR-027, 3d) · portal journey shell + stepper (FG-LR-028, 2.5d) · Report v2 business-risk/financial-impact/top-10 chapters (FG-LR-026, 3d). Sequenced here because each is amplified by real client feedback and none is safe to build during the launch window.
+- **Success metrics:** 3 engagements delivered with <1 buffer-day of unplanned engineering each; ≥2 clients active in portal at day 30; **≥1 CG v0 subscription signed**; ≥1 expansion conversation started; support load ≤2h/client/week after delivery week.
 - **Failure thresholds:** any Stage-1 stop condition; >3 engineering days firefighting per engagement (signals ops debt — pause intake, fix).
 - **Evidence to proceed:** all 3 delivered + day-90 retention purge executed on schedule for the earliest engagement (proves FG-LR-006 runbook) + updated dry-run log after any stack change.
 - **Max concurrent:** 3. **Review cadence:** bi-weekly.
@@ -44,7 +46,8 @@ Gates are evidence-based: no stage advances on calendar time alone. All stages a
 ## Stage 3 — Up to 10 clients (~Q4 2026)
 
 - **Profile:** widen to secondary segments (credit unions, insurance, mid-market tech); still M365-centric; first CMMC-track client allowed **only** with the dedicated CMMC playbook validated in a dry run.
-- **Gate work required to enter (P2 backlog, ~9 days):** automated retention purge honoring legal holds; client email digests + scheduled re-scan (FG-LR-014); metrics scraping + 3 SLOs (FG-LR-017); Redis-backed explainer cache if scaling instances (FG-LR-016); failed-scan-job console surface.
+- **Gate work required to enter (P2 backlog, ~9 days):** automated retention purge honoring legal holds; client email digests + scheduled re-scan (FG-LR-014) — **this is also the CG v0→v1 automation: the manual drift/review steps the CG clients have been receiving become system-delivered, and the `/changes` stub becomes the client-facing delta view**; metrics scraping + 3 SLOs (FG-LR-017); Redis-backed explainer cache if scaling instances (FG-LR-016); failed-scan-job triage (arrives with Operator Home, FG-LR-027).
+- **CG economics check at this stage:** with up to 10 clients, manual CG (~2–3 h/client/month) approaches the solo support ceiling — automation is not optional here, which is why FG-LR-014 sits in this gate and not later.
 - **Success metrics:** ≥8/10 renewals or expansions in conversation; ≤4h/week aggregate support; SLO adherence ≥99% monthly uptime on portal.
 - **Failure thresholds:** support load growth outpacing client growth; second occurrence of any incident class already root-caused once.
 - **Evidence to proceed:** 3 consecutive months of SLO data; one full second-operator engagement delivery (proves transferability); continuous-governance package sold to ≥1 client.

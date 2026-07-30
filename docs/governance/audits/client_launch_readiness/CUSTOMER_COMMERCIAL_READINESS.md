@@ -44,10 +44,80 @@
 
 Every deliverable above should be framed in sales materials against the four competitor classes: the *disclosure appendix + manifest hash + verification bundle* displaces assessment-firm PDFs (no verifiable provenance); the *remediation closed loop with evidence capture* displaces GRC workflow tools (tickets without evidence); the *assessor-led scan suite across 13 connectors* is categorically outside Vanta/Drata questionnaire automation; and the AI-governance-specific findings (AI tool discovery, OAuth risk, vendor governance) are outside Credo/Holistic's model-governance surface. **[MOAT-WIDENING]** assets already shipped; the launch materials just have to say so.
 
+## Operating model math (the numbers that decide whether this scales)
+
+Hour estimates are derived from the runbooks (`first_client_prep.md` budgets 75–90 min in-meeting; `onboarding_runbook.md` splits pre-/in-meeting) plus reasonable allowances — classification: **strong inference / assumption**, to be replaced with actuals from the Stage-1 engagement retro. Timing yourself is already an H-step (H18); extend it to the whole engagement.
+
+### Hours per engagement (solo operator)
+
+| Phase | Est. hours |
+|-------|-----------|
+| Pre-sale call, proposal, authorization letter, scheduling | 2.0 |
+| Azure AD app setup with client IT (or verify) | 1.0 |
+| Pre-meeting no-auth scans + review | 1.5 |
+| In-meeting: device-code scans + interviews | 1.5 |
+| Questionnaire completion + evidence curation | 3.0 |
+| Findings curation, report generation, QA, PDF review | 2.5 |
+| Delivery meeting + portal walkthrough + access-code handoff | 1.0 |
+| 30-day follow-up (review + call) | 1.0 |
+| **Total per engagement** | **~13.5 h** |
+
+### Capacity, pricing, and timeline
+
+- **Onboarding capacity:** a founder also doing engineering and sales can sustain **1–2 engagements/week** (~13.5 h each + context switching); burst 3. This independently confirms the rollout caps (Stage 2 = 3 concurrent, Stage 3 = 10 total) — they are operator-capacity numbers, not just risk numbers.
+- **Delivery timeline per client:** ~2 weeks wall-clock (week 1: setup + scans + meeting; week 2: report + QA + delivery), then a 30/60/90-day remediation tail at ≤1 h/month.
+- **Pricing floor (math, not advice):** at 13.5 operator-hours and a specialist-advisory effective rate of $250–400/h, the assessor-led engagement must price at **$3.5k–$5.5k minimum** to be a business. The $299–999 "Snapshot" tier (SYSTEM.md §12) is *self-serve* pricing and must not anchor the assessor-led offer — the current proposal template has no price card at all, which is how mispricing happens. The deliverable stack (13 scans, signed report, verified evidence, remediation portal, 30-day follow-up) supports mid-market pricing at that level against a Big-4-lite alternative costing 5–10×.
+- **Support load:** delivery week ~2 h/client; steady-state ≤1 h/client/month (portal self-serve absorbs the rest). At 10 clients: ~10–15 h/month of support+follow-up — the ceiling of solo operation, which is exactly where Stage 3's automation gate (digests, re-scans) and second-operator requirement sit.
+- **Renewal/upsell triggers (calendar-anchored, all already in the system):**
+  - **Report delivery** → the CG offer (peak-trust moment; see below).
+  - **Day 30** → follow-up letter #5 + remediation verification re-scan.
+  - **Day 90** → the DPA retention boundary forces a contact: *purge or continue?* — turn the compliance obligation (FG-LR-006) into the renewal conversation.
+  - **Quarterly** → CG review call (below).
+
+## Executive report — target specification (not just "PDF generation")
+
+The current PDF (PR 38: cover → AI exec summary → confidence → findings → remediation plan → framework coverage → evidence appendix + disclosure) is a strong *assessor's* report. An *enterprise buyer's* report has a different spine — it must let a CISO hand it upward without translation. Target chapter architecture, mapped against what exists:
+
+| # | Target chapter | Exists today? | Gap and action |
+|---|----------------|---------------|----------------|
+| 1 | Executive summary (1 page, board language) | ✅ AI-generated, advisory-labeled (PR 27) | QA for tone in FG-LR-011; keep |
+| 2 | **Business risk** — what these findings mean for *this* org's operations, clients, regulators | ⚠️ partial — severity/posture exists, but framed technically | Prompt + template work: industry-specific risk narrative ("for a medical group, finding X means…") — the playbook sector data already exists to condition it |
+| 3 | **Financial impact** — exposure ranges per finding class | ❌ missing | v2: cited-benchmark ranges (e.g., published breach-cost data) with an explicit methodology note. **Ranges + citations only — advisory-labeled; fabricated precision here would violate the legally-defensible standard (FOUNDER_DIRECTIVE §4), so this ships only with a reviewed methodology** |
+| 4 | **Top 10 actions** — one page, ranked, owner + effort | ⚠️ exists as data (immediate actions, quick-wins matrix in portal) but not distilled in the PDF | Lift into a dedicated PDF page — mostly serialization work |
+| 5 | Roadmap (30/60/90) | ✅ (PR 31) | keep |
+| 6 | Technical appendix (findings detail) | ✅ | keep |
+| 7 | Evidence + provenance (manifest hash, data-collected disclosure, verification bundle reference) | ✅ — best-in-segment | keep; this chapter *is* the moat made visible |
+
+**Action: FG-LR-026, "Report v2" — ~3 days, Stage 2→3 package.** Chapters 2–4 are content/serialization work on existing data, not new pipelines. For launch, the current report passes with FG-LR-011 QA; the v2 spine is what converts reports from deliverables into sales assets for the *next* buyer up the chain.
+
+## Continuous Governance — the recurring-revenue engine (CG v0 costs zero engineering days)
+
+Deferring the CG *scheduler* is right; deferring the CG *offer* would be wrong. The one-time assessment is the customer-acquisition event; CG is the business. The launch version needs no new engineering — every step below runs on shipped features, manually:
+
+```
+Assessment → Baseline → Monthly drift check → Quarterly review → AI governance updates → Risk trend → Renewal
+```
+
+| CG v0 step | Cadence | How it runs today (0 eng days) |
+|-----------|---------|--------------------------------|
+| Baseline | at delivery | The delivered report + verification bundle *is* the baseline (immutable, signed — migration 0086) |
+| Drift check | monthly | Operator re-runs the scan suite on the same engagement (supported today); reviews new/changed findings; sends a templated delta email (letters framework) |
+| Quarterly review | quarterly | 30-min call + regenerated report version (report versioning exists); refreshed coverage matrix |
+| AI governance updates | continuous | AI tool discovery / OAuth risk / vendor governance re-scans surface new AI adoption — the exact recurring anxiety this segment buys relief from |
+| Risk trend | quarterly | Risk-history snapshots + Recharts trend (PR 37) — already built for workforce; extend framing to engagement posture in v1 |
+| Renewal | month 12 | Anchored by the day-90 retention decision and four quarterly touchpoints — the client has been *receiving* the subscription all year |
+
+**Pricing shape:** $750–1,500/month against ~2–3 operator-hours/month keeps CG margin-positive from client one; it also means a single CG client is worth more per year than the assessment that acquired them.
+**The pitch moment:** at report delivery — "this report is accurate today; here's how it stays accurate" — with the drift check as the demo (the platform can literally show what changed since the scans two weeks earlier).
+**Moat note [MOAT-WIDENING]:** CG v0 is what starts the longitudinal drift history — the irreversible, non-backfillable asset (`MOAT_ASSESSMENT.md`). Every month a client is on CG v0, the switching cost compounds, even while the automation is still manual behind the curtain.
+**Automation path:** Stage 3 replaces the manual steps with FG-LR-014 (digests, scheduled re-scans) and turns the `/changes` stub into the client-facing delta view — the CG v0 client base defines exactly what to automate first.
+
 ## Pre-launch commercial checklist (founder, ~0 engineering days)
 
-1. Price card for the FA engagement in proposal template.
-2. Response-time expectation sentence in letter #1.
-3. DPA cross-check after FG-LR-005/006 land (breach + retention now backed by process).
-4. Anthropic auto-recharge (FG-LR-013).
-5. Confirm Stripe invoice (not checkout) flow for engagement billing.
+1. Price card for the FA engagement in proposal template — **anchored at $3.5k–$5.5k, not Snapshot pricing** (math above).
+2. CG v0 one-pager (offer, cadence, price) — pitched at every report delivery from client one.
+3. Response-time expectation sentence in letter #1.
+4. DPA cross-check after FG-LR-005/006 land (breach + retention now backed by process); frame the day-90 retention contact as the renewal touchpoint.
+5. Anthropic auto-recharge (FG-LR-013).
+6. Confirm Stripe invoice (not checkout) flow for engagement + CG subscription billing.
+7. Extend the H18 timer to full-engagement time tracking — replace the hour estimates above with actuals after Stage 1.

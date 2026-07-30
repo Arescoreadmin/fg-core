@@ -4,7 +4,7 @@ Complexity is a cost. Everything below either failed to justify pre-launch time 
 
 ---
 
-## HIDE for launch (cheap, in the 18.5-day plan)
+## HIDE for launch (cheap, in the 19-day plan)
 
 | Item | Action | Why | Effort |
 |------|--------|-----|--------|

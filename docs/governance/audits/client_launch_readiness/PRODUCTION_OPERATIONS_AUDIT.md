@@ -1,7 +1,7 @@
 # Production & Operations Audit
 
 **Question:** can a one-person team operate this reliably for paying clients?
-**Answer:** yes for 1–3 concurrent white-glove clients **after** the P0 gaps close; no for 10 without the P2 automation. **Operational readiness: 4/10 today; ~6.5/10 after the 18.5-day plan.**
+**Answer:** yes for 1–3 concurrent white-glove clients **after** the P0 gaps close; no for 10 without the P2 automation. **Operational readiness: 4/10 today; ~6.5/10 after the 19-day plan.**
 
 Classification per item: **IV** implemented+verified · **IU** implemented, unverified · **DO** documented only · **M** missing.
 
@@ -61,7 +61,7 @@ Classification per item: **IV** implemented+verified · **IU** implemented, unve
 
 The Platform Recovery series (R0→R7) is the most informative evidence in the repository: production credential/provisioning failures discovered live, root-caused, fixed, and hardened — *fast and well*. It demonstrates (a) real production traffic exists, (b) the founder can operate under incident pressure, and (c) none of it was procedure — every recovery was improvised. With zero clients, improvisation is free. With a paying client mid-engagement it is not. That is why FG-LR-003/004/005 are P0 while nothing in the security column is.
 
-## Minimum ops bar for client one (all inside the 18.5-day plan)
+## Minimum ops bar for client one (all inside the 19-day plan)
 
 1. Verified backup + one restore drill + runbook (1.5d)
 2. Incident/rollback runbook + one timed drill (1d)

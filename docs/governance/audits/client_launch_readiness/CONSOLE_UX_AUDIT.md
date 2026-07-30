@@ -64,10 +64,49 @@ Mechanism exists already: `getNavigationItemsForPrincipal` filters by principal;
 
 **Global search/filter strategy:** defer global search (P3). The two lists that matter (engagements, findings) already filter; saved views are P2-at-scale.
 
-## 5. What this buys
+## 5. Target design — what the Console should become
 
-- Operator training time drops from "tour of 22 surfaces" to "one guided workflow plus 5 admin pages."
+The critique above (hide, merge, gate) is the launch action. This section is the destination: the Console should stop being a *map of the platform* and become a *work queue for the operator*. The organizing question changes from "what does FrostGate have?" to "what needs my attention right now?"
+
+### 5.1 Operator Home (replaces all four dashboards)
+
+One screen, seven zones, every zone a queue with counts and one-click drill-down. Every zone is backed by data that **already exists** — this is composition, not new plumbing:
+
+| Zone | Contents | Existing data source |
+|------|----------|---------------------|
+| **Today's engagements** | Engagements with activity scheduled/expected today; status, next gate, client access state | `fa_engagements` (`in_progress`), guided-execution gate counts |
+| **Waiting on client** | Unaccepted invites (with age), findings sitting in remediation with no client activity for N days, attestations past `next_attestation_due` | `portal_users` invitations; `FaEngagementAuditEvent` recency; governance assets `next_attestation_due` (FA-1 #541) |
+| **Evidence needing review** | Evidence in `collected` (not locked), provenance events pending review | evidence lifecycle states (H15); `mark_provenance_reviewed` queue |
+| **Reports pending approval** | Finalized report versions lacking the `qa_approved_report` gate | report version history + QA gate |
+| **High-risk findings** | Open critical/high across all engagements, newest first | `fa_findings` severity/status |
+| **Governance alerts** | Fired workforce alert rules, drift deltas since baseline | fired-alerts audit log (PR 37); drift detection (PR 6) |
+| **System health** | Scan jobs in dead-letter/orphaned state, startup-validation status, uptime/Sentry links | `GET /scan-jobs`; `app.state.startup_validation`; external links |
+
+Behavior rules: a zone with zero items collapses to a single line; every item's click lands on the *action* (the QA button, the finding card), never on a list page the operator must re-filter; counts are the navigation — if "Reports pending approval (2)" shows, that *is* the to-do list. This also closes the audit's §2 gap #11 (failed-scan triage had no surface) and #15 (health had no home).
+
+### 5.2 Target screen map (post-launch end-state)
+
+```
+Operator Home  (the 7 queues above — the only "dashboard")
+ ├── Engagements        → Engagement Workspace (existing guided workflow — unchanged)
+ ├── Review Queue       → evidence review · report QA · governance decisions (SoD-gated)
+ ├── Clients            → tenants, invitations, portal grants (existing /admin/tenants)
+ ├── Intelligence       → workforce intel · risk history (existing, sellable)
+ └── Admin              → keys · settings · audit log
+```
+
+Six top-level destinations. Configuration (Admin), operations (Home + Engagements), review (Review Queue), and reporting (inside the workspace) are cleanly separated — the role-visibility model in §4 maps onto this unchanged: assessors see Home/Engagements/Intelligence; qa_reviewers additionally see Review Queue; platform_admin sees Clients/Admin.
+
+### 5.3 Sequencing and effort
+
+- **Launch (in the 19-day plan):** nav gating to ≤9 items, keep `/dashboard` as interim Home — FG-LR-007, 2 days. Unchanged.
+- **Stage 2→3 (post-launch): Operator Home v1 — ~3 days** (FG-LR-027): the 7-zone queue screen composed from the endpoints above, replacing the interim dashboard. This is the highest-leverage console investment after launch because it converts the console from founder-memory-driven to queue-driven — the precondition for a second operator ever being productive.
+
+## 6. What this buys
+
+- Operator training time drops from "tour of 22 surfaces" to "one guided workflow plus 5 admin pages"; with Operator Home, the daily loop becomes "clear the queues."
 - Screen-shares during engagements only ever show live, populated, relevant surfaces — an enterprise-credibility gain at zero feature cost.
 - QA surface for the launch window shrinks by roughly half the console.
+- The dry-run gap list (failed-scan triage, health visibility) gets a permanent home instead of API spelunking.
 
-**Effort: 2 days** (nav gating + one dashboard consolidation pass + smoke click-through). Everything else in this document is post-launch.
+**Launch effort: 2 days** (nav gating + smoke click-through). Operator Home v1: 3 days, Stage 2→3 package.

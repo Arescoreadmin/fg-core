@@ -49,9 +49,50 @@
 
 Optimizes exactly what the brief demands: minimal cognitive load, obvious next action (Immediate Actions callout already on home), visible progress (coverage bars), low abandonment, low support burden. **Effort: 1 day** (registry gating + friendly fallback for direct URLs).
 
-## 5. Abandonment & support-burden risks ranked
+## 5. Target design — one continuous journey, not a set of pages
+
+Nav trimming is the launch action. The destination is different in kind: the client should never *navigate* — they should be **carried**. The portal becomes a single journey with a persistent stepper, and the engagement's server-side state determines the one highlighted next action. Pages stop being destinations and become steps.
+
+### 5.1 The journey
+
+```
+Login → Welcome → Assessment in progress → Upload evidence → Review findings
+      → Download report → Start remediation → Track progress → Schedule follow-up
+```
+
+| Step | What the client sees | Backing (already exists) | State trigger |
+|------|---------------------|--------------------------|---------------|
+| 1. Login | Invite email → accept → OIDC | portal_users flow (FG-LR-002 proves it) | session created |
+| 2. Welcome | One screen: who FrostGate is, what happens next, their assessor's name, timeline. First-login only. | *new — thin static screen* | first session, engagement `in_progress`, no findings yet |
+| 3. Assessment in progress | Live progress: scans completed, controls assessed, "your assessor is collecting evidence" | scan results + questionnaire counts | scans/questionnaire active |
+| 4. Upload evidence | "3 documents requested" card → Documents tab | engagement Documents tab (PR 35) | open evidence requests |
+| 5. Review findings | "We found N items — 2 need your attention this week" → findings with explainers | /findings + explainer (PRs 22/33) | findings published |
+| 6. Download report | Report ready card, manifest-verified badge | /reports + verify + PDF | QA approved / `delivered` |
+| 7. Start remediation | Immediate-actions callout → RemediationCenter | /remediation (PRs 31/32) | open remediation items |
+| 8. Track progress | Coverage delta since delivery, resolved count | coverage matrix + risk posture | remediation activity |
+| 9. Schedule follow-up | "Book your 30-day review" CTA (calendar link) | *new — one CTA, letters #5 backs it* | ~day 21+ |
+
+**Implementation shape:** a BFF-computed `journeyState` derived from existing endpoints (engagement status, scan counts, findings, report versions, remediation activity) drives (a) a persistent stepper across the top of every page and (b) the single highlighted "next action" card on the dashboard. No backend changes; the pages already exist — this is a composition layer. **Effort: ~2.5 days, Stage 2→3 package (FG-LR-028).** For launch, the existing dashboard's Immediate Actions callout is the acceptable v0 of the same idea.
+
+### 5.2 Customer psychology — the confidence curve
+
+The assessment is the product the client is deciding whether to trust *while it runs*. Each stage must raise confidence, and the audit maps where today's build helps or hurts:
+
+| Moment | The client's silent question | What must happen | Today's state |
+|--------|------------------------------|------------------|---------------|
+| Invite email (min 0) | "Is this legit?" | Professional email, real domain, expiry stated | ✅ built (Resend template is clean) — deliverability must be dry-run-tested (FG-LR-002) |
+| First login (min 1–5) | **"Is this worth paying for?"** | The first screen must show *their* data, not scaffolding: "We found 4 AI tools with access to your files; 2 sharing links open to anyone." Concrete discoveries about their own environment are the single strongest proof-of-value the platform can produce — and the scan connectors already generate them before the client ever logs in. | ⚠️ the dashboard shows severity counts and coverage bars (abstract) before it shows discoveries (concrete). **Reorder: lead the dashboard hero with 2–3 named, plain-language discoveries.** ~0.5 day, fold into FG-LR-008 |
+| First 15 min | "Do I understand this?" | Plain language, severity explained, no NIST jargon unexplained | ✅ explainers exist; tooltip fix in FG-LR-008 |
+| Between meetings (day 2–14) | "Is anything happening?" | Visible scan/questionnaire progress; assessor responsiveness | ✅ progress data exists; journey step 3 makes it explicit |
+| Report delivery | "Was this worth it?" — **peak trust moment** | Board-ready report + verified badge + the CG offer made *here* (see CUSTOMER_COMMERCIAL_READINESS §CG) | ⚠️ report QA pending (FG-LR-011); CG offer is a founder motion, 0 eng days |
+| Day 21–90 | "Do they still care?" | Follow-up CTA, 30-day review, retention-decision touchpoint | ❌ manual only (letters); journey step 9 + FG-LR-014 automate later |
+
+The confidence curve also names the failure mode of the current build precisely: **the platform's most impressive capabilities (provenance, verification bundles) reassure buyers at the *end* of the journey, while the beginning — the minute-five "worth paying for" moment — leans on abstract charts.** The cheapest UX investment in the whole audit is putting real discoveries first.
+
+## 6. Abandonment & support-burden risks ranked
 
 1. Invite email lands in spam / OIDC misconfig → client never gets in (FG-LR-002 — the dry run must include a cold external mailbox).
-2. Dead-end stub pages → "is this product finished?" (FG-LR-008).
-3. NIST jargon on coverage → confusion → support call (cheap fix above).
-4. No reminder emails → remediation stalls silently between meetings (accepted at stage 1; operator letters cover; automate by stage 3).
+2. Minute-five abstraction — client sees charts before discoveries → value doubt (§5.2 reorder, in FG-LR-008).
+3. Dead-end stub pages → "is this product finished?" (FG-LR-008).
+4. NIST jargon on coverage → confusion → support call (cheap fix above).
+5. No reminder emails → remediation stalls silently between meetings (accepted at stage 1; operator letters cover; automate by stage 3).
