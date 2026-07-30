@@ -31,15 +31,17 @@ Scope note: the founder's review draft of this checklist included "Portal journe
 
 ### Traceability: every Launch DoD item → its executable step in the 30-day plan
 
+Task IDs follow execution order v2 (T1–T14, per `IMPLEMENTATION_SANITY_PASS.md`).
+
 | DoD | Plan task (THIRTY_DAY_LAUNCH_PLAN.md) | DoD | Plan task |
 |-----|----------------------------------------|-----|-----------|
-| L1 | Task 1 (portal named-user proof) | L8 | Task 8 (console gating) |
-| L2 | Task 5 (H1–H18 dry run) | L9 | Task 9 (portal gating + discoveries hero) |
-| L3 | Task 6 (report/PDF QA) | L10 | Task 4 (infra headroom) |
-| L4 | Task 3 (backup + restore drill) | L11 | Task 12 (retention purge rehearsal) |
-| L5 | Task 5 (dry-run steps H15–H16) | L12 | Tasks 13 + 2 (secrets; auto-recharge) |
-| L6 | Task 5 (CG v0 drift rehearsal) | L13 | Roll-up of tasks 1, 3, 4, 5, 7 |
-| L7 | Task 7 (incident/rollback drill) | L14 | Founder commercial track |
+| L1 | T4 (portal named-user proof) | L8 | T9 (console gating) |
+| L2 | T6 (H1–H18 dry run) | L9 | T10 (portal gating + discoveries hero) |
+| L3 | T7 (report/PDF QA) | L10 | T5 (infra headroom) |
+| L4 | T1 (backup + restore drill, Day 1) | L11 | T13 (retention purge rehearsal) |
+| L5 | T6 (dry-run steps H15–H16) | L12 | T2 + T3 + T14 (auto-recharge; rotation act; rotation doc) |
+| L6 | T6 (CG v0 drift rehearsal) | L13 | Roll-up of T1, T4, T5, T6, T8 |
+| L7 | T8 (incident/rollback drill) | L14 | Founder commercial track |
 
 ## Stage 2 DoD — gate to first full-price cohort
 
