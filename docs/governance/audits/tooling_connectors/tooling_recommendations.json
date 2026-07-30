@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-07-29T00:00:00Z",
-  "repository_commit": "61aa749e",
+  "repository_commit": "61aa749ef8feaa8fe74d9c0d6ee8e059d6d9b465",
   "methodology": "Scores are 1-10 per criterion, expressed as 'goodness' in every case (including maintenance_burden, data_risk_exposure, and vendor_lock_in_risk, where 10 = lowest burden/risk). Weighted priority score = sum(criterion_score * weight), weights: strategic_fit 0.15, immediate_roi 0.15, quality_improvement 0.10, security_improvement 0.10, production_reliability 0.10, enterprise_readiness 0.10, commercial_value 0.10, moat_contribution 0.10, implementation_simplicity 0.05, maintenance_burden 0.03, data_risk_exposure 0.01, vendor_lock_in_risk 0.01. Recommendations array is sorted by weighted_priority_score descending, then name ascending. All entries are evidence-derived from static repository inspection only; no installation, configuration, or connection occurred during this audit.",
   "current_tools": [
     {"name": "GitHub Actions (6 workflows)", "path": ".github/workflows/", "classification": "active_and_well_integrated"},

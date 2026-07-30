@@ -23,7 +23,7 @@ ALLOWED_TARGETS = {
 
 def _safe_path(rel_path: str) -> Path:
     p = (REPO_ROOT / rel_path).resolve()
-    if not str(p).startswith(str(REPO_ROOT.resolve())):
+    if not p.is_relative_to(REPO_ROOT.resolve()):
         raise ValueError("Path escapes repo root")
     return p
 

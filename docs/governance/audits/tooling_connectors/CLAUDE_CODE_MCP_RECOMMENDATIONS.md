@@ -2,6 +2,8 @@
 
 Evidence base: `REPOSITORY_TOOLING_INVENTORY.md`. Existing MCP surface: `.mcp.json` → one stdio server, `repo-tools` (`tools/mcp/repo_tools_server.py`), allowlisted to 6 Make targets, ripgrep search, repo-root-jailed file reads, and `git status`/`git diff --stat`. Claude Code hooks (`.claude/hooks/pre_bash_guard.sh`, `post_edit_guard.sh`) already deny `sudo`, `rm -rf`, `terraform apply`, `kubectl apply/delete`, `helm upgrade`, `aws secretsmanager`, and deny reads of `.env*`/`secrets/**`.
 
+**Path-jail correction (addressed in this PR):** the original `_safe_path()` in `repo_tools_server.py` used `str(p).startswith(str(REPO_ROOT))`, which is vulnerable to a sibling-path attack — a path like `../fg-core-secrets/token` resolves to a sibling directory whose string representation shares the repo-root prefix. Fixed to `p.is_relative_to(REPO_ROOT.resolve())` (Python 3.9+ `Path` method), which checks actual filesystem ancestry rather than string prefix. New servers following this pattern must use `is_relative_to`, not `startswith`.
+
 **Design constraint carried through every recommendation below:** the existing `repo-tools` server proves the team's preferred pattern is a *narrow, purpose-built, allowlisted* MCP server, not a broad general-purpose connector. New recommendations follow that pattern — extend `repo-tools`-style servers rather than install broad third-party MCP servers with wide default scopes.
 
 ---

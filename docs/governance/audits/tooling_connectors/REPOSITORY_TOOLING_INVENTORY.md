@@ -1,7 +1,7 @@
 # Repository Tooling Inventory — FrostGate Core
 
 **Audit type:** Repository-driven tooling, connector, integration, and developer-productivity audit
-**Repository:** `~/Projects/fg-core` (branch `feature/pr-588-actor-service-target-attribution`, HEAD `61aa749e`)
+**Repository:** `~/Projects/fg-core` (branch `feature/pr-588-actor-service-target-attribution`, HEAD `61aa749ef8feaa8fe74d9c0d6ee8e059d6d9b465` — merged to main as PR #588)
 **Method:** Static inspection only. Nothing was installed, configured, connected, modified, or committed.
 **Principle:** Trust, but Verify.
 

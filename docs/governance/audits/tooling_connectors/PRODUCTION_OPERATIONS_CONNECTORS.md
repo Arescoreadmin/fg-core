@@ -89,8 +89,8 @@ Evidence base: production topology inferred from `ROADMAP.md` (Railway prod mode
 
 ## 10. Incident Response Integration
 
-- **Evidence:** No PagerDuty/Opsgenie/Incident.io configuration or reference found anywhere in the repository.
-- **Recommendation:** **Out of scope for a connector recommendation at this stage.** Incident-response tooling is an organizational-process decision (on-call rotation, escalation policy) that should precede any tool selection — recommending a specific IR platform without evidence of how the team currently handles incidents would be exactly the kind of generic, non-repository-evidenced recommendation this audit is required to avoid.
+- **Evidence:** `api/observability/alerts.py` lines 175–181 already dispatches alerts to PagerDuty (`FG_ALERT_BACKEND=pagerduty`, requires `FG_PAGERDUTY_ROUTING_KEY`) and OpsGenie (`FG_ALERT_BACKEND=opsgenie`, requires `FG_OPSGENIE_API_KEY`). Credentials documented in `.env.example` lines 137–139. This is an **implemented production integration**, not a gap.
+- **Recommendation:** **Assess provisioning and delivery, not selection.** The routing code exists; the operational gaps are: (1) confirm `FG_ALERT_BACKEND` is set to `pagerduty` or `opsgenie` in Railway prod (not the default `log`), (2) confirm the relevant credential is present and the on-call routing policy is defined in the connected IR platform, (3) add a startup-validation warning (matching the `_check_observability_config()` pattern) when `FG_ALERT_BACKEND` is `log` in production — silent log-only alerting in prod is a delivery gap, not a configuration choice. A read-only connector to the IR platform (PagerDuty/OpsGenie incidents list) is reasonable once (1)–(2) are confirmed.
 
 ---
 
