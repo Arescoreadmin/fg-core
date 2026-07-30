@@ -1,0 +1,128 @@
+# Portal UX Audit — The Client Experience
+
+**Surface audited:** `apps/portal` (20 pages), nav registry `packages/navigation/src/registrations/portal.ts`, BFF (`apps/portal/app/api/*`), session model (`apps/portal/lib/session.ts`).
+**Frame:** a client contact (practice administrator, compliance officer, managing partner) who knows nothing about FrostGate internals and shouldn't need to.
+
+**Portal usability score: 6/10.** The spine of the journey is real and often better than the market standard; the risks are concentrated at the front door (invite/login — FG-LR-002) and at the edges (stub pages, nav breadth — FG-LR-008).
+
+---
+
+## 1. Client journey trace
+
+| Stage | State | Evidence / assessment |
+|-------|-------|----------------------|
+| 1. Invitation | ⚠️ built, unproven in prod | Console invite → Resend email (`apps/console/app/api/email/route.ts` — professional HTML, 72h expiry) → `/accept-invite`. **This exact chain has never carried a real external user in production** (EVIDENCE U1). |
+| 2. First login | ⚠️ built, unproven | OIDC (`/api/auth/oidc`, PKCE) → `pnu1.` opaque session, server-side validated, fail-closed middleware (`apps/portal/middleware.ts`). Password fallback correctly disabled in prod. Recovery from a failed OIDC handshake = contact operator; acceptable at stage 1 given white-glove delivery. |
+| 3. Tenant/engagement identification | ✅ good | Engagement selector hub with localStorage persistence, auto-select when single (`PR 30`; `engagementStore.ts`). Client never sees tenant machinery. |
+| 4. Orientation | ✅ good | Home (`app/page.tsx`, 793 lines) is a real risk dashboard: severity strip, NIST function coverage, immediate actions, remediation center — value visible on first screen. |
+| 5–6. Assessment start / questionnaire | ✅ (operator-led) | The NIST questionnaire is operator-driven in-console at this stage; portal shows coverage read-only (`/coverage`). Right call for the assessor-led model — the client is never asked to self-serve a 69-control questionnaire. |
+| 7. Evidence upload | ✅ built | Engagement workspace Documents tab (PR 35); blob paths tenant-scoped SHA-256 opaque (Sprint 1). |
+| 8. Attestation | ✅ built | `/attestation` submit + health (PR 11); asset_name binding bug fixed (FA-1 #541). |
+| 9. Connector authorization | ✅ (operator-led) | Device-code flows run in-console with the client present; the portal never asks for credentials. Good trust posture. |
+| 10. Progress tracking | ✅ | Home coverage bars + readiness; live refresh on remediation. |
+| 11. Incomplete work recovery | ✅ | localStorage engagement persistence; attestation drafts (`lib/attestationDrafts.ts`). |
+| 12. Clarification requests | ⚠️ minimal | `/support` is a static self-serve FAQ (real content, verified) — no in-app message channel. Acceptable stage 1–2: the operator relationship *is* the channel. |
+| 13. Finding review | ✅ strong | `/findings` with severity filter, plain-language explainer + remediation steps (PRs 22/33). |
+| 14. Report delivery | ✅ built / ⚠️ UT | `/reports` version list + viewer + verify; PDF export (PR 38). Current-stack rendering quality untested (FG-LR-011). |
+| 15. Remediation response | ✅ strong | Mark-resolved with evidence notes; NIST auto-update; roadmap re-phases live (PR 32); RemediationCenter 4-tab on home (R-2). This loop is a genuine differentiator — Big-4 PDFs and Vanta checklists have no equivalent closed loop with evidence capture. |
+| 16. Follow-up | ❌ manual | No email nudges/digests (G7 open). Operator letters #4/#5 cover it manually. P2 (FG-LR-014). |
+| 17. Continuous governance transition | ❌ not a motion | `monitoring` status exists; no client-facing offer surface (FG-LR-020). Post-launch. |
+
+## 2. Trust, wording, and state quality
+
+- **Trust signals present:** report manifest hashes + verify page, verification-bundle status card on Overview, data-collected disclosure appendix in the PDF, DPA + data-handling letter templates. This is above-market for the segment.
+- **Empty/error states:** generally handled (fail-closed BFF errors, PortalApiError surfaces). The exceptions are the two stubs below.
+- **Terminology:** mostly plain ("findings," "remediation," "coverage"). Watch NIST jargon on `/coverage` (GOVERN/MAP/MEASURE/MANAGE unexplained) — one tooltip line each would do; fold into FG-LR-008 day.
+- **Accessibility/responsive:** not systematically assessed (no automated a11y checks found in CI). Not a launch gate for the white-glove segment; note for stage 3.
+
+## 3. Concrete defects (verified)
+
+1. **`/changes` can never show data** — `apps/portal/app/changes/page.tsx:15` declares `const [groups] = useState<ChangeGroup[]>([])` with no setter; the page permanently renders its empty state. A paying client clicking "Changes" hits a dead end. **Hide it.**
+2. **`/export` defaults every option to `available: false`** (`app/export/page.tsx`) — reads as "nothing available to export" unless upstream flips flags. Show only live formats.
+3. **Nav breadth:** 12+ registered destinations for a client with ~6 jobs. Every extra item raises abandonment and support load.
+
+## 4. Recommended launch information architecture
+
+**Default portal nav (6 items):** Dashboard · Assessment (engagement detail) · Findings · Remediation · Reports · Support.
+**Conditional:** Assistant (appears when QA-approval flips `portal_ai_enabled` — mechanism exists, P-2 merged) · Attestation & Coverage (link from Dashboard cards rather than top-level nav).
+**Hidden for launch:** Changes (stub), Export (until options are live), Timeline, Trust, Continuity, Notifications (fold its content into Dashboard activity), Actions.
+
+Optimizes exactly what the brief demands: minimal cognitive load, obvious next action (Immediate Actions callout already on home), visible progress (coverage bars), low abandonment, low support burden. **Effort: 1 day** (registry gating + friendly fallback for direct URLs).
+
+## 5. Target design — one continuous journey, not a set of pages
+
+Nav trimming is the launch action. The destination is different in kind: the client should never *navigate* — they should be **carried**. The portal becomes a single journey with a persistent stepper, and the engagement's server-side state determines the one highlighted next action. Pages stop being destinations and become steps.
+
+### 5.1 The journey
+
+```
+Login → Welcome → Assessment in progress → Upload evidence → Review findings
+      → Download report → Start remediation → Track progress → Schedule follow-up
+```
+
+| Step | What the client sees | Backing (already exists) | State trigger |
+|------|---------------------|--------------------------|---------------|
+| 1. Login | Invite email → accept → OIDC | portal_users flow (FG-LR-002 proves it) | session created |
+| 2. Welcome | One screen: who FrostGate is, what happens next, their assessor's name, timeline. First-login only. | *new — thin static screen* | first session, engagement `in_progress`, no findings yet |
+| 3. Assessment in progress | Live progress: scans completed, controls assessed, "your assessor is collecting evidence" | scan results + questionnaire counts | scans/questionnaire active |
+| 4. Upload evidence | "3 documents requested" card → Documents tab | engagement Documents tab (PR 35) | open evidence requests |
+| 5. Review findings | "We found N items — 2 need your attention this week" → findings with explainers | /findings + explainer (PRs 22/33) | findings published |
+| 6. Download report | Report ready card, manifest-verified badge | /reports + verify + PDF | QA approved / `delivered` |
+| 7. Start remediation | Immediate-actions callout → RemediationCenter | /remediation (PRs 31/32) | open remediation items |
+| 8. Track progress | Coverage delta since delivery, resolved count | coverage matrix + risk posture | remediation activity |
+| 9. Schedule follow-up | "Book your 30-day review" CTA (calendar link) | *new — one CTA, letters #5 backs it* | ~day 21+ |
+
+**Implementation shape:** a BFF-computed `journeyState` derived from existing endpoints (engagement status, scan counts, findings, report versions, remediation activity) drives (a) a persistent stepper across the top of every page and (b) the single highlighted "next action" card on the dashboard. No backend changes; the pages already exist — this is a composition layer. **Effort: ~2.5 days, Stage 2→3 package (FG-LR-028).** For launch, the existing dashboard's Immediate Actions callout is the acceptable v0 of the same idea.
+
+### 5.1a The `journeyState` machine (formal definition)
+
+`journeyState` is a deterministic pure function of server-side facts — never client-side state, never localStorage. Formalizing it makes the stepper testable and removes all ambiguity about "what does the client see when":
+
+```
+INVITED → AUTHENTICATED → ASSESSMENT_ACTIVE → EVIDENCE_PENDING → EVIDENCE_COMPLETE
+        → ANALYSIS_RUNNING → FINDINGS_READY → REPORT_AVAILABLE → REMEDIATION_ACTIVE → MONITORING
+```
+
+| State | Entry condition (server-side facts) | Allowed transitions |
+|-------|-------------------------------------|---------------------|
+| `INVITED` | invitation row exists, not accepted | → AUTHENTICATED |
+| `AUTHENTICATED` | first valid portal session, engagement has no scan results yet | → ASSESSMENT_ACTIVE |
+| `ASSESSMENT_ACTIVE` | ≥1 scan job running/complete OR questionnaire started | → EVIDENCE_PENDING · → ANALYSIS_RUNNING |
+| `EVIDENCE_PENDING` | ≥1 open evidence/document request to the client | → EVIDENCE_COMPLETE |
+| `EVIDENCE_COMPLETE` | zero open client evidence requests | → ANALYSIS_RUNNING |
+| `ANALYSIS_RUNNING` | scans complete, findings not yet published | → FINDINGS_READY |
+| `FINDINGS_READY` | ≥1 finding visible to portal | → REPORT_AVAILABLE |
+| `REPORT_AVAILABLE` | QA-approved report version exists (engagement `delivered`) | → REMEDIATION_ACTIVE |
+| `REMEDIATION_ACTIVE` | ≥1 finding open post-delivery | → MONITORING · → REPORT_AVAILABLE (new report version) |
+| `MONITORING` | all findings terminal OR engagement status `monitoring` (CG v0) | → ASSESSMENT_ACTIVE (re-scan/reassessment) |
+
+Rules that make it deterministic and safe:
+
+- **Derivation, not storage.** The state is computed per request from the facts above; there is no `journey_state` column to drift. (If later persisted for analytics, the stored value is a cache, never the authority.)
+- **Backward moves are explicit, not accidental.** Only two reverse edges exist: REMEDIATION_ACTIVE → REPORT_AVAILABLE (new report version supersedes) and MONITORING → ASSESSMENT_ACTIVE (reassessment). Any other observed regression (e.g., findings disappearing) renders the last stable state and logs a telemetry warning rather than bouncing the client backward.
+- **Evidence loops are re-entrant.** EVIDENCE_PENDING can recur after ANALYSIS_RUNNING if the assessor requests more; the stepper shows the furthest state reached, with the current ask as the next-action card — progress never appears to un-happen.
+- **Each state binds exactly one primary CTA** (the step table in §5.1); unknown/ambiguous fact combinations resolve to the most conservative earlier state — fail-safe, never fail-forward into "Download report" prematurely.
+- **Test contract:** a table-driven unit test enumerates every fact combination → expected state; transitions not in the table are assertion failures.
+
+### 5.2 Customer psychology — the confidence curve
+
+The assessment is the product the client is deciding whether to trust *while it runs*. Each stage must raise confidence, and the audit maps where today's build helps or hurts:
+
+| Moment | The client's silent question | What must happen | Today's state |
+|--------|------------------------------|------------------|---------------|
+| Invite email (min 0) | "Is this legit?" | Professional email, real domain, expiry stated | ✅ built (Resend template is clean) — deliverability must be dry-run-tested (FG-LR-002) |
+| First login (min 1–5) | **"Is this worth paying for?"** | The first screen must show *their* data, not scaffolding: "We found 4 AI tools with access to your files; 2 sharing links open to anyone." Concrete discoveries about their own environment are the single strongest proof-of-value the platform can produce — and the scan connectors already generate them before the client ever logs in. | ⚠️ the dashboard shows severity counts and coverage bars (abstract) before it shows discoveries (concrete). **Reorder: lead the dashboard hero with 2–3 named, plain-language discoveries.** ~0.5 day, fold into FG-LR-008 |
+| First 15 min | "Do I understand this?" | Plain language, severity explained, no NIST jargon unexplained | ✅ explainers exist; tooltip fix in FG-LR-008 |
+| Between meetings (day 2–14) | "Is anything happening?" | Visible scan/questionnaire progress; assessor responsiveness | ✅ progress data exists; journey step 3 makes it explicit |
+| Report delivery | "Was this worth it?" — **peak trust moment** | Board-ready report + verified badge + the CG offer made *here* (see CUSTOMER_COMMERCIAL_READINESS §CG) | ⚠️ report QA pending (FG-LR-011); CG offer is a founder motion, 0 eng days |
+| Day 21–90 | "Do they still care?" | Follow-up CTA, 30-day review, retention-decision touchpoint | ❌ manual only (letters); journey step 9 + FG-LR-014 automate later |
+
+The confidence curve also names the failure mode of the current build precisely: **the platform's most impressive capabilities (provenance, verification bundles) reassure buyers at the *end* of the journey, while the beginning — the minute-five "worth paying for" moment — leans on abstract charts.** The cheapest UX investment in the whole audit is putting real discoveries first.
+
+## 6. Abandonment & support-burden risks ranked
+
+1. Invite email lands in spam / OIDC misconfig → client never gets in (FG-LR-002 — the dry run must include a cold external mailbox).
+2. Minute-five abstraction — client sees charts before discoveries → value doubt (§5.2 reorder, in FG-LR-008).
+3. Dead-end stub pages → "is this product finished?" (FG-LR-008).
+4. NIST jargon on coverage → confusion → support call (cheap fix above).
+5. No reminder emails → remediation stalls silently between meetings (accepted at stage 1; operator letters cover; automate by stage 3).
