@@ -346,7 +346,9 @@ Variables for the portal (set in the portal deployment environment):
 | `PORTAL_SESSION_SECRET` | Session cookie signing | `openssl rand -base64 32` |
 | `CORE_API_URL` | Backend API URL | `https://api-production-6d47.up.railway.app` |
 | `CORE_API_KEY` | BFF authentication key | Same as `FG_API_KEY` in Railway |
-| `CORE_TENANT_ID` | Tenant context | `default` |
+| `CORE_TENANT_ID` | Tenant context | `frostgate-internal` (**not** `default` — no longer supported; see production note below) |
+
+**Production note:** `CORE_TENANT_ID=default` is no longer supported. The application validates this at startup and will fail to start in production or strict mode if the value is missing or set to `default`. Use the canonical internal platform authority tenant, `frostgate-internal`. See [`production_configuration_changes.md`](production_configuration_changes.md) for the full required-variable checklist.
 
 ---
 
@@ -368,6 +370,7 @@ Variables for the portal (set in the portal deployment environment):
 | PDF download returns 501 | `reportlab` not installed | Add `reportlab` to `requirements.txt` and redeploy |
 | Portal login fails | `PORTAL_PASSWORD` or `PORTAL_SESSION_SECRET` not set | Add to portal deployment env vars |
 | Field assessment 401 | `CORE_TENANT_ID` or `CORE_API_KEY` not set | Add to portal and console Vercel env vars |
+| Backend API crash-loops on deploy (Railway shows `Crashed`) | `CORE_TENANT_ID` not set (or still `default`) on the Railway **api** service — required since PRs #585–#587 | `railway variable set CORE_TENANT_ID=frostgate-internal --service api`; redeploys automatically |
 
 ---
 

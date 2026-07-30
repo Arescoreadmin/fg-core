@@ -23,7 +23,7 @@ Run through every item below before the client meeting starts. Do not begin the 
   - [ ] `PORTAL_SESSION_SECRET` is set.
   - [ ] `CORE_API_URL` points to the Railway API.
   - [ ] `CORE_API_KEY` is set.
-  - [ ] `CORE_TENANT_ID` is set (typically `default`).
+  - [ ] `CORE_TENANT_ID` is set to `frostgate-internal` (**not** `default` — production note: `CORE_TENANT_ID=default` is no longer supported; the application validates this at startup and will fail to start in production or strict mode if the value is missing or set to `default`. See [`production_configuration_changes.md`](production_configuration_changes.md)).
 
 ---
 
