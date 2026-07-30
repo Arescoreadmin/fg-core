@@ -640,7 +640,7 @@ test-unit: venv _require-pytest-venv
 
 coverage: venv _require-pytest-venv
 	@mkdir -p artifacts/ci
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres" \
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q $(PYTEST_FAST_FILTER) \
 		--cov --cov-report=xml:artifacts/ci/coverage.xml \
 		--cov-report=term-missing
 
