@@ -1465,6 +1465,7 @@ class _FakeRequest:
 
     def __init__(self, auth: object) -> None:
         from types import SimpleNamespace
+
         self.state = SimpleNamespace(auth=auth, request_id="req-psp-test")
 
 
@@ -1473,7 +1474,9 @@ def test_psp_key_populates_service_principal_id(
 ) -> None:
     """PSP-01: PSP credential slot → service_principal_id + authority_tenant_id set."""
     # Bootstrap the PSP so a row exists in platform_service_principals
-    result = bootstrap_platform_service_principal(engine_with_authority, request_id="psp-01")
+    result = bootstrap_platform_service_principal(
+        engine_with_authority, request_id="psp-01"
+    )
     assert result.principal_id is not None
 
     # Patch the DB lookup inside _resolve_psp_fields to use the test engine
@@ -1481,6 +1484,7 @@ def test_psp_key_populates_service_principal_id(
 
     def _patched_resolve(tenant_id: str):
         from sqlalchemy import text as _text
+
         with engine_with_authority.connect() as c:
             row = c.execute(
                 _text(
@@ -1497,6 +1501,7 @@ def test_psp_key_populates_service_principal_id(
     monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
 
     from unittest.mock import MagicMock
+
     auth = _FakeAuth(
         valid=True,
         reason="canonical_validated",
@@ -1510,6 +1515,7 @@ def test_psp_key_populates_service_principal_id(
     conn = MagicMock()
 
     from api.identity_providers.api_key import extract_api_key_actor
+
     actor = extract_api_key_actor(request, conn)
 
     assert actor is not None
@@ -1526,9 +1532,15 @@ def test_non_psp_key_leaves_service_principal_id_none(
 ) -> None:
     """PSP-02: Non-PSP credential slot → service_principal_id stays None."""
     import api.identity_providers.api_key as _mod
-    monkeypatch.setattr(_mod, "_resolve_psp_fields", lambda tid: (_ for _ in ()).throw(AssertionError("must not be called")))
+
+    monkeypatch.setattr(
+        _mod,
+        "_resolve_psp_fields",
+        lambda tid: (_ for _ in ()).throw(AssertionError("must not be called")),
+    )
 
     from unittest.mock import MagicMock
+
     auth = _FakeAuth(
         valid=True,
         reason="canonical_validated",
@@ -1541,6 +1553,7 @@ def test_non_psp_key_leaves_service_principal_id_none(
     request = _FakeRequest(auth)
 
     from api.identity_providers.api_key import extract_api_key_actor
+
     actor = extract_api_key_actor(request, MagicMock())
 
     assert actor is not None
@@ -1553,10 +1566,12 @@ def test_psp_resolve_fails_gracefully_when_no_psp_row(
 ) -> None:
     """PSP-03: PSP slot but no active PSP row → service_principal_id stays None (fail-open)."""
     import api.identity_providers.api_key as _mod
+
     monkeypatch.setattr(_mod, "_resolve_psp_fields", lambda tid: (None, None))
     monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
 
     from unittest.mock import MagicMock
+
     auth = _FakeAuth(
         valid=True,
         reason="canonical_validated",
@@ -1569,6 +1584,7 @@ def test_psp_resolve_fails_gracefully_when_no_psp_row(
     request = _FakeRequest(auth)
 
     from api.identity_providers.api_key import extract_api_key_actor
+
     actor = extract_api_key_actor(request, MagicMock())
 
     assert actor is not None
@@ -1659,6 +1675,7 @@ def test_authentication_success_event_emitted_on_psp_key_auth(
     monkeypatch.setattr(_mod, "_emit_psp_auth_event", _fake_emit)
 
     from unittest.mock import MagicMock
+
     auth = _FakeAuth(
         valid=True,
         reason="canonical_validated",
@@ -1671,6 +1688,7 @@ def test_authentication_success_event_emitted_on_psp_key_auth(
     request = _FakeRequest(auth)
 
     from api.identity_providers.api_key import extract_api_key_actor
+
     extract_api_key_actor(request, MagicMock())
 
     assert len(captured) == 1, "authentication event must be emitted once"
@@ -1697,7 +1715,9 @@ def test_suspended_psp_does_not_populate_attribution_fields(
 
     bootstrap_platform_service_principal(engine_with_authority, request_id="psp-08")
     # Suspend the PSP — lifecycle_state becomes 'suspended', not 'active'
-    suspend_service_principal(engine_with_authority, actor_id="test", request_id="psp-08-suspend")
+    suspend_service_principal(
+        engine_with_authority, actor_id="test", request_id="psp-08-suspend"
+    )
 
     result = _resolve_psp_fields("frostgate-internal")
 
@@ -1722,6 +1742,7 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
     monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
 
     from unittest.mock import MagicMock
+
     auth = _FakeAuth(
         valid=True,
         reason="canonical_validated",
@@ -1734,6 +1755,7 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
     request = _FakeRequest(auth)
 
     from api.identity_providers.api_key import extract_api_key_actor
+
     # The exception in _resolve_psp_fields is caught inside the function,
     # so the PSP slot branch itself returns (None, None) gracefully.
     # But wait — _raise raises BEFORE the monkeypatched version in api_key.py
@@ -1757,7 +1779,9 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
     actor = extract_api_key_actor(request, MagicMock())
 
     assert actor is not None, "request must complete normally even with attribution gap"
-    assert actor.service_principal_id is None, "attribution must be None when resolution fails"
+    assert actor.service_principal_id is None, (
+        "attribution must be None when resolution fails"
+    )
 
     # require_psp_actor() must deny this actor with 403
     from api.auth_dispatch import require_psp_actor
@@ -1803,24 +1827,37 @@ def test_two_requests_produce_distinct_correlated_events(
 
     for req_id in ("req-alpha", "req-beta"):
         from types import SimpleNamespace
+
         auth = _FakeAuth(
-            valid=True, reason="canonical_validated", key_prefix="fgk.psp",
-            tenant_id="frostgate-internal", scopes=set(), key_db_id=None,
+            valid=True,
+            reason="canonical_validated",
+            key_prefix="fgk.psp",
+            tenant_id="frostgate-internal",
+            scopes=set(),
+            key_db_id=None,
             credential_slot=PSP_CREDENTIAL_SLOT,
         )
-        request = type("R", (), {"state": SimpleNamespace(auth=auth, request_id=req_id)})()
+        request = type(
+            "R", (), {"state": SimpleNamespace(auth=auth, request_id=req_id)}
+        )()
         extract_api_key_actor(request, MagicMock())
 
     assert len(captured) == 2, "each request produces exactly one auth event"
     assert captured[0]["req_id"] == "req-alpha"
     assert captured[1]["req_id"] == "req-beta"
-    assert captured[0]["req_id"] != captured[1]["req_id"], "events are distinguishable by request_id"
+    assert captured[0]["req_id"] != captured[1]["req_id"], (
+        "events are distinguishable by request_id"
+    )
 
     # Verify no credential material in any captured event argument
     for ev in captured:
         for val in ev.values():
-            assert "fgk." not in str(val or ""), "key prefix must not appear in event args"
-            assert "secret" not in str(val or "").lower(), "secret must not appear in event args"
+            assert "fgk." not in str(val or ""), (
+                "key prefix must not appear in event args"
+            )
+            assert "secret" not in str(val or "").lower(), (
+                "secret must not appear in event args"
+            )
 
 
 def test_wrong_authority_tenant_does_not_resolve_as_psp(
@@ -1835,6 +1872,7 @@ def test_wrong_authority_tenant_does_not_resolve_as_psp(
     bootstrap_platform_service_principal(engine_with_authority, request_id="psp-11")
 
     import api.identity_providers.api_key as _mod
+
     monkeypatch.setattr(_mod, "_emit_psp_auth_event", lambda *a, **kw: None)
 
     from api.identity_providers.api_key import _resolve_psp_fields

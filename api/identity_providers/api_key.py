@@ -139,6 +139,7 @@ def _emit_psp_auth_event(
             extra={"service_principal_id": service_principal_id, "exc": str(exc)},
         )
 
+
 # Maps legacy tenant_rbac.py role names → new enterprise role names.
 # Existing key assignments are honoured without requiring re-assignment.
 _LEGACY_ROLE_MAP: dict[str, str] = {
@@ -230,7 +231,9 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
         )
         service_principal_id, psp_authority_tenant_id = _resolve_psp_fields(tenant_id)
         if service_principal_id:
-            _emit_psp_auth_event(service_principal_id, psp_authority_tenant_id or tenant_id, request_id)
+            _emit_psp_auth_event(
+                service_principal_id, psp_authority_tenant_id or tenant_id, request_id
+            )
 
     raw_role: Optional[str] = None
     if key_db_id is not None and tenant_id:
