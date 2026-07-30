@@ -6332,3 +6332,31 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 - No OPA policy files, no cryptographic key material, no secret handling code, no CI workflow files, no migrations are modified.
 
 **SOC review outcome:** approved. All three P1 findings close real bypasses without altering the authority model or introducing new attack surface. Existing invariants documented in the PR #577 SOC entry (P1-1 through P2-5) remain in force. The catch-all move is a strengthening of validation coverage, not a change to what validation does; the enrollment membership-resolution broadening is a functional bug fix that does not weaken engagement-binding enforcement (which the middleware still applies on every engagement-scoped request).
+
+---
+
+## feat/tooling-phase0-ci-additions — PR #592 CI tooling additions (2026-07-30)
+
+**Critical files changed:** `.github/workflows/ci.yml`
+
+**Change scope:** CI-only tooling additions. No auth code, no security gates, no OPA policies, no migrations, no cryptographic material, no route additions, no production code touched.
+
+**Changes to `.github/workflows/ci.yml`:**
+
+1. **`portal` job added** — mirrors the existing `console` job; runs `make ci-portal` (portal-lint + portal-test + portal-audit). Uses `fg_guard.outputs.console` guard condition because `apps/portal/**` is mapped to the `console` output key in `detect_changed_paths.py`. 20-minute timeout, `contents: read` permission only.
+
+2. **`coverage` job added** — advisory-only (`continue-on-error: true`); runs `make coverage` (pytest `not postgres` suite with `--cov`) after `unit` succeeds; 55-minute timeout to accommodate the 35+ minute full non-postgres suite without conflicting with the `unit` job's 25-minute budget. Produces `artifacts/ci/coverage.xml` uploaded as a non-blocking artifact. This job cannot block merges by construction (`continue-on-error: true`).
+
+3. **Coverage step removed from `unit` job** — the original placement would have caused the `unit` job to be cancelled by its 25-minute timeout before coverage completed (P1 bot finding). The step was not present in any prior merged commit on `main`; it was introduced and removed within this branch.
+
+**Security invariants confirmed:**
+
+- **No gate weakened.** The `coverage` job's `continue-on-error: true` prevents it from ever blocking a merge or masking a failing gate. It is observational only. All required status checks (`fg-required`, `unit`, `guard`) are unaffected.
+- **No new permissions.** Both new jobs use `permissions: contents: read`, matching the lowest-privilege pattern used by the `console` job.
+- **No secret exposure.** Both jobs use the `fg-secrets` composite action, identical to all other Python/Node jobs. The coverage job's `FG_SQLITE_PATH: state/frostgate-coverage.db` is an isolated ephemeral file; no production credentials are involved.
+- **`portal` job is additive.** `ci-portal` was already defined in `Makefile` and `make ci-portal` was already callable. The new CI job wires what existed to an actual workflow run; no new Make targets were added in this CI file change.
+- **No workflow trigger changes.** The `on:` block is unchanged. No new external triggers, no new environment secrets, no new deployment targets.
+
+**Non-changes (confirmed):** No auth middleware, no security gate logic, no OPA policies, no migrations, no API routes, no secret-handling code, no cryptographic material modified.
+
+**SOC review outcome:** approved. `.github/workflows/ci.yml` is listed under the SOC critical-file watchlist because CI changes can in principle weaken security gates. This change does the opposite — it adds coverage measurement and portal test execution without removing or weakening any existing required gate. The `continue-on-error: true` on the coverage job is a deliberate design choice (advisory baseline measurement, not enforcement), not a bypass.
