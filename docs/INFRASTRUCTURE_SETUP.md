@@ -165,7 +165,7 @@ This means the API key never touches the browser — it lives only in Vercel env
 |----------|-------|-------------|
 | `CORE_API_URL` | `https://api-production-6d47.up.railway.app` | Backend base URL |
 | `CORE_API_KEY` | `<governance key>` | API key injected into every backend request |
-| `CORE_TENANT_ID` | `default` | Default tenant context injected into backend requests |
+| `CORE_TENANT_ID` | `frostgate-internal` | Tenant context injected into backend requests |
 | `FG_CONSOLE_DEMO_TENANTS` | optional | Comma-separated allowlist for demo tenant query selection |
 | `FG_CONSOLE_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | optional | JSON map of allowlisted demo tenant IDs to tenant-bound API keys |
 | `AUTH0_CLIENT_ID` | `JPIiVXP8fKKSYblWegdN7BrnzwboWVUS` | Auth0 application client ID |
@@ -173,6 +173,8 @@ This means the API key never touches the browser — it lives only in Vercel env
 | `AUTH0_ISSUER_BASE_URL` | `https://dev-22nn3c7muqjk4tgu.us.auth0.com` | Auth0 domain |
 | `AUTH_SECRET` | `<random 32+ char string>` | next-auth session signing secret (generate with `openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | `https://console.frostgate.ai` | Must match the production domain |
+
+**Production note:** `CORE_TENANT_ID=default` is no longer supported. `apps/console/lib/startup-validation.ts` (`validateProductionConfig()`) and, on the backend, `api/internal_platform_authority.py` (`validate_configured_core_tenant_id()`) both validate this at startup and will fail to start in production or strict mode if the value is missing or set to `default`. Use the canonical internal platform authority tenant, `frostgate-internal`. See [`operators/production_configuration_changes.md`](operators/production_configuration_changes.md) for the full required-variable checklist.
 
 ---
 
@@ -428,7 +430,7 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 |----------|----------|-------------|
 | `CORE_API_URL` | Yes | Railway backend URL |
 | `CORE_API_KEY` | Yes | API key injected into every backend request |
-| `CORE_TENANT_ID` | Yes | Default tenant ID injected into backend requests |
+| `CORE_TENANT_ID` | Yes | Tenant ID injected into backend requests — must be `frostgate-internal` in production, not `default` (see note below) |
 | `FG_CONSOLE_DEMO_TENANTS` | No | Comma-separated allowlist for console demo tenant selection |
 | `FG_CONSOLE_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | No | JSON map of demo tenant IDs to tenant-bound API keys |
 | `AUTH0_CLIENT_ID` | Yes | Auth0 application client ID |
@@ -452,11 +454,15 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 |----------|----------|-------------|
 | `CORE_API_URL` | Yes | Railway backend URL |
 | `CORE_API_KEY` | Yes | Default portal API key |
-| `CORE_TENANT_ID` | Yes | Default portal tenant |
+| `CORE_TENANT_ID` | Yes | **The specific client tenant ID this portal deployment serves** — not `frostgate-internal` (that's the backend/console operator tenant), not `default` (see note below) |
 | `PORTAL_SESSION_SECRET` | Yes | HMAC secret for signed portal session cookies |
 | `FG_PORTAL_DEMO_TENANTS` | No | Comma-separated allowlist for portal demo tenant selection |
 | `FG_PORTAL_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | No | JSON map of demo tenant IDs to tenant-bound API keys |
 | `NEXT_PUBLIC_PORTAL_DEMO_TENANTS` | No | Public tenant ID list rendered in the login selector; contains no secrets |
+
+**Production note:** `CORE_TENANT_ID=default` is no longer supported. The console validates this at startup (`apps/console/lib/startup-validation.ts` → `validateProductionConfig()`) and will fail to start in production or strict mode if the value is missing or set to `default`. The portal BFF proxy (`apps/portal/app/api/core/[...path]/route.ts`) only checks that `CORE_TENANT_ID` is *present* — it does not reject `default` specifically, so a stale `default` value there fails differently (requests reaching a nonexistent/invalid tenant) rather than failing fast at startup. The Railway backend API service enforces the strict check independently via `api/internal_platform_authority.py`.
+
+**Do not use `frostgate-internal` for the portal.** That value is the internal platform authority tenant used by the backend and console (FrostGate's own operator surfaces). The portal is client-facing — `PortalClientScopeMiddleware` (`api/middleware/portal_scope.py`) validates every portal session's membership against the tenant in `CORE_TENANT_ID`, and portal memberships are stored under the client's own tenant, not `frostgate-internal`. Setting the portal to `frostgate-internal` does not crash the deployment — it silently 403s every legitimate client session instead. See [`operators/production_configuration_changes.md`](operators/production_configuration_changes.md) for the full explanation and required-variable checklist.
 
 ### Railway API service — full list
 

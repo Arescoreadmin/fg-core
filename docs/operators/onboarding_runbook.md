@@ -346,7 +346,9 @@ Variables for the portal (set in the portal deployment environment):
 | `PORTAL_SESSION_SECRET` | Session cookie signing | `openssl rand -base64 32` |
 | `CORE_API_URL` | Backend API URL | `https://api-production-6d47.up.railway.app` |
 | `CORE_API_KEY` | BFF authentication key | Same as `FG_API_KEY` in Railway |
-| `CORE_TENANT_ID` | Tenant context | `default` |
+| `CORE_TENANT_ID` | Tenant context | **This client's own tenant ID** (from the console's tenant-provisioning flow for this engagement) — **not** `frostgate-internal`, **not** `default` (see production note below) |
+
+**Production note:** `CORE_TENANT_ID=default` is no longer supported anywhere, and the portal's `CORE_TENANT_ID` must **never** be `frostgate-internal` either — that value is the internal platform authority tenant used only by the Railway `api` service and the console. Portal sessions are validated against whatever tenant `CORE_TENANT_ID` names; if it doesn't match the client's actual tenant, every legitimate portal login will fail with a 403, even though the deployment itself looks healthy. Use this specific client's tenant ID here. See [`production_configuration_changes.md`](production_configuration_changes.md) for the full explanation and required-variable checklist.
 
 ---
 
@@ -368,6 +370,8 @@ Variables for the portal (set in the portal deployment environment):
 | PDF download returns 501 | `reportlab` not installed | Add `reportlab` to `requirements.txt` and redeploy |
 | Portal login fails | `PORTAL_PASSWORD` or `PORTAL_SESSION_SECRET` not set | Add to portal deployment env vars |
 | Field assessment 401 | `CORE_TENANT_ID` or `CORE_API_KEY` not set | Add to portal and console Vercel env vars |
+| Backend API crash-loops on deploy (Railway shows `Crashed`) | `CORE_TENANT_ID` not set (or still `default`) on the Railway **api** service — required since PRs #585–#587 | `railway variable set CORE_TENANT_ID=frostgate-internal --service api`; redeploys automatically |
+| Portal deployment is healthy but every client login/session fails with 403 | Portal's `CORE_TENANT_ID` is unset, `default`, or (easy mistake) set to `frostgate-internal` — that value belongs to the backend/console only. `PortalClientScopeMiddleware` validates sessions against this exact tenant | Set the portal's `CORE_TENANT_ID` to this client's own tenant ID (from the console's tenant-provisioning record for the engagement), not `frostgate-internal` |
 
 ---
 
