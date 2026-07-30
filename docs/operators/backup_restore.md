@@ -60,9 +60,11 @@ Upgrading to Railway Pro is required to enable automatic backups (T5/infra decis
 | Metric | Value | Type |
 |--------|-------|------|
 | RPO (Recovery Point Objective) | Time since last manual `pg_dump` | Measured (pre-engagement cadence) |
-| RTO (Recovery Target Objective) | < 15 minutes for a 1.7 MB database | Measured (4s restore + validation) |
-| Restore duration (2026-07-30 drill) | ~4 seconds | Measured |
-| Validation duration (2026-07-30 drill) | ~18 seconds | Measured |
+| RTO (Recovery Target Objective) | < 15 minutes for a 1.7 MB database | Measured (3.5 min end-to-end) |
+| End-to-end drill duration (2026-07-30) | ~3.5 minutes | Measured (20:08:46Z → 20:12:11Z) |
+| pg_dump duration (2026-07-30) | ~2 minutes | Measured (network + compression) |
+| pg_restore duration (2026-07-30) | ~4 seconds | Measured |
+| Validation duration (2026-07-30) | ~18 seconds | Measured |
 | Database size (2026-07-30) | 1.7 MB (compressed custom format) | Measured |
 
 RPO is bounded by the backup cadence. With pre-engagement `pg_dump` only, data added between
@@ -173,11 +175,47 @@ Exit code must be 0. Any non-zero exit is a restore failure — see Section 10.
 
 ## 8. Integrity Validation
 
-Run each query against the scratch database and compare to production source counts
-(recorded in Section 9 below for each drill):
+Run the production queries first to capture live source counts, then run the same queries
+against the scratch database to compare. Both sets of output must be recorded in the evidence
+checklist (Section 9) before comparison is marked PASS.
+
+### 8.1 Source counts (production — read-only)
 
 ```bash
-# Overall dataset counts
+# Get production counts immediately after pg_dump completes (same session, before restore)
+PROD_PASS="$(railway variables --service Postgres --json 2>/dev/null \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['PGPASSWORD'])" 2>/dev/null)"
+
+docker run --rm \
+  -e PGPASSWORD="$PROD_PASS" \
+  pgvector/pgvector:pg18 \
+  psql -h <PROD_PROXY_HOST> -p <PROD_PROXY_PORT> -U postgres -d railway --no-password -tA -c \
+  "SELECT
+    (SELECT COUNT(*) FROM fa_engagements) AS fa_engagements,
+    (SELECT COUNT(*) FROM fa_normalized_findings) AS findings,
+    (SELECT COUNT(*) FROM fa_evidence) AS evidence,
+    (SELECT COUNT(*) FROM fa_engagement_audit_events) AS audit_events,
+    (SELECT COUNT(*) FROM fa_scan_results) AS scan_results,
+    (SELECT COUNT(*) FROM tenants) AS tenants,
+    (SELECT COUNT(*) FROM portal_remediation_audit_events) AS remediation_audit_events"
+
+# Per-engagement source counts — resolve ENG_ID using the lookup in §8.3
+docker run --rm \
+  -e PGPASSWORD="$PROD_PASS" \
+  pgvector/pgvector:pg18 \
+  psql -h <PROD_PROXY_HOST> -p <PROD_PROXY_PORT> -U postgres -d railway --no-password -tA -c \
+  "SELECT
+    (SELECT COUNT(*) FROM fa_engagements WHERE id = '<ENG_ID>') AS eng_count,
+    (SELECT COUNT(*) FROM fa_normalized_findings WHERE engagement_id = '<ENG_ID>') AS findings,
+    (SELECT COUNT(*) FROM fa_evidence WHERE engagement_id = '<ENG_ID>') AS evidence,
+    (SELECT COUNT(*) FROM fa_engagement_audit_events WHERE engagement_id = '<ENG_ID>') AS audit_events,
+    (SELECT COUNT(*) FROM fa_scan_results WHERE engagement_id = '<ENG_ID>') AS scan_results"
+```
+
+### 8.2 Restored counts (scratch)
+
+```bash
+# Overall dataset counts — scratch
 docker run --rm \
   -e PGPASSWORD="$SCRATCH_PASS" \
   --network host \
@@ -192,8 +230,7 @@ docker run --rm \
     (SELECT COUNT(*) FROM tenants) AS tenants,
     (SELECT COUNT(*) FROM portal_remediation_audit_events) AS remediation_audit_events"
 
-# Per-engagement counts for ENG-RESTORE-PROOF-01 (use the engagement ID on record
-# in the sanitized evidence manifest — never hard-code customer engagement IDs here)
+# Per-engagement counts — scratch
 docker run --rm \
   -e PGPASSWORD="$SCRATCH_PASS" \
   --network host \
@@ -206,7 +243,7 @@ docker run --rm \
     (SELECT COUNT(*) FROM fa_engagement_audit_events WHERE engagement_id = '<ENG_ID>') AS audit_events,
     (SELECT COUNT(*) FROM fa_scan_results WHERE engagement_id = '<ENG_ID>') AS scan_results"
 
-# Schema state
+# Schema state — scratch
 docker run --rm \
   -e PGPASSWORD="$SCRATCH_PASS" \
   --network host \
@@ -216,7 +253,23 @@ docker run --rm \
    SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
 ```
 
-Replace `<ENG_ID>` with the engagement ID recorded in `docs/governance/status/L04_evidence_manifest.md`.
+### 8.3 Resolving the ENG-RESTORE-PROOF-01 engagement ID
+
+The engagement alias `ENG-RESTORE-PROOF-01` maps to the third engagement by creation date in the
+`default` tenant (created 2026-06-01). Resolve the ID at drill time using this read-only query
+against the database being validated (production first, then verify the same ID exists in scratch):
+
+```bash
+# Run against production (§8.1 session) to resolve current ENG_ID
+docker run --rm \
+  -e PGPASSWORD="$PROD_PASS" \
+  pgvector/pgvector:pg18 \
+  psql -h <PROD_PROXY_HOST> -p <PROD_PROXY_PORT> -U postgres -d railway --no-password -tA -c \
+  "SELECT id FROM fa_engagements WHERE tenant_id = 'default' ORDER BY created_at LIMIT 3 OFFSET 2"
+```
+
+The returned `id` is `<ENG_ID>`. Record it in your drill notes (not committed). Confirm the same
+ID exists in the scratch database before running the §8.2 per-engagement query.
 
 **L4 requires exact count agreement** across all tables for the selected engagement.
 Any mismatch must be investigated before marking L4 complete.
@@ -313,5 +366,8 @@ be executed and validated, not assumed.
 | Evidence reference | `docs/governance/status/L04_evidence_manifest.md` |
 | Operator | admin@arescore.ai |
 | Next required rehearsal | 2026-10-30 (quarterly) or before second client engagement |
-| Drill duration | ~22 seconds (dump + restore + validation) |
+| End-to-end drill duration | ~3.5 minutes (20:08:46Z → 20:12:11Z, includes Docker image pull) |
+| pg_dump duration | ~2 minutes (network + compression, 1.7 MB output) |
+| Restore duration | ~4 seconds (pg_restore exit 0) |
+| Validation duration | ~18 seconds (restore + validation combined: 20:11:42Z → 20:12:11Z) |
 | Database size | 1.7 MB (compressed) |

@@ -15,7 +15,7 @@ Run through every item below before the client meeting starts. Do not begin the 
 The Railway Hobby plan provides no automatic database backups (`maxBackupsCount = 0`).
 A manual `pg_dump` is required before each engagement to ensure recoverability.
 
-- [ ] Run a manual `pg_dump` of production following `docs/operators/backup_restore.md` §7.2.
+- [ ] Run a manual `pg_dump` of production following `docs/operators/backup_restore.md` §7.2–7.3 (credential setup through dump completion).
 - [ ] Confirm exit code is 0.
 - [ ] Confirm dump file size is non-zero (expected: > 1 MB for a seeded database).
 - [ ] Store the dump in a secure location outside this repository.
