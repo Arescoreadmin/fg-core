@@ -1,5 +1,24 @@
 # PR Fix Log (Strict)
 
+## P-34 — feat(tooling): Phase 0 CI additions — Dependabot, npm audit, coverage reporting
+
+**Branch:** `feat/tooling-phase0-ci-additions`
+**Date:** 2026-07-29
+**Files changed:**
+- `.github/dependabot.yml` — new file; enables Dependabot for pip, npm (root/console/portal), and GitHub Actions on a weekly schedule
+- `Makefile` — adds `console-audit`, `portal-audit` (non-blocking npm audit targets), updates `ci-console`/`ci-portal` to include them, adds `coverage` target
+- `.github/workflows/ci.yml` — adds "Generate coverage report" step in `unit` job after "Run unit lane"; `artifacts/ci/coverage.xml` is captured by the existing artifact upload step
+
+**Root cause:** Three "INSTALL NOW" gaps identified in `docs/governance/audits/tooling_connectors/TOOLING_IMPLEMENTATION_ROADMAP.md` (§1–3): no dependency-update automation, no Node audit in CI, and `pytest-cov` installed but unused.
+
+**Changes:**
+1. **Dependabot** — weekly security-update PRs for Python (pip), Node (3 directories), and GitHub Actions. Conservative `open-pull-requests-limit` prevents PR flood. Complements existing `pip-audit` (which detects but does not auto-open fix PRs).
+2. **npm audit** — `console-audit` and `portal-audit` Makefile targets run `npm audit --omit=dev --audit-level=high`; `|| true` keeps them non-blocking during the pilot burn-in period. Added to `ci-console`/`ci-portal` so results are visible in CI logs without failing the build.
+3. **Coverage** — `make coverage` runs the `not postgres` suite with `--cov=api --cov=engine`; writes `artifacts/ci/coverage.xml` and a terminal summary. Added as a step in the CI `unit` job; the existing `frostgate-unit-artifacts` upload captures the XML automatically.
+
+**Security impact:** None — CI/tooling additions only. No auth, no schema, no production code changed.
+**Result:** Pending CI run.
+
 ## P-33 — fix(mcp): correct repo-root path jail in repo_tools_server.py
 
 **Branch:** `docs/governance-tooling-audit` (PR #591)

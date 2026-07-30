@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # Python — all requirements files at repo root
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+
+  # Node — repo root (markdownlint-cli)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+
+  # Node — apps/console
+  - package-ecosystem: "npm"
+    directory: "/apps/console"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+
+  # Node — apps/portal
+  - package-ecosystem: "npm"
+    directory: "/apps/portal"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3

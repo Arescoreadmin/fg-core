@@ -195,6 +195,11 @@ jobs:
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
+      - name: Generate coverage report
+        run: make coverage
+        env:
+          FG_API_KEY: ${{ env.FG_API_KEY }}
+
       - name: Upload unit artifacts
         if: always()
         uses: actions/upload-artifact@v4
