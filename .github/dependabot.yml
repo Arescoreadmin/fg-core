@@ -7,6 +7,19 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      python-routine:
+        update-types:
+          - "minor"
+          - "patch"
+    # Majors (outside any group) get individual PRs for deliberate compatibility review.
+    # Add ignore entries here only with a documented rationale and a review date:
+    #   ignore:
+    #     - dependency-name: "example-pkg"
+    #       reason: "API break in v4; revisit 2026-10-01"
 
   # Node — repo root (markdownlint-cli)
   - package-ecosystem: "npm"
@@ -15,6 +28,14 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "javascript"
+    groups:
+      root-npm-routine:
+        update-types:
+          - "minor"
+          - "patch"
 
   # Node — apps/console
   - package-ecosystem: "npm"
@@ -23,6 +44,15 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "console"
+    groups:
+      console-routine:
+        update-types:
+          - "minor"
+          - "patch"
 
   # Node — apps/portal
   - package-ecosystem: "npm"
@@ -31,11 +61,28 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "portal"
+    groups:
+      portal-routine:
+        update-types:
+          - "minor"
+          - "patch"
 
-  # GitHub Actions
+  # GitHub Actions — pin action hashes against supply-chain attacks
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      actions-routine:
+        update-types:
+          - "minor"
+          - "patch"

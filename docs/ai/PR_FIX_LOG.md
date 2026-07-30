@@ -3,18 +3,19 @@
 ## P-34 — feat(tooling): Phase 0 CI additions — Dependabot, npm audit, coverage reporting
 
 **Branch:** `feat/tooling-phase0-ci-additions`
-**Date:** 2026-07-29
+**Date:** 2026-07-30
 **Files changed:**
-- `.github/dependabot.yml` — new file; enables Dependabot for pip, npm (root/console/portal), and GitHub Actions on a weekly schedule
-- `Makefile` — adds `console-audit`, `portal-audit` (non-blocking npm audit targets), updates `ci-console`/`ci-portal` to include them, adds `coverage` target
-- `.github/workflows/ci.yml` — adds "Generate coverage report" step in `unit` job after "Run unit lane"; `artifacts/ci/coverage.xml` is captured by the existing artifact upload step
+- `.github/dependabot.yml` — new file; weekly Dependabot for pip, npm (root/console/portal), and GitHub Actions; grouped patch/minor per ecosystem, majors individual; labels by ecosystem; ignore block documented as requiring rationale + review date
+- `Makefile` — `console-audit`/`portal-audit` targets (non-blocking pilot) added to `ci-console`/`ci-portal`; transition plan comment (Phase 1→2→3 enforcement path) inline; `coverage` target using `--cov` (sources and branch coverage from `pyproject.toml`)
+- `.github/workflows/ci.yml` — "Generate coverage report" step in `unit` job after "Run unit lane"; `artifacts/ci/coverage.xml` captured by existing `frostgate-unit-artifacts` upload
+- `pyproject.toml` — `[tool.coverage.run]` (branch=true, source=api+engine, omit) and `[tool.coverage.report]` (exclusion line patterns); `fail_under` deliberately absent until a baseline run establishes the floor
 
-**Root cause:** Three "INSTALL NOW" gaps identified in `docs/governance/audits/tooling_connectors/TOOLING_IMPLEMENTATION_ROADMAP.md` (§1–3): no dependency-update automation, no Node audit in CI, and `pytest-cov` installed but unused.
+**Root cause:** Three "INSTALL NOW" gaps from `TOOLING_IMPLEMENTATION_ROADMAP.md` §1–3: no dependency-update automation, no Node audit in CI, `pytest-cov` installed but unused.
 
 **Changes:**
-1. **Dependabot** — weekly security-update PRs for Python (pip), Node (3 directories), and GitHub Actions. Conservative `open-pull-requests-limit` prevents PR flood. Complements existing `pip-audit` (which detects but does not auto-open fix PRs).
-2. **npm audit** — `console-audit` and `portal-audit` Makefile targets run `npm audit --omit=dev --audit-level=high`; `|| true` keeps them non-blocking during the pilot burn-in period. Added to `ci-console`/`ci-portal` so results are visible in CI logs without failing the build.
-3. **Coverage** — `make coverage` runs the `not postgres` suite with `--cov=api --cov=engine`; writes `artifacts/ci/coverage.xml` and a terminal summary. Added as a step in the CI `unit` job; the existing `frostgate-unit-artifacts` upload captures the XML automatically.
+1. **Dependabot** — weekly grouped PRs (patch/minor bundled per ecosystem, majors individual). Conservative `open-pull-requests-limit`. Labels by ecosystem. Complements `pip-audit` (detects; Dependabot fixes via PR).
+2. **npm audit** — non-blocking Phase 1 pilot; inline comment documents the three-phase path to risk-based enforcement: observe → fail on new criticals → fail on new highs with fix available.
+3. **Coverage** — branch coverage (not just line coverage) via `pyproject.toml [tool.coverage.run]`; structured exclusions for TYPE_CHECKING/abstractmethod/etc.; no arbitrary global threshold on first activation — ratcheting baseline to be set once a main-branch run establishes the floor.
 
 **Security impact:** None — CI/tooling additions only. No auth, no schema, no production code changed.
 **Result:** Pending CI run.

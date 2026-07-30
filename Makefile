@@ -641,8 +641,7 @@ test-unit: venv _require-pytest-venv
 coverage: venv _require-pytest-venv
 	@mkdir -p artifacts/ci
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres" \
-		--cov=api --cov=engine \
-		--cov-report=xml:artifacts/ci/coverage.xml \
+		--cov --cov-report=xml:artifacts/ci/coverage.xml \
 		--cov-report=term-missing
 
 .PHONY: agent-unit agent-build-windows agent-smoke
@@ -1181,6 +1180,11 @@ console-lint: console-deps
 console-test: console-deps
 	@cd $(CONSOLE_DIR) && npm run test
 
+# Enforcement transition (do not remove this comment block until Phase 3 lands):
+#   Phase 1 — now:   || true, observe findings, classify direct vs transitive
+#   Phase 2 — next:  --audit-level=critical (fail only on newly introduced criticals)
+#   Phase 3 — later: --audit-level=high, fail on new highs with available remediation
+#   Use `npm audit --json | jq` to produce a machine-readable baseline before promoting.
 console-audit: console-deps
 	@echo "==> npm audit (console) — non-blocking pilot"
 	@cd $(CONSOLE_DIR) && npm audit --omit=dev --audit-level=high || true
@@ -1203,6 +1207,7 @@ portal-lint: portal-deps
 portal-test: portal-deps
 	@cd $(PORTAL_DIR) && npm run test
 
+# See transition comment on console-audit above — same phases apply.
 portal-audit: portal-deps
 	@echo "==> npm audit (portal) — non-blocking pilot"
 	@cd $(PORTAL_DIR) && npm audit --omit=dev --audit-level=high || true

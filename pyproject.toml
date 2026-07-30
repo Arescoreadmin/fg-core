@@ -8,3 +8,26 @@ markers = [
 
 [tool.ruff]
 target-version = "py311"
+
+[tool.coverage.run]
+branch = true
+source = ["api", "engine"]
+omit = [
+    "*/tests/*",
+    "*conftest*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+    "@abstractmethod",
+]
+# Baseline strategy: track current value, ratchet — do not impose an arbitrary
+# global threshold on first activation. A later gate should use changed-code
+# coverage or a ratcheting baseline rather than a fixed percent.
+# fail_under is intentionally absent until a baseline run establishes the floor.
