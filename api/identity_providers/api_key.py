@@ -59,6 +59,11 @@ def _resolve_psp_fields(
 
         engine = _get_engine()
         with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id},
+                )
             row = conn.execute(
                 text(
                     "SELECT id, authority_tenant_id"

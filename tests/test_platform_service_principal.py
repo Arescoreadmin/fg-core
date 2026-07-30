@@ -1853,3 +1853,59 @@ def test_wrong_authority_tenant_does_not_resolve_as_psp(
         "slot name alone is not PSP identity"
     )
     assert auth_tid is None
+
+
+def test_resolve_psp_sets_tenant_context_before_select_on_postgresql(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PSP-12: _resolve_psp_fields sets app.tenant_id via set_config before SELECT on PostgreSQL.
+
+    Without this binding the table-level RLS policy (migration 0168 lines 63-73)
+    filters out the matching row for non-BYPASSRLS runtime roles, causing every valid
+    PSP key to resolve to service_principal_id=None.
+    """
+    from unittest.mock import MagicMock
+    import api.identity_providers.api_key as _mod
+
+    executed_sqls: list[str] = []
+
+    class _FakeResult:
+        def fetchone(self):
+            return ("psp-uuid-pg", "frostgate-internal")
+
+    class _FakeConn:
+        class dialect:
+            name = "postgresql"
+
+        def execute(self, stmt, params=None):
+            executed_sqls.append(str(stmt))
+            return _FakeResult()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    class _FakeEngine:
+        class dialect:
+            name = "postgresql"
+
+        def connect(self):
+            return _FakeConn()
+
+    monkeypatch.setattr("api.db.get_engine", lambda: _FakeEngine())
+
+    spid, atid = _mod._resolve_psp_fields("frostgate-internal")
+
+    assert spid == "psp-uuid-pg"
+    assert atid == "frostgate-internal"
+    assert len(executed_sqls) == 2, (
+        f"Expected set_config + SELECT (2 statements), got {len(executed_sqls)}: {executed_sqls}"
+    )
+    assert "set_config" in executed_sqls[0], (
+        f"First statement must bind tenant context via set_config; got: {executed_sqls[0]}"
+    )
+    assert "platform_service_principals" in executed_sqls[1], (
+        f"Second statement must be the PSP SELECT; got: {executed_sqls[1]}"
+    )
