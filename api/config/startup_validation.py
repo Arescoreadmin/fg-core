@@ -282,6 +282,7 @@ class StartupValidator:
         self._check_report_signing_key(report)
         self._check_billing_hmac_key(report)
         self._check_minisign_key(report)
+        self._check_observability_config(report)
 
         return report
 
@@ -1150,6 +1151,60 @@ class StartupValidator:
                 name="minisign_secret_key",
                 passed=True,
                 message="Minisign secret key configured.",
+                severity="info",
+            )
+
+    def _check_observability_config(self, report: StartupValidationReport) -> None:
+        """Warn (never block) when prod/staging is missing observability config.
+
+        SENTRY_DSN and FG_OTEL_ENDPOINT are both optional at the code level —
+        api/main.py:_init_sentry() and api/observability/tracing.py:setup_tracing()
+        no-op cleanly when unset, by design (see docs/observability/deployment_topology.md,
+        which documents "no telemetry at all" as a valid, deliberate topology). That
+        means a prod/staging deploy with both unset boots successfully and silently
+        has no error reporting and no distributed tracing. This check surfaces that
+        state in the startup validation report without ever failing the boot —
+        observability being absent should not take down revenue-generating traffic,
+        unlike the hard-required vars in api/config/required_env.py.
+        """
+        if not self.is_production:
+            return
+
+        if not _env_str("SENTRY_DSN", ""):
+            report.add(
+                name="sentry_dsn_missing",
+                passed=False,
+                message=(
+                    "SENTRY_DSN is not set. Backend exceptions will not be reported "
+                    "to Sentry in this environment. This does not block startup."
+                ),
+                severity="warning",
+            )
+        else:
+            report.add(
+                name="sentry_dsn_configured",
+                passed=True,
+                message="SENTRY_DSN configured; Sentry error reporting will initialize.",
+                severity="info",
+            )
+
+        if not _env_str("FG_OTEL_ENDPOINT", ""):
+            report.add(
+                name="otel_endpoint_missing",
+                passed=False,
+                message=(
+                    "FG_OTEL_ENDPOINT is not set. No distributed traces will be "
+                    "exported in this environment (see docs/observability/"
+                    "deployment_topology.md for supported topologies). This does "
+                    "not block startup."
+                ),
+                severity="warning",
+            )
+        else:
+            report.add(
+                name="otel_endpoint_configured",
+                passed=True,
+                message="FG_OTEL_ENDPOINT configured; traces will be exported.",
                 severity="info",
             )
 

@@ -475,6 +475,133 @@ def test_all_runbook_files_exist():
 
 
 # ---------------------------------------------------------------------------
+# Alert delivery (PagerDuty / OpsGenie HTTP routing)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_route_pagerduty_skips_when_routing_key_unset(monkeypatch):
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_pagerduty,
+        AlertEvent,
+        ALERT_5XX_RATE_HIGH,
+    )
+
+    monkeypatch.delenv("FG_PAGERDUTY_ROUTING_KEY", raising=False)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        _route_pagerduty(AlertEvent(condition=ALERT_5XX_RATE_HIGH))
+        mock_urlopen.assert_not_called()
+
+
+@pytest.mark.smoke
+def test_route_pagerduty_posts_expected_payload_when_configured(monkeypatch):
+    import json
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_pagerduty,
+        AlertEvent,
+        ALERT_5XX_RATE_HIGH,
+    )
+
+    monkeypatch.setenv("FG_PAGERDUTY_ROUTING_KEY", "test-routing-key")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        _route_pagerduty(
+            AlertEvent(condition=ALERT_5XX_RATE_HIGH, labels={"tenant_id": "t1"})
+        )
+        mock_urlopen.assert_called_once()
+        request = mock_urlopen.call_args[0][0]
+        assert request.full_url == "https://events.pagerduty.com/v2/enqueue"
+        payload = json.loads(request.data.decode())
+        assert payload["routing_key"] == "test-routing-key"
+        assert payload["event_action"] == "trigger"
+        assert payload["payload"]["summary"] == ALERT_5XX_RATE_HIGH.description
+        assert payload["payload"]["severity"] == ALERT_5XX_RATE_HIGH.severity.value
+        assert payload["links"][0]["href"] == ALERT_5XX_RATE_HIGH.runbook
+
+
+@pytest.mark.smoke
+def test_route_pagerduty_swallows_delivery_errors(monkeypatch):
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_pagerduty,
+        AlertEvent,
+        ALERT_5XX_RATE_HIGH,
+    )
+
+    monkeypatch.setenv("FG_PAGERDUTY_ROUTING_KEY", "test-routing-key")
+    with patch("urllib.request.urlopen", side_effect=OSError("network down")):
+        # Must not raise — alert delivery failures must never break the caller.
+        _route_pagerduty(AlertEvent(condition=ALERT_5XX_RATE_HIGH))
+
+
+@pytest.mark.smoke
+def test_route_opsgenie_skips_when_api_key_unset(monkeypatch):
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_opsgenie,
+        AlertEvent,
+        ALERT_5XX_RATE_HIGH,
+    )
+
+    monkeypatch.delenv("FG_OPSGENIE_API_KEY", raising=False)
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        _route_opsgenie(AlertEvent(condition=ALERT_5XX_RATE_HIGH))
+        mock_urlopen.assert_not_called()
+
+
+@pytest.mark.smoke
+def test_route_opsgenie_posts_expected_payload_when_configured(monkeypatch):
+    import json
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_opsgenie,
+        AlertEvent,
+        ALERT_PROVIDER_FAILURE,
+    )
+
+    monkeypatch.setenv("FG_OPSGENIE_API_KEY", "test-api-key")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        _route_opsgenie(AlertEvent(condition=ALERT_PROVIDER_FAILURE))
+        mock_urlopen.assert_called_once()
+        request = mock_urlopen.call_args[0][0]
+        assert request.full_url == "https://api.opsgenie.com/v2/alerts"
+        assert request.get_header("Authorization") == "GenieKey test-api-key"
+        payload = json.loads(request.data.decode())
+        assert payload["message"] == ALERT_PROVIDER_FAILURE.description
+        assert payload["alias"] == ALERT_PROVIDER_FAILURE.name
+        assert payload["priority"] == "P1"  # CRITICAL -> P1
+
+
+@pytest.mark.smoke
+def test_route_opsgenie_swallows_delivery_errors(monkeypatch):
+    from unittest.mock import patch
+    from api.observability.alerts import (
+        _route_opsgenie,
+        AlertEvent,
+        ALERT_PROVIDER_FAILURE,
+    )
+
+    monkeypatch.setenv("FG_OPSGENIE_API_KEY", "test-api-key")
+    with patch("urllib.request.urlopen", side_effect=OSError("network down")):
+        _route_opsgenie(AlertEvent(condition=ALERT_PROVIDER_FAILURE))
+
+
+@pytest.mark.smoke
+def test_fire_alert_dispatches_to_configured_backend(monkeypatch):
+    """fire_alert() must actually invoke the PagerDuty/OpsGenie routing path
+    when FG_ALERT_BACKEND selects it — not just log the event."""
+    from unittest.mock import patch
+    from api.observability.alerts import fire_alert, ALERT_DB_CONNECTIVITY
+
+    monkeypatch.setenv("FG_ALERT_BACKEND", "pagerduty")
+    monkeypatch.setenv("FG_PAGERDUTY_ROUTING_KEY", "test-routing-key")
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        fire_alert(ALERT_DB_CONNECTIVITY)
+        mock_urlopen.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # Cardinality guard tests
 # ---------------------------------------------------------------------------
 
