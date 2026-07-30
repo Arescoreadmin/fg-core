@@ -1,4 +1,8 @@
 version: 2
+# open-pull-requests-limit: 0 disables routine version-update PRs on all entries.
+# Dependabot security updates bypass this limit and are unaffected — they are
+# governed by GitHub repo settings (Security > Dependabot security updates), not
+# by this file. Set limit > 0 here only when routine version bumps are wanted.
 updates:
   # Python — all requirements files at repo root
   - package-ecosystem: "pip"
@@ -6,7 +10,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "python"
@@ -16,7 +20,7 @@ updates:
           - "minor"
           - "patch"
     # Majors (outside any group) get individual PRs for deliberate compatibility review.
-    # Add ignore entries here only with a documented rationale and a review date:
+    # Add ignore entries only with a documented rationale and a review date:
     #   ignore:
     #     - dependency-name: "example-pkg"
     #       reason: "API break in v4; revisit 2026-10-01"
@@ -27,7 +31,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "javascript"
@@ -43,7 +47,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "javascript"
@@ -60,7 +64,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "javascript"
@@ -77,7 +81,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
       - "github-actions"
