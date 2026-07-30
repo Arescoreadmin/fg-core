@@ -634,9 +634,15 @@ fg-lint: fmt-check
 # Unit tests lane (ALWAYS run as FG_ENV=test)
 # =============================================================================
 
-.PHONY: test-unit
+.PHONY: test-unit coverage
 test-unit: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres"
+
+coverage: venv _require-pytest-venv
+	@mkdir -p artifacts/ci
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q $(PYTEST_FAST_FILTER) \
+		--cov --cov-report=xml:artifacts/ci/coverage.xml \
+		--cov-report=term-missing
 
 .PHONY: agent-unit agent-build-windows agent-smoke
 agent-unit: venv _require-pytest-venv
@@ -1155,8 +1161,8 @@ ci-admin: admin-venv admin-lint admin-test
 CONSOLE_DIR := apps/console
 PORTAL_DIR  := apps/portal
 
-.PHONY: console-deps console-dev console-build console-lint console-test ci-console \
-        portal-deps portal-dev portal-build portal-lint portal-test ci-portal
+.PHONY: console-deps console-dev console-build console-lint console-test console-audit ci-console \
+        portal-deps portal-dev portal-build portal-lint portal-test portal-audit ci-portal
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1174,7 +1180,16 @@ console-lint: console-deps
 console-test: console-deps
 	@cd $(CONSOLE_DIR) && npm run test
 
-ci-console: console-lint console-test
+# Enforcement transition (do not remove this comment block until Phase 3 lands):
+#   Phase 1 — now:   || true, observe findings, classify direct vs transitive
+#   Phase 2 — next:  --audit-level=critical (fail only on newly introduced criticals)
+#   Phase 3 — later: --audit-level=high, fail on new highs with available remediation
+#   Use `npm audit --json | jq` to produce a machine-readable baseline before promoting.
+console-audit: console-deps
+	@echo "==> npm audit (console) — non-blocking pilot"
+	@cd $(CONSOLE_DIR) && npm audit --omit=dev --audit-level=high || true
+
+ci-console: console-lint console-test console-audit
 
 portal-deps:
 	@cd $(PORTAL_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1192,7 +1207,12 @@ portal-lint: portal-deps
 portal-test: portal-deps
 	@cd $(PORTAL_DIR) && npm run test
 
-ci-portal: portal-lint portal-test
+# See transition comment on console-audit above — same phases apply.
+portal-audit: portal-deps
+	@echo "==> npm audit (portal) — non-blocking pilot"
+	@cd $(PORTAL_DIR) && npm audit --omit=dev --audit-level=high || true
+
+ci-portal: portal-lint portal-test portal-audit
 
 # =============================================================================
 # Repo guards

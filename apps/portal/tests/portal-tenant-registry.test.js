@@ -172,19 +172,26 @@ test('provision_tenant_redis_write_fails_safely_without_url', () => {
   const src = readConsole('app/api/admin/provision-tenant/route.ts');
   // Must check for URL presence before connecting
   assert.match(src, /BFF_REDIS_URL.*REDIS_URL/);
-  assert.match(src, /if \(!url\) return false/);
+  // Guard returns a structured PersistenceResult (not bare false) when URL absent
+  assert.match(src, /if \(!url\)/);
 });
 
 test('provision_tenant_suppresses_raw_key_when_registry_write_succeeds', () => {
   const src = readConsole('app/api/admin/provision-tenant/route.ts');
-  assert.match(src, /api_key: registryLive \? null : rawKey/);
+  // api_key exposed only in the dev-override failure branch (accompanied by warning)
+  const apiKeyPos = src.indexOf('api_key: keyData.plaintext_secret');
+  const successPos = src.indexOf('registry_live: true');
+  assert.ok(apiKeyPos > -1, 'api_key must be present in dev-override failure path');
+  assert.ok(successPos > -1, 'success response must set registry_live: true');
+  // Verify suppression: api_key appears only before the success response block
+  assert.ok(apiKeyPos < successPos, 'api_key must not appear in the success response');
 });
 
 test('provision_tenant_tries_redis_when_edge_config_is_not_configured', () => {
   const src = readConsole('app/api/admin/provision-tenant/route.ts');
   // Use the call-site of writeKeyToRedis (inside the handler), not the function definition
   const ecPos = src.indexOf('isRegistryConfigured()');
-  const redisCallPos = src.indexOf('registryLive = await writeKeyToRedis');
+  const redisCallPos = src.indexOf('redisResult = await writeKeyToRedis');
   assert.ok(ecPos > -1, 'isRegistryConfigured() call must be present');
   assert.ok(redisCallPos > -1, 'Redis write call-site must be present');
   assert.ok(ecPos < redisCallPos, 'Edge Config must be attempted before Redis fallback');

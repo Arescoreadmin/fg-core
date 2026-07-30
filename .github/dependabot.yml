@@ -1,0 +1,92 @@
+version: 2
+# open-pull-requests-limit: 0 disables routine version-update PRs on all entries.
+# Dependabot security updates bypass this limit and are unaffected — they are
+# governed by GitHub repo settings (Security > Dependabot security updates), not
+# by this file. Set limit > 0 here only when routine version bumps are wanted.
+updates:
+  # Python — all requirements files at repo root
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "python"
+    groups:
+      python-routine:
+        update-types:
+          - "minor"
+          - "patch"
+    # Majors (outside any group) get individual PRs for deliberate compatibility review.
+    # Add ignore entries only with a documented rationale and a review date:
+    #   ignore:
+    #     - dependency-name: "example-pkg"
+    #       reason: "API break in v4; revisit 2026-10-01"
+
+  # Node — repo root (markdownlint-cli)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "javascript"
+    groups:
+      root-npm-routine:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Node — apps/console
+  - package-ecosystem: "npm"
+    directory: "/apps/console"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "console"
+    groups:
+      console-routine:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Node — apps/portal
+  - package-ecosystem: "npm"
+    directory: "/apps/portal"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "portal"
+    groups:
+      portal-routine:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions — pin action hashes against supply-chain attacks
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      actions-routine:
+        update-types:
+          - "minor"
+          - "patch"

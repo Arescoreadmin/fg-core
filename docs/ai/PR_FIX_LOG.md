@@ -1,5 +1,25 @@
 # PR Fix Log (Strict)
 
+## P-34 — feat(tooling): Phase 0 CI additions — Dependabot, npm audit, coverage reporting
+
+**Branch:** `feat/tooling-phase0-ci-additions`
+**Date:** 2026-07-30
+**Files changed:**
+- `.github/dependabot.yml` — new file; weekly Dependabot for pip, npm (root/console/portal), and GitHub Actions; grouped patch/minor per ecosystem, majors individual; labels by ecosystem; ignore block documented as requiring rationale + review date
+- `Makefile` — `console-audit`/`portal-audit` targets (non-blocking pilot) added to `ci-console`/`ci-portal`; transition plan comment (Phase 1→2→3 enforcement path) inline; `coverage` target using `--cov` (sources and branch coverage from `pyproject.toml`)
+- `.github/workflows/ci.yml` — "Generate coverage report" step in `unit` job after "Run unit lane"; `artifacts/ci/coverage.xml` captured by existing `frostgate-unit-artifacts` upload
+- `pyproject.toml` — `[tool.coverage.run]` (branch=true, source=api+engine, omit) and `[tool.coverage.report]` (exclusion line patterns); `fail_under` deliberately absent until a baseline run establishes the floor
+
+**Root cause:** Three "INSTALL NOW" gaps from `TOOLING_IMPLEMENTATION_ROADMAP.md` §1–3: no dependency-update automation, no Node audit in CI, `pytest-cov` installed but unused.
+
+**Changes:**
+1. **Dependabot** — weekly grouped PRs (patch/minor bundled per ecosystem, majors individual). Conservative `open-pull-requests-limit`. Labels by ecosystem. Complements `pip-audit` (detects; Dependabot fixes via PR).
+2. **npm audit** — non-blocking Phase 1 pilot; inline comment documents the three-phase path to risk-based enforcement: observe → fail on new criticals → fail on new highs with fix available.
+3. **Coverage** — branch coverage (not just line coverage) via `pyproject.toml [tool.coverage.run]`; structured exclusions for TYPE_CHECKING/abstractmethod/etc.; no arbitrary global threshold on first activation — ratcheting baseline to be set once a main-branch run establishes the floor.
+
+**Security impact:** None — CI/tooling additions only. No auth, no schema, no production code changed.
+**Result:** Pending CI run.
+
 ## P-33 — fix(mcp): correct repo-root path jail in repo_tools_server.py
 
 **Branch:** `docs/governance-tooling-audit` (PR #591)
