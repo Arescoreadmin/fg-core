@@ -44,6 +44,12 @@
 
 Every deliverable above should be framed in sales materials against the four competitor classes: the *disclosure appendix + manifest hash + verification bundle* displaces assessment-firm PDFs (no verifiable provenance); the *remediation closed loop with evidence capture* displaces GRC workflow tools (tickets without evidence); the *assessor-led scan suite across 13 connectors* is categorically outside Vanta/Drata questionnaire automation; and the AI-governance-specific findings (AI tool discovery, OAuth risk, vendor governance) are outside Credo/Holistic's model-governance surface. **[MOAT-WIDENING]** assets already shipped; the launch materials just have to say so.
 
+**Approved customer-facing language for the institutional-record asset** (per the MOAT_ASSESSMENT framing rule — never use lock-in-sounding phrasing externally):
+
+> *"FrostGate preserves a continuously verified institutional record of evidence, decisions, exceptions, remediation, and reviewer rationale that would otherwise be fragmented or lost over time."*
+
+Pair it with the genuine portability story (export center, verification bundles) when procurement asks — the record's value comes from its verified, attributed character, not from data being withheld.
+
 ## Operating model math (the numbers that decide whether this scales)
 
 Hour estimates are derived from the runbooks (`first_client_prep.md` budgets 75–90 min in-meeting; `onboarding_runbook.md` splits pre-/in-meeting) plus reasonable allowances — classification: **strong inference / assumption**, to be replaced with actuals from the Stage-1 engagement retro. Timing yourself is already an H-step (H18); extend it to the whole engagement.

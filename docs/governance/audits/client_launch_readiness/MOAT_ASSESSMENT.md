@@ -68,10 +68,16 @@ Revision 1.2 adds the layer the earlier cuts of this assessment undersold. The c
 
 Two properties make this the hardest layer to compete with:
 
-1. **It cannot be reconstructed, even by the client.** Observational data can be re-scanned by a competitor on day one of a switch. *Why the 2026 risk acceptance was granted, by whom, against which evidence, and what the reviewer weighed* exists nowhere else — not in the client's heads two staff-turnovers later, not in any competitor's onboarding import. After a few years, FrostGate holds the only complete account of the client's governance reasoning — which is precisely the artifact a regulator, an acquirer's due-diligence team, or a new CISO asks for first.
+1. **It cannot be reconstructed, even by the client.** *(Internal analysis — see the framing note below before any of this reaches customer-facing material.)* Observational data can be re-scanned by a competitor on day one of a switch. *Why the 2026 risk acceptance was granted, by whom, against which evidence, and what the reviewer weighed* exists nowhere else — not in the client's heads two staff-turnovers later, not in any competitor's onboarding import. After a few years, FrostGate holds the only complete account of the client's governance reasoning — which is precisely the artifact a regulator, an acquirer's due-diligence team, or a new CISO asks for first.
 2. **It appreciates on the client's side of the ledger.** Most switching costs are friction the vendor imposes; this one is value the *client* loses by leaving. That is the strongest form of retention, and it compounds without any additional engineering — every QA approval, risk acceptance, and remediation closure is already writing to append-only, attributed, signed ledgers.
 
 The schema for all of it is shipped (see table). The moat action is therefore unchanged and sharpened: **every month of live client operation deposits irreplaceable decision history; nothing on the pre-launch backlog deposits any.**
+
+**⚠ Customer-facing framing rule.** The analysis above is internal strategy language. In any external material — proposals, portal copy, sales decks, the DPA conversation — never use phrasing that reads as intentional lock-in or engineered client dependence ("cannot be reconstructed," "cannot leave," "only complete account"). Procurement and counsel read that as vendor risk, and it invites data-portability demands as a contract term. The approved external framing is:
+
+> *"FrostGate preserves a continuously verified institutional record of evidence, decisions, exceptions, remediation, and reviewer rationale that would otherwise be fragmented or lost over time."*
+
+Same moat, framed as a service to the client's continuity rather than a constraint on their exit. Note the export center and verification bundles genuinely support data portability — the retention comes from the record's *verified, attributed* character, which loses its evidentiary weight outside the chain, not from withholding data. Say the first part externally; keep the second part internal.
 
 ## What competitors can copy vs. cannot
 

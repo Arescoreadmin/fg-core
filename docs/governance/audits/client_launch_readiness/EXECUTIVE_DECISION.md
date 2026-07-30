@@ -1,7 +1,10 @@
 # FrostGate Launch Readiness — Executive Decision
 
-**Audit date:** 2026-07-30 · **Revision 1.2** (see addenda at end)
-**Launch gate:** `LAUNCH_DEFINITION_OF_DONE.md` — 14 binary outcomes gate the design partner; 6 more gate the paying cohort. The plan flexes; the gate does not.
+**Audit date:** 2026-07-30 · **Revision 1.3 — FROZEN AS CANONICAL.** Further refinement of this audit is lower ROI than execution; changes from here are recorded as execution learnings (Stage-1 retro, DoD check-offs), not audit revisions.
+**Launch gate:** `LAUNCH_DEFINITION_OF_DONE.md` — 14 binary outcomes gate the design partner; 6 more gate the paying cohort. The plan flexes; the gate does not. Four failure classes are non-waivable by anyone: tenant-isolation exposure, backup/restore failure, portal login failure, audit/evidence-integrity failure.
+
+**Canonical sequence from here:**
+`freeze audit (done) → implementation PR plan for the 14 plan tasks → execute Launch DoD → run design partner → capture actual friction (hours, interventions, support calls) → adjust Stage 2 package from evidence`
 **Scope:** Entire `fg-core` repository at `cd79f1f` (main lineage), production topology per `CLIENT_READINESS.md`
 **Method:** Direct repository inspection with code-level evidence (see `EVIDENCE_INDEX.md`). Documentation claims were verified against implementation, not trusted.
 **Constraint applied:** 20 effective engineering days pre-launch.
@@ -12,7 +15,7 @@
 
 **CONFIDENCE: MEDIUM**
 **PRE-LAUNCH EFFORT: 19.0 engineering days** (plan in `THIRTY_DAY_LAUNCH_PLAN.md`; 16.6 committed + 2.4 buffer)
-**RECOMMENDED FIRST CLIENT DATE: 2026-08-27** (30 days out), Stage 1 design partner; first *full-price* clients (Stage 2) ~2 weeks after a clean design-partner engagement.
+**RECOMMENDED FIRST CLIENT DATE: 2026-08-27, contingent on passing the Launch DoD gate** — the date is earned by L1–L14 all checking, not by the calendar plan completing. Stage 1 design partner; first *full-price* clients (Stage 2) ~2 weeks after a clean design-partner engagement **and** S1–S6.
 
 ### TOP FIVE NON-NEGOTIABLE ACTIONS
 
@@ -105,7 +108,7 @@ The moat thesis — deterministic evidence chain + assessor-led field evidence +
 VERDICT: **READY WITH CONDITIONS**
 CONFIDENCE: **MEDIUM**
 PRE-LAUNCH EFFORT: **19.0 engineering days**
-RECOMMENDED FIRST CLIENT DATE: **2026-08-27 (Stage 1 design partner)**
+RECOMMENDED FIRST CLIENT DATE: **2026-08-27 — contingent on all Launch DoD items (L1–L14) passing, not on plan completion**
 
 TOP FIVE NON-NEGOTIABLE ACTIONS:
 1. Full production dry run (H1–H18) on the current stack — FG-LR-001
@@ -137,5 +140,17 @@ Five refinements and one new deliverable, applied in place. Verdict and 19.0-day
 2. **`journeyState` is now a formal state machine** (`PORTAL_UX_AUDIT.md` §5.1a): 10 states, explicit allowed-transition table, derivation-not-storage, two sanctioned reverse edges only, fail-safe unknown-state resolution, one CTA per state, table-driven transition tests (Stage 2 DoD S1).
 3. **Financial impact is categorized, not predicted** (`CUSTOMER_COMMERCIAL_READINESS.md` report spec ch. 3): every finding maps deterministically to Regulatory Exposure / Operational Risk / Productivity / AI Governance / Data Protection / Business Continuity; dollar ranges only where a citable benchmark exists; never "estimated savings."
 4. **Capacity numbers carry explicit assumptions** (one founder, no subcontractors, M365 clients, current automation level, current scope, travel excluded) so they can be revised honestly when any assumption changes.
-5. **The moat's deepest layer is named: decision history as institutional memory** (`MOAT_ASSESSMENT.md`): what accumulates is not just observations but *choices with attributed rationale* — governance decisions, accepted risks, exceptions, reviewer reasoning — already flowing into shipped append-only ledgers. It cannot be reconstructed by a competitor *or by the client*, and it appreciates on the client's side of the ledger: the strongest form of retention.
+5. **The moat's deepest layer is named: decision history as institutional memory** (`MOAT_ASSESSMENT.md`): what accumulates is not just observations but *choices with attributed rationale* — governance decisions, accepted risks, exceptions, reviewer reasoning — already flowing into shipped append-only ledgers. Internally: it cannot be reconstructed by a competitor or by the client, and it appreciates on the client's side of the ledger. **Externally, only the approved framing is used** (MOAT_ASSESSMENT framing rule): FrostGate preserves a continuously verified institutional record that would otherwise be fragmented or lost over time.
 6. **New deliverable: `LAUNCH_DEFINITION_OF_DONE.md`** — the binary checkpoint this audit previously lacked. 14 Launch DoD outcomes (external client completes engagement unassisted; report signed and delivered; backup restored; remediation tracked to completion; manual governance review performed; incident drill executed; console at launch IA; portal next-action v0; no open P0s; …) gate Stage 1. Full `journeyState`, Operator Home, and Report v2 sit in the Stage 2 DoD — a recorded, deliberate trade to hold the 20-day cap.
+
+## Addendum — Revision 1.3 (freeze + final consistency validation)
+
+Five cross-artifact checks were executed before freezing; two required fixes, which were applied:
+
+1. **Every Launch DoD item → executable verification step:** PASS. Each L-item carries a verification method, and a traceability table in the DoD now maps L1–L14 to their 30-day-plan tasks.
+2. **Every P0 → Launch DoD item:** PASS (FG-LR-001→L2, 002→L1, 003→L4, 004→L10, 005→L7; L13 is the roll-up).
+3. **Stage-2 features absent from committed effort:** PASS. Only FG-LR-028's 0.5-day minimum is in the 16.6; the 8.5-day package (026/027/028 remainders) is outside the window.
+4. **Risk acceptance impossible for the four fatal classes:** **FAILED, fixed.** `LAUNCH_BLOCKERS.md` previously allowed written founder acceptance for any blocker. Both it and the DoD now state that no written acceptance — founder or otherwise — exists for tenant-isolation exposure, backup/restore failure, portal login failure, or audit/evidence-integrity failure (L1, L2, L4, L13 have no override path).
+5. **Date contingent on the gate:** **PARTIAL, fixed.** Both date statements in this document now read as contingent on L1–L14 passing, not on plan completion.
+
+Also in 1.3: the institutional-memory claim is split into internal analysis vs. approved external framing ("FrostGate preserves a continuously verified institutional record of evidence, decisions, exceptions, remediation, and reviewer rationale that would otherwise be fragmented or lost over time") — recorded in `MOAT_ASSESSMENT.md` (framing rule) and `CUSTOMER_COMMERCIAL_READINESS.md` (sales language), paired with the genuine portability story so procurement never reads lock-in.

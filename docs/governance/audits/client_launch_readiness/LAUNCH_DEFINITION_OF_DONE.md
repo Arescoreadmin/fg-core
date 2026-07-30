@@ -27,6 +27,20 @@ Scope note: the founder's review draft of this checklist included "Portal journe
 
 **Rule:** any unchecked item on the day the design partner is scheduled pushes the date, not the item — with two exceptions that may be explicitly risk-accepted in writing by the founder: L11 (if the purge rehearsal slips, the calendar control + day-90 buffer covers the first engagement) and L14 (commercial paper can trail signature by days, not the engagement itself).
 
+**Non-waivable classes.** No written risk acceptance — founder or otherwise — exists for failures in these four classes: **tenant-isolation exposure · backup/restore failure · portal login failure · audit/evidence-integrity failure.** L1, L2, L4, and L13 therefore have no override path of any kind. This mirrors the never-downgrading stop conditions in `STAGGERED_ROLLOUT_PLAN.md`.
+
+### Traceability: every Launch DoD item → its executable step in the 30-day plan
+
+| DoD | Plan task (THIRTY_DAY_LAUNCH_PLAN.md) | DoD | Plan task |
+|-----|----------------------------------------|-----|-----------|
+| L1 | Task 1 (portal named-user proof) | L8 | Task 8 (console gating) |
+| L2 | Task 5 (H1–H18 dry run) | L9 | Task 9 (portal gating + discoveries hero) |
+| L3 | Task 6 (report/PDF QA) | L10 | Task 4 (infra headroom) |
+| L4 | Task 3 (backup + restore drill) | L11 | Task 12 (retention purge rehearsal) |
+| L5 | Task 5 (dry-run steps H15–H16) | L12 | Tasks 13 + 2 (secrets; auto-recharge) |
+| L6 | Task 5 (CG v0 drift rehearsal) | L13 | Roll-up of tasks 1, 3, 4, 5, 7 |
+| L7 | Task 7 (incident/rollback drill) | L14 | Founder commercial track |
+
 ## Stage 2 DoD — gate to first full-price cohort
 
 | # | Outcome (binary) | Verified by | Findings closed |

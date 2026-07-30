@@ -4,7 +4,7 @@
   "branch_audited": "claude/frostgate-launch-readiness-16ttje (head cd79f1f, tracking main)",
   "verdict": "READY_WITH_CONDITIONS",
   "confidence": "MEDIUM",
-  "revision": "1.2",
+  "revision": "1.3-frozen",
   "launch_gate": "LAUNCH_DEFINITION_OF_DONE.md (binary; L1-L14 gate Stage 1, S1-S6 gate Stage 2)",
   "pre_launch_effort_days": 19.0,
   "findings": [

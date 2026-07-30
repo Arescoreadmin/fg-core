@@ -1,6 +1,8 @@
 # Launch Blockers (P0)
 
-Five blockers. None require building new product capability — all are verification, hardening, or operationalization of what exists. A paying client should not be onboarded until each is resolved or explicitly risk-accepted in writing by the founder.
+Five blockers. None require building new product capability — all are verification, hardening, or operationalization of what exists. A paying client should not be onboarded until each is resolved.
+
+**Risk acceptance is not available for this list.** Written founder risk-acceptance exists elsewhere in this audit for two narrow DoD items (L11, L14 — see `LAUNCH_DEFINITION_OF_DONE.md`), but **no written acceptance can waive**: tenant-isolation exposure, backup/restore failure, portal login failure, or audit/evidence-integrity failure. Those four classes end the launch conversation until fixed — the same classes that appear as immediate stop conditions in `STAGGERED_ROLLOUT_PLAN.md`, which never downgrade at any stage.
 
 Cross-reference: structured detail in `audit_findings.json` (FG-LR-001 … FG-LR-005); evidence classes in `EVIDENCE_INDEX.md`.
 
