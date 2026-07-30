@@ -1729,7 +1729,7 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
         tenant_id="frostgate-internal",
         scopes=set(),
         key_db_id=None,
-        credential_slot=_PSP_CREDENTIAL_SLOT,
+        credential_slot=PSP_CREDENTIAL_SLOT,
     )
     request = _FakeRequest(auth)
 
@@ -1760,7 +1760,6 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
     assert actor.service_principal_id is None, "attribution must be None when resolution fails"
 
     # require_psp_actor() must deny this actor with 403
-    from api.actor_context import ActorContext
     from api.auth_dispatch import require_psp_actor
 
     dep = require_psp_actor()
@@ -1768,10 +1767,6 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
         dep(actor=actor)
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["code"] == "PSP_ACTOR_REQUIRED"
-
-
-# Import the slot constant for PSP-09 (used in _FakeAuth above)
-from api.platform_service_principal import PSP_CREDENTIAL_SLOT as _PSP_CREDENTIAL_SLOT
 
 
 def test_two_requests_produce_distinct_correlated_events(
@@ -1864,7 +1859,6 @@ def test_resolve_psp_sets_tenant_context_before_select_on_postgresql(
     filters out the matching row for non-BYPASSRLS runtime roles, causing every valid
     PSP key to resolve to service_principal_id=None.
     """
-    from unittest.mock import MagicMock
     import api.identity_providers.api_key as _mod
 
     executed_sqls: list[str] = []
