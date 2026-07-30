@@ -8,6 +8,24 @@ Run through every item below before the client meeting starts. Do not begin the 
 
 ---
 
+## 0. Pre-Engagement Database Backup
+
+**Perform before every client engagement. Estimated time: 5 minutes.**
+
+The Railway Hobby plan provides no automatic database backups (`maxBackupsCount = 0`).
+A manual `pg_dump` is required before each engagement to ensure recoverability.
+
+- [ ] Run a manual `pg_dump` of production following `docs/operators/backup_restore.md` §7.2.
+- [ ] Confirm exit code is 0.
+- [ ] Confirm dump file size is non-zero (expected: > 1 MB for a seeded database).
+- [ ] Store the dump in a secure location outside this repository.
+- [ ] Record the dump timestamp in your engagement notes.
+
+> Do not begin the engagement if pg_dump fails. The dump represents the only restore point
+> if data is lost during the engagement.
+
+---
+
 ## 1. System Health Check
 
 - [ ] Railway API is responding — open `https://api-production-6d47.up.railway.app/health` (or your Railway URL) and confirm a 200 response.
