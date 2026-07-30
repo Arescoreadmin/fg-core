@@ -454,13 +454,15 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 |----------|----------|-------------|
 | `CORE_API_URL` | Yes | Railway backend URL |
 | `CORE_API_KEY` | Yes | Default portal API key |
-| `CORE_TENANT_ID` | Yes | Portal tenant — must be `frostgate-internal` in production, not `default` (see note below) |
+| `CORE_TENANT_ID` | Yes | **The specific client tenant ID this portal deployment serves** — not `frostgate-internal` (that's the backend/console operator tenant), not `default` (see note below) |
 | `PORTAL_SESSION_SECRET` | Yes | HMAC secret for signed portal session cookies |
 | `FG_PORTAL_DEMO_TENANTS` | No | Comma-separated allowlist for portal demo tenant selection |
 | `FG_PORTAL_DEMO_TENANT_KEYS` or `FG_DEMO_TENANT_API_KEYS` | No | JSON map of demo tenant IDs to tenant-bound API keys |
 | `NEXT_PUBLIC_PORTAL_DEMO_TENANTS` | No | Public tenant ID list rendered in the login selector; contains no secrets |
 
-**Production note:** `CORE_TENANT_ID=default` is no longer supported. The console validates this at startup (`apps/console/lib/startup-validation.ts` → `validateProductionConfig()`) and will fail to start in production or strict mode if the value is missing or set to `default`. The portal BFF proxy (`apps/portal/app/api/core/[...path]/route.ts`) only checks that `CORE_TENANT_ID` is *present* — it does not reject `default` specifically, so a stale `default` value there will fail differently (requests reaching a nonexistent/invalid tenant) rather than failing fast at startup. The Railway backend API service enforces the strict check independently via `api/internal_platform_authority.py`. Use the canonical internal platform authority tenant, `frostgate-internal`, everywhere. See [`operators/production_configuration_changes.md`](operators/production_configuration_changes.md) for the full required-variable checklist.
+**Production note:** `CORE_TENANT_ID=default` is no longer supported. The console validates this at startup (`apps/console/lib/startup-validation.ts` → `validateProductionConfig()`) and will fail to start in production or strict mode if the value is missing or set to `default`. The portal BFF proxy (`apps/portal/app/api/core/[...path]/route.ts`) only checks that `CORE_TENANT_ID` is *present* — it does not reject `default` specifically, so a stale `default` value there fails differently (requests reaching a nonexistent/invalid tenant) rather than failing fast at startup. The Railway backend API service enforces the strict check independently via `api/internal_platform_authority.py`.
+
+**Do not use `frostgate-internal` for the portal.** That value is the internal platform authority tenant used by the backend and console (FrostGate's own operator surfaces). The portal is client-facing — `PortalClientScopeMiddleware` (`api/middleware/portal_scope.py`) validates every portal session's membership against the tenant in `CORE_TENANT_ID`, and portal memberships are stored under the client's own tenant, not `frostgate-internal`. Setting the portal to `frostgate-internal` does not crash the deployment — it silently 403s every legitimate client session instead. See [`operators/production_configuration_changes.md`](operators/production_configuration_changes.md) for the full explanation and required-variable checklist.
 
 ### Railway API service — full list
 
