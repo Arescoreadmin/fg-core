@@ -7,7 +7,7 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 
 **Execution order v2** — resequenced per `IMPLEMENTATION_SANITY_PASS.md` (structural fixes S-1: secrets rotate *before* the dry run; S-2: Railway plan tier decided Day 1; founder-directed Week-1 reorder: recovery verified before anything else touches production). Task IDs are now T1–T14 and match the sanity-pass table and the DoD traceability map.
 
-**Config-freeze rule (S-1):** any production configuration change after T6 (dry run) passes requires a golden-path smoke re-run before the client date.
+**Config-freeze rule (S-1) — permanent invariant, not launch-scoped:** any production configuration change after a validation gate passes (T6 now; any dry run or smoke thereafter) requires a golden-path smoke re-run before the next client-facing use. Validated-config-is-launched-config, forever. Codified as rollout cross-stage rule 1 (`STAGGERED_ROLLOUT_PLAN.md`), which survives this plan.
 
 ---
 

@@ -1,6 +1,7 @@
 # First Client Playbook — The Script for the Stage 1 Engagement
 
 **Purpose:** the operational script for FrostGate's first design-partner engagement. Not a technical document — the technical procedures live in the runbooks it links. This is what the founder-operator follows, says, sends, and measures, start to finish.
+**Living document:** annotate it after every engagement (retro §9 feeds it directly) — mark what was wrong, what was unnecessary, what was missing, dated inline. The value of this playbook is the accumulated corrections, not the first draft; expect to simplify it by client #5 and to be surprised by it at client #20.
 **Preconditions:** every Launch DoD item checked (`docs/governance/audits/client_launch_readiness/LAUNCH_DEFINITION_OF_DONE.md`). If any L-item is unchecked, this playbook does not start.
 **Companion documents:** `first_client_prep.md` (day-of pre-flight) · `onboarding_runbook.md` (scan procedures) · `console_user_guide.md` · `credential_delivery.md` · `letters/` #1–#6 · DPA template.
 

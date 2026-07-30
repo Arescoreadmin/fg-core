@@ -62,7 +62,7 @@ Gates are evidence-based: no stage advances on calendar time alone. All stages a
 
 ## Cross-stage rules
 
-1. **A stack change between engagements re-runs the golden-path smoke** (subset of H-steps) before the next client touches it.
+1. **Any production change — code *or configuration* (secrets, env vars, plan tier, provider settings) — after a validation gate passes re-runs the golden-path smoke** (subset of H-steps) before the next client touches it. Permanent invariant (S-1 origin): the configuration that was validated is the configuration that serves clients; anything else is an unvalidated deploy wearing a validated deploy's evidence.
 2. **Stop conditions never downgrade** — the Stage-1 list applies forever.
 3. **Every stage retro updates `CLIENT_READINESS.md`** — it is the living gate record (and is currently stale; FG-LR-009).
 4. **Nothing ships to a stage it wasn't gated for** — feature exposure follows the stage table, not merge dates.
