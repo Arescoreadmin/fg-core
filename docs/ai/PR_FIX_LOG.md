@@ -1,44 +1,27 @@
 # PR Fix Log (Strict)
 
-## P-31 — feat(identity): actor/service/target attribution for PSP API key path
+## P-32 — fix(observability): verify production telemetry configuration
 
-**Branch:** `feature/pr-588-actor-service-target-attribution` (PR #588)
-**Date:** 2026-07-29
+**Branch:** `fix/production-observability-verification` (PR #590)
+**Date:** 2026-07-30
 **Files changed:**
-- `api/auth_scopes/definitions.py` — `credential_slot` field added to `AuthResult`
-- `api/auth_scopes/resolution.py` — propagate `credential_slot` from credential authority result
-- `api/identity_providers/api_key.py` — `_PSP_CREDENTIAL_SLOT` constant, `_resolve_psp_fields()`, `_emit_psp_auth_event()`, PSP branch in `extract_api_key_actor()`, `service_principal_id` and `authority_tenant_id` populated on `ActorContext`
-- `api/auth_dispatch.py` — `require_psp_actor()` FastAPI dependency factory
-- `api/platform_service_principal.py` — stale comment fix (PR #587 → #588)
-- `tests/test_platform_service_principal.py` — 12 new tests (PSP-01..PSP-12)
+- `api/config/startup_validation.py` — new `_check_observability_config()` method on `StartupValidator`
+- `tests/security/test_startup_validation.py` — observability config tests added
+- `tests/test_observability.py` — new observability integration tests
 
-**Root cause / motivation:** `ActorContext.service_principal_id` and `authority_tenant_id` were always `None`. PSP-authenticated requests were indistinguishable from ordinary API-key requests in the audit trail and no dependency existed to gate routes on PSP identity.
+**Root cause / motivation:** `SENTRY_DSN` and `FG_OTEL_ENDPOINT` are optional at the code level — `api/main.py:_init_sentry()` and `api/observability/tracing.py:setup_tracing()` no-op cleanly when unset by design (see `docs/observability/deployment_topology.md`). A prod/staging deploy with both vars unset boots successfully with no error reporting and no distributed tracing, with no indication in the startup log. This check surfaces that silent state.
 
-**Architecture:**
-- `credential_slot` flows from the credential authority validation result through `AuthResult` into `extract_api_key_actor()`
-- When `credential_slot == "platform-service-principal:v1"`, `_resolve_psp_fields(tenant_id)` queries `platform_service_principals` for the active PSP bound to that authority tenant; returns `(service_principal_id, authority_tenant_id)`
-- Binding requires both `credential_slot` AND `authority_tenant_id` — slot name alone is insufficient identity
-- `uq_psp_authority_kind_active` partial index guarantees at most one non-revoked PSP per authority+kind; `LIMIT 1` is defensive
-- `_emit_psp_auth_event()` writes `authentication_success` to `platform_service_principal_events` per request (REQUEST auth, not LIFECYCLE auth); best-effort, failures logged and swallowed
-- `require_psp_actor()` fails closed: denies 403 `PSP_ACTOR_REQUIRED` when `service_principal_id is None`
-- `_resolve_psp_fields` fails open: returns `(None, None)` on any DB error so attribution gaps never invalidate a valid key
+**Fix:** Added `_check_observability_config()` to `StartupValidator`. Runs only in prod/staging (`is_production` guard). Emits `severity="warning"` (never `severity="error"`) for missing `SENTRY_DSN` or `FG_OTEL_ENDPOINT`. Never blocks startup — observability being absent must not take down revenue-generating traffic. Passing config emits `severity="info"`.
 
-**P1 bot finding addressed (post-review):**
-`_resolve_psp_fields` opened a connection without setting `app.tenant_id`, so the RLS policy (migration 0168 lines 63-73) hid the matching row for non-BYPASSRLS runtime roles. Every PSP key resolved to `service_principal_id=None` on PostgreSQL, emitted no auth event, and was rejected by `require_psp_actor()`. Fixed: `set_config('app.tenant_id', :tid, true)` is now executed before the SELECT on PostgreSQL connections, matching the pattern used by all PSP write paths. PSP-12 tests the tenant binding directly.
+**Security impact:** None. Both env vars are non-secret configuration pointers (DSN endpoint URL, OTEL collector URL). The check is read-only; it calls `_env_str()` which reads environment variables without side effects. No auth logic, no credential handling, no schema change.
 
-**Security invariants:**
-- Only `credential_slot == "platform-service-principal:v1"` AND matching `authority_tenant_id` triggers PSP attribution — cross-tenant slot collision cannot grant PSP identity
-- Suspended/revoked PSPs (lifecycle_state != 'active') return `(None, None)`; `require_psp_actor()` denies correctly
-- No credential material (key prefix, token, secret) is ever included in emitted events or logs
-- Target tenant attribution is intentionally NOT on `ActorContext` — it is per-request context, not per-actor identity
-
-**Tests added:** 12 tests (PSP-01..PSP-12) covering: slot → fields populated, non-PSP slot → None, no DB row → None, `require_psp_actor()` deny, `require_psp_actor()` pass, auth event emitted, target tenant not on ActorContext, suspended PSP → None, DB exception → request valid but PSP denied, distinct request_ids → correlated events/no credential material, wrong authority tenant → not resolved, PostgreSQL tenant binding via set_config.
-
-**Validation:** `pytest tests/test_platform_service_principal.py` → 88 passed. `make required-tests-gate fg-contract` → pass.
+**Tests added:** Tests verify: warning emitted when SENTRY_DSN absent, warning emitted when FG_OTEL_ENDPOINT absent, info emitted when both present, check skipped in non-production, both warnings independent of each other.
 
 **Result:** Pass.
 
 ---
+
+## P-31 — feat(identity): actor/service/target attribution for PSP API key path
 
 ## P-30 — feat(identity): establish canonical platform service principal
 
