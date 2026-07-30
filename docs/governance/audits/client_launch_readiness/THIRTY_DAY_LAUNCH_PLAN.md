@@ -22,7 +22,7 @@ Rule for the window: **no new product surface, no refactors, no trust-layer PRs.
 
 | # | Task | Finding | Days | Exit criteria |
 |---|------|---------|------|---------------|
-| 5 | Full H1–H18 production dry run on current stack (includes `migration_status` check against prod, then clear `FG_DB_MIGRATIONS_RISK_ACCEPTED`; includes client-access-code delivery rehearsal) | FG-LR-001 | 3.0 | All 18 steps pass; dated log in docs/operators/ |
+| 5 | Full H1–H18 production dry run on current stack (includes `migration_status` check against prod, then clear `FG_DB_MIGRATIONS_RISK_ACCEPTED`; client-access-code delivery rehearsal; **one manual CG v0 drift-cycle rehearsal** — re-scan + delta summary, DoD item L6) | FG-LR-001, FG-LR-020 (v0) | 3.0 | All 18 steps pass; dated log in docs/operators/; delta summary produced |
 | 6 | Report/PDF QA on dry-run artifact: section checklist (no placeholders, advisory language, manifest hash, data-collected appendix); fix defects | FG-LR-011 | 1.0 | Checklist signed off |
 | 7 | Incident/rollback runbook + one timed Railway rollback drill + client-comms template | FG-LR-005 | 1.0 | Rollback < 15 min, documented |
 
@@ -74,3 +74,7 @@ Price card in proposal · response-time sentence in letter #1 · DPA cross-check
 ## Stop condition for the plan itself
 
 If the Week-2 dry run surfaces defects consuming more than the 2.4-day buffer, **push the client date rather than cutting tasks 7, 11, or 12** — the ops floor is not negotiable; the date is.
+
+## The gate
+
+This plan is the *work*; **`LAUNCH_DEFINITION_OF_DONE.md` is the *gate*** — 14 binary Launch DoD outcomes (L1–L14) that must all be checked before the design partner is onboarded, and 6 Stage 2 DoD outcomes (S1–S6) before the first full-price cohort. The plan can flex task order and days; the gate does not flex. Plan complete + DoD item failing = the date moves.

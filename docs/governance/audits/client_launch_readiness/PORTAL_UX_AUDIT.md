@@ -74,6 +74,36 @@ Login → Welcome → Assessment in progress → Upload evidence → Review find
 
 **Implementation shape:** a BFF-computed `journeyState` derived from existing endpoints (engagement status, scan counts, findings, report versions, remediation activity) drives (a) a persistent stepper across the top of every page and (b) the single highlighted "next action" card on the dashboard. No backend changes; the pages already exist — this is a composition layer. **Effort: ~2.5 days, Stage 2→3 package (FG-LR-028).** For launch, the existing dashboard's Immediate Actions callout is the acceptable v0 of the same idea.
 
+### 5.1a The `journeyState` machine (formal definition)
+
+`journeyState` is a deterministic pure function of server-side facts — never client-side state, never localStorage. Formalizing it makes the stepper testable and removes all ambiguity about "what does the client see when":
+
+```
+INVITED → AUTHENTICATED → ASSESSMENT_ACTIVE → EVIDENCE_PENDING → EVIDENCE_COMPLETE
+        → ANALYSIS_RUNNING → FINDINGS_READY → REPORT_AVAILABLE → REMEDIATION_ACTIVE → MONITORING
+```
+
+| State | Entry condition (server-side facts) | Allowed transitions |
+|-------|-------------------------------------|---------------------|
+| `INVITED` | invitation row exists, not accepted | → AUTHENTICATED |
+| `AUTHENTICATED` | first valid portal session, engagement has no scan results yet | → ASSESSMENT_ACTIVE |
+| `ASSESSMENT_ACTIVE` | ≥1 scan job running/complete OR questionnaire started | → EVIDENCE_PENDING · → ANALYSIS_RUNNING |
+| `EVIDENCE_PENDING` | ≥1 open evidence/document request to the client | → EVIDENCE_COMPLETE |
+| `EVIDENCE_COMPLETE` | zero open client evidence requests | → ANALYSIS_RUNNING |
+| `ANALYSIS_RUNNING` | scans complete, findings not yet published | → FINDINGS_READY |
+| `FINDINGS_READY` | ≥1 finding visible to portal | → REPORT_AVAILABLE |
+| `REPORT_AVAILABLE` | QA-approved report version exists (engagement `delivered`) | → REMEDIATION_ACTIVE |
+| `REMEDIATION_ACTIVE` | ≥1 finding open post-delivery | → MONITORING · → REPORT_AVAILABLE (new report version) |
+| `MONITORING` | all findings terminal OR engagement status `monitoring` (CG v0) | → ASSESSMENT_ACTIVE (re-scan/reassessment) |
+
+Rules that make it deterministic and safe:
+
+- **Derivation, not storage.** The state is computed per request from the facts above; there is no `journey_state` column to drift. (If later persisted for analytics, the stored value is a cache, never the authority.)
+- **Backward moves are explicit, not accidental.** Only two reverse edges exist: REMEDIATION_ACTIVE → REPORT_AVAILABLE (new report version supersedes) and MONITORING → ASSESSMENT_ACTIVE (reassessment). Any other observed regression (e.g., findings disappearing) renders the last stable state and logs a telemetry warning rather than bouncing the client backward.
+- **Evidence loops are re-entrant.** EVIDENCE_PENDING can recur after ANALYSIS_RUNNING if the assessor requests more; the stepper shows the furthest state reached, with the current ask as the next-action card — progress never appears to un-happen.
+- **Each state binds exactly one primary CTA** (the step table in §5.1); unknown/ambiguous fact combinations resolve to the most conservative earlier state — fail-safe, never fail-forward into "Download report" prematurely.
+- **Test contract:** a table-driven unit test enumerates every fact combination → expected state; transitions not in the table are assertion failures.
+
 ### 5.2 Customer psychology — the confidence curve
 
 The assessment is the product the client is deciding whether to trust *while it runs*. Each stage must raise confidence, and the audit maps where today's build helps or hurts:

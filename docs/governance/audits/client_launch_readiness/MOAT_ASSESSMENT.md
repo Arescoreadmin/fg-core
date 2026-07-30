@@ -50,10 +50,33 @@ Auth/OIDC plumbing, dashboards, PDF generation, Stripe billing, uptime monitorin
 3. Report/explanation polish (the compounding *trust* channel with buyers).
 4. Second-operator enablement (console gating → training → the operational advantage becomes transferable, i.e., a business not a founder).
 
+## The deepest layer: decision history as institutional memory
+
+Revision 1.2 adds the layer the earlier cuts of this assessment undersold. The compounding asset is not just *longitudinal data* (what was observed over time) — it is **decision history** (what the organization *chose*, *why*, and *who* stood behind it). What accumulates per client, per year:
+
+| Accumulating record | Where it already lives (shipped) |
+|---------------------|----------------------------------|
+| Evidence, with provenance and lifecycle state | `fa_evidence` + Ed25519-signed provenance + lifecycle locks |
+| Findings and their full status history | `fa_findings` + append-only audit events |
+| Remediation choices — what was fixed, what was deferred, in what order | remediation loop + roadmap phases + closure evidence notes |
+| Governance decisions with reviewer rationale | `fa_governance_decisions` — `decision_reason` is a first-class field, actor-attributed from JWT, approval chain recorded (H14) |
+| Accepted risks and granted exceptions | `FaRiskAcceptance` + `FaGovernanceException`, append-only, `exception_granted` preserved across re-scans |
+| Policy evolution | governance change workflow + policy versioning |
+| Assessment cadence and reassessment triggers | engagement history + (CG v0) drift cycles |
+| AI usage change over time | AI tool discovery / vendor governance re-scans; workforce query attribution |
+| Reviewer reasoning texture | `fa_governance_events` with `review_duration_seconds`, `decision_reason`, delegation fields |
+
+Two properties make this the hardest layer to compete with:
+
+1. **It cannot be reconstructed, even by the client.** Observational data can be re-scanned by a competitor on day one of a switch. *Why the 2026 risk acceptance was granted, by whom, against which evidence, and what the reviewer weighed* exists nowhere else — not in the client's heads two staff-turnovers later, not in any competitor's onboarding import. After a few years, FrostGate holds the only complete account of the client's governance reasoning — which is precisely the artifact a regulator, an acquirer's due-diligence team, or a new CISO asks for first.
+2. **It appreciates on the client's side of the ledger.** Most switching costs are friction the vendor imposes; this one is value the *client* loses by leaving. That is the strongest form of retention, and it compounds without any additional engineering — every QA approval, risk acceptance, and remediation closure is already writing to append-only, attributed, signed ledgers.
+
+The schema for all of it is shipped (see table). The moat action is therefore unchanged and sharpened: **every month of live client operation deposits irreplaceable decision history; nothing on the pre-launch backlog deposits any.**
+
 ## What competitors can copy vs. cannot
 
 - **Can copy in a quarter:** scan connectors individually, dashboards, playbook content, PDF formats.
-- **Cannot copy:** an installed base of signed, append-only, assessor-attributed governance history; the combination (field evidence + deterministic chain + governed workflow + remediation loop) as an *operating practice* with runbooks and reference clients in a local trust-dependent market.
+- **Cannot copy:** an installed base of signed, append-only, assessor-attributed governance history — above all the **decision history** (rationale, acceptances, exceptions, reviewer reasoning) that neither a competitor nor the client can reconstruct; plus the combination (field evidence + deterministic chain + governed workflow + remediation loop) as an *operating practice* with runbooks and reference clients in a local trust-dependent market.
 - **The unreplicable combination** (FOUNDER_DIRECTIVE) is architecturally present today. Its compounding term is zero until client one. Every week of pre-launch deepening is negative moat ROI relative to a week of client evidence accrual.
 
 **Moat score: 7/10** (architecture 9, accrued data 1, weighting toward what a buyer can verify today).

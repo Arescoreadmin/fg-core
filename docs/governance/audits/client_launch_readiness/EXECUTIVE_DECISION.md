@@ -1,6 +1,7 @@
 # FrostGate Launch Readiness — Executive Decision
 
-**Audit date:** 2026-07-30 · **Revision 1.1** (same day — prescriptive deepening, see addendum at end)
+**Audit date:** 2026-07-30 · **Revision 1.2** (see addenda at end)
+**Launch gate:** `LAUNCH_DEFINITION_OF_DONE.md` — 14 binary outcomes gate the design partner; 6 more gate the paying cohort. The plan flexes; the gate does not.
 **Scope:** Entire `fg-core` repository at `cd79f1f` (main lineage), production topology per `CLIENT_READINESS.md`
 **Method:** Direct repository inspection with code-level evidence (see `EVIDENCE_INDEX.md`). Documentation claims were verified against implementation, not trusted.
 **Constraint applied:** 20 effective engineering days pre-launch.
@@ -127,3 +128,14 @@ Founder review of revision 1.0 identified six areas where the audit critiqued wi
 6. **Continuous governance repositioned** — revision 1.0 wrongly filed CG under "later." FG-LR-020 is re-cut: the *scheduler* stays deferred, but **CG v0 launches at Stage 1 with zero engineering days** — baseline (delivered report + verification bundle) → monthly manual drift re-scan + delta email → quarterly review call + report regeneration → renewal at the day-90 retention touchpoint. Priced $750–1,500/mo against ~2–3 operator-hours/mo, pitched at report delivery. It starts the longitudinal drift history — the non-backfillable moat asset — from client one. Stage-3 automation (FG-LR-014 + the `/changes` delta view) replaces the manual steps once real CG clients define what to automate first.
 
 The Stage 2→3 investment package (Operator Home 3d + journey shell 2.5d + Report v2 3d ≈ 8.5d) is sequenced in `STAGGERED_ROLLOUT_PLAN.md` and deliberately kept out of the pre-launch window.
+
+## Addendum — Revision 1.2 (founder refinements + launch gate)
+
+Five refinements and one new deliverable, applied in place. Verdict and 19.0-day budget unchanged.
+
+1. **Operator Home now has acceptance criteria, not aspirations** (`CONSOLE_UX_AUDIT.md` §5.1): ≤3 clicks to active work · single owner on every item · explicit aging with amber/red thresholds per queue · no non-closed engagement absent from all zones (testable predicate) · all exceptions on one screen. These gate FG-LR-027 (Stage 2 DoD S2).
+2. **`journeyState` is now a formal state machine** (`PORTAL_UX_AUDIT.md` §5.1a): 10 states, explicit allowed-transition table, derivation-not-storage, two sanctioned reverse edges only, fail-safe unknown-state resolution, one CTA per state, table-driven transition tests (Stage 2 DoD S1).
+3. **Financial impact is categorized, not predicted** (`CUSTOMER_COMMERCIAL_READINESS.md` report spec ch. 3): every finding maps deterministically to Regulatory Exposure / Operational Risk / Productivity / AI Governance / Data Protection / Business Continuity; dollar ranges only where a citable benchmark exists; never "estimated savings."
+4. **Capacity numbers carry explicit assumptions** (one founder, no subcontractors, M365 clients, current automation level, current scope, travel excluded) so they can be revised honestly when any assumption changes.
+5. **The moat's deepest layer is named: decision history as institutional memory** (`MOAT_ASSESSMENT.md`): what accumulates is not just observations but *choices with attributed rationale* — governance decisions, accepted risks, exceptions, reviewer reasoning — already flowing into shipped append-only ledgers. It cannot be reconstructed by a competitor *or by the client*, and it appreciates on the client's side of the ledger: the strongest form of retention.
+6. **New deliverable: `LAUNCH_DEFINITION_OF_DONE.md`** — the binary checkpoint this audit previously lacked. 14 Launch DoD outcomes (external client completes engagement unassisted; report signed and delivered; backup restored; remediation tracked to completion; manual governance review performed; incident drill executed; console at launch IA; portal next-action v0; no open P0s; …) gate Stage 1. Full `journeyState`, Operator Home, and Report v2 sit in the Stage 2 DoD — a recorded, deliberate trade to hold the 20-day cap.

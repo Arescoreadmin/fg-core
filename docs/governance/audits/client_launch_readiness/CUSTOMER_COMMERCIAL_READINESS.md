@@ -64,7 +64,15 @@ Hour estimates are derived from the runbooks (`first_client_prep.md` budgets 75�
 
 ### Capacity, pricing, and timeline
 
-- **Onboarding capacity:** a founder also doing engineering and sales can sustain **1–2 engagements/week** (~13.5 h each + context switching); burst 3. This independently confirms the rollout caps (Stage 2 = 3 concurrent, Stage 3 = 10 total) — they are operator-capacity numbers, not just risk numbers.
+**Stated assumptions behind every number in this section** — revise the numbers when any assumption changes, and record the change here:
+
+1. **One founder-operator** doing delivery, engineering, and sales — no second operator, no subcontractors.
+2. **Microsoft 365 clients only** — the 13.5 h estimate assumes the full connector suite applies; a non-M365 client shifts hours from scans to interviews and breaks the estimate.
+3. **Current automation level** — manual CG v0, manual re-scans, manual report QA; every Stage-3 automation item (FG-LR-014) reduces the recurring hours, not the engagement hours.
+4. **Current engagement scope** — AI-governance field assessment per the runbooks; a CMMC-track or multi-site engagement is out-of-model.
+5. **Local/remote delivery mix** — travel time excluded; on-site engagements add it back.
+
+- **Onboarding capacity:** under the assumptions above, **1–2 engagements/week** sustained (~13.5 h each + context switching); burst 3. This independently confirms the rollout caps (Stage 2 = 3 concurrent, Stage 3 = 10 total) — they are operator-capacity numbers, not just risk numbers.
 - **Delivery timeline per client:** ~2 weeks wall-clock (week 1: setup + scans + meeting; week 2: report + QA + delivery), then a 30/60/90-day remediation tail at ≤1 h/month.
 - **Pricing floor (math, not advice):** at 13.5 operator-hours and a specialist-advisory effective rate of $250–400/h, the assessor-led engagement must price at **$3.5k–$5.5k minimum** to be a business. The $299–999 "Snapshot" tier (SYSTEM.md §12) is *self-serve* pricing and must not anchor the assessor-led offer — the current proposal template has no price card at all, which is how mispricing happens. The deliverable stack (13 scans, signed report, verified evidence, remediation portal, 30-day follow-up) supports mid-market pricing at that level against a Big-4-lite alternative costing 5–10×.
 - **Support load:** delivery week ~2 h/client; steady-state ≤1 h/client/month (portal self-serve absorbs the rest). At 10 clients: ~10–15 h/month of support+follow-up — the ceiling of solo operation, which is exactly where Stage 3's automation gate (digests, re-scans) and second-operator requirement sit.
@@ -82,7 +90,7 @@ The current PDF (PR 38: cover → AI exec summary → confidence → findings �
 |---|----------------|---------------|----------------|
 | 1 | Executive summary (1 page, board language) | ✅ AI-generated, advisory-labeled (PR 27) | QA for tone in FG-LR-011; keep |
 | 2 | **Business risk** — what these findings mean for *this* org's operations, clients, regulators | ⚠️ partial — severity/posture exists, but framed technically | Prompt + template work: industry-specific risk narrative ("for a medical group, finding X means…") — the playbook sector data already exists to condition it |
-| 3 | **Financial impact** — exposure ranges per finding class | ❌ missing | v2: cited-benchmark ranges (e.g., published breach-cost data) with an explicit methodology note. **Ranges + citations only — advisory-labeled; fabricated precision here would violate the legally-defensible standard (FOUNDER_DIRECTIVE §4), so this ships only with a reviewed methodology** |
+| 3 | **Financial impact** — categorized exposure, not dollar predictions | ❌ missing | v2: **categorize first, quantify only where defensible.** Every finding maps to one or more impact categories: **Regulatory Exposure · Operational Risk · Productivity · AI Governance · Data Protection · Business Continuity.** The chapter leads with the category profile ("your exposure concentrates in Regulatory and AI Governance"); dollar ranges appear *only* where a citable benchmark exists (published breach-cost studies, regulator fine schedules), always as ranges with the citation inline and a methodology note. Never "estimated annual savings," never single-point figures. This is strictly easier to defend in front of a board or regulator than any savings model, and the category mapping is deterministic from finding class — no AI in the loop for the categorization itself |
 | 4 | **Top 10 actions** — one page, ranked, owner + effort | ⚠️ exists as data (immediate actions, quick-wins matrix in portal) but not distilled in the PDF | Lift into a dedicated PDF page — mostly serialization work |
 | 5 | Roadmap (30/60/90) | ✅ (PR 31) | keep |
 | 6 | Technical appendix (findings detail) | ✅ | keep |

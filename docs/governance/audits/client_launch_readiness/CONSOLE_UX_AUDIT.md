@@ -84,6 +84,16 @@ One screen, seven zones, every zone a queue with counts and one-click drill-down
 
 Behavior rules: a zone with zero items collapses to a single line; every item's click lands on the *action* (the QA button, the finding card), never on a list page the operator must re-filter; counts are the navigation — if "Reports pending approval (2)" shows, that *is* the to-do list. This also closes the audit's §2 gap #11 (failed-scan triage had no surface) and #15 (health had no home).
 
+**Acceptance criteria (Operator Home v1 is done when all five hold — these gate FG-LR-027, not aspirations):**
+
+1. **≤3 clicks from Home to any piece of active work** — measured across all seven queues; the click path is Home → queue item → action control.
+2. **Every work item displays a single owner** — the operator (or, post-second-hire, a named assignee); no item may render ownerless. Where the data model lacks an assignee today, the queue defaults ownership to the engagement's assessor.
+3. **Every queue shows explicit aging** — each item carries "N days in this state," and each queue defines its amber/red thresholds (e.g., invite unaccepted 5/10 days; evidence unreviewed 3/7; report awaiting QA 2/5).
+4. **No engagement can disappear from visibility** — every non-closed engagement appears in at least one zone at all times; an engagement matching no queue predicate surfaces in a fallback "quiet engagements" row rather than vanishing. This is testable: for all `fa_engagements` not in `closed|cancelled`, Home renders ≥1 entry.
+5. **All exceptions surface within one screen** — dead-letter/orphaned scan jobs, failed report generations, and startup-validation warnings appear on Home itself (System health zone), never only behind an API or a sub-page.
+
+Validation method: a scripted walkthrough against a seeded tenant with one item in every queue state, executed as part of the Stage-2 acceptance review.
+
 ### 5.2 Target screen map (post-launch end-state)
 
 ```
