@@ -1,5 +1,28 @@
 # PR Fix Log (Strict)
 
+## P-33 — fix(mcp): correct repo-root path jail in repo_tools_server.py
+
+**Branch:** `docs/governance-tooling-audit` (PR #591)
+**Date:** 2026-07-30
+**Files changed:**
+- `tools/mcp/repo_tools_server.py` — `_safe_path()` jail check corrected
+- `docs/governance/audits/tooling_connectors/` — 4 audit docs updated (incident response, commit hash, MCP jail note, error-reporting row)
+
+**Root cause:** `_safe_path()` used `str(p).startswith(str(REPO_ROOT.resolve()))` to enforce the repo-root jail. This is a string-prefix check, not a filesystem-ancestry check. A sibling directory whose name shares the repo path prefix (e.g., `../fg-core-secrets`) would pass the check because its resolved path string starts with the same characters as the repo root.
+
+**Fix:** Replaced `str(p).startswith(...)` with `p.is_relative_to(REPO_ROOT.resolve())`. `Path.is_relative_to()` (Python 3.9+) checks that `REPO_ROOT` is an actual ancestor of `p` in the filesystem hierarchy — it cannot be fooled by string prefix coincidence.
+
+**Security impact:** Low — the MCP server is a local developer tool, not a production service. The fix closes a path-traversal vector that could expose sibling-directory secrets to Claude Code's MCP tools in local development environments. No production code, no auth logic, no schema change.
+
+**Also corrected in this PR (audit doc fixes):**
+- Incident response section: `api/observability/alerts.py:175-181` already implements PagerDuty/OpsGenie routing via `FG_ALERT_BACKEND`; incorrect "no reference found" claim corrected.
+- Commit hash: expanded short hash `61aa749e` to full SHA; noted merge as PR #588.
+- Error reporting row: confirmed `_check_observability_config()` (PR #590) already closed the SENTRY_DSN visibility gap as warning-only.
+
+**Result:** Pass.
+
+---
+
 ## P-32 — fix(observability): verify production telemetry configuration
 
 **Branch:** `fix/production-observability-verification` (PR #590)
