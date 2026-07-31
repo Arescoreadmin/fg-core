@@ -9,7 +9,7 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Branch:** `main`
 
-**Current PR:** None — PR #599 merged; preparing T4 portal named-user production proof.
+**Current PR:** None — PR #600 merged; preparing T4 portal named-user production proof.
 
 **Overall Status:** YELLOW
 
@@ -17,11 +17,11 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
-**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, and T2 complete; T3 partially complete; preparing T4.
+**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial), and #600 evidence reconciliation complete; preparing T4.
 
 **Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
 
-**Completed Since Last Update:** T2 executed 2026-07-31: Anthropic auto-recharge enabled by operator in `console.anthropic.com`. Balance check added to `first_client_prep.md` §1. FG-LR-013 closed. T3 executed 2026-07-31 via CLI automation: `PORTAL_SESSION_SECRET` (Vercel portal), `FG_REPORT_SIGNING_KEY` (Railway API), `FG_INTERNAL_GATEWAY_SECRET` + `FG_INTERNAL_AUTH_SECRET` (Railway API + Vercel console) all rotated with new cryptographically random values via stdin (never echoed). R6 Deploy 2 complete — canonical `FG_INTERNAL_GATEWAY_SECRET` now set in Railway API and Vercel console. All three services health-checked (HTTP 200) at 2026-07-31T13:56:37Z. `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` deferred with written rationale (no evidence of exposure; high blast radius). FG-LR-012 remains open. L12 IN PROGRESS: three canonical secrets rotated; FG_SIGNING_SECRET and FG_KEY_PEPPER remain deferred pending controlled rotation. `docs/governance/status/L12_evidence_manifest.md` completed.
+**Completed Since Last Update:** PR #600 merged 2026-07-31 (b5821f2c) — L12 evidence manifest and execution state contradictions resolved; all CI gates pass (496 tests, fg-fast, production profile, authority verification, gap audit, RLS verification, runtime intelligence written). Working tree clean on main.
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
@@ -77,9 +77,29 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Recommended Next Action:** Resolve the remaining L12 rotation gap or record an approved DoD amendment, then execute T4 portal named-user production proof.
 
-**Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. T2 is complete. T3 and L12 remain partially complete until the two deferred secrets are rotated or the frozen DoD is formally amended.
+**Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-07-31 — PR #600 Evidence Reconciliation
+
+**Review Type:** Task Execution
+
+**Summary:** PR #600 (b5821f2c) merged — docs-only fix resolving two bot-review contradictions introduced by external edits to L12 evidence files. L12 manifest header now correctly lists FG-LR-012 as open and L12 status as IN PROGRESS, matching the closure section. EXECUTION_STATE priority queue updated to remove stale "merge #599" instruction and add FG-LR-012 gap work. All CI gates green: 496 executed tests, fg-fast, production profile, authority verification, gap audit, RLS verification.
+
+**Major Changes:**
+- `docs/governance/status/L12_evidence_manifest.md` — header `Findings closed` corrected to list FG-LR-013 only; `Finding open: FG-LR-012` added; `L12 status` changed from PASS to IN PROGRESS.
+- `docs/governance/status/EXECUTION_STATE.md` — priority 1 replaced with L12 gap work; "Next Required PR" tail cleaned.
+
+**Decisions Made:** No DoD amendment. FG_SIGNING_SECRET and FG_KEY_PEPPER remain deferred with written rationale in L12 manifest. Next work order is T4 (portal named-user proof).
+
+**Blockers discovered:** None new. Timing flake (932s vs 930s hard_max) appeared again on docs-only run; resolved with re-run.
+
+**Updated Launch Confidence:** 72%
+
+**Next:** T4 — portal named-user proof with real external identity in production (2.0d, closes FG-LR-002, required for L2).
+
+---
 
 ### 2026-07-30 — Executive Delivery Review + T1.5 Merge
 
