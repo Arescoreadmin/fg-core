@@ -126,9 +126,7 @@ def test_prune_bucket_graduation_uses_age_ranges(run_fg_backup, backup_dir: Path
     """
     now = datetime.now(timezone.utc)
     # 3 fresh hourly + 1 that has aged into daily bucket (26h) + 1 weekly (10d).
-    hourly = [
-        _make_backup(backup_dir, now - timedelta(hours=h)) for h in (1, 2, 3)
-    ]
+    hourly = [_make_backup(backup_dir, now - timedelta(hours=h)) for h in (1, 2, 3)]
     daily_grad = _make_backup(backup_dir, now - timedelta(hours=26))
     weekly_grad = _make_backup(backup_dir, now - timedelta(days=10))
     env = {
@@ -154,11 +152,11 @@ def test_prune_bucket_boundaries_25h_8d_35d_366d(run_fg_backup, backup_dir: Path
     """Boundary values around each threshold land in the expected bucket."""
     now = datetime.now(timezone.utc)
     # One backup just inside each bucket.
-    b_hourly = _make_backup(backup_dir, now - timedelta(hours=24))          # <25h
-    b_daily = _make_backup(backup_dir, now - timedelta(hours=26))           # 25h..8d
-    b_weekly = _make_backup(backup_dir, now - timedelta(days=9))            # 8d..35d
-    b_monthly = _make_backup(backup_dir, now - timedelta(days=40))          # 35d..366d
-    b_yearly = _make_backup(backup_dir, now - timedelta(days=400))          # >=366d
+    b_hourly = _make_backup(backup_dir, now - timedelta(hours=24))  # <25h
+    b_daily = _make_backup(backup_dir, now - timedelta(hours=26))  # 25h..8d
+    b_weekly = _make_backup(backup_dir, now - timedelta(days=9))  # 8d..35d
+    b_monthly = _make_backup(backup_dir, now - timedelta(days=40))  # 35d..366d
+    b_yearly = _make_backup(backup_dir, now - timedelta(days=400))  # >=366d
     env = {
         "FG_BACKUP_RETAIN_HOURLY": "1",
         "FG_BACKUP_RETAIN_DAILY": "1",

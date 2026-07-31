@@ -84,7 +84,9 @@ def test_id_ignores_other_dates(backup_dir: Path):
     assert bid == "FG-BKP-20260730-00001"
 
 
-def _seed_backup_with_manifest(backup_dir: Path, date_str: str, hhmmss: str, seq: int) -> tuple[Path, Path]:
+def _seed_backup_with_manifest(
+    backup_dir: Path, date_str: str, hhmmss: str, seq: int
+) -> tuple[Path, Path]:
     """Create a paired archive + manifest with a specific backup_id sequence."""
     archive = backup_dir / f"frostgate_{date_str}_{hhmmss}_scheduled.dump"
     archive.write_bytes(b"x")
