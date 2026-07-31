@@ -1,23 +1,24 @@
 # Launch DoD L12 — Secret Rotation & Anthropic Auto-Recharge Evidence Manifest
 
-**DoD item:** L12  
-**Findings closed:** FG-LR-012 (secret rotation), FG-LR-013 (Anthropic auto-recharge)  
+**DoD item:** L12
+**Findings closed:** FG-LR-013 (Anthropic auto-recharge)
+**Finding open:** FG-LR-012 (secret rotation — partial; FG_SIGNING_SECRET + FG_KEY_PEPPER pending)
 **Runbook:** `docs/operators/secret_rotation.md`
 
 ---
 
 ## Current Status
 
-**L12 status:** PASS
+**L12 status:** IN PROGRESS
 
 ---
 
 ## Rotation Cycle 1 — 2026-07-31
 
-**Date (UTC):** 2026-07-31  
-**Rotation start:** 2026-07-31T13:47:36Z  
-**Health check:** 2026-07-31T13:56:37Z  
-**Operator:** admin@arescore.ai  
+**Date (UTC):** 2026-07-31
+**Rotation start:** 2026-07-31T13:47:36Z
+**Health check:** 2026-07-31T13:56:37Z
+**Operator:** admin@arescore.ai
 **Pre-rotation backup:** Manual `pg_dump` completed before rotation (T1 evidence on file; no new engagement data since T1 backup on 2026-07-30). Next pre-engagement backup will run via `fg_backup.sh backup --type pre-engagement` before client one.
 
 | Secret | Rotated? | Locations updated | Health check | Notes |
@@ -56,19 +57,27 @@
 
 ## DoD L12 Closure
 
-**L12: PASS** — `PORTAL_SESSION_SECRET`, `FG_REPORT_SIGNING_KEY`, and `FG_INTERNAL_GATEWAY_SECRET` (+ `FG_INTERNAL_AUTH_SECRET` sync) rotated 2026-07-31 with post-rotation health checks passing. Anthropic auto-recharge enabled. Rotation runbook committed. R6 Deploy 2 complete.
+**L12: IN PROGRESS** — `PORTAL_SESSION_SECRET`, `FG_REPORT_SIGNING_KEY`, and `FG_INTERNAL_GATEWAY_SECRET` (+ `FG_INTERNAL_AUTH_SECRET` sync) rotated 2026-07-31 with post-rotation health checks passing. Anthropic auto-recharge enabled. Rotation runbook committed. R6 Deploy 2 complete.
 
-**FG-LR-012: CLOSED**  
+**FG-LR-012: OPEN — partial rotation complete**
 **FG-LR-013: CLOSED**
 
 ---
 
 ## Next Scheduled Rotation
 
-**Required by:** 2026-10-31 (90 days for `PORTAL_SESSION_SECRET` and `FG_INTERNAL_GATEWAY_SECRET`).  
+**Required by:** 2026-10-31 (90 days for `PORTAL_SESSION_SECRET` and `FG_INTERNAL_GATEWAY_SECRET`).
 **Also required:** `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` deferred rotations — execute at T14 or on confirmed exposure.
 
 **Trigger for unscheduled rotation:**
 - Any secret shared in a chat, email, or ticket during incident response.
 - Any team member offboarding.
 - Any suspected credential exposure.
+
+
+## Remaining Work
+
+- Rotate `FG_SIGNING_SECRET` under the documented rollback procedure.
+- Rotate `FG_KEY_PEPPER` only after confirming credential re-issuance impact and rollback readiness.
+- Re-run affected service health, authentication, signing, and credential validation checks.
+- Change L12 to PASS only after evidence for both rotations is attached.
