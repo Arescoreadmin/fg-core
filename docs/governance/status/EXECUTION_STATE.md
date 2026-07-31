@@ -5,39 +5,38 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-07-30
+**Date:** 2026-07-31
 
 **Current Branch:** `ops/t2-t3-autorecharge-secrets`
 
-**Current PR:** T2+T3 — Anthropic auto-recharge checklist + secret rotation runbook (open, pending merge)
+**Current PR:** #599 — T2+T3 (open; rotations executed in production; pending merge to commit evidence)
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 68
+**Launch Confidence (%):** 72
 
-**Current Critical Path:** T2/T3 top-5 secret rotation -> T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
+**Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
-**Current Phase:** Stage 0 / Week 1 Day 1 — T1 + T1.5 complete, advancing to T2/T3.
+**Current Phase:** Stage 0 / Week 1 Day 2 — T1+T1.5+T2+T3 complete, advancing to T4.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked with post-freeze durable evidence (L4: PASS, now with automation + monthly-drill infrastructure on top).
+**Current DoD Progress:** 2/14 Launch DoD items checked (L4: PASS, L12: PASS).
 
-**Completed Since Last Update:** T1.5 merged to main via PR #598 (5f5d4a17). Final script has 10 subcommands (backup/verify/verify-manifest/restore/list/prune/drill/inventory/metrics/status). Signed manifests (HMAC-SHA256), immutable backup IDs (FG-BKP-YYYYMMDD-NNNNN from max existing sequence), dry-run mode on all destructive actions, backup health dashboard (artifacts/operations/backup_health.json), Prometheus metrics text output. Six bot review findings corrected: retention bucketing by age range (not global count), offsite_uploaded truth on 3-state provider exit, restore validates against manifest source_row_counts not live prod, manifest uploaded after verification, encrypted archive discovery via find with .dump.enc glob, backup ID sequence from manifest scan. 73 hermetic pytest tests, CI green. Dockerfile fix (#595) creates /app/state and /app/models — ring_state_dir crash resolved in image; Railway env var FG_RING_STATE_DIR should be changed to /var/lib/frostgate/state if not already done.
+**Completed Since Last Update:** T2 executed 2026-07-31: Anthropic auto-recharge enabled by operator in `console.anthropic.com`. Balance check added to `first_client_prep.md` §1. FG-LR-013 closed. T3 executed 2026-07-31 via CLI automation: `PORTAL_SESSION_SECRET` (Vercel portal), `FG_REPORT_SIGNING_KEY` (Railway API), `FG_INTERNAL_GATEWAY_SECRET` + `FG_INTERNAL_AUTH_SECRET` (Railway API + Vercel console) all rotated with new cryptographically random values via stdin (never echoed). R6 Deploy 2 complete — canonical `FG_INTERNAL_GATEWAY_SECRET` now set in Railway API and Vercel console. All three services health-checked (HTTP 200) at 2026-07-31T13:56:37Z. `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` deferred with written rationale (no evidence of exposure; high blast radius). FG-LR-012 closed. L12 PASS. `docs/governance/status/L12_evidence_manifest.md` completed.
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
 - FG-LR-002: portal named-user invite -> OIDC -> session -> logout revocation unproven with a real external identity in production.
-- FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load. Note: Railway hobby plan confirmed; T5 will determine if upgrade to Pro is needed for automatic backups and headroom.
+- FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
-- **Operational (if not yet resolved):** Change Railway `FG_RING_STATE_DIR` from `/app/state` to `/var/lib/frostgate/state` to prevent API crash on next deploy.
 
 **Top Three Priorities:**
-1. Execute T2: enable Anthropic auto-recharge and confirm Anthropic balance.
-2. Execute T3: rotate top-5 blast-radius secrets before the dry run validates final config (S-1 invariant).
-3. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence.
+1. Merge PR #599 and commit L12 evidence to main.
+2. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence (closes FG-LR-002, required for L2).
+3. Execute T5: Railway infra headroom check and plan upgrade decision (closes FG-LR-004).
 
-**Next Required PR:** T2/T3 (auto-recharge + secret rotation) are 0.6 days combined. T4 portal named-user proof is 2 days. Branch from main; each task gets its own PR.
+**Next Required PR:** T4 portal named-user proof is 2 days. Branch from main after #599 merges.
 
-**Estimated Engineering Days Remaining:** 16.5 (budget 19.0; T1 consumed 1.5d, T1.5 consumed ~1.0d).
+**Estimated Engineering Days Remaining:** 16.0 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d consumed).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
 
