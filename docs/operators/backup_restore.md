@@ -371,3 +371,23 @@ be executed and validated, not assumed.
 | Restore duration | ~4 seconds (pg_restore exit 0) |
 | Validation duration | ~18 seconds (restore + validation combined: 20:11:42Z → 20:12:11Z) |
 | Database size | 1.7 MB (compressed) |
+| Automation layer added | 2026-07-30 (T1.5) — see §14 |
+
+## 14. Related documents
+
+This runbook describes the **manual** procedure that is authoritative for
+L4 quarterly drills and for the emergency case where the automation is
+unavailable. Day-to-day the automation layer in
+`scripts/backup/fg_backup.sh` is expected to drive backups.
+
+| Document | Purpose |
+|----------|---------|
+| `docs/operators/backup_automation.md` | Automation config, workflow, offsite, retention |
+| `docs/operators/disaster_recovery.md` | Full DR procedure, escalation, comms |
+| `docs/operators/backup_schedule.md` | One-page schedule cheat sheet |
+| `docs/operators/first_client_prep.md §0` | Pre-engagement backup step |
+| `docs/governance/status/L04_evidence_manifest.md` | L4 evidence manifest |
+
+The automation layer wraps this exact procedure (`pgvector/pgvector:pg18`
+image, custom-format dump, `--no-acl --no-owner`) — it does not replace
+it. If the automation fails, this runbook is still the operator's fallback.

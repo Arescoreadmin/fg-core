@@ -41,18 +41,9 @@ COPY --from=builder /install /usr/local
 
 # Copy app code
 COPY . /app
-RUN mkdir -p \
-    /var/lib/frostgate/pycache \
-    /var/lib/frostgate/state \
-    /var/lib/frostgate/agent_queue \
-    /var/lib/frostgate/ring/state \
-    /var/lib/frostgate/ring/models \
-    /app/state \
-    /app/models \
- && chown -R frostgate:frostgate \
-    /var/lib/frostgate \
-    /app/state \
-    /app/models
+RUN mkdir -p /var/lib/frostgate/pycache /var/lib/frostgate/state /var/lib/frostgate/agent_queue \
+        /app/state /app/models \
+ && chown -R frostgate:frostgate /var/lib/frostgate /app/state /app/models
 ENV PYTHONPYCACHEPREFIX=/var/lib/frostgate/pycache
 # Default envs; override in real deployments
 ENV FG_ENV=prod \

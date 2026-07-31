@@ -7,21 +7,21 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-07-30
 
-**Current Branch:** `ops/t1-backup-restore-proof`
+**Current Branch:** `ops/t1.5-backup-automation`
 
-**Current PR:** T1 backup/restore proof PR (in progress)
+**Current PR:** T1.5 backup automation & recovery hardening (in progress)
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 65
+**Launch Confidence (%):** 67
 
 **Current Critical Path:** T2/T3 top-5 secret rotation -> T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
-**Current Phase:** Stage 0 / Week 1 Day 1 — T1 complete, advancing to T2/T3.
+**Current Phase:** Stage 0 / Week 1 Day 1 — T1 + T1.5 complete, advancing to T2/T3.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked with post-freeze durable evidence (L4: PASS).
+**Current DoD Progress:** 1/14 Launch DoD items checked with post-freeze durable evidence (L4: PASS, now with automation + monthly-drill infrastructure on top).
 
-**Completed Since Last Update:** T1 executed 2026-07-30. Production database backed up via `pg_dump` (PostgreSQL 18.4, 1.7 MB), restored into isolated scratch container `frostgate-restore-proof-20260730` in ~4 seconds. Row counts verified for all key tables and for ENG-RESTORE-PROOF-01 (all PASS). Railway plan tier confirmed as **hobby** (`maxBackupsCount: 0`). `docs/operators/backup_restore.md` created. `docs/governance/status/L04_evidence_manifest.md` created. L4 marked PASS. FG-LR-003 closed.
+**Completed Since Last Update:** T1 executed 2026-07-30. Production database backed up via `pg_dump` (PostgreSQL 18.4, 1.7 MB), restored into isolated scratch container `frostgate-restore-proof-20260730` in ~4 seconds. Row counts verified for all key tables and for ENG-RESTORE-PROOF-01 (all PASS). Railway plan tier confirmed as **hobby** (`maxBackupsCount: 0`). `docs/operators/backup_restore.md` created. `docs/governance/status/L04_evidence_manifest.md` created. L4 marked PASS. FG-LR-003 closed. T1.5 executed same day: `scripts/backup/fg_backup.sh` (backup/verify/restore/list/prune/drill/status subcommands), manifests with SHA-256 + optional AES-256-CBC encryption, offsite storage abstraction (local/S3/R2/B2), retention pruning with newest-protected invariant, monthly drill evidence pipeline, RPO/RTO status JSON, backup automation + DR + schedule docs, pytest suite (`tests/backup/`).
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
@@ -34,9 +34,9 @@ Update current status fields in place. Preserve historical entries under `Execut
 2. Execute T3: rotate top-5 blast-radius secrets before the dry run validates final config (S-1 invariant).
 3. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence.
 
-**Next Required PR:** T2/T3 (auto-recharge + secret rotation) are 0.6 days combined. T4 portal named-user proof is 2 days. Do not combine with T1 PR.
+**Next Required PR:** T2/T3 (auto-recharge + secret rotation) are 0.6 days combined. T4 portal named-user proof is 2 days. Do not combine with T1.5 PR.
 
-**Estimated Engineering Days Remaining:** 17.5 (was 19.0; T1 consumed 1.5 days).
+**Estimated Engineering Days Remaining:** 17.0 (was 17.5; T1.5 consumed 0.5 days).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
 
@@ -78,6 +78,45 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Recommended Next Action:** Execute T2 (Anthropic auto-recharge) and T3 (secret rotation) before touching production config further. T4 portal named-user proof is the next P0 blocker after that.
 
 **Execution Notes:** The frozen audit is the source of truth. T1 is the only change in this PR. No product surface, trust-layer, or architecture changes.
+
+## T1.5 Execution History
+
+**Date:** 2026-07-30
+**Task:** T1.5 Backup Automation & Recovery Hardening
+**Status:** COMPLETE
+
+**Summary:** Built the automation layer on top of the T1 proven method. Added `scripts/backup/fg_backup.sh` (production-grade bash) with subcommands `backup / verify / restore / list / prune / drill / status`. Wraps the T1 `pgvector/pgvector:pg18` `pg_dump` recipe verbatim — no change to the proven method itself. Adds SHA-256 manifest per backup, optional AES-256-CBC (pbkdf2 iter=600k) encryption with fail-closed key check, pluggable offsite provider (local / S3 / R2 / B2, all sourced from `scripts/backup/providers/*.sh`), configurable retention with 5 age buckets and a hard "never delete the single newest successful backup" invariant, monthly restore drill that appends evidence to `docs/governance/status/restore_drill_evidence_YYYYMMDD.md`, and a `status` JSON report with RPO/RTO warning thresholds.
+
+**Files added:**
+- `scripts/backup/fg_backup.sh` — main script (chmod +x, bash -n clean)
+- `scripts/backup/backup_config.sh` — env-driven config with defaults
+- `scripts/backup/providers/upload_base.sh` — provider interface
+- `scripts/backup/providers/upload_local.sh` — local filesystem provider
+- `scripts/backup/providers/upload_s3_compatible.sh` — S3/R2/B2 stub (rclone or aws-cli)
+- `docs/operators/backup_automation.md` — automation architecture, config, workflow, failure handling, key rotation, offsite setup
+- `docs/operators/disaster_recovery.md` — RTO/RPO targets, full DR procedure, escalation, comms template
+- `docs/operators/backup_schedule.md` — one-page schedule reference card
+- `tests/backup/conftest.py`, `test_backup_manifest.py`, `test_backup_config.py`, `test_backup_checksum.py`, `test_retention.py`, `test_backup_shell.py`
+
+**Files modified:**
+- `docs/operators/backup_restore.md` — added §14 cross-ref to automation docs; updated §13 with T1.5 note
+- `docs/operators/first_client_prep.md` — §0 now references `fg_backup.sh backup --type pre-engagement`
+- `docs/governance/status/EXECUTION_STATE.md` — this file
+
+**Not changed:**
+- The T1 proven method in `docs/operators/backup_restore.md` §1–§13 is unchanged.
+- `docs/governance/status/L04_evidence_manifest.md` — frozen evidence, untouched.
+- No CI, deployment, auth, or schema files touched.
+
+**Decisions:**
+- Full logical dumps only, no true incrementals. Rationale documented in `backup_automation.md §2`: Railway Hobby exposes no WAL/basebackup access; DB is 1.7 MB; incrementals would add complexity with zero benefit at this scale.
+- Newest-backup protection is a hard invariant in the pruner (unit-tested) so retention math can never orphan the last recovery point.
+- S3 provider intentionally exits 0 with "skipped: credentials not configured" when creds are absent — scheduled backups do not fail because offsite is still being wired up; the manifest records `offsite_uploaded: false` for monitoring.
+- `verify` uses `pg_restore --list` where docker is available; on encrypted archives it skips that check (they must be decrypted first) but still verifies SHA-256.
+
+**Launch Confidence:** 65% -> 67%.
+
+**Next:** T2 (Anthropic auto-recharge) and T3 (secret rotation).
 
 ## Execution History
 
