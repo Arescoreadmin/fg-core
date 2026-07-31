@@ -1,5 +1,26 @@
 # PR Fix Log (Strict)
 
+## P-39 — fix(ops): address 4 bot review findings on secret_rotation.md
+
+- **PR/Branch:** `ops/t2-t3-autorecharge-secrets` (#599)
+- **Date:** 2026-07-31
+- **Files changed:** `docs/operators/secret_rotation.md`
+- **Root causes (4 bot findings):**
+  1. **P1 — FG_REPORT_SIGNING_KEY is Ed25519, not HMAC:** The rotation procedure generated a random hex string and checked only that "signature is non-empty". `services/governance/report/signing.py` uses Ed25519 — `FG_REPORT_SIGNING_KEY` is a 32-byte private seed, and `FG_REPORT_SIGNING_PUBLIC_KEY` (when set) is preferred by `get_public_key_hex()` over deriving from the private seed. Rotating only the private key while leaving an old `FG_REPORT_SIGNING_PUBLIC_KEY` in place causes every new report to sign with the new key but verify against the old public key — the `/verify` endpoint rejects all new reports while `is signature non-empty` still passes.
+  2. **P1 — FG_INTERNAL_GATEWAY_SECRET rollback:** Rollback instruction said "revert to old `FG_INTERNAL_AUTH_SECRET`" but `FG_INTERNAL_GATEWAY_SECRET` (canonical) takes precedence in both `api/config/internal_gateway_secret.py` and `apps/console/lib/internal-gateway-secret.ts`. Once the canonical var is set, the legacy fallback is never read. Reverting only `FG_INTERNAL_AUTH_SECRET` leaves the canonical var pointing at the new (unwanted) value — the mismatch persists.
+  3. **P1 — FG_SIGNING_SECRET has no runtime signing consumer:** The runbook claimed FG_SIGNING_SECRET "Signs agent enrollment tokens" and required re-enrollment of all agents after rotation. The actual code: (a) `api/config/required_env.py` requires the var to be set in prod; (b) `agent/app/service/wrapper.py` and `agent/app/installer/msi_contract.py` put it in a secret-denylist (`_SECRET_PATTERNS`) to prevent it from appearing in service command arguments; (c) no API module reads this value at runtime. Enrollment tokens and credential fingerprints use `FG_KEY_PEPPER`. The re-enrollment instruction was false.
+  4. **P2 — Wrong credential table name:** The FG_KEY_PEPPER precondition query used `SELECT type, COUNT(*) FROM fa_credential_store GROUP BY type`. `fa_credential_store` does not exist. Canonical credentials are in `tenant_credentials` (migration 0159) with column `credential_type`.
+- **Fixes:**
+  1. `FG_REPORT_SIGNING_KEY` procedure rewritten: generation command now uses `cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PrivateKey` to derive both private seed (`PRIVATE_SEED`) and matching public key (`PUBLIC_KEY`) in one step. Step 4 added: check for `FG_REPORT_SIGNING_PUBLIC_KEY`; if present, update it to the matching public key. Health check updated: `GET /signing/public-key` must return the new public key hex (not just "non-empty signature"). Rollback now covers both vars.
+  2. `FG_INTERNAL_GATEWAY_SECRET` rollback rewritten: explicitly lists 4 steps — revert canonical var on Railway API, revert canonical var on Vercel console, revert legacy `FG_INTERNAL_AUTH_SECRET` on both, wait for redeploy and verify.
+  3. `FG_SIGNING_SECRET` effect and steps rewritten: removes false "enrollment tokens" claim, removes agent re-enrollment step. Correctly describes it as a required-env enforcement var with no runtime signing consumer. Health check reduced to `GET /health` → 200.
+  4. FG_KEY_PEPPER precondition query corrected: `SELECT credential_type, COUNT(*) FROM tenant_credentials WHERE status = 'active' GROUP BY credential_type`. Table references in surrounding text updated from `fa_credential_store` to `tenant_credentials`.
+- **No behavioral impact:** docs-only. No source files changed.
+- **Validation:** No test run required. `make fg-fast` must pass on the branch (docs-only changes + PR_FIX_LOG entry satisfied by this entry).
+- **Result:** Pass.
+
+---
+
 ## P-38 — ops(launch): T2 Anthropic auto-recharge checklist + T3 secret rotation runbook
 
 - **PR/Branch:** `ops/t2-t3-autorecharge-secrets`

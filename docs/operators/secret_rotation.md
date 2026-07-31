@@ -90,18 +90,33 @@ Execute in this order. Lower blast radius first so any mistakes are recoverable 
 
 **Steps:**
 
-1. Generate new value (64-byte hex): `python3 -c "import secrets; print(secrets.token_hex(32))"`
+**Key type:** Ed25519. `FG_REPORT_SIGNING_KEY` is the 32-byte private seed (64-char hex). `FG_REPORT_SIGNING_PUBLIC_KEY`, if set, is the matching Ed25519 public key used by verification callers (`GET /signing/public-key`, `/verify`). `get_public_key_hex()` prefers `FG_REPORT_SIGNING_PUBLIC_KEY` over deriving from the private key, so if this var is set you **must** update it too — otherwise new reports sign with the new key but verification uses the old public key and all new reports fail the `/verify` endpoint.
+
+1. Generate a new keypair. Run in a private terminal:
+   ```bash
+   python3 -c "
+   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+   import secrets
+   seed = secrets.token_bytes(32)
+   priv = Ed25519PrivateKey.from_private_bytes(seed)
+   pub = priv.public_key().public_bytes_raw()
+   print('PRIVATE_SEED:', seed.hex())
+   print('PUBLIC_KEY:  ', pub.hex())
+   "
+   ```
 2. Open Railway → API service → Variables.
-3. Update `FG_REPORT_SIGNING_KEY` to the new value.
-4. Railway redeploys automatically after a variable change. Wait for the deploy to complete (check Railway deploy logs).
-5. Generate a test report (use a `[TEST]` engagement): confirm the report generates without error and the signature field in the response is non-empty.
-6. Record the old key value in a secure offline note labelled `FG_REPORT_SIGNING_KEY_PRE_<date>` — needed to verify any pre-rotation reports.
+3. Update `FG_REPORT_SIGNING_KEY` to the `PRIVATE_SEED` value.
+4. Check if `FG_REPORT_SIGNING_PUBLIC_KEY` is set. If it is, update it to the `PUBLIC_KEY` value from the same keypair. If it is not set, skip this step (the API derives the public key from the private seed automatically).
+5. Wait for Railway deploy to complete (check Railway deploy logs).
+6. Verify a report using the new key: generate a test report on a `[TEST]` engagement, then call `GET /signing/public-key` → confirm the returned hex matches `PUBLIC_KEY` above. If the endpoint is unavailable, confirm report generation completed without error.
+7. Record the old `FG_REPORT_SIGNING_KEY` value in a secure offline note labelled `FG_REPORT_SIGNING_KEY_PRE_<date>` — needed to verify pre-rotation reports against the old public key.
 
 **Health check:**
 - `GET /health` → 200 — PASS
+- `GET /signing/public-key` returns the new public key hex — PASS
 - Report generation on a test engagement completes without error — PASS
 
-**Rollback:** Revert the Railway env var; Railway redeploys.
+**Rollback:** Revert both `FG_REPORT_SIGNING_KEY` and `FG_REPORT_SIGNING_PUBLIC_KEY` (if set) to the old values; Railway redeploys.
 
 ---
 
@@ -129,48 +144,49 @@ Execute in this order. Lower blast radius first so any mistakes are recoverable 
 - `GET <portal-url>/` renders without 502/503 — PASS
 - Create a test engagement in console → PASS
 
-**Rollback:** Revert all three services to the old `FG_INTERNAL_AUTH_SECRET` value simultaneously. The fallback chain means the old value will work while you stabilise.
+**Rollback:** Once `FG_INTERNAL_GATEWAY_SECRET` is set, the legacy `FG_INTERNAL_AUTH_SECRET` fallback is never consulted — the canonical var takes precedence. Rollback must restore or remove `FG_INTERNAL_GATEWAY_SECRET` on every consumer:
+1. Railway API → revert `FG_INTERNAL_GATEWAY_SECRET` to the old value (or delete it to fall back to `FG_INTERNAL_AUTH_SECRET` if still set to the old value).
+2. Vercel console → revert or delete `FG_INTERNAL_GATEWAY_SECRET`.
+3. Revert `FG_INTERNAL_AUTH_SECRET` to the old value on both Railway API and Vercel console.
+4. Wait for all services to redeploy; verify console login.
 
 ---
 
 ### 4. FG_SIGNING_SECRET — Rotate Fourth
 
-**Effect:** Agent enrollment tokens signed with the old key become invalid. Any CG agent currently enrolled will fail its next authentication attempt and must re-enroll. For zero active clients this is safe; confirm no enrolled agents are in active use before rotating.
+**Effect:** `FG_SIGNING_SECRET` is enforced as a required production env var by startup validation and appears in the agent installer's secret-denylist (ensuring it never leaks into service command arguments). No runtime signing operation in the API consumes this value — agent credential fingerprinting uses `FG_KEY_PEPPER` (HMAC-SHA256). Rotating this value satisfies the required-env enforcement check and removes any exposure if the value was shared during incident recovery, but does not invalidate existing enrolled agents or portal credentials.
 
 **Steps:**
 
 1. Confirm no active field assessments are in progress.
 2. Generate new value: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 3. Open Railway → API service → Variables. Update `FG_SIGNING_SECRET`.
-4. If the agent build/installer pipeline reads `FG_SIGNING_SECRET` at compile time, regenerate the MSI/installer artifact after the rotation.
-5. Wait for Railway deploy. Verify `/health` → 200.
-6. Re-enroll any CG agents that were active (follow `onboarding_runbook.md` agent enrollment section).
+4. Wait for Railway deploy. Verify `/health` → 200.
 
 **Health check:**
 - `GET /health` → 200 — PASS
-- Agent enrollment flow completes (if applicable) — PASS
 
-**Rollback:** Revert Railway env var; re-enroll is not needed for rollback.
+**Rollback:** Revert Railway env var; no credential or session impact.
 
 ---
 
 ### 5. FG_KEY_PEPPER — Rotate Last (Highest Blast Radius)
 
-**WARNING:** Rotating `FG_KEY_PEPPER` immediately invalidates ALL credential lookups stored in the database. Every portal key, connector key, and agent device key in `fa_credential_store` was stored as `HMAC-SHA256(secret_part, old_pepper)`. After rotation, none of them can be looked up by fingerprint — all authentications via `credential_authority.py` will return 404/invalid.
+**WARNING:** Rotating `FG_KEY_PEPPER` immediately invalidates ALL credential lookups stored in the database. Every portal key, connector key, and agent device key has its fingerprint stored as `HMAC-SHA256(secret_part, old_pepper)` in `tenant_credentials`. After rotation, none of them can be looked up by fingerprint — all authentications via `credential_authority.py` will return 404/invalid.
 
 **Only rotate if:** the old pepper is confirmed or suspected to have been shared in any channel during incident recovery. If there is no evidence of exposure, the operational cost is severe enough to defer to a scheduled maintenance window with pre-planned key migration.
 
 **Pre-conditions:**
 - [ ] Active client count is zero.
 - [ ] A fresh database backup exists (run `fg_backup.sh backup --type pre-maintenance` within the last 60 minutes).
-- [ ] You have a list of all active portal keys, connector keys, and agent device keys from the `fa_credential_store` table (count, not values — run `SELECT type, COUNT(*) FROM fa_credential_store GROUP BY type`).
+- [ ] You have a count of all active credentials: `SELECT credential_type, COUNT(*) FROM tenant_credentials WHERE status = 'active' GROUP BY credential_type;`
 
 **Steps:**
 
 1. Generate new value: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 2. Open Railway → API service → Variables. Update `FG_KEY_PEPPER`.
 3. Wait for Railway deploy. Verify `/health` → 200.
-4. The old fingerprints in `fa_credential_store` are now orphaned. Credential lookups will fail with "invalid credential" or "not found".
+4. The old fingerprints in `tenant_credentials` are now orphaned. Credential lookups will fail with "invalid credential" or "not found".
 5. Regenerate all active credentials:
    - **Portal keys:** in the console, revoke and reissue each active portal key.
    - **Connector keys:** revoke and reissue from the tenant admin panel.
