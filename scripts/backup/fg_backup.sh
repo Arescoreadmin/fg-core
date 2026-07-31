@@ -38,6 +38,7 @@ FG_BACKUP_MANIFEST_SCHEMA_VERSION="1.0"
 TMP_PGPASS=""
 CURRENT_SCRATCH_CONTAINER=""
 DRY_RUN="false"
+FG_RESTORE_DECRYPT_TMP=""
 
 # --- helpers -----------------------------------------------------------------
 
@@ -80,6 +81,10 @@ cleanup() {
     if command -v docker >/dev/null 2>&1; then
       docker rm -f "$CURRENT_SCRATCH_CONTAINER" >/dev/null 2>&1 || true
     fi
+  fi
+  # Wipe any decrypted restore temp file — plaintext must never linger.
+  if [[ -n "$FG_RESTORE_DECRYPT_TMP" && -f "$FG_RESTORE_DECRYPT_TMP" ]]; then
+    shred -u "$FG_RESTORE_DECRYPT_TMP" 2>/dev/null || rm -f "$FG_RESTORE_DECRYPT_TMP"
   fi
   return "$ec"
 }
@@ -170,22 +175,68 @@ dry_run_check() {
   return 1
 }
 
-# Generate an immutable backup ID of form FG-BKP-YYYYMMDD-NNNNN by counting
-# existing dump files with today's date-stamp in FG_BACKUP_DIR and incrementing.
-# Prints the ID to stdout.
+# Generate an immutable backup ID of form FG-BKP-YYYYMMDD-NNNNN. The sequence
+# number is derived from the MAX sequence already recorded in today's manifest
+# files, plus one. This prevents ID reuse after pruning: if archive #00003 is
+# deleted, the next issued ID is #00004 (from max=3), not #00003 (from count=2).
+# Falls back to counting archives when no manifests are readable — but always
+# tie-breaks toward "next value from max seen" so uniqueness holds.
 generate_backup_id() {
   local date_str="${1:-$(date -u +%Y%m%d)}"
   local dir="${FG_BACKUP_DIR:-.}"
-  local count=0
-  if [[ -d "$dir" ]]; then
-    # Count today's dump files (both encrypted and plain), ignoring manifests.
-    count="$(find "$dir" -maxdepth 1 -type f -name "frostgate_${date_str}_*.dump" 2>/dev/null | wc -l)"
-    local enc_count
-    enc_count="$(find "$dir" -maxdepth 1 -type f -name "frostgate_${date_str}_*.dump.enc" 2>/dev/null | wc -l)"
-    count=$((count + enc_count))
+
+  # If the dir doesn't exist yet, we start at 00001.
+  if [[ ! -d "$dir" ]]; then
+    printf 'FG-BKP-%s-%05d' "$date_str" 1
+    return 0
   fi
-  local seq=$((count + 1))
-  printf 'FG-BKP-%s-%05d' "$date_str" "$seq"
+
+  # Use python for a robust manifest scan; falls back to filename-derived
+  # sequence when a manifest is missing or unparseable so pruned-manifest
+  # scenarios still don't cause reuse (filenames carry the timestamp, which
+  # tie-breaks safely — a new backup written 'now' will always be strictly
+  # newer than any pruned entry).
+  local next
+  next="$(python3 - "$dir" "$date_str" <<'PYEOF'
+import glob, json, os, re, sys
+backup_dir, date_str = sys.argv[1], sys.argv[2]
+
+max_seq = 0
+# 1) Scan today's manifest files for stored backup_id sequence numbers.
+pattern = os.path.join(backup_dir, f"frostgate_{date_str}_*.manifest.json")
+id_re = re.compile(r"^FG-BKP-\d{8}-(\d+)$")
+for path in glob.glob(pattern):
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+        bkid = data.get("backup_id", "")
+        m = id_re.match(bkid or "")
+        if m:
+            seq = int(m.group(1))
+            if seq > max_seq:
+                max_seq = seq
+    except Exception:
+        # Corrupt/unreadable manifest: fall through to filename count below.
+        continue
+
+# 2) Also count today's archive filenames as a lower-bound safety net so we
+#    never return a sequence smaller than the number of same-day archives
+#    currently on disk (protects against manifest loss where archives remain).
+archive_count = 0
+for ext in (".dump", ".dump.enc"):
+    archive_count += len(glob.glob(os.path.join(
+        backup_dir, f"frostgate_{date_str}_*{ext}")))
+
+# Next sequence is one past the greater of (max manifest seq, archive count).
+next_seq = max(max_seq, archive_count) + 1
+print(next_seq)
+PYEOF
+  )"
+  # Guard against empty / non-numeric python output.
+  if ! [[ "$next" =~ ^[0-9]+$ ]]; then
+    next=1
+  fi
+  printf 'FG-BKP-%s-%05d' "$date_str" "$next"
 }
 
 # HMAC-SHA256 sign a manifest file in place. Reads the file content and adds:
@@ -346,13 +397,14 @@ if os.path.isdir(drill_dir):
             except ValueError:
                 pass
 
-# Retention buckets by age.
+# Retention buckets by age (thresholds match cmd_prune classification):
+#   hourly < 25h, daily < 8d, weekly < 35d, monthly < 366d, else yearly.
 def bucket_of(mtime):
     age = (now - mtime) / 3600.0
     if age < 25: return "hourly"
     if age < 24 * 8: return "daily"
     if age < 24 * 35: return "weekly"
-    if age < 24 * 400: return "monthly"
+    if age < 24 * 366: return "monthly"
     return "yearly"
 
 buckets = {"hourly": 0, "daily": 0, "weekly": 0, "monthly": 0, "yearly": 0}
@@ -502,6 +554,23 @@ cmd_backup() {
   db_version="$(psql_scalar 'SELECT version()')"
   [[ -n "$db_version" ]] || db_version="unknown"
 
+  # Capture source row counts at backup time so restore validation can
+  # compare against a frozen ground truth rather than live production
+  # (which will drift as writes happen between backup and restore).
+  # Missing tables are tolerated (report 0) so the field is always present.
+  local source_row_counts_raw
+  source_row_counts_raw="$(docker run --rm \
+    -e PGPASSWORD="$PG_PASSWORD" \
+    "$FG_BACKUP_DOCKER_IMAGE" \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DBNAME" \
+      --no-password -tA -c "
+      SELECT 'fa_engagements='               || COALESCE((SELECT COUNT(*)::text FROM fa_engagements),               '0')
+      UNION ALL SELECT 'fa_normalized_findings='       || COALESCE((SELECT COUNT(*)::text FROM fa_normalized_findings),       '0')
+      UNION ALL SELECT 'fa_engagement_audit_events='   || COALESCE((SELECT COUNT(*)::text FROM fa_engagement_audit_events),   '0')
+      UNION ALL SELECT 'fa_scan_results='              || COALESCE((SELECT COUNT(*)::text FROM fa_scan_results),              '0')
+      UNION ALL SELECT 'tenants='                      || COALESCE((SELECT COUNT(*)::text FROM tenants),                      '0');
+      " 2>/dev/null || true)"
+
   local dump_size checksum
   dump_size="$(file_size_bytes "$dump_file")"
   checksum="$(sha256_file "$dump_file")"
@@ -522,22 +591,28 @@ cmd_backup() {
   fi
 
   # Offsite upload (best-effort). Records outcome; does not fail the backup
-  # unless provider returns hard error (1).
+  # unless provider returns hard error (1). The provider contract is 3-state:
+  #   0 = success (bytes uploaded); set offsite_uploaded=true
+  #   1 = hard failure (network/auth); fail the backup
+  #   2 = skipped (not configured); leave offsite_uploaded=false, warn only
   local offsite_uploaded="false"
   local offsite_provider="${FG_BACKUP_OFFSITE_PROVIDER:-local}"
   local offsite_msg=""
   if [[ "$offsite_provider" != "none" ]]; then
-    if offsite_msg="$(upload_backup "$final_file" "$basename" 2>&1)"; then
+    local upload_exit=0
+    offsite_msg="$(upload_backup "$final_file" "$basename" 2>&1)" || upload_exit=$?
+    if [[ "$upload_exit" -eq 0 ]]; then
       offsite_uploaded="true"
-      # Also upload the manifest once we write it (below).
+      log "offsite: $offsite_msg"
+    elif [[ "$upload_exit" -eq 2 ]]; then
+      # Skip: no credentials / provider not configured. Not a failure.
+      offsite_uploaded="false"
+      log "offsite upload skipped: $offsite_msg"
     else
-      local rc=$?
-      log "offsite upload returned rc=$rc: $offsite_msg"
-      if [[ "$rc" == "1" ]]; then
-        die 5 "offsite upload failed: $offsite_msg"
-      fi
+      offsite_uploaded="false"
+      log "offsite upload failed (exit $upload_exit): $offsite_msg"
+      die 5 "offsite upload failed: $offsite_msg"
     fi
-    log "offsite: $offsite_msg"
   fi
 
   # Manifest.
@@ -558,11 +633,28 @@ cmd_backup() {
     "$checksum" "$final_file" "$FG_BACKUP_DOCKER_IMAGE" \
     "$pg_dump_ver" "$FG_BACKUP_OPERATOR" "$encrypted" \
     "$offsite_uploaded" "$offsite_provider" "$duration" \
-    "$FG_BACKUP_RAILWAY_PLAN" "$FG_BACKUP_SCRIPT_VERSION" "$backup_id" <<'PYEOF'
+    "$FG_BACKUP_RAILWAY_PLAN" "$FG_BACKUP_SCRIPT_VERSION" "$backup_id" \
+    "$source_row_counts_raw" <<'PYEOF'
 import json, sys
 (_prog, path, schema_v, start_iso, end_iso, btype, db_v, mig_v, size,
  checksum, storage, image, dump_ver, operator, encrypted, offsite_uploaded,
- offsite_provider, duration, plan, script_v, backup_id) = sys.argv
+ offsite_provider, duration, plan, script_v, backup_id, source_counts_raw) = sys.argv
+
+# Parse "table=N\ntable=N\n..." into a dict[str,int]. Non-integer values are
+# stored as None so operator can still see the field was present.
+source_row_counts = {}
+for line in source_counts_raw.splitlines():
+    line = line.strip()
+    if not line or "=" not in line:
+        continue
+    k, _, v = line.partition("=")
+    k = k.strip()
+    v = v.strip()
+    try:
+        source_row_counts[k] = int(v)
+    except ValueError:
+        source_row_counts[k] = None
+
 data = {
   "backup_id": backup_id,
   "manifest_schema_version": schema_v,
@@ -589,6 +681,9 @@ data = {
   "duration_seconds": int(duration),
   "railway_plan": plan,
   "script_version": script_v,
+  # Row counts captured at backup time so restore compares against the frozen
+  # source-of-truth from when the dump was taken, not against a moving live DB.
+  "source_row_counts": source_row_counts,
 }
 with open(path, "w") as fh:
     json.dump(data, fh, indent=2, sort_keys=True)
@@ -597,13 +692,6 @@ PYEOF
 
   # Sign the manifest (HMAC-SHA256 or "unsigned" if key absent).
   sign_manifest "$manifest_file" || log "sign_manifest failed for $manifest_file (non-fatal)"
-
-  # Upload the manifest alongside the dump.
-  if [[ "$offsite_provider" != "none" ]]; then
-    local m_key
-    m_key="$(basename "$manifest_file")"
-    upload_backup "$manifest_file" "$m_key" >/dev/null 2>&1 || true
-  fi
 
   # Verify the manifest we just wrote against the archive (self-check).
   if verify_backup_impl "$final_file" >/dev/null 2>&1; then
@@ -624,6 +712,16 @@ PYEOF
     log "post-backup verification FAILED for $final_file"
     update_health_dashboard "failed" ""
     die 6 "verify step failed after backup"
+  fi
+
+  # Upload the finalized manifest offsite AFTER verify + re-sign so the remote
+  # copy reflects verification_status="verified" and the up-to-date signature.
+  # Uploading before verify would leave the remote copy permanently marked as
+  # "unverified" even though the local manifest is verified.
+  if [[ "$offsite_provider" != "none" ]]; then
+    local m_key
+    m_key="$(basename "$manifest_file")"
+    upload_backup "$manifest_file" "$m_key" >/dev/null 2>&1 || true
   fi
 
   # Retention.
@@ -861,14 +959,24 @@ if candidates:
     protected.add(candidates[0][1])
 
 def bucket_of(ts):
+    # Age-range classification for retention graduation. Thresholds:
+    #   hourly:  age < 25h                (slack hour to avoid edge cases)
+    #   daily:   25h  <= age < 8d
+    #   weekly:  8d   <= age < 35d        (5 weeks)
+    #   monthly: 35d  <= age < 366d
+    #   yearly:  age  >= 366d
+    # This separates "how old is this backup" (bucket classification) from
+    # "how many to keep per bucket type" (retention counts), so an archive
+    # graduates from hourly -> daily -> weekly -> monthly -> yearly as it ages
+    # rather than being pruned while still competing for hourly slots.
     age = now - ts
-    if age < timedelta(hours=48):
+    if age < timedelta(hours=25):
         return "hourly"
-    if age < timedelta(days=14):
+    if age < timedelta(days=8):
         return "daily"
-    if age < timedelta(days=90):
+    if age < timedelta(days=35):
         return "weekly"
-    if age < timedelta(days=730):
+    if age < timedelta(days=366):
         return "monthly"
     return "yearly"
 
@@ -962,12 +1070,39 @@ cmd_restore() {
 
   require_bin docker
 
+  # Manifest lookup: prefer <file>.manifest.json (what we write); if file is
+  # a .dump.enc and that manifest is missing, also try the plain-dump name
+  # (defensive — some legacy layouts kept a single manifest per timestamp).
   local manifest="${file}.manifest.json"
+  if [[ ! -f "$manifest" && "$file" == *.dump.enc ]]; then
+    local alt_manifest="${file%.enc}.manifest.json"
+    if [[ -f "$alt_manifest" ]]; then
+      manifest="$alt_manifest"
+    fi
+  fi
   [[ -f "$manifest" ]] || die 2 "manifest not found: $manifest"
   local encrypted
   encrypted="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("encrypted", False))' "$manifest")"
+
+  # Handle encrypted archives inline: decrypt to a temp file, register EXIT
+  # cleanup, and continue with the decrypted copy as the restore source.
+  # The original .dump.enc on disk is not touched.
+  local restore_source="$file"
+  local decrypt_tmp=""
   if [[ "$encrypted" == "True" || "$encrypted" == "true" ]]; then
-    die 2 "encrypted archive — decrypt with docs/operators/disaster_recovery.md §4 before restore"
+    if [[ -z "${FG_BACKUP_ENCRYPTION_KEY:-}" ]]; then
+      die 2 "encrypted archive requires FG_BACKUP_ENCRYPTION_KEY to restore"
+    fi
+    require_bin openssl
+    decrypt_tmp="$(mktemp -p "$FG_BACKUP_TMP_DIR" .fg_restore.XXXXXX.dump)"
+    # Register cleanup by extending the trap-visible state.
+    FG_RESTORE_DECRYPT_TMP="$decrypt_tmp"
+    log "decrypting $file → $decrypt_tmp (in tmpfs)"
+    FG_BACKUP_ENCRYPTION_KEY="$FG_BACKUP_ENCRYPTION_KEY" \
+      openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+        -pass env:FG_BACKUP_ENCRYPTION_KEY \
+        -in "$file" -out "$decrypt_tmp"
+    restore_source="$decrypt_tmp"
   fi
 
   local stamp rand
@@ -1000,7 +1135,7 @@ cmd_restore() {
   docker run --rm \
     -e PGPASSWORD="$scratch_pass" \
     --network host \
-    -v "$(readlink -f "$file"):/restore.dump:ro" \
+    -v "$(readlink -f "$restore_source"):/restore.dump:ro" \
     "$FG_BACKUP_DOCKER_IMAGE" \
     pg_restore \
       --no-password \
@@ -1019,39 +1154,71 @@ cmd_restore() {
        (SELECT COUNT(*) FROM tenants),
        COALESCE((SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1),'unknown')")"
 
-  # Query production counts.
-  parse_db_url "$FG_BACKUP_DB_URL"
-  local prod_counts
-  prod_counts="$(docker run --rm -e PGPASSWORD="$PG_PASSWORD" "$FG_BACKUP_DOCKER_IMAGE" \
-    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DBNAME" --no-password -tA -F '|' -c \
-    "SELECT
-       (SELECT COUNT(*) FROM fa_engagements),
-       (SELECT COUNT(*) FROM fa_normalized_findings),
-       (SELECT COUNT(*) FROM fa_engagement_audit_events),
-       (SELECT COUNT(*) FROM fa_scan_results),
-       (SELECT COUNT(*) FROM tenants),
-       COALESCE((SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1),'unknown')")"
+  # Compare scratch counts against the manifest's captured source_row_counts
+  # (frozen at backup time) rather than against live production, which drifts
+  # between the backup and this restore. If the manifest predates the
+  # source-count capture (older backups), fall back to a live query with a
+  # loud warning so the operator knows a false mismatch is possible.
+  local expected_counts_source="manifest"
+  local expected_line=""
+  local fallback_note=""
+  expected_line="$(python3 - "$manifest" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as fh:
+    data = json.load(fh)
+counts = data.get("source_row_counts") or {}
+labels = ["fa_engagements","fa_normalized_findings","fa_engagement_audit_events",
+          "fa_scan_results","tenants"]
+if not counts or not all(l in counts for l in labels):
+    # Signal to caller: fall back to live query.
+    print("__MANIFEST_MISSING_SOURCE_COUNTS__")
+else:
+    parts = [str(counts.get(l, "")) for l in labels]
+    parts.append(str(data.get("migration_version", "unknown")))
+    print("|".join(parts))
+PYEOF
+)"
+  if [[ "$expected_line" == "__MANIFEST_MISSING_SOURCE_COUNTS__" ]]; then
+    log "WARNING: manifest predates source-count capture; comparing against current production (may produce false mismatches)"
+    expected_counts_source="production_live"
+    fallback_note="manifest predates source-count capture; live production queried instead"
+    parse_db_url "$FG_BACKUP_DB_URL"
+    expected_line="$(docker run --rm -e PGPASSWORD="$PG_PASSWORD" "$FG_BACKUP_DOCKER_IMAGE" \
+      psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DBNAME" --no-password -tA -F '|' -c \
+      "SELECT
+         (SELECT COUNT(*) FROM fa_engagements),
+         (SELECT COUNT(*) FROM fa_normalized_findings),
+         (SELECT COUNT(*) FROM fa_engagement_audit_events),
+         (SELECT COUNT(*) FROM fa_scan_results),
+         (SELECT COUNT(*) FROM tenants),
+         COALESCE((SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1),'unknown')")"
+  fi
 
   # Compare.
   local report_file="$FG_BACKUP_DIR/restore_report_$(ts_now_compact).json"
-  python3 - "$report_file" "$file" "$target" "$prod_counts" "$scratch_counts" <<'PYEOF'
+  python3 - "$report_file" "$file" "$target" "$expected_line" "$scratch_counts" \
+    "$expected_counts_source" "$fallback_note" <<'PYEOF'
 import json, sys
-(_p, report_path, backup, target, prod_line, scratch_line) = sys.argv
+(_p, report_path, backup, target, expected_line, scratch_line,
+ expected_source, fallback_note) = sys.argv
 labels = ["fa_engagements","fa_normalized_findings","fa_engagement_audit_events",
           "fa_scan_results","tenants","migration_version"]
-prod = [v.strip() for v in prod_line.strip().split("|")]
+expected = [v.strip() for v in expected_line.strip().split("|")]
 scratch = [v.strip() for v in scratch_line.strip().split("|")]
-prod_map = dict(zip(labels, prod))
+expected_map = dict(zip(labels, expected))
 scratch_map = dict(zip(labels, scratch))
-mismatches = [k for k in labels if prod_map.get(k) != scratch_map.get(k)]
+mismatches = [k for k in labels if expected_map.get(k) != scratch_map.get(k)]
 result = {
   "backup_file": backup,
   "scratch_container": target,
-  "production_counts": prod_map,
+  "expected_counts": expected_map,
+  "expected_counts_source": expected_source,
   "scratch_counts": scratch_map,
   "mismatches": mismatches,
   "status": "PASS" if not mismatches else "FAIL",
 }
+if fallback_note:
+    result["note"] = fallback_note
 with open(report_path, "w") as fh:
     json.dump(result, fh, indent=2, sort_keys=True)
     fh.write("\n")
@@ -1075,8 +1242,13 @@ cmd_drill() {
     esac
   done
   ensure_backup_dir
+  # Find newest backup archive (encrypted or not). find + stat gives us a
+  # portable sort-by-mtime that works with both .dump and .dump.enc extensions.
   local latest
-  latest="$(ls -1t "$FG_BACKUP_DIR"/frostgate_*.dump 2>/dev/null | head -1 || true)"
+  latest="$(find "$FG_BACKUP_DIR" -maxdepth 1 -type f \
+    \( -name "frostgate_*.dump" -o -name "frostgate_*.dump.enc" \) \
+    -printf '%T@\t%p\n' 2>/dev/null \
+    | sort -rn | head -1 | cut -f2- || true)"
   if [[ -z "$latest" ]]; then
     die 4 "no backup found in $FG_BACKUP_DIR — run 'fg_backup.sh backup' first"
   fi
@@ -1240,10 +1412,11 @@ if os.path.isdir(drill_dir):
 all_drill_text = "\n".join(drill_texts)
 
 def bucket_of(age_hours):
+    # Thresholds match cmd_prune classification (age-range graduation).
     if age_hours < 25: return "hourly"
     if age_hours < 24 * 8: return "daily"
     if age_hours < 24 * 35: return "weekly"
-    if age_hours < 24 * 400: return "monthly"
+    if age_hours < 24 * 366: return "monthly"
     return "yearly"
 
 def fmt_size(n):

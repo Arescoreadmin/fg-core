@@ -39,6 +39,9 @@ REQUIRED_FIELDS = {
     "railway_plan",
     "manifest_signature",
     "manifest_signing_key_id",
+    # Source row counts captured at backup time so restore validation can
+    # compare against a frozen ground truth rather than live production.
+    "source_row_counts",
 }
 
 
@@ -85,6 +88,10 @@ MANIFEST_SCHEMA = {
         "backup_id": {"type": "string", "pattern": r"^FG-BKP-\d{8}-\d{5}$"},
         "manifest_signature": {"type": "string"},
         "manifest_signing_key_id": {"type": "string"},
+        "source_row_counts": {
+            "type": "object",
+            "additionalProperties": {"type": ["integer", "null"]},
+        },
     },
 }
 

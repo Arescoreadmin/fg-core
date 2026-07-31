@@ -1,5 +1,38 @@
 # PR Fix Log (Strict)
 
+## P-37 — fix(ops): address 6 bot review findings on fg_backup.sh
+
+- **PR/Branch:** `ops/t1.5-backup-automation` (#598)
+- **Date:** 2026-07-31
+- **Files changed:** `scripts/backup/fg_backup.sh`, `scripts/backup/providers/upload_base.sh`, `scripts/backup/providers/upload_s3_compatible.sh`, `tests/backup/conftest.py`, `tests/backup/test_backup_id.py`, `tests/backup/test_backup_manifest.py`, `tests/backup/test_backup_shell.py`, `tests/backup/test_retention.py`
+- **Root causes (6 bot findings):**
+  1. **P1 — Retention bucket graduation:** the prune classifier used `age < timedelta(hours=48)` as the hourly threshold, so any archive under 48 hours old sat in the hourly bucket. With 24 hourly slots and hourly backups, the 25th backup pruned the oldest (~24h) archive before it could graduate to the daily bucket. Nothing ever survived to daily / weekly / monthly / yearly — long-term retention was a fiction.
+  2. **P1 — `offsite_uploaded` truth:** `upload_s3_compatible.sh` returned `0` (success) when credentials were missing so scheduled runs would not fail. `cmd_backup` treated exit 0 as "uploaded" and set `offsite_uploaded="true"` in the manifest, even though nothing left the machine.
+  3. **P1 — Restore validation compared against live production:** `cmd_restore` queried the current production DB for row counts, so any legitimate write between the backup and the restore drill produced a false "mismatch" on an otherwise valid restore.
+  4. **P2 — Manifest uploaded before final verification:** the manifest was pushed offsite before `verification_status` was flipped to `"verified"` and re-signed, so the remote copy was permanently stuck at `"unverified"`.
+  5. **P2 — Drill / restore ignored encrypted archives:** `cmd_drill` used `ls -1t "$FG_BACKUP_DIR"/frostgate_*.dump` which never matched `.dump.enc`, so drills silently skipped when `FG_BACKUP_ENCRYPT=true`. `cmd_restore` also refused encrypted archives outright with a "decrypt manually" error.
+  6. **P2 — Backup ID reuse after prune:** `generate_backup_id()` used `wc -l` to count today's archives and added 1. If archive `#00003` was pruned, the count dropped to 2 and the next ID issued was `00003` again — collision.
+- **Fixes:**
+  1. `bucket_of(ts)` in `cmd_prune` (and the matching helpers in `update_health_dashboard` and `cmd_inventory`) now uses age-range classification: `hourly < 25h`, `25h ≤ daily < 8d`, `8d ≤ weekly < 35d`, `35d ≤ monthly < 366d`, `yearly ≥ 366d`. Each bucket's retention count now applies only to archives whose age falls inside that bucket's range, so a 26h-old archive competes for daily slots (not hourly) and can survive to graduate further.
+  2. `upload_s3_compatible.sh` and `upload_local.sh` now return exit **2** on skip (credentials/path missing) per the `upload_base.sh` 3-state contract (`0`=uploaded, `1`=hard failure, `2`=skipped). `cmd_backup` distinguishes 0/2/other with a `local upload_exit=0; msg=$(...) || upload_exit=$?` pattern: sets `offsite_uploaded=true` only on 0, warns and leaves it `false` on 2, and dies on any other non-zero.
+  3. `cmd_backup` now captures production row counts at backup time (`fa_engagements`, `fa_normalized_findings`, `fa_engagement_audit_events`, `fa_scan_results`, `tenants`) and stores them in the manifest under `source_row_counts`. `cmd_restore` reads these frozen counts from the manifest and compares scratch counts against them. When the manifest predates the field (older backups), the restore falls back to a live production query with an explicit "may produce false mismatches" warning.
+  4. The manifest offsite-upload block was moved from immediately after `sign_manifest` (pre-verify) to after the verify + re-sign step, so the remote copy always reflects `verification_status="verified"` and the finalized HMAC signature.
+  5. `cmd_drill` now uses `find "$FG_BACKUP_DIR" -maxdepth 1 -type f \( -name "frostgate_*.dump" -o -name "frostgate_*.dump.enc" \) -printf '%T@\t%p\n' | sort -rn | head -1` to select the latest archive of either flavour. `cmd_restore` handles encrypted archives inline: decrypts to a `mktemp` file under `FG_BACKUP_TMP_DIR`, feeds that to `pg_restore`, and cleans up on the EXIT trap (added `FG_RESTORE_DECRYPT_TMP` global tracked by `cleanup()`, shredded on exit). Manifest lookup for `.dump.enc` also falls back to the plain `.dump.manifest.json` name for defensive compatibility with legacy layouts.
+  6. `generate_backup_id()` now derives the sequence from the MAX `backup_id` sequence recorded in today's manifest files, plus one — with a same-day archive-count safety net so a pruned-manifest-but-live-archive layout still can't produce a smaller sequence. Pruning archive #3 no longer resets the next-issued ID to #3.
+- **Tests added / updated:**
+  - `test_retention.py`: docstring updated; added `test_prune_bucket_graduation_uses_age_ranges` (26h & 10d archives compete in daily/weekly slots, not hourly) and `test_prune_bucket_boundaries_25h_8d_35d_366d` (one archive per bucket, all kept).
+  - `test_backup_manifest.py`: `source_row_counts` added to `REQUIRED_FIELDS` and `MANIFEST_SCHEMA` (object with integer-or-null values).
+  - `test_backup_id.py`: added `test_pruning_does_not_cause_id_reuse` (prune #2, next ID is still #4) and `test_id_derived_from_manifest_max_seq` (two archives with seqs 7,12 → next=13, not 3).
+  - `test_backup_shell.py`: added `test_upload_s3_without_credentials_exits_2` and `test_upload_local_without_path_exits_2` (both providers exit 2 on skip, not 0).
+  - `conftest.py`: seed fixture now emits `source_row_counts` so existing manifest-schema tests keep passing.
+- **Behavioral impact:** Backup archives now graduate correctly across retention buckets (previous behaviour silently pruned any archive before it could ever reach the daily bucket). `offsite_uploaded` in the manifest is now truthful — operators watching this flag will start seeing `false` in environments where offsite credentials were never wired up (previously showed `true` even when nothing shipped). Restore drills against a busy production DB stop producing false-negative mismatches. Encrypted backups become first-class for drills and restores. Backup IDs are now stable after pruning.
+- **Security impact:** Decrypted restore intermediate is created under `FG_BACKUP_TMP_DIR` with `mktemp` and shredded on `EXIT` trap regardless of success/failure. The encryption key is only accepted from `FG_BACKUP_ENCRYPTION_KEY` — never persisted, never logged. Manifest signing is unchanged.
+- **Schema/API impact:** Manifest JSON gains one field — `source_row_counts` (object mapping table name to integer). Additive; older manifests still restore via the documented live-query fallback.
+- **Validation:** `bash -n scripts/backup/fg_backup.sh scripts/backup/providers/*.sh` → clean. `python -m pytest tests/backup/ -v` → 73 passed (67 baseline + 6 new). `make fg-fast` → PASS (exit 0). `git diff --check` → clean.
+- **Result:** Pass.
+
+---
+
 ## P-36 — feat(ops): T1.5 refinements — signed manifests, health dashboard, backup IDs, dry-run, inventory, metrics
 
 - **PR/Branch:** `ops/t1.5-backup-automation`

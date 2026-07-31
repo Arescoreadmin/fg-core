@@ -109,6 +109,15 @@ def _write_manifest(archive: Path, checksum: str, **overrides) -> Path:
         "script_version": "1.0.0",
         "manifest_signature": "unsigned",
         "manifest_signing_key_id": "none",
+        # Source row counts captured at backup time (Fix 3): compare restored
+        # scratch counts against these frozen values rather than live prod.
+        "source_row_counts": {
+            "fa_engagements": 0,
+            "fa_normalized_findings": 0,
+            "fa_engagement_audit_events": 0,
+            "fa_scan_results": 0,
+            "tenants": 0,
+        },
     }
     data.update(overrides)
     manifest = archive.with_suffix(archive.suffix + ".manifest.json")

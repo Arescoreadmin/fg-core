@@ -1,8 +1,9 @@
 """Retention policy tests.
 
 The prune logic must:
-  - Bucket backups by age (hourly / daily / weekly / monthly / yearly).
-  - Keep the N newest in each bucket.
+  - Bucket backups by age-range so archives graduate hourly -> daily -> weekly
+    -> monthly -> yearly as they age (thresholds: 25h, 8d, 35d, 366d).
+  - Keep the N newest in each bucket (competition is per-bucket, not global).
   - Never delete the single newest successful backup (invariant).
   - Honour --dry-run without mutating state.
 """
@@ -109,6 +110,69 @@ def test_prune_ignores_non_frostgate_files(run_fg_backup, backup_dir: Path):
     assert all("frostgate_" in n for n in payload["kept"])
     assert (backup_dir / "unrelated.txt").exists()
     assert (backup_dir / "random.dump").exists()
+
+
+def test_prune_bucket_graduation_uses_age_ranges(run_fg_backup, backup_dir: Path):
+    """Archives should compete only within their own age-range bucket.
+
+    Regression test for the pre-fix bug where the hourly bucket held any
+    archive <48h old. With 24 hourly slots, the 25th hourly backup pruned
+    the oldest (~24h) one before it could graduate to the daily bucket,
+    so nothing ever survived to daily/weekly/monthly/yearly.
+
+    Under age-range classification (hourly<25h, daily<8d, weekly<35d,
+    monthly<366d, yearly>=366d) an archive at 26h old is already in the
+    daily bucket and never competes against fresh hourly backups.
+    """
+    now = datetime.now(timezone.utc)
+    # 3 fresh hourly + 1 that has aged into daily bucket (26h) + 1 weekly (10d).
+    hourly = [
+        _make_backup(backup_dir, now - timedelta(hours=h)) for h in (1, 2, 3)
+    ]
+    daily_grad = _make_backup(backup_dir, now - timedelta(hours=26))
+    weekly_grad = _make_backup(backup_dir, now - timedelta(days=10))
+    env = {
+        # Even with zero hourly-slot pressure, the 26h archive must not be
+        # pruned when daily retention permits it — it's in a different bucket.
+        "FG_BACKUP_RETAIN_HOURLY": "3",
+        "FG_BACKUP_RETAIN_DAILY": "1",
+        "FG_BACKUP_RETAIN_WEEKLY": "1",
+        "FG_BACKUP_RETAIN_MONTHLY": "0",
+        "FG_BACKUP_RETAIN_YEARLY": "0",
+    }
+    result = run_fg_backup("prune", env=env)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    kept = set(payload["kept"])
+    for h in hourly:
+        assert h.name in kept, f"hourly {h.name} should be kept"
+    assert daily_grad.name in kept, "26h-old archive should have graduated to daily"
+    assert weekly_grad.name in kept, "10d-old archive should have graduated to weekly"
+
+
+def test_prune_bucket_boundaries_25h_8d_35d_366d(run_fg_backup, backup_dir: Path):
+    """Boundary values around each threshold land in the expected bucket."""
+    now = datetime.now(timezone.utc)
+    # One backup just inside each bucket.
+    b_hourly = _make_backup(backup_dir, now - timedelta(hours=24))          # <25h
+    b_daily = _make_backup(backup_dir, now - timedelta(hours=26))           # 25h..8d
+    b_weekly = _make_backup(backup_dir, now - timedelta(days=9))            # 8d..35d
+    b_monthly = _make_backup(backup_dir, now - timedelta(days=40))          # 35d..366d
+    b_yearly = _make_backup(backup_dir, now - timedelta(days=400))          # >=366d
+    env = {
+        "FG_BACKUP_RETAIN_HOURLY": "1",
+        "FG_BACKUP_RETAIN_DAILY": "1",
+        "FG_BACKUP_RETAIN_WEEKLY": "1",
+        "FG_BACKUP_RETAIN_MONTHLY": "1",
+        "FG_BACKUP_RETAIN_YEARLY": "1",
+    }
+    result = run_fg_backup("prune", env=env)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    kept = set(payload["kept"])
+    for b in (b_hourly, b_daily, b_weekly, b_monthly, b_yearly):
+        assert b.name in kept, f"{b.name} should be kept (one per bucket)"
+    assert not payload["dropped"], "nothing to drop when each bucket has exactly one"
 
 
 def test_prune_removes_manifest_alongside_archive(

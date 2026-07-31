@@ -134,3 +134,85 @@ def test_backup_dry_run_exits_zero_and_prints_dry_run(run_fg_backup):
 def test_verify_manifest_missing_file_exits_nonzero(run_fg_backup):
     result = run_fg_backup("verify-manifest", "/tmp/nonexistent.manifest.json")
     assert result.returncode != 0
+
+
+def test_upload_s3_without_credentials_exits_2(tmp_path: Path):
+    """The S3 provider must exit 2 (skipped), not 0 (success), when there
+    are no credentials. Otherwise cmd_backup would set offsite_uploaded=true
+    even though nothing was uploaded.
+    """
+    import subprocess
+
+    provider = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "backup"
+        / "providers"
+        / "upload_s3_compatible.sh"
+    )
+    fake_archive = tmp_path / "frostgate_20260730_120000_scheduled.dump"
+    fake_archive.write_bytes(b"x")
+    # Ensure no AWS creds leak in.
+    env = {
+        k: v
+        for k, v in __import__("os").environ.items()
+        if not k.startswith("AWS_") and not k.startswith("FG_BACKUP_")
+    }
+    env["PATH"] = __import__("os").environ.get("PATH", "/usr/bin:/bin")
+    # Also clear rclone remote so the aws-cli path is exercised.
+    env.pop("FG_BACKUP_RCLONE_REMOTE", None)
+    env["FG_BACKUP_S3_BUCKET"] = ""  # no bucket
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{provider}"; upload_backup "{fake_archive}" "test-key"',
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 2, (
+        f"expected exit code 2 (skipped) when credentials are missing, "
+        f"got {result.returncode}. stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "skipped" in (result.stdout + result.stderr).lower()
+
+
+def test_upload_local_without_path_exits_2(tmp_path: Path):
+    """The local provider must exit 2 (skipped) when FG_BACKUP_OFFSITE_LOCAL_PATH
+    is unset, so callers don't record a false offsite_uploaded=true.
+    """
+    import subprocess
+
+    provider = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "backup"
+        / "providers"
+        / "upload_local.sh"
+    )
+    fake_archive = tmp_path / "frostgate_20260730_120000_scheduled.dump"
+    fake_archive.write_bytes(b"x")
+    env = {
+        k: v
+        for k, v in __import__("os").environ.items()
+        if not k.startswith("FG_BACKUP_")
+    }
+    env["PATH"] = __import__("os").environ.get("PATH", "/usr/bin:/bin")
+    # Explicitly unset FG_BACKUP_OFFSITE_LOCAL_PATH
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'unset FG_BACKUP_OFFSITE_LOCAL_PATH; source "{provider}"; '
+            f'upload_backup "{fake_archive}" "test-key"',
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 2, (
+        f"expected exit code 2 (skipped), got {result.returncode}. "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )

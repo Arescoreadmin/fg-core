@@ -3,9 +3,11 @@
 # S3-compatible offsite provider (S3, Cloudflare R2, Backblaze B2).
 #
 # This is a stub that documents the expected environment and prefers rclone
-# when available, falling back to aws-cli. It exits code 0 with a "skipped"
-# message when credentials are not configured — so scheduled backups never
-# fail merely because offsite is not yet wired up.
+# when available, falling back to aws-cli. It exits code 2 (see upload_base.sh
+# contract) with a "skipped" message when credentials are not configured — so
+# scheduled backups never fail merely because offsite is not yet wired up, but
+# the caller can still distinguish skip (2) from success (0) and refrain from
+# marking offsite_uploaded=true.
 #
 # Required env when enabled:
 #   FG_BACKUP_S3_BUCKET       target bucket name
@@ -49,14 +51,15 @@ upload_backup() {
   fi
 
   # Fall back to aws-cli when credentials + bucket are present.
+  # Exit 2 (per upload_base.sh contract) so caller distinguishes skip from success.
   if [[ -z "$bucket" || -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
     echo "upload_s3_compatible.sh: offsite upload skipped: credentials not configured"
-    return 0
+    return 2
   fi
 
   if ! command -v aws >/dev/null 2>&1; then
     echo "upload_s3_compatible.sh: offsite upload skipped: aws CLI not installed"
-    return 0
+    return 2
   fi
 
   local s3_uri="s3://$bucket/$prefix/$key"
