@@ -9,7 +9,7 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Branch:** `main`
 
-**Current PR:** None — PR #600 merged; preparing T4 portal named-user production proof.
+**Current PR:** open — T4 portal named-user proof (branch: `ops/t4-portal-named-user-proof`).
 
 **Overall Status:** YELLOW
 
@@ -17,11 +17,11 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
-**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial), and #600 evidence reconciliation complete; preparing T4.
+**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial), and #600 evidence reconciliation complete; T4 in progress.
 
 **Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
 
-**Completed Since Last Update:** PR #600 merged 2026-07-31 (b5821f2c) — L12 evidence manifest and execution state contradictions resolved; all CI gates pass (496 tests, fg-fast, production profile, authority verification, gap audit, RLS verification, runtime intelligence written). Working tree clean on main.
+**Completed Since Last Update:** PR #600 merged 2026-07-31 (b5821f2c). T4 branch `ops/t4-portal-named-user-proof` created 2026-07-31. ROADMAP updated: PR B (#579 merged 2026-07-26) and PR C (#580 merged 2026-07-27) status corrected; T2+T3 marked merged. T4 runbook created at `docs/operators/portal_named_user_proof.md`. L1 evidence manifest created at `docs/governance/status/L01_evidence_manifest.md`. Known gap documented: no automated email for `pni1.` invitations; operator delivers accept-invite URL manually (T14 scope).
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
