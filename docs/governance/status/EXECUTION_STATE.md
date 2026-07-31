@@ -7,13 +7,13 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-07-30
 
-**Current Branch:** `ops/t1.5-backup-automation`
+**Current Branch:** `main`
 
-**Current PR:** T1.5 backup automation & recovery hardening (in progress)
+**Current PR:** None — main is clean. T1.5 (#598) merged. Ring_state_dir fix (#595) merged.
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 67
+**Launch Confidence (%):** 68
 
 **Current Critical Path:** T2/T3 top-5 secret rotation -> T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
@@ -21,22 +21,23 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current DoD Progress:** 1/14 Launch DoD items checked with post-freeze durable evidence (L4: PASS, now with automation + monthly-drill infrastructure on top).
 
-**Completed Since Last Update:** T1 executed 2026-07-30. Production database backed up via `pg_dump` (PostgreSQL 18.4, 1.7 MB), restored into isolated scratch container `frostgate-restore-proof-20260730` in ~4 seconds. Row counts verified for all key tables and for ENG-RESTORE-PROOF-01 (all PASS). Railway plan tier confirmed as **hobby** (`maxBackupsCount: 0`). `docs/operators/backup_restore.md` created. `docs/governance/status/L04_evidence_manifest.md` created. L4 marked PASS. FG-LR-003 closed. T1.5 executed same day: `scripts/backup/fg_backup.sh` (backup/verify/restore/list/prune/drill/status subcommands), manifests with SHA-256 + optional AES-256-CBC encryption, offsite storage abstraction (local/S3/R2/B2), retention pruning with newest-protected invariant, monthly drill evidence pipeline, RPO/RTO status JSON, backup automation + DR + schedule docs, pytest suite (`tests/backup/`).
+**Completed Since Last Update:** T1.5 merged to main via PR #598 (5f5d4a17). Final script has 10 subcommands (backup/verify/verify-manifest/restore/list/prune/drill/inventory/metrics/status). Signed manifests (HMAC-SHA256), immutable backup IDs (FG-BKP-YYYYMMDD-NNNNN from max existing sequence), dry-run mode on all destructive actions, backup health dashboard (artifacts/operations/backup_health.json), Prometheus metrics text output. Six bot review findings corrected: retention bucketing by age range (not global count), offsite_uploaded truth on 3-state provider exit, restore validates against manifest source_row_counts not live prod, manifest uploaded after verification, encrypted archive discovery via find with .dump.enc glob, backup ID sequence from manifest scan. 73 hermetic pytest tests, CI green. Dockerfile fix (#595) creates /app/state and /app/models — ring_state_dir crash resolved in image; Railway env var FG_RING_STATE_DIR should be changed to /var/lib/frostgate/state if not already done.
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
 - FG-LR-002: portal named-user invite -> OIDC -> session -> logout revocation unproven with a real external identity in production.
 - FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load. Note: Railway hobby plan confirmed; T5 will determine if upgrade to Pro is needed for automatic backups and headroom.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
+- **Operational (if not yet resolved):** Change Railway `FG_RING_STATE_DIR` from `/app/state` to `/var/lib/frostgate/state` to prevent API crash on next deploy.
 
 **Top Three Priorities:**
 1. Execute T2: enable Anthropic auto-recharge and confirm Anthropic balance.
 2. Execute T3: rotate top-5 blast-radius secrets before the dry run validates final config (S-1 invariant).
 3. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence.
 
-**Next Required PR:** T2/T3 (auto-recharge + secret rotation) are 0.6 days combined. T4 portal named-user proof is 2 days. Do not combine with T1.5 PR.
+**Next Required PR:** T2/T3 (auto-recharge + secret rotation) are 0.6 days combined. T4 portal named-user proof is 2 days. Branch from main; each task gets its own PR.
 
-**Estimated Engineering Days Remaining:** 17.0 (was 17.5; T1.5 consumed 0.5 days).
+**Estimated Engineering Days Remaining:** 16.5 (budget 19.0; T1 consumed 1.5d, T1.5 consumed ~1.0d).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
 
@@ -78,6 +79,36 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Recommended Next Action:** Execute T2 (Anthropic auto-recharge) and T3 (secret rotation) before touching production config further. T4 portal named-user proof is the next P0 blocker after that.
 
 **Execution Notes:** The frozen audit is the source of truth. T1 is the only change in this PR. No product surface, trust-layer, or architecture changes.
+
+## Execution History (recent, newest first)
+
+### 2026-07-30 — Executive Delivery Review + T1.5 Merge
+
+**Review Type:** Daily Execution Review
+
+**Summary:** T1.5 merged to main via PR #598 (5f5d4a17). Ring_state_dir Dockerfile fix merged via PR #595 (48f1d30b). Six bot review findings on `fg_backup.sh` corrected in the same PR cycle: retention bucket graduation by age range, offsite_uploaded 3-state exit truth, restore validates against manifest `source_row_counts` not live production, manifest uploaded after verification, encrypted archive discovery via find with `.dump.enc`, backup ID sequence from max manifest scan. Script expanded from 7 to 10 subcommands: added `verify-manifest`, `inventory`, `metrics`. Added HMAC-SHA256 signed manifests, immutable backup IDs (FG-BKP-YYYYMMDD-NNNNN), dry-run mode, backup health dashboard, Prometheus metrics text output. 73 hermetic pytest tests; CI green (all 496 tests pass, fmt-check clean, PR_FIX_LOG entries P-35/P-36/P-37 added).
+
+**Major Changes:**
+- `scripts/backup/fg_backup.sh` — 10-subcommand backup CLI (final merged version)
+- `scripts/backup/backup_config.sh`, `providers/upload_base.sh`, `providers/upload_local.sh`, `providers/upload_s3_compatible.sh` — provider layer with 3-state exit protocol
+- `tests/backup/` — 9 test files, 73 tests covering all subcommands
+- `docs/operators/backup_automation.md`, `disaster_recovery.md`, `backup_schedule.md`
+- `Dockerfile` — `/app/state` and `/app/models` now created in image (ring_state_dir crash fixed)
+- `docs/ai/PR_FIX_LOG.md` — entries P-35, P-36, P-37 added
+
+**Decisions Made:**
+- Backup IDs use max-sequence scan of existing manifests (not file count) to survive pruning.
+- Restore validation uses `source_row_counts` captured at backup time (not live prod) to avoid false mismatches.
+- Provider skip exits 2 (not 0) so callers can distinguish success / failure / skip without touching `offsite_uploaded`.
+- Retention bucketing uses age ranges (not global sort position) so each bucket's count is enforced independently.
+
+**Blockers discovered:** None new. FG-LR-001/002/004/005 remain open.
+
+**Updated Launch Confidence:** 68%
+
+**Next:** T2 (Anthropic auto-recharge, 0.1d) and T3 (top-5 secret rotation, 0.5d) are the immediate work order. T4 (portal named-user proof, 2.0d) follows.
+
+---
 
 ## T1.5 Execution History
 
@@ -170,3 +201,39 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Decisions Made:** Today's highest-ROI work is T1 backup/restore proof as the primary objective, with T2 Anthropic auto-recharge as the secondary objective if T1 is not blocked. PR #592 should be monitored or merged only if checks pass without consuming launch execution time.
 
 **Updated Launch Confidence:** 60%
+
+
+Ring State Directory
+
+Status: RESOLVED
+
+Resolution:
+- PR #595 deployed successfully.
+- Container starts successfully.
+- Application startup completed.
+- No ring_state_dir errors observed.
+- No restart loop detected.
+- Repeated /health probes returned HTTP 200.
+
+Production Evidence:
+- Docker image creates:
+  - /app/state
+  - /app/models
+  - /var/lib/frostgate/state
+- Uvicorn reached "Application startup complete."
+- Continuous health checks succeeded after deployment.
+
+Launch Impact:
+- Operational blocker cleared.
+- This is no longer considered a Launch DoD blocker.
+
+Follow-up (Configuration Hygiene):
+Confirm the canonical production value for FG_RING_STATE_DIR.
+
+Preferred:
+    /var/lib/frostgate/state
+
+Temporary compatibility:
+    /app/state
+
+Until documentation is updated, either path is operational because PR #595 creates both directories during image build.
