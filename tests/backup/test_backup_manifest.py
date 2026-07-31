@@ -14,6 +14,7 @@ import jsonschema
 import pytest
 
 REQUIRED_FIELDS = {
+    "backup_id",
     "manifest_schema_version",
     "timestamp",
     "backup_type",
@@ -36,6 +37,8 @@ REQUIRED_FIELDS = {
     "offsite_provider",
     "duration_seconds",
     "railway_plan",
+    "manifest_signature",
+    "manifest_signing_key_id",
 }
 
 
@@ -79,6 +82,9 @@ MANIFEST_SCHEMA = {
         "offsite_provider": {"type": ["string", "null"]},
         "duration_seconds": {"type": "integer", "minimum": 0},
         "railway_plan": {"type": "string"},
+        "backup_id": {"type": "string", "pattern": r"^FG-BKP-\d{8}-\d{5}$"},
+        "manifest_signature": {"type": "string"},
+        "manifest_signing_key_id": {"type": "string"},
     },
 }
 

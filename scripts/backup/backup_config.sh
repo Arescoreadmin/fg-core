@@ -52,6 +52,18 @@
 : "${FG_BACKUP_ENCRYPT:=false}"
 : "${FG_BACKUP_ENCRYPTION_KEY:=}"
 
+# ----- Manifest signing (HMAC-SHA256) ---------------------------------------
+# FG_BACKUP_MANIFEST_HMAC_KEY: optional secret used to HMAC-SHA256 sign every
+# generated manifest. When unset, manifests carry manifest_signature="unsigned"
+# and are still valid (signing is opt-in). When set, verify-manifest recomputes
+# the HMAC and compares to the stored signature.
+: "${FG_BACKUP_MANIFEST_HMAC_KEY:=}"
+
+# ----- Health dashboard ------------------------------------------------------
+# FG_BACKUP_HEALTH_DASHBOARD: path to the JSON health snapshot updated after
+# every backup / verify / drill. Not committed (artifacts/ is gitignored).
+: "${FG_BACKUP_HEALTH_DASHBOARD:=artifacts/operations/backup_health.json}"
+
 # ----- Retention (used by fg_backup.sh prune) --------------------------------
 : "${FG_BACKUP_RETAIN_HOURLY:=24}"
 : "${FG_BACKUP_RETAIN_DAILY:=30}"
@@ -84,6 +96,7 @@ export FG_BACKUP_DOCKER_IMAGE
 export FG_BACKUP_OFFSITE_PROVIDER FG_BACKUP_OFFSITE_LOCAL_PATH
 export FG_BACKUP_S3_BUCKET FG_BACKUP_S3_ENDPOINT FG_BACKUP_S3_PREFIX
 export FG_BACKUP_ENCRYPT FG_BACKUP_ENCRYPTION_KEY
+export FG_BACKUP_MANIFEST_HMAC_KEY FG_BACKUP_HEALTH_DASHBOARD
 export FG_BACKUP_RETAIN_HOURLY FG_BACKUP_RETAIN_DAILY FG_BACKUP_RETAIN_WEEKLY
 export FG_BACKUP_RETAIN_MONTHLY FG_BACKUP_RETAIN_YEARLY
 export FG_BACKUP_RPO_WARN_HOURS FG_BACKUP_RTO_ESTIMATE_MINUTES

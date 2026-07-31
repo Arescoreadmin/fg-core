@@ -1,5 +1,37 @@
 # PR Fix Log (Strict)
 
+## P-36 — feat(ops): T1.5 refinements — signed manifests, health dashboard, backup IDs, dry-run, inventory, metrics
+
+- **PR/Branch:** `ops/t1.5-backup-automation`
+- **Date:** 2026-07-30
+- **Files changed:** `scripts/backup/fg_backup.sh`, `scripts/backup/backup_config.sh`, `tests/backup/conftest.py`, `tests/backup/test_backup_manifest.py`, `tests/backup/test_backup_shell.py`, `tests/backup/test_backup_signing.py` (new), `tests/backup/test_backup_id.py` (new), `tests/backup/test_health_dashboard.py` (new), `tests/backup/test_inventory.py` (new), `tests/backup/test_metrics.py` (new)
+- **Root cause:** T1.5 shipped the backup automation baseline (P-35) but left six operator-facing gaps: manifests were unsigned, there was no consolidated health snapshot for external alerting, backups were addressed only by timestamp filenames (no immutable ID for cross-referencing across drill evidence / support tickets), only `prune` supported `--dry-run` (restore / backup / drill did not), and there was no `inventory` or `metrics` subcommand for at-a-glance status or Prometheus scraping.
+- **Fix:** Extended `fg_backup.sh` additively (no restructuring of existing paths):
+  1. **Signed manifests** — every manifest is HMAC-SHA256 signed via `sign_manifest` using `FG_BACKUP_MANIFEST_HMAC_KEY`. When the key is unset the manifest carries `manifest_signature="unsigned"` (opt-in signing). Added `verify-manifest` subcommand; `verify` now also calls `verify_manifest_impl`.
+  2. **Health dashboard** — `update_health_dashboard` writes `artifacts/operations/backup_health.json` after every backup / verify / drill with `backup_status`, `last_success`, `last_failure`, `backup_age_hours`, `rpo_ok`, retention bucket counts, and metric aggregates. `artifacts/**/*.json` is already gitignored.
+  3. **Backup IDs** — `generate_backup_id` derives `FG-BKP-YYYYMMDD-NNNNN` by counting existing dumps for the current day (including `.dump.enc`). Stored in the manifest as `backup_id`, echoed in summary output and health dashboard.
+  4. **Dry-run mode** — `--dry-run` extended to `backup`, `restore`, and `drill` via a global `DRY_RUN` and `dry_run_check` helper. Prints `[DRY-RUN] ...` to stderr and short-circuits before touching docker or the database.
+  5. **Inventory subcommand** — reads all manifest files, cross-references drill evidence in `docs/governance/status/` for the "Drilled" column, buckets by age (hourly / daily / weekly / monthly / yearly), and prints either a formatted table or JSON (`FG_BACKUP_JSON_OUTPUT=true`).
+  6. **Metrics subcommand** — emits 8 Prometheus gauges/counters (`fg_backup_last_success_timestamp_seconds`, `fg_backup_age_seconds`, `fg_backup_count`, `fg_backup_size_bytes`, `fg_backup_last_duration_seconds`, `fg_backup_last_restore_duration_seconds`, `fg_backup_verification_failures_total`, `fg_backup_rpo_ok`) with HELP+TYPE lines. JSON output when `FG_BACKUP_JSON_OUTPUT=true`. No live DB connection required.
+
+  Config surface additions in `backup_config.sh`: `FG_BACKUP_MANIFEST_HMAC_KEY` (optional) and `FG_BACKUP_HEALTH_DASHBOARD` (default `artifacts/operations/backup_health.json`). Three new manifest fields (`backup_id`, `manifest_signature`, `manifest_signing_key_id`) added to the required-fields lock.
+- **Tests added:** 35 new tests across 5 new files plus test_backup_shell.py extensions:
+  - `test_backup_signing.py` — 6 tests: HMAC signing with key produces non-`unsigned` sig; without key produces `unsigned`; verify-manifest match/mismatch/unsigned paths; signature is computed over stripped manifest (stable across re-verify).
+  - `test_backup_id.py` — 6 tests: format `FG-BKP-YYYYMMDD-NNNNN`; first backup gets `00001`; sequential increment across three existing dumps; five same-day dumps produce five distinct IDs; encrypted `.dump.enc` files are counted; other dates ignored.
+  - `test_health_dashboard.py` — 6 tests: valid JSON; all required top-level keys present; `backup_status` ∈ {ok, warning, critical}; `last_success` shape; empty backup dir is `critical`; failed outcome populates `last_failure`.
+  - `test_inventory.py` — 5 tests: empty-dir notice; reads manifest files; JSON schema; JSON empty is valid empty array; bucket classification valid.
+  - `test_metrics.py` — 6 tests: expected metric names present; HELP+TYPE lines emitted; JSON schema; all values numeric; empty dir exits 0 with `fg_backup_count 0`; `fg_backup_rpo_ok` is binary.
+  - `test_backup_shell.py` — 6 new tests: `inventory` on empty dir; `metrics` on empty dir; `drill --dry-run`; `restore --dry-run <missing-file>` still exits 0; `backup --dry-run` exits 0 and prints `[DRY-RUN]`; `verify-manifest` on nonexistent path exits nonzero. Also extended `test_help_output_lists_all_subcommands` to require `inventory`, `metrics`, `verify-manifest`.
+  - `test_backup_manifest.py` — added `backup_id`, `manifest_signature`, `manifest_signing_key_id` to the required-fields set and schema.
+  - `conftest.py` — seed fixture now emits `backup_id` (derived from archive filename) plus `manifest_signature="unsigned"` and `manifest_signing_key_id="none"` so all downstream tests keep passing without change.
+- **Behavioral impact:** Purely additive. No existing subcommand output field is removed or renamed. The existing `verify` subcommand return code now also reflects a bad manifest signature when one is set — this is intentional (invalid signature is a verify failure).
+- **Security impact:** Manifest signing is opt-in and fail-closed on wrong key. The HMAC key comes exclusively from `FG_BACKUP_MANIFEST_HMAC_KEY` env var — never printed, never persisted. `dry_run_check` prevents any pg_dump / docker / db touch when set.
+- **Schema/API impact:** Manifest JSON gains three fields (`backup_id`, `manifest_signature`, `manifest_signing_key_id`) plus optional `manifest_verify_cmd`. Old manifests without these fields will not validate against the updated schema but existing runtime code paths do not require them (they are used only by verify-manifest and inventory display).
+- **Validation:** `bash -n scripts/backup/fg_backup.sh scripts/backup/backup_config.sh scripts/backup/providers/*.sh` → clean. `python -m pytest tests/backup/ -v` → 67 passed (32 original + 35 new). `make fg-fast` → PASS.
+- **Result:** Pass.
+
+---
+
 ## P-35 — feat(ops): T1.5 backup automation and recovery hardening — commit 4e164418
 
 - **PR/Branch:** `ops/t1.5-backup-automation`

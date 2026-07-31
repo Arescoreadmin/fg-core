@@ -85,5 +85,52 @@ def test_backup_type_flag_validation(run_fg_backup):
 def test_help_output_lists_all_subcommands(run_fg_backup):
     result = run_fg_backup("--help")
     combined = (result.stdout + result.stderr).lower()
-    for sub in ("backup", "verify", "restore", "list", "prune", "drill", "status"):
+    for sub in (
+        "backup",
+        "verify",
+        "restore",
+        "list",
+        "prune",
+        "drill",
+        "status",
+        "inventory",
+        "metrics",
+        "verify-manifest",
+    ):
         assert sub in combined
+
+
+def test_inventory_with_empty_backup_dir_exits_zero(run_fg_backup):
+    result = run_fg_backup("inventory")
+    assert result.returncode == 0
+
+
+def test_metrics_with_empty_backup_dir_exits_zero(run_fg_backup):
+    result = run_fg_backup("metrics")
+    assert result.returncode == 0
+
+
+def test_drill_dry_run_exits_zero_and_prints_dry_run(run_fg_backup, seed_backup):
+    # drill requires at least one existing backup even for dry-run (else exits 4).
+    seed_backup()
+    result = run_fg_backup("drill", "--dry-run")
+    assert result.returncode == 0
+    assert "[DRY-RUN]" in result.stderr
+
+
+def test_restore_dry_run_exits_zero_even_if_file_does_not_exist(run_fg_backup):
+    result = run_fg_backup("restore", "--dry-run", "/tmp/does-not-exist.dump")
+    assert result.returncode == 0
+    assert "[DRY-RUN]" in result.stderr
+
+
+def test_backup_dry_run_exits_zero_and_prints_dry_run(run_fg_backup):
+    env = {"FG_BACKUP_DB_URL": "postgres://u:p@h:5432/d"}
+    result = run_fg_backup("backup", "--dry-run", env=env)
+    assert result.returncode == 0
+    assert "[DRY-RUN]" in result.stderr
+
+
+def test_verify_manifest_missing_file_exits_nonzero(run_fg_backup):
+    result = run_fg_backup("verify-manifest", "/tmp/nonexistent.manifest.json")
+    assert result.returncode != 0

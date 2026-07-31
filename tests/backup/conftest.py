@@ -70,7 +70,19 @@ def run_fg_backup(backup_dir: Path, clean_env, monkeypatch):
 def _write_manifest(archive: Path, checksum: str, **overrides) -> Path:
     import json
 
+    # Derive a deterministic backup_id from the archive name so seeded backups
+    # look like production output (FG-BKP-YYYYMMDD-NNNNN).
+    default_backup_id = "FG-BKP-20260730-00001"
+    stem = archive.name
+    if stem.startswith("frostgate_"):
+        try:
+            date_part = stem.split("_")[1]
+            default_backup_id = f"FG-BKP-{date_part}-00001"
+        except IndexError:
+            pass
+
     data = {
+        "backup_id": default_backup_id,
         "manifest_schema_version": "1.0",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -95,6 +107,8 @@ def _write_manifest(archive: Path, checksum: str, **overrides) -> Path:
         "duration_seconds": 42,
         "railway_plan": "hobby",
         "script_version": "1.0.0",
+        "manifest_signature": "unsigned",
+        "manifest_signing_key_id": "none",
     }
     data.update(overrides)
     manifest = archive.with_suffix(archive.suffix + ".manifest.json")

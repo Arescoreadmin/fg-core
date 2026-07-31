@@ -37,6 +37,7 @@ FG_BACKUP_MANIFEST_SCHEMA_VERSION="1.0"
 # --- global state (populated by traps + subcommands) -------------------------
 TMP_PGPASS=""
 CURRENT_SCRATCH_CONTAINER=""
+DRY_RUN="false"
 
 # --- helpers -----------------------------------------------------------------
 
@@ -159,6 +160,250 @@ file_size_bytes() {
   stat -c %s -- "$1" 2>/dev/null || wc -c < "$1"
 }
 
+# Print [DRY-RUN] line to stderr and return 0 when DRY_RUN=true; return 1 otherwise.
+# Callers use this to short-circuit destructive actions.
+dry_run_check() {
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[DRY-RUN] %s\n' "$*" >&2
+    return 0
+  fi
+  return 1
+}
+
+# Generate an immutable backup ID of form FG-BKP-YYYYMMDD-NNNNN by counting
+# existing dump files with today's date-stamp in FG_BACKUP_DIR and incrementing.
+# Prints the ID to stdout.
+generate_backup_id() {
+  local date_str="${1:-$(date -u +%Y%m%d)}"
+  local dir="${FG_BACKUP_DIR:-.}"
+  local count=0
+  if [[ -d "$dir" ]]; then
+    # Count today's dump files (both encrypted and plain), ignoring manifests.
+    count="$(find "$dir" -maxdepth 1 -type f -name "frostgate_${date_str}_*.dump" 2>/dev/null | wc -l)"
+    local enc_count
+    enc_count="$(find "$dir" -maxdepth 1 -type f -name "frostgate_${date_str}_*.dump.enc" 2>/dev/null | wc -l)"
+    count=$((count + enc_count))
+  fi
+  local seq=$((count + 1))
+  printf 'FG-BKP-%s-%05d' "$date_str" "$seq"
+}
+
+# HMAC-SHA256 sign a manifest file in place. Reads the file content and adds:
+#   manifest_signature       = "sha256-hmac:<hex>" or "unsigned"
+#   manifest_signing_key_id  = "env:FG_BACKUP_MANIFEST_HMAC_KEY" or "none"
+#   manifest_verify_cmd      = documented verification command
+# The signature is computed over the manifest JSON as it exists BEFORE the
+# three signature fields are added — verify-manifest strips them and rehashes.
+sign_manifest() {
+  local manifest_path="${1:?manifest path required}"
+  [[ -f "$manifest_path" ]] || return 1
+  local hmac_key="${FG_BACKUP_MANIFEST_HMAC_KEY:-}"
+  python3 - "$manifest_path" "$hmac_key" <<'PYEOF'
+import hashlib, hmac, json, sys
+path, key = sys.argv[1], sys.argv[2]
+with open(path) as fh:
+    data = json.load(fh)
+# Strip any pre-existing signature fields before hashing so verify is stable.
+for f in ("manifest_signature", "manifest_signing_key_id", "manifest_verify_cmd"):
+    data.pop(f, None)
+canonical = json.dumps(data, indent=2, sort_keys=True) + "\n"
+if key:
+    digest = hmac.new(key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    data["manifest_signature"] = f"sha256-hmac:{digest}"
+    data["manifest_signing_key_id"] = "env:FG_BACKUP_MANIFEST_HMAC_KEY"
+else:
+    data["manifest_signature"] = "unsigned"
+    data["manifest_signing_key_id"] = "none"
+data["manifest_verify_cmd"] = (
+    'fg_backup.sh verify-manifest <manifest.json>  # requires FG_BACKUP_MANIFEST_HMAC_KEY'
+)
+with open(path, "w") as fh:
+    json.dump(data, fh, indent=2, sort_keys=True)
+    fh.write("\n")
+PYEOF
+}
+
+# Verify a manifest's HMAC signature. Exits 0 on match or when signature is
+# "unsigned". Exits 1 on mismatch (key present but hash differs), 2 on missing
+# manifest file. Prints one PASS/FAIL/UNSIGNED line to stdout.
+verify_manifest_impl() {
+  local manifest_path="${1:?manifest path required}"
+  if [[ ! -f "$manifest_path" ]]; then
+    echo "FAIL manifest_signature: manifest not found: $manifest_path"
+    return 2
+  fi
+  local hmac_key="${FG_BACKUP_MANIFEST_HMAC_KEY:-}"
+  python3 - "$manifest_path" "$hmac_key" <<'PYEOF'
+import hashlib, hmac, json, sys
+path, key = sys.argv[1], sys.argv[2]
+with open(path) as fh:
+    data = json.load(fh)
+stored = data.get("manifest_signature", "unsigned")
+if stored == "unsigned":
+    print("UNSIGNED manifest_signature: manifest is unsigned")
+    sys.exit(0)
+if not stored.startswith("sha256-hmac:"):
+    print(f"FAIL manifest_signature: unknown signature scheme: {stored}")
+    sys.exit(1)
+if not key:
+    print("FAIL manifest_signature: FG_BACKUP_MANIFEST_HMAC_KEY not set but manifest is signed")
+    sys.exit(1)
+stored_hex = stored[len("sha256-hmac:"):]
+# Recompute by stripping signature fields.
+copy = dict(data)
+for f in ("manifest_signature", "manifest_signing_key_id", "manifest_verify_cmd"):
+    copy.pop(f, None)
+canonical = json.dumps(copy, indent=2, sort_keys=True) + "\n"
+digest = hmac.new(key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+if hmac.compare_digest(digest, stored_hex):
+    print("PASS manifest_signature")
+    sys.exit(0)
+print(f"FAIL manifest_signature: expected={stored_hex} actual={digest}")
+sys.exit(1)
+PYEOF
+}
+
+# Update the backup health dashboard JSON. Reads current state from the
+# manifest directory and writes a fresh snapshot. Never fails the caller.
+update_health_dashboard() {
+  local outcome="${1:-ok}"   # ok | failed
+  local drill_result="${2:-}" # optional "PASS"/"FAIL" when called from drill
+  local dashboard_path="${FG_BACKUP_HEALTH_DASHBOARD:-artifacts/operations/backup_health.json}"
+  local dashboard_dir
+  dashboard_dir="$(dirname "$dashboard_path")"
+  mkdir -p "$dashboard_dir" 2>/dev/null || return 0
+  python3 - "$FG_BACKUP_DIR" "$dashboard_path" "$outcome" "$drill_result" \
+    "${FG_BACKUP_RPO_WARN_HOURS:-25}" <<'PYEOF' || true
+import json, os, sys, time
+from datetime import datetime, timezone
+
+backup_dir, dashboard_path, outcome, drill_result, rpo_warn_s = sys.argv[1:6]
+rpo_warn = float(rpo_warn_s)
+
+def iso_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+items = []
+if os.path.isdir(backup_dir):
+    for name in sorted(os.listdir(backup_dir)):
+        if not (name.startswith("frostgate_") and (name.endswith(".dump") or name.endswith(".dump.enc"))):
+            continue
+        path = os.path.join(backup_dir, name)
+        try:
+            st = os.stat(path)
+        except FileNotFoundError:
+            continue
+        manifest = path + ".manifest.json"
+        meta = {}
+        if os.path.exists(manifest):
+            try:
+                meta = json.load(open(manifest))
+            except Exception:
+                meta = {}
+        items.append((st.st_mtime, name, path, meta))
+
+items.sort(key=lambda x: x[0], reverse=True)
+
+last_success = None
+verification_failures = 0
+checksum_failures = 0
+durations = []
+for mtime, name, path, meta in items:
+    if not last_success and meta.get("verification_status") == "verified":
+        last_success = {
+            "backup_id": meta.get("backup_id"),
+            "timestamp": meta.get("timestamp"),
+            "size_bytes": meta.get("backup_size_bytes"),
+            "verified": True,
+            "encrypted": bool(meta.get("encrypted", False)),
+            "offsite_uploaded": bool(meta.get("offsite_uploaded", False)),
+        }
+    if meta.get("verification_status") == "failed":
+        verification_failures += 1
+    d = meta.get("duration_seconds")
+    if isinstance(d, (int, float)):
+        durations.append(d)
+
+now = time.time()
+age_hours = None
+if items:
+    age_hours = round((now - items[0][0]) / 3600.0, 2)
+
+# Look for restore drill evidence for last_restore_drill.
+drill_dir = os.path.join("docs", "governance", "status")
+last_drill = None
+if os.path.isdir(drill_dir):
+    for f in sorted(os.listdir(drill_dir), reverse=True):
+        if f.startswith("restore_drill_evidence_") and f.endswith(".md"):
+            date_str = f[len("restore_drill_evidence_"):-len(".md")]
+            try:
+                datetime.strptime(date_str, "%Y%m%d")
+                last_drill = {
+                    "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
+                    "result": drill_result or "UNKNOWN",
+                }
+                break
+            except ValueError:
+                pass
+
+# Retention buckets by age.
+def bucket_of(mtime):
+    age = (now - mtime) / 3600.0
+    if age < 25: return "hourly"
+    if age < 24 * 8: return "daily"
+    if age < 24 * 35: return "weekly"
+    if age < 24 * 400: return "monthly"
+    return "yearly"
+
+buckets = {"hourly": 0, "daily": 0, "weekly": 0, "monthly": 0, "yearly": 0}
+for mtime, name, path, meta in items:
+    buckets[bucket_of(mtime)] += 1
+oldest_backup = None
+if items:
+    oldest_mtime = min(x[0] for x in items)
+    oldest_backup = datetime.fromtimestamp(oldest_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+rpo_ok = (age_hours is not None) and (age_hours <= rpo_warn)
+status = "ok"
+if outcome == "failed":
+    status = "critical"
+elif not items:
+    status = "critical"
+elif not rpo_ok:
+    status = "warning"
+
+payload = {
+    "generated_at": iso_now(),
+    "backup_status": status,
+    "last_success": last_success,
+    "last_failure": None if outcome == "ok" else {"timestamp": iso_now()},
+    "backup_age_hours": age_hours,
+    "rpo_hours": rpo_warn,
+    "rpo_ok": rpo_ok,
+    "verification_status": "verified" if last_success else "unverified",
+    "last_restore_drill": last_drill,
+    "backup_count": len(items),
+    "retention": {
+        "hourly_count": buckets["hourly"],
+        "daily_count": buckets["daily"],
+        "weekly_count": buckets["weekly"],
+        "monthly_count": buckets["monthly"],
+        "yearly_count": buckets["yearly"],
+        "oldest_backup": oldest_backup,
+    },
+    "metrics": {
+        "avg_backup_duration_seconds": int(sum(durations) / len(durations)) if durations else 0,
+        "avg_restore_duration_seconds": 0,
+        "last_verification_failures": verification_failures,
+        "last_checksum_failures": checksum_failures,
+    },
+}
+with open(dashboard_path, "w") as fh:
+    json.dump(payload, fh, indent=2, sort_keys=True)
+    fh.write("\n")
+PYEOF
+}
+
 # Query production for a scalar value using the pgvector:pg18 image.
 # Uses the current PG_* vars.
 psql_scalar() {
@@ -193,6 +438,7 @@ cmd_backup() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --type) backup_type="${2:?--type value required}"; shift 2 ;;
+      --dry-run) DRY_RUN="true"; shift ;;
       -h|--help) print_help; exit 0 ;;
       *) die 2 "unknown argument: $1" ;;
     esac
@@ -208,22 +454,30 @@ cmd_backup() {
   if [[ "${FG_BACKUP_ENCRYPT,,}" == "true" && -z "${FG_BACKUP_ENCRYPTION_KEY:-}" ]]; then
     die 2 "FG_BACKUP_ENCRYPT=true but FG_BACKUP_ENCRYPTION_KEY is empty"
   fi
-  require_bin docker
-  require_bin sha256sum
   ensure_backup_dir
   load_offsite_provider
-
-  parse_db_url "$FG_BACKUP_DB_URL"
 
   local start_ts_iso start_epoch
   start_ts_iso="$(iso_now_utc)"
   start_epoch="$(date -u +%s)"
 
-  local stamp basename dump_file manifest_file
+  local stamp basename dump_file manifest_file backup_id
   stamp="$(ts_now_compact)"
   basename="frostgate_${stamp}_${backup_type}.dump"
   dump_file="$FG_BACKUP_DIR/$basename"
   manifest_file="$FG_BACKUP_DIR/${basename}.manifest.json"
+  backup_id="$(generate_backup_id "$(date -u +%Y%m%d)")"
+
+  # Dry-run: don't touch pg_dump or docker. Just describe the planned action.
+  if dry_run_check "backup id=$backup_id type=$backup_type would write $dump_file, provider=${FG_BACKUP_OFFSITE_PROVIDER:-local}"; then
+    dry_run_check "would upload to ${FG_BACKUP_OFFSITE_PROVIDER:-local}:${basename}"
+    return 0
+  fi
+
+  require_bin docker
+  require_bin sha256sum
+
+  parse_db_url "$FG_BACKUP_DB_URL"
 
   TMP_PGPASS="$(mktemp -p "$FG_BACKUP_TMP_DIR" .fg_pgpass.XXXXXX)"
   write_pgpass "$TMP_PGPASS"
@@ -304,12 +558,13 @@ cmd_backup() {
     "$checksum" "$final_file" "$FG_BACKUP_DOCKER_IMAGE" \
     "$pg_dump_ver" "$FG_BACKUP_OPERATOR" "$encrypted" \
     "$offsite_uploaded" "$offsite_provider" "$duration" \
-    "$FG_BACKUP_RAILWAY_PLAN" "$FG_BACKUP_SCRIPT_VERSION" <<'PYEOF'
+    "$FG_BACKUP_RAILWAY_PLAN" "$FG_BACKUP_SCRIPT_VERSION" "$backup_id" <<'PYEOF'
 import json, sys
 (_prog, path, schema_v, start_iso, end_iso, btype, db_v, mig_v, size,
  checksum, storage, image, dump_ver, operator, encrypted, offsite_uploaded,
- offsite_provider, duration, plan, script_v) = sys.argv
+ offsite_provider, duration, plan, script_v, backup_id) = sys.argv
 data = {
+  "backup_id": backup_id,
   "manifest_schema_version": schema_v,
   "timestamp": start_iso,
   "completed_at": end_iso,
@@ -340,6 +595,9 @@ with open(path, "w") as fh:
     fh.write("\n")
 PYEOF
 
+  # Sign the manifest (HMAC-SHA256 or "unsigned" if key absent).
+  sign_manifest "$manifest_file" || log "sign_manifest failed for $manifest_file (non-fatal)"
+
   # Upload the manifest alongside the dump.
   if [[ "$offsite_provider" != "none" ]]; then
     local m_key
@@ -360,29 +618,39 @@ with open(path, "w") as fh:
     json.dump(data, fh, indent=2, sort_keys=True)
     fh.write("\n")
 PYEOF
+    # Re-sign after mutation so signature stays consistent with contents.
+    sign_manifest "$manifest_file" || log "sign_manifest (post-verify) failed (non-fatal)"
   else
     log "post-backup verification FAILED for $final_file"
+    update_health_dashboard "failed" ""
     die 6 "verify step failed after backup"
   fi
 
   # Retention.
   prune_backups_impl false >/dev/null 2>&1 || log "prune step reported issues (non-fatal here)"
 
+  # Health dashboard snapshot.
+  update_health_dashboard "ok" ""
+
+  log "backup complete: $backup_id"
+
   # Emit summary.
   emit_backup_summary "$final_file" "$manifest_file" "$backup_type" "$checksum" \
-    "$dump_size" "$duration" "$encrypted" "$offsite_uploaded" "$offsite_provider"
+    "$dump_size" "$duration" "$encrypted" "$offsite_uploaded" "$offsite_provider" "$backup_id"
 }
 
 emit_backup_summary() {
   local file="$1" manifest="$2" btype="$3" checksum="$4" size="$5" duration="$6"
   local encrypted="$7" offsite_uploaded="$8" offsite_provider="$9"
+  local backup_id="${10:-}"
   if [[ "${FG_BACKUP_JSON_OUTPUT,,}" == "true" ]]; then
     python3 - "$file" "$manifest" "$btype" "$checksum" "$size" "$duration" \
-      "$encrypted" "$offsite_uploaded" "$offsite_provider" <<'PYEOF'
+      "$encrypted" "$offsite_uploaded" "$offsite_provider" "$backup_id" <<'PYEOF'
 import json, sys
-(_p, file, manifest, btype, checksum, size, duration, enc, off, prov) = sys.argv
+(_p, file, manifest, btype, checksum, size, duration, enc, off, prov, bid) = sys.argv
 print(json.dumps({
   "result": "ok",
+  "backup_id": bid or None,
   "backup_file": file,
   "manifest_file": manifest,
   "backup_type": btype,
@@ -397,6 +665,7 @@ PYEOF
   else
     cat >&2 <<EOF
 [fg_backup] backup complete
+  id            : $backup_id
   file          : $file
   manifest      : $manifest
   type          : $btype
@@ -468,7 +737,26 @@ verify_backup_impl() {
 cmd_verify() {
   local file="${1:-}"
   [[ -n "$file" ]] || die 2 "usage: fg_backup.sh verify <backup-file>"
-  verify_backup_impl "$file"
+  local rc=0
+  verify_backup_impl "$file" || rc=$?
+  # Also verify the manifest signature (does not change verify rc unless the
+  # signature is present-but-wrong).
+  local manifest="${file}.manifest.json"
+  if [[ -f "$manifest" ]]; then
+    local sig_rc=0
+    verify_manifest_impl "$manifest" || sig_rc=$?
+    if [[ "$sig_rc" != "0" ]]; then
+      rc=$sig_rc
+    fi
+  fi
+  update_health_dashboard "$([[ $rc -eq 0 ]] && echo ok || echo failed)" ""
+  return "$rc"
+}
+
+cmd_verify_manifest() {
+  local manifest="${1:-}"
+  [[ -n "$manifest" ]] || die 2 "usage: fg_backup.sh verify-manifest <manifest.json>"
+  verify_manifest_impl "$manifest"
 }
 
 # --- subcommand: list --------------------------------------------------------
@@ -650,11 +938,26 @@ cmd_restore() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --target-name) target="${2:?}"; shift 2 ;;
+      --dry-run) DRY_RUN="true"; shift ;;
       -h|--help) print_help; exit 0 ;;
       *) if [[ -z "$file" ]]; then file="$1"; else die 2 "unexpected: $1"; fi; shift ;;
     esac
   done
   [[ -n "$file" ]] || die 2 "usage: fg_backup.sh restore <backup-file> [--target-name <name>]"
+
+  # Dry-run short-circuit: describe planned actions without any docker/db work.
+  if [[ "$DRY_RUN" == "true" ]]; then
+    local stamp rand planned_target scratch_port
+    stamp="$(date -u +%Y%m%d)"
+    rand="dryrun"
+    planned_target="${target:-frostgate-restore-${stamp}-${rand}}"
+    scratch_port="${FG_BACKUP_SCRATCH_PORT:-5434}"
+    dry_run_check "restore backup=$file target=$planned_target port=$scratch_port"
+    dry_run_check "would compare row counts across: fa_engagements, fa_normalized_findings, fa_engagement_audit_events, fa_scan_results, tenants, alembic_version"
+    dry_run_check "no scratch container will be created and no database will be touched"
+    return 0
+  fi
+
   [[ -f "$file" ]] || die 2 "backup file not found: $file"
 
   require_bin docker
@@ -764,6 +1067,13 @@ PYEOF
 # --- subcommand: drill -------------------------------------------------------
 
 cmd_drill() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) DRY_RUN="true"; shift ;;
+      -h|--help) print_help; exit 0 ;;
+      *) die 2 "unknown argument: $1" ;;
+    esac
+  done
   ensure_backup_dir
   local latest
   latest="$(ls -1t "$FG_BACKUP_DIR"/frostgate_*.dump 2>/dev/null | head -1 || true)"
@@ -771,11 +1081,16 @@ cmd_drill() {
     die 4 "no backup found in $FG_BACKUP_DIR — run 'fg_backup.sh backup' first"
   fi
 
-  log "drill using $latest"
   local drill_stamp
   drill_stamp="$(date -u +%Y%m%d)"
   local evidence_dir="docs/governance/status"
   local evidence_file="$evidence_dir/restore_drill_evidence_${drill_stamp}.md"
+
+  if dry_run_check "drill would use backup=$latest, evidence would be written to $evidence_file"; then
+    return 0
+  fi
+
+  log "drill using $latest"
 
   # Capture the restore output so we can append it to evidence.
   local drill_log
@@ -798,7 +1113,11 @@ cmd_drill() {
   } >> "$evidence_file"
   rm -f "$drill_log"
 
-  log "drill evidence written to $evidence_file (result=$([[ $rc -eq 0 ]] && echo PASS || echo FAIL))"
+  local drill_result
+  drill_result="$([[ $rc -eq 0 ]] && echo PASS || echo FAIL)"
+  update_health_dashboard "$([[ $rc -eq 0 ]] && echo ok || echo failed)" "$drill_result"
+
+  log "drill evidence written to $evidence_file (result=$drill_result)"
   return $rc
 }
 
@@ -896,6 +1215,207 @@ print(json.dumps(payload, indent=2, sort_keys=True))
 PYEOF
 }
 
+# --- subcommand: inventory ---------------------------------------------------
+
+cmd_inventory() {
+  ensure_backup_dir
+  local drill_dir="docs/governance/status"
+  python3 - "$FG_BACKUP_DIR" "$drill_dir" "${FG_BACKUP_JSON_OUTPUT:-false}" \
+    "${FG_BACKUP_RPO_WARN_HOURS:-25}" <<'PYEOF'
+import json, os, sys, time
+
+backup_dir, drill_dir, json_out_s, rpo_warn_s = sys.argv[1:5]
+json_out = json_out_s.lower() == "true"
+rpo_warn = float(rpo_warn_s)
+
+# Load all drill evidence files once so we can scan for backup_id references.
+drill_texts = []
+if os.path.isdir(drill_dir):
+    for f in sorted(os.listdir(drill_dir)):
+        if f.startswith("restore_drill_evidence_") and f.endswith(".md"):
+            try:
+                drill_texts.append(open(os.path.join(drill_dir, f)).read())
+            except Exception:
+                pass
+all_drill_text = "\n".join(drill_texts)
+
+def bucket_of(age_hours):
+    if age_hours < 25: return "hourly"
+    if age_hours < 24 * 8: return "daily"
+    if age_hours < 24 * 35: return "weekly"
+    if age_hours < 24 * 400: return "monthly"
+    return "yearly"
+
+def fmt_size(n):
+    if n is None:
+        return "-"
+    for unit in ("B","KB","MB","GB","TB"):
+        if n < 1024.0:
+            return f"{n:.1f} {unit}"
+        n /= 1024.0
+    return f"{n:.1f} PB"
+
+def fmt_age(hours):
+    if hours is None:
+        return "-"
+    if hours < 24:
+        h = int(hours); m = int((hours - h) * 60)
+        return f"{h}h {m}m"
+    days = int(hours // 24); rem_h = int(hours - days*24)
+    return f"{days}d {rem_h}h"
+
+now = time.time()
+items = []
+if os.path.isdir(backup_dir):
+    for name in sorted(os.listdir(backup_dir)):
+        if not (name.startswith("frostgate_") and (name.endswith(".dump") or name.endswith(".dump.enc"))):
+            continue
+        path = os.path.join(backup_dir, name)
+        try:
+            st = os.stat(path)
+        except FileNotFoundError:
+            continue
+        manifest_path = path + ".manifest.json"
+        meta = {}
+        if os.path.exists(manifest_path):
+            try:
+                meta = json.load(open(manifest_path))
+            except Exception:
+                meta = {}
+        age_hours = (now - st.st_mtime) / 3600.0
+        bkid = meta.get("backup_id") or "-"
+        drilled = (bkid != "-" and bkid in all_drill_text) or (name in all_drill_text)
+        items.append({
+            "backup_id": bkid,
+            "file": name,
+            "age_hours": age_hours,
+            "verified": meta.get("verification_status") == "verified",
+            "encrypted": bool(meta.get("encrypted", False)),
+            "offsite_uploaded": bool(meta.get("offsite_uploaded", False)),
+            "bucket": bucket_of(age_hours),
+            "drilled": drilled,
+            "size_bytes": st.st_size,
+        })
+
+items.sort(key=lambda x: x["age_hours"])
+
+if json_out:
+    print(json.dumps({"backups": items, "count": len(items)}, indent=2))
+    sys.exit(0)
+
+if not items:
+    print("BACKUP INVENTORY")
+    print("=" * 80)
+    print("no backups found")
+    sys.exit(0)
+
+header = f"{'ID':<21} {'Age':<10} {'Verified':<9} {'Encrypted':<10} {'Offsite':<8} {'Bucket':<8} {'Drilled':<8} {'Size':<8}"
+print("BACKUP INVENTORY")
+print("=" * 85)
+print(header)
+print("-" * 85)
+for it in items:
+    print(f"{it['backup_id']:<21} {fmt_age(it['age_hours']):<10} "
+          f"{('YES' if it['verified'] else 'NO'):<9} "
+          f"{('YES' if it['encrypted'] else 'NO'):<10} "
+          f"{('YES' if it['offsite_uploaded'] else 'NO'):<8} "
+          f"{it['bucket']:<8} "
+          f"{('YES' if it['drilled'] else 'NO'):<8} "
+          f"{fmt_size(it['size_bytes']):<8}")
+print("=" * 85)
+oldest = fmt_age(max(x["age_hours"] for x in items))
+latest = fmt_age(min(x["age_hours"] for x in items))
+rpo_ok = min(x["age_hours"] for x in items) <= rpo_warn
+print(f"Total: {len(items)} backups | Oldest: {oldest} | Latest: {latest} | RPO: {'OK' if rpo_ok else 'BREACH'}")
+PYEOF
+}
+
+# --- subcommand: metrics -----------------------------------------------------
+
+cmd_metrics() {
+  ensure_backup_dir
+  python3 - "$FG_BACKUP_DIR" "${FG_BACKUP_JSON_OUTPUT:-false}" \
+    "${FG_BACKUP_RPO_WARN_HOURS:-25}" <<'PYEOF'
+import json, os, sys, time
+
+backup_dir, json_out_s, rpo_warn_s = sys.argv[1:4]
+json_out = json_out_s.lower() == "true"
+rpo_warn = float(rpo_warn_s)
+
+items = []
+if os.path.isdir(backup_dir):
+    for name in sorted(os.listdir(backup_dir)):
+        if not (name.startswith("frostgate_") and (name.endswith(".dump") or name.endswith(".dump.enc"))):
+            continue
+        path = os.path.join(backup_dir, name)
+        try:
+            st = os.stat(path)
+        except FileNotFoundError:
+            continue
+        manifest = path + ".manifest.json"
+        meta = {}
+        if os.path.exists(manifest):
+            try:
+                meta = json.load(open(manifest))
+            except Exception:
+                meta = {}
+        items.append((st.st_mtime, st.st_size, meta))
+
+items.sort(key=lambda x: x[0], reverse=True)
+
+now = int(time.time())
+last_success_ts = 0
+last_size = 0
+last_duration = 0
+verify_failures = 0
+for mtime, size, meta in items:
+    if meta.get("verification_status") == "verified" and not last_success_ts:
+        last_success_ts = int(mtime)
+        last_size = int(size)
+        last_duration = int(meta.get("duration_seconds") or 0)
+    if meta.get("verification_status") == "failed":
+        verify_failures += 1
+
+age_seconds = (now - last_success_ts) if last_success_ts else 0
+rpo_ok = 1 if (last_success_ts and (age_seconds / 3600.0) <= rpo_warn) else 0
+last_restore_duration = 0  # Placeholder — restore duration not persisted per-backup.
+
+metrics = {
+    "fg_backup_last_success_timestamp_seconds": last_success_ts,
+    "fg_backup_age_seconds": age_seconds,
+    "fg_backup_count": len(items),
+    "fg_backup_size_bytes": last_size,
+    "fg_backup_last_duration_seconds": last_duration,
+    "fg_backup_last_restore_duration_seconds": last_restore_duration,
+    "fg_backup_verification_failures_total": verify_failures,
+    "fg_backup_rpo_ok": rpo_ok,
+}
+
+if json_out:
+    print(json.dumps(metrics, indent=2, sort_keys=True))
+    sys.exit(0)
+
+help_meta = {
+    "fg_backup_last_success_timestamp_seconds": ("gauge", "Unix timestamp of last successful backup"),
+    "fg_backup_age_seconds": ("gauge", "Age of most recent backup in seconds"),
+    "fg_backup_count": ("gauge", "Total number of backups in local storage"),
+    "fg_backup_size_bytes": ("gauge", "Size of most recent backup in bytes"),
+    "fg_backup_last_duration_seconds": ("gauge", "Duration of most recent backup in seconds"),
+    "fg_backup_last_restore_duration_seconds": ("gauge", "Duration of most recent restore drill in seconds"),
+    "fg_backup_verification_failures_total": ("counter", "Total verification failures (from manifests)"),
+    "fg_backup_rpo_ok": ("gauge", "Whether RPO threshold is currently met (1=ok, 0=breached)"),
+}
+out = []
+for k, v in metrics.items():
+    kind, help_text = help_meta[k]
+    out.append(f"# HELP {k} {help_text}")
+    out.append(f"# TYPE {k} {kind}")
+    out.append(f"{k} {v}")
+    out.append("")
+print("\n".join(out))
+PYEOF
+}
+
 # --- help --------------------------------------------------------------------
 
 print_help() {
@@ -903,13 +1423,16 @@ print_help() {
 fg_backup.sh — FrostGate production backup automation
 
 Usage:
-  fg_backup.sh backup  [--type scheduled|manual|pre-deploy|pre-migration|pre-maintenance|pre-engagement]
-  fg_backup.sh verify  <backup-file>
-  fg_backup.sh restore <backup-file> [--target-name <name>]
+  fg_backup.sh backup  [--type scheduled|manual|pre-deploy|pre-migration|pre-maintenance|pre-engagement] [--dry-run]
+  fg_backup.sh verify           <backup-file>
+  fg_backup.sh verify-manifest  <manifest.json>
+  fg_backup.sh restore   <backup-file> [--target-name <name>] [--dry-run]
   fg_backup.sh list
-  fg_backup.sh prune   [--dry-run]
-  fg_backup.sh drill
+  fg_backup.sh prune     [--dry-run]
+  fg_backup.sh drill     [--dry-run]
   fg_backup.sh status
+  fg_backup.sh inventory
+  fg_backup.sh metrics
 
 Configuration is loaded from scripts/backup/backup_config.sh (which reads
 env vars). See docs/operators/backup_automation.md for the full guide.
@@ -922,13 +1445,16 @@ main() {
   local cmd="${1:-}"
   [[ $# -gt 0 ]] && shift || true
   case "$cmd" in
-    backup)   cmd_backup  "$@" ;;
-    verify)   cmd_verify  "$@" ;;
-    restore)  cmd_restore "$@" ;;
-    list)     cmd_list    "$@" ;;
-    prune)    cmd_prune   "$@" ;;
-    drill)    cmd_drill   "$@" ;;
-    status)   cmd_status  "$@" ;;
+    backup)            cmd_backup          "$@" ;;
+    verify)            cmd_verify          "$@" ;;
+    verify-manifest)   cmd_verify_manifest "$@" ;;
+    restore)           cmd_restore         "$@" ;;
+    list)              cmd_list            "$@" ;;
+    prune)             cmd_prune           "$@" ;;
+    drill)             cmd_drill           "$@" ;;
+    status)            cmd_status          "$@" ;;
+    inventory)         cmd_inventory       "$@" ;;
+    metrics)           cmd_metrics         "$@" ;;
     ""|-h|--help) print_help ;;
     *) die 2 "unknown subcommand: $cmd" ;;
   esac
