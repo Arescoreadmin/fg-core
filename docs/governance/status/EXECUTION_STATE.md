@@ -7,9 +7,9 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-07-31
 
-**Current Branch:** `ops/t2-t3-autorecharge-secrets`
+**Current Branch:** `main`
 
-**Current PR:** #599 — T2+T3 (open; rotations executed in production; pending merge to commit evidence)
+**Current PR:** None — PR #599 merged; preparing T4 portal named-user production proof.
 
 **Overall Status:** YELLOW
 
@@ -17,11 +17,11 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
 
-**Current Phase:** Stage 0 / Week 1 Day 2 — T1+T1.5+T2+T3 complete, advancing to T4.
+**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, and T2 complete; T3 partially complete; preparing T4.
 
-**Current DoD Progress:** 2/14 Launch DoD items checked (L4: PASS, L12: PASS).
+**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
 
-**Completed Since Last Update:** T2 executed 2026-07-31: Anthropic auto-recharge enabled by operator in `console.anthropic.com`. Balance check added to `first_client_prep.md` §1. FG-LR-013 closed. T3 executed 2026-07-31 via CLI automation: `PORTAL_SESSION_SECRET` (Vercel portal), `FG_REPORT_SIGNING_KEY` (Railway API), `FG_INTERNAL_GATEWAY_SECRET` + `FG_INTERNAL_AUTH_SECRET` (Railway API + Vercel console) all rotated with new cryptographically random values via stdin (never echoed). R6 Deploy 2 complete — canonical `FG_INTERNAL_GATEWAY_SECRET` now set in Railway API and Vercel console. All three services health-checked (HTTP 200) at 2026-07-31T13:56:37Z. `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` deferred with written rationale (no evidence of exposure; high blast radius). FG-LR-012 closed. L12 PASS. `docs/governance/status/L12_evidence_manifest.md` completed.
+**Completed Since Last Update:** T2 executed 2026-07-31: Anthropic auto-recharge enabled by operator in `console.anthropic.com`. Balance check added to `first_client_prep.md` §1. FG-LR-013 closed. T3 executed 2026-07-31 via CLI automation: `PORTAL_SESSION_SECRET` (Vercel portal), `FG_REPORT_SIGNING_KEY` (Railway API), `FG_INTERNAL_GATEWAY_SECRET` + `FG_INTERNAL_AUTH_SECRET` (Railway API + Vercel console) all rotated with new cryptographically random values via stdin (never echoed). R6 Deploy 2 complete — canonical `FG_INTERNAL_GATEWAY_SECRET` now set in Railway API and Vercel console. All three services health-checked (HTTP 200) at 2026-07-31T13:56:37Z. `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` deferred with written rationale (no evidence of exposure; high blast radius). FG-LR-012 remains open. L12 IN PROGRESS: three canonical secrets rotated; FG_SIGNING_SECRET and FG_KEY_PEPPER remain deferred pending controlled rotation. `docs/governance/status/L12_evidence_manifest.md` completed.
 
 **Current Blockers:**
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
@@ -75,9 +75,9 @@ Update current status fields in place. Preserve historical entries under `Execut
 - `CLIENT_READINESS.md` is stale relative to the named-user portal cutover.
 - `credential_delivery.md` still needs the T14 named-user rewrite.
 
-**Recommended Next Action:** Execute T2 (Anthropic auto-recharge) and T3 (secret rotation) before touching production config further. T4 portal named-user proof is the next P0 blocker after that.
+**Recommended Next Action:** Resolve the remaining L12 rotation gap or record an approved DoD amendment, then execute T4 portal named-user production proof.
 
-**Execution Notes:** The frozen audit is the source of truth. T1 is the only change in this PR. No product surface, trust-layer, or architecture changes.
+**Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. T2 is complete. T3 and L12 remain partially complete until the two deferred secrets are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
 
