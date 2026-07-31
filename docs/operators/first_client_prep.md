@@ -37,6 +37,7 @@ A pre-engagement backup is required to ensure recoverability.
   - [ ] `FG_MSAL_CLIENT_ID` is set and non-empty.
   - [ ] `FG_ACKNOWLEDGMENT_KEY` is set.
   - [ ] `FG_ANTHROPIC_API_KEY` is set.
+  - [ ] Anthropic auto-recharge is enabled (`console.anthropic.com` → Billing → auto-recharge on, monthly cap ≥ $200). Confirm balance is ≥ $10. Report generation fails with a billing error if the balance hits $0 mid-engagement.
   - [ ] `FG_REPORT_VERIFY_URL` is set (e.g. `https://console.frostgate.ai/verify`).
 - [ ] Portal env vars confirmed (Vercel or your portal deployment → Environment Variables):
   - [ ] `PORTAL_PASSWORD` is set.
