@@ -47,6 +47,9 @@ RUN mkdir -p /var/lib/frostgate/pycache /var/lib/frostgate/state /var/lib/frostg
 ENV PYTHONPYCACHEPREFIX=/var/lib/frostgate/pycache
 # Default envs; override in real deployments
 ENV FG_ENV=prod \
+    FG_STATE_DIR=/var/lib/frostgate/state \
+    FG_RING_STATE_DIR=/app/state \
+    FG_RING_MODEL_DIR=/app/models \
     FROSTGATE_ENFORCEMENT_MODE=block \
     FROSTGATE_LOG_LEVEL=INFO
 
