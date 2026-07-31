@@ -9,32 +9,37 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Branch:** `main`
 
-**Current PR:** open — T4 portal named-user proof (branch: `ops/t4-portal-named-user-proof`).
+**Current PR:** open — IA-0 capability audit + amendment A-1 (branch: `ops/t4-portal-named-user-proof`).
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 72
+**Launch Confidence (%):** 68
 
-**Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
+**Current Critical Path:** IA-0 → IA-1 → IA-2 → IA-3 → IA-4 → T4-revised → L12 finish → T5 → T6.
 
-**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial), and #600 evidence reconciliation complete; T4 in progress.
+**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial) complete; Amendment A-1 approved; IA-0 in progress.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
+**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 IN PROGRESS. L1 pending IA-v1 + T4-revised.
 
-**Completed Since Last Update:** PR #600 merged 2026-07-31 (b5821f2c). T4 branch `ops/t4-portal-named-user-proof` created 2026-07-31. ROADMAP updated: PR B (#579 merged 2026-07-26) and PR C (#580 merged 2026-07-27) status corrected; T2+T3 marked merged. T4 runbook created at `docs/operators/portal_named_user_proof.md`. L1 evidence manifest created at `docs/governance/status/L01_evidence_manifest.md`. Known gap documented: no automated email for `pni1.` invitations; operator delivers accept-invite URL manually (T14 scope).
+**Completed Since Last Update:** Launch Plan Amendment A-1 approved 2026-07-31: IA-v1 (Console-Managed Identity Authority) inserted before T4. Reason: portal Vercel env confirmed non-functional (CORE_API_URL/CORE_TENANT_ID empty, all PORTAL_AUTH0_* vars absent); existing invite flow has no Auth0 Organization scope; auth0_organization_id columns exist in schema but are entirely unpopulated; no Auth0 Management API calls anywhere in codebase. T4 revised to full lifecycle proof via Console. IA-0 audit document created at `docs/governance/ia_v1/IA_0_audit.md`. Amendment at `docs/governance/status/LAUNCH_PLAN_AMENDMENT_A1.md`.
 
 **Current Blockers:**
+- **IA-0 gate**: Auth0 Organizations plan availability unconfirmed (manual check required in Auth0 dashboard before IA-1 may begin).
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
-- FG-LR-002: portal named-user invite -> OIDC -> session -> logout revocation unproven with a real external identity in production.
+- FG-LR-002: portal named-user lifecycle unproven; now requires IA-v1 completion before T4-revised.
 - FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
 
 **Top Three Priorities:**
-1. Complete L12 gap: rotate `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` under the documented rollback procedure; attach evidence to `L12_evidence_manifest.md`; close FG-LR-012.
-2. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence (closes FG-LR-002, required for L2).
-3. Execute T5: Railway infra headroom check and plan upgrade decision (closes FG-LR-004).
+1. IA-0: confirm Auth0 Organizations availability in dashboard; create Auth0 M2M app (`FrostGate Identity Authority`) with least-privilege Management API scopes; operator approves ADR in `docs/governance/ia_v1/IA_0_audit.md`.
+2. IA-1: client organization provisioning (Console `Create Client` → FrostGate tenant → Auth0 Organization → `tenant_identity_bindings`).
+3. Complete L12 gap: rotate `FG_SIGNING_SECRET` and `FG_KEY_PEPPER`; attach evidence; close FG-LR-012.
 
-**Next Required PR:** T4 portal named-user proof is 2 days. Branch from main.
+**Next Required PR:** IA-0 audit + amendment docs on current branch. IA-1 branches from main after IA-0 is checked off.
+
+**Estimated Engineering Days Remaining:** 9.5 (budget 19.0; consumed: T1 1.5d, T1.5 1.0d, T2+T3 0.5d, IA-v1 net 6.5d = 9.5d).
+
+**Estimated Launch Date:** 2026-09-05 (revised from 2026-08-27 by Amendment A-1; contingent on Auth0 Organizations confirmed and IA-v1 scope held).
 
 **Estimated Engineering Days Remaining:** 16.0 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d consumed).
 
