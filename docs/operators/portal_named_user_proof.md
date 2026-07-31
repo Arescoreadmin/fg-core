@@ -19,14 +19,41 @@
 
 ## Pre-flight checklist
 
+**Step 0 — Verify Vercel production env vars are set (confirmed gap as of 2026-07-31):**
+
+The portal Vercel project (`app.frostgate.ai`) was found to have `CORE_API_URL=""` and `CORE_TENANT_ID=""` (empty strings — not absent, but falsy). All `PORTAL_AUTH0_*` vars are absent entirely. The portal is non-functional until these are set and a redeploy is triggered.
+
+Required Vercel production env vars before any test can proceed:
+
+| Variable | Required value | Status as of 2026-07-31 |
+|----------|----------------|------------------------|
+| `PORTAL_AUTH0_DOMAIN` | `dev-8rdpb1rmffldmj6w.us.auth0.com` | ❌ not set |
+| `PORTAL_AUTH0_CLIENT_ID` | portal Auth0 app client ID | ❌ not set |
+| `PORTAL_AUTH0_CLIENT_SECRET` | portal Auth0 app client secret | ❌ not set |
+| `PORTAL_AUTH0_CALLBACK_URL` | `https://app.frostgate.ai/api/auth/oidc/callback` | ❌ not set |
+| `CORE_API_URL` | `https://api.frostgate.ai` | ❌ empty string |
+| `CORE_TENANT_ID` | target test tenant ID | ❌ empty string |
+| `CORE_API_KEY` | tenant-scoped server-side key | ✅ set (encrypted) |
+| `PORTAL_SESSION_SECRET` | (rotated 2026-07-31) | ✅ set (encrypted) |
+
+Auth0 application setup required first:
+1. In Auth0 (`dev-8rdpb1rmffldmj6w.us.auth0.com`) → Applications → Create Regular Web Application (name: "FrostGate Portal").
+2. Set **Allowed Callback URLs**: `https://app.frostgate.ai/api/auth/oidc/callback`
+3. Set **Allowed Logout URLs**: `https://app.frostgate.ai`
+4. Set **Allowed Web Origins**: `https://app.frostgate.ai`
+5. Enable the connection that can authenticate the test identity (e.g. Google/Username-Password).
+6. Copy Domain, Client ID, Client Secret → add to Vercel portal production env vars (see table above).
+7. Trigger Vercel redeploy of `app.frostgate.ai`.
+
+**Pre-flight gate checks (run after Vercel redeploy):**
+
 - [ ] `GET https://api.frostgate.ai/health` → 200.
-- [ ] `https://app.frostgate.ai` renders the **OIDC sign-in panel only** — no password field, no demo tenant selector. If a password field appears, `NEXT_PUBLIC_FG_ENV` is not `prod` in Vercel.
-- [ ] `RESEND_API_KEY` is set in Railway → Console service → Variables (for other email flows; not used for this proof's invite delivery but required for post-engagement email).
-- [ ] `PORTAL_SESSION_SECRET` is set in Vercel → `app.frostgate.ai` → Environment Variables (rotated 2026-07-31).
-- [ ] `CORE_TENANT_ID` in Vercel portal is the **client's own tenant ID** — not `default`, not `frostgate-internal`.
-- [ ] `CORE_API_URL` points to the Railway API.
-- [ ] `CORE_API_KEY` is set.
-- [ ] Auth0 app `Allowed Callback URLs` includes `https://app.frostgate.ai/api/auth/oidc/callback`.
+- [ ] `https://app.frostgate.ai` renders the **OIDC sign-in panel only** — no password field. Click the sign-in button — Auth0 login page appears (not a 500 or `oidc_not_configured` error).
+- [ ] `RESEND_API_KEY` is set in Railway → Console service → Variables.
+- [ ] `PORTAL_SESSION_SECRET` is set in Vercel portal production (rotated 2026-07-31).
+- [ ] `CORE_TENANT_ID` in Vercel portal is the **test tenant's own ID** — not empty, not `default`, not `frostgate-internal`.
+- [ ] `CORE_API_URL` is `https://api.frostgate.ai` (not empty, not localhost).
+- [ ] Auth0 app `Allowed Callback URLs` includes `https://app.frostgate.ai/api/auth/oidc/callback` exactly.
 
 ---
 
@@ -132,7 +159,19 @@ The portal BFF (`apps/portal/app/api/auth/logout/route.ts`) detects the `pnu1.` 
 
 ## Step 7 — Verify Core-side session revocation
 
-Confirm the session was revoked in Core:
+**Browser-level revocation tests (all three must fail to show protected data):**
+
+In the browser where the external user was logged in, immediately after clicking logout:
+
+- [ ] **Refresh the page** — must redirect to the Auth0 login page, not show engagement data.
+- [ ] **Open the old portal URL in a new tab** — same result: login redirect, not data.
+- [ ] **Click the browser Back button** — browser may show a cached page visually, but any data-fetching API call must return 401 and the page must redirect to login. If protected data appears without a network call, note it (page cache, not a session bug).
+
+If any of these three still display live engagement data, that is a production bug. Stop, record it, and do not continue until it is fixed.
+
+**API-level revocation confirmation:**
+
+Attempt to replay the old session token directly:
 
 ```bash
 # Attempt to use the old session token — must be rejected
@@ -145,7 +184,7 @@ curl -s -X GET "https://api.frostgate.ai/portal/engagement" \
 
 Expected: HTTP 401 with `SESSION_REVOKED` or similar rejection — **not** 200.
 
-Alternatively, confirm via the audit log:
+**Audit event confirmation (optional but recommended):**
 
 ```bash
 curl -s "https://api.frostgate.ai/portal/named-users/$PORTAL_USER_ID/audit-events?tenant_id=$TENANT_ID" \
@@ -153,7 +192,7 @@ curl -s "https://api.frostgate.ai/portal/named-users/$PORTAL_USER_ID/audit-event
   -H "X-FG-Tenant-ID: $TENANT_ID"
 ```
 
-Look for a `portal_session_revoked` event timestamped after the logout.
+Look for a `portal_session_revoked` event timestamped within seconds of the logout.
 
 ---
 

@@ -68,12 +68,15 @@
 ### Step 6–7 — Logout and Revocation
 
 **Logout time (UTC):** _(fill in)_  
-**Revocation confirmation method:** _(401 rejection / audit event)_
+**Revocation confirmation method:** _(401 rejection / audit event / both)_
 
 | Check | Result | Notes |
 |-------|--------|-------|
 | Logout redirects to portal login page | ⬜ | |
-| Old `pnu1.` token rejected (HTTP 401 / SESSION_REVOKED) | ⬜ | |
+| Page refresh → login redirect (no engagement data) | ⬜ | |
+| Old URL in new tab → login redirect (no engagement data) | ⬜ | |
+| Back button → no live data shown | ⬜ | |
+| Old `pnu1.` token rejected via direct API call (HTTP 401 / SESSION_REVOKED) | ⬜ | |
 | `portal_session_revoked` audit event present (if checked) | ⬜ | |
 
 ---
