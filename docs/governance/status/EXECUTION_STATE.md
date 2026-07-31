@@ -30,11 +30,11 @@ Update current status fields in place. Preserve historical entries under `Execut
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
 
 **Top Three Priorities:**
-1. Merge PR #599 and commit L12 evidence to main.
+1. Complete L12 gap: rotate `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` under the documented rollback procedure; attach evidence to `L12_evidence_manifest.md`; close FG-LR-012.
 2. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence (closes FG-LR-002, required for L2).
 3. Execute T5: Railway infra headroom check and plan upgrade decision (closes FG-LR-004).
 
-**Next Required PR:** T4 portal named-user proof is 2 days. Branch from main after #599 merges.
+**Next Required PR:** T4 portal named-user proof is 2 days. Branch from main.
 
 **Estimated Engineering Days Remaining:** 16.0 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d consumed).
 

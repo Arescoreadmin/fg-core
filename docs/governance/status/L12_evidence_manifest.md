@@ -1,14 +1,15 @@
 # Launch DoD L12 — Secret Rotation & Anthropic Auto-Recharge Evidence Manifest
 
 **DoD item:** L12
-**Findings closed:** FG-LR-012 (secret rotation), FG-LR-013 (Anthropic auto-recharge)
+**Findings closed:** FG-LR-013 (Anthropic auto-recharge)
+**Finding open:** FG-LR-012 (secret rotation — partial; FG_SIGNING_SECRET + FG_KEY_PEPPER pending)
 **Runbook:** `docs/operators/secret_rotation.md`
 
 ---
 
 ## Current Status
 
-**L12 status:** PASS
+**L12 status:** IN PROGRESS
 
 ---
 
