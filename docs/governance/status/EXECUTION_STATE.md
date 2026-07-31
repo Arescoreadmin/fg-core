@@ -7,9 +7,9 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-07-30
 
-**Current Branch:** `main`
+**Current Branch:** `ops/t2-t3-autorecharge-secrets`
 
-**Current PR:** None — main is clean. T1.5 (#598) merged. Ring_state_dir fix (#595) merged.
+**Current PR:** T2+T3 — Anthropic auto-recharge checklist + secret rotation runbook (open, pending merge)
 
 **Overall Status:** YELLOW
 

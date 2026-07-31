@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-38 — ops(launch): T2 Anthropic auto-recharge checklist + T3 secret rotation runbook
+
+- **PR/Branch:** `ops/t2-t3-autorecharge-secrets`
+- **Date:** 2026-07-31
+- **Files changed:** `docs/operators/secret_rotation.md` (new), `docs/governance/status/L12_evidence_manifest.md` (new), `docs/operators/first_client_prep.md` (modified), `docs/governance/status/EXECUTION_STATE.md` (modified)
+- **What this PR does:** Delivers the documentation and checklist additions for T2 (FG-LR-013 — Anthropic auto-recharge) and T3 (FG-LR-012 — top-5 blast-radius secret rotation) of the Launch Readiness Audit. No source code is changed. The actual secret rotation and auto-recharge enablement are operator actions to be performed following this runbook.
+- **T2 changes (FG-LR-013):** Added one pre-flight checklist item to `first_client_prep.md` §1 (System Health Check): confirm Anthropic auto-recharge is enabled and balance ≥ $10 before every engagement. The step references `console.anthropic.com → Billing`, the recommended trigger threshold ($10), recharge amount ($50), and monthly cap ($200).
+- **T3 changes (FG-LR-012):** `docs/operators/secret_rotation.md` inventories the top-5 blast-radius secrets (`FG_KEY_PEPPER`, `FG_SIGNING_SECRET`, `FG_INTERNAL_GATEWAY_SECRET`, `FG_REPORT_SIGNING_KEY`, `PORTAL_SESSION_SECRET`), documents the blast radius of each, provides a step-by-step rotation procedure in ascending blast-radius order (rotate the safest first), health checks after each rotation, and rollback steps. Also documents that rotating `FG_INTERNAL_GATEWAY_SECRET` is R6 Deploy 2 (previously blocked; this PR provides the procedure). `FG_KEY_PEPPER` rotation is documented with a WARNING block because it invalidates all existing credential fingerprints.
+- **Evidence manifest:** `docs/governance/status/L12_evidence_manifest.md` created as a fill-in-place operator log. L12 status is OPEN until the operator completes the rotations and fills in the manifest.
+- **No production changes:** No Railway or Vercel variables changed in this PR. No secrets read or committed. No source files touched.
+- **DoD impact:** L12 blocking items: (1) auto-recharge must be enabled by operator, (2) secrets must be rotated by operator following the runbook, (3) L12_evidence_manifest.md must be completed and committed. After those three operator steps, L12 can be marked PASS.
+- **Validation:** No source files modified; no test run required. `make fg-fast` must pass before merge (docs-only changes; the PR_FIX_LOG requirement is satisfied by this entry).
+- **Result:** Pending operator execution.
+
+---
+
 ## P-37 — fix(ops): address 6 bot review findings on fg_backup.sh
 
 - **PR/Branch:** `ops/t1.5-backup-automation` (#598)
