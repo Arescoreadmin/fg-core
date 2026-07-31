@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-35 — feat(ops): T1.5 backup automation and recovery hardening — commit 4e164418
+
+- **PR/Branch:** `ops/t1.5-backup-automation`
+- **Date:** 2026-07-30
+- **Files changed:** `scripts/backup/fg_backup.sh`, `scripts/backup/backup_config.sh`, `scripts/backup/providers/upload_base.sh`, `scripts/backup/providers/upload_local.sh`, `scripts/backup/providers/upload_s3_compatible.sh`, `tests/backup/__init__.py`, `tests/backup/conftest.py`, `tests/backup/test_backup_checksum.py`, `tests/backup/test_backup_config.py`, `tests/backup/test_backup_manifest.py`, `tests/backup/test_backup_shell.py`, `tests/backup/test_retention.py`
+- **Root cause:** T1 proved the manual `pg_dump` backup and restore procedure but left all execution steps manual and undocumented in automation form. Every backup required operator recall of the exact Docker invocation, pgpass setup, checksum computation, and retention decisions. No verification was automatic; no drill evidence pipeline existed.
+- **Fix:** Wrapped the proven `pgvector/pgvector:pg18 pg_dump --format=custom --no-acl --no-owner` method inside `fg_backup.sh` (7 subcommands: `backup / verify / restore / list / prune / drill / status`). Added: 22-field JSON manifest per backup, SHA-256 checksum (auto-verified on `verify`), optional AES-256-CBC pbkdf2 encryption with fail-closed key check (exits 2 if `FG_BACKUP_ENCRYPT=true` but key absent), pluggable offsite provider abstraction (local / S3 / R2 / B2 stubs), configurable 5-bucket retention with a never-delete-newest invariant, monthly `drill` subcommand writing dated evidence files, and `status` JSON with RPO threshold warning. All config is env-driven via `backup_config.sh` with no duplicated values.
+- **Tests added:** 32 tests across 5 files in `tests/backup/`: manifest schema validation (all 22 required fields), config defaults and override semantics, verify subcommand behaviors (missing file, checksum mismatch, invalid archive), retention bucketing and newest-protected invariant, CLI safety behaviors (missing DB URL exits non-zero, encryption enabled without key exits 2, unknown subcommand exits non-zero). All tests are hermetic — no live DB or Docker required (subprocess mocked).
+- **Behavioral impact:** No change to any existing backup or restore behavior. The proven T1 method is invoked identically; `fg_backup.sh` is additive automation layered on top. `docs/operators/backup_restore.md` manual procedure (§1–§12) is unchanged; §14 cross-ref added. `first_client_prep.md` §0 now invokes `fg_backup.sh backup --type pre-engagement` instead of a raw `pg_dump` invocation.
+- **Security impact:** Encryption is opt-in and fail-closed. Keys come exclusively from `FG_BACKUP_ENCRYPTION_KEY` env var — never hardcoded or written to disk. Pgpass files created by the script use `chmod 600` and are destroyed on `EXIT` trap regardless of success or failure.
+- **Schema/API impact:** None. No migrations, no API surface, no deployment config changes.
+- **Validation:** `bash -n scripts/backup/fg_backup.sh scripts/backup/backup_config.sh scripts/backup/providers/*.sh` → clean. `python -m pytest tests/backup/ -v` → 32 passed. `make fg-fast` → PASS (exit 0).
+- **Result:** Pass.
+
+---
+
 ## P-34 — feat(tooling): Phase 0 CI additions — Dependabot, npm audit, coverage reporting
 
 **Branch:** `feat/tooling-phase0-ci-additions`

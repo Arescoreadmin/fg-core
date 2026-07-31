@@ -13,16 +13,18 @@ Run through every item below before the client meeting starts. Do not begin the 
 **Perform before every client engagement. Estimated time: 5 minutes.**
 
 The Railway Hobby plan provides no automatic database backups (`maxBackupsCount = 0`).
-A manual `pg_dump` is required before each engagement to ensure recoverability.
+A pre-engagement backup is required to ensure recoverability.
 
-- [ ] Run a manual `pg_dump` of production following `docs/operators/backup_restore.md` §7.2–7.3 (credential setup through dump completion).
-- [ ] Confirm exit code is 0.
-- [ ] Confirm dump file size is non-zero (expected: > 1 MB for a seeded database).
-- [ ] Store the dump in a secure location outside this repository.
-- [ ] Record the dump timestamp in your engagement notes.
+- [ ] Run `scripts/backup/fg_backup.sh backup --type pre-engagement` with `FG_BACKUP_DB_URL` set to the production URL and `FG_BACKUP_OPERATOR` set to your email. This wraps the `pg_dump` procedure in `docs/operators/backup_restore.md` §7.2–7.3 and adds a manifest, SHA-256 checksum, optional encryption, and offsite upload.
+- [ ] Confirm the script exit code is 0.
+- [ ] Confirm the backup summary reports `size > 1 MB` (expected for a seeded database).
+- [ ] Confirm the manifest shows `verification_status: "verified"` (`fg_backup.sh verify <file>`).
+- [ ] Confirm `fg_backup.sh status` returns `backup_status: "ok"`.
+- [ ] Record the backup filename and manifest checksum in your engagement notes.
 
-> Do not begin the engagement if pg_dump fails. The dump represents the only restore point
-> if data is lost during the engagement.
+> Do not begin the engagement if the backup step fails. The dump represents the only restore point
+> if data is lost during the engagement. If the automation is unavailable, fall back to the manual
+> procedure in `docs/operators/backup_restore.md` §7.2–7.3.
 
 ---
 
