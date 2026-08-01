@@ -41,6 +41,12 @@ COPY --from=builder /install /usr/local
 
 # Copy app code
 COPY . /app
+# Normalize permissions that may be incorrect when building from a local upload
+# (railway up, docker build .) rather than a fresh git clone. git only tracks
+# the executable bit so local umask anomalies can produce 0600 files that are
+# unreadable by the unprivileged frostgate user.
+RUN find /app -type f -not -executable -exec chmod 644 {} + && \
+    find /app -type d -exec chmod 755 {} +
 RUN mkdir -p /var/lib/frostgate/pycache /var/lib/frostgate/state /var/lib/frostgate/agent_queue \
         /app/state /app/models \
  && chown -R frostgate:frostgate /var/lib/frostgate /app/state /app/models

@@ -64,6 +64,56 @@ def _sqlite_url(sqlite_path: str) -> str:
     return f"sqlite+pysqlite:///{p}"
 
 
+def _db_migration_url() -> str | None:
+    """Return FG_DB_MIGRATION_URL normalised to psycopg scheme, or None if unset.
+
+    When set, the migrator uses this elevated credential (postgres superuser) for
+    DDL while the runtime engine continues to use FG_DB_URL (restricted fg_app).
+    """
+    url = (os.getenv("FG_DB_MIGRATION_URL") or "").strip()
+    if not url:
+        return None
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
+def _pg_quote_ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _grant_runtime_role_access(mig_engine: "Engine", runtime_engine: "Engine") -> None:
+    """Grant the runtime role (fg_app) access to objects created by the migration role.
+
+    init_roles.sh sets ALTER DEFAULT PRIVILEGES FOR ROLE fg_app, which covers objects
+    created by fg_app itself. When migrations run as the postgres superuser, those
+    default privileges don't apply. This function issues blanket grants and sets
+    default privileges for the migration role, ensuring the restricted runtime role
+    can access every table, sequence, and function — both existing and future ones.
+    """
+    runtime_role = runtime_engine.url.username
+    if not runtime_role:
+        return
+    qr = _pg_quote_ident(runtime_role)
+    with mig_engine.begin() as conn:
+        mig_role = conn.exec_driver_sql("SELECT current_user").scalar()
+        qm = _pg_quote_ident(mig_role)
+        for stmt in (
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {qr}",
+            f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {qr}",
+            f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT EXECUTE ON FUNCTIONS TO {qr}",
+        ):
+            conn.exec_driver_sql(stmt)
+
+
 def _db_url(*, sqlite_path: Optional[str] = None) -> str:
     """
     Resolve SQLAlchemy URL.
@@ -1854,14 +1904,25 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
     elif engine.dialect.name == "postgresql":
         from api.db_migrations import apply_migrations, assert_migrations_applied  # noqa
 
+        # When FG_DB_MIGRATION_URL is set (elevated postgres credential), DDL runs
+        # on that engine while the runtime engine (fg_app, restricted) handles reads.
+        migration_url = _db_migration_url()
+        mig_engine = (
+            create_engine(migration_url, future=True) if migration_url else engine
+        )
+
         # Create ORM-managed tables BEFORE running numbered migrations.
         # Migrations 0073+ use ALTER TABLE on FA substrate tables that have no
         # earlier CREATE TABLE migration — they rely on ORM create_all() to
         # materialise the table first.  checkfirst=True makes this idempotent
         # on existing databases where the tables are already present.
-        Base.metadata.create_all(bind=engine, checkfirst=True)
+        Base.metadata.create_all(bind=mig_engine, checkfirst=True)
 
-        apply_migrations(engine)
+        apply_migrations(mig_engine)
+        if mig_engine is not engine:
+            _grant_runtime_role_access(mig_engine, engine)
+            mig_engine.dispose()
+
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
             assert_migrations_applied(engine)
 
