@@ -80,6 +80,40 @@ def _db_migration_url() -> str | None:
     return url
 
 
+def _pg_quote_ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _grant_runtime_role_access(mig_engine: "Engine", runtime_engine: "Engine") -> None:
+    """Grant the runtime role (fg_app) access to objects created by the migration role.
+
+    init_roles.sh sets ALTER DEFAULT PRIVILEGES FOR ROLE fg_app, which covers objects
+    created by fg_app itself. When migrations run as the postgres superuser, those
+    default privileges don't apply. This function issues blanket grants and sets
+    default privileges for the migration role, ensuring the restricted runtime role
+    can access every table, sequence, and function — both existing and future ones.
+    """
+    runtime_role = runtime_engine.url.username
+    if not runtime_role:
+        return
+    qr = _pg_quote_ident(runtime_role)
+    with mig_engine.begin() as conn:
+        mig_role = conn.exec_driver_sql("SELECT current_user").scalar()
+        qm = _pg_quote_ident(mig_role)
+        for stmt in (
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {qr}",
+            f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {qr}",
+            f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {qr}",
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {qm} IN SCHEMA public"
+            f" GRANT EXECUTE ON FUNCTIONS TO {qr}",
+        ):
+            conn.exec_driver_sql(stmt)
+
+
 def _db_url(*, sqlite_path: Optional[str] = None) -> str:
     """
     Resolve SQLAlchemy URL.
@@ -1884,6 +1918,7 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
 
         apply_migrations(mig_engine)
         if mig_engine is not engine:
+            _grant_runtime_role_access(mig_engine, engine)
             mig_engine.dispose()
 
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):

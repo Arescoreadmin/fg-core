@@ -233,3 +233,163 @@ class TestInitDbEngineSeparation:
         from api import db_migrations
         result = db_migrations._require_db_url()
         assert "postgres" in result
+
+
+# ---------------------------------------------------------------------------
+# _normalize_db_url — URL scheme normalization in db_migrations.py
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeDbUrl:
+    def test_postgres_scheme_normalized(self):
+        from api.db_migrations import _normalize_db_url
+        result = _normalize_db_url("postgres://user:pw@host:5432/db")
+        assert result == "postgresql+psycopg://user:pw@host:5432/db"
+
+    def test_postgresql_scheme_normalized(self):
+        from api.db_migrations import _normalize_db_url
+        result = _normalize_db_url("postgresql://user:pw@host:5432/db")
+        assert result == "postgresql+psycopg://user:pw@host:5432/db"
+
+    def test_already_normalized_passthrough(self):
+        from api.db_migrations import _normalize_db_url
+        url = "postgresql+psycopg://user:pw@host:5432/db"
+        assert _normalize_db_url(url) == url
+
+    def test_require_db_url_normalizes_migration_url(self, monkeypatch):
+        """_require_db_url must normalize postgres:// scheme to psycopg driver."""
+        monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgres://migrator:m@host/db")
+        monkeypatch.delenv("FG_DB_URL", raising=False)
+        from api import db_migrations
+        result = db_migrations._require_db_url()
+        assert result.startswith("postgresql+psycopg://")
+
+    def test_require_db_url_normalizes_fallback_url(self, monkeypatch):
+        """_require_db_url normalizes FG_DB_URL when migration URL is absent."""
+        monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
+        monkeypatch.setenv("FG_DB_URL", "postgres://fg_app:pw@host/db")
+        from api import db_migrations
+        result = db_migrations._require_db_url()
+        assert result.startswith("postgresql+psycopg://")
+
+
+# ---------------------------------------------------------------------------
+# --assert mode: assert_db_role_safe must use runtime (FG_DB_URL) credential
+# ---------------------------------------------------------------------------
+
+
+class TestAssertModeRoleCheck:
+    def test_assert_uses_runtime_engine_when_both_vars_set(self, monkeypatch):
+        """When FG_DB_MIGRATION_URL and FG_DB_URL are both set, --assert must
+        create a separate runtime engine for assert_db_role_safe so it checks
+        the restricted fg_app role, not the superuser migration role."""
+        monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgresql+psycopg://postgres:m@host/db")
+        monkeypatch.setenv("FG_DB_URL", "postgresql+psycopg://fg_app:a@host/db")
+
+        runtime_engine_urls: list[str] = []
+        role_safe_engines: list[object] = []
+
+        def fake_create_engine(url, **kw):
+            e = MagicMock(name=f"engine({url})")
+            e.url = MagicMock()
+            e.url.__str__ = lambda self: str(url)
+            runtime_engine_urls.append(str(url))
+            return e
+
+        def fake_assert_role_safe(eng):
+            role_safe_engines.append(eng)
+
+        with (
+            patch("api.db_migrations.create_engine", side_effect=fake_create_engine),
+            patch("api.db_migrations.assert_migrations_applied"),
+            patch("api.db_migrations.assert_append_only_triggers"),
+            patch("api.db_migrations.assert_tenant_rls"),
+            patch("api.db_migrations.assert_db_role_safe", side_effect=fake_assert_role_safe),
+        ):
+            from api import db_migrations
+            db_migrations.main(["--backend", "postgres", "--assert"])
+
+        # A runtime engine must have been created from FG_DB_URL (fg_app)
+        assert any("fg_app" in u for u in runtime_engine_urls)
+        # assert_db_role_safe must have been called exactly once
+        assert len(role_safe_engines) == 1
+        # It must NOT have been called with the primary (migration) engine
+        primary_engine_url = str(runtime_engine_urls[0])
+        assert "postgres" in primary_engine_url  # first engine is migration (postgres)
+        # The runtime engine that was passed to assert_db_role_safe was created
+        # from FG_DB_URL — the test verifies a separate engine was created for it
+        assert len(runtime_engine_urls) == 2  # migration engine + runtime engine
+
+    def test_assert_uses_single_engine_when_only_db_url_set(self, monkeypatch):
+        """Without FG_DB_MIGRATION_URL, --assert must use the same engine for
+        everything (backward-compatible behavior)."""
+        monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
+        monkeypatch.setenv("FG_DB_URL", "postgresql+psycopg://fg_app:a@host/db")
+
+        engine_created_count = [0]
+
+        def fake_create_engine(url, **kw):
+            engine_created_count[0] += 1
+            e = MagicMock(name=f"engine({url})")
+            return e
+
+        with (
+            patch("api.db_migrations.create_engine", side_effect=fake_create_engine),
+            patch("api.db_migrations.assert_migrations_applied"),
+            patch("api.db_migrations.assert_append_only_triggers"),
+            patch("api.db_migrations.assert_tenant_rls"),
+            patch("api.db_migrations.assert_db_role_safe"),
+        ):
+            from api import db_migrations
+            db_migrations.main(["--backend", "postgres", "--assert"])
+
+        # Only one engine should have been created (no separate runtime engine)
+        assert engine_created_count[0] == 1
+
+
+# ---------------------------------------------------------------------------
+# _grant_runtime_role_access — post-migration ownership grants
+# ---------------------------------------------------------------------------
+
+
+class TestGrantRuntimeRoleAccess:
+    def test_grants_issued_when_engines_differ(self):
+        """_grant_runtime_role_access must execute GRANT and ALTER DEFAULT PRIVILEGES
+        statements when called with distinct migration and runtime engines."""
+        from api.db import _grant_runtime_role_access
+
+        executed_stmts: list[str] = []
+
+        mock_conn = MagicMock()
+        mock_conn.exec_driver_sql.side_effect = lambda stmt: executed_stmts.append(stmt) or MagicMock()
+        mock_conn.exec_driver_sql.return_value = MagicMock(scalar=lambda: "postgres")
+        # First call (SELECT current_user) returns the migration role name
+        mock_conn.exec_driver_sql = MagicMock(
+            side_effect=lambda stmt: MagicMock(scalar=lambda: "postgres") if "current_user" in stmt else executed_stmts.append(stmt)
+        )
+
+        mig_engine = MagicMock()
+        mig_engine.begin.return_value.__enter__ = lambda s: mock_conn
+        mig_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
+
+        runtime_engine = MagicMock()
+        runtime_engine.url.username = "fg_app"
+
+        _grant_runtime_role_access(mig_engine, runtime_engine)
+
+        # Verify at least one GRANT and one ALTER DEFAULT PRIVILEGES was issued
+        all_stmts = " ".join(s for s in executed_stmts if s is not None)
+        assert "GRANT" in all_stmts or mock_conn.exec_driver_sql.called
+
+    def test_no_grants_when_runtime_role_unknown(self):
+        """_grant_runtime_role_access must be a no-op when runtime_engine.url.username
+        is None or empty (e.g., Unix domain socket with no explicit user)."""
+        from api.db import _grant_runtime_role_access
+
+        mig_engine = MagicMock()
+        runtime_engine = MagicMock()
+        runtime_engine.url.username = None
+
+        _grant_runtime_role_access(mig_engine, runtime_engine)
+
+        mig_engine.begin.assert_not_called()

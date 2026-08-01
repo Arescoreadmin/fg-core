@@ -259,13 +259,22 @@ def migration_status(engine: Engine) -> list[str]:
     return statuses
 
 
+def _normalize_db_url(url: str) -> str:
+    """Normalize bare postgres:// / postgresql:// to the psycopg3 driver scheme."""
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def _require_db_url() -> str:
     # FG_DB_MIGRATION_URL carries an elevated credential (postgres superuser) for DDL.
     # Falls back to FG_DB_URL when no separate migration credential is configured.
     db_url = (os.getenv("FG_DB_MIGRATION_URL") or os.getenv("FG_DB_URL") or "").strip()
     if not db_url:
         raise RuntimeError("FG_DB_URL is required for postgres migrations")
-    return db_url
+    return _normalize_db_url(db_url)
 
 
 def build_engine() -> Engine:
@@ -297,7 +306,20 @@ def main(argv: Iterable[str] | None = None) -> int:
         assert_migrations_applied(engine)
         assert_append_only_triggers(engine)
         assert_tenant_rls(engine)
-        assert_db_role_safe(engine)
+        # assert_db_role_safe must check the RUNTIME credential (FG_DB_URL),
+        # not the migration credential (FG_DB_MIGRATION_URL). When both are set,
+        # the migration engine runs as a superuser (rolsuper=true) and would
+        # always fail the safety check — defeating the purpose of the assertion.
+        migration_url_raw = (os.getenv("FG_DB_MIGRATION_URL") or "").strip()
+        runtime_url_raw = (os.getenv("FG_DB_URL") or "").strip()
+        if migration_url_raw and runtime_url_raw:
+            runtime_engine = create_engine(_normalize_db_url(runtime_url_raw), future=True)
+            try:
+                assert_db_role_safe(runtime_engine)
+            finally:
+                runtime_engine.dispose()
+        else:
+            assert_db_role_safe(engine)
         print("Migration assertions: OK")
 
     if not (args.apply or args.status or args.do_assert):
