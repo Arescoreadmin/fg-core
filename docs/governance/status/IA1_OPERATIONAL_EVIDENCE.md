@@ -1,13 +1,13 @@
 # IA-1 Operational Evidence
 
-Status: BLOCKED
+Status: G1-dev PASS — G2-dev pending
 
 Gate sequence: G1-dev → G2-dev → G1-prod → G2-prod
 
 Critical path:
-1. Create Railway dev environment
-2. Create restricted dev runtime role (fg_app)
-3. Run G1-dev
+1. ~~Create Railway dev environment~~ ✓ DONE
+2. ~~Create restricted dev runtime role (fg_app)~~ ✓ DONE
+3. ~~Run G1-dev~~ ✓ PASS
 4. Run G2-dev
 5. Create restricted prod runtime role (fg_app)
 6. Rerun G1-prod
@@ -18,34 +18,39 @@ Critical path:
 
 ## G1-dev — Migration 0169, Dev Environment
 
-**Status: NOT EXECUTABLE**
-**Reason: No Railway dev environment exists. This is a CONTROL GAP / LAUNCH RISK,
-not an IA-1 code failure. A non-production environment must exist before IA-2
-reaches runtime validation.**
+**Status: PASS**
+
+Infrastructure created this session:
+- Railway dev environment provisioned (Postgres-dUxF, Redis-89wp, API-DEV services)
+- `fg_app` restricted role created on dev Postgres
+- `FG_DB_MIGRATION_URL` added to API-DEV (elevated postgres for DDL)
+- `FG_DB_URL` set to fg_app (restricted runtime credential)
+- Code change: `api/db.py` + `api/db_migrations.py` — added `FG_DB_MIGRATION_URL` support to decouple migration engine from runtime engine
 
 | Field | Value |
 |---|---|
 | Environment | dev |
-| Date/time (UTC) | |
-| Operator | |
-| Railway deploy/run ID | |
-| Migration service exit status | |
-| `SELECT version FROM schema_migrations WHERE version = '0169'` | |
-| `SELECT to_regclass('public.tenant_identity_bindings')` | |
-| `SELECT to_regclass('public.tenant_identity_binding_events')` | |
-| API runtime role (`current_user`) | |
-| `rolsuper` | |
-| `rolbypassrls` | |
-| `rolcreatedb` | |
-| `rolcreaterole` | |
+| Date/time (UTC) | 2026-08-01T16:13:40Z |
+| Operator | jcosat |
+| Railway deploy/run ID | 7c0daa93-36d6-4022-8742-ea2c9879f493 |
+| Migration service exit status | 0 (169 migrations applied) |
+| `SELECT version FROM schema_migrations WHERE version = '0169'` | **0169 — PASS** |
+| `SELECT to_regclass('public.tenant_identity_bindings')` | **tenant_identity_bindings — PASS** |
+| `SELECT to_regclass('public.tenant_identity_binding_events')` | **tenant_identity_binding_events — PASS** |
+| `/health` HTTP status | **200 OK — PASS** |
+| API runtime role (`current_user`) | **fg_app — PASS** |
+| `rolsuper` | **false — PASS** |
+| `rolbypassrls` | **false — PASS** |
+| `rolcreatedb` | **false — PASS** |
+| `rolcreaterole` | **false — PASS** |
 
-**G1-dev result: NOT EXECUTABLE — Railway dev environment missing**
+**G1-dev result: PASS**
 
 ---
 
 ## G2-dev — E2E Proof, Dev Environment
 
-**Status: BLOCKED — blocked by G1-dev**
+**Status: PENDING — G1-dev complete, G2-dev not yet executed**
 
 Disposable tenant: `fg-ia1-dev-validation-20260801`
 
@@ -68,7 +73,7 @@ Disposable tenant: `fg-ia1-dev-validation-20260801`
 | Retry: duplicate-org count in Auth0 | |
 | Console UI binding state visible | (skip if not rendered) |
 
-**G2-dev result: BLOCKED — blocked by G1-dev**
+**G2-dev result: PENDING — execution required**
 
 ---
 
