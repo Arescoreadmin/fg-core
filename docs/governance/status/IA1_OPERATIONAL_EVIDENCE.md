@@ -1,18 +1,35 @@
 # IA-1 Operational Evidence
 
-Status: G1-dev PASS — G2-dev pending
+Status: G1-dev PASS (isolated) — G2-dev pending Auth0 decision
 
 Gate sequence: G1-dev → G2-dev → G1-prod → G2-prod
+
+Prerequisite: PR #602 (fix/db-migration-credential-separation) — must merge before G2-dev or prod work
 
 Critical path:
 1. ~~Create Railway dev environment~~ ✓ DONE
 2. ~~Create restricted dev runtime role (fg_app)~~ ✓ DONE
 3. ~~Run G1-dev~~ ✓ PASS
-4. Run G2-dev
-5. Create restricted prod runtime role (fg_app)
-6. Rerun G1-prod
-7. Run G2-prod
-8. IA-1 operationally complete → IA-2 deployment unlocked
+4. ~~Tighten dev isolation~~ ✓ DONE (2026-08-01)
+5. Merge PR #602
+6. Redeploy API-DEV from merged main
+7. Run G2-dev (blocked pending Auth0 decision — see below)
+8. Create restricted prod runtime role (fg_app)
+9. Rerun G1-prod
+10. Run G2-prod
+11. IA-1 operationally complete → IA-2 deployment unlocked
+
+Dev isolation status (2026-08-01):
+- FG_JWT_SECRET, FG_ENCRYPTION_KEY, FG_KEY_PEPPER, FG_SIGNING_SECRET,
+  FG_REPORT_SIGNING_KEY, FG_BILLING_EVIDENCE_HMAC_KEY, FG_ACKNOWLEDGMENT_KEY,
+  FG_INTERNAL_AUTH_SECRET, FG_INTERNAL_GATEWAY_SECRET, FG_WEBHOOK_SECRET:
+  replaced with dev-specific random values ✓
+- FG_CORS_ORIGINS: restricted to dev origins ✓
+- Stripe: already in test mode ✓
+- Auth0 (FG_OIDC_ISSUER): PENDING DECISION — G2-dev will create Auth0 orgs
+  in the shared production Auth0 tenant. Options:
+  (a) Accept disposable test orgs + manual cleanup after G2-dev
+  (b) Create a separate Auth0 dev tenant with its own Management API credentials
 
 ---
 
