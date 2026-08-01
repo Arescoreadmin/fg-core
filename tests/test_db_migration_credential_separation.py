@@ -18,7 +18,7 @@ Invariants verified:
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -173,8 +173,6 @@ class TestInitDbEngineSeparation:
 
         created_with: list[str] = []
 
-        original_create = __import__("sqlalchemy").create_engine
-
         def fake_create_engine(url, **kw):
             created_with.append(str(url))
             return mig_engine
@@ -214,7 +212,7 @@ class TestInitDbEngineSeparation:
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgresql://migrator:m@host/db")
         monkeypatch.setenv("FG_DB_URL", "postgresql://fg_app:a@host/db")
 
-        from api import db, db_migrations
+        from api import db
 
         mig_result = db._db_migration_url()
         runtime_result = db._db_url()
