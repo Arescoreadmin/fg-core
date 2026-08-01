@@ -262,9 +262,9 @@ def migration_status(engine: Engine) -> list[str]:
 def _normalize_db_url(url: str) -> str:
     """Normalize bare postgres:// / postgresql:// to the psycopg3 driver scheme."""
     if url.startswith("postgres://"):
-        return "postgresql+psycopg://" + url[len("postgres://"):]
+        return "postgresql+psycopg://" + url[len("postgres://") :]
     if url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + url[len("postgresql://"):]
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
 
 
@@ -313,7 +313,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         migration_url_raw = (os.getenv("FG_DB_MIGRATION_URL") or "").strip()
         runtime_url_raw = (os.getenv("FG_DB_URL") or "").strip()
         if migration_url_raw and runtime_url_raw:
-            runtime_engine = create_engine(_normalize_db_url(runtime_url_raw), future=True)
+            runtime_engine = create_engine(
+                _normalize_db_url(runtime_url_raw), future=True
+            )
             try:
                 assert_db_role_safe(runtime_engine)
             finally:

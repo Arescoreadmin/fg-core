@@ -37,7 +37,9 @@ class TestDbMigrationUrl:
         with patch.dict(os.environ, env, clear=False):
             # Remove FG_DB_MIGRATION_URL if not explicitly set in env
             if "FG_DB_MIGRATION_URL" not in env:
-                env_copy = {k: v for k, v in os.environ.items() if k != "FG_DB_MIGRATION_URL"}
+                env_copy = {
+                    k: v for k, v in os.environ.items() if k != "FG_DB_MIGRATION_URL"
+                }
                 with patch.dict(os.environ, env_copy, clear=True):
                     return db._db_migration_url()
             return db._db_migration_url()
@@ -45,16 +47,19 @@ class TestDbMigrationUrl:
     def test_returns_none_when_unset(self, monkeypatch):
         monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
         from api import db
+
         assert db._db_migration_url() is None
 
     def test_returns_none_for_empty_string(self, monkeypatch):
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "")
         from api import db
+
         assert db._db_migration_url() is None
 
     def test_returns_none_for_whitespace(self, monkeypatch):
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "   ")
         from api import db
+
         assert db._db_migration_url() is None
 
     def test_normalises_postgres_scheme(self, monkeypatch):
@@ -62,14 +67,17 @@ class TestDbMigrationUrl:
             "FG_DB_MIGRATION_URL", "postgres://migrator:secret@db.internal:5432/railway"
         )
         from api import db
+
         result = db._db_migration_url()
         assert result == "postgresql+psycopg://migrator:secret@db.internal:5432/railway"
 
     def test_normalises_postgresql_scheme(self, monkeypatch):
         monkeypatch.setenv(
-            "FG_DB_MIGRATION_URL", "postgresql://migrator:secret@db.internal:5432/railway"
+            "FG_DB_MIGRATION_URL",
+            "postgresql://migrator:secret@db.internal:5432/railway",
         )
         from api import db
+
         result = db._db_migration_url()
         assert result == "postgresql+psycopg://migrator:secret@db.internal:5432/railway"
 
@@ -77,15 +85,18 @@ class TestDbMigrationUrl:
         url = "postgresql+psycopg://migrator:secret@db.internal:5432/railway"
         monkeypatch.setenv("FG_DB_MIGRATION_URL", url)
         from api import db
+
         assert db._db_migration_url() == url
 
     def test_credential_not_logged(self, monkeypatch, caplog):
         import logging
+
         monkeypatch.setenv(
             "FG_DB_MIGRATION_URL",
             "postgresql://migrator:supersecret@db.internal:5432/railway",
         )
         from api import db
+
         with caplog.at_level(logging.DEBUG):
             db._db_migration_url()
         assert "supersecret" not in caplog.text
@@ -101,6 +112,7 @@ class TestRequireDbUrl:
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgresql://migrator:m@host/db")
         monkeypatch.setenv("FG_DB_URL", "postgresql://app:a@host/db")
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert "migrator" in result
         assert "app" not in result
@@ -109,6 +121,7 @@ class TestRequireDbUrl:
         monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
         monkeypatch.setenv("FG_DB_URL", "postgresql://app:a@host/db")
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert "app" in result
 
@@ -116,6 +129,7 @@ class TestRequireDbUrl:
         monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
         monkeypatch.delenv("FG_DB_URL", raising=False)
         from api import db_migrations
+
         with pytest.raises(RuntimeError, match="FG_DB_URL is required"):
             db_migrations._require_db_url()
 
@@ -123,6 +137,7 @@ class TestRequireDbUrl:
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "")
         monkeypatch.setenv("FG_DB_URL", "postgresql://app:a@host/db")
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert "app" in result
 
@@ -183,6 +198,7 @@ class TestInitDbEngineSeparation:
             patch("api.db_migrations.assert_migrations_applied"),
         ):
             from api import db
+
             db._ensure_models_imported = lambda: None  # skip heavy model imports
             # Simulate the postgresql branch of init_db by calling _db_migration_url
             # and verifying the contract: a separate engine is created and disposed.
@@ -229,6 +245,7 @@ class TestInitDbEngineSeparation:
         monkeypatch.setenv("FG_DB_URL", "postgresql://postgres:pw@host/db")
 
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert "postgres" in result
 
@@ -241,16 +258,19 @@ class TestInitDbEngineSeparation:
 class TestNormalizeDbUrl:
     def test_postgres_scheme_normalized(self):
         from api.db_migrations import _normalize_db_url
+
         result = _normalize_db_url("postgres://user:pw@host:5432/db")
         assert result == "postgresql+psycopg://user:pw@host:5432/db"
 
     def test_postgresql_scheme_normalized(self):
         from api.db_migrations import _normalize_db_url
+
         result = _normalize_db_url("postgresql://user:pw@host:5432/db")
         assert result == "postgresql+psycopg://user:pw@host:5432/db"
 
     def test_already_normalized_passthrough(self):
         from api.db_migrations import _normalize_db_url
+
         url = "postgresql+psycopg://user:pw@host:5432/db"
         assert _normalize_db_url(url) == url
 
@@ -259,6 +279,7 @@ class TestNormalizeDbUrl:
         monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgres://migrator:m@host/db")
         monkeypatch.delenv("FG_DB_URL", raising=False)
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert result.startswith("postgresql+psycopg://")
 
@@ -267,6 +288,7 @@ class TestNormalizeDbUrl:
         monkeypatch.delenv("FG_DB_MIGRATION_URL", raising=False)
         monkeypatch.setenv("FG_DB_URL", "postgres://fg_app:pw@host/db")
         from api import db_migrations
+
         result = db_migrations._require_db_url()
         assert result.startswith("postgresql+psycopg://")
 
@@ -281,7 +303,9 @@ class TestAssertModeRoleCheck:
         """When FG_DB_MIGRATION_URL and FG_DB_URL are both set, --assert must
         create a separate runtime engine for assert_db_role_safe so it checks
         the restricted fg_app role, not the superuser migration role."""
-        monkeypatch.setenv("FG_DB_MIGRATION_URL", "postgresql+psycopg://postgres:m@host/db")
+        monkeypatch.setenv(
+            "FG_DB_MIGRATION_URL", "postgresql+psycopg://postgres:m@host/db"
+        )
         monkeypatch.setenv("FG_DB_URL", "postgresql+psycopg://fg_app:a@host/db")
 
         runtime_engine_urls: list[str] = []
@@ -302,9 +326,13 @@ class TestAssertModeRoleCheck:
             patch("api.db_migrations.assert_migrations_applied"),
             patch("api.db_migrations.assert_append_only_triggers"),
             patch("api.db_migrations.assert_tenant_rls"),
-            patch("api.db_migrations.assert_db_role_safe", side_effect=fake_assert_role_safe),
+            patch(
+                "api.db_migrations.assert_db_role_safe",
+                side_effect=fake_assert_role_safe,
+            ),
         ):
             from api import db_migrations
+
             db_migrations.main(["--backend", "postgres", "--assert"])
 
         # A runtime engine must have been created from FG_DB_URL (fg_app)
@@ -339,6 +367,7 @@ class TestAssertModeRoleCheck:
             patch("api.db_migrations.assert_db_role_safe"),
         ):
             from api import db_migrations
+
             db_migrations.main(["--backend", "postgres", "--assert"])
 
         # Only one engine should have been created (no separate runtime engine)
@@ -359,11 +388,17 @@ class TestGrantRuntimeRoleAccess:
         executed_stmts: list[str] = []
 
         mock_conn = MagicMock()
-        mock_conn.exec_driver_sql.side_effect = lambda stmt: executed_stmts.append(stmt) or MagicMock()
+        mock_conn.exec_driver_sql.side_effect = lambda stmt: (
+            executed_stmts.append(stmt) or MagicMock()
+        )
         mock_conn.exec_driver_sql.return_value = MagicMock(scalar=lambda: "postgres")
         # First call (SELECT current_user) returns the migration role name
         mock_conn.exec_driver_sql = MagicMock(
-            side_effect=lambda stmt: MagicMock(scalar=lambda: "postgres") if "current_user" in stmt else executed_stmts.append(stmt)
+            side_effect=lambda stmt: (
+                MagicMock(scalar=lambda: "postgres")
+                if "current_user" in stmt
+                else executed_stmts.append(stmt)
+            )
         )
 
         mig_engine = MagicMock()

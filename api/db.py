@@ -74,9 +74,9 @@ def _db_migration_url() -> str | None:
     if not url:
         return None
     if url.startswith("postgres://"):
-        return "postgresql+psycopg://" + url[len("postgres://"):]
+        return "postgresql+psycopg://" + url[len("postgres://") :]
     if url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + url[len("postgresql://"):]
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
 
 
@@ -1907,7 +1907,9 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
         # When FG_DB_MIGRATION_URL is set (elevated postgres credential), DDL runs
         # on that engine while the runtime engine (fg_app, restricted) handles reads.
         migration_url = _db_migration_url()
-        mig_engine = create_engine(migration_url, future=True) if migration_url else engine
+        mig_engine = (
+            create_engine(migration_url, future=True) if migration_url else engine
+        )
 
         # Create ORM-managed tables BEFORE running numbered migrations.
         # Migrations 0073+ use ALTER TABLE on FA substrate tables that have no
