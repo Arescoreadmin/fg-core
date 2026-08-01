@@ -260,7 +260,9 @@ def migration_status(engine: Engine) -> list[str]:
 
 
 def _require_db_url() -> str:
-    db_url = (os.getenv("FG_DB_URL") or "").strip()
+    # FG_DB_MIGRATION_URL carries an elevated credential (postgres superuser) for DDL.
+    # Falls back to FG_DB_URL when no separate migration credential is configured.
+    db_url = (os.getenv("FG_DB_MIGRATION_URL") or os.getenv("FG_DB_URL") or "").strip()
     if not db_url:
         raise RuntimeError("FG_DB_URL is required for postgres migrations")
     return db_url

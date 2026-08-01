@@ -64,6 +64,22 @@ def _sqlite_url(sqlite_path: str) -> str:
     return f"sqlite+pysqlite:///{p}"
 
 
+def _db_migration_url() -> str | None:
+    """Return FG_DB_MIGRATION_URL normalised to psycopg scheme, or None if unset.
+
+    When set, the migrator uses this elevated credential (postgres superuser) for
+    DDL while the runtime engine continues to use FG_DB_URL (restricted fg_app).
+    """
+    url = (os.getenv("FG_DB_MIGRATION_URL") or "").strip()
+    if not url:
+        return None
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def _db_url(*, sqlite_path: Optional[str] = None) -> str:
     """
     Resolve SQLAlchemy URL.
@@ -1854,14 +1870,22 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
     elif engine.dialect.name == "postgresql":
         from api.db_migrations import apply_migrations, assert_migrations_applied  # noqa
 
+        # When FG_DB_MIGRATION_URL is set (elevated postgres credential), DDL runs
+        # on that engine while the runtime engine (fg_app, restricted) handles reads.
+        migration_url = _db_migration_url()
+        mig_engine = create_engine(migration_url, future=True) if migration_url else engine
+
         # Create ORM-managed tables BEFORE running numbered migrations.
         # Migrations 0073+ use ALTER TABLE on FA substrate tables that have no
         # earlier CREATE TABLE migration — they rely on ORM create_all() to
         # materialise the table first.  checkfirst=True makes this idempotent
         # on existing databases where the tables are already present.
-        Base.metadata.create_all(bind=engine, checkfirst=True)
+        Base.metadata.create_all(bind=mig_engine, checkfirst=True)
 
-        apply_migrations(engine)
+        apply_migrations(mig_engine)
+        if mig_engine is not engine:
+            mig_engine.dispose()
+
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
             assert_migrations_applied(engine)
 
