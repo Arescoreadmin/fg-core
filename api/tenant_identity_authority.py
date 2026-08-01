@@ -424,7 +424,9 @@ def provision_tenant_organization(
         from sqlalchemy.exc import IntegrityError
 
         def _do_insert(conn: Any) -> Any:
-            return _insert_binding(conn, tenant_id=tenant_id, provider=provider, ikey=ikey)
+            return _insert_binding(
+                conn, tenant_id=tenant_id, provider=provider, ikey=ikey
+            )
 
         try:
             row = _exec_committed(_do_insert)
@@ -459,12 +461,19 @@ def provision_tenant_organization(
     try:
         mgmt = get_management_provider()
     except ManagementProviderError as exc:
+        # Bind exc fields to local variables so the nested closure captures
+        # values that outlive the `except` block (Python deletes `exc` at
+        # block exit; without this the closure references an unbound name).
+        err_code = exc.code
+        err_message = _sanitize_error_message(str(exc))
+        err_str = str(exc)
+
         def _fail_config(conn: Any) -> None:
             _update_binding_failed(
                 conn,
                 binding_id=binding_id,
-                error_code=exc.code,
-                error_message_redacted=_sanitize_error_message(str(exc)),
+                error_code=err_code,
+                error_message_redacted=err_message,
             )
             _insert_event(
                 conn,
@@ -476,12 +485,12 @@ def provision_tenant_organization(
                 actor_id=actor_id,
                 request_id=request_id,
                 outcome="failure",
-                error_code=exc.code,
+                error_code=err_code,
             )
 
         _exec_committed(_fail_config)
         raise ProvisioningFailedError(
-            str(exc), retryable=False, error_code=exc.code
+            err_str, retryable=False, error_code=err_code
         ) from exc
 
     try:
@@ -492,12 +501,16 @@ def provision_tenant_organization(
             correlation_id=request_id,
         )
     except RetryableProviderError as exc:
+        err_code = exc.code
+        err_message = _sanitize_error_message(str(exc))
+        err_str = str(exc)
+
         def _fail_retryable(conn: Any) -> None:
             _update_binding_failed(
                 conn,
                 binding_id=binding_id,
-                error_code=exc.code,
-                error_message_redacted=_sanitize_error_message(str(exc)),
+                error_code=err_code,
+                error_message_redacted=err_message,
             )
             _insert_event(
                 conn,
@@ -509,22 +522,25 @@ def provision_tenant_organization(
                 actor_id=actor_id,
                 request_id=request_id,
                 outcome="failure",
-                error_code=exc.code,
+                error_code=err_code,
             )
 
         _exec_committed(_fail_retryable)
         raise ProvisioningFailedError(
-            str(exc), retryable=True, error_code=exc.code
+            err_str, retryable=True, error_code=err_code
         ) from exc
     except ManagementProviderError as exc:
-        severity = "HIGH" if exc.code == "AUTH0_ORG_OWNERSHIP_CONFLICT" else "normal"
+        err_code = exc.code
+        err_message = _sanitize_error_message(str(exc))
+        err_str = str(exc)
+        severity = "HIGH" if err_code == "AUTH0_ORG_OWNERSHIP_CONFLICT" else "normal"
 
         def _fail_nonretryable(conn: Any) -> None:
             _update_binding_failed(
                 conn,
                 binding_id=binding_id,
-                error_code=exc.code,
-                error_message_redacted=_sanitize_error_message(str(exc)),
+                error_code=err_code,
+                error_message_redacted=err_message,
             )
             _insert_event(
                 conn,
@@ -536,7 +552,7 @@ def provision_tenant_organization(
                 actor_id=actor_id,
                 request_id=request_id,
                 outcome="failure",
-                error_code=exc.code,
+                error_code=err_code,
                 metadata={
                     "severity": severity,
                     "correlation_id": request_id,
@@ -545,7 +561,7 @@ def provision_tenant_organization(
 
         _exec_committed(_fail_nonretryable)
         raise ProvisioningFailedError(
-            str(exc), retryable=False, error_code=exc.code
+            err_str, retryable=False, error_code=err_code
         ) from exc
 
     # --- Success: persist org binding ---
@@ -590,6 +606,7 @@ def provision_tenant_organization(
             },
         )
         try:
+
             def _fail_db(conn: Any) -> None:
                 _update_binding_failed(
                     conn,

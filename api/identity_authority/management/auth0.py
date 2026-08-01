@@ -64,10 +64,7 @@ class Auth0ManagementProvider:
     def is_configured(self) -> bool:
         """Return True if all four required env vars are present."""
         return bool(
-            self._domain
-            and self._client_id
-            and self._client_secret
-            and self._audience
+            self._domain and self._client_id and self._client_secret and self._audience
         )
 
     def _get_access_token(self) -> str:

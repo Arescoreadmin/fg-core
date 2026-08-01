@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS tenant_identity_binding_events (
 
 ALTER TABLE tenant_identity_binding_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tibe_tenant_isolation ON tenant_identity_binding_events;
-CREATE POLICY tibe_tenant_isolation
+DROP POLICY IF EXISTS tenant_identity_binding_events_tenant_isolation ON tenant_identity_binding_events;
+CREATE POLICY tenant_identity_binding_events_tenant_isolation
     ON tenant_identity_binding_events
     FOR ALL
     USING (

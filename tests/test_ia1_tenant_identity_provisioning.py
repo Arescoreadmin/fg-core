@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Optional
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -117,8 +117,7 @@ def engine() -> Engine:
         for tid, name in _TENANTS:
             conn.execute(
                 text(
-                    "INSERT INTO tenants (tenant_id, display_name) "
-                    "VALUES (:tid, :name)"
+                    "INSERT INTO tenants (tenant_id, display_name) VALUES (:tid, :name)"
                 ),
                 {"tid": tid, "name": name},
             )
@@ -135,7 +134,9 @@ def mock_provider() -> MagicMock:
     return p
 
 
-def _provision(engine: Engine, provider: MagicMock, tenant_id: str = "tenant-alpha") -> TenantIdentityBindingRecord:
+def _provision(
+    engine: Engine, provider: MagicMock, tenant_id: str = "tenant-alpha"
+) -> TenantIdentityBindingRecord:
     """Helper: provision with monkeypatched provider. Passes engine as db_conn
     so provision_tenant_organization can manage its own transactions."""
     with patch(
@@ -231,11 +232,16 @@ class TestA_SuccessPath:
     def test_org_name_uses_fg_prefix(
         self, engine: Engine, mock_provider: MagicMock
     ) -> None:
-        """Verify the provider is called with fg-{slug} org name."""
+        """Verify the provider is called with fg-{slug}-{sha256[:8]} org name.
+
+        The 8-char hash suffix is required for collision resistance across
+        tenant IDs that produce the same slug (see _slugify_tenant_id).
+        """
         _provision(engine, mock_provider)
         kwargs = mock_provider.create_organization.call_args.kwargs
-        assert kwargs["name"].startswith("fg-")
-        assert kwargs["name"] == "fg-tenant-alpha"
+        assert kwargs["name"].startswith("fg-tenant-alpha-")
+        # Deterministic collision-resistant format: fg-{slug}-{sha256(tid)[:8]}
+        assert kwargs["name"] == _slugify_tenant_id("tenant-alpha")
 
     def test_idempotency_key_format(
         self, engine: Engine, mock_provider: MagicMock
@@ -244,12 +250,17 @@ class TestA_SuccessPath:
         assert binding.idempotency_key == "ia1:tenant-alpha:auth0"
 
     def test_slug_rule_non_alnum_becomes_dash(self) -> None:
-        assert _slugify_tenant_id("acme corp!") == "fg-acme-corp-"[:50].rstrip("-")
-        # More precisely: acme corp! → 'acme-corp-' → strip trailing '-' → 'acme-corp'
-        # But let's just test the prefix and no double dashes
-        slug = _slugify_tenant_id("acme_corp")
-        assert slug.startswith("fg-")
+        # Non-alnum chars collapse to '-'; leading/trailing dashes stripped
+        # from the slug portion, then an 8-char sha256(tenant_id) suffix is
+        # appended for collision resistance.
+        slug = _slugify_tenant_id("acme corp!")
+        assert slug.startswith("fg-acme-corp-")
         assert "--" not in slug
+        assert len(slug) <= 50
+        # Different inputs producing same slug still get unique suffixes.
+        slug_underscore = _slugify_tenant_id("acme_corp")
+        assert slug_underscore.startswith("fg-acme-corp-")
+        assert "--" not in slug_underscore
 
     def test_slug_max_50_chars(self) -> None:
         long_id = "a" * 60
@@ -291,7 +302,7 @@ class TestB_Idempotency:
         assert direct is not None
         assert direct["provisioning_state"] == "active"
         # Second provision still returns the same binding id
-        b2 = _provision(engine, mock_provider)
+        _provision(engine, mock_provider)
         direct2 = _get_binding_direct(engine, "tenant-alpha")
         assert direct2 is not None
         assert direct["id"] == direct2["id"]
@@ -511,16 +522,18 @@ class TestF_DBFailureAfterRemoteCreation:
         # by raising on _update_binding_active. We do this by patching the SQL update.
         call_count = {"n": 0}
 
-        original_update_active = None
-
         import api.tenant_identity_authority as tia
 
         original_fn = tia._update_binding_active
 
-        def _fail_on_first_active(conn, *, binding_id, provider_org_id, provider_org_name):
+        def _fail_on_first_active(
+            conn, *, binding_id, provider_org_id, provider_org_name
+        ):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                raise RuntimeError("simulated DB commit failure after Auth0 org created")
+                raise RuntimeError(
+                    "simulated DB commit failure after Auth0 org created"
+                )
             return original_fn(
                 conn,
                 binding_id=binding_id,
@@ -532,8 +545,8 @@ class TestF_DBFailureAfterRemoteCreation:
         # On second call (retry): org already exists in Auth0 → adapter returns same org.
         # The fg- prefix + metadata ownership claim enables the adapter to safely recover.
         mock_provider.create_organization.side_effect = [
-            created_org,          # First attempt: Auth0 creates org successfully
-            created_org,          # Retry: org already exists → 409 recovery → same org returned
+            created_org,  # First attempt: Auth0 creates org successfully
+            created_org,  # Retry: org already exists → 409 recovery → same org returned
         ]
 
         # First attempt: Auth0 succeeds but DB write fails.
@@ -542,7 +555,9 @@ class TestF_DBFailureAfterRemoteCreation:
         # The binding row (inserted earlier in its own transaction) persists on disk.
         # The failed _update_binding_active causes the _succeed transaction to roll back.
         # The failure handler then runs in its OWN transaction and writes state='failed'.
-        with patch.object(tia, "_update_binding_active", side_effect=_fail_on_first_active):
+        with patch.object(
+            tia, "_update_binding_active", side_effect=_fail_on_first_active
+        ):
             with pytest.raises(Exception):
                 with patch(
                     "api.tenant_identity_authority.get_management_provider",
@@ -593,7 +608,9 @@ class TestG_SecurityInvariants:
     ) -> None:
         """Error messages must not contain client_secret-like strings."""
         mock_provider.create_organization.side_effect = RetryableProviderError(
-            "provider error (no secret here)", code="PROVIDER_UNAVAILABLE", provider="auth0"
+            "provider error (no secret here)",
+            code="PROVIDER_UNAVAILABLE",
+            provider="auth0",
         )
         with pytest.raises(ProvisioningFailedError):
             with patch(
@@ -619,7 +636,9 @@ class TestG_SecurityInvariants:
         _provision(engine, mock_provider)
         with engine.connect() as conn:
             rows = conn.execute(
-                text("SELECT metadata FROM tenant_identity_binding_events WHERE tenant_id = 'tenant-alpha'")
+                text(
+                    "SELECT metadata FROM tenant_identity_binding_events WHERE tenant_id = 'tenant-alpha'"
+                )
             ).fetchall()
         for (meta,) in rows:
             if meta:
@@ -632,7 +651,9 @@ class TestG_SecurityInvariants:
     ) -> None:
         """last_error_message_redacted must not store email addresses."""
         mock_provider.create_organization.side_effect = RetryableProviderError(
-            "error for user@example.com token xyz123", code="PROVIDER_UNAVAILABLE", provider="auth0"
+            "error for user@example.com token xyz123",
+            code="PROVIDER_UNAVAILABLE",
+            provider="auth0",
         )
         with pytest.raises(ProvisioningFailedError):
             with patch(
