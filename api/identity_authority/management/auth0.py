@@ -104,10 +104,27 @@ class Auth0ManagementProvider:
                     provider="auth0",
                 ) from exc
 
+            if resp.status_code == 429:
+                # Rate limit on the token endpoint is transient — retry after backoff.
+                retry_after = int(resp.headers.get("Retry-After", 60))
+                raise RetryableProviderError(
+                    "Auth0 token endpoint rate limited",
+                    code="RATE_LIMITED",
+                    provider="auth0",
+                    retry_after=retry_after,
+                )
+            if resp.status_code >= 500:
+                # Auth0 server error — transient, not a misconfiguration.
+                raise RetryableProviderError(
+                    "Auth0 token endpoint server error",
+                    code="PROVIDER_UNAVAILABLE",
+                    provider="auth0",
+                )
             if not resp.ok:
-                # Token fetch failure is always non-retryable (misconfiguration)
+                # 4xx (other than 429): genuine auth rejection — credentials wrong or
+                # audience invalid. Non-retryable until operator fixes configuration.
                 raise ManagementProviderError(
-                    "Auth0 token fetch failed",
+                    "Auth0 token fetch rejected",
                     code="AUTH_FAILED",
                     provider="auth0",
                 )

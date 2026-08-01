@@ -14,6 +14,7 @@ Transaction model:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import uuid
@@ -41,17 +42,19 @@ _LEADING_TRAILING_DASH_RE = re.compile(r"^-+|-+$")
 
 
 def _slugify_tenant_id(tenant_id: str) -> str:
-    """Derive a deterministic Auth0 org name slug from tenant_id.
+    """Derive a deterministic, collision-resistant Auth0 org name from tenant_id.
 
-    Lowercase, replace non-alphanumeric with '-', collapse repeated '-',
-    strip leading/trailing '-', prefix 'fg-'. Max 50 chars total.
+    Format: fg-{slug[:38]}-{sha256(tenant_id)[:8]}
+    Max 50 chars. The hash suffix guarantees uniqueness even when two tenant IDs
+    produce the same slug (e.g. foo_bar and foo-bar both become fg-foo-bar-{HASH}).
     """
     slug = tenant_id.lower()
     slug = _NON_ALNUM_RE.sub("-", slug)
     slug = re.sub(r"-{2,}", "-", slug)
     slug = _LEADING_TRAILING_DASH_RE.sub("", slug)
-    name = f"fg-{slug}"
-    return name[:50]
+    # 8-char suffix from the canonical tenant_id keeps names unique under truncation
+    suffix = hashlib.sha256(tenant_id.encode()).hexdigest()[:8]
+    return f"fg-{slug[:38]}-{suffix}"
 
 
 def _idempotency_key(tenant_id: str, provider: str = _PROVIDER) -> str:
@@ -154,6 +157,18 @@ _SELECT_BINDING = (
     "FROM tenant_identity_bindings "
     "WHERE tenant_id = :tenant_id AND provider = :provider"
 )
+
+
+def _set_tenant_guc(conn: Any, tenant_id: str) -> None:
+    """Set app.tenant_id GUC for RLS on Postgres. No-op on SQLite (dialect != postgresql)."""
+    dialect = getattr(getattr(conn, "dialect", None), "name", "") or getattr(
+        getattr(getattr(conn, "engine", None), "dialect", None), "name", ""
+    )
+    if dialect == "postgresql":
+        conn.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
 
 
 def _get_binding_row(conn: Any, tenant_id: str, provider: str) -> Optional[Any]:
@@ -363,16 +378,20 @@ def provision_tenant_organization(
     raw_conn = None if engine else db_conn
 
     def _exec_committed(fn: Any, *args: Any, **kwargs: Any) -> Any:
-        """Execute fn(conn, ...) in its own committed transaction (when engine is available)."""
+        """Execute fn(conn, ...) in its own committed transaction (when engine is available).
+        Sets app.tenant_id GUC first so RLS policies on the binding tables are satisfied."""
         if engine is not None:
             with engine.begin() as conn:
+                _set_tenant_guc(conn, tenant_id)
                 return fn(conn, *args, **kwargs)
         else:
             return fn(raw_conn, *args, **kwargs)
 
     def _read(fn: Any, *args: Any, **kwargs: Any) -> Any:
+        """Read-only query. Sets app.tenant_id GUC so RLS policies are satisfied."""
         if engine is not None:
             with engine.connect() as conn:
+                _set_tenant_guc(conn, tenant_id)
                 return fn(conn, *args, **kwargs)
         else:
             return fn(raw_conn, *args, **kwargs)
@@ -399,12 +418,21 @@ def provision_tenant_organization(
         # (c) The spec (step 7 in TestF) requires retry to work after DB failure.
 
     if row is None:
-        # Fresh: INSERT pending
-        def _do_insert(conn: Any) -> Any:
-            result = _insert_binding(conn, tenant_id=tenant_id, provider=provider, ikey=ikey)
-            return result
+        # Fresh: INSERT pending. Guard against concurrent requests both seeing row=None:
+        # if two requests race, the second INSERT raises IntegrityError on the UNIQUE
+        # constraint — catch it and reload the row that the winner committed.
+        from sqlalchemy.exc import IntegrityError
 
-        row = _exec_committed(_do_insert)
+        def _do_insert(conn: Any) -> Any:
+            return _insert_binding(conn, tenant_id=tenant_id, provider=provider, ikey=ikey)
+
+        try:
+            row = _exec_committed(_do_insert)
+        except IntegrityError:
+            # Another concurrent request won the INSERT race — load its binding.
+            row = _read(_get_binding_row, tenant_id, provider)
+            if row is None:
+                raise  # genuine error unrelated to the race
 
     binding = _row_to_binding(row)
     binding_id = binding.binding_id

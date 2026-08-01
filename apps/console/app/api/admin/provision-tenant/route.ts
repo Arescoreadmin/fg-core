@@ -661,14 +661,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     stage: 'complete',
   });
 
+  // Keep the existing top-level shape so tenants/page.tsx consumers are unchanged.
+  // identity_binding is additive — new callers read it; existing callers ignore it.
   return NextResponse.json({
-    tenant: {
-      tenant_id: tenantId,
-      name,
-      already_existed: alreadyExisted,
-      credential_id: keyData.credential_id,
-      api_key_expires_at: keyData.expires_at,
-    },
+    tenant_id: tenantId,
+    name,
+    already_existed: alreadyExisted,
+    registry_live: true,
+    credential_id: keyData.credential_id,
+    api_key_expires_at: keyData.expires_at,
     identity_binding: {
       provider: 'auth0',
       provisioning_state: bindingData.provisioning_state as string ?? 'active',

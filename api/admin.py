@@ -1588,14 +1588,18 @@ async def provision_tenant_identity_binding(
     )
 
     try:
-        with engine.begin() as conn:
-            binding = provision_tenant_organization(
-                tenant_id=tenant_id,
-                display_name=req.display_name,
-                actor_id=actor_id,
-                request_id=request_id,
-                db_conn=conn,
-            )
+        # Pass the Engine directly (not a connection) so provision_tenant_organization
+        # can open independent transactions for each state transition. Passing a
+        # connection here would wrap the entire call in a single outer transaction,
+        # causing failed-state binding rows and audit events to be rolled back on
+        # Auth0 failure — making failures invisible to retries and operators.
+        binding = provision_tenant_organization(
+            tenant_id=tenant_id,
+            display_name=req.display_name,
+            actor_id=actor_id,
+            request_id=request_id,
+            db_conn=engine,
+        )
     except ProvisioningFailedError as exc:
         from fastapi.responses import JSONResponse
 
