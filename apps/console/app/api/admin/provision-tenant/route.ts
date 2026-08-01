@@ -336,6 +336,81 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     request_id: requestId, tenant_id: tenantId, already_existed: tenantAlreadyExisted, stage: 'tenant_created',
   });
 
+  // Step 1.5: Provision Auth0 organization (IA-1).
+  // Always call — idempotent when binding already active, retries when failed.
+  let bindingData: Record<string, unknown> = {};
+  {
+    let bindingRes: Response;
+    try {
+      bindingRes = await fetch(
+        `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/identity-bindings`,
+        {
+          method: 'POST',
+          headers: adminHeaders(),
+          body: JSON.stringify({ display_name: name }),
+          cache: 'no-store',
+        },
+      );
+    } catch (fetchErr) {
+      logEvent('error', 'provision.upstream.unreachable', {
+        request_id: requestId, tenant_id: tenantId, stage: 'identity_binding',
+        error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+      });
+      // Do NOT roll back the FG tenant. Return partial-success 207.
+      return NextResponse.json(
+        {
+          tenant: {
+            tenant_id: tenantId,
+            name,
+            already_existed: tenantAlreadyExisted,
+          },
+          identity_binding: {
+            provider: 'auth0',
+            provisioning_state: 'failed',
+            retryable: true,
+            error_code: 'CORE_API_UNAVAILABLE',
+          },
+          request_id: requestId,
+        },
+        { status: 207, headers: { 'x-request-id': requestId } },
+      );
+    }
+
+    if (!bindingRes.ok) {
+      const bindingErr = await bindingRes.json().catch(() => ({})) as Record<string, unknown>;
+      logEvent('warn', 'provision.identity_binding.failed', {
+        request_id: requestId, tenant_id: tenantId, status: bindingRes.status,
+        error_code: bindingErr.error_code ?? bindingErr.error ?? 'UNKNOWN',
+      });
+      // Do NOT roll back the FG tenant. Preserve evidence; return explicit partial-success.
+      return NextResponse.json(
+        {
+          tenant: {
+            tenant_id: tenantId,
+            name,
+            already_existed: tenantAlreadyExisted,
+          },
+          identity_binding: {
+            provider: 'auth0',
+            provisioning_state: 'failed',
+            retryable: bindingErr.retryable ?? false,
+            error_code: bindingErr.error_code ?? bindingErr.error ?? 'UNKNOWN',
+          },
+          request_id: requestId,
+        },
+        { status: 207, headers: { 'x-request-id': requestId } },
+      ); // 207 Multi-Status: tenant created, org provisioning failed
+    }
+
+    bindingData = await bindingRes.json() as Record<string, unknown>;
+    logEvent('info', 'provision.identity_binding.ok', {
+      request_id: requestId, tenant_id: tenantId,
+      provisioning_state: bindingData.provisioning_state,
+      provider_org_id: bindingData.provider_org_id,
+      stage: 'identity_binding_complete',
+    });
+  }
+
   // Step 2: Create BFF credential scoped to the tenant (R4.8: /admin/keys retired).
   // On slot conflict (409) the tenant was partially provisioned before — rotate instead.
   let keyRes: Response;
@@ -587,12 +662,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   return NextResponse.json({
-    tenant_id: tenantId,
-    name,
-    already_existed: alreadyExisted,
-    registry_live: true,
-    credential_id: keyData.credential_id,
-    api_key_expires_at: keyData.expires_at,
+    tenant: {
+      tenant_id: tenantId,
+      name,
+      already_existed: alreadyExisted,
+      credential_id: keyData.credential_id,
+      api_key_expires_at: keyData.expires_at,
+    },
+    identity_binding: {
+      provider: 'auth0',
+      provisioning_state: bindingData.provisioning_state as string ?? 'active',
+      provider_org_id: bindingData.provider_org_id as string ?? null,
+      provider_org_name: bindingData.provider_org_name as string ?? null,
+    },
     request_id: requestId,
   }, { headers: { 'x-request-id': requestId } });
 }

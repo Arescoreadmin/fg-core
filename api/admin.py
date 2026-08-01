@@ -1496,6 +1496,181 @@ async def create_tenant(
     )
 
 
+class TenantIdentityBindingRequest(BaseModel):
+    """Request to provision an identity binding for a tenant."""
+
+    model_config = {"extra": "forbid"}
+
+    display_name: str = Field(
+        ...,
+        max_length=256,
+        description="Auth0 Organization display name (human-readable)",
+    )
+
+
+class TenantIdentityBindingResponse(BaseModel):
+    """Identity binding record returned to callers."""
+
+    binding_id: str
+    tenant_id: str
+    provider: str
+    provider_org_id: Optional[str]
+    provider_org_name: Optional[str]
+    provisioning_state: str
+    idempotency_key: str
+    last_sync_at: Optional[str]
+    last_error_code: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+@router.post(
+    "/tenants/{tenant_id}/identity-bindings",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def provision_tenant_identity_binding(
+    tenant_id: str,
+    req: TenantIdentityBindingRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Any:
+    """Provision an Auth0 organization for the given tenant (IA-1).
+
+    Idempotent: returns existing active binding without a new Auth0 call.
+    Retryable: calling again when state='failed' reattempts provisioning.
+    """
+    from api.tenant_identity_authority import (
+        ProvisioningFailedError,
+        provision_tenant_organization,
+    )
+
+    if not _TENANT_ID_RE.fullmatch(tenant_id):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "TENANT_ID_FORMAT_INVALID",
+                "tenant_id does not match required format",
+            ),
+        )
+
+    # Verify tenant exists
+    from api.tenant_repository import get_tenant_repository
+
+    repo = get_tenant_repository()
+    if repo is not None:
+        tenant_record = repo.get(tenant_id)
+        if tenant_record is None:
+            raise HTTPException(
+                status_code=404,
+                detail=api_error("TENANT_NOT_FOUND", f"tenant not found: {tenant_id}"),
+            )
+
+    request_id = _request_id_from_request(request) or str(uuid.uuid4())
+    _auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    actor_id: str = (
+        getattr(_auth_ctx, "key_prefix", None)
+        or getattr(_auth_ctx, "subject", None)
+        or actor_ctx.subject
+        or "admin"
+    )
+
+    engine = get_engine()
+    from api.tenant_identity_authority import get_tenant_binding
+
+    # Capture pre-call state to determine 200 vs 201
+    with engine.connect() as pre_conn:
+        pre_binding = get_tenant_binding(
+            tenant_id=tenant_id,
+            db_conn=pre_conn,
+        )
+    was_already_active = (
+        pre_binding is not None and pre_binding.provisioning_state == "active"
+    )
+
+    try:
+        with engine.begin() as conn:
+            binding = provision_tenant_organization(
+                tenant_id=tenant_id,
+                display_name=req.display_name,
+                actor_id=actor_id,
+                request_id=request_id,
+                db_conn=conn,
+            )
+    except ProvisioningFailedError as exc:
+        from fastapi.responses import JSONResponse
+
+        audit_admin_action(
+            action="tenant_org_provisioning_failed",
+            tenant_id=tenant_id,
+            request=request,
+            details={
+                "actor_id": actor_id,
+                "error_code": exc.error_code,
+                "retryable": exc.retryable,
+                "provider": "auth0",
+            },
+        )
+        if exc.retryable:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "PROVISIONING_FAILED",
+                    "retryable": True,
+                    "error_code": exc.error_code,
+                },
+            )
+        if exc.error_code == "AUTH0_ORG_OWNERSHIP_CONFLICT":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "AUTH0_ORG_OWNERSHIP_CONFLICT",
+                    "retryable": False,
+                    "operator_action_required": True,
+                },
+            )
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "PROVISIONING_FAILED",
+                "retryable": False,
+                "error_code": exc.error_code,
+            },
+        )
+
+    audit_admin_action(
+        action="tenant_org_provisioned",
+        tenant_id=tenant_id,
+        request=request,
+        details={
+            "actor_id": actor_id,
+            "provider": binding.provider,
+            "provider_org_id": binding.provider_org_id,
+            "provisioning_state": binding.provisioning_state,
+        },
+    )
+
+    response_body = TenantIdentityBindingResponse(
+        binding_id=binding.binding_id,
+        tenant_id=binding.tenant_id,
+        provider=binding.provider,
+        provider_org_id=binding.provider_org_id,
+        provider_org_name=binding.provider_org_name,
+        provisioning_state=binding.provisioning_state,
+        idempotency_key=binding.idempotency_key,
+        last_sync_at=binding.last_sync_at,
+        last_error_code=binding.last_error_code,
+        created_at=binding.created_at,
+        updated_at=binding.updated_at,
+    )
+
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=200 if was_already_active else 201,
+        content=response_body.model_dump(),
+    )
+
+
 @router.get(
     "/tenants",
     dependencies=[Depends(require_scopes("admin:read"))],
