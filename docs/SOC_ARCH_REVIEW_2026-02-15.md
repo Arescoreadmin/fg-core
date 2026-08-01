@@ -1,3 +1,28 @@
+## 2026-08-01 — PR #601: IA-1 Tenant Identity Authority — CI governance artifacts
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (route inventory and plane registry governance artifacts changed; identity binding provisioning endpoint added to control plane)
+
+**Scope:** IA-1 adds `POST /admin/tenants/{tenant_id}/identity-bindings` — an admin provisioning endpoint that creates an Auth0 organization binding for a given tenant. This entry covers the five `tools/ci/` files that changed as a result.
+
+**Security posture:** The new endpoint is control-plane only (admin:write scope required). `tenant_id` in the path identifies the *target* tenant being provisioned, not the caller; isolation is enforced inside `provision_tenant_organization` via idempotency key and Auth0 metadata ownership verification, not auth-context tenant binding. The plane registry exception added to `check_plane_registry.py` matches the identical existing exception for `GET /admin/tenants/{tenant_id}/operator-authority` (PR 584). No scopes weakened, no public surface added, no tenant isolation removed.
+
+**Critical-path files changed:**
+- `tools/ci/check_plane_registry.py`: added `POST /admin/tenants/{tenant_id}/identity-bindings` to `EXACT_TENANT_BINDING_EXCEPTIONS`. Justification: same as the existing `/operator-authority` exception — `tenant_id` is the provisioning target, not the caller tenant.
+- `tools/ci/route_inventory.json`: regenerated via `make route-inventory-generate` after adding the IA-1 endpoint.
+- `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make soc-manifest-sync` to reflect the updated route inventory.
+
+**Validation evidence:**
+- `make fg-fast`: 496 passed, 2 skipped.
+- `make fg-contract`: CONTRACT LINT PASSED, OpenAPI contract matches.
+- `make fg-security`: 1201 passed.
+- `pytest tests/test_ia1_tenant_identity_provisioning.py`: 36/36 passed (TestF and TestJ merge gates included).
+- `python tools/ci/check_plane_registry.py --use-runtime-app`: plane registry check OK.
+- `make route-inventory-generate` and `make soc-manifest-sync` both completed before this SOC entry.
+
+**SOC review outcome:** approved. The route inventory and plane registry changes are purely additive — one new control-plane endpoint, one new exact exception with documented justification. No auth middleware, OPA policy, security gate, or tenant isolation logic was weakened. Auth0 is a projection; FrostGate remains the system of record and RBAC authority per ADR-IA-001.
+
+---
+
 ## 2026-07-28 — PR #585: Internal platform authority bootstrap foundation
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (tenant authority bootstrap,
