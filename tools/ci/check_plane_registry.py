@@ -46,6 +46,10 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # Internal admin-gateway validation of configured Console operator authority;
     # tenant_id is the candidate authority under review, not the caller tenant.
     ("GET", "/admin/tenants/{tenant_id}/operator-authority"),
+    # IA-1 identity binding provisioning: tenant_id in path identifies the target
+    # tenant being provisioned, not the caller. Caller authenticates via admin:write
+    # scope; isolation enforced by provision_tenant_organization, not auth context.
+    ("POST", "/admin/tenants/{tenant_id}/identity-bindings"),
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
     # C7 portal grant/session routes enforce tenant isolation through
     # PortalGrantSession validation and PortalScopeMiddleware rather than
