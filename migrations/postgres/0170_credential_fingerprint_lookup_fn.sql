@@ -14,9 +14,11 @@
 -- --------
 -- A narrow SECURITY DEFINER function runs as its owner (postgres superuser,
 -- BYPASSRLS), performing the fingerprint lookup across all tenants.
--- GRANT EXECUTE to fg_app limits access to exactly this function.
 -- The lookup_fingerprint is HMAC-SHA256(secret_part, pepper) — callers cannot
 -- enumerate rows without possessing a valid issued secret.
+-- Access is granted by _grant_runtime_role_access() in api/db.py, which issues
+-- GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO <runtime_role> after each
+-- migration run.  Do not hardcode the runtime role name here.
 --
 -- Column order
 -- ------------
@@ -97,8 +99,5 @@ that do not embed tenant ID in their key format (portal_access, connector,
 agent_device).  The fingerprint is HMAC-SHA256(secret_part, pepper) — row
 enumeration is infeasible without a valid issued secret.  Column order matches
 _RECORD_SELECT_TC + secret_hash + lifecycle_state in api/credential_authority.py;
-do not reorder.';
-
-GRANT EXECUTE
-    ON FUNCTION public.credential_fingerprint_lookup(VARCHAR(64), VARCHAR(64))
-    TO fg_app;
+do not reorder.  EXECUTE is granted to the runtime role by _grant_runtime_role_access()
+in api/db.py (GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public) — not hardcoded here.';

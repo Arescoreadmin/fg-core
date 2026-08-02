@@ -1317,7 +1317,8 @@ def validate_credential(
             # portal_access, connector, agent_device keys embed no tenant ID, so
             # app.tenant_id cannot be set before the query.  The SECURITY DEFINER
             # function runs as its owner (BYPASSRLS) to perform the cross-tenant
-            # fingerprint lookup safely.  migration 0170.
+            # fingerprint lookup safely.  migration 0170.  EXECUTE is granted to
+            # the runtime role by _grant_runtime_role_access() in db.py.
             row = conn.execute(
                 text(
                     "SELECT * FROM public.credential_fingerprint_lookup(:fp, :ctype)"
