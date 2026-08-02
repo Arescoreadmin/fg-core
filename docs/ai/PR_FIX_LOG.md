@@ -20791,3 +20791,18 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Security impact:** Credential separation is a security improvement — the API runtime now operates with NOBYPASSRLS, so RLS policies on all tenant tables are enforced even against the API process itself. `_db_migration_url()` returns None (not empty string) to avoid accidental fallthrough. Migration URL is not logged.
 - **Schema/API impact:** None. Additive env var (`FG_DB_MIGRATION_URL`). Fully backward compatible — single-credential deployments (only `FG_DB_URL`) continue to work unchanged.
 - **Result:** All 25 tests pass.
+
+---
+
+## P-32 — fix(db): assert_migrations_applied must not attempt CREATE TABLE — PR #604
+
+- **PR/Branch:** `fix/assert-migrations-no-create-privilege` (#604)
+- **Date:** 2026-08-02
+- **Files changed:** `api/db_migrations.py`
+- **Root cause:** `assert_migrations_applied()` called `_applied_versions()` which internally calls `_ensure_schema_migrations()`, which issues `CREATE TABLE IF NOT EXISTS schema_migrations`. PostgreSQL evaluates DDL privileges before checking table existence, so even with `IF NOT EXISTS`, the calling role needs `CREATE` privilege on the schema. The restricted runtime role (`fg_app`) has `SELECT, INSERT, UPDATE, DELETE` on tables (granted by `_grant_runtime_role_access()` in PR #602) but not `CREATE` on the `public` schema. Result: every startup with `FG_DB_MIGRATION_URL` set raised `ProgrammingError: permission denied for schema public` in `assert_migrations_applied`.
+- **Fix:** `assert_migrations_applied()` now queries `schema_migrations` directly via `SELECT version FROM schema_migrations` without calling `_ensure_schema_migrations()`. The table is guaranteed to exist after `apply_migrations()` runs successfully with the elevated migration credential. `_applied_versions()` retains its `_ensure_schema_migrations()` call for `apply_migrations()` (which runs as the superuser and needs idempotent table creation on fresh databases).
+- **Behavioral impact:** None in normal operation. `_ensure_schema_migrations` is still called from `apply_migrations` (migration engine, superuser). `assert_migrations_applied` only ever SELECTs — it never needed to create the table.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by existing 25 tests in `tests/test_db_migration_credential_separation.py`.
+- **Result:** 25 tests pass.
