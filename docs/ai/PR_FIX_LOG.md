@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-40 — fix(auth): set RLS tenant context in credential authority write paths
+
+- **PR/Branch:** `fix/credential-authority-rls-context` (#606)
+- **Date:** 2026-08-02
+- **Files changed:** `api/credential_authority.py`
+- **Root cause:** `credential_slots` and `tenant_credentials` have `ENABLE ROW LEVEL SECURITY` with policy `USING (tenant_id = current_setting('app.tenant_id', true))`. Before PR #602, the API ran as postgres superuser which bypasses RLS entirely. After switching to `fg_app` (NOSUPERUSER NOBYPASSRLS), every function that opens a fresh DB connection via `engine.begin()` and writes to these tables fails with `InsufficientPrivilege: new row violates row-level security policy` because `current_setting('app.tenant_id', true)` returns NULL when no context is set.
+- **Immediate failure (API startup):** `bootstrap_internal_platform_authority()` calls `issue_credential()`, which opens a fresh connection via `engine.begin()` and immediately calls `_upsert_slot()` → INSERT into `credential_slots`. Without `app.tenant_id` set, the RLS WITH CHECK fails. This prevented the API from starting after deploying PR #602/#604 to Railway dev with the `fg_app` runtime role.
+- **Fixes:** Added `SELECT set_config('app.tenant_id', :tid, true)` at the start of each function that opens a fresh connection and writes to credential tables: `issue_credential._do_issue`, `rotate_credential`, `revoke_credential`, `suspend_credential`, `resume_credential`, `issue_bootstrap_token`, `exchange_bootstrap_token`, `get_active_credential_for_slot`. For `expire_credentials`, the fix is applied only when `tenant_id` is provided (cross-tenant sweep with no context remains a no-op under RLS, which is acceptable since expiration is enforced lazily at validation time).
+- **Known remaining gap:** `validate_credential` for `portal_access`, `connector`, and `agent_device` credential types sets no tenant context (tenant_id is not embedded in the key format). With `fg_app`, these credential lookups would return 0 rows from RLS filtering. Fixing this requires either a SECURITY DEFINER lookup function or a separate cross-tenant read role — addressed in a follow-up.
+- **Result:** Pass (pending CI).
+
+---
+
 ## P-39 — fix(ops): address 4 bot review findings on secret_rotation.md
 
 - **PR/Branch:** `ops/t2-t3-autorecharge-secrets` (#599)
