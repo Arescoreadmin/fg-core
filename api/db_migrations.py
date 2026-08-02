@@ -88,7 +88,12 @@ def apply_migrations(engine: Engine) -> list[str]:
 def assert_migrations_applied(engine: Engine) -> None:
     migrations = _load_migrations()
     with engine.begin() as conn:
-        applied_versions = _applied_versions(conn)
+        # SELECT directly — schema_migrations is guaranteed to exist after apply_migrations.
+        # Do not call _applied_versions() here: that helper calls _ensure_schema_migrations()
+        # which issues CREATE TABLE, requiring schema-level CREATE privilege that the
+        # restricted runtime role (fg_app) does not have.
+        rows = conn.exec_driver_sql("SELECT version FROM schema_migrations").fetchall()
+        applied_versions = {row[0] for row in rows}
         expected = {m.version for m in migrations}
         missing = sorted(expected - applied_versions)
         if missing:
