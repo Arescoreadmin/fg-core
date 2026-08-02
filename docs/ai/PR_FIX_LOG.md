@@ -1,5 +1,17 @@
 # PR Fix Log (Strict)
 
+## P-41 — fix(auth): SECURITY DEFINER lookup for unscoped credential types under fg_app
+
+- **PR/Branch:** `fix/credential-fingerprint-lookup-security-definer` (#607)
+- **Date:** 2026-08-02
+- **Files changed:** `api/credential_authority.py`, `migrations/postgres/0170_credential_fingerprint_lookup_fn.sql`
+- **Root cause:** `portal_access`, `connector`, and `agent_device` credential keys do not embed a tenant ID (unlike `tenant_api_key` which uses a JWT-style `t` payload field). `validate_credential()` therefore cannot call `set_config('app.tenant_id', ...)` before querying `tenant_credentials`. With `fg_app` (NOSUPERUSER NOBYPASSRLS), the RLS policy `USING (tenant_id = current_setting('app.tenant_id', true))` filters every row when `app.tenant_id` is unset → 0 rows → `CredentialNotFoundError` on every portal, connector, and agent_device authentication.
+- **Fix — migration 0170:** Creates `public.credential_fingerprint_lookup(_fp, _ctype)` as a `SECURITY DEFINER` function. Runs as its owner (postgres superuser, BYPASSRLS), executes the `tenant_credentials JOIN tenants` query unrestricted. `GRANT EXECUTE ... TO fg_app`. Column order matches `_RECORD_SELECT_TC + secret_hash + lifecycle_state` used by `validate_credential()`. `SET search_path = public` prevents schema-injection escalation. The fingerprint itself is `HMAC-SHA256(secret_part, pepper)` — row enumeration without a valid issued secret is infeasible.
+- **Fix — Python:** `validate_credential()` now branches on `is_postgres and not tenant_id_hint`: calls the SECURITY DEFINER function for unscoped types; keeps the existing `set_config + direct JOIN` path for `tenant_api_key` (hinted lookups). SQLite test path unchanged (direct query, no RLS).
+- **Result:** Pass (pending CI).
+
+---
+
 ## P-40 — fix(auth): set RLS tenant context in credential authority write paths
 
 - **PR/Branch:** `fix/credential-authority-rls-context` (#606)
