@@ -1320,9 +1320,7 @@ def validate_credential(
             # fingerprint lookup safely.  migration 0170.  EXECUTE is granted to
             # the runtime role by _grant_runtime_role_access() in db.py.
             row = conn.execute(
-                text(
-                    "SELECT * FROM public.credential_fingerprint_lookup(:fp, :ctype)"
-                ),
+                text("SELECT * FROM public.credential_fingerprint_lookup(:fp, :ctype)"),
                 {"fp": fp, "ctype": credential_type},
             ).fetchone()
         else:
