@@ -20806,3 +20806,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Tests added:** None — covered by existing 25 tests in `tests/test_db_migration_credential_separation.py`.
 - **Result:** 25 tests pass.
+
+---
+
+## P-33 — fix(db): grant USAGE ON SCHEMA public to runtime role — PR #605
+
+- **PR/Branch:** `fix/grant-schema-usage-to-runtime-role` (#605)
+- **Date:** 2026-08-02
+- **Files changed:** `api/db.py`
+- **Root cause:** `_grant_runtime_role_access()` (PR #602) granted `SELECT, INSERT, UPDATE, DELETE ON ALL TABLES`, `USAGE, SELECT, UPDATE ON ALL SEQUENCES`, and `EXECUTE ON ALL FUNCTIONS` in the public schema, but never granted `USAGE ON SCHEMA public` itself. In PostgreSQL, schema USAGE is a prerequisite for accessing any object in that schema — without it, all table-level grants are unreachable and every query returns `permission denied for schema public`, even a plain `SELECT`. The deployment to API-DEV confirmed this: `assert_migrations_applied` failed immediately with `InsufficientPrivilege` on `SELECT version FROM schema_migrations`.
+- **Fix:** `GRANT USAGE ON SCHEMA public TO {runtime_role}` is now the first statement issued in `_grant_runtime_role_access()`, before any object-level grants.
+- **Operational note:** The live Railway dev database received a manual one-time `GRANT USAGE ON SCHEMA public TO fg_app` to unblock the current deployment before this PR can be deployed.
+- **Behavioral impact:** Corrects a silent startup failure — API-DEV was starting (uvicorn Online) but DB init was failing and being swallowed.
+- **Security impact:** None — USAGE on the public schema does not grant any data access on its own; it only allows the role to resolve object names. The actual data access is bounded by the separate table-level grants and RLS policies.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by existing 25 tests.
+- **Result:** 25 tests pass.

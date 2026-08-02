@@ -101,6 +101,9 @@ def _grant_runtime_role_access(mig_engine: "Engine", runtime_engine: "Engine") -
         mig_role = conn.exec_driver_sql("SELECT current_user").scalar()
         qm = _pg_quote_ident(mig_role)
         for stmt in (
+            # Schema USAGE must come first — without it, all object-level grants
+            # are unreachable and produce "permission denied for schema public".
+            f"GRANT USAGE ON SCHEMA public TO {qr}",
             f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {qr}",
             f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO {qr}",
             f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {qr}",
