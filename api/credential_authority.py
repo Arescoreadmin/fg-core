@@ -1073,6 +1073,11 @@ def issue_credential(
     is_postgres = engine.dialect.name == "postgresql"
 
     def _do_issue(conn: Connection) -> IssuanceResult:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         # Idempotency: scoped to tenant so cross-tenant replay is impossible.
         if idempotency_key:
             existing = conn.execute(
@@ -1465,6 +1470,11 @@ def rotate_credential(
     is_postgres = engine.dialect.name == "postgresql"
 
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         # Idempotency.
         if idempotency_key:
             existing = conn.execute(
@@ -1670,7 +1680,13 @@ def revoke_credential(
         CredentialStateError:    credential is rotated or expired (not revokable
             by this path; those are terminal for different reasons).
     """
+    is_postgres = engine.dialect.name == "postgresql"
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         row = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
@@ -1751,7 +1767,13 @@ def suspend_credential(
         CredentialStateError:    credential is not active (already suspended,
             revoked, rotated, or expired).
     """
+    is_postgres = engine.dialect.name == "postgresql"
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         row = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
@@ -1816,7 +1838,13 @@ def resume_credential(
         CredentialNotFoundError: credential does not exist or wrong tenant.
         CredentialStateError:    credential is not suspended.
     """
+    is_postgres = engine.dialect.name == "postgresql"
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         row = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
@@ -1895,8 +1923,14 @@ def issue_bootstrap_token(
     token_hash = _compute_lookup_fingerprint(raw_token, _get_pepper())
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     expires_iso = expires_at.isoformat()
+    is_postgres = engine.dialect.name == "postgresql"
 
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         lifecycle_state = _get_tenant_lifecycle_state(conn, tenant_id)
         _enforce_lifecycle(lifecycle_state, "issue", tenant_id)
 
@@ -1955,8 +1989,14 @@ def exchange_bootstrap_token(
     """
     token_hash = _compute_lookup_fingerprint(raw_token, _get_pepper())
     now = datetime.now(timezone.utc)
+    is_postgres = engine.dialect.name == "postgresql"
 
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         tok_row = conn.execute(
             text(
                 "SELECT id, tenant_id, expires_at, max_uses, used_count "
@@ -2050,8 +2090,14 @@ def expire_credentials(
     if tenant_id is not None:
         tenant_clause = " AND tenant_id = :tid"
         params["tid"] = tenant_id
+    is_postgres = engine.dialect.name == "postgresql"
 
     with engine.begin() as conn:
+        if is_postgres and tenant_id is not None:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         # Fetch targets first so we can emit per-credential audit events.
         targets = conn.execute(
             text(
@@ -2301,10 +2347,14 @@ def get_active_credential_for_slot(
     query. A status='active' filter would return None for both cases, making
     revoked credentials silently fall through to the legacy AES-GCM path.
 
-    NOTE: Does NOT set SET LOCAL app.tenant_id — internal trusted-code path,
-    not a request handler. RLS is not required on this path.
     """
+    is_postgres = engine.dialect.name == "postgresql"
     with engine.begin() as conn:
+        if is_postgres:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         # ORDER BY generation DESC LIMIT 1: get the most recent generation so we
         # can tell "absent" (row is None) from "found but terminal" (row exists,
         # status != 'active').
