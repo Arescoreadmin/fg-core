@@ -1313,32 +1313,43 @@ def validate_credential(
     is_postgres = engine.dialect.name == "postgresql"
 
     with engine.begin() as conn:
-        if is_postgres and tenant_id_hint:
-            # SET LOCAL does not accept bound parameters in psycopg3; use
-            # pg_catalog.set_config() which does.
-            conn.execute(
-                text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
-                {"tid": tenant_id_hint},
-            )
+        if is_postgres and not tenant_id_hint:
+            # portal_access, connector, agent_device keys embed no tenant ID, so
+            # app.tenant_id cannot be set before the query.  The SECURITY DEFINER
+            # function runs as its owner (BYPASSRLS) to perform the cross-tenant
+            # fingerprint lookup safely.  migration 0170.  EXECUTE is granted to
+            # the runtime role by _grant_runtime_role_access() in db.py.
+            row = conn.execute(
+                text("SELECT * FROM public.credential_fingerprint_lookup(:fp, :ctype)"),
+                {"fp": fp, "ctype": credential_type},
+            ).fetchone()
+        else:
+            if is_postgres and tenant_id_hint:
+                # SET LOCAL does not accept bound parameters in psycopg3; use
+                # pg_catalog.set_config() which does.
+                conn.execute(
+                    text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id_hint},
+                )
 
-        # AUTHORIZED-DIRECT-TENANT-SQL: validate_credential JOIN.
-        # This is the only place in the authority that queries tenants directly.
-        # A JOIN is used instead of TenantRepository.get() because:
-        #   (a) credential status and tenant lifecycle state must be read
-        #       atomically in a single round-trip — two separate reads would
-        #       introduce a race window on the hot validation path, and
-        #   (b) it eliminates one DB connection acquisition per validation call.
-        # Any other direct tenant SQL in this module is a regression.
-        row = conn.execute(
-            text(
-                f"SELECT {_RECORD_SELECT_TC}, tc.secret_hash, t.lifecycle_state "
-                "FROM tenant_credentials tc "
-                "JOIN tenants t ON t.tenant_id = tc.tenant_id "
-                "WHERE tc.lookup_fingerprint = :fp "
-                "  AND tc.credential_type = :ctype"
-            ),
-            {"fp": fp, "ctype": credential_type},
-        ).fetchone()
+            # AUTHORIZED-DIRECT-TENANT-SQL: validate_credential JOIN.
+            # This is the only place in the authority that queries tenants directly.
+            # A JOIN is used instead of TenantRepository.get() because:
+            #   (a) credential status and tenant lifecycle state must be read
+            #       atomically in a single round-trip — two separate reads would
+            #       introduce a race window on the hot validation path, and
+            #   (b) it eliminates one DB connection acquisition per validation call.
+            # Any other direct tenant SQL in this module is a regression.
+            row = conn.execute(
+                text(
+                    f"SELECT {_RECORD_SELECT_TC}, tc.secret_hash, t.lifecycle_state "
+                    "FROM tenant_credentials tc "
+                    "JOIN tenants t ON t.tenant_id = tc.tenant_id "
+                    "WHERE tc.lookup_fingerprint = :fp "
+                    "  AND tc.credential_type = :ctype"
+                ),
+                {"fp": fp, "ctype": credential_type},
+            ).fetchone()
 
     # All checks happen outside the connection block (connection already closed).
     # Emit validation telemetry best-effort after each decision point.

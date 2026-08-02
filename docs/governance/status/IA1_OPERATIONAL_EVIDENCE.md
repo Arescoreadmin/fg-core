@@ -1,23 +1,25 @@
 # IA-1 Operational Evidence
 
-Status: G1-dev PASS (isolated) — G2-dev pending Auth0 decision
+Status: G1-dev PASS (2nd verification 2026-08-02, commit b0f9a22a) — G2-dev pending Auth0 dev tenant
 
 Gate sequence: G1-dev → G2-dev → G1-prod → G2-prod
-
-Prerequisite: PR #602 (fix/db-migration-credential-separation) — must merge before G2-dev or prod work
 
 Critical path:
 1. ~~Create Railway dev environment~~ ✓ DONE
 2. ~~Create restricted dev runtime role (fg_app)~~ ✓ DONE
 3. ~~Run G1-dev~~ ✓ PASS
 4. ~~Tighten dev isolation~~ ✓ DONE (2026-08-01)
-5. Merge PR #602
-6. Redeploy API-DEV from merged main
-7. Run G2-dev (blocked pending Auth0 decision — see below)
-8. Create restricted prod runtime role (fg_app)
-9. Rerun G1-prod
-10. Run G2-prod
-11. IA-1 operationally complete → IA-2 deployment unlocked
+5. ~~Merge PR #602 (credential separation)~~ ✓ MERGED (a3dc65b8)
+6. ~~Merge PR #604 (assert_migrations_applied CREATE fix)~~ ✓ MERGED (06ee0038)
+7. ~~Merge PR #605 (GRANT USAGE ON SCHEMA public to fg_app)~~ ✓ MERGED (cb053181)
+8. ~~Merge PR #606 (RLS tenant context in credential write paths)~~ ✓ MERGED (b0f9a22a)
+9. ~~Redeploy API-DEV from merged main — clean startup confirmed~~ ✓ DONE (2026-08-02)
+10. Create Auth0 dev tenant (frostgate-dev) — MANUAL BLOCKER
+11. Run G2-dev
+12. Create restricted prod runtime role (fg_app)
+13. Rerun G1-prod
+14. Run G2-prod
+15. IA-1 operationally complete → IA-2 deployment unlocked
 
 Dev isolation status (2026-08-01):
 - FG_JWT_SECRET, FG_ENCRYPTION_KEY, FG_KEY_PEPPER, FG_SIGNING_SECRET,
