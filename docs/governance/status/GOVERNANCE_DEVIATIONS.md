@@ -6,9 +6,11 @@ Known deviations from governance gates. Record when identified. Close in place w
 
 ## GD-2026-001
 
-**Status:** OPEN (Controlled)
+**Status:** CLOSED
 
 **Date Identified:** 2026-08-03
+
+**Closed:** 2026-08-03
 
 **Description:** IA-2 implementation was merged into main before IA-1 operational acceptance was completed.
 
@@ -27,22 +29,12 @@ Known deviations from governance gates. Record when identified. Close in place w
 
 **Closure Criteria:**
 1. IA-1 operational evidence completed and Final Acceptance block filled.
-2. G2-prod = PASS (disposable tenant `fg-ia1-prod-validation-20260801` validated).
+2. G2-prod = PASS (disposable tenant `fg-ia1-prod-validation-20260803` validated).
 3. EXECUTION_STATE.md updated to reflect IA-1 closure.
 
----
-
-<!-- When G2-prod passes, update Status to CLOSED, add Closed date, and add Evidence block. Do not delete this entry. -->
-
-<!--
-CLOSED TEMPLATE (fill when criteria met):
-
-**Status:** CLOSED
-
-**Closed:** 2026-08-XX
-
 **Evidence:**
-- `docs/governance/status/IA1_OPERATIONAL_EVIDENCE.md` — Final Acceptance block completed
-- G2-prod PASS recorded in EXECUTION_STATE.md
-- EXECUTION_STATE.md updated 2026-08-XX
--->
+- `docs/governance/status/IA1_OPERATIONAL_EVIDENCE.md` — Final Acceptance block completed 2026-08-03T20:30Z
+- G2-prod PASS: disposable tenant `fg-ia1-prod-validation-20260803`, Auth0 org `org_ZTxlvEm74W5wG9Q4`, `provisioning_state=active`, idempotency proven, audit trail verified
+- EXECUTION_STATE.md updated 2026-08-03
+
+---

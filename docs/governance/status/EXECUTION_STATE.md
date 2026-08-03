@@ -9,26 +9,25 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Branch:** `main`
 
-**Current Commit:** `007dd437`
+**Current Commit:** `4a2bb592`
 
-**Current PR:** None — G1-prod PASS; G2-prod next.
+**Current PR:** None — IA-1 COMPLETE; T4 next.
 
-**Overall Status:** YELLOW
+**Overall Status:** GREEN
 
-**Launch Confidence (%):** 73
+**Launch Confidence (%):** 79
 
-**Current Critical Path:** G2-prod (disposable tenant IA-1 proof) → close IA-1 → T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
+**Current Critical Path:** T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
 
-**Current Phase:** Stage 0 / Week 1 Day 4 — T1, T2 complete; T3 partial; G1-dev PASS; G1-prod PASS; G2-prod pending; T4 gated on IA-1 close.
+**Current Phase:** Stage 0 / Week 1 Day 4 — T1, T2 complete; T3 partial; IA-1 COMPLETE (G1-dev, G1-prod, G2-prod all PASS); T4 unlocked.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS. G1-prod PASS establishes L-level evidence for RLS/least-privilege architecture.
+**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS. IA-1 COMPLETE establishes L-level evidence for RLS/least-privilege architecture and identity provisioning.
 
-**Completed Since Last Update:** G1-prod executed and passed 2026-08-03. `fg_app` restricted role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION) created in production Postgres. `FG_DB_URL` updated to fg_app credential; `FG_DB_MIGRATION_URL` set to postgres superuser. Production API (deployment `82c9eead`) redeployed — `Application startup complete` confirmed. All 9 role-safety checks passed. Production now operates under least privilege; API can no longer bypass RLS. Defect recorded: `_grant_runtime_role_access()` ordering race required manual grant pre-application to unblock crash loop; to be fixed before next runtime-role promotion.
+**Completed Since Last Update:** G2-prod executed and passed 2026-08-03. Disposable tenant `fg-ia1-prod-validation-20260803` provisioned: Auth0 org `org_ZTxlvEm74W5wG9Q4` created, `provisioning_state=active`, ownership metadata verified (`frostgate_tenant_id` confirmed), idempotency proven (retry returned same binding, no new events), audit trail verified (security_audit_log ids 43 + 45). Auth0 M2M app "FrostGate Identity Authority" (`oyWWKp3DPebUVulQKYP9zRtfLoV74RFB`) created with correct scopes and Railway vars set. IA-1 Final Acceptance recorded. GD-2026-001 CLOSED.
 
 **Current Blockers:**
-- G2-prod PENDING: disposable tenant `fg-ia1-prod-validation-20260801` provisioning proof not yet executed.
-- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action.
-- T4 NOT STARTED: gated on IA-1 close (G2-prod). FG-LR-002 remains open.
+- T4 NOT STARTED: portal named-user proof (2.0d, closes FG-LR-002, required for L1/L2). Now unblocked.
+- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action (parallel track, not on critical path).
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
 - FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
@@ -36,19 +35,19 @@ Update current status fields in place. Preserve historical entries under `Execut
 - Startup ordering defect: `_grant_runtime_role_access()` race condition not yet fixed.
 
 **Top Three Priorities:**
-1. G2-prod: execute disposable tenant `fg-ia1-prod-validation-20260801` provisioning proof — verify Auth0 org, binding row, ownership metadata, audit chain, idempotent retry. Close IA-1. Fill Final Acceptance block. Close GD-2026-001.
+1. Begin T4 portal named-user proof (2.0d, closes FG-LR-002, required for L1/L2).
 2. Auth0 dev tenant (frostgate-dev): browser action → API-DEV vars → redeploy → G2-dev gate (parallel track).
-3. Begin T4 portal named-user proof immediately after IA-1 closes (2.0d, closes FG-LR-002, required for L1).
+3. T5 infra headroom (Railway Pro decision, backup automation validation).
 
-**Next Required PR:** T4 portal named-user proof. Branch from main after IA-1 G2-prod passes.
+**Next Required PR:** T4 portal named-user proof. Branch from main.
 
-**Estimated Engineering Days Remaining:** ~13.5 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 work ~2.5d consumed).
+**Estimated Engineering Days Remaining:** ~12.5 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 work ~3.5d consumed).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
 
-**Roadmap Drift:** PRs #601-607 (IA-1 provisioning work) not in the frozen 30-day launch plan — required unplanned engineering time.
+**Roadmap Drift:** PRs #601-608 (IA-1 provisioning work + audit RLS fix) not in the frozen 30-day launch plan — required unplanned engineering time. IA-1 now operationally complete; no further drift expected on this track.
 
-**Known Governance Deviation:** See `GOVERNANCE_DEVIATIONS.md` GD-2026-001 (OPEN/Controlled) — IA-2 merged before IA-1 operational acceptance. Closure criteria: G1-prod PASS + G2-prod PASS + IA-1 Final Acceptance recorded.
+**Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
 
 **T1 Result:**
 
@@ -90,6 +89,28 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-03 — G2-prod PASS · IA-1 COMPLETE · GD-2026-001 CLOSED
+
+**Review Type:** Gate Execution
+
+**Summary:** G2-prod executed and passed. Disposable tenant `fg-ia1-prod-validation-20260803` provisioned in production. Auth0 org `org_ZTxlvEm74W5wG9Q4` created with name `fg-fg-ia1-prod-validation-20260803-5618261f`. `provisioning_state=active` confirmed in DB. Ownership metadata verified in Auth0 (`frostgate_tenant_id=fg-ia1-prod-validation-20260803`, `frostgate_idempotency_key=ia1:fg-ia1-prod-validation-20260803:auth0`). Idempotency proven: retry returned same `binding_id` and `provider_org_id`; event count unchanged; Auth0 org count = 1. Audit trail verified: `security_audit_log` id=43 (`tenant_created`) and id=45 (`tenant_org_provisioned`). IA-1 Final Acceptance block filled. GD-2026-001 closed.
+
+**Major Changes:**
+- Auth0 M2M application "FrostGate Identity Authority" (`oyWWKp3DPebUVulQKYP9zRtfLoV74RFB`) created with scopes `read:organizations`, `create:organizations`, `update:organizations`.
+- `AUTH0_MANAGEMENT_DOMAIN`, `AUTH0_MANAGEMENT_CLIENT_ID`, `AUTH0_MANAGEMENT_CLIENT_SECRET`, `AUTH0_MANAGEMENT_AUDIENCE` set in Railway production → api → Variables.
+- Production API redeployed with working Auth0 credentials.
+- `docs/governance/status/IA1_OPERATIONAL_EVIDENCE.md`: G2-prod section filled (PASS), Final Acceptance block completed.
+- `docs/governance/status/GOVERNANCE_DEVIATIONS.md`: GD-2026-001 OPEN → CLOSED.
+- `docs/governance/status/EXECUTION_STATE.md`: status YELLOW → GREEN, confidence 73% → 79%.
+
+**Decisions Made:** Disposable tenant `fg-ia1-prod-validation-20260803` retained in production DB (no deletion required — row is clean, has valid binding, and documents the gate evidence). Orphan tenant `fg-ia1-prod-validation-20260801` (no binding, no audit rows) can be deleted after T4 if desired.
+
+**Updated Launch Confidence:** 79%
+
+**Next:** T4 portal named-user proof (2.0d, closes FG-LR-002, required for L1/L2). Branch from main.
+
+---
 
 ### 2026-08-03 — G1-prod PASS
 
