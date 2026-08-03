@@ -1,6 +1,6 @@
 # IA-1 Operational Evidence
 
-Status: G1-dev PASS (2nd verification 2026-08-02, commit b0f9a22a) — G2-dev pending Auth0 dev tenant
+Status: G1-dev PASS · G1-prod PASS (2026-08-03) — G2-dev pending Auth0 dev tenant · G2-prod ready for execution
 
 Gate sequence: G1-dev → G2-dev → G1-prod → G2-prod
 
@@ -14,11 +14,11 @@ Critical path:
 7. ~~Merge PR #605 (GRANT USAGE ON SCHEMA public to fg_app)~~ ✓ MERGED (cb053181)
 8. ~~Merge PR #606 (RLS tenant context in credential write paths)~~ ✓ MERGED (b0f9a22a)
 9. ~~Redeploy API-DEV from merged main — clean startup confirmed~~ ✓ DONE (2026-08-02)
-10. Create Auth0 dev tenant (frostgate-dev) — MANUAL BLOCKER
-11. Run G2-dev
-12. Create restricted prod runtime role (fg_app)
-13. Rerun G1-prod
-14. Run G2-prod
+10. Create Auth0 dev tenant (frostgate-dev) — MANUAL BLOCKER (G2-dev parallel track)
+11. ~~Create restricted prod runtime role (fg_app)~~ ✓ DONE (2026-08-03)
+12. ~~Run G1-prod~~ ✓ PASS (2026-08-03)
+13. Run G2-prod
+14. Run G2-dev (parallel — Auth0 dev tenant required)
 15. IA-1 operationally complete → IA-2 deployment unlocked
 
 Dev isolation status (2026-08-01):
@@ -96,42 +96,48 @@ Disposable tenant: `fg-ia1-dev-validation-20260801`
 
 ---
 
-## G1-prod — Migration 0169, Production Environment
+## G1-prod — Migration 0169 + Runtime Role Safety, Production Environment
 
-**Status: FAIL (role safety)**
-
-Migration was applied automatically on PR #601 redeploy (FG_DB_MIGRATIONS_REQUIRED=1
-was already set). No additional deploy required for migration conditions.
+**Status: PASS**
 
 | Field | Value |
 |---|---|
 | Environment | prod |
-| Date/time (UTC) | 2026-08-01 |
+| Date/time (UTC) | 2026-08-03 |
 | Operator | jcosat |
-| Railway deploy/run ID | 0cba6aa2-b9ff-4d00-b50b-f0f44d520ebb (current api deployment) |
-| Migration service exit status | 0 (applied on PR #601 redeploy) |
-| `SELECT version FROM schema_migrations WHERE version = '0169'` | **0169 — PASS** |
+| Railway deployment ID | 82c9eead-4506-4a1a-8bb5-ef3e541bd32d |
+| Commit | 007dd437 |
+| `SELECT MAX(version) FROM schema_migrations` | **0170 — PASS** |
 | `SELECT to_regclass('public.tenant_identity_bindings')` | **tenant_identity_bindings — PASS** |
 | `SELECT to_regclass('public.tenant_identity_binding_events')` | **tenant_identity_binding_events — PASS** |
-| API runtime role (`current_user`) | postgres |
-| `rolsuper` | **true — FAIL** |
-| `rolbypassrls` | **true — FAIL** |
-| `rolcreatedb` | true |
-| `rolcreaterole` | true |
+| Application startup | **`INFO: Application startup complete.` — PASS** |
+| API runtime role (`current_user` via fg_app connection) | **fg_app — PASS** |
+| `rolsuper` | **false — PASS** |
+| `rolbypassrls` | **false — PASS** |
+| `rolcreatedb` | **false — PASS** |
+| `rolcreaterole` | **false — PASS** |
+| `rolreplication` | **false — PASS** |
+| `SELECT COUNT(*) FROM schema_migrations` via fg_app | **PASS** |
+| `SELECT COUNT(*) FROM tenants` via fg_app | **6 rows — PASS** |
+| `SELECT COUNT(*) FROM tenant_credentials` via fg_app | **PASS** |
+| Permission errors in logs post-startup | **None — PASS** |
+| `FG_DB_URL` user | **fg_app** |
+| `FG_DB_MIGRATION_URL` user | **postgres** |
+| `FG_DB_URL` host | **postgres.railway.internal** |
+| `FG_DB_MIGRATION_URL` host | **postgres.railway.internal** |
 
-**Migration SQL conditions: PASS**
-**Runtime role safety: FAIL**
+**G1-prod result: PASS**
 
-**G1-prod overall result: FAIL**
+**Actions taken (2026-08-03):**
+1. `CREATE ROLE fg_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN` in prod Postgres
+2. `GRANT CONNECT ON DATABASE railway TO fg_app`
+3. `GRANT USAGE ON SCHEMA public TO fg_app`
+4. Pre-applied `_grant_runtime_role_access()` grants manually (see defect note below)
+5. `FG_DB_URL` updated to `postgresql://fg_app@postgres.railway.internal:5432/railway`
+6. `FG_DB_MIGRATION_URL` set to `postgresql://postgres@postgres.railway.internal:5432/railway`
+7. Production API redeployed — `Application startup complete` confirmed
 
-Root cause: The API runtime connects as the Railway-managed `postgres` superuser.
-`rolbypassrls=true` means the API can bypass every RLS policy on every tenant table.
-This is a pre-existing production architecture gap now made explicit by IA-1 evidence.
-It is not an IA-1 code defect, but it is a real tenant-isolation control failure.
-
-Required fix: Create `fg_app` restricted role (NOSUPERUSER, NOBYPASSRLS, NOCREATEDB,
-NOCREATEROLE). Update API service FG_DB_URL to use fg_app. Leave migrator on the
-elevated postgres credential. Prove in dev first, then promote to prod.
+**Defect recorded:** `_grant_runtime_role_access()` did not complete before `auth_store` validation during the first startup attempt. Runtime credential check reached `api_keys` before grants were available, producing `auth_store_unreachable:OperationalError`. Manual pre-application of the 7 grant statements unblocked the crash loop. Classified as a startup ordering / initialization race (severity: medium). Acceptance criterion: no service capable of issuing queries may initialize before `_grant_runtime_role_access()` completes. To be tracked and fixed before next production deployment of the runtime role pattern.
 
 ---
 
@@ -160,7 +166,7 @@ Disposable tenant: `fg-ia1-prod-validation-20260801`
 | Retry: duplicate-org count in Auth0 | |
 | Console UI binding state visible | (skip if not rendered) |
 
-**G2-prod result: BLOCKED — G1-prod not complete**
+**G2-prod result: PENDING — execution required**
 
 ---
 

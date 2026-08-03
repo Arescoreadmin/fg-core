@@ -9,35 +9,36 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Branch:** `main`
 
-**Current Commit:** `91bff19b`
+**Current Commit:** `007dd437`
 
-**Current PR:** None — PRs #601-607 merged; IA-1 in final prod closure sequence.
+**Current PR:** None — G1-prod PASS; G2-prod next.
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 68
+**Launch Confidence (%):** 73
 
-**Current Critical Path:** G1-prod (fg_app role in prod Postgres) → redeploy prod API → G2-prod (IA-1 close) → T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
+**Current Critical Path:** G2-prod (disposable tenant IA-1 proof) → close IA-1 → T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
 
-**Current Phase:** Stage 0 / Week 1 Days 3-4 — T1, T2 complete; T3 partial; IA-1 feature shipped (PRs #601-607); IA-1 prod close blocked on fg_app role creation; T4 not started, gated on IA-1 close.
+**Current Phase:** Stage 0 / Week 1 Day 4 — T1, T2 complete; T3 partial; G1-dev PASS; G1-prod PASS; G2-prod pending; T4 gated on IA-1 close.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
+**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS. G1-prod PASS establishes L-level evidence for RLS/least-privilege architecture.
 
-**Completed Since Last Update:** PRs #601-607 merged (2026-07-31 to 2026-08-02) — IA-1 Client Org Provisioning feature + 5 prod-critical fixes: migration 0169 (tenant_identity_bindings), Auth0ManagementProvider, provision_tenant_organization() state machine, credential-separation DB roles (migration URL vs runtime URL), assert_migrations_applied fix, schema USAGE grant to fg_app, RLS context fix in 8 credential write-path functions, migration 0170 SECURITY DEFINER fingerprint lookup. Commit 3d9a742d: platform_service_principal + internal_platform_authority set_config RLS fix. Commit 91bff19b: api/main.py startup exception logging (4 paths wrapped with log.exception before raise to survive Railway log rate limiter). Dev environment cleaned: duplicate API-DEV-48012471 service (wrong FG_ENV) deleted. Primary API-DEV verified healthy: FG_ENV=dev, fg_app role flags correct, /health HTTP 200.
+**Completed Since Last Update:** G1-prod executed and passed 2026-08-03. `fg_app` restricted role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION) created in production Postgres. `FG_DB_URL` updated to fg_app credential; `FG_DB_MIGRATION_URL` set to postgres superuser. Production API (deployment `82c9eead`) redeployed — `Application startup complete` confirmed. All 9 role-safety checks passed. Production now operates under least privilege; API can no longer bypass RLS. Defect recorded: `_grant_runtime_role_access()` ordering race required manual grant pre-application to unblock crash loop; to be fixed before next runtime-role promotion.
 
 **Current Blockers:**
-- G1-prod FAIL: fg_app restricted role not yet created in production Postgres. Blocks prod API redeploy and G2-prod.
-- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action required (Console app, Portal app, Identity Authority M2M app, Organizations enabled).
-- T4 NOT STARTED: gated on IA-1 prod close (G2-prod). FG-LR-002 remains open.
+- G2-prod PENDING: disposable tenant `fg-ia1-prod-validation-20260801` provisioning proof not yet executed.
+- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action.
+- T4 NOT STARTED: gated on IA-1 close (G2-prod). FG-LR-002 remains open.
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
 - FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
 - L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
+- Startup ordering defect: `_grant_runtime_role_access()` race condition not yet fixed.
 
 **Top Three Priorities:**
-1. G1-prod: create fg_app restricted role (NOSUPERUSER NOBYPASSRLS) in production Postgres; set FG_DB_URL=fg_app credential, FG_DB_MIGRATION_URL=postgres superuser; redeploy prod API; run G1-prod 7-check gate. Then G2-prod → close IA-1.
-2. Auth0 dev tenant (frostgate-dev): browser action → set API-DEV vars (FG_OIDC_ISSUER, M2M client ID+secret) → redeploy → G2-dev gate.
-3. Begin T4 portal named-user proof immediately after IA-1 closes in prod (2.0d, closes FG-LR-002, required for L1).
+1. G2-prod: execute disposable tenant `fg-ia1-prod-validation-20260801` provisioning proof — verify Auth0 org, binding row, ownership metadata, audit chain, idempotent retry. Close IA-1. Fill Final Acceptance block. Close GD-2026-001.
+2. Auth0 dev tenant (frostgate-dev): browser action → API-DEV vars → redeploy → G2-dev gate (parallel track).
+3. Begin T4 portal named-user proof immediately after IA-1 closes (2.0d, closes FG-LR-002, required for L1).
 
 **Next Required PR:** T4 portal named-user proof. Branch from main after IA-1 G2-prod passes.
 
@@ -89,6 +90,27 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-03 — G1-prod PASS
+
+**Review Type:** Gate Execution
+
+**Summary:** G1-prod executed and passed. `fg_app` restricted role created in production Postgres (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION). `FG_DB_URL` → `fg_app@postgres.railway.internal`; `FG_DB_MIGRATION_URL` → `postgres@postgres.railway.internal`. Production API redeployed (deployment `82c9eead`, commit `007dd437`). `Application startup complete` confirmed. All role-safety checks verified: rolsuper=false, rolbypassrls=false, rolcreatedb=false, rolcreaterole=false. Table access (tenants, tenant_credentials, schema_migrations) confirmed via fg_app. No permission errors in logs post-startup. Production database now operates under least privilege — the API can no longer bypass RLS policies.
+
+**Major Changes:**
+- Production Postgres: `fg_app` role created with full restriction flags.
+- Railway production `api` service: `FG_DB_URL` updated to fg_app credential; `FG_DB_MIGRATION_URL` added with postgres superuser credential. Both use `postgres.railway.internal` (Railway internal hostname).
+- `docs/governance/status/IA1_OPERATIONAL_EVIDENCE.md`: G1-prod section updated FAIL → PASS with full evidence table; G2-prod updated BLOCKED → PENDING; critical path updated.
+
+**Defect discovered:** `_grant_runtime_role_access()` did not complete before `auth_store` validation on the first startup attempt. Startup reached credential check before table grants were available, causing `auth_store_unreachable:OperationalError`. Root cause: FastAPI's `merged_lifespan` may interleave router startup contexts, allowing the auth store check to execute before `init_db()` completes. Manual pre-application of the 7 grant statements (`GRANT SELECT/INSERT/UPDATE/DELETE ON ALL TABLES`, sequences, functions, `ALTER DEFAULT PRIVILEGES`) unblocked the crash loop. Classified: severity medium, category reliability, component IA startup. Acceptance criterion: no service may issue queries before `_grant_runtime_role_access()` returns successfully.
+
+**Decisions Made:** Manual grant pre-application accepted as a one-time recovery action for G1-prod. The underlying ordering defect is tracked and must be fixed before the next runtime-role promotion (e.g., a new environment). Not patching production manually — the manual run duplicated what `_grant_runtime_role_access()` would have applied; no additional permissions granted beyond what the code intends.
+
+**Updated Launch Confidence:** 73%
+
+**Next:** G2-prod — disposable tenant `fg-ia1-prod-validation-20260801` provisioning proof → close IA-1 → begin T4.
+
+---
 
 ### 2026-08-03 — Daily Execution Review
 
