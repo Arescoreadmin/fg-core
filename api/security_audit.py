@@ -221,14 +221,29 @@ class SecurityAuditor:
         try:
             from api.db import get_engine
             from api.db_models import SecurityAuditLog
+            from sqlalchemy import text
             from sqlalchemy.orm import Session
+
+            if not event.tenant_id:
+                if _is_prod_like():
+                    raise AuditPersistenceError(
+                        "FG-AUDIT-002",
+                        "audit persistence requires tenant_id; platform-level events must supply tenant context",
+                    )
+                log.debug("audit_persist_skipped: no tenant_id, non-prod")
+                return
 
             engine = get_engine()
             with Session(engine) as session:
-                tenant_id = event.tenant_id or "global"
+                if engine.dialect.name == "postgresql":
+                    session.execute(
+                        text("SELECT set_config('app.tenant_id', :tid, true)"),
+                        {"tid": event.tenant_id},
+                    )
+                chain_id = event.tenant_id  # guarded above; always non-None here
                 prev = (
                     session.query(SecurityAuditLog)
-                    .filter(SecurityAuditLog.chain_id == tenant_id)
+                    .filter(SecurityAuditLog.chain_id == chain_id)
                     .order_by(SecurityAuditLog.id.desc())
                     .limit(1)
                     .one_or_none()
@@ -274,12 +289,14 @@ class SecurityAuditor:
                     reason=event.reason,
                     details_json=event.details if event.details else None,
                     created_at=ts,
-                    chain_id=tenant_id,
+                    chain_id=chain_id,
                     prev_hash=prev_hash,
                     entry_hash=entry_hash,
                 )
                 session.add(record)
                 session.commit()
+        except AuditPersistenceError:
+            raise
         except Exception as e:
             if _is_prod_like():
                 raise AuditPersistenceError(
@@ -650,6 +667,12 @@ def audit_admin_action(
         raise AuditPersistenceError(
             "FG-AUDIT-ADMIN-001",
             f"missing required admin audit fields: {','.join(missing)}",
+        )
+
+    if not tenant_id:
+        raise AuditPersistenceError(
+            "FG-AUDIT-ADMIN-002",
+            "audit_admin_action requires tenant_id; all admin actions must be tenant-scoped",
         )
 
     get_auditor().log_admin_action(

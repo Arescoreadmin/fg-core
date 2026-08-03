@@ -46,6 +46,8 @@ def test_audit_persistence_fails_closed_in_prod(monkeypatch):
     import pytest
 
     with pytest.raises(Exception) as exc:
-        auditor.log_event(AuditEvent(event_type=EventType.STARTUP))
+        auditor.log_event(
+            AuditEvent(event_type=EventType.STARTUP, tenant_id="tenant-x")
+        )
 
     assert "FG-AUDIT-001" in str(exc.value)

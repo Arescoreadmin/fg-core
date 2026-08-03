@@ -83,6 +83,7 @@ from api.keys import (
     RevokeKeyResponse,
 )
 from api.security_audit import (
+    AuditPersistenceError,
     audit_admin_action,
     audit_key_created,
     audit_key_revoked,
@@ -1411,16 +1412,39 @@ async def create_tenant(
         except Exception:
             pass  # JSON write is best-effort during transition
 
-        audit_admin_action(
-            action="tenant_created",
-            tenant_id=req.tenant_id,
-            request=request,
-            details={
-                "name": pg_record.display_name,
-                "actor_id": _actor_id,
-                "scope": _scope_values,
-            },
-        )
+        try:
+            audit_admin_action(
+                action="tenant_created",
+                tenant_id=req.tenant_id,
+                request=request,
+                details={
+                    "name": pg_record.display_name,
+                    "actor_id": _actor_id,
+                    "scope": _scope_values,
+                },
+            )
+        except AuditPersistenceError:
+            # Compensate: delete the orphan tenant row so no partial state persists.
+            try:
+                from sqlalchemy import text as _text
+
+                with get_engine().begin() as _conn:
+                    _conn.execute(
+                        _text("DELETE FROM tenants WHERE tenant_id = :tid"),
+                        {"tid": req.tenant_id},
+                    )
+            except Exception:
+                log.error(
+                    "tenant.orphan_compensation_failed",
+                    extra={"tenant_id": req.tenant_id},
+                )
+            raise HTTPException(
+                status_code=500,
+                detail=api_error(
+                    "AUDIT_PERSISTENCE_FAILED",
+                    "tenant created but audit write failed; tenant rolled back",
+                ),
+            )
         log.info(
             "tenant.created",
             extra={

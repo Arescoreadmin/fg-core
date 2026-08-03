@@ -6360,3 +6360,40 @@ Additional non-critical-path changes: `services/governance_optimization/__init__
 **Non-changes (confirmed):** No auth middleware, no security gate logic, no OPA policies, no migrations, no API routes, no secret-handling code, no cryptographic material modified.
 
 **SOC review outcome:** approved. `.github/workflows/ci.yml` is listed under the SOC critical-file watchlist because CI changes can in principle weaken security gates. This change does the opposite — it adds coverage measurement and portal test execution without removing or weakening any existing required gate. The `continue-on-error: true` on the coverage job is a deliberate design choice (advisory baseline measurement, not enforcement), not a bypass.
+
+---
+
+## fix/audit-rls-tenant-context — PR #608 audit RLS tenant context (2026-08-03)
+
+**Critical files changed:** `api/security_audit.py`
+
+**Change scope:** Defect fix — `_persist_event` must set `app.tenant_id` Postgres session variable before any INSERT into `security_audit_log`. Under the `fg_app` restricted runtime role (NOBYPASSRLS), the RLS policy `security_audit_log_tenant_isolation` blocks every INSERT that lacks a matching `app.tenant_id` context. This fix was required to unblock G2-prod gate execution.
+
+**Changes to `api/security_audit.py`:**
+
+1. **`_persist_event` — RLS context set before INSERT:** Added `SELECT set_config('app.tenant_id', :tid, true)` call (postgresql-dialect-only, transaction-local) before the `session.add(record)` + `session.commit()`. This satisfies the RLS policy `security_audit_log_tenant_isolation`.
+
+2. **`_persist_event` — fail-closed guard for `tenant_id=None`:** Raises `AuditPersistenceError("FG-AUDIT-002", ...)` in prod-like environments when `tenant_id` is None. In non-prod, logs debug and returns. Previously the code fell through to `chain_id = event.tenant_id or "global"` — now it is fail-closed.
+
+3. **`audit_admin_action` — fail-closed guard for `tenant_id=None`:** Raises `AuditPersistenceError("FG-AUDIT-ADMIN-002", ...)` when caller passes no tenant_id.
+
+4. **`except AuditPersistenceError: raise`:** Added before catch-all `except Exception` to prevent FG-AUDIT-002/FG-AUDIT-ADMIN-002 from being re-wrapped as FG-AUDIT-001.
+
+**Changes to `api/admin.py`:**
+
+5. **`create_tenant` — compensation delete on audit failure:** On `AuditPersistenceError`, performs `DELETE FROM tenants WHERE tenant_id = :tid` to remove the orphaned row committed by `repo.create()`, then raises `HTTPException(500, AUDIT_PERSISTENCE_FAILED)`.
+
+**New file `tests/postgres/test_audit_rls_tenant_context.py`:**
+
+Tests A–E: INSERT with correct context succeeds; set_config called before DML; None tenant_id raises FG-AUDIT-002 in prod; cross-tenant INSERT blocked by RLS; audit failure causes create_tenant 500 with no orphan row.
+
+**Security invariants confirmed:**
+
+- RLS policy `security_audit_log_tenant_isolation` is not modified. This fix makes application code conform to the existing policy.
+- No bypass of RLS — `set_config` uses the exact `tenant_id` of the event; cross-tenant writes remain blocked.
+- `fg_app` role remains NOBYPASSRLS. The fix operates within the access model, not around it.
+- Fail-closed guard (FG-AUDIT-002) tightens security surface: `None` tenant_id now raises unconditionally in prod.
+- Compensation logic in `create_tenant` eliminates orphaned-tenant window on audit failure.
+- No auth middleware, no OPA policies, no migrations, no cryptographic material, no CI workflow files modified.
+
+**SOC review outcome:** approved. `api/security_audit.py` is listed under the SOC critical-file watchlist as a security event persistence path. This change tightens rather than relaxes security controls: it enforces RLS conformance, adds fail-closed guards for missing tenant context, and eliminates an orphaned-state window. The tamper-evidence chain invariant is preserved.
