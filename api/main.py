@@ -333,7 +333,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if ai_external_provider_enabled():
             raise RuntimeError("AI_EXTERNAL_PROVIDER_NOT_ALLOWED")
 
-        assert_prod_invariants()
+        try:
+            assert_prod_invariants()
+        except Exception:
+            log.exception("STARTUP_FATAL assert_prod_invariants")
+            raise
         is_production = False
         try:
             is_production = is_production_env()
@@ -450,12 +454,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
-        from services.embeddings.startup import (
-            is_retrieval_enabled,
-            startup_retrieval_service,
-        )
-
         try:
+            from services.embeddings.startup import (
+                is_retrieval_enabled,
+                startup_retrieval_service,
+            )
+
             if is_retrieval_enabled():
                 startup_retrieval_service(get_engine())
                 app.state.retrieval_service_ok = True
@@ -467,13 +471,24 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
-        from api.observability.tracing import setup_tracing
+        try:
+            from api.observability.tracing import setup_tracing
 
-        setup_tracing(service_name=app.state.service)
+            setup_tracing(service_name=app.state.service)
+        except Exception:
+            log.exception("STARTUP_FATAL setup_tracing")
+            if is_production or is_strict_env_required():
+                raise
 
-        self_heal_watchdog = SelfHealWatchdog()
-        self_heal_watchdog.start()
-        app.state.self_heal_watchdog = self_heal_watchdog
+        try:
+            self_heal_watchdog = SelfHealWatchdog()
+            self_heal_watchdog.start()
+            app.state.self_heal_watchdog = self_heal_watchdog
+        except Exception:
+            log.exception("STARTUP_FATAL SelfHealWatchdog")
+            app.state.self_heal_watchdog = None
+            if is_production or is_strict_env_required():
+                raise
 
         shutdown_factory = getattr(spine_modules, "get_shutdown_manager", None)
         if callable(shutdown_factory):
