@@ -1,6 +1,6 @@
 # IA-1 Operational Evidence
 
-Status: G1-dev PASS · G1-prod PASS (2026-08-03) — G2-dev pending Auth0 dev tenant · G2-prod ready for execution
+Status: G1-dev PASS · G1-prod PASS (2026-08-03) — G2-prod BLOCKED (AUTH0_MANAGEMENT_* not in prod Railway) · G2-dev BLOCKED (Auth0 dev tenant)
 
 Gate sequence: G1-dev → G2-dev → G1-prod → G2-prod
 
@@ -14,12 +14,14 @@ Critical path:
 7. ~~Merge PR #605 (GRANT USAGE ON SCHEMA public to fg_app)~~ ✓ MERGED (cb053181)
 8. ~~Merge PR #606 (RLS tenant context in credential write paths)~~ ✓ MERGED (b0f9a22a)
 9. ~~Redeploy API-DEV from merged main — clean startup confirmed~~ ✓ DONE (2026-08-02)
-10. Create Auth0 dev tenant (frostgate-dev) — MANUAL BLOCKER (G2-dev parallel track)
-11. ~~Create restricted prod runtime role (fg_app)~~ ✓ DONE (2026-08-03)
-12. ~~Run G1-prod~~ ✓ PASS (2026-08-03)
-13. Run G2-prod
-14. Run G2-dev (parallel — Auth0 dev tenant required)
-15. IA-1 operationally complete → IA-2 deployment unlocked
+10. ~~Merge PR #608 (audit RLS tenant context + brute-force tenant propagation)~~ ✓ MERGED (901c1c51)
+11. Create Auth0 dev tenant (frostgate-dev) — MANUAL BLOCKER (G2-dev parallel track)
+12. ~~Create restricted prod runtime role (fg_app)~~ ✓ DONE (2026-08-03)
+13. ~~Run G1-prod~~ ✓ PASS (2026-08-03)
+14. Rotate Auth0 M2M client secret → set AUTH0_MANAGEMENT_* in Railway prod → redeploy — MANUAL BLOCKER (G2-prod)
+15. Run G2-prod
+16. Run G2-dev (parallel — Auth0 dev tenant required)
+17. IA-1 operationally complete → IA-2 deployment unlocked
 
 Dev isolation status (2026-08-01):
 - FG_JWT_SECRET, FG_ENCRYPTION_KEY, FG_KEY_PEPPER, FG_SIGNING_SECRET,
@@ -143,9 +145,24 @@ Disposable tenant: `fg-ia1-dev-validation-20260801`
 
 ## G2-prod — E2E Proof, Production Environment
 
-**Status: BLOCKED — G1-prod not complete**
+**Status: BLOCKED — AUTH0_MANAGEMENT_* env vars not set in production Railway**
 
-Disposable tenant: `fg-ia1-prod-validation-20260801`
+Blocker (2026-08-03): `AUTH0_MANAGEMENT_DOMAIN`, `AUTH0_MANAGEMENT_CLIENT_ID`,
+`AUTH0_MANAGEMENT_CLIENT_SECRET`, `AUTH0_MANAGEMENT_AUDIENCE` are absent from the
+production Railway environment. The implementation is correct (PR #608 verified);
+this is a missing production prerequisite, not an implementation defect.
+
+Pre-execution actions required:
+1. Rotate M2M client secret in Auth0 production tenant (any prior secret treated as exposed)
+2. Set all four `AUTH0_MANAGEMENT_*` variables in Railway production → api → Variables
+3. Redeploy production API
+4. Verify preflight: all four vars present, /health 200, no Auth0 config error in logs, fg_app role unchanged
+
+Disposable tenant: `fg-ia1-prod-validation-20260803`
+
+Note: `fg-ia1-prod-validation-20260803` was created 2026-08-03T17:52:38Z during the
+blocked attempt. No identity binding was created. No Auth0 org was created. The tenant
+row is valid and may be reused for the gate run.
 
 | Field | Value |
 |---|---|
@@ -153,7 +170,8 @@ Disposable tenant: `fg-ia1-prod-validation-20260801`
 | Date/time (UTC) | |
 | Operator | |
 | Tenant ID | |
-| Request ID | |
+| Request ID (tenant creation) | |
+| Request ID (identity-binding) | |
 | `provisioning_state` | |
 | `provider_org_id` | |
 | `provider_org_name` | |
@@ -166,7 +184,7 @@ Disposable tenant: `fg-ia1-prod-validation-20260801`
 | Retry: duplicate-org count in Auth0 | |
 | Console UI binding state visible | (skip if not rendered) |
 
-**G2-prod result: PENDING — execution required**
+**G2-prod result: PENDING — Auth0 M2M configuration required before execution**
 
 ---
 
