@@ -29848,6 +29848,21 @@
       },
       "PortalIssueInvitationResponse": {
         "properties": {
+          "delivery_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Error Code"
+          },
+          "delivery_state": {
+            "title": "Delivery State",
+            "type": "string"
+          },
           "email": {
             "title": "Email",
             "type": "string"
@@ -29875,18 +29890,30 @@
             "title": "Portal Role",
             "type": "string"
           },
-          "token": {
-            "title": "Token",
-            "type": "string"
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           }
         },
         "required": [
           "invitation_id",
-          "token",
-          "expires_at",
           "email",
           "portal_role",
-          "engagement_id"
+          "engagement_id",
+          "expires_at",
+          "delivery_state"
         ],
         "title": "PortalIssueInvitationResponse",
         "type": "object"
@@ -29915,6 +29942,82 @@
           "engagement_ids"
         ],
         "title": "PortalMeResponse",
+        "type": "object"
+      },
+      "PortalNamedUserMeResponse": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "engagement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Id"
+          },
+          "membership_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Id"
+          },
+          "portal_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portal Role"
+          },
+          "portal_user_id": {
+            "title": "Portal User Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portal_user_id",
+          "tenant_id",
+          "email",
+          "display_name",
+          "portal_role",
+          "engagement_id",
+          "membership_id",
+          "session_id"
+        ],
+        "title": "PortalNamedUserMeResponse",
         "type": "object"
       },
       "PortalRiskDetailResponse": {
@@ -107831,7 +107934,7 @@
     },
     "/portal/invitations": {
       "post": {
-        "description": "Issue a named-user invitation token.\n\nRequires governance:write scope (admin/operator action).\nReturns the raw pni1. token \u2014 caller must deliver it to the invitee.\nToken is stored as HMAC-SHA256 fingerprint only; the raw value is not\nrecoverable after this response.",
+        "description": "Issue a named-user portal invitation and send it via email.\n\nIdempotent: if idempotency_key matches an existing invitation, returns the\nexisting record (no new invitation, no new email).\nDelivery failure does not roll back the invitation \u2014 the invitation remains\nvalid and the delivery_state is persisted for operator visibility.",
         "operationId": "portal_issue_invitation_portal_invitations_post",
         "parameters": [
           {
@@ -108098,6 +108201,28 @@
           }
         },
         "summary": "Portal Named User Enroll",
+        "tags": [
+          "portal"
+        ]
+      }
+    },
+    "/portal/named-users/me": {
+      "get": {
+        "description": "Return the current named-user's identity from their pnu1. session token.\n\nIdentity is resolved exclusively from the validated pnu1. session \u2014 no\ncaller-supplied tenant or user override is accepted.\n\nThe session token is read from X-FG-Portal-Session. Tenant is resolved\nserver-side via lookup_portal_session_by_fingerprint() (SECURITY DEFINER,\nmigration 0171) so no X-Tenant-Id header is trusted.\n\nCache-Control: no-store is set on the response.",
+        "operationId": "portal_named_user_me_portal_named_users_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalNamedUserMeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Portal Named User Me",
         "tags": [
           "portal"
         ]

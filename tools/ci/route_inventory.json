@@ -17017,6 +17017,20 @@
     },
     {
       "dependency_categories": [
+        "db"
+      ],
+      "file": "api/portal.py",
+      "method": "GET",
+      "path": "/portal/named-users/me",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "tenant"
       ],
@@ -20672,7 +20686,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-08-01T01:17:14.749591+00:00",
+  "generated_at": "2026-08-03T21:07:49.340339+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

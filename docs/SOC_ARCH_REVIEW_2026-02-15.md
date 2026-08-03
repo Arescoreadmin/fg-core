@@ -1,3 +1,28 @@
+## 2026-08-03 — T4: Portal Named-User Invitation Email Delivery + `/portal/named-users/me`
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH (route inventory, plane registry, topology hash, and contract routes changed; new portal endpoint added; schema migration with SECURITY DEFINER function)
+
+**Scope:** T4 adds end-to-end named-user portal functionality: (1) delivery tracking columns on `portal_user_invitations` (migration 0171, SCHEMA CHANGE); (2) `lookup_portal_session_by_fingerprint()` SECURITY DEFINER function for tenant-context-free session lookup (same pattern as migration 0165); (3) `api/notifications/email.py` Resend email client; (4) email delivery wired into `POST /portal/invitations` (delivery_state persisted post-commit); (5) `GET /portal/named-users/me` new endpoint.
+
+**Security posture:** The new `GET /portal/named-users/me` endpoint resolves tenant from the pnu1. token via a read-only SECURITY DEFINER function — no caller-supplied tenant header is trusted. Full `validate_session()` is called after tenant resolution to apply RLS, version checks, and audit. `Cache-Control: no-store` is set. The email client uses stdlib `urllib.request` with no new dependencies and skips silently when `FG_RESEND_API_KEY` is absent (dev-safe). The SECURITY DEFINER function is intentionally minimal: one table, one WHERE predicate, no joins, `SET search_path = public` to prevent schema injection. No credentials are issued, rotated, revoked, or selected by this change. No production tenant is created, reclassified, or promoted.
+
+**Critical-path files changed:**
+- `migrations/postgres/0171_portal_invitation_delivery_tracking.sql`: four additive columns on `portal_user_invitations`, one partial index, one SECURITY DEFINER function (read-only).
+- `api/notifications/__init__.py`, `api/notifications/email.py`: new email delivery module.
+- `api/portal_user_authority.py`: `PortalInvitationRecord` new delivery fields (with defaults); `update_invitation_delivery()`, `get_invitation_by_idempotency_key()`, `SessionLookupResult` dataclass, `lookup_session_by_token()` added; `PortalUserAuthority` class extended.
+- `api/portal.py`: `PortalIssueInvitationResponse` updated (removed `token`, added delivery fields); `portal_issue_invitation()` rewritten with email delivery and idempotency; `PortalNamedUserMeResponse` and `portal_named_user_me()` added.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`, `tools/ci/contract_routes.json`: regenerated via `make route-inventory-generate` for the additive `GET /portal/named-users/me` endpoint.
+
+**Validation evidence:**
+- `make fg-contract` PASS.
+- `make route-inventory-generate` completed before this SOC entry.
+- Existing portal user authority tests pass (new `PortalInvitationRecord` fields have defaults; mock rows use `getattr` with fallback).
+- No security boundary changes: the SECURITY DEFINER function is read-only, scoped to active+non-expired rows only, and returns minimal columns. RLS is set by the caller before all subsequent queries.
+
+**SOC review outcome:** approved. The additive schema migration is replay-safe (`IF NOT EXISTS`, `CREATE OR REPLACE`). The new route is portal-only and requires a valid pnu1. session token as the credential. The SECURITY DEFINER function is narrower than the existing `revoke_portal_session_by_fingerprint()` (read-only vs mutating). Delivery failure does not roll back the invitation — operators can observe `delivery_state` for follow-up.
+
+---
+
 ## 2026-08-01 — PR #601: IA-1 Tenant Identity Authority — CI governance artifacts
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (route inventory and plane registry governance artifacts changed; identity binding provisioning endpoint added to control plane)

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,6 +32,7 @@ from services.portal_grant_service import (
 )
 from services.identity_resolver import IdentityResolver, IdentityResolutionError
 from api.identity_providers.auth0 import validate_auth0_token
+from api.notifications.email import build_invitation_url, send_portal_invitation
 
 log = logging.getLogger("frostgate.api.portal")
 
@@ -710,6 +711,105 @@ def portal_named_user_enroll(
     )
 
 
+class PortalNamedUserMeResponse(BaseModel):
+    portal_user_id: str
+    tenant_id: str
+    email: str
+    display_name: str | None
+    portal_role: str | None
+    engagement_id: str | None
+    membership_id: str | None
+    session_id: str
+
+
+@portal_router.get(
+    "/named-users/me",
+    response_model=PortalNamedUserMeResponse,
+)
+def portal_named_user_me(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> PortalNamedUserMeResponse:
+    """Return the current named-user's identity from their pnu1. session token.
+
+    Identity is resolved exclusively from the validated pnu1. session — no
+    caller-supplied tenant or user override is accepted.
+
+    The session token is read from X-FG-Portal-Session. Tenant is resolved
+    server-side via lookup_portal_session_by_fingerprint() (SECURITY DEFINER,
+    migration 0171) so no X-Tenant-Id header is trusted.
+
+    Cache-Control: no-store is set on the response.
+    """
+    from sqlalchemy import text as _text
+
+    raw_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+    if not raw_token:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error(
+                "PORTAL_SESSION_REQUIRED", "X-FG-Portal-Session header required"
+            ),
+        )
+    if not raw_token.startswith("pnu1."):
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("PORTAL_SESSION_INVALID", "session token format invalid"),
+        )
+
+    # Resolve tenant from the token itself (no caller-supplied context trusted).
+    lookup = pua.lookup_session_by_token(db, raw_token=raw_token)
+    if lookup is None:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error(
+                "PORTAL_SESSION_NOT_FOUND", "session not found or expired"
+            ),
+        )
+
+    # Full validation with RLS (auth_version check, membership active check, audit).
+    vr = pua.validate_session(db, raw_token=raw_token, tenant_id=lookup.tenant_id)
+    if not vr.ok:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error(
+                vr.denial_code or "PORTAL_SESSION_INVALID", vr.denial_reason or ""
+            ),
+        )
+
+    # Fetch portal_user for email/display_name (RLS is now set from validate_session).
+    user_row = db.execute(
+        _text(
+            """
+            SELECT id, email, display_name
+            FROM   portal_users
+            WHERE  id        = :user_id
+              AND  tenant_id = :tenant_id
+            """
+        ),
+        {"user_id": vr.portal_user_id, "tenant_id": vr.tenant_id},
+    ).fetchone()
+
+    if user_row is None:
+        raise HTTPException(
+            status_code=401,
+            detail=api_error("PORTAL_USER_NOT_FOUND", "portal user not found"),
+        )
+
+    response.headers["Cache-Control"] = "no-store"
+    return PortalNamedUserMeResponse(
+        portal_user_id=vr.portal_user_id or "",
+        tenant_id=vr.tenant_id or "",
+        email=str(user_row.email),
+        display_name=user_row.display_name,
+        portal_role=vr.portal_role,
+        engagement_id=vr.engagement_id,
+        membership_id=vr.portal_membership_id,
+        session_id=vr.session_id or "",
+    )
+
+
 class PortalIssueInvitationBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str
@@ -721,11 +821,14 @@ class PortalIssueInvitationBody(BaseModel):
 
 class PortalIssueInvitationResponse(BaseModel):
     invitation_id: str
-    token: str
-    expires_at: str
     email: str
     portal_role: str
     engagement_id: str | None
+    expires_at: str
+    delivery_state: str
+    delivery_error_code: str | None = None
+    retryable: bool = False
+    request_id: str | None = None
 
 
 @portal_router.post(
@@ -739,16 +842,19 @@ def portal_issue_invitation(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> PortalIssueInvitationResponse:
-    """Issue a named-user invitation token.
+    """Issue a named-user portal invitation and send it via email.
 
-    Requires governance:write scope (admin/operator action).
-    Returns the raw pni1. token — caller must deliver it to the invitee.
-    Token is stored as HMAC-SHA256 fingerprint only; the raw value is not
-    recoverable after this response.
+    Idempotent: if idempotency_key matches an existing invitation, returns the
+    existing record (no new invitation, no new email).
+    Delivery failure does not roll back the invitation — the invitation remains
+    valid and the delivery_state is persisted for operator visibility.
     """
+    from sqlalchemy.exc import IntegrityError
+
     tenant_id = _resolve_tenant(request)
     auth = getattr(getattr(request, "state", None), "auth", None)
     actor_id = getattr(auth, "actor_id", None) or getattr(auth, "tenant_id", None)
+    request_id = request.headers.get("x-request-id")
 
     kwargs: dict = dict(
         tenant_id=tenant_id,
@@ -756,21 +862,78 @@ def portal_issue_invitation(
         portal_role=body.portal_role,
         engagement_id=body.engagement_id,
         invited_by_actor_id=str(actor_id) if actor_id else None,
-        request_id=request.headers.get("x-request-id"),
+        request_id=request_id,
         idempotency_key=body.idempotency_key,
     )
     if body.ttl_seconds is not None:
         kwargs["ttl_seconds"] = body.ttl_seconds
 
-    inv = pua.create_invitation(db, **kwargs)
+    # ── Step 1: persist the invitation ──────────────────────────────────────
+    # Idempotency: duplicate idempotency_key → return the existing record.
+    try:
+        inv = pua.create_invitation(db, **kwargs)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        orig = getattr(exc, "orig", None)
+        is_unique = (
+            "UniqueViolation" in type(orig).__name__
+            if orig
+            else "unique" in str(exc).lower()
+        )
+        if is_unique and body.idempotency_key:
+            existing = pua.get_invitation_by_idempotency_key(
+                db, idempotency_key=body.idempotency_key, tenant_id=tenant_id
+            )
+            if existing is not None:
+                return PortalIssueInvitationResponse(
+                    invitation_id=existing.id,
+                    email=existing.email,
+                    portal_role=existing.portal_role,
+                    engagement_id=existing.engagement_id,
+                    expires_at=existing.expires_at,
+                    delivery_state=existing.delivery_state,
+                    delivery_error_code=existing.delivery_error_code,
+                    retryable=existing.delivery_state == "failed",
+                    request_id=request_id,
+                )
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "PORTAL_INVITATION_DUPLICATE", "duplicate idempotency_key"
+            ),
+        )
+
+    # ── Step 2: send email (post-commit, raw_token available here only) ──────
+    invitation_url = build_invitation_url(inv.raw_token)  # type: ignore[arg-type]
+    result = send_portal_invitation(
+        to_email=inv.email,
+        invitation_url=invitation_url,
+        portal_role=inv.portal_role,
+        expires_at=inv.expires_at,
+    )
+
+    # ── Step 3: persist delivery outcome ────────────────────────────────────
+    pua.update_invitation_delivery(
+        db,
+        invitation_id=inv.id,
+        tenant_id=tenant_id,
+        delivery_state=result.state,
+        email_message_id=result.message_id,
+        delivery_error_code=result.error_code,
+    )
     db.commit()
+
     return PortalIssueInvitationResponse(
         invitation_id=inv.id,
-        token=inv.raw_token,  # type: ignore[arg-type]
-        expires_at=inv.expires_at,
         email=inv.email,
         portal_role=inv.portal_role,
         engagement_id=inv.engagement_id,
+        expires_at=inv.expires_at,
+        delivery_state=result.state,
+        delivery_error_code=result.error_code,
+        retryable=result.retryable,
+        request_id=request_id,
     )
 
 

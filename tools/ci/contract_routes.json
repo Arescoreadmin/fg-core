@@ -5138,6 +5138,12 @@
     },
     {
       "method": "GET",
+      "path": "/portal/named-users/me",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/portal/remediation",
       "scopes": [],
       "source": "contract"
@@ -6139,7 +6145,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-07-26T21:05:32.022793+00:00",
+  "generated_at": "2026-08-03T21:07:49.366483+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

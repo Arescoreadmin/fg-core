@@ -123,6 +123,9 @@ class PortalInvitationRecord:
     status: str
     expires_at: str
     raw_token: str | None  # only set at issuance; never stored in DB
+    delivery_state: str = "pending"
+    email_message_id: str | None = None
+    delivery_error_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -527,7 +530,8 @@ def create_invitation(
                  now() + (:ttl_seconds || ' seconds')::interval)
             RETURNING
                 id, tenant_id, email, portal_role, engagement_id,
-                status, expires_at
+                status, expires_at,
+                delivery_state, email_message_id, delivery_error_code
             """
         ),
         {
@@ -544,6 +548,7 @@ def create_invitation(
         },
     ).fetchone()
 
+    _delivery_state = getattr(row, "delivery_state", None)
     record = PortalInvitationRecord(
         id=_coerce_uuid(row.id) or "",
         tenant_id=str(row.tenant_id),
@@ -553,6 +558,9 @@ def create_invitation(
         status=str(row.status),
         expires_at=str(row.expires_at),
         raw_token=raw_token,
+        delivery_state=str(_delivery_state) if _delivery_state else "pending",
+        email_message_id=getattr(row, "email_message_id", None),
+        delivery_error_code=getattr(row, "delivery_error_code", None),
     )
 
     _emit_audit(
@@ -564,6 +572,136 @@ def create_invitation(
     )
 
     return record
+
+
+def update_invitation_delivery(
+    db,
+    *,
+    invitation_id: str,
+    tenant_id: str,
+    delivery_state: str,
+    email_message_id: str | None = None,
+    delivery_error_code: str | None = None,
+) -> None:
+    """Persist email delivery outcome on an invitation. Caller controls transaction."""
+    _set_tenant_rls(db, tenant_id)
+    db.execute(
+        text(
+            """
+            UPDATE portal_user_invitations
+            SET    delivery_state           = :delivery_state,
+                   email_message_id         = :email_message_id,
+                   delivery_error_code      = :delivery_error_code,
+                   last_delivery_attempt_at = now()
+            WHERE  id        = :invitation_id
+              AND  tenant_id = :tenant_id
+            """
+        ),
+        {
+            "invitation_id": invitation_id,
+            "tenant_id": tenant_id,
+            "delivery_state": delivery_state,
+            "email_message_id": email_message_id,
+            "delivery_error_code": delivery_error_code,
+        },
+    )
+
+
+def get_invitation_by_idempotency_key(
+    db,
+    *,
+    idempotency_key: str,
+    tenant_id: str,
+) -> PortalInvitationRecord | None:
+    """Return an existing invitation by idempotency_key, or None."""
+    _set_tenant_rls(db, tenant_id)
+    row = db.execute(
+        text(
+            """
+            SELECT id, tenant_id, email, portal_role, engagement_id, status, expires_at,
+                   delivery_state, email_message_id, delivery_error_code
+            FROM   portal_user_invitations
+            WHERE  idempotency_key = :key
+              AND  tenant_id       = :tenant_id
+            LIMIT 1
+            """
+        ),
+        {"key": idempotency_key, "tenant_id": tenant_id},
+    ).fetchone()
+
+    if row is None:
+        return None
+
+    return PortalInvitationRecord(
+        id=_coerce_uuid(row.id) or "",
+        tenant_id=str(row.tenant_id),
+        email=str(row.email),
+        portal_role=str(row.portal_role),
+        engagement_id=row.engagement_id,
+        status=str(row.status),
+        expires_at=str(row.expires_at),
+        raw_token=None,
+        delivery_state=str(row.delivery_state) if row.delivery_state else "pending",
+        email_message_id=row.email_message_id,
+        delivery_error_code=row.delivery_error_code,
+    )
+
+
+@dataclass(frozen=True)
+class SessionLookupResult:
+    """Raw session identity resolved from a pnu1. token, without RLS."""
+
+    session_id: str
+    tenant_id: str
+    portal_user_id: str
+    portal_membership_id: str | None
+
+
+def lookup_session_by_token(
+    db,
+    *,
+    raw_token: str,
+) -> SessionLookupResult | None:
+    """
+    Resolve a pnu1. session token to (session_id, tenant_id) without requiring
+    prior tenant context.  Uses the lookup_portal_session_by_fingerprint()
+    SECURITY DEFINER function (migration 0171) to bypass tenant-scoped RLS.
+
+    Returns None for unknown, expired, or revoked tokens.
+    Does NOT emit an audit event — use validate_session() after setting RLS
+    for full validation and audit.
+    """
+    if not raw_token.startswith(SESSION_TOKEN_PREFIX):
+        return None
+
+    token_hex = raw_token[len(SESSION_TOKEN_PREFIX) :]
+    try:
+        fingerprint = _compute_lookup_fingerprint(token_hex, _get_pepper())
+    except RuntimeError:
+        return None
+
+    try:
+        rows = db.execute(
+            text(
+                "SELECT session_id, tenant_id, portal_user_id, portal_membership_id"
+                " FROM lookup_portal_session_by_fingerprint(:fp)"
+            ),
+            {"fp": fingerprint},
+        ).fetchall()
+    except Exception as exc:
+        log.exception("lookup_session_by_token: DB error: %s", exc)
+        return None
+
+    if not rows:
+        return None
+
+    row = rows[0]
+    return SessionLookupResult(
+        session_id=_coerce_uuid(row.session_id) or "",
+        tenant_id=str(row.tenant_id),
+        portal_user_id=_coerce_uuid(row.portal_user_id) or "",
+        portal_membership_id=_coerce_uuid(row.portal_membership_id),
+    )
 
 
 def get_invitation_by_token(
@@ -1221,11 +1359,14 @@ class PortalUserAuthority:
 
     find_or_create_portal_user = staticmethod(find_or_create_portal_user)
     create_invitation = staticmethod(create_invitation)
+    update_invitation_delivery = staticmethod(update_invitation_delivery)
+    get_invitation_by_idempotency_key = staticmethod(get_invitation_by_idempotency_key)
     get_invitation_by_token = staticmethod(get_invitation_by_token)
     accept_invitation = staticmethod(accept_invitation)
     revoke_invitation = staticmethod(revoke_invitation)
     create_session = staticmethod(create_session)
     validate_session = staticmethod(validate_session)
+    lookup_session_by_token = staticmethod(lookup_session_by_token)
     revoke_session = staticmethod(revoke_session)
     revoke_session_by_token = staticmethod(revoke_session_by_token)
 

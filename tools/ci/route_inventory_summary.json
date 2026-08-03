@@ -185,7 +185,7 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 1023,
+  "contract_count": 1024,
   "contract_only": [],
   "internal_allowed": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
@@ -326,7 +326,7 @@
     "agent": 15,
     "ai": 5,
     "connector": 14,
-    "control": 894,
+    "control": 895,
     "data": 54,
     "evidence": 125,
     "identity": 27,
@@ -387,7 +387,7 @@
     "POST /ui/devices/{device_id}/enable"
   ],
   "removed": [],
-  "runtime_count": 1211,
+  "runtime_count": 1212,
   "runtime_only": [
     "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
     "DELETE /admin/tenants/{tenant_id}/entitlements/{capability}",
