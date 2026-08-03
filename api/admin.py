@@ -1401,17 +1401,6 @@ async def create_tenant(
                 status_code=409, detail=f"Tenant already exists: {req.tenant_id}"
             )
 
-        # Also write to JSON for rollback safety during R7 transition.
-        try:
-            from tools.tenants.registry import create_tenant_exclusive
-
-            create_tenant_exclusive(
-                tenant_id=req.tenant_id,
-                name=req.name or req.tenant_id,
-            )
-        except Exception:
-            pass  # JSON write is best-effort during transition
-
         try:
             audit_admin_action(
                 action="tenant_created",
@@ -1425,6 +1414,7 @@ async def create_tenant(
             )
         except AuditPersistenceError:
             # Compensate: delete the orphan tenant row so no partial state persists.
+            # JSON write is deferred until after audit succeeds, so no JSON cleanup needed.
             try:
                 from sqlalchemy import text as _text
 
@@ -1445,6 +1435,18 @@ async def create_tenant(
                     "tenant created but audit write failed; tenant rolled back",
                 ),
             )
+
+        # JSON write is best-effort during R7 transition. Deferred until after audit
+        # succeeds so compensation on audit failure only needs to delete the Postgres row.
+        try:
+            from tools.tenants.registry import create_tenant_exclusive
+
+            create_tenant_exclusive(
+                tenant_id=req.tenant_id,
+                name=req.name or req.tenant_id,
+            )
+        except Exception:
+            pass  # best-effort during transition
         log.info(
             "tenant.created",
             extra={

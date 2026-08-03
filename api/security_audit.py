@@ -347,9 +347,11 @@ class SecurityAuditor:
         # Check for brute force
         client_ip = event.client_ip
         if client_ip:
-            self._track_failed_auth(client_ip)
+            self._track_failed_auth(client_ip, tenant_id=event.tenant_id)
 
-    def _track_failed_auth(self, client_ip: str) -> None:
+    def _track_failed_auth(
+        self, client_ip: str, tenant_id: Optional[str] = None
+    ) -> None:
         """Track failed auth attempts for brute force detection."""
         now = int(time.time())
         cutoff = now - self._brute_force_window
@@ -374,6 +376,7 @@ class SecurityAuditor:
                     success=False,
                     severity=Severity.CRITICAL,
                     client_ip=client_ip,
+                    tenant_id=tenant_id,
                     reason=f"Exceeded {self._brute_force_threshold} failed auth attempts in {self._brute_force_window}s",
                     details={
                         "attempt_count": len(self._failed_auth_cache[client_ip]),

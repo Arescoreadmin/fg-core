@@ -11,7 +11,8 @@
   2. Fail-closed guard for `tenant_id=None`: raises `AuditPersistenceError("FG-AUDIT-002", ...)` in prod-like environments; logs debug and returns in non-prod.
   3. `audit_admin_action`: raises `AuditPersistenceError("FG-AUDIT-ADMIN-002", ...)` when `tenant_id` is None.
   4. `except AuditPersistenceError: raise` added before catch-all to prevent FG-AUDIT-002/ADMIN-002 from being re-wrapped as FG-AUDIT-001.
-- **Fix — `api/admin.py`:** `create_tenant` wraps `audit_admin_action(action="tenant_created", ...)` in try/except. On `AuditPersistenceError`, executes `DELETE FROM tenants WHERE tenant_id = :tid` to remove the orphaned row, then raises `HTTPException(500, AUDIT_PERSISTENCE_FAILED)`.
+  5. `_track_failed_auth`: now accepts `tenant_id` and includes it in the `BRUTE_FORCE_DETECTED` event. Without this, the brute-force alert had `tenant_id=None` and the FG-AUDIT-002 guard would raise in prod, losing the critical-severity event. `log_auth_failure` passes `tenant_id=event.tenant_id` down.
+- **Fix — `api/admin.py`:** JSON write (`create_tenant_exclusive`) deferred until after `audit_admin_action` succeeds. Previously it ran before the audit, so compensation on audit failure could only delete the Postgres row — the JSON entry remained resolvable via `_json_get()` fallback. With the JSON write deferred, compensation only needs to delete the Postgres row (no JSON entry exists yet). `AuditPersistenceError` → `DELETE FROM tenants` + `HTTPException(500, AUDIT_PERSISTENCE_FAILED)`.
 - **Tests added:** `tests/postgres/test_audit_rls_tenant_context.py` (5 tests):
   - A: INSERT with matching `app.tenant_id` context succeeds.
   - B: `_persist_event` calls `set_config` before any DML (tracked via Session.execute intercept).
