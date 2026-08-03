@@ -199,6 +199,11 @@ def _list_internal_platform_rows(repo: TenantRepository) -> list[TenantRow]:
 
 
 def _operator_credential_row(conn: Connection, tenant_id: str) -> Any | None:
+    if conn.dialect.name == "postgresql":
+        conn.execute(
+            text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
     return conn.execute(
         text(
             """

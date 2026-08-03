@@ -267,6 +267,11 @@ def _fetch_by_stable_key(
 def _fetch_credential_row(
     conn: Connection, tenant_id: str, credential_type: str, credential_slot: str
 ) -> Any:
+    if conn.dialect.name == "postgresql":
+        conn.execute(
+            text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
     return conn.execute(
         text(
             """
@@ -528,6 +533,11 @@ def bootstrap_platform_service_principal(
 
     # Check for existing PSP record
     with engine.connect() as conn:
+        if conn.dialect.name == "postgresql":
+            conn.execute(
+                text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                {"tid": authority.tenant_id},
+            )
         psp = _fetch_by_stable_key(conn, CANONICAL_PSP_STABLE_KEY)
 
     if psp is not None:
@@ -664,6 +674,11 @@ def bootstrap_platform_service_principal(
         # Reload to distinguish a legitimate concurrent bootstrap (same authority →
         # return "reused") from a genuine conflict (different authority → "conflict").
         with engine.connect() as conn:
+            if conn.dialect.name == "postgresql":
+                conn.execute(
+                    text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": authority.tenant_id},
+                )
             concurrent_psp = _fetch_by_stable_key(conn, CANONICAL_PSP_STABLE_KEY)
 
         if (
