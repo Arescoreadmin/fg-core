@@ -5,40 +5,49 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-07-31
+**Date:** 2026-08-03
 
 **Current Branch:** `main`
 
-**Current PR:** None — PR #600 merged; preparing T4 portal named-user production proof.
+**Current Commit:** `91bff19b`
+
+**Current PR:** None — PRs #601-607 merged; IA-1 in final prod closure sequence.
 
 **Overall Status:** YELLOW
 
-**Launch Confidence (%):** 72
+**Launch Confidence (%):** 68
 
-**Current Critical Path:** T4 portal named-user production proof -> T5 infrastructure headroom -> T6 full H1-H18 production dry run with CG v0 drift rehearsal.
+**Current Critical Path:** G1-prod (fg_app role in prod Postgres) → redeploy prod API → G2-prod (IA-1 close) → T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
 
-**Current Phase:** Stage 0 / Week 1 Day 2 — T1, T1.5, T2, T3 (partial), and #600 evidence reconciliation complete; preparing T4.
+**Current Phase:** Stage 0 / Week 1 Days 3-4 — T1, T2 complete; T3 partial; IA-1 feature shipped (PRs #601-607); IA-1 prod close blocked on fg_app role creation; T4 not started, gated on IA-1 close.
 
 **Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS pending controlled rotation of FG_SIGNING_SECRET and FG_KEY_PEPPER.
 
-**Completed Since Last Update:** PR #600 merged 2026-07-31 (b5821f2c) — L12 evidence manifest and execution state contradictions resolved; all CI gates pass (496 tests, fg-fast, production profile, authority verification, gap audit, RLS verification, runtime intelligence written). Working tree clean on main.
+**Completed Since Last Update:** PRs #601-607 merged (2026-07-31 to 2026-08-02) — IA-1 Client Org Provisioning feature + 5 prod-critical fixes: migration 0169 (tenant_identity_bindings), Auth0ManagementProvider, provision_tenant_organization() state machine, credential-separation DB roles (migration URL vs runtime URL), assert_migrations_applied fix, schema USAGE grant to fg_app, RLS context fix in 8 credential write-path functions, migration 0170 SECURITY DEFINER fingerprint lookup. Commit 3d9a742d: platform_service_principal + internal_platform_authority set_config RLS fix. Commit 91bff19b: api/main.py startup exception logging (4 paths wrapped with log.exception before raise to survive Railway log rate limiter). Dev environment cleaned: duplicate API-DEV-48012471 service (wrong FG_ENV) deleted. Primary API-DEV verified healthy: FG_ENV=dev, fg_app role flags correct, /health HTTP 200.
 
 **Current Blockers:**
+- G1-prod FAIL: fg_app restricted role not yet created in production Postgres. Blocks prod API redeploy and G2-prod.
+- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action required (Console app, Portal app, Identity Authority M2M app, Organizations enabled).
+- T4 NOT STARTED: gated on IA-1 prod close (G2-prod). FG-LR-002 remains open.
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
-- FG-LR-002: portal named-user invite -> OIDC -> session -> logout revocation unproven with a real external identity in production.
 - FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
 - FG-LR-005: incident/rollback runbook and timed drill are missing.
+- L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
 
 **Top Three Priorities:**
-1. Complete L12 gap: rotate `FG_SIGNING_SECRET` and `FG_KEY_PEPPER` under the documented rollback procedure; attach evidence to `L12_evidence_manifest.md`; close FG-LR-012.
-2. Execute T4: prove the real external portal named-user path in production and collect session/revocation evidence (closes FG-LR-002, required for L2).
-3. Execute T5: Railway infra headroom check and plan upgrade decision (closes FG-LR-004).
+1. G1-prod: create fg_app restricted role (NOSUPERUSER NOBYPASSRLS) in production Postgres; set FG_DB_URL=fg_app credential, FG_DB_MIGRATION_URL=postgres superuser; redeploy prod API; run G1-prod 7-check gate. Then G2-prod → close IA-1.
+2. Auth0 dev tenant (frostgate-dev): browser action → set API-DEV vars (FG_OIDC_ISSUER, M2M client ID+secret) → redeploy → G2-dev gate.
+3. Begin T4 portal named-user proof immediately after IA-1 closes in prod (2.0d, closes FG-LR-002, required for L1).
 
-**Next Required PR:** T4 portal named-user proof is 2 days. Branch from main.
+**Next Required PR:** T4 portal named-user proof. Branch from main after IA-1 G2-prod passes.
 
-**Estimated Engineering Days Remaining:** 16.0 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d consumed).
+**Estimated Engineering Days Remaining:** ~13.5 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 work ~2.5d consumed).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
+
+**Roadmap Drift:** PRs #601-607 (IA-1 provisioning work) not in the frozen 30-day launch plan — required unplanned engineering time.
+
+**Known Governance Deviation:** See `GOVERNANCE_DEVIATIONS.md` GD-2026-001 (OPEN/Controlled) — IA-2 merged before IA-1 operational acceptance. Closure criteria: G1-prod PASS + G2-prod PASS + IA-1 Final Acceptance recorded.
 
 **T1 Result:**
 
@@ -80,6 +89,29 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-03 — Daily Execution Review
+
+**Review Type:** Daily Execution Review
+
+**Summary:** Executive Delivery Manager audit conducted across ROADMAP.md, THIRTY_DAY_LAUNCH_PLAN.md, LAUNCH_DEFINITION_OF_DONE.md, FIRST_CLIENT_PLAYBOOK.md, TOP_ROI_ACTIONS.md, EXECUTION_STATE.md, and repository state. Seven PRs (#601-607) shipped since last EXECUTION_STATE update — IA-1 Client Org Provisioning feature plus five prod-critical infrastructure fixes. Dev environment repaired: duplicate API-DEV service (UUID-named, wrong FG_ENV=staging) crashed with FG-PROD-003; diagnosed, identified as topology error, deleted. Primary API-DEV verified healthy on all 9 checks. API startup exception visibility hardened: 4 startup paths in api/main.py now log.exception before raise, ensuring Railway log rate limiter cannot eat root exception traceback. Launch confidence revised down from 72% to 68% reflecting unplanned IA-1 engineering time and T4 not yet started.
+
+**Major Changes:**
+- PRs #601-607: IA-1 Client Org Provisioning + DB credential separation + assert_migrations fix + schema USAGE grant + RLS context fix (8 credential write-path functions) + migration 0170 SECURITY DEFINER fingerprint lookup function.
+- Commit `3d9a742d`: `api/platform_service_principal.py` and `api/internal_platform_authority.py` — set_config RLS context fix for fg_app runtime role.
+- Commit `91bff19b`: `api/main.py` — 4 startup paths wrapped with log.exception/raise for Railway log visibility.
+- Dev environment: duplicate `API-DEV-48012471` service (service ID `3e227ef4`) deleted via `railway service delete`.
+- G1-dev: PASS 7/7 (2nd verification, commit b0f9a22a). G2-dev: BLOCKED (Auth0 dev tenant). G1-prod: FAIL (fg_app role not in prod). G2-prod: BLOCKED on G1-prod.
+
+**Decisions Made:** IA-2 merge before IA-1 close is a gate violation — noted as roadmap drift; cannot be unshipped. Duplicate dev service deleted rather than repaired (topology was wrong by design). Launch confidence reduced to 68% to reflect slip.
+
+**Blockers discovered:** fg_app role missing in production Postgres (G1-prod FAIL). Auth0 dev tenant not yet created (G2-dev BLOCKED). T4 not started due to IA-1 gating.
+
+**Updated Launch Confidence:** 68%
+
+**Next:** G1-prod → redeploy prod API → G2-prod → close IA-1 → begin T4. Parallel: Auth0 dev tenant → G2-dev.
+
+---
 
 ### 2026-07-31 — PR #600 Evidence Reconciliation
 
