@@ -1,5 +1,29 @@
 # PR Fix Log (Strict)
 
+## P-42 — fix(audit): set tenant RLS context for admin audit writes — PR #608
+
+- **PR/Branch:** `fix/audit-rls-tenant-context` (#608)
+- **Date:** 2026-08-03
+- **Files changed:** `api/security_audit.py`, `api/admin.py`, `tests/postgres/test_audit_rls_tenant_context.py`, `tests/security/test_audit_tamper_evidence.py`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- **Root cause:** `_persist_event` opened a new SQLAlchemy `Session` but never called `SELECT set_config('app.tenant_id', :tid, true)` before any DML. Under the `fg_app` role (NOSUPERUSER NOBYPASSRLS), the RLS policy `security_audit_log_tenant_isolation` blocks every INSERT where `current_setting('app.tenant_id', true)` is NULL or does not match `tenant_id`. Previously this was invisible because the API ran as postgres superuser (BYPASSRLS). The defect was discovered during G2-prod gate execution: `POST /admin/tenants` committed the tenant row, then `audit_admin_action` raised `AuditPersistenceError: FG-AUDIT-001`, leaving an orphaned tenant in production with no audit row.
+- **Fix — `api/security_audit.py`:**
+  1. `_persist_event`: calls `SELECT set_config('app.tenant_id', :tid, true)` (postgresql-dialect-only, transaction-local) before `session.add(record)`.
+  2. Fail-closed guard for `tenant_id=None`: raises `AuditPersistenceError("FG-AUDIT-002", ...)` in prod-like environments; logs debug and returns in non-prod.
+  3. `audit_admin_action`: raises `AuditPersistenceError("FG-AUDIT-ADMIN-002", ...)` when `tenant_id` is None.
+  4. `except AuditPersistenceError: raise` added before catch-all to prevent FG-AUDIT-002/ADMIN-002 from being re-wrapped as FG-AUDIT-001.
+- **Fix — `api/admin.py`:** `create_tenant` wraps `audit_admin_action(action="tenant_created", ...)` in try/except. On `AuditPersistenceError`, executes `DELETE FROM tenants WHERE tenant_id = :tid` to remove the orphaned row, then raises `HTTPException(500, AUDIT_PERSISTENCE_FAILED)`.
+- **Tests added:** `tests/postgres/test_audit_rls_tenant_context.py` (5 tests):
+  - A: INSERT with matching `app.tenant_id` context succeeds.
+  - B: `_persist_event` calls `set_config` before any DML (tracked via Session.execute intercept).
+  - C: `tenant_id=None` raises FG-AUDIT-002 in prod env; no row written.
+  - D: Cross-tenant INSERT (`app.tenant_id=tenant-a`, row `tenant-b`) blocked by RLS.
+  - E: Audit failure in `create_tenant` returns 500 with no orphan tenant row.
+- **Security impact:** Tightens security — RLS enforcement now covers the audit persistence path. `None` tenant_id is now fail-closed in prod (previously silently wrote to chain_id='global' under superuser). Cross-tenant audit writes remain blocked (Test D). No auth, OPA, migration, or CI files changed.
+- **Schema/API impact:** None.
+- **Result:** `make fg-fast` passes (496 passed, 2 skipped).
+
+---
+
 ## P-41 — fix(auth): SECURITY DEFINER lookup for unscoped credential types under fg_app
 
 - **PR/Branch:** `fix/credential-fingerprint-lookup-security-definer` (#607)
