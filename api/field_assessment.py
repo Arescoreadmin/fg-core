@@ -4296,7 +4296,7 @@ def _network_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
-    from api.db import get_sessionmaker
+    from api.db import get_sessionmaker, set_tenant_context
 
     SessionLocal = get_sessionmaker()
 
@@ -4304,6 +4304,7 @@ def _network_scan_background(
         _set(status="scanning")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -4319,6 +4320,7 @@ def _network_scan_background(
         _set(status="importing")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             result = import_network_scan(
                 db=db,
                 tenant_id=tenant_id,
@@ -4358,6 +4360,7 @@ def _network_scan_background(
         except Exception as exc:
             log.error("network_scan_background: import failed — %s", exc)
             db.rollback()
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(
                 db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -4382,6 +4385,7 @@ def _network_scan_background(
         log.error("network_scan_background: scan failed — %s", exc)
         db2 = SessionLocal()
         try:
+            set_tenant_context(db2, tenant_id)
             _c6_update_job_status(
                 db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -4574,7 +4578,7 @@ def _dns_email_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
-    from api.db import get_sessionmaker
+    from api.db import get_sessionmaker, set_tenant_context
 
     SessionLocal = get_sessionmaker()
 
@@ -4582,6 +4586,7 @@ def _dns_email_scan_background(
         _set(status="scanning")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -4594,6 +4599,7 @@ def _dns_email_scan_background(
         _set(status="importing")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             result = import_dns_email_scan(
                 db=db,
                 tenant_id=tenant_id,
@@ -4629,6 +4635,7 @@ def _dns_email_scan_background(
         except Exception as exc:
             log.error("dns_email_scan_background: import failed — %s", exc)
             db.rollback()
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(
                 db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -4653,6 +4660,7 @@ def _dns_email_scan_background(
         log.error("dns_email_scan_background: scan failed — %s", exc)
         db2 = SessionLocal()
         try:
+            set_tenant_context(db2, tenant_id)
             _c6_update_job_status(
                 db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -4776,7 +4784,7 @@ def _web_headers_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
-    from api.db import get_sessionmaker
+    from api.db import get_sessionmaker, set_tenant_context
 
     SessionLocal = get_sessionmaker()
 
@@ -4784,6 +4792,7 @@ def _web_headers_scan_background(
         _set(status="scanning")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -4796,6 +4805,7 @@ def _web_headers_scan_background(
         _set(status="importing")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             result = import_web_headers_scan(
                 db=db,
                 tenant_id=tenant_id,
@@ -4835,6 +4845,7 @@ def _web_headers_scan_background(
         except Exception as exc:
             log.error("web_headers_scan_background: import failed — %s", exc)
             db.rollback()
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(
                 db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -4859,6 +4870,7 @@ def _web_headers_scan_background(
         log.error("web_headers_scan_background: scan failed — %s", exc)
         db2 = SessionLocal()
         try:
+            set_tenant_context(db2, tenant_id)
             _c6_update_job_status(
                 db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
