@@ -145,6 +145,7 @@ def send_portal_invitation(
     )
     req.add_header("Authorization", f"Bearer {api_key}")
     req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "FrostGate/1.0")
 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:

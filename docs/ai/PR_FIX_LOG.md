@@ -1,5 +1,19 @@
 # PR Fix Log (Strict)
 
+## P-51 — fix(email): add User-Agent header to Resend API calls to bypass Cloudflare bot block
+
+- **PR/Branch:** `fix/resend-user-agent`
+- **Date:** 2026-08-04
+- **Files changed:** `api/notifications/email.py`
+- **Root cause:** `urllib.request` defaults to `User-Agent: Python-urllib/3.12`. Cloudflare's bot protection on Resend's CDN blocks this UA with HTTP 403 / error code 1010. The production portal invitation email call was failing with `EMAIL_PROVIDER_ERROR` and `retryable=False` on every attempt.
+- **Fix:** Added `req.add_header("User-Agent", "FrostGate/1.0")` to the Resend `send_portal_invitation` function.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None — verified by T4 G1 behavioral re-fire after fix.
+- **Result:** `make fg-fast` passes.
+
+---
+
 ## P-50 — fix(auth): inject X-Tenant-Id for internal admin gateway requests
 
 - **PR/Branch:** `fix/portal-invitation-gateway-auth`
