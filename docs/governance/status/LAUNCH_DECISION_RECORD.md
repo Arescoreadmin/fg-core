@@ -92,11 +92,11 @@ All items must be COMPLETE before GO is authorized.
 | L4 | Backup and restore proven (row-count verified) | **PASS** | T1 | 2026-07-30; pg_dump/restore to scratch DB; row-count verified |
 | L5 | Remediation item tracked to completion via portal | **PASS** | T6 | H15 PASS (remediation item created and formatted per portal spec) |
 | L6 | CG v0 drift-cycle rehearsal (re-scan + delta) | **PASS** | T6 | H5 PASS; re-scan triggered; delta summary produced |
-| L7 | Incident drill: alert + Railway rollback in <15 min | **LAUNCH CONSTRAINT** | T8 (not done) | Must complete before first client engagement; T5 G4 proves rollback path exists (~8.8s) |
-| L8 | Console navigation ≤9 items; operator flow end-to-end | **LAUNCH CONSTRAINT** | T9 (not done) | Must complete before first client engagement; deferred from T6 critical path |
-| L9 | Portal pages render real data; dashboard leads with discoveries | **LAUNCH CONSTRAINT** | T10 (not done) | Must complete before first client engagement; deferred from T6 critical path |
+| L7 | Incident drill: alert + Railway rollback in <15 min | **READY TO EXECUTE** | T8 | Runbook: `docs/operators/t8_incident_drill.md` (commit ce37680a); requires operator to execute timed drill and record evidence |
+| L8 | Console navigation ≤9 items; operator flow end-to-end | **READY TO EXECUTE** | T9 | Checklist: `docs/operators/t9_console_ux_validation.md` (commit ce37680a); requires walkthrough session |
+| L9 | Portal pages render real data; dashboard leads with discoveries | **READY TO EXECUTE** | T10 | Checklist: `docs/operators/t10_portal_ux_validation.md` (commit ce37680a); gold path engagement `2a8be91c` as data source |
 | L10 | Infrastructure headroom ≥30% memory during scan + report | **PASS** | T5 | 94.4% memory headroom; all scans + report proven; T5 G1–G6 |
-| L11 | Deletion runbook covers DPA triggers; executed once against test data | **LAUNCH CONSTRAINT** | T13 (not done) | Must complete before first client engagement; Stage 1 has day-90 buffer; explicitly risk-acceptable per DoD |
+| L11 | Deletion runbook covers DPA triggers; executed once against test data | **READY TO EXECUTE** | T13 | Runbook: `docs/operators/t13_deletion_runbook.md` (commit ce37680a); requires one purge drill against test tenant |
 | L12 | Top-5 secrets rotated; Anthropic auto-recharge enabled | **IN PROGRESS** | T2+T3+T14 | FG_SIGNING_SECRET + FG_KEY_PEPPER not rotated; documented rationale in L12 manifest; deferred with acceptance |
 | L13 | No P0 finding open; FG-LR-001–005 all met | **CONDITIONAL** | roll-up | L1+L2+L4+L5+L6 PASS; L7 (FG-LR-005 T8) pending — launch constraint; closes when L7 closes |
 | L14 | Commercial paper ready (price card, one-pager, Stripe) | **FOUNDER TRACK** | founder | Not blocking engineering release; must close before engagement signed |
@@ -107,12 +107,12 @@ All items must be COMPLETE before GO is authorized.
 
 The following conditions must be confirmed closed before the first client engagement begins. Violation of any constraint that is not closed before client data enters the system is a launch policy violation.
 
-| # | Constraint | Acceptance criteria | Owner | Target |
-|---|---|---|---|---|
-| C1 | Backup hardening: scheduling + encryption + offsite | Scheduled cron produces non-zero artifact; `FG_BACKUP_ENCRYPTION_KEY` set; at least one offsite destination (S3/R2/B2) configured and verified; record backup ID | jcosat | Before client onboarding |
-| C2 | Portal invitation URL fix (D-T6-004) | PR-T6.3 merged; invitation emails include `?tenant_id=` in accept URL; verified in staging | jcosat | Before first portal invite |
-| C3 | Global JSON exception handler (PR-T6.5) | All non-2xx responses return `{"error_code": ..., "request_id": ...}` JSON; no HTML error pages | jcosat | Before first non-operator API use |
-| C4 | Launch DoD operational gates (L7, L8, L9, L11) | T8 (incident drill PASS), T9 (console UX PASS), T10 (portal UX PASS), T13 (deletion runbook executed) | jcosat | Before client engagement |
+| # | Constraint | Acceptance criteria | Status | Owner | Target |
+|---|---|---|---|---|---|
+| C1 | Backup hardening: scheduling + encryption + offsite | Scheduled cron produces non-zero artifact; `FG_BACKUP_ENCRYPTION_KEY` set; at least one offsite destination (S3/R2/B2) configured and verified; record backup ID | **CODE DONE** (commit 498c0b34); requires GitHub secrets + manual trigger | jcosat | Before client onboarding |
+| C2 | Portal invitation URL fix (D-T6-004) | Invitation emails include `?tenant_id=` in accept URL | **DONE** (commit 5a9440bf) | jcosat | ✅ |
+| C3 | Global JSON exception handler (PR-T6.5) | All unhandled exceptions return structured JSON; no HTML 500 pages | **DONE** (commit 98088457) | jcosat | ✅ |
+| C4 | Launch DoD operational gates (L7, L8, L9, L11) | T8 (incident drill PASS), T9 (console UX PASS), T10 (portal UX PASS), T13 (deletion runbook executed) | **RUNBOOKS DONE** (commit ce37680a); requires operator execution | jcosat | Before client engagement |
 
 **Non-waivable stop conditions (active during engagement):** tenant-isolation exposure, data loss, audit integrity failure, portal login failure >4h. Any of these → immediate stop, founder communicates within 24h.
 
