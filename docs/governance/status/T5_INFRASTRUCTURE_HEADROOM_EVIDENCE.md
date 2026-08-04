@@ -2,7 +2,7 @@
 
 Status: **PENDING** — gates not yet executed
 
-Gate sequence: G1 (+ G1.1) → G2 → G3 → G4 → G5 → G6
+Gate sequence: G1 (+ G1.1) → G2 → G3 → G4 → G4.5 → G5 → G6
 
 T5 closes FG-LR-004. It proves Railway production can support the first client engagement
 under realistic load and recover from an instance failure without corrupting state.
@@ -44,8 +44,25 @@ When T5 completes, all of the following must be true:
 - [ ] Rollback is documented (target deployment, ID, estimated time, verified)
 - [ ] Configuration fingerprint is documented (G1.1 — no unexpected drift)
 - [ ] Production deployment is reproducible (version fingerprint: SHA + deployment ID + image digest)
+- [ ] Observability is verified (G4.5 — logs, audit events, metrics, alerts all confirmed)
 
 At T5 close, T6 becomes a business workflow validation, not another infrastructure investigation.
+
+---
+
+## Failure Budget
+
+These are the allowed failure counts for T5 to PASS. Exceeding any one = gate fail.
+
+| Failure type | Allowed during T5 |
+|---|---|
+| 5xx errors (total across G2 load window) | < 0.5% of requests |
+| API restarts (outside G4 controlled injection) | 0 |
+| OOM kills | 0 |
+| Data loss events | 0 |
+| Audit event loss | 0 |
+| Session corruption events | 0 |
+| Duplicate work from idempotent retry | 0 |
 
 ---
 
@@ -69,36 +86,62 @@ At T5 close, T6 becomes a business workflow validation, not another infrastructu
 
 ## Workload Definition
 
-One simulated live engagement (the-wick-network, or a dedicated disposable tenant):
+Locked before G2 begins. One simulated live engagement representing first-client volume.
+Tenant: the-wick-network (or a dedicated disposable tenant — record which).
 
-| Operation | Frequency | Notes |
-|---|---|---|
-| Portal login (`GET /portal/named-users/me`) | ~30 req/min | Named-user pnu1. token flow |
-| Engagement reads (`GET /engagements/...`) | ~20 req/min | Read-heavy; BFF proxied |
-| Evidence reads (`GET /engagements/{id}/evidence`) | ~15 req/min | |
-| Report polling (`GET /engagements/{id}/reports`) | ~10 req/min | |
-| Admin operations (`POST /portal/invitations`, etc.) | ~2 req/min | Operator-level; authenticated |
-| Background jobs (scan dispatch, score snapshot) | per-schedule | No acceleration |
+| Operation | Endpoint | Target count | Notes |
+|---|---|---|---|
+| Portal login | `GET /portal/named-users/me` | 10 users | Named-user pnu1. token flow |
+| Dashboard load | `GET /engagements/` (list) | 50 requests | BFF proxied |
+| Engagement read | `GET /engagements/{id}` | 200 requests | Read-heavy |
+| Evidence read | `GET /engagements/{id}/evidence` | 500 requests | Largest volume |
+| Report download | `GET /engagements/{id}/reports/{rid}` | 20 requests | |
+| Admin operations | `POST /portal/invitations` etc. | 25 requests | Operator-level; authenticated |
+| Background jobs | scan dispatch, score snapshot | 100 operations | No schedule acceleration |
+
+**Actual counts executed (fill during G2):**
+
+| Operation | Planned | Actual | Delta |
+|---|---|---|---|
+| Portal login | 10 | | |
+| Dashboard load | 50 | | |
+| Engagement read | 200 | | |
+| Evidence read | 500 | | |
+| Report download | 20 | | |
+| Admin operations | 25 | | |
+| Background jobs | 100 | | |
 
 No synthetic destructive writes beyond disposable test data. No schema mutations during load.
 
 ---
 
+## SLO Targets
+
+Provisional operational objectives. Verified against G1 baseline and G2 load measurements.
+
+| Objective | Target | G1 baseline | G2 peak | Status |
+|---|---|---|---|---|
+| Availability | ≥ 99.9% | | | |
+| API p95 latency | < 1.5 s | | | |
+| Portal login (end-to-end) | < 3 s | | | |
+| Invitation delivery | < 30 s | | | |
+| Report polling response | < 2 s | | | |
+
+---
+
 ## Pass Thresholds (G3)
 
-Set during G1 from actual Railway plan limits. Candidates based on typical engagement volume:
+Calibrate against actual Railway plan limits captured in G1. Update the Threshold column before G2 runs.
 
-| Metric | Threshold | Rationale |
-|---|---|---|
-| API CPU sustained | < 70% | _(calibrate against Railway limit from G1)_ |
-| API memory sustained | < 75% | _(calibrate against Railway limit from G1)_ |
-| DB connections active | < 70% of ceiling | _(calibrate against ceiling from G1)_ |
-| 5xx error rate | < 0.5% over load window | |
-| p95 API latency | < 1.5 s | Portal-facing; portal UX threshold |
-| OOM kills / crash loops | 0 | Absolute |
-| Redis memory used | < 80% of maxmemory | |
-
-Thresholds are updated in G3 once G1 captures actual plan limits.
+| Metric | Threshold | Observed (G2) | Pass/Fail |
+|---|---|---|---|
+| API CPU sustained | < 70% of plan limit | | |
+| API memory sustained | < 75% of plan limit | | |
+| DB connections active | < 70% of ceiling | | |
+| 5xx error rate | < 0.5% | | |
+| p95 API latency | < 1.5 s | | |
+| OOM kills / crash loops | 0 | | |
+| Redis memory used | < 80% of maxmemory | | |
 
 ---
 
@@ -136,8 +179,14 @@ Let the system idle for 5–10 minutes after last deployment before recording me
 |---|---|
 | CPU % (idle) | |
 | Memory % (idle) | |
-| Active connections (idle) | |
+| Active sessions (idle) | |
+| Idle sessions | |
+| Waiting locks | |
+| Longest running query (ms) | |
+| Deadlocks (if exposed) | |
 | Max connections ceiling | |
+| Current connections | |
+| Connection utilization % | |
 | Storage used | |
 | Storage limit | |
 | IOPS (if available) | |
@@ -149,8 +198,11 @@ Let the system idle for 5–10 minutes after last deployment before recording me
 | Memory used | |
 | maxmemory limit | |
 | Memory used % | |
+| Memory fragmentation ratio | |
 | Active connections | |
 | Eviction count | |
+| Hit ratio | |
+| Persistence mode (RDB / AOF / none) | |
 
 ### Deployments
 
@@ -212,20 +264,33 @@ Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G
 
 | Field | Value |
 |---|---|
-| Queue depth | |
-| Active jobs | |
-| Idle jobs | |
+| Queued | |
+| Running | |
+| Completed | |
+| Failed | |
+| Retrying | |
+| Oldest queued job age | |
+
+### Alerting
+
+| Field | Value |
+|---|---|
+| Railway alerting configured | yes / no |
+| Alert rules in place (if yes) | |
+| External monitoring configured (UptimeRobot, etc.) | yes / no |
+| On-call or notification channel | |
 
 ### Steady-State Baseline (5–10 min idle observation)
 
-| Metric | Value |
-|---|---|
-| CPU (start / end / peak) | |
-| Memory (start / end / peak) | |
-| Open DB connections (start / end / peak) | |
-| Redis memory (start / end / peak) | |
-| Request rate (avg over window) | |
-| Restart count (must be zero) | |
+| Metric | Start | End | Peak |
+|---|---|---|---|
+| API CPU % | | | |
+| API Memory % | | | |
+| Open DB connections | | | |
+| DB waiting locks | | | |
+| Redis memory % | | | |
+| Request rate (req/min) | | | |
+| Restart count | 0 (required) | 0 (required) | 0 (required) |
 
 ---
 
@@ -309,8 +374,8 @@ Do not start G2 until all are true:
 - [ ] Replica count documented
 - [ ] Restart counter stable (zero during idle observation window)
 - [ ] Rollback target documented and verified
-- [ ] Alerting status documented (Railway alerting configured: yes/no; if yes, note alert rules in place)
-- [ ] G3 thresholds calibrated against actual plan limits (update Pass Thresholds table above)
+- [ ] Alerting status documented
+- [ ] G3 thresholds calibrated against actual plan limits (Pass Thresholds table updated above)
 
 **G1 result: PENDING**
 
@@ -320,16 +385,18 @@ Do not start G2 until all are true:
 
 **Status: PENDING**
 
-Run the bounded production-safe load test (workload definition above). Record all observed metrics during the load window.
+Run the workload defined above. Lock the workload table before starting. Record all observed metrics during the load window.
 
 | Field | Value |
 |---|---|
-| Date/time (UTC) | |
+| Date/time start (UTC) | |
+| Date/time end (UTC) | |
 | Load window duration | |
-| Disposable tenant used | |
+| Tenant used | |
 | Peak API CPU % | |
 | Peak API memory % | |
 | Peak DB connections | |
+| Peak DB waiting locks | |
 | Peak Redis memory | |
 | Observed p50 latency | |
 | Observed p95 latency | |
@@ -337,8 +404,10 @@ Run the bounded production-safe load test (workload definition above). Record al
 | 5xx count / rate | |
 | API restart count during load | |
 | DB connection saturation events | |
-| Redis eviction count | |
-| Memory growth trend | |
+| Redis eviction count during load | |
+| Redis hit ratio during load | |
+| Memory growth trend (start → end) | |
+| Background job failure count | |
 
 **G2 result: PENDING**
 
@@ -349,16 +418,19 @@ Run the bounded production-safe load test (workload definition above). Record al
 **Status: PENDING**
 
 Compare G2 observed peaks against G1-calibrated thresholds. Pass only if all thresholds are met.
+(Mirrors the Pass Thresholds table above — fill Observed column from G2.)
 
 | Metric | Threshold | Observed | Pass/Fail |
 |---|---|---|---|
-| API CPU sustained | < 70% | | |
-| API memory sustained | < 75% | | |
+| API CPU sustained | < 70% of plan limit | | |
+| API memory sustained | < 75% of plan limit | | |
 | DB connections | < 70% of ceiling | | |
 | 5xx rate | < 0.5% | | |
 | p95 API latency | < 1.5 s | | |
 | OOM kills / crash loops | 0 | | |
 | Redis memory | < 80% of maxmemory | | |
+
+Also verify SLO targets against G2 observations (update SLO table above).
 
 **G3 result: PENDING**
 
@@ -368,7 +440,7 @@ Compare G2 observed peaks against G1-calibrated thresholds. Pass only if all thr
 
 **Status: PENDING**
 
-Restart or redeploy the production API during controlled test activity. Verify recovery.
+Restart or redeploy the production API during controlled test activity. Rollback target must be confirmed (G1) before proceeding.
 
 | Check | Result |
 |---|---|
@@ -376,14 +448,37 @@ Restart or redeploy the production API during controlled test activity. Verify r
 | Trigger method (Railway redeploy / kill) | |
 | Health check failure observed (before recovery) | |
 | Health check recovery time (s) | |
+| Restart-to-health time (s) | |
 | Orphan jobs observed post-restart | |
 | Session corruption observed | |
 | Duplicate work produced | |
 | Lost audit events | |
 | Portal accessible after restart | |
-| Restart-to-health time (s) | |
 
 **G4 result: PENDING**
+
+---
+
+## G4.5 — Observability Validation
+
+**Status: PENDING**
+
+A healthy service that nobody can observe is operationally unhealthy.
+Verify that the operational signals needed to detect and diagnose real incidents are present and functional.
+
+| Check | Result |
+|---|---|
+| Application logs appear in Railway log viewer | |
+| Logs include structured fields (timestamp, level, request_id) | |
+| Audit events written to DB during G4 injection period | |
+| No audit event gap around restart timestamp | |
+| Railway metrics update (CPU/memory visible post-restart) | |
+| `/health` endpoint returns within expected response time after recovery | |
+| Traces or request IDs available (if enabled; if not, document as intentionally absent) | |
+| Alerts fired correctly during G4 failure (if alerting configured) | |
+| If no alerting configured: document explicitly as known gap | |
+
+**G4.5 result: PENDING**
 
 ---
 
@@ -411,7 +506,9 @@ Verify durable state integrity after the G4 restart.
 
 **Status: PENDING**
 
-Final determination based on G1–G5 evidence.
+Final determination based on G1–G5 evidence. This is the executive summary for T5.
+
+### Decision
 
 | Field | Value |
 |---|---|
@@ -419,9 +516,48 @@ Final determination based on G1–G5 evidence.
 | Railway plan at decision | |
 | Upgrade required | _(yes / no)_ |
 | Upgrade trigger | _(metric and threshold that forces upgrade)_ |
-| Estimated upgrade cost delta | |
+| Estimated upgrade cost delta ($/month) | |
 | Automatic backup enabled post-upgrade | _(yes / no)_ |
-| Residual risks documented | |
+
+### Reason
+
+_(One paragraph. State the primary finding: whether the system met thresholds, what the headroom margin was, and what the single largest risk factor is going into T6.)_
+
+### Supporting Evidence
+
+| Gate | Result | Key finding |
+|---|---|---|
+| G1 — Capacity Baseline | | |
+| G1.1 — Configuration Drift | | |
+| G2 — Load Profile | | |
+| G3 — Headroom Threshold | | |
+| G4 — Failure Injection | | |
+| G4.5 — Observability Validation | | |
+| G5 — State Recovery | | |
+
+### Residual Risks
+
+_(List any risks that remain after T5 completes. Each risk must be accepted or mitigated before launch.)_
+
+| Risk | Severity | Mitigation / Acceptance |
+|---|---|---|
+| | | |
+
+### Mandatory Actions Before Launch
+
+_(Actions required before client onboarding regardless of T5 outcome.)_
+
+| Action | Owner | Deadline |
+|---|---|---|
+| | | |
+
+### Recommended Actions After Launch
+
+_(Non-blocking improvements identified during T5. Track in backlog.)_
+
+| Action | Priority | Notes |
+|---|---|---|
+| | | |
 
 **G6 result: PENDING**
 
@@ -433,3 +569,4 @@ Final determination based on G1–G5 evidence.
 - No artificial metric suppression.
 - No client tenant touched during load test (use disposable tenant or the-wick-network under controlled conditions only).
 - Any state corruption = failed gate. Investigate before re-run.
+- Any failure budget breach = failed gate. No partial passes.
