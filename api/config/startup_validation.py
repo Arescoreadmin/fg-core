@@ -282,6 +282,7 @@ class StartupValidator:
         self._check_report_signing_key(report)
         self._check_billing_hmac_key(report)
         self._check_minisign_key(report)
+        self._check_evidence_signing_key(report)
         self._check_observability_config(report)
 
         return report
@@ -1153,6 +1154,47 @@ class StartupValidator:
                 message="Minisign secret key configured.",
                 severity="info",
             )
+
+    def _check_evidence_signing_key(self, report: StartupValidationReport) -> None:
+        import base64
+
+        raw = _env_str("FG_EVIDENCE_SIGNING_KEY_B64", "")
+        if not raw:
+            report.add(
+                name="evidence_signing_key_missing",
+                passed=False,
+                message=(
+                    "FG_EVIDENCE_SIGNING_KEY_B64 is not set. "
+                    "Observation evidence provenance signing will fail at request time. "
+                    "Configure this key in Railway production environment variables."
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+            return
+        try:
+            decoded = base64.b64decode(raw, validate=True)
+        except Exception:
+            report.add(
+                name="evidence_signing_key_invalid",
+                passed=False,
+                message="FG_EVIDENCE_SIGNING_KEY_B64 must be valid base64 decoding to 32 bytes (Ed25519 seed).",
+                severity="error",
+            )
+            return
+        if len(decoded) != 32:
+            report.add(
+                name="evidence_signing_key_invalid",
+                passed=False,
+                message="FG_EVIDENCE_SIGNING_KEY_B64 must be valid base64 decoding to 32 bytes (Ed25519 seed).",
+                severity="error",
+            )
+            return
+        report.add(
+            name="evidence_signing_key",
+            passed=True,
+            message="Evidence signing key configured.",
+            severity="info",
+        )
 
     def _check_observability_config(self, report: StartupValidationReport) -> None:
         """Warn (never block) when prod/staging is missing observability config.

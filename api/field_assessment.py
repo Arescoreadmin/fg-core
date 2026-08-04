@@ -1935,9 +1935,9 @@ def capture_observation_route(
             "severity": body.severity.value,
         },
     )
+    response = _observation_to_response(observation)
     db.commit()
-    db.refresh(observation)
-    return _observation_to_response(observation)
+    return response
 
 
 class BulkObservationImportResult(BaseModel):
