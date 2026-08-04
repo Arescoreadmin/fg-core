@@ -11,15 +11,17 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Commit:** `fb97d337` (T5 G2-G6 evidence commit on T5 branch)
 
-**Current PR:** None — T5 COMPLETE; LRR issued CONDITIONAL GO; backup authority reconciliation pending before T6 start.
+**Current PR:** None — T5 COMPLETE; LRR CONDITIONAL GO; Condition 1 CLOSED; T6 READY TO EXECUTE.
 
 **Overall Status:** GREEN
 
 **Launch Confidence (%):** 92
 
-**Current Critical Path:** ~~T5 infra headroom~~ ✅ → ~~Launch Readiness Review~~ ✅ CONDITIONAL GO → **backup authority reconciliation** → T6 H1-H18 dry run → Launch Decision Record → launch DoD sweep.
+**Current Critical Path:** ~~T5 infra headroom~~ ✅ → ~~Launch Readiness Review~~ ✅ CONDITIONAL GO → ~~backup authority reconciliation~~ ✅ CLOSED → **T6 H1-H18 dry run** → Launch Decision Record → launch DoD sweep.
 
-**Current Phase:** Stage 0 / Week 1 Day 5 — T1, T2, T4, T5 complete; T3 partial; IA-1 COMPLETE; LRR issued; T6 pending Condition 1.
+**Current Phase:** T6 Operational Rehearsal — READY TO EXECUTE
+
+**Launch Authorization:** BLOCKED — pending backup hardening: (1) scheduled backup automation, (2) backup encryption, (3) manifest signing, (4) offsite replication.
 
 **Platform Freeze: LIFTED for LRR/backup work — REACTIVATE before T6**
 
@@ -44,14 +46,20 @@ T5 production freeze is lifted. Permitted: backup authority reconciliation, cred
 
 **Current Blockers:**
 - FG-LR-004: CLOSED — T5 PASS. Railway headroom proven sufficient.
-- **OPEN: Backup authority reconciliation** — Option A (Railway Pro) or Option B (T1.5 with scheduling+encryption+offsite); must resolve before T6.
+- **Condition 1: CLOSED (T6 AUTHORIZED)** — T1.5 accepted as production backup authority for Stage 1. Pre-T6 checkpoint exists; restore proven.
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack (T6).
 - FG-LR-005: incident/rollback runbook and timed drill missing (T8/T9).
 - L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
 
+**Outstanding Launch Blockers (must close before launch authorization):**
+1. Scheduled backup automation — produce successful non-zero automated scheduled backup artifact
+2. Backup encryption — configure `FG_BACKUP_ENCRYPTION_KEY` and verify encrypted backup roundtrip
+3. Manifest signing — configure `FG_BACKUP_MANIFEST_HMAC_KEY` and verify HMAC-signed manifests
+4. Offsite replication — configure S3/R2/B2 destination; verify upload and remote restore source
+
 **Top Three Priorities:**
-1. Backup authority reconciliation — Option A or B decision and formal acceptance.
-2. T6 H1-H18 production dry run — after Condition 1 resolved.
+1. T6 H1-H18 production dry run — Condition 1 CLOSED; T6 is now unblocked.
+2. Backup hardening (four items above) — required for launch authorization.
 3. Launch DoD L1-L14 sweep — after T6.
 
 **T5 Result:**

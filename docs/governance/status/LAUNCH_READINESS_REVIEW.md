@@ -1,8 +1,11 @@
 # Launch Readiness Review
 
-Status: **COMPLETE — CONDITIONAL GO TO T6**
+Status: **COMPLETE — CONDITIONAL GO**
 
-**Issued: 2026-08-04 | Decision: CONDITIONAL GO | T6 authorized pending backup authority reconciliation**
+**Decision: CONDITIONAL GO | Issued: 2026-08-04**
+
+T6 Status: **READY**
+Launch Status: **BLOCKED** — pending backup hardening completion (scheduled backup, encryption, manifest signing, offsite replication)
 
 This document is the executive go/no-go decision record before the full H1-H18 production
 dry run (T6). It summarizes all completed gate evidence, classifies remaining risks, and
@@ -102,8 +105,10 @@ Items that must be resolved before any client onboarding, regardless of gate out
 |---|---|---|
 | T6 H1-H18 dry run not yet executed | T6 | Before client onboarding |
 | Launch DoD L1-L14 not fully checked | DoD sweep | Before client onboarding |
-| Backup authority reconciliation: Option A or Option B must be formally resolved | T5 G6 / LRR | Before T6 start |
-| Orphaned `default` tenant data migration defect open | T5 G2 | Before commercial use of any legacy record |
+| Backup scheduling: produce a successful non-zero automated scheduled backup artifact | T1.5 | Before launch authorization |
+| Backup encryption: configure `FG_BACKUP_ENCRYPTION_KEY` and verify encrypted backup roundtrip | T1.5 | Before launch authorization |
+| Manifest signing: configure `FG_BACKUP_MANIFEST_HMAC_KEY` and verify HMAC-signed manifests | T1.5 | Before launch authorization |
+| Offsite replication: configure S3/R2/B2 destination; verify backup upload and remote restore source | T1.5 | Before launch authorization |
 
 ---
 
@@ -190,7 +195,7 @@ All conditions must be met before T6 begins. T6 may not start with any condition
 
 | # | Condition | Acceptance criteria | Status |
 |---|---|---|---|
-| 1 | **Backup authority formally reconciled** | Either (A) upgrade Railway to a plan supporting native automatic backups and enable them, OR (B) formally accept T1.5 as production backup authority with documented gaps and a written schedule for configuring encryption + remote offsite + cron. Record the decision in this document below. | **OPEN — must resolve before T6** |
+| 1 | **Backup authority formally reconciled** | Either (A) upgrade Railway to a plan supporting native automatic backups and enable them, OR (B) formally accept T1.5 as production backup authority with documented gaps and a written schedule for configuring encryption + remote offsite + cron. Record the decision in this document below. | **CLOSED (T6 AUTHORIZED)** — Backup authority accepted for operational rehearsal. Launch authorization remains contingent on closure of the four mandatory backup hardening items. |
 | 2 | **Pre-T6 backup checkpoint evidenced** | Immutable backup ID, timestamp, SHA-256, and restore instructions recorded. | ✅ DONE — `FG-BKP-20260804-00001` · 2026-08-04T12:28:56Z · SHA-256: `af7ac56d44a5354a7fb2a4cf8af137c4508bc9d60131a96aaa1e4bac2733c41b` · restore: `pgvector/pgvector:pg18` per T1 runbook |
 | 3 | **`default` orphan data non-blocking for H1–H18** | Confirm no T6 H1-H18 step depends on data under orphaned `tenant_id='default'`. | ✅ CONFIRMED — T6 creates a fresh disposable tenant (H3); H9 explicitly accepts "no engagements" for fresh tenant; no H1–H18 step reads from `fa_engagements` or `fa_scan_jobs` under `default` |
 | 4 | **T6 uses a registered disposable tenant** | T6 platform state table specifies a freshly registered disposable tenant (not `the-wick-network`, not `default`). | ✅ CONFIRMED — T6 evidence doc spec: "create a new disposable tenant; do not use the-wick-network" |
@@ -214,11 +219,14 @@ All conditions must be met before T6 begins. T6 may not start with any condition
 
 **Option B acceptance criteria (for T6 GO):** Operator records a named decision here that T1.5 covers the backup authority role for Stage 1, and documents a completion target for: (a) fix cron scheduling, (b) configure encryption key, (c) configure remote offsite provider. The pre-T6 checkpoint is the T6 rollback baseline regardless.
 
-_(Record decision here before T6 starts)_
+**Backup Authority:** T1.5 (FrostGate Backup Authority)
+**Status:** PROVISIONALLY ACCEPTED FOR T6 / CONDITIONALLY ACCEPTED FOR LAUNCH
+**Decision Authority:** Jason
+**Decision Date:** 2026-08-04
 
-**Option B accepted:** _(yes / no)_ **Date:** _____ **By:** _____ **Note:** _____
+**Basis:** T1 restore drill previously demonstrated successful restore capability (`pgvector/pgvector:pg18`; ~4s restore; 2026-07-30). A verified pre-T6 checkpoint (`FG-BKP-20260804-00001`, 1.73 MB, SHA-256 verified) exists and rollback is available for the operational rehearsal. Remaining hardening work (scheduling, encryption, manifest signing, offsite replication) does not prevent execution of T6 but does prevent production launch authorization.
 
-**Gap resolution target:** _(encrypt + offsite + cron by: _____)_
+**T1.5 is the designated production backup authority for Stage 1**, subject to mandatory completion of scheduling, encryption, manifest signing, and offsite replication before launch authorization is granted.
 
 ---
 
@@ -226,8 +234,8 @@ _(Record decision here before T6 starts)_
 
 | Step | Owner | Target date | Status |
 |---|---|---|---|
-| Condition 1: backup authority reconciliation | jcosat | Before T6 | **OPEN** |
-| T6: Full H1-H18 production dry run | jcosat | After Condition 1 | Pending |
+| Condition 1: backup authority reconciliation | jcosat | 2026-08-04 | **CLOSED — T6 AUTHORIZED** |
+| T6: Full H1-H18 production dry run | jcosat | Now | **READY** |
 | Launch DoD L1-L14 sweep | jcosat | After T6 | Pending |
 | Incident runbook timed drill (T8/T9) | jcosat | Before client onboarding | Pending |
 | Railway plan upgrade | N/A | N/A | T5 G6: PASS — no upgrade required at Stage 1 volume |
