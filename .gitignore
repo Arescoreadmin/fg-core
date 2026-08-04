@@ -184,6 +184,10 @@ artifacts/
 !artifacts/audits/canonical_roadmap/roadmap_manifest.json
 !artifacts/audits/canonical_roadmap/EXECUTION_STATE.json
 
+# T5/T6 operational evidence packages are governance artifacts — commit them
+!artifacts/t5/
+!artifacts/t5/**
+
 # Keep volatile evidence ignored
 artifacts/platform_inventory.json
 # Local caches (Codex / CI / dev)

@@ -1,8 +1,10 @@
 # T5 Infrastructure Headroom — Failure Recovery Proof
 
-Status: **PENDING** — gates not yet executed
+Status: **IN PROGRESS** — G1 executing
 
 **Execution ID: T5-EXEC-20260804-001**
+**Execution start: 2026-08-04T10:38:05Z**
+**Production Freeze start: 2026-08-04T10:38:05Z**
 Reference this ID on all screenshots, SQL captures, Railway exports, logs, and evidence
 references for this execution. Used in the Launch Readiness Review and Launch Decision Record.
 
@@ -114,16 +116,16 @@ These are the allowed failure counts for T5 to PASS. Exceeding any one = gate fa
 | Field | Value |
 |---|---|
 | Environment | prod |
-| Railway plan tier | hobby (as of T1, 2026-07-30) |
-| API service | api (Railway internal: `api.railway.internal`) |
-| DB service | PostgreSQL 18.4 (`postgres.railway.internal`) |
-| Redis service | _(fill: service name and region)_ |
-| Deployment replica count | _(fill from G1)_ |
-| Railway plan limits (API) | _(fill: vCPU, RAM, egress ceiling from G1)_ |
-| Railway plan limits (DB) | _(fill: connections ceiling, storage ceiling from G1)_ |
-| Railway plan limits (Redis) | _(fill: maxmemory, connection limit from G1)_ |
+| Railway plan tier | _(capture from Railway dashboard — G1)_ |
+| API service | api · sfo region · https://api.frostgate.ai · service ID: 1dbe2a7b-44b6-429f-b853-1e53e44f5161 |
+| DB service | PostgreSQL · postgres-volume · Online |
+| Redis service | redis-volume · Online |
+| Deployment replica count | _(capture from Railway dashboard — G1)_ |
+| Railway plan limits (API) | _(capture from Railway dashboard — G1)_ |
+| Railway plan limits (DB) | max_connections: 100 (confirmed) · storage: _(dashboard)_ |
+| Railway plan limits (Redis) | _(capture from Railway dashboard — G1; private endpoint, cannot query remotely)_ |
 | Automatic DB backups | None (hobby: `maxBackupsCount = 0`) |
-| Production commit at T5 start | _(fill)_ |
+| Production commit at T5 start | 2aaa6ab7 (latest on main at execution start) |
 
 ---
 
@@ -192,7 +194,7 @@ Calibrate against actual Railway plan limits captured in G1. Update the Threshol
 
 ## G1 — Capacity Baseline
 
-**Status: PENDING**
+**Status: IN PROGRESS**
 
 Capture current production limits and observed steady-state usage before any load test runs.
 Let the system idle for 5–10 minutes after last deployment before recording metrics.
@@ -201,52 +203,53 @@ Let the system idle for 5–10 minutes after last deployment before recording me
 
 | Field | Value |
 |---|---|
-| Captured by | |
-| Capture start (UTC) | |
-| Capture end (UTC) | |
+| Captured by | jcosat |
+| Capture start (UTC) | 2026-08-04T10:38:05Z |
+| Capture end (UTC) | _(fill when G1 complete)_ |
 | Environment | prod |
-| Deployment ID | _(from Version Fingerprint below)_ |
-| Commit SHA | _(from Version Fingerprint below)_ |
-| Source | Railway Dashboard / CLI |
-| Evidence | _(screenshot folder / log reference)_ |
+| Deployment ID | d71a11d2-e883-460e-919e-1adc0d81068f |
+| Commit SHA | 2aaa6ab7 (latest on main; confirm against Railway dashboard) |
+| Source | railway CLI + railway run python3 + Railway Dashboard (manual captures noted below) |
+| Evidence | `artifacts/t5/T5-EXEC-20260804-001/` |
 
 ### Railway Plan
 
 | Field | Value |
 |---|---|
-| Plan name | |
-| API vCPU limit | |
-| API RAM limit | |
-| Included usage / overage pricing | |
+| Plan name | hobby |
+| API vCPU limit | _(Railway dashboard — manual capture required; hobby: shared/burstable)_ |
+| API RAM limit | _(Railway dashboard — manual capture required)_ |
+| Included usage / overage pricing | _(Railway dashboard — Settings → Usage)_ |
 
 ### API Service
 
 | Field | Value |
 |---|---|
-| Replica count | |
-| Restart count (since last deploy) | |
-| CPU % (idle steady-state) | |
-| Memory % (idle steady-state) | |
-| Network in (idle) | |
-| Network out (idle) | |
+| Replica count | 1 (multiRegionConfig.sfo.numReplicas = 1, confirmed via deployment JSON) |
+| Restart count (since last deploy) | 0 (no restart events in deployment logs since 2026-08-04T02:05:58Z) |
+| CPU % (idle steady-state) | _(Railway dashboard → Metrics — manual capture required)_ |
+| Memory % (idle steady-state) | _(Railway dashboard → Metrics — manual capture required)_ |
+| Network in (idle) | _(Railway dashboard → Metrics — manual capture required)_ |
+| Network out (idle) | _(Railway dashboard → Metrics — manual capture required)_ |
 
 ### Postgres
 
 | Field | Value |
 |---|---|
-| CPU % (idle) | |
-| Memory % (idle) | |
-| Active sessions (idle) | |
-| Idle sessions | |
-| Waiting locks | |
-| Longest running query (ms) | |
-| Deadlocks (if exposed) | |
-| Max connections ceiling | |
-| Current connections | |
-| Connection utilization % | |
-| Storage used | |
-| Storage limit | |
-| IOPS (if available) | |
+| CPU % (idle) | _(Railway dashboard — manual capture required)_ |
+| Memory % (idle) | _(Railway dashboard — manual capture required)_ |
+| Active sessions (idle) | 1 (captured 2026-08-04T10:42:30Z via pg_stat_activity) |
+| Idle sessions | 1 (captured 2026-08-04T10:42:30Z via pg_stat_activity) |
+| Waiting locks | 0 |
+| Longest running query (ms) | 0 |
+| Deadlocks (if exposed) | 0 (pg_stat_database.deadlocks) |
+| Max connections ceiling | 100 (pg_settings.max_connections) |
+| Current connections | 2 (total = active + idle) |
+| Connection utilization % | 2% (2/100) |
+| Storage used | 39 MB (pg_database_size) |
+| Storage limit | _(Railway dashboard — manual capture required)_ |
+| IOPS (if available) | _(Railway dashboard — if exposed)_ |
+| Evidence | `artifacts/t5/T5-EXEC-20260804-001/sql/G1_db_baseline_output.txt` |
 
 ### Redis
 
@@ -265,10 +268,12 @@ Let the system idle for 5–10 minutes after last deployment before recording me
 
 | Field | Value |
 |---|---|
-| Current API deployment ID | |
-| Current commit SHA | |
-| Pending deployments | |
-| Migration version | |
+| Current API deployment ID | d71a11d2-e883-460e-919e-1adc0d81068f |
+| Current commit SHA | 2aaa6ab72d23c2daa647685652d51b1b00bbc714 |
+| Container start (UTC) | 2026-08-04T02:05:58.677Z |
+| Application startup complete (UTC) | 2026-08-04T02:06:10.034Z (11s from container start) |
+| Pending deployments | 0 |
+| Migration version | 0171 ✅ |
 
 ### Version Fingerprint
 
@@ -276,15 +281,15 @@ Every performance measurement in G2–G5 is traceable to this exact deployment s
 
 | Component | Field | Value |
 |---|---|---|
-| API | Git commit SHA | |
-| API | Railway deployment ID | |
-| API | Docker image digest (if available) | |
-| API | Startup timestamp (UTC) | |
-| API | Runtime DB role | fg_app (expected) |
-| Postgres | Migration version | 0171 (expected) |
-| Postgres | Runtime role confirmed | |
-| Portal (Vercel) | Deployment ID | |
-| Portal (Vercel) | Git commit SHA | |
+| API | Git commit SHA | 2aaa6ab7 (latest on main; verify against Railway dashboard) |
+| API | Railway deployment ID | d71a11d2-e883-460e-919e-1adc0d81068f |
+| API | Docker image digest (if available) | sha256:725b10d74316b2772c2281b87a65e9e9bc37555101f9868b93e3dd8decb02f71 ✅ |
+| API | Startup timestamp (UTC) | 2026-08-04T02:06:10.034Z (app startup complete) |
+| API | Runtime DB role | fg_app ✅ (confirmed via pg_stat_activity: fg_app present) |
+| Postgres | Migration version | 0171 ✅ (confirmed: applied 2026-08-03T22:58:17Z) |
+| Postgres | Runtime role confirmed | ✅ fg_app present in pg_stat_activity |
+| Portal (Vercel) | Deployment ID | _(Vercel dashboard — manual capture required)_ |
+| Portal (Vercel) | Git commit SHA | _(Vercel dashboard — manual capture required)_ |
 
 ### Rollback Evidence
 
@@ -292,11 +297,14 @@ Document the previous healthy deployment before G4 failure injection.
 
 | Field | Value |
 |---|---|
-| Rollback target (previous healthy deployment ID) | |
-| Rollback target commit SHA | |
-| Rollback estimated time (Railway one-click or CLI) | |
-| Rollback method (Railway dashboard / `railway redeploy`) | |
-| Rollback verified | YES / NO |
+| Rollback target (previous healthy deployment ID) | dcd8d311-472d-4336-89ae-3d718089e811 |
+| Rollback target commit SHA | cde7cb615b2c70011424ad2c7d23a6f1179837d2 |
+| Rollback target image digest | sha256:cd547f84c105f72e4f45be611a6f4c5acb4fae8920f1d7f9bce9bac84c0eda70 |
+| Rollback target deployment date | 2026-08-04T02:01:45.875Z (REMOVED — superseded) |
+| Rollback estimated time (Railway one-click or CLI) | ~5–10 min (Railway rebuild from Dockerfile) |
+| Rollback method | Railway dashboard → Deployments → select dcd8d311 → Rollback; or `railway redeploy --deployment dcd8d311-472d-4336-89ae-3d718089e811` |
+| Rollback note | Deployment status REMOVED (superseded, not deleted). Railway should allow redeploy from this record. Both current and rollback target are documentation-only commits — no functional code difference since T4 PASS. |
+| Rollback verified | Pending — Railway dashboard verification required before G4 |
 
 Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G4 is blocked.
 
@@ -304,38 +312,48 @@ Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G
 
 | Field | Value |
 |---|---|
-| `/health` response time (ms) | |
-| `/health` status | |
+| `/health` response time (ms) | 235ms warm (3-sample median via urllib from railway run; first cold: 432ms) |
+| `/health` status | 200 OK |
+| `/health` response body | `{"status":"ok","service":"frostgate-core","version":"0.8.0","api_version":"v1","env":"prod","auth_enabled":true}` |
+| Captured at | 2026-08-04T10:53:XX UTC |
+| Note | Measured from Railway internal network via `railway run`. External latency will differ by user geography. |
 
 ### Baseline Traffic
 
 | Field | Value |
 |---|---|
-| Requests/min (idle 10-min window) | |
-| p50 latency | |
-| p95 latency | |
-| p99 latency | |
-| 5xx rate (idle 24h window) | |
+| Requests/min (idle 10-min window) | _(Railway Metrics dashboard — manual capture required)_ |
+| p50 latency | _(Railway Metrics dashboard — manual capture required)_ |
+| p95 latency | _(Railway Metrics dashboard — manual capture required)_ |
+| p99 latency | _(Railway Metrics dashboard — manual capture required)_ |
+| 5xx rate (idle 24h window) | _(Railway Metrics dashboard — manual capture required)_ |
+| Health check traffic (observed) | `HEAD /health` every ~30s from Railway internal health check probes (100.64.x.x) → 200 OK |
 
 ### Background Workers
 
+Captured 2026-08-04T10:53:41Z via `railway run` DB query.
+
 | Field | Value |
 |---|---|
-| Queued | |
-| Running | |
-| Completed | |
-| Failed | |
-| Retrying | |
-| Oldest queued job age | |
+| Queued | 0 |
+| Running | 0 |
+| Completed | 11 (fa_scan_jobs status=complete) |
+| Failed | 0 |
+| Retrying | 0 |
+| Oldest queued job age | None (no pending jobs) |
+| fa_quarantined_scans | 0 |
+| fg_cgct_action_queue | 0 rows |
+| fa_rem_task | 0 rows |
 
 ### Alerting
 
 | Field | Value |
 |---|---|
-| Railway alerting configured | yes / no |
-| Alert rules in place (if yes) | |
-| External monitoring configured (UptimeRobot, etc.) | yes / no |
-| On-call or notification channel | |
+| Railway alerting configured | _(Railway dashboard — manual capture required)_ |
+| Alert rules in place (if yes) | _(Railway dashboard)_ |
+| External monitoring configured (UptimeRobot, etc.) | _(verify manually)_ |
+| On-call or notification channel | _(verify manually)_ |
+| Startup warnings (from deployment logs) | 3 non-blocking warnings at startup: (1) rate_limiting_backend: in-memory Redis not used for rate limiting; (2) redis_tls: Redis URL not TLS; (3) otel_endpoint_missing: no distributed traces exported. All documented in `docs/observability/deployment_topology.md`. |
 
 ### Steady-State Baseline (10 min idle observation — fixed-interval samples)
 
@@ -366,33 +384,113 @@ Record variable **names only** — no secret values.
 
 | Field | Value |
 |---|---|
-| Captured by | |
-| Timestamp (UTC) | |
+| Captured by | jcosat |
+| Timestamp (UTC) | 2026-08-04T10:41:00Z (Railway vars export); Vercel vars pending |
 | Environment | prod |
-| Source | Railway Dashboard (vars), Vercel Dashboard (vars), Auth0 Dashboard, Resend Dashboard |
-| Deployment ID | _(from G1 Version Fingerprint)_ |
-| Commit SHA | _(from G1 Version Fingerprint)_ |
-| Evidence | _(screenshot folder / export reference)_ |
+| Source | `railway run --service api env` (Railway vars); Vercel Dashboard (vars, pending); Auth0 Dashboard (pending verify); Resend Dashboard (pending verify) |
+| Deployment ID | d71a11d2-e883-460e-919e-1adc0d81068f |
+| Commit SHA | 2aaa6ab72d23c2daa647685652d51b1b00bbc714 |
+| Evidence | `artifacts/t5/T5-EXEC-20260804-001/exports/G1_railway_variables.txt` |
 
 Classification key: **Expected** = present and correct · **Missing** = was present at T4, not now · **Unexpected** = present now, not at T4 · **Deprecated** = present but should have been removed
 
 ### Railway Variable Names (api service)
 
+Full export: `artifacts/t5/T5-EXEC-20260804-001/exports/G1_railway_variables.txt` (71 variables total, captured 2026-08-04T10:41:00Z)
+
+**T4-tracked variables (12 expected):**
+
 | Variable name | Classification | Notes |
 |---|---|---|
-| FG_ENV | Expected | |
-| FG_DB_URL | Expected | |
-| FG_DB_MIGRATION_URL | Expected | |
-| FG_RESEND_API_KEY | Expected | |
-| FG_EMAIL_FROM_ADDRESS | Expected | |
-| FG_AUTH0_DOMAIN | Expected | |
-| FG_AUTH0_AUDIENCE | Expected | |
-| FG_INTERNAL_GATEWAY_SECRET | Expected | |
-| AUTH0_MANAGEMENT_DOMAIN | Expected | |
-| AUTH0_MANAGEMENT_CLIENT_ID | Expected | |
-| AUTH0_MANAGEMENT_CLIENT_SECRET | Expected | |
-| AUTH0_MANAGEMENT_AUDIENCE | Expected | |
-| _(list any others found)_ | _(classify)_ | |
+| AUTH0_MANAGEMENT_AUDIENCE | Expected | ✅ present |
+| AUTH0_MANAGEMENT_CLIENT_ID | Expected | ✅ present |
+| AUTH0_MANAGEMENT_CLIENT_SECRET | Expected | ✅ present |
+| AUTH0_MANAGEMENT_DOMAIN | Expected | ✅ present |
+| FG_AUTH0_AUDIENCE | Expected | ✅ present |
+| FG_AUTH0_DOMAIN | Expected | ✅ present |
+| FG_DB_MIGRATION_URL | Expected | ✅ present |
+| FG_DB_URL | Expected | ✅ present |
+| FG_EMAIL_FROM_ADDRESS | Expected | ✅ present |
+| FG_ENV | Expected | ✅ present (value: prod) |
+| FG_INTERNAL_GATEWAY_SECRET | Expected | ✅ present |
+| FG_RESEND_API_KEY | Expected | ✅ present |
+
+**Additional variables present (pre-existing infrastructure, not new since T4):**
+
+| Variable name | Classification | Notes |
+|---|---|---|
+| CORE_TENANT_ID | Expected (pre-existing) | Railway API internal tenant; separate from Vercel CORE_TENANT_ID (portal BFF). Value: frostgate-internal |
+| DATABASE_URL | Expected (pre-existing) | Railway-provided Postgres proxy (external hostname for `railway run`) |
+| FG_ACKNOWLEDGMENT_KEY | Expected (pre-existing) | |
+| FG_ADMIN_ENABLED | Expected (pre-existing) | |
+| FG_ANTHROPIC_API_KEY | Expected (pre-existing) | |
+| FG_API_KEY | Expected (pre-existing) | Global key; disabled in prod by `_is_production_env()` |
+| FG_BILLING_EVIDENCE_HMAC_KEY | Expected (pre-existing) | |
+| FG_CORS_ORIGINS | Expected (pre-existing) | |
+| FG_DB_BACKEND | Expected (pre-existing) | |
+| FG_DB_MIGRATIONS_REQUIRED | Expected (pre-existing) | |
+| FG_DB_MIGRATIONS_RISK_ACCEPTED | Expected (pre-existing) | ⚠ Value: 1 — set. T6 H1 will check and clear this before client data enters |
+| FG_DOS_GUARD_ENABLED | Expected (pre-existing) | |
+| FG_ENCRYPTION_KEY | Expected (pre-existing) | |
+| FG_ENFORCEMENT_MODE | Expected (pre-existing) | |
+| FG_GOVERNANCE_ENABLED | Expected (pre-existing) | |
+| FG_INTERNAL_AUTH_SECRET | Expected (pre-existing) | |
+| FG_JWT_SECRET | Expected (pre-existing) | L12 rotation pending |
+| FG_KEEPALIVE_TIMEOUT_SEC | Expected (pre-existing) | |
+| FG_KEY_PEPPER | Expected (pre-existing) | L12 rotation pending |
+| FG_MAX_BODY_BYTES | Expected (pre-existing) | |
+| FG_MAX_CONCURRENT_REQUESTS | Expected (pre-existing) | |
+| FG_MAX_HEADER_LINE_BYTES | Expected (pre-existing) | |
+| FG_MAX_HEADERS_BYTES | Expected (pre-existing) | |
+| FG_MAX_HEADERS_COUNT | Expected (pre-existing) | |
+| FG_MAX_PATH_BYTES | Expected (pre-existing) | |
+| FG_MAX_QUERY_BYTES | Expected (pre-existing) | |
+| FG_MISSION_ENVELOPE_ENABLED | Expected (pre-existing) | |
+| FG_MISSION_ENVELOPE_PATH | Expected (pre-existing) | |
+| FG_MSAL_CLIENT_ID | Expected (pre-existing) | Azure AD app for MS Graph scans |
+| FG_MULTIPART_MAX_BYTES | Expected (pre-existing) | |
+| FG_MULTIPART_MAX_PARTS | Expected (pre-existing) | |
+| FG_NATS_ENABLED | Expected (pre-existing) | |
+| FG_OIDC_ISSUER | Expected (pre-existing) | |
+| FG_OPA_RISK_ACCEPTED | Expected (pre-existing) | |
+| FG_PORTAL_INVITATION_BASE_URL | Expected (pre-existing) | |
+| FG_REDIS_URL | Expected (pre-existing) | Private endpoint; Redis Online confirmed via railway status |
+| FG_REPORT_SIGNING_KEY | Expected (pre-existing) | |
+| FG_REPORT_VERIFY_URL | Expected (pre-existing) | |
+| FG_REQUEST_TIMEOUT_SEC | Expected (pre-existing) | |
+| FG_RING_MODEL_DIR | Expected (pre-existing) | |
+| FG_RING_ROUTER_ENABLED | Expected (pre-existing) | |
+| FG_RING_STATE_DIR | Expected (pre-existing) | |
+| FG_ROE_ENGINE_ENABLED | Expected (pre-existing) | |
+| FG_SIGNING_SECRET | Expected (pre-existing) | L12 rotation pending |
+| FG_WEBHOOK_SECRET | Expected (pre-existing) | |
+| MINISIGN_SECRET_KEY | Expected (pre-existing) | |
+| PORT | Expected (pre-existing) | Railway-injected |
+| RAILWAY_ENVIRONMENT | Expected (pre-existing) | Railway system variable |
+| RAILWAY_ENVIRONMENT_ID | Expected (pre-existing) | Railway system variable |
+| RAILWAY_ENVIRONMENT_NAME | Expected (pre-existing) | Railway system variable |
+| RAILWAY_PRIVATE_DOMAIN | Expected (pre-existing) | Railway system variable |
+| RAILWAY_PROJECT_ID | Expected (pre-existing) | Railway system variable |
+| RAILWAY_PROJECT_NAME | Expected (pre-existing) | Railway system variable |
+| RAILWAY_PUBLIC_DOMAIN | Expected (pre-existing) | Railway system variable |
+| RAILWAY_SERVICE_API_URL | Expected (pre-existing) | Railway system variable |
+| RAILWAY_SERVICE_ID | Expected (pre-existing) | Railway system variable |
+| RAILWAY_SERVICE_NAME | Expected (pre-existing) | Railway system variable |
+| RAILWAY_STATIC_URL | Expected (pre-existing) | Railway system variable |
+| Sentry_DSN | Expected (pre-existing) | ⚠ Mixed-case duplicate — `Sentry_DSN` and `SENTRY_DSN` both present; note for cleanup |
+| SENTRY_DSN | Expected (pre-existing) | ⚠ Mixed-case duplicate of above |
+| STRIPE_SECRET_KEY | Expected (pre-existing) | |
+| STRIPE_WEBHOOK_SECRET | Expected (pre-existing) | |
+
+**Missing (expected at T4, absent now):** None — all 12 T4-tracked variables confirmed present.
+
+**Unexpected (not present at T4, new since T4):** None identified.
+
+**Deprecated (should be removed):** `Sentry_DSN` (mixed-case duplicate of `SENTRY_DSN`) — non-blocking, cleanup backlog.
+
+**Findings:**
+- `FG_DB_MIGRATIONS_RISK_ACCEPTED = 1` — set. Not a T5 blocker (no migrations run during T5), but T6 H1 must check and clear this before client data enters.
+- `Sentry_DSN` / `SENTRY_DSN` duplicate — non-blocking cosmetic issue.
 
 ### Vercel Variable Names (portal app)
 
@@ -410,13 +508,13 @@ Classification key: **Expected** = present and correct · **Missing** = was pres
 
 | Item | Expected | Observed | Delta |
 |---|---|---|---|
-| Auth0 tenant | dev-22nn3c7muqjk4tgu.us.auth0.com | | |
-| Auth0 portal app ID | cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4 | | |
-| Auth0 FrostGate API identifier | https://api.frostgate.ai | | |
-| Resend sending domain | frostgate.ai | | |
-| Resend domain status | verified | | |
-| Migration version | 0171 | | |
-| Railway API service version / image | _(fill from G1)_ | | |
+| Auth0 tenant | dev-22nn3c7muqjk4tgu.us.auth0.com | _(Auth0 dashboard — verify)_ | |
+| Auth0 portal app ID | cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4 | _(Auth0 dashboard — verify)_ | |
+| Auth0 FrostGate API identifier | https://api.frostgate.ai | _(Auth0 dashboard — verify)_ | |
+| Resend sending domain | frostgate.ai | _(Resend dashboard — verify)_ | |
+| Resend domain status | verified | _(Resend dashboard — verify)_ | |
+| Migration version | 0171 | 0171 ✅ (confirmed via pg_stat DB query 2026-08-04T10:42:30Z) | None |
+| Railway API service version / image | sha256:725b10d74... | sha256:725b10d74316b2772c2281b87a65e9e9bc37555101f9868b93e3dd8decb02f71 ✅ | None |
 
 ### Outcome
 

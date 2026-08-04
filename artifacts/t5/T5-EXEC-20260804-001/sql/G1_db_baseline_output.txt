@@ -1,0 +1,28 @@
+-- T5-EXEC-20260804-001 / G1 DB Baseline Output
+-- Captured: 2026-08-04T10:42:30Z
+-- Source: railway run --service api python3 / DATABASE_URL proxy
+
+-- Migration versions (top 5):
+0171  2026-08-03 22:58:17.346108+00:00
+0170  2026-08-02 22:55:36.644605+00:00
+0169  2026-08-01 14:04:03.274684+00:00
+0168  2026-07-29 19:36:45.821175+00:00
+0167  2026-07-29 12:50:11.006903+00:00
+
+-- Connection state:
+total_connections: 2
+active_connections: 1
+idle_connections: 1
+waiting_locks: 0
+longest_query_ms: 0
+max_connections: 100
+deadlocks_total: 0
+
+-- Storage:
+db_size: 39 MB
+
+-- Runtime users observed in pg_stat_activity:
+fg_app, postgres
+
+-- current_user (DATABASE_URL proxy context):
+postgres

@@ -1,0 +1,50 @@
+{
+  "execution_id": "T5-EXEC-20260804-001",
+  "captured_at": "2026-08-04T10:50:00Z",
+  "source": "railway deployment list --json",
+  "current_deployment": {
+    "id": "d71a11d2-e883-460e-919e-1adc0d81068f",
+    "status": "SUCCESS",
+    "created_at": "2026-08-04T02:04:58.072Z",
+    "container_start": "2026-08-04T02:05:58.677Z",
+    "app_startup_complete": "2026-08-04T02:06:10.034Z",
+    "commit_hash": "2aaa6ab72d23c2daa647685652d51b1b00bbc714",
+    "image_digest": "sha256:725b10d74316b2772c2281b87a65e9e9bc37555101f9868b93e3dd8decb02f71",
+    "plan": "hobby",
+    "num_replicas": 1,
+    "region": "sfo",
+    "restart_policy_type": "ON_FAILURE",
+    "restart_policy_max_retries": 10,
+    "builder": "DOCKERFILE",
+    "runtime": "V2"
+  },
+  "rollback_target": {
+    "id": "dcd8d311-472d-4336-89ae-3d718089e811",
+    "status": "REMOVED",
+    "created_at": "2026-08-04T02:01:45.875Z",
+    "commit_hash": "cde7cb615b2c70011424ad2c7d23a6f1179837d2",
+    "image_digest": "sha256:cd547f84c105f72e4f45be611a6f4c5acb4fae8920f1d7f9bce9bac84c0eda70",
+    "note": "REMOVED status means superseded, not deleted. Rollback via Railway dashboard or railway redeploy command."
+  },
+  "health_check": {
+    "url": "https://api.frostgate.ai/health",
+    "status": 200,
+    "response_ms_warm": 235,
+    "response_ms_cold": 432,
+    "response_body": {
+      "status": "ok",
+      "service": "frostgate-core",
+      "version": "0.8.0",
+      "api_version": "v1",
+      "env": "prod",
+      "auth_enabled": true
+    },
+    "measurement_method": "urllib from railway run container (internal network)",
+    "captured_at": "2026-08-04T10:53:00Z"
+  },
+  "startup_warnings": [
+    "rate_limiting_backend: Rate limiting uses in-memory backend. Use Redis for distributed rate limiting in production.",
+    "redis_tls: Redis URL doesn't use TLS (rediss://). Consider using TLS for production.",
+    "otel_endpoint_missing: FG_OTEL_ENDPOINT is not set. No distributed traces will be exported."
+  ]
+}

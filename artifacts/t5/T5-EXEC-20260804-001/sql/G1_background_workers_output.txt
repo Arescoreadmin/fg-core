@@ -1,0 +1,34 @@
+-- T5-EXEC-20260804-001 / G1 Background Worker State Output
+-- Captured: 2026-08-04T10:53:41Z
+-- Source: railway run --service api python3 / DATABASE_URL proxy
+
+-- Job-related tables discovered:
+fa_quarantined_scans, fa_rem_task, fa_scan_audit_events, fa_scan_jobs,
+fa_scan_results, fg_cgct_action_queue, remediation_task_audits, remediation_tasks
+
+-- fa_scan_jobs by status:
+complete: 11
+
+-- Pending/running/queued scan jobs:
+(none)
+
+-- Oldest non-complete scan job:
+None
+
+-- fa_rem_task by state:
+(no rows — table empty)
+
+-- fg_cgct_action_queue rows:
+0
+
+-- fa_quarantined_scans:
+0
+
+-- DB time at capture:
+2026-08-04 10:53:41.614950 UTC
+
+-- Summary:
+-- All 11 scan jobs are in 'complete' state.
+-- No queued, running, pending, or failed background jobs.
+-- No quarantined scans. No remediation tasks. No action queue items.
+-- System is idle.
