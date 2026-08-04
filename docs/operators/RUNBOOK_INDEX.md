@@ -10,6 +10,10 @@ The operational table of contents. When something happens, start here.
 |---|---|---|
 | **Production deploy** | Production Configuration Changes | `docs/operators/production_configuration_changes.md` |
 | **Rollback** | Disaster Recovery | `docs/operators/disaster_recovery.md` |
+| **Incident / rollback drill (T8)** | T8 Incident Drill | `docs/operators/t8_incident_drill.md` |
+| **Console UX gate (T9)** | T9 Console UX Validation | `docs/operators/t9_console_ux_validation.md` |
+| **Portal UX gate (T10)** | T10 Portal UX Validation | `docs/operators/t10_portal_ux_validation.md` |
+| **Data purge / DPA deletion (T13)** | T13 Deletion Runbook | `docs/operators/t13_deletion_runbook.md` |
 | **Database backup** | Backup and Restore | `docs/operators/backup_restore.md` |
 | **Backup automation / scheduling** | Backup Automation | `docs/operators/backup_automation.md` |
 | **Backup schedule reference** | Backup Schedule | `docs/operators/backup_schedule.md` |
@@ -35,6 +39,10 @@ The operational table of contents. When something happens, start here.
 | Runbook | File | Last verified | Covers |
 |---|---|---|---|
 | Auth0 Roles | `auth0_roles.md` | — | Auth0 role configuration |
+| T8 Incident Drill | `t8_incident_drill.md` | — (pending execution) | Railway rollback drill; ≤15 min RTO; evidence record |
+| T9 Console UX Validation | `t9_console_ux_validation.md` | — (pending execution) | ≤9 nav items; end-to-end engagement via visible nav |
+| T10 Portal UX Validation | `t10_portal_ux_validation.md` | — (pending execution) | Real data on all visible pages; discoveries before charts; session revocation |
+| T13 Deletion Runbook | `t13_deletion_runbook.md` | — (pending execution) | DPA §5 / §10 / day-90 triggers; purge order; legal-hold checks; test execution |
 | Azure AD App Setup | `azure_ad_app_setup.md` | PR 25 | Client Azure AD app registration, scopes, admin consent |
 | Backup and Restore | `backup_restore.md` | T1 (2026-07-30) | `pg_dump` method, restore to scratch, row-count verify |
 | Backup Automation | `backup_automation.md` | T1.5 (2026-07-30) | `fg_backup.sh`, retention, offsite, signed manifests |
@@ -54,7 +62,7 @@ The operational table of contents. When something happens, start here.
 
 | Gap | Severity | Notes |
 |---|---|---|
-| Incident runbook (timed drill) | Medium | Not yet executed — T8/T9 scope |
+| Incident runbook (timed drill) | Medium | Runbook written (`t8_incident_drill.md`) — not yet executed |
 | `credential_delivery.md` rewrite | Low | Instructions predate named-user cutover (T14 plan item) |
 | Portal lockout runbook (standalone) | Low | Currently embedded in First Client Playbook §8 |
 | Auth0 outage escalation (standalone) | Low | Currently embedded in auth0_roles.md and disaster_recovery.md |
