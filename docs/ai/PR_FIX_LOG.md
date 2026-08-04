@@ -20931,3 +20931,48 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Tests added:** None — covered by existing 25 tests.
 - **Result:** 25 tests pass.
+
+---
+
+## P-34 — fix(D-T6-004): portal invitation URL missing tenant_id — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `api/notifications/email.py`, `api/portal.py`
+- **Root cause:** `build_invitation_url()` in `api/notifications/email.py` did not accept or embed `tenant_id`. The portal acceptance flow at `/accept-invite` requires `?token=…&tenant_id=…` to resolve which tenant the invitation belongs to. Without `tenant_id`, the accept flow cannot locate the invitation and fails with a generic error.
+- **Fix:** `build_invitation_url(raw_token, tenant_id)` now accepts `tenant_id` as a required second argument and appends `&tenant_id={tenant_id}` to the URL. Call site in `api/portal.py` updated to pass `tenant_id` from the invitation record.
+- **Behavioral impact:** Portal invitation emails now include the correct acceptance URL. Pre-existing sent invitations with the old URL format continue to fail (no backfill possible for emails already sent).
+- **Security impact:** None — `tenant_id` is not a secret; it is already present in the invitation token payload.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by T4 Gold Path G3 (portal invite delivery verified end-to-end).
+- **Result:** PASS.
+
+---
+
+## P-35 — fix(PR-T6.5): unhandled exceptions returned HTML instead of JSON — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `api/main.py`
+- **Root cause:** FastAPI/Starlette's default handler for unhandled Python exceptions returns an HTML error page (`text/html; charset=utf-8`). Any exception not caught by a route handler or Pydantic's `RequestValidationError` handler produced a non-JSON 500 response. This is a reliability and trust issue for API clients and operator consoles that expect structured JSON on all error paths.
+- **Fix:** Added `@app.exception_handler(Exception)` before the `RequestValidationError` handler in `api/main.py`. The handler logs the exception (including traceback), extracts `x-request-id` from the request headers, and returns `{"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred.", "request_id": "…"}` as JSON with status 500. No stack trace is exposed to the caller.
+- **Behavioral impact:** All unhandled Python exceptions now return structured JSON. Operator and portal clients no longer receive HTML 500 pages.
+- **Security impact:** Positive — stack traces and internal details are no longer leaked to callers. Error is logged server-side with full traceback.
+- **Schema/API impact:** Breaking for any caller that was parsing the HTML error body (none known).
+- **Tests added:** None — verified via T6 second run (D-T6-005 area) and Gold Path.
+- **Result:** PASS.
+
+---
+
+## P-36 — fix(ci): portal_named_user_me missing from DB + scope lint exemptions — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `tools/ci/check_db_dependency.py`, `tools/ci/check_route_scopes.py`
+- **Root cause:** `GET /portal/named-users/me` authenticates via the `pnu1.` session token in `X-FG-Portal-Session` rather than the standard tenant-header + `require_scopes`/`require_permission` FastAPI dependency chain. Two CI gates did not know about this alternative pattern: (1) `check_db_dependency.py` flags non-public routes using `Depends(get_db)` directly; (2) `check_route_scopes.py` flags non-public routes without an explicit scope dependency. Both gates flagged the route as a violation, blocking `frostgate-core-ci` on main since the T4 named-user route was merged.
+- **Fix:** Both gates now have a `_EXEMPTIONS: frozenset[str]` containing `/portal/named-users/me`. Each exemption is documented inline with the alternative auth pattern: tenant resolved via SECURITY DEFINER `lookup_portal_session_by_fingerprint()` (migration 0171); `validate_session()` calls `_set_tenant_rls()` before any tenant-scoped query; auth_version + membership-active checks enforced before any data access.
+- **Behavioral impact:** None — runtime behaviour of the route is unchanged.
+- **Security impact:** None — the route's auth is correctly implemented; the exemption is a CI gate annotation, not a bypass of any runtime enforcement.
+- **Schema/API impact:** None.
+- **Tests added:** None — existing portal named-user tests (47 in T4) cover the auth flow.
+- **Result:** PASS (local verification: both gates print OK).
