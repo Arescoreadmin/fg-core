@@ -763,3 +763,84 @@ def test_concurrent_report_versions_are_unique(build_app, monkeypatch) -> None:
     assert len(versions) == 2, (
         f"Duplicate versions assigned under concurrency: {versions}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression: D-T6-006 — post-commit ORM attribute access (create_engagement_report)
+# ---------------------------------------------------------------------------
+
+
+def test_create_report_response_fields_not_500(client: TestClient) -> None:
+    """POST /reports must return 201 with all expected response fields (D-T6-006).
+
+    Guards against SQLAlchemy DetachedInstanceError caused by accessing record.id
+    after db.commit() when db.refresh(record) was removed.
+    """
+    eid = _make_engagement(client)
+    resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports",
+        json={"report_type": "full_assessment"},
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert "report_id" in data
+    assert data["report_id"]
+    assert data["version"] == 1
+    assert data["status"] == "finalized"
+    assert "compiled_at" in data
+
+
+# ---------------------------------------------------------------------------
+# Regression: D-T6-002 — post-commit ORM attribute access (qa_approve_report)
+# ---------------------------------------------------------------------------
+
+_TENANT_QA = "tenant-report-qa-t6"
+
+
+@pytest.fixture()
+def qa_approve_client(build_app, monkeypatch):
+    """Client with governance:read + governance:write + governance:qa_approve scopes.
+
+    No DB role assigned — scope fallback unions assessor (assessment.create) and
+    qa_reviewer (report.qa_approve) capabilities without a DB role row.
+    """
+    from api.auth_scopes import mint_key
+
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    key = mint_key(
+        "governance:read",
+        "governance:write",
+        "governance:qa_approve",
+        tenant_id=_TENANT_QA,
+    )
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+def test_qa_approve_response_contains_engagement_status(
+    qa_approve_client: TestClient,
+) -> None:
+    """POST /qa-approve must return engagement_status in response (D-T6-002).
+
+    Guards against SQLAlchemy DetachedInstanceError caused by accessing eng.status
+    after db.commit().
+    """
+    eid = _make_engagement(qa_approve_client)
+    report = _make_report(qa_approve_client, eid)
+    report_id = report["report_id"]
+
+    resp = qa_approve_client.post(
+        f"/field-assessment/engagements/{eid}/reports/{report_id}/qa-approve",
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "engagement_status" in data
+    assert data["engagement_status"] in {
+        "in_progress",
+        "delivered",
+        "remediation",
+        "monitoring",
+        "closed",
+        "cancelled",
+    }

@@ -486,3 +486,51 @@ def test_list_questionnaires_requires_assessment_read(build_app: object) -> None
         f"/field-assessment/engagements/{eng_resp.json()['id']}/questionnaires"
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Regression: D-T6-002 — post-commit ORM attribute access (create_or_get_questionnaire)
+# ---------------------------------------------------------------------------
+
+
+def test_create_questionnaire_response_fields_not_500(client: TestClient) -> None:
+    """POST /questionnaires must return 200 with all expected response fields (D-T6-002).
+
+    Guards against SQLAlchemy DetachedInstanceError caused by accessing ORM
+    attributes on an expired questionnaire object after db.commit().
+    """
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/questionnaires",
+        json={"framework": "nist_ai_rmf"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "id" in data
+    assert data["engagement_id"] == eng_id
+    assert data["framework"] == "nist_ai_rmf"
+    assert "status" in data
+    assert "responses" in data
+    assert isinstance(data["responses"], list)
+
+
+def test_create_questionnaire_idempotent_already_existed(client: TestClient) -> None:
+    """Second POST for the same engagement+framework must return already_existed=True (D-T6-002)."""
+    eng = _create_engagement(client)
+    eng_id = eng["id"]
+
+    r1 = client.post(
+        f"/field-assessment/engagements/{eng_id}/questionnaires",
+        json={"framework": "nist_ai_rmf"},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json().get("already_existed") is False
+
+    r2 = client.post(
+        f"/field-assessment/engagements/{eng_id}/questionnaires",
+        json={"framework": "nist_ai_rmf"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json().get("already_existed") is True

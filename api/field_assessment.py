@@ -1319,9 +1319,40 @@ def create_engagement_route(
         occurred_at=eng.created_at,
         payload=audit_payload,
     )
+    # Capture all ORM attributes before commit to avoid post-commit expiry (D-T6-002).
+    _eng_id = eng.id
+    _eng_tenant_id = eng.tenant_id
+    _eng_client_name = eng.client_name
+    _eng_client_domain = eng.client_domain
+    _eng_assessor_id = eng.assessor_id
+    _eng_assessment_type = eng.assessment_type
+    _eng_status = eng.status
+    _eng_scheduled_date = eng.scheduled_date
+    _eng_engagement_metadata = eng.engagement_metadata
+    _eng_schema_version = eng.schema_version
+    _eng_created_at = eng.created_at
+    _eng_updated_at = eng.updated_at
     db.commit()
-    db.refresh(eng)
-    return _engagement_to_response(eng)
+    _LEGACY_STATUS_MAP = {
+        "scheduled": "in_progress",
+        "pre_visit": "in_progress",
+        "evidence_collected": "in_progress",
+        "report_generation": "in_progress",
+    }
+    return EngagementResponse(
+        id=_eng_id,
+        tenant_id=_eng_tenant_id,
+        client_name=_eng_client_name,
+        client_domain=_eng_client_domain,
+        assessor_id=_eng_assessor_id,
+        assessment_type=_eng_assessment_type,
+        status=_LEGACY_STATUS_MAP.get(_eng_status, _eng_status),
+        scheduled_date=_eng_scheduled_date,
+        engagement_metadata=_eng_engagement_metadata or {},
+        schema_version=_eng_schema_version,
+        created_at=_eng_created_at,
+        updated_at=_eng_updated_at,
+    )
 
 
 @router.get(
@@ -7537,13 +7568,15 @@ def qa_approve_report_route(
         actor_type="human_operator",
         reason=f"QA approval of report {report_id}",
     )
+    # Capture eng.status before commit to avoid post-commit expiry (D-T6-002).
+    _eng_status = eng.status
     db.commit()
 
     return ReportQaApproveResponse(
         report_id=report_id,
         qa_approved_by=display_name,
         qa_approved_at=now,
-        engagement_status=eng.status,
+        engagement_status=_eng_status,
         portal_grant_id=portal_grant_id,
         portal_raw_secret=portal_raw_secret,
         portal_expires_at=portal_expires_at,
@@ -8560,11 +8593,12 @@ def create_engagement_report_route(
             "report_link_count": report_link_count,
         },
     )
+    # Capture record.id before commit to avoid post-commit expiry (D-T6-006).
+    _record_id = record.id
     db.commit()
-    db.refresh(record)
 
     return {
-        "report_id": record.id,
+        "report_id": _record_id,
         "version": version,
         "status": "finalized",
         "compiled_at": now,
@@ -9267,8 +9301,14 @@ def create_or_get_questionnaire(
             reason_code="QUESTIONNAIRE_INIT",
             payload={"questionnaire_id": q.id, "framework": body.framework},
         )
+    # Capture q.id before commit to avoid post-commit expiry (D-T6-002).
+    _q_id = q.id
+    _already_existed = not created
     db.commit()
-    responses = list_responses(db, questionnaire_id=q.id, tenant_id=tenant_id)
+    # Re-query q after commit so _questionnaire_to_response can access its attributes
+    # under the current RLS context (post-commit refresh is unsafe; re-query is correct).
+    q = db.get(FaQuestionnaire, _q_id)
+    responses = list_responses(db, questionnaire_id=_q_id, tenant_id=tenant_id)
     evidence_map = _build_response_evidence_map(
         db,
         engagement_id=engagement_id,
@@ -9276,7 +9316,7 @@ def create_or_get_questionnaire(
         response_ids=[r.id for r in responses],
     )
     return _questionnaire_to_response(
-        q, responses, already_existed=not created, evidence_map=evidence_map
+        q, responses, already_existed=_already_existed, evidence_map=evidence_map
     )
 
 
