@@ -1,3 +1,22 @@
+## 2026-08-03 — fix/portal-invitation-gateway-auth: inject X-Tenant-Id for internal admin gateway requests
+
+**Critical files changed:** `api/middleware/auth_gate.py`
+
+**Change scope:** Defect fix — `AuthGateMiddleware` injected the `X-Tenant-Id` request header into `result.tenant_id` only when `result.reason == "global_key"`. The internal admin gateway authenticates as `reason="admin_internal_token"` with no bound tenant. Without injection, `request.state.tenant_id` was always None for gateway-authenticated portal requests, causing `_resolve_tenant()` to raise 401 "tenant context required".
+
+**Change to `api/middleware/auth_gate.py`:**
+
+- Renamed the injection condition to `_tenant_injectable` and extended it to also cover `"admin_internal_token"` alongside `"global_key"`. The rest of the injection logic (only when `not result.tenant_id` and `requested_tenant` is present) is unchanged.
+
+**Security invariants confirmed:**
+
+- Injection still only occurs when `result.tenant_id` is None — a credential with a bound tenant cannot be overridden by the header.
+- The header value is only accepted after the caller has already been authenticated (gateway secret validated by constant-time comparison). Unauthenticated callers never reach this branch.
+- No new unauthenticated tenant injection path is created. The `admin_internal_token` path already requires `FG_INTERNAL_GATEWAY_SECRET` to match.
+- Cross-tenant mismatch guard (lines 166–187) still runs before injection; it checks `result.tenant_id` which is None at that point for gateway requests, so the guard correctly passes through.
+
+**SOC review outcome:** approved. The change resolves a broken operational path with no new security surface. Tenant header injection is conditional on prior authentication and is bounded by the existing no-override guard.
+
 ## 2026-08-03 — fix/portal-invitation-gateway-auth: extend internal admin gateway to portal operator paths
 
 **Critical files changed:** `api/auth_scopes/resolution.py`

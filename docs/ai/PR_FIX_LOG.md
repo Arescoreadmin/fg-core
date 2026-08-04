@@ -1,5 +1,19 @@
 # PR Fix Log (Strict)
 
+## P-50 — fix(auth): inject X-Tenant-Id for internal admin gateway requests
+
+- **PR/Branch:** `fix/portal-invitation-gateway-auth`
+- **Date:** 2026-08-03
+- **Files changed:** `api/middleware/auth_gate.py`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- **Root cause:** `AuthGateMiddleware` injected the `X-Tenant-Id` header into `result.tenant_id` only for `reason="global_key"`. Internal admin gateway authenticates as `reason="admin_internal_token"` with no bound tenant, so `request.state.tenant_id` was always None, causing 401 "tenant context required" on portal operator routes.
+- **Fix:** Extended `_tenant_injectable` condition to include `"admin_internal_token"`. Injection only occurs when `result.tenant_id` is None and `X-Tenant-Id` is present — existing no-override guard unchanged.
+- **Security impact:** None. Injection is gated on prior authentication. No new unauthenticated path created.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by G1 gate behavioral proof.
+- **Result:** `make fg-fast` passes.
+
+---
+
 ## P-49 — fix(auth): extend internal admin gateway to portal operator paths
 
 - **PR/Branch:** `fix/portal-invitation-gateway-auth`

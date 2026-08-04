@@ -186,9 +186,11 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                 "denied_tenant",
             )
 
-        # For global-key + BFF-supplied tenant header: inject the header
+        # For global-key + BFF-supplied tenant header, and for the internal
+        # admin gateway (which carries no bound tenant): inject the header
         # tenant into result so the assignment below remains result.tenant_id.
-        if result.reason == "global_key" and not result.tenant_id and requested_tenant:
+        _tenant_injectable = result.reason in ("global_key", "admin_internal_token")
+        if _tenant_injectable and not result.tenant_id and requested_tenant:
             result.tenant_id = requested_tenant
         request.state.auth = result
         request.state.tenant_id = result.tenant_id
