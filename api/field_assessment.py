@@ -3302,7 +3302,7 @@ def _msgraph_scan_background(
         with _MSGRAPH_RUNS_LOCK:
             _MSGRAPH_RUNS[run_id].update(kw)
 
-    from api.db import get_sessionmaker
+    from api.db import get_sessionmaker, set_tenant_context
 
     SessionLocal = get_sessionmaker()
 
@@ -3310,6 +3310,7 @@ def _msgraph_scan_background(
         _set(status="authenticating")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -3323,6 +3324,7 @@ def _msgraph_scan_background(
             _set(status="failed", error=error_msg)
             db = SessionLocal()
             try:
+                set_tenant_context(db, tenant_id)
                 _c6_update_job_status(
                     db, job_id=job_id, status="failed", failure_reason=error_msg
                 )
@@ -3352,6 +3354,7 @@ def _msgraph_scan_background(
         _set(status="importing")
         db = SessionLocal()
         try:
+            set_tenant_context(db, tenant_id)
             envelope = ConnectorImportEnvelope.model_validate(
                 {
                     "connector_type": "microsoft_graph",
@@ -3395,6 +3398,7 @@ def _msgraph_scan_background(
         except Exception as exc:
             log.error("msgraph_background: import failed — %s", exc)
             db.rollback()
+            set_tenant_context(db, tenant_id)
             _c6_update_job_status(
                 db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
@@ -3419,6 +3423,7 @@ def _msgraph_scan_background(
         log.error("msgraph_background: scan failed — %s", exc)
         db2 = SessionLocal()
         try:
+            set_tenant_context(db2, tenant_id)
             _c6_update_job_status(
                 db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
