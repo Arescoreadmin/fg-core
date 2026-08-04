@@ -1,0 +1,84 @@
+name: restore-drill
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"   # 03:00 UTC on the 1st of each month
+  workflow_dispatch:        # manual trigger for C1 validation + ad hoc drills
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    name: Monthly restore drill → evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      FG_BACKUP_DB_URL:               ${{ secrets.FG_BACKUP_DB_URL }}
+      FG_BACKUP_ENCRYPT:              "true"
+      FG_BACKUP_ENCRYPTION_KEY:       ${{ secrets.FG_BACKUP_ENCRYPTION_KEY }}
+      FG_BACKUP_MANIFEST_HMAC_KEY:    ${{ secrets.FG_BACKUP_MANIFEST_HMAC_KEY }}
+      FG_BACKUP_OFFSITE_PROVIDER:     "s3"
+      FG_BACKUP_S3_BUCKET:            ${{ secrets.FG_BACKUP_S3_BUCKET }}
+      FG_BACKUP_S3_ENDPOINT:          ${{ secrets.FG_BACKUP_S3_ENDPOINT }}
+      FG_BACKUP_S3_PREFIX:            "frostgate/backups"
+      AWS_ACCESS_KEY_ID:              ${{ secrets.FG_BACKUP_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:          ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}
+      FG_BACKUP_OPERATOR:             "ops@frostgate.ai"
+      FG_BACKUP_DOCKER_IMAGE:         "pgvector/pgvector:pg18"
+      FG_BACKUP_DIR:                  "/tmp/fg-backups"
+      FG_BACKUP_SCRATCH_PORT:         "5434"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [[ -z "$FG_BACKUP_DB_URL" ]] && missing+=(FG_BACKUP_DB_URL)
+          [[ -z "$FG_BACKUP_ENCRYPTION_KEY" ]] && missing+=(FG_BACKUP_ENCRYPTION_KEY)
+          [[ -z "$FG_BACKUP_MANIFEST_HMAC_KEY" ]] && missing+=(FG_BACKUP_MANIFEST_HMAC_KEY)
+          [[ -z "$FG_BACKUP_S3_BUCKET" ]] && missing+=(FG_BACKUP_S3_BUCKET)
+          [[ -z "$FG_BACKUP_S3_ENDPOINT" ]] && missing+=(FG_BACKUP_S3_ENDPOINT)
+          [[ -z "$AWS_ACCESS_KEY_ID" ]] && missing+=(FG_BACKUP_R2_ACCESS_KEY_ID)
+          [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && missing+=(FG_BACKUP_R2_SECRET_ACCESS_KEY)
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "FATAL: missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets present."
+
+      - name: Install aws-cli
+        run: |
+          if ! command -v aws &>/dev/null; then
+            pip install awscli --quiet
+          fi
+
+      - name: Pull pg Docker image
+        run: docker pull --quiet pgvector/pgvector:pg18
+
+      - name: Take backup for drill source
+        run: |
+          chmod +x scripts/backup/fg_backup.sh
+          scripts/backup/fg_backup.sh backup --type manual
+
+      - name: Run restore drill
+        run: scripts/backup/fg_backup.sh drill
+
+      - name: Upload drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-evidence-${{ github.run_id }}
+          path: |
+            docs/governance/status/restore_drill_evidence_*.md
+            /tmp/fg-backups/restore_report_*.json
+          retention-days: 90
+
+      - name: Fail loudly on drill failure
+        if: failure()
+        run: |
+          echo "::error::Restore drill FAILED. Check uploaded artifact: restore-drill-evidence-${{ github.run_id }}"
+          exit 1
