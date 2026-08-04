@@ -3533,9 +3533,10 @@ def initiate_msgraph_scan(
         scan_job_id=job.id,
         scanner_type="microsoft_graph",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -3548,7 +3549,7 @@ def initiate_msgraph_scan(
     background_tasks.add_task(
         _msgraph_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         receipt=receipt,
@@ -3783,9 +3784,10 @@ def initiate_oauth_inventory_scan(
         scan_job_id=job.id,
         scanner_type="oauth_inventory",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -3798,7 +3800,7 @@ def initiate_oauth_inventory_scan(
     background_tasks.add_task(
         _oauth_inventory_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -4032,9 +4034,10 @@ def initiate_endpoint_inventory_scan(
         scan_job_id=job.id,
         scanner_type="endpoint_inventory",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -4047,7 +4050,7 @@ def initiate_endpoint_inventory_scan(
     background_tasks.add_task(
         _endpoint_inventory_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -4506,9 +4509,10 @@ def initiate_network_scan(
         scanner_type="network_scan",
         payload_summary={"target_count": len(verified_rows)},
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id  # reuse job.id as run_id for in-memory state lookup
+    run_id = job_id  # reuse job_id as run_id for in-memory state lookup
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -4521,7 +4525,7 @@ def initiate_network_scan(
     background_tasks.add_task(
         _network_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         target_hosts=[r.target for r in verified_rows],
@@ -4708,9 +4712,10 @@ def initiate_dns_email_scan(
         scanner_type="dns_email",
         payload_summary={"domain_count": len(body.domains)},
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -4723,7 +4728,7 @@ def initiate_dns_email_scan(
     background_tasks.add_task(
         _dns_email_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         domains=body.domains,
@@ -4980,9 +4985,10 @@ def initiate_web_headers_scan(
         scanner_type="web_headers",
         payload_summary={"target_count": len(verified_rows)},
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "scanning",
@@ -4995,7 +5001,7 @@ def initiate_web_headers_scan(
     background_tasks.add_task(
         _web_headers_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         targets=[r.target for r in verified_rows],
@@ -5236,9 +5242,10 @@ def initiate_entra_governance_scan(
         scan_job_id=job.id,
         scanner_type="entra_governance",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -5251,7 +5258,7 @@ def initiate_entra_governance_scan(
     background_tasks.add_task(
         _entra_governance_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -5491,9 +5498,10 @@ def initiate_sharepoint_scan(
         scan_job_id=job.id,
         scanner_type="sharepoint_onedrive",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -5506,7 +5514,7 @@ def initiate_sharepoint_scan(
     background_tasks.add_task(
         _sharepoint_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -5746,9 +5754,10 @@ def initiate_oauth_risk_scan(
         scan_job_id=job.id,
         scanner_type="oauth_risk",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -5761,7 +5770,7 @@ def initiate_oauth_risk_scan(
     background_tasks.add_task(
         _oauth_risk_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -6005,9 +6014,10 @@ def initiate_ai_tool_discovery_scan(
         scan_job_id=job.id,
         scanner_type="ai_tool_discovery",
     )
+    job_id = job.id  # capture before commit — session expire guard
     db.commit()
 
-    run_id = job.id
+    run_id = job_id
     with _MSGRAPH_RUNS_LOCK:
         _MSGRAPH_RUNS[run_id] = {
             "status": "pending_auth",
@@ -6020,7 +6030,7 @@ def initiate_ai_tool_discovery_scan(
     background_tasks.add_task(
         _ai_tool_discovery_scan_background,
         run_id=run_id,
-        job_id=job.id,
+        job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         msal_app=msal_app,
@@ -10481,6 +10491,8 @@ def run_ai_data_access_mapping(
             "tool_count": len(tools),
         },
     )
+    job_id = job.id  # capture before commit — session expire guard
+    source_scan_id = source_scan.id  # capture before commit — session expire guard
     db.commit()
 
     try:
@@ -10488,7 +10500,7 @@ def run_ai_data_access_mapping(
 
         mappings, raw_findings, summary = map_engagement(
             tools,
-            source_scan_result_id=source_scan.id,
+            source_scan_result_id=source_scan_id,
             tenant_id=tenant_id,
             engagement_id=engagement_id,
         )
@@ -10501,7 +10513,7 @@ def run_ai_data_access_mapping(
             "schema_version": "1.0",
             "tenant_id": tenant_id,
             "engagement_id": engagement_id,
-            "source_scan_result_id": source_scan.id,
+            "source_scan_result_id": source_scan_id,
             "scan_completed_at": stable_ts,
             "mappings": mappings,
             "findings": raw_findings,
@@ -10524,7 +10536,7 @@ def run_ai_data_access_mapping(
         )
         _c6_update_job_status(
             db,
-            job_id=job.id,
+            job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
         )
@@ -10535,7 +10547,7 @@ def run_ai_data_access_mapping(
             engagement_id=engagement_id,
             event_type="scan.completed",
             actor=actor,
-            scan_job_id=job.id,
+            scan_job_id=job_id,
             scanner_type="ai_data_access_mapping",
             scan_result_id=result.scan_result_id,
             payload_summary={
@@ -10560,7 +10572,7 @@ def run_ai_data_access_mapping(
         db.rollback()
         try:
             _c6_update_job_status(
-                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
             _c6_write_audit_event(
                 db,
@@ -10568,7 +10580,7 @@ def run_ai_data_access_mapping(
                 engagement_id=engagement_id,
                 event_type="scan.failed",
                 actor=actor,
-                scan_job_id=job.id,
+                scan_job_id=job_id,
                 scanner_type="ai_data_access_mapping",
                 rejection_reason=str(exc)[:500],
             )
@@ -11209,6 +11221,8 @@ def run_ai_vendor_governance(
             "risk_record_count": len(risk_records),
         },
     )
+    job_id = job.id  # capture before commit — session expire guard
+    source_scan_id = source_scan.id  # capture before commit — session expire guard
     db.commit()
 
     try:
@@ -11224,7 +11238,7 @@ def run_ai_vendor_governance(
             engagement_id=engagement_id,
             pr1_scan_result_id=None,
             pr2_scan_result_id=None,
-            pr3_scan_result_id=source_scan.id,
+            pr3_scan_result_id=source_scan_id,
             now_str=now_str,
         )
 
@@ -11239,7 +11253,7 @@ def run_ai_vendor_governance(
             "schema_version": "1.0",
             "tenant_id": tenant_id,
             "engagement_id": engagement_id,
-            "source_scan_result_id": source_scan.id,
+            "source_scan_result_id": source_scan_id,
             "scan_completed_at": stable_ts,
             "governance_records": governance_recs,
             "findings": all_findings,
@@ -11262,7 +11276,7 @@ def run_ai_vendor_governance(
         )
         _c6_update_job_status(
             db,
-            job_id=job.id,
+            job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
         )
@@ -11273,7 +11287,7 @@ def run_ai_vendor_governance(
             engagement_id=engagement_id,
             event_type="scan.completed",
             actor=actor,
-            scan_job_id=job.id,
+            scan_job_id=job_id,
             scanner_type="ai_vendor_governance",
             scan_result_id=result.scan_result_id,
             payload_summary={
@@ -11298,7 +11312,7 @@ def run_ai_vendor_governance(
         db.rollback()
         try:
             _c6_update_job_status(
-                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
             _c6_write_audit_event(
                 db,
@@ -11306,7 +11320,7 @@ def run_ai_vendor_governance(
                 engagement_id=engagement_id,
                 event_type="scan.failed",
                 actor=actor,
-                scan_job_id=job.id,
+                scan_job_id=job_id,
                 scanner_type="ai_vendor_governance",
                 rejection_reason=str(exc)[:500],
             )
