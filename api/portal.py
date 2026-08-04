@@ -905,7 +905,7 @@ def portal_issue_invitation(
         )
 
     # ── Step 2: send email (post-commit, raw_token available here only) ──────
-    invitation_url = build_invitation_url(inv.raw_token)  # type: ignore[arg-type]
+    invitation_url = build_invitation_url(inv.raw_token, tenant_id)  # type: ignore[arg-type]
     result = send_portal_invitation(
         to_email=inv.email,
         invitation_url=invitation_url,
