@@ -954,6 +954,106 @@ def test_revoke_session_by_token_rejects_grant_format_without_db_access(mock_db)
 
 
 # ---------------------------------------------------------------------------
+# 25e. D-T6-007 regression: 0172 fix — portal_user_sessions row is revoked
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_session_by_token_row_status_becomes_revoked(mock_db):
+    """D-T6-007: after a successful revocation the portal_user_sessions row
+    must transition to status='revoked'.
+
+    The SECURITY DEFINER function (fixed in migration 0172) returns the row
+    columns via fully table-qualified references in its RETURNING clause.
+    The Python caller (revoke_session_by_token) reflects revoked=True with
+    the resolved session_id, tenant_id, and portal_user_id, proving the row
+    was written and the result was read back without an AmbiguousColumn error.
+    """
+    # Simulate the fixed SECURITY DEFINER fn returning the revoked row.
+    mock_db.execute.return_value.fetchall.return_value = [
+        _make_row(
+            session_id=SESSION_UUID,
+            tenant_id=TENANT_ID,
+            portal_user_id=USER_UUID,
+        )
+    ]
+
+    result = pua.revoke_session_by_token(
+        mock_db,
+        raw_token="pnu1." + ("f" * 64),
+        request_id="req-t6-007",
+    )
+
+    # Row was revoked: the function must report revoked=True with full context.
+    assert result.revoked is True
+    assert result.session_id == str(SESSION_UUID)
+    assert result.tenant_id == TENANT_ID
+    assert result.portal_user_id == str(USER_UUID)
+    # The DB call must target the SECURITY DEFINER function, not a bare UPDATE.
+    first_call_sql = str(mock_db.execute.call_args_list[0].args[0])
+    assert "revoke_portal_session_by_fingerprint" in first_call_sql
+
+
+def test_revoke_session_by_token_second_call_is_idempotent(mock_db):
+    """D-T6-007: a second revocation of the same token must not raise.
+
+    The SECURITY DEFINER function's WHERE status='active' predicate ensures
+    already-revoked rows are not matched; the function returns 0 rows.
+    revoke_session_by_token must reflect revoked=False without raising.
+    """
+    raw_token = "pnu1." + ("0" * 64)
+
+    # First call: session is active — function returns the row.
+    mock_db.execute.return_value.fetchall.return_value = [
+        _make_row(
+            session_id=SESSION_UUID,
+            tenant_id=TENANT_ID,
+            portal_user_id=USER_UUID,
+        )
+    ]
+    first = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
+    assert first.revoked is True
+    mock_db.reset_mock()
+
+    # Second call: session is already revoked — function returns 0 rows.
+    mock_db.execute.return_value.fetchall.return_value = []
+    second = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
+
+    # Must be idempotent: no exception, revoked=False (no-op), no session_id.
+    assert second.revoked is False
+    assert second.session_id is None
+
+
+def test_revoke_session_by_token_then_validate_fails(mock_db):
+    """D-T6-007: a revoked pnu1. token must be denied by validate_session.
+
+    Sequence: revoke_session_by_token succeeds → validate_session returns
+    ok=False with PORTAL_SESSION_NOT_FOUND (DB WHERE status='active' excludes
+    the now-revoked row).  Proves server-side revocation is the security control
+    and that a replayed token cannot authenticate after logout.
+    """
+    raw_token = SESSION_TOKEN_PREFIX + ("1" * 64)
+
+    # Step 1 – revoke: SECURITY DEFINER fn returns the revoked row.
+    mock_db.execute.return_value.fetchall.return_value = [
+        _make_row(
+            session_id=SESSION_UUID,
+            tenant_id=TENANT_ID,
+            portal_user_id=USER_UUID,
+        )
+    ]
+    revoke_result = pua.revoke_session_by_token(mock_db, raw_token=raw_token)
+    assert revoke_result.revoked is True
+    mock_db.reset_mock()
+
+    # Step 2 – validate: DB returns None because the row is no longer active.
+    mock_db.execute.return_value.fetchone.return_value = None
+    val_result = validate_session(mock_db, raw_token=raw_token, tenant_id=TENANT_ID)
+
+    assert val_result.ok is False
+    assert val_result.denial_code == "PORTAL_SESSION_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
 # 26. Concurrency: simulate two concurrent accept_invitation calls
 # ---------------------------------------------------------------------------
 
