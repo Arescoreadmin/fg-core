@@ -2,7 +2,7 @@
 
 Status: **PENDING** — gates not yet executed
 
-Gate sequence: G1 → G2 → G3 → G4 → G5 → G6
+Gate sequence: G1 (+ G1.1) → G2 → G3 → G4 → G5 → G6
 
 T5 closes FG-LR-004. It proves Railway production can support the first client engagement
 under realistic load and recover from an instance failure without corrupting state.
@@ -71,25 +71,179 @@ Thresholds are updated in G3 once G1 captures actual plan limits.
 
 **Status: PENDING**
 
-Capture current production limits and observed idle/baseline usage before any load test runs.
+Capture current production limits and observed steady-state usage before any load test runs.
+Let the system idle for 5–10 minutes after last deployment before recording metrics.
+
+### Railway Plan
 
 | Field | Value |
 |---|---|
-| Date/time (UTC) | |
-| Railway API plan: vCPU | |
-| Railway API plan: RAM | |
-| Railway DB plan: max connections | |
-| Railway DB plan: storage limit | |
-| Railway Redis plan: maxmemory | |
-| Railway Redis plan: max connections | |
-| Deployment replica count | |
-| Observed baseline API CPU % | |
-| Observed baseline API memory % | |
-| Observed baseline DB connections | |
-| Observed baseline Redis memory | |
-| p50 / p95 / p99 API latency (idle) | |
-| 5xx rate (idle, 24h window) | |
-| First-client safety margin (documented) | |
+| Date/time captured (UTC) | |
+| Plan name | |
+| API vCPU limit | |
+| API RAM limit | |
+| Included usage / overage pricing | |
+
+### API Service
+
+| Field | Value |
+|---|---|
+| Replica count | |
+| Restart count (since last deploy) | |
+| CPU % (idle steady-state) | |
+| Memory % (idle steady-state) | |
+| Network in (idle) | |
+| Network out (idle) | |
+
+### Postgres
+
+| Field | Value |
+|---|---|
+| CPU % (idle) | |
+| Memory % (idle) | |
+| Active connections (idle) | |
+| Max connections ceiling | |
+| Storage used | |
+| Storage limit | |
+| IOPS (if available) | |
+
+### Redis
+
+| Field | Value |
+|---|---|
+| Memory used | |
+| maxmemory limit | |
+| Memory used % | |
+| Active connections | |
+| Eviction count | |
+
+### Deployments
+
+| Field | Value |
+|---|---|
+| Current API deployment ID | |
+| Current commit SHA | |
+| Pending deployments | |
+| Migration version | |
+
+### Health
+
+| Field | Value |
+|---|---|
+| `/health` response time (ms) | |
+| `/health` status | |
+
+### Baseline Traffic
+
+| Field | Value |
+|---|---|
+| Requests/min (idle 10-min window) | |
+| p50 latency | |
+| p95 latency | |
+| p99 latency | |
+| 5xx rate (idle 24h window) | |
+
+### Background Workers
+
+| Field | Value |
+|---|---|
+| Queue depth | |
+| Active jobs | |
+| Idle jobs | |
+
+### Steady-State Baseline (5–10 min idle observation)
+
+| Metric | Value |
+|---|---|
+| CPU (start / end / peak) | |
+| Memory (start / end / peak) | |
+| Open DB connections (start / end / peak) | |
+| Redis memory (start / end / peak) | |
+| Request rate (avg over window) | |
+| Restart count (must be zero) | |
+
+---
+
+## G1.1 — Configuration Drift
+
+**Status: PENDING**
+
+Fingerprint the production configuration and verify no unexpected drift since T4 PASS (2026-08-04).
+Record variable **names only** — no secret values.
+
+### Railway Variable Names (api service)
+
+_(List all variable names present; flag any not present at T4 close or any unexpected additions.)_
+
+| Variable name | Present at T4 | Present now | Delta |
+|---|---|---|---|
+| FG_ENV | yes | | |
+| FG_DB_URL | yes | | |
+| FG_DB_MIGRATION_URL | yes | | |
+| FG_RESEND_API_KEY | yes | | |
+| FG_EMAIL_FROM_ADDRESS | yes | | |
+| FG_AUTH0_DOMAIN | yes | | |
+| FG_AUTH0_AUDIENCE | yes | | |
+| FG_INTERNAL_GATEWAY_SECRET | yes | | |
+| AUTH0_MANAGEMENT_DOMAIN | yes | | |
+| AUTH0_MANAGEMENT_CLIENT_ID | yes | | |
+| AUTH0_MANAGEMENT_CLIENT_SECRET | yes | | |
+| AUTH0_MANAGEMENT_AUDIENCE | yes | | |
+| _(any additions)_ | no | | |
+
+### Vercel Variable Names (portal app)
+
+| Variable name | Present at T4 | Present now | Delta |
+|---|---|---|---|
+| CORE_TENANT_ID | yes | | |
+| CORE_API_KEY | yes | | |
+| PORTAL_AUTH0_CLIENT_ID | yes | | |
+| PORTAL_AUTH0_CLIENT_SECRET | yes | | |
+| PORTAL_AUTH0_ISSUER | yes | | |
+| NEXT_PUBLIC_FG_ENV | yes | | |
+| _(any additions)_ | no | | |
+
+### Vendor State
+
+| Item | Expected | Observed | Delta |
+|---|---|---|---|
+| Auth0 tenant | dev-22nn3c7muqjk4tgu.us.auth0.com | | |
+| Auth0 portal app ID | cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4 | | |
+| Auth0 FrostGate API identifier | https://api.frostgate.ai | | |
+| Resend sending domain | frostgate.ai | | |
+| Resend domain status | verified | | |
+| Migration version | 0171 | | |
+| Railway API service version / image | _(fill from G1)_ | | |
+
+### Outcome
+
+| Check | Result |
+|---|---|
+| No unexpected Railway variables added or removed | |
+| No unexpected Vercel variables added or removed | |
+| Auth0 tenant and app IDs unchanged | |
+| Resend domain still verified | |
+| Migration version matches expected (0171) | |
+| No unapplied migrations pending | |
+
+**G1.1 result: PENDING**
+
+---
+
+## G1 Exit Criteria
+
+Do not start G2 until all are true:
+
+- [ ] Baseline metrics captured (all G1 tables filled)
+- [ ] Infrastructure limits documented (plan name, vCPU, RAM, DB connections ceiling, Redis maxmemory)
+- [ ] Zero crash loops (restart count stable, zero during idle observation)
+- [ ] Zero pending deployments
+- [ ] No migration in progress
+- [ ] Configuration fingerprint recorded (G1.1 complete, no unexpected delta)
+- [ ] Replica count documented
+- [ ] Restart counter stable (zero during idle observation window)
+- [ ] Alerting status documented (Railway alerting configured: yes/no; if yes, note alert rules in place)
+- [ ] G3 thresholds calibrated against actual plan limits (update Pass Thresholds table above)
 
 **G1 result: PENDING**
 
