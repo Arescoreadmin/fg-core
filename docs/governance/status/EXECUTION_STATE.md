@@ -7,50 +7,73 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-08-04
 
-**Current Branch:** `main`
+**Current Branch:** `exec/t5-exec-20260804-001` (T5 evidence) / `main` (code)
 
-**Current Commit:** `e4d70804`
+**Current Commit:** `fb97d337` (T5 G2-G6 evidence commit on T5 branch)
 
-**Current PR:** None — T4 COMPLETE; T5 next.
+**Current PR:** None — T5 COMPLETE; LRR issued CONDITIONAL GO; backup authority reconciliation pending before T6 start.
 
 **Overall Status:** GREEN
 
-**Launch Confidence (%):** 85
+**Launch Confidence (%):** 92
 
-**Current Critical Path:** T5 infra headroom → Launch Readiness Review → T6 H1-H18 dry run → Launch Decision Record → launch DoD sweep.
+**Current Critical Path:** ~~T5 infra headroom~~ ✅ → ~~Launch Readiness Review~~ ✅ CONDITIONAL GO → **backup authority reconciliation** → T6 H1-H18 dry run → Launch Decision Record → launch DoD sweep.
 
-**Current Phase:** Stage 0 / Week 1 Day 5 — T1, T2, T4 complete; T3 partial; IA-1 COMPLETE; T5 unlocked.
+**Current Phase:** Stage 0 / Week 1 Day 5 — T1, T2, T4, T5 complete; T3 partial; IA-1 COMPLETE; LRR issued; T6 pending Condition 1.
 
-**Platform Freeze: ACTIVE**
+**Platform Freeze: LIFTED for LRR/backup work — REACTIVATE before T6**
 
-Effective immediately through production launch. Permitted work: defects, launch blockers, security fixes. Everything else waits until after launch.
+T5 production freeze is lifted. Permitted: backup authority reconciliation, credential_delivery.md update, EXECUTION_STATE updates. Reactivate freeze immediately before T6 begins.
 
-| Prohibited | Why |
+| Prohibited (during T6) | Why |
 |---|---|
 | Feature PRs | Baseline instability; deferred to post-launch backlog |
 | Dependency upgrades | Untested behavior under operational load |
-| Schema changes / migrations | Migration risk during T5/T6 rehearsal window |
-| Infrastructure changes (Railway / Vercel) | Invalidates T5 baseline; requires G1 restart |
-| Environment variable additions | Configuration drift; invalidates G1.1 |
-| Auth0 / Resend / vendor changes | Invalidates T4 and T5 configuration fingerprints |
+| Schema changes / migrations | Migration risk during T6 rehearsal window |
+| Infrastructure changes (Railway / Vercel) | Invalidates T6 baseline |
+| Environment variable additions | Configuration drift |
+| Auth0 / Resend / vendor changes | Invalidates T4 configuration fingerprints |
 
-**Current DoD Progress:** 2/14 Launch DoD items checked (L4: PASS, L2: PASS via T4). L10 pending (T5). L12 remains IN PROGRESS.
+**Current DoD Progress:** 3/14 Launch DoD items checked (L4: PASS, L2: PASS via T4, L10: PASS via T5). L12 remains IN PROGRESS.
 
-**Completed Since Last Update:** T4 COMPLETE 2026-08-04. G1–G6 all PASS. Invitation issued for jason@frostgate.ai / the-wick-network, email delivered via Resend, invitation accepted via Auth0 OIDC, pnu1. session issued, portal accessed as viewer, session revoked on logout. Auth0 app `cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4` + FrostGate API `https://api.frostgate.ai` registered. Vercel CORE_TENANT_ID and CORE_API_KEY (portal-bff, `4921106c-adbc-4488-87d7-6acb0072861a`) set. P-51 fix: `User-Agent: FrostGate/1.0` added to Resend client (Cloudflare WAF bypass). Commit `e4d70804`.
+**Completed Since Last Update:** T5 COMPLETE 2026-08-04. G1–G6 all PASS. 805/805 requests OK (0 5xx); CPU peak 1.14 vCPU (14%); memory 455 MB (5.6%); DB 3 of 100 connections; Redis 9.83 MB of 1024 MB; 8.8s restart-to-health; no data/session/audit loss. G6: PASS — hobby plan sufficient; no upgrade required. LRR issued CONDITIONAL GO. Pre-T6 backup checkpoint `FG-BKP-20260804-00001` taken (1.73 MB; SHA-256 verified; 2026-08-04T12:28:56Z). T5 branch: `exec/t5-exec-20260804-001`, commit `fb97d337`.
+
+**T5 Key Finding:** No tenant with `tenant_id='default'` in `tenants` registry. 7 engagements + 11 scan jobs exist under orphaned legacy `default` tenant_id. P1 data-governance defect; non-blocking for T6 (T6 uses fresh disposable tenant). Migrate before commercial use.
+
+**Admin auth mechanism (discovered during T5):** `/admin/...` endpoints require BOTH `X-API-Key: {FG_INTERNAL_GATEWAY_SECRET}` + `X-Admin-Gateway-Internal: true` (for auth gate internal scopes) AND `x-fg-internal-token: {FG_INTERNAL_GATEWAY_SECRET}` (for `require_internal_admin_gateway`). Both headers must be present.
 
 **Current Blockers:**
-- FG-LR-004: Railway plan/headroom and orphan recovery unproven (T5 — active now).
+- FG-LR-004: CLOSED — T5 PASS. Railway headroom proven sufficient.
+- **OPEN: Backup authority reconciliation** — Option A (Railway Pro) or Option B (T1.5 with scheduling+encryption+offsite); must resolve before T6.
 - FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack (T6).
 - FG-LR-005: incident/rollback runbook and timed drill missing (T8/T9).
 - L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
-- DB startup ordering defect: `_grant_runtime_role_access()` race condition documented; not on critical path unless it reappears during T5.
 
 **Top Three Priorities:**
-1. T5 G1 — capture Railway plan limits and baseline metrics.
-2. T5 G2–G3 — run bounded load test; verify headroom thresholds.
-3. T5 G4–G6 — failure injection, state recovery, capacity decision (Railway Pro upgrade if required).
+1. Backup authority reconciliation — Option A or B decision and formal acceptance.
+2. T6 H1-H18 production dry run — after Condition 1 resolved.
+3. Launch DoD L1-L14 sweep — after T6.
 
-**Next Required PR:** None — T5 is operational gate execution, not a code PR. If G6 results in PASS WITH ACTION, a Railway plan upgrade is the next infra action.
+**T5 Result:**
+
+| Field | Value |
+|-------|-------|
+| T5 status | COMPLETE |
+| L10 status | PASS |
+| FG-LR-004 status | CLOSED |
+| Execution ID | T5-EXEC-20260804-001 |
+| G6 decision | PASS — hobby plan sufficient; no upgrade required |
+| CPU peak | 1.14 vCPU of 8.0 (14.3%) |
+| Memory peak | 455 MB of 8192 MB (5.6%) |
+| 5xx rate | 0.0% |
+| Restart-to-health | 8.8 s |
+| State integrity | PASS — zero data/session/audit loss |
+| Pre-T6 backup | FG-BKP-20260804-00001 · 2026-08-04T12:28:56Z |
+| Branch | exec/t5-exec-20260804-001 |
+| Commit | fb97d337 |
+| Evidence file | `docs/governance/status/T5_INFRASTRUCTURE_HEADROOM_EVIDENCE.md` |
+
+**Next Required PR:** None — T6 is operational gate execution. Backup authority reconciliation is an operator decision, not a code PR.
 
 **Estimated Engineering Days Remaining:** ~10.5 (T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 ~3.5d, T4 ~2.0d consumed of 19.0 budget).
 
@@ -120,6 +143,37 @@ Effective immediately through production launch. Permitted work: defects, launch
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-04 — T5 COMPLETE · LRR issued CONDITIONAL GO
+
+**Review Type:** Gate Execution
+
+**Summary:** T5 Infrastructure Headroom executed fully. Execution ID: T5-EXEC-20260804-001. All gates PASS. G1 captured Railway plan limits via CLI (CPU 8 vCPU, memory 8192 MB, Postgres 100 connections, Redis 1024 MB). G1.1 confirmed 71 Railway vars + 19 Vercel vars, all Expected. G2 ran 805 requests against `lace-money-group` tenant (substituted from `default` which does not exist in tenants registry); 100% OK, 0 5xx. G3 7/7 thresholds met: CPU 85.7% headroom, memory 94.4%, DB 97%, Redis 98.8%. G4 `railway redeploy --service api` triggered 8.8s restart-to-health. G4.5 metrics and audit continuous; two known gaps (no OTel, no alerting). G5 all state intact. G6 PASS — hobby plan sufficient; no upgrade required for first-client engagement.
+
+Launch Readiness Review issued CONDITIONAL GO. Pre-T6 backup checkpoint `FG-BKP-20260804-00001` taken. Production freeze lifted for backup reconciliation work.
+
+**Key Finding:** No `tenant_id='default'` in tenants registry. fa_engagements (7 rows) and fa_scan_jobs (11 rows) use orphaned legacy tenant_id. P1 data-governance defect; non-blocking for T6.
+
+**Major Changes:**
+- `docs/governance/status/T5_INFRASTRUCTURE_HEADROOM_EVIDENCE.md` — all G1-G6 sections filled PASS
+- `docs/governance/status/LAUNCH_READINESS_REVIEW.md` — filled: T5 summary, risks, rollback, decision (CONDITIONAL GO), conditions
+- `docs/governance/status/EXECUTION_STATE.md` — updated status, blockers, DoD progress
+- `artifacts/t5/T5-EXEC-20260804-001/metrics/G2_load_profile_results.json` — G2 evidence (805 requests)
+- `artifacts/t5/T5-EXEC-20260804-001/metrics/G2_railway_peak_metrics.json` — Railway peak metrics
+- `artifacts/t5/T5-EXEC-20260804-001/metrics/G4_injection_results.json` — G4 injection results
+- `/var/lib/frostgate/backups/frostgate_20260804_122857_pre-engagement.dump` — pre-T6 checkpoint
+
+**Decisions Made:**
+- T5 G6: PASS — hobby plan has sufficient first-client headroom; no upgrade required
+- LRR: CONDITIONAL GO — conditions 2-5 met; Condition 1 (backup authority reconciliation) required before T6
+- G2 tenant substitution: lace-money-group (no default tenant; orphaned engagement data confirmed non-blocking)
+- Backup authority: Option B recommended; T1.5 mechanism proven; scheduling + encryption + remote offsite not yet configured (gaps documented)
+
+**Updated Launch Confidence:** 92%
+
+**Next:** Backup authority reconciliation (Condition 1) → T6 H1-H18.
+
+---
 
 ### 2026-08-04 — T4 COMPLETE · G1–G6 all PASS
 
