@@ -337,17 +337,21 @@ Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G
 | External monitoring configured (UptimeRobot, etc.) | yes / no |
 | On-call or notification channel | |
 
-### Steady-State Baseline (5–10 min idle observation)
+### Steady-State Baseline (10 min idle observation — fixed-interval samples)
 
-| Metric | Start | End | Peak |
-|---|---|---|---|
-| API CPU % | | | |
-| API Memory % | | | |
-| Open DB connections | | | |
-| DB waiting locks | | | |
-| Redis memory % | | | |
-| Request rate (req/min) | | | |
-| Restart count | 0 (required) | 0 (required) | 0 (required) |
+Sample every 2 minutes. Do not fill retrospectively; record each row at the time of capture.
+
+| Time | API CPU % | API Memory % | DB connections | DB waiting locks | Redis memory % | Req/min | Restarts |
+|---|---|---|---|---|---|---|---|
+| 0 min | | | | | | | 0 |
+| 2 min | | | | | | | |
+| 4 min | | | | | | | |
+| 6 min | | | | | | | |
+| 8 min | | | | | | | |
+| 10 min | | | | | | | |
+| **Peak** | | | | | | | 0 (required) |
+
+Restart count must be 0 at every interval. Any non-zero value = G1 fail.
 
 ---
 
@@ -370,35 +374,37 @@ Record variable **names only** — no secret values.
 | Commit SHA | _(from G1 Version Fingerprint)_ |
 | Evidence | _(screenshot folder / export reference)_ |
 
+Classification key: **Expected** = present and correct · **Missing** = was present at T4, not now · **Unexpected** = present now, not at T4 · **Deprecated** = present but should have been removed
+
 ### Railway Variable Names (api service)
 
-| Variable name | Present at T4 | Present now | Delta |
-|---|---|---|---|
-| FG_ENV | yes | | |
-| FG_DB_URL | yes | | |
-| FG_DB_MIGRATION_URL | yes | | |
-| FG_RESEND_API_KEY | yes | | |
-| FG_EMAIL_FROM_ADDRESS | yes | | |
-| FG_AUTH0_DOMAIN | yes | | |
-| FG_AUTH0_AUDIENCE | yes | | |
-| FG_INTERNAL_GATEWAY_SECRET | yes | | |
-| AUTH0_MANAGEMENT_DOMAIN | yes | | |
-| AUTH0_MANAGEMENT_CLIENT_ID | yes | | |
-| AUTH0_MANAGEMENT_CLIENT_SECRET | yes | | |
-| AUTH0_MANAGEMENT_AUDIENCE | yes | | |
-| _(any additions)_ | no | | |
+| Variable name | Classification | Notes |
+|---|---|---|
+| FG_ENV | Expected | |
+| FG_DB_URL | Expected | |
+| FG_DB_MIGRATION_URL | Expected | |
+| FG_RESEND_API_KEY | Expected | |
+| FG_EMAIL_FROM_ADDRESS | Expected | |
+| FG_AUTH0_DOMAIN | Expected | |
+| FG_AUTH0_AUDIENCE | Expected | |
+| FG_INTERNAL_GATEWAY_SECRET | Expected | |
+| AUTH0_MANAGEMENT_DOMAIN | Expected | |
+| AUTH0_MANAGEMENT_CLIENT_ID | Expected | |
+| AUTH0_MANAGEMENT_CLIENT_SECRET | Expected | |
+| AUTH0_MANAGEMENT_AUDIENCE | Expected | |
+| _(list any others found)_ | _(classify)_ | |
 
 ### Vercel Variable Names (portal app)
 
-| Variable name | Present at T4 | Present now | Delta |
-|---|---|---|---|
-| CORE_TENANT_ID | yes | | |
-| CORE_API_KEY | yes | | |
-| PORTAL_AUTH0_CLIENT_ID | yes | | |
-| PORTAL_AUTH0_CLIENT_SECRET | yes | | |
-| PORTAL_AUTH0_ISSUER | yes | | |
-| NEXT_PUBLIC_FG_ENV | yes | | |
-| _(any additions)_ | no | | |
+| Variable name | Classification | Notes |
+|---|---|---|
+| CORE_TENANT_ID | Expected | |
+| CORE_API_KEY | Expected | |
+| PORTAL_AUTH0_CLIENT_ID | Expected | |
+| PORTAL_AUTH0_CLIENT_SECRET | Expected | |
+| PORTAL_AUTH0_ISSUER | Expected | |
+| NEXT_PUBLIC_FG_ENV | Expected | |
+| _(list any others found)_ | _(classify)_ | |
 
 ### Vendor State
 
@@ -446,6 +452,22 @@ Do not start G2 until all are true:
 - [ ] Chain of custody complete for G1 and G1.1
 
 **G1 result: PENDING**
+
+---
+
+## Pre-G2 Confirmation
+
+**Complete immediately before starting the load test. If any item fails, stop and restart G1.**
+
+| Check | Value | Match? |
+|---|---|---|
+| Deployment ID (now) | | Must match G1 Version Fingerprint |
+| Commit SHA (now) | | Must match G1 Version Fingerprint |
+| Configuration fingerprint | | Must match G1.1 (no new vars, no removals) |
+| Deployments since G1 | | Must be zero |
+| Restart count change since G1 | | Must be zero |
+
+If any row does not match: **stop. Record the discrepancy. Restart G1.**
 
 ---
 
