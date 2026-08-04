@@ -14,6 +14,41 @@ T5 ends with one of three explicit outcomes:
 
 ---
 
+## Production Freeze (active during T5)
+
+**No changes to production during T5 gate execution.**
+
+A change to any of the following invalidates the baseline and requires G1 to be re-run
+from the beginning before G2 can proceed:
+
+- No code merges to main
+- No Railway environment variable changes
+- No Railway service restarts or redeployments (except G4 controlled injection)
+- No Auth0 tenant or application changes
+- No Resend domain or configuration changes
+- No Vercel environment variable changes
+- No Vercel redeployments
+
+The baseline is meaningless if the system is a moving target.
+
+---
+
+## T5 Success Criteria
+
+When T5 completes, all of the following must be true:
+
+- [ ] Infrastructure limits are documented (Railway plan, DB ceiling, Redis maxmemory)
+- [ ] Baseline behavior is documented (idle CPU/memory/connections/latency)
+- [ ] Failure recovery is documented (G4 inject + G5 state verification)
+- [ ] Capacity headroom is documented (G3 thresholds met under G2 load)
+- [ ] Rollback is documented (target deployment, ID, estimated time, verified)
+- [ ] Configuration fingerprint is documented (G1.1 — no unexpected drift)
+- [ ] Production deployment is reproducible (version fingerprint: SHA + deployment ID + image digest)
+
+At T5 close, T6 becomes a business workflow validation, not another infrastructure investigation.
+
+---
+
 ## Environment
 
 | Field | Value |
@@ -125,6 +160,36 @@ Let the system idle for 5–10 minutes after last deployment before recording me
 | Current commit SHA | |
 | Pending deployments | |
 | Migration version | |
+
+### Version Fingerprint
+
+Every performance measurement in G2–G5 is traceable to this exact deployment state.
+
+| Component | Field | Value |
+|---|---|---|
+| API | Git commit SHA | |
+| API | Railway deployment ID | |
+| API | Docker image digest (if available) | |
+| API | Startup timestamp (UTC) | |
+| API | Runtime DB role | fg_app (expected) |
+| Postgres | Migration version | 0171 (expected) |
+| Postgres | Runtime role confirmed | |
+| Portal (Vercel) | Deployment ID | |
+| Portal (Vercel) | Git commit SHA | |
+
+### Rollback Evidence
+
+Document the previous healthy deployment before G4 failure injection.
+
+| Field | Value |
+|---|---|
+| Rollback target (previous healthy deployment ID) | |
+| Rollback target commit SHA | |
+| Rollback estimated time (Railway one-click or CLI) | |
+| Rollback method (Railway dashboard / `railway redeploy`) | |
+| Rollback verified | YES / NO |
+
+Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G4 is blocked.
 
 ### Health
 
@@ -240,8 +305,10 @@ Do not start G2 until all are true:
 - [ ] Zero pending deployments
 - [ ] No migration in progress
 - [ ] Configuration fingerprint recorded (G1.1 complete, no unexpected delta)
+- [ ] Version fingerprint recorded (commit SHA, deployment ID, image digest, startup timestamp)
 - [ ] Replica count documented
 - [ ] Restart counter stable (zero during idle observation window)
+- [ ] Rollback target documented and verified
 - [ ] Alerting status documented (Railway alerting configured: yes/no; if yes, note alert rules in place)
 - [ ] G3 thresholds calibrated against actual plan limits (update Pass Thresholds table above)
 
