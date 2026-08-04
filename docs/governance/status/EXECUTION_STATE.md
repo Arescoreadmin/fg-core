@@ -17,9 +17,22 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Launch Confidence (%):** 85
 
-**Current Critical Path:** T5 infra headroom → T6 H1-H18 dry run → launch DoD sweep.
+**Current Critical Path:** T5 infra headroom → Launch Readiness Review → T6 H1-H18 dry run → Launch Decision Record → launch DoD sweep.
 
 **Current Phase:** Stage 0 / Week 1 Day 5 — T1, T2, T4 complete; T3 partial; IA-1 COMPLETE; T5 unlocked.
+
+**Platform Freeze: ACTIVE**
+
+Effective immediately through production launch. Permitted work: defects, launch blockers, security fixes. Everything else waits until after launch.
+
+| Prohibited | Why |
+|---|---|
+| Feature PRs | Baseline instability; deferred to post-launch backlog |
+| Dependency upgrades | Untested behavior under operational load |
+| Schema changes / migrations | Migration risk during T5/T6 rehearsal window |
+| Infrastructure changes (Railway / Vercel) | Invalidates T5 baseline; requires G1 restart |
+| Environment variable additions | Configuration drift; invalidates G1.1 |
+| Auth0 / Resend / vendor changes | Invalidates T4 and T5 configuration fingerprints |
 
 **Current DoD Progress:** 2/14 Launch DoD items checked (L4: PASS, L2: PASS via T4). L10 pending (T5). L12 remains IN PROGRESS.
 
