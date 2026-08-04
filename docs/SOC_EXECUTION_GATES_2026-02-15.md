@@ -1,3 +1,25 @@
+## 2026-08-03 — fix/portal-invitation-gateway-auth: extend internal admin gateway to portal operator paths
+
+**Critical files changed:** `api/auth_scopes/resolution.py`
+
+**Change scope:** Defect fix — `POST /portal/invitations` requires `governance:write` scope but the internal admin gateway only activated for `/admin/*` paths and only granted `admin:*`, `keys:*`, `audit:*` scopes. Operator-issued portal invitations are an administrative action and must be reachable via the internal gateway. This fix extends the gateway to cover the portal invitation path and adds `governance:read`/`governance:write` to the internal admin scope set.
+
+**Changes to `api/auth_scopes/resolution.py`:**
+
+1. **`_is_admin_route_path` — portal operator paths added:** `/portal/invitations` added to a named `_OPERATOR_PORTAL_PATHS` set checked after the `/admin/*` prefix. The function remains the single gate for which paths the internal token is accepted. No other paths are broadened.
+
+2. **`_internal_admin_scopes` — governance scopes added:** `governance:read` and `governance:write` added to the returned set. The internal admin gateway represents an authenticated platform operator performing operator-level actions; governance operations (including portal invitation issuance) fall within that authority.
+
+**Security invariants confirmed:**
+
+- No new authentication bypass. The internal gateway path still requires `X-Admin-Gateway-Internal: true` AND a valid `FG_INTERNAL_GATEWAY_SECRET` match (constant-time comparison). The gateway secret remains the same credential; this change only widens what endpoints it may reach.
+- `/portal/invitations` is the only non-admin path added. Wildcard portal prefix is not granted — only the explicit invitation issuance endpoint.
+- `governance:read`/`governance:write` are scoped to operator actions (tenant data retrieval, invitation issuance). No cryptographic, migration, or infrastructure paths are affected.
+- `FG_API_KEY` global bypass remains disabled in production. No change to that guard.
+- RLS and row-level tenant isolation are enforced at the DB layer and are not affected by this change.
+
+**SOC review outcome:** approved. The change tightens a previously broken operational path (portal invitations unreachable via operator tooling) without relaxing any existing auth control. The internal gateway secret guard, constant-time comparison, and production-env checks are all preserved.
+
 ## 2026-07-30 — feature/pr-588-actor-service-target-attribution: PR #588 Actor/Service/Target Attribution
 
 **Critical files changed:** `api/auth_dispatch.py`, `api/auth_scopes/definitions.py`, `api/auth_scopes/resolution.py`

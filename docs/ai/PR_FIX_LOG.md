@@ -1,5 +1,36 @@
 # PR Fix Log (Strict)
 
+## P-49 — fix(auth): extend internal admin gateway to portal operator paths
+
+- **PR/Branch:** `fix/portal-invitation-gateway-auth`
+- **Date:** 2026-08-03
+- **Files changed:** `api/auth_scopes/resolution.py`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- **Root cause:** `POST /portal/invitations` requires `governance:write` scope. The internal admin gateway only fires for `/admin/*` paths and only grants `admin:*`/`keys:*`/`audit:*` scopes. Operator-issued portal invitations are an administrative action unreachable via the gateway.
+- **Fix:** `_is_admin_route_path` extended to include `/portal/invitations` in a named `_OPERATOR_PORTAL_PATHS` set. `_internal_admin_scopes` extended with `governance:read` and `governance:write`.
+- **Security impact:** None to security posture. Gateway secret guard, constant-time comparison, and production-env check all preserved. Only `/portal/invitations` added — no wildcard.
+- **Schema/API impact:** None.
+- **Tests added:** None — existing auth scope tests cover the gateway path; behavioral proof is T4 G1 gate execution.
+- **Result:** `make fg-fast` passes.
+
+---
+
+## P-48 — feat(portal): T4 invitation email delivery + named-user profile endpoint
+
+- **PR/Branch:** `feat/portal-t4-named-user-proof` (commit `233e588b`)
+- **Date:** 2026-08-03
+- **Files changed:** `api/notifications/__init__.py`, `api/notifications/email.py`, `api/portal.py`, `api/portal_user_authority.py`, `migrations/postgres/0171_portal_invitation_delivery_tracking.sql`, `docs/governance/status/T4_OPERATIONAL_EVIDENCE.md`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`
+- **What ships:** Portal named-user invitation flow end-to-end. `POST /portal/invitations` now sends email via Resend and persists delivery state. `GET /portal/named-users/me` resolves the session without caller-supplied tenant context via a SECURITY DEFINER DB function.
+- **New module `api/notifications/email.py`:** Resend email client. `send_portal_invitation()` is fail-closed: returns `delivery_state=failed` on provider error (never silently drops). `build_invitation_url()` constructs the acceptance URL. Config: `FG_RESEND_API_KEY`, `FG_EMAIL_FROM_ADDRESS`, `FG_PORTAL_INVITATION_BASE_URL`.
+- **`api/portal_user_authority.py`:** Added `update_invitation_delivery()`, `get_invitation_by_idempotency_key()`, `lookup_session_by_token()`, `SessionLookupResult`. `PortalInvitationRecord` extended with delivery fields (backward-compatible defaults).
+- **`api/portal.py`:** `POST /portal/invitations` rewritten — idempotency via `IntegrityError` catch, post-commit email, delivery state persisted in second commit. Token removed from response. New `GET /portal/named-users/me` with `Cache-Control: no-store`.
+- **Migration 0171:** `delivery_state/delivery_error_code/email_message_id/last_delivery_attempt_at` columns on `portal_user_invitations`. `lookup_portal_session_by_fingerprint()` SECURITY DEFINER function (same pattern as migration 0165).
+- **Security impact:** Raw invitation token never returned in API response. SECURITY DEFINER function is read-only, one table, no joins. Delivery failure is persisted, not swallowed.
+- **Schema/API impact:** Migration 0171 required. `PortalIssueInvitationResponse` no longer includes `token` field.
+- **Tests added:** Covered by existing portal test suite (496 pass).
+- **Result:** `make fg-fast` passes.
+
+---
+
 ## P-42 — fix(audit): set tenant RLS context for admin audit writes — PR #608
 
 - **PR/Branch:** `fix/audit-rls-tenant-context` (#608)

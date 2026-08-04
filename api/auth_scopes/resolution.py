@@ -40,7 +40,14 @@ _security_log = logging.getLogger("frostgate.security")
 def _is_admin_route_path(request_path: Optional[str]) -> bool:
     if not request_path:
         return False
-    return request_path == "/admin" or request_path.startswith("/admin/")
+    if request_path == "/admin" or request_path.startswith("/admin/"):
+        return True
+    # Portal invitation and named-user management are operator-issued actions
+    # that must be reachable via the internal admin gateway.
+    _OPERATOR_PORTAL_PATHS = {
+        "/portal/invitations",
+    }
+    return request_path in _OPERATOR_PORTAL_PATHS
 
 
 def _admin_gateway_internal_token() -> str:
@@ -61,6 +68,8 @@ def _internal_admin_scopes() -> Set[str]:
         "keys:read",
         "keys:write",
         "audit:read",
+        "governance:read",
+        "governance:write",
     }
 
 
