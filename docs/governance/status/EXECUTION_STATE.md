@@ -5,49 +5,67 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-03
+**Date:** 2026-08-04
 
 **Current Branch:** `main`
 
-**Current Commit:** `4a2bb592`
+**Current Commit:** `e4d70804`
 
-**Current PR:** None — IA-1 COMPLETE; T4 next.
+**Current PR:** None — T4 COMPLETE; T5 next.
 
 **Overall Status:** GREEN
 
-**Launch Confidence (%):** 79
+**Launch Confidence (%):** 85
 
-**Current Critical Path:** T4 portal named-user proof → T5 infra headroom → T6 H1-H18 dry run.
+**Current Critical Path:** T5 infra headroom → T6 H1-H18 dry run → launch DoD sweep.
 
-**Current Phase:** Stage 0 / Week 1 Day 4 — T1, T2 complete; T3 partial; IA-1 COMPLETE (G1-dev, G1-prod, G2-prod all PASS); T4 unlocked.
+**Current Phase:** Stage 0 / Week 1 Day 5 — T1, T2, T4 complete; T3 partial; IA-1 COMPLETE; T5 unlocked.
 
-**Current DoD Progress:** 1/14 Launch DoD items checked (L4: PASS). L12 remains IN PROGRESS. IA-1 COMPLETE establishes L-level evidence for RLS/least-privilege architecture and identity provisioning.
+**Current DoD Progress:** 2/14 Launch DoD items checked (L4: PASS, L2: PASS via T4). L10 pending (T5). L12 remains IN PROGRESS.
 
-**Completed Since Last Update:** G2-prod executed and passed 2026-08-03. Disposable tenant `fg-ia1-prod-validation-20260803` provisioned: Auth0 org `org_ZTxlvEm74W5wG9Q4` created, `provisioning_state=active`, ownership metadata verified (`frostgate_tenant_id` confirmed), idempotency proven (retry returned same binding, no new events), audit trail verified (security_audit_log ids 43 + 45). Auth0 M2M app "FrostGate Identity Authority" (`oyWWKp3DPebUVulQKYP9zRtfLoV74RFB`) created with correct scopes and Railway vars set. IA-1 Final Acceptance recorded. GD-2026-001 CLOSED.
+**Completed Since Last Update:** T4 COMPLETE 2026-08-04. G1–G6 all PASS. Invitation issued for jason@frostgate.ai / the-wick-network, email delivered via Resend, invitation accepted via Auth0 OIDC, pnu1. session issued, portal accessed as viewer, session revoked on logout. Auth0 app `cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4` + FrostGate API `https://api.frostgate.ai` registered. Vercel CORE_TENANT_ID and CORE_API_KEY (portal-bff, `4921106c-adbc-4488-87d7-6acb0072861a`) set. P-51 fix: `User-Agent: FrostGate/1.0` added to Resend client (Cloudflare WAF bypass). Commit `e4d70804`.
 
 **Current Blockers:**
-- T4 NOT STARTED: portal named-user proof (2.0d, closes FG-LR-002, required for L1/L2). Now unblocked.
-- G2-dev BLOCKED: Auth0 dev tenant (frostgate-dev) not yet created — manual browser action (parallel track, not on critical path).
-- FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack.
-- FG-LR-004: Railway plan/headroom and orphan recovery are unproven under engagement load.
-- FG-LR-005: incident/rollback runbook and timed drill are missing.
+- FG-LR-004: Railway plan/headroom and orphan recovery unproven (T5 — active now).
+- FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack (T6).
+- FG-LR-005: incident/rollback runbook and timed drill missing (T8/T9).
 - L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
-- Startup ordering defect: `_grant_runtime_role_access()` race condition not yet fixed.
+- DB startup ordering defect: `_grant_runtime_role_access()` race condition documented; not on critical path unless it reappears during T5.
 
 **Top Three Priorities:**
-1. Begin T4 portal named-user proof (2.0d, closes FG-LR-002, required for L1/L2).
-2. Auth0 dev tenant (frostgate-dev): browser action → API-DEV vars → redeploy → G2-dev gate (parallel track).
-3. T5 infra headroom (Railway Pro decision, backup automation validation).
+1. T5 G1 — capture Railway plan limits and baseline metrics.
+2. T5 G2–G3 — run bounded load test; verify headroom thresholds.
+3. T5 G4–G6 — failure injection, state recovery, capacity decision (Railway Pro upgrade if required).
 
-**Next Required PR:** T4 portal named-user proof. Branch from main.
+**Next Required PR:** None — T5 is operational gate execution, not a code PR. If G6 results in PASS WITH ACTION, a Railway plan upgrade is the next infra action.
 
-**Estimated Engineering Days Remaining:** ~12.5 (budget 19.0; T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 work ~3.5d consumed).
+**Estimated Engineering Days Remaining:** ~10.5 (T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 ~3.5d, T4 ~2.0d consumed of 19.0 budget).
 
 **Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
 
-**Roadmap Drift:** PRs #601-608 (IA-1 provisioning work + audit RLS fix) not in the frozen 30-day launch plan — required unplanned engineering time. IA-1 now operationally complete; no further drift expected on this track.
+**Roadmap Drift:** PRs #601-608 (IA-1 provisioning work + audit RLS fix) not in the frozen 30-day launch plan. T4 completed on plan. No new drift.
 
 **Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
+
+**T4 Result:**
+
+| Field | Value |
+|-------|-------|
+| T4 status | COMPLETE |
+| L2 status | PASS |
+| FG-LR-002 status | CLOSED |
+| Invitee | jason@frostgate.ai |
+| Tenant | the-wick-network |
+| Invitation ID | 81b40050-39b2-4a6e-a57b-c830489e7a93 |
+| Auth0 user ID | auth0\|6a1a0e50c88714c3166670c3 |
+| Auth0 app | cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4 |
+| Auth0 tenant | dev-22nn3c7muqjk4tgu.us.auth0.com |
+| Session type | pnu1. (named-user) |
+| Portal role | viewer |
+| G1–G6 | ALL PASS |
+| Completion date | 2026-08-04 |
+| Evidence file | `docs/governance/status/T4_OPERATIONAL_EVIDENCE.md` |
+| Commit | e4d70804 |
 
 **T1 Result:**
 
@@ -89,6 +107,30 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-04 — T4 COMPLETE · G1–G6 all PASS
+
+**Review Type:** Gate Execution
+
+**Summary:** T4 portal named-user proof executed fully in production. G1–G6 all PASS. A real external user (jason@frostgate.ai) received an invitation email, accepted via Auth0 OIDC SSO, accessed the portal as a viewer, and logged out cleanly. No manual DB writes, no Auth0 dashboard user creation, no RBAC edits — gate policy fully observed.
+
+**Major Changes:**
+- `api/notifications/email.py`: added `req.add_header("User-Agent", "FrostGate/1.0")` — Python's default UA (`Python-urllib/3.x`) was blocked by Cloudflare WAF on Resend's CDN with HTTP 403 / error code 1010. Fix committed `470301a4`. Entry P-51 added to `docs/ai/PR_FIX_LOG.md`.
+- Auth0 (dev-22nn3c7muqjk4tgu.us.auth0.com): FrostGate Portal app `cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4` created; FrostGate API `https://api.frostgate.ai` (RS256) registered and authorized for the portal app.
+- Vercel (portal): `CORE_TENANT_ID=the-wick-network`, `CORE_API_KEY` updated to new portal-bff credential `4921106c-adbc-4488-87d7-6acb0072861a` (scopes: governance:read + governance:write).
+- `docs/governance/status/T4_OPERATIONAL_EVIDENCE.md`: all gates filled PASS.
+- `ROADMAP.md`: T4 row updated to COMPLETE 2026-08-04.
+- Commit `e4d70804` pushed to origin/main.
+
+**Decisions Made:**
+- Auth0 tenant `dev-22nn3c7muqjk4tgu` (the management tenant) doubles as the OIDC user auth tenant for portal users — confirmed working; no separate OIDC tenant required.
+- No post-T4 cleanup of the portal PRs B/C branches until after T6. They are either superseded or documentation debt; archaeology deferred until after launch.
+
+**Updated Launch Confidence:** 85%
+
+**Next:** T5 G1 — capture Railway plan limits and baseline metrics. No code PR required.
+
+---
 
 ### 2026-08-03 — G2-prod PASS · IA-1 COMPLETE · GD-2026-001 CLOSED
 
