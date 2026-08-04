@@ -135,3 +135,51 @@ Any of the following observed post-launch → stop engagement, execute rollback:
 | Review type | Stage 1 retrospective (per `FIRST_CLIENT_PLAYBOOK.md §9`) |
 | Review criteria | All Stage 1 success criteria (§7 of playbook); Stage 2 gate criteria (§12) |
 | Stage 2 authorized | _(yes / no — determined at review)_ |
+
+---
+
+## Stage 2 Exit Criteria
+
+These limits define when Stage 1 ends and Stage 2 begins. Stage 2 is not authorized until
+all Stage 1 success criteria (playbook §7) pass and the post-launch review is complete.
+
+### Capacity Limits (Stage 1)
+
+Operating outside these limits in Stage 1 is a launch constraint violation.
+
+| Dimension | Stage 1 limit | Stage 2 threshold | Notes |
+|---|---|---|---|
+| Design partners (concurrent) | 1 | ≥ 2 | Stage 2 begins with full-price clients |
+| Tenants (total) | ≤ 3 | Uncapped | Includes disposable test tenants |
+| Named users per tenant | ≤ 5 | Uncapped (per plan) | Portal viewer + operator |
+| Active engagements (concurrent) | 1 | ≤ 5 | Railway capacity upgrade may be required |
+| Evidence volume per engagement | ≤ 500 evidence items | Uncapped | Redis + DB pressure not yet characterized at scale |
+| Reports generated per day | ≤ 3 | Uncapped | PDF export CPU not load-tested beyond dry run |
+| API requests per day | ≤ 10,000 | Per plan tier | Establish from T5 G2 actual numbers |
+| Scan connectors per engagement | ≤ 8 | 9 (all) | All 9 connectors validated in T6 H11 |
+
+### Stage 2 Authorization Criteria
+
+All of the following must be true before Stage 2 begins:
+
+- [ ] Stage 1 design-partner engagement fully delivered
+- [ ] All `FIRST_CLIENT_PLAYBOOK.md §7` success criteria pass
+- [ ] Post-launch retrospective complete (§9 of playbook)
+- [ ] Every manual intervention dispositioned (runbook edit or backlog item)
+- [ ] Zero open non-waivable-class incidents
+- [ ] Actual hours per phase recorded and compared to 13.5h model
+- [ ] `CLIENT_READINESS.md` updated with actual Stage 1 metrics
+- [ ] Railway plan upgrade executed if T5 G6 = PASS WITH ACTION (required before multi-client load)
+- [ ] Credential delivery runbook rewritten for named-user path (T14)
+- [ ] DB startup ordering defect fixed before second concurrent client
+- [ ] Founder go decision recorded in `CLIENT_READINESS.md`
+
+### Stage 2 KPI Targets (set at Stage 1 close)
+
+| KPI | Stage 1 actual | Stage 2 target |
+|---|---|---|
+| Time to provision tenant | _(from T6 H3)_ | < 2 min |
+| Time to first client portal login | _(from T6 H9)_ | < 5 min |
+| Manual interventions per engagement | _(from T6 KPIs)_ | 0 |
+| Support touches per engagement | _(from Stage 1 retro)_ | ≤ 1 |
+| Findings resolved by day 21 | _(from Stage 1)_ | ≥ 1 |

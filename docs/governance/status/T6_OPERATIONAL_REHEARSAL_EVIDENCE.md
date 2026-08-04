@@ -85,6 +85,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -101,6 +103,8 @@ Duration is measured in minutes from step start to step completion.
 | Manifest SHA-256 | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -117,6 +121,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -133,6 +139,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -153,6 +161,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Total duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -170,6 +180,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -186,6 +198,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -202,6 +216,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -216,6 +232,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -230,6 +248,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -253,6 +273,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Total duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -268,6 +290,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -284,6 +308,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -300,6 +326,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -324,6 +352,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -339,6 +369,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -357,6 +389,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
@@ -372,6 +406,8 @@ Duration is measured in minutes from step start to step completion.
 | Actual result | |
 | Evidence | |
 | Duration (min) | |
+| Human actions required | |
+| Automation coverage (%) | |
 | Pass/Fail | |
 
 ---
