@@ -14,6 +14,42 @@ T5 ends with one of three explicit outcomes:
 
 ---
 
+## Evidence Freeze
+
+**Status: ACTIVE — G1 has begun.**
+
+Once G1 starts, no structural changes to this document are permitted.
+
+**Permitted additions:**
+- Measured values, timestamps, observations
+- Evidence references (screenshot paths, query results, log excerpts)
+- Gate outcome lines (`PASS` / `FAIL` / `PENDING`)
+
+**Not permitted once G1 is active:**
+- Adding, removing, or reordering sections
+- Changing acceptance criteria or threshold values
+- Changing the workload definition counts
+- Changing the Chain of Custody fields
+
+Any structural modification requires:
+1. A new commit with documented rationale
+2. Complete restart of T5 from G1
+3. A note in the Deviation Log at the bottom of this file
+
+Otherwise the gate was not executed against consistent acceptance criteria.
+
+---
+
+## Deviation Log
+
+_(Append any structural modifications made after G1 start. If none, leave blank.)_
+
+| Date (UTC) | Section changed | Rationale | Commit |
+|---|---|---|---|
+| | | | |
+
+---
+
 ## Production Freeze (active during T5)
 
 **No changes to production during T5 gate execution.**
@@ -28,6 +64,7 @@ from the beginning before G2 can proceed:
 - No Resend domain or configuration changes
 - No Vercel environment variable changes
 - No Vercel redeployments
+- No pushes to `ops/t5-infrastructure-headroom` after G1 starts
 
 The baseline is meaningless if the system is a moving target.
 
@@ -44,9 +81,11 @@ When T5 completes, all of the following must be true:
 - [ ] Rollback is documented (target deployment, ID, estimated time, verified)
 - [ ] Configuration fingerprint is documented (G1.1 — no unexpected drift)
 - [ ] Production deployment is reproducible (version fingerprint: SHA + deployment ID + image digest)
-- [ ] Observability is verified (G4.5 — logs, audit events, metrics, alerts all confirmed)
+- [ ] Observability is verified (G4.5 — logs, audit events, metrics, alerts confirmed or gaps documented)
+- [ ] Chain of custody is complete for every evidence section
 
-At T5 close, T6 becomes a business workflow validation, not another infrastructure investigation.
+At T5 close, produce the Launch Readiness Review (`docs/governance/status/LAUNCH_READINESS_REVIEW.md`)
+before beginning T6.
 
 ---
 
@@ -75,10 +114,10 @@ These are the allowed failure counts for T5 to PASS. Exceeding any one = gate fa
 | API service | api (Railway internal: `api.railway.internal`) |
 | DB service | PostgreSQL 18.4 (`postgres.railway.internal`) |
 | Redis service | _(fill: service name and region)_ |
-| Deployment replica count | _(fill from Railway during G1)_ |
-| Railway plan limits (API) | _(fill: vCPU, RAM, egress ceiling during G1)_ |
-| Railway plan limits (DB) | _(fill: connections ceiling, storage ceiling during G1)_ |
-| Railway plan limits (Redis) | _(fill: maxmemory, connection limit during G1)_ |
+| Deployment replica count | _(fill from G1)_ |
+| Railway plan limits (API) | _(fill: vCPU, RAM, egress ceiling from G1)_ |
+| Railway plan limits (DB) | _(fill: connections ceiling, storage ceiling from G1)_ |
+| Railway plan limits (Redis) | _(fill: maxmemory, connection limit from G1)_ |
 | Automatic DB backups | None (hobby: `maxBackupsCount = 0`) |
 | Production commit at T5 start | _(fill)_ |
 
@@ -86,7 +125,9 @@ These are the allowed failure counts for T5 to PASS. Exceeding any one = gate fa
 
 ## Workload Definition
 
-Locked before G2 begins. One simulated live engagement representing first-client volume.
+**Locked before G2 begins. Do not modify after G1 starts.**
+
+One simulated live engagement representing first-client volume.
 Tenant: the-wick-network (or a dedicated disposable tenant — record which).
 
 | Operation | Endpoint | Target count | Notes |
@@ -152,11 +193,23 @@ Calibrate against actual Railway plan limits captured in G1. Update the Threshol
 Capture current production limits and observed steady-state usage before any load test runs.
 Let the system idle for 5–10 minutes after last deployment before recording metrics.
 
+### G1 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Captured by | |
+| Capture start (UTC) | |
+| Capture end (UTC) | |
+| Environment | prod |
+| Deployment ID | _(from Version Fingerprint below)_ |
+| Commit SHA | _(from Version Fingerprint below)_ |
+| Source | Railway Dashboard / CLI |
+| Evidence | _(screenshot folder / log reference)_ |
+
 ### Railway Plan
 
 | Field | Value |
 |---|---|
-| Date/time captured (UTC) | |
 | Plan name | |
 | API vCPU limit | |
 | API RAM limit | |
@@ -301,9 +354,19 @@ Rollback must be verified before G4 proceeds. If rollback cannot be confirmed, G
 Fingerprint the production configuration and verify no unexpected drift since T4 PASS (2026-08-04).
 Record variable **names only** — no secret values.
 
-### Railway Variable Names (api service)
+### G1.1 Chain of Custody
 
-_(List all variable names present; flag any not present at T4 close or any unexpected additions.)_
+| Field | Value |
+|---|---|
+| Captured by | |
+| Timestamp (UTC) | |
+| Environment | prod |
+| Source | Railway Dashboard (vars), Vercel Dashboard (vars), Auth0 Dashboard, Resend Dashboard |
+| Deployment ID | _(from G1 Version Fingerprint)_ |
+| Commit SHA | _(from G1 Version Fingerprint)_ |
+| Evidence | _(screenshot folder / export reference)_ |
+
+### Railway Variable Names (api service)
 
 | Variable name | Present at T4 | Present now | Delta |
 |---|---|---|---|
@@ -376,6 +439,7 @@ Do not start G2 until all are true:
 - [ ] Rollback target documented and verified
 - [ ] Alerting status documented
 - [ ] G3 thresholds calibrated against actual plan limits (Pass Thresholds table updated above)
+- [ ] Chain of custody complete for G1 and G1.1
 
 **G1 result: PENDING**
 
@@ -385,14 +449,28 @@ Do not start G2 until all are true:
 
 **Status: PENDING**
 
-Run the workload defined above. Lock the workload table before starting. Record all observed metrics during the load window.
+Run the workload defined above. Lock the workload table before starting (counts must not change mid-run).
+Record all observed metrics during the load window.
+
+### G2 Chain of Custody
 
 | Field | Value |
 |---|---|
-| Date/time start (UTC) | |
-| Date/time end (UTC) | |
-| Load window duration | |
+| Captured by | |
+| Load start (UTC) | |
+| Load end (UTC) | |
+| Environment | prod |
+| Deployment ID | _(must match G1 Version Fingerprint — if different, restart G1)_ |
+| Commit SHA | _(must match G1 Version Fingerprint)_ |
 | Tenant used | |
+| Source | Railway Metrics / API logs |
+| Evidence | _(screenshot folder / log reference)_ |
+
+### Metrics
+
+| Field | Value |
+|---|---|
+| Load window duration | |
 | Peak API CPU % | |
 | Peak API memory % | |
 | Peak DB connections | |
@@ -418,7 +496,18 @@ Run the workload defined above. Lock the workload table before starting. Record 
 **Status: PENDING**
 
 Compare G2 observed peaks against G1-calibrated thresholds. Pass only if all thresholds are met.
-(Mirrors the Pass Thresholds table above — fill Observed column from G2.)
+
+### G3 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Assessed by | |
+| Timestamp (UTC) | |
+| Environment | prod |
+| Source | G1 and G2 evidence in this document |
+| Evidence | _(note any supplementary screenshot or log)_ |
+
+### Threshold Comparison
 
 | Metric | Threshold | Observed | Pass/Fail |
 |---|---|---|---|
@@ -430,7 +519,7 @@ Compare G2 observed peaks against G1-calibrated thresholds. Pass only if all thr
 | OOM kills / crash loops | 0 | | |
 | Redis memory | < 80% of maxmemory | | |
 
-Also verify SLO targets against G2 observations (update SLO table above).
+Also update SLO table (above) with G2 peak observations.
 
 **G3 result: PENDING**
 
@@ -440,12 +529,25 @@ Also verify SLO targets against G2 observations (update SLO table above).
 
 **Status: PENDING**
 
-Restart or redeploy the production API during controlled test activity. Rollback target must be confirmed (G1) before proceeding.
+Restart or redeploy the production API during controlled test activity.
+Rollback target must be confirmed (G1) before proceeding.
+
+### G4 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Executed by | |
+| Injection timestamp (UTC) | |
+| Environment | prod |
+| Deployment ID at injection | _(must match G1 Version Fingerprint)_ |
+| Commit SHA at injection | _(must match G1 Version Fingerprint)_ |
+| Trigger method | Railway dashboard redeploy / CLI |
+| Evidence | _(screenshot / Railway deploy log reference)_ |
+
+### Observations
 
 | Check | Result |
 |---|---|
-| Date/time of restart injection (UTC) | |
-| Trigger method (Railway redeploy / kill) | |
 | Health check failure observed (before recovery) | |
 | Health check recovery time (s) | |
 | Restart-to-health time (s) | |
@@ -464,7 +566,21 @@ Restart or redeploy the production API during controlled test activity. Rollback
 **Status: PENDING**
 
 A healthy service that nobody can observe is operationally unhealthy.
-Verify that the operational signals needed to detect and diagnose real incidents are present and functional.
+Verify that operational signals needed to detect and diagnose real incidents are present and functional.
+
+### G4.5 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Captured by | |
+| Timestamp (UTC) | |
+| Environment | prod |
+| Deployment ID | _(must match G1 Version Fingerprint)_ |
+| Commit SHA | _(must match G1 Version Fingerprint)_ |
+| Source | Railway log viewer, DB audit query, Railway metrics |
+| Evidence | _(log excerpt / query result / screenshot reference)_ |
+
+### Checks
 
 | Check | Result |
 |---|---|
@@ -476,7 +592,7 @@ Verify that the operational signals needed to detect and diagnose real incidents
 | `/health` endpoint returns within expected response time after recovery | |
 | Traces or request IDs available (if enabled; if not, document as intentionally absent) | |
 | Alerts fired correctly during G4 failure (if alerting configured) | |
-| If no alerting configured: document explicitly as known gap | |
+| If no alerting configured: documented explicitly as known gap | |
 
 **G4.5 result: PENDING**
 
@@ -487,6 +603,20 @@ Verify that the operational signals needed to detect and diagnose real incidents
 **Status: PENDING**
 
 Verify durable state integrity after the G4 restart.
+
+### G5 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Captured by | |
+| Timestamp (UTC) | |
+| Environment | prod |
+| Deployment ID post-restart | |
+| Commit SHA post-restart | |
+| Source | DB queries, Railway log viewer, Redis CLI |
+| Evidence | _(query results / log excerpts / screenshot reference)_ |
+
+### Checks
 
 | Check | Result |
 |---|---|
@@ -507,6 +637,15 @@ Verify durable state integrity after the G4 restart.
 **Status: PENDING**
 
 Final determination based on G1–G5 evidence. This is the executive summary for T5.
+
+### G6 Chain of Custody
+
+| Field | Value |
+|---|---|
+| Decision made by | |
+| Timestamp (UTC) | |
+| Environment | prod |
+| Evidence basis | G1–G5 sections of this document |
 
 ### Decision
 
@@ -537,23 +676,17 @@ _(One paragraph. State the primary finding: whether the system met thresholds, w
 
 ### Residual Risks
 
-_(List any risks that remain after T5 completes. Each risk must be accepted or mitigated before launch.)_
-
 | Risk | Severity | Mitigation / Acceptance |
 |---|---|---|
 | | | |
 
 ### Mandatory Actions Before Launch
 
-_(Actions required before client onboarding regardless of T5 outcome.)_
-
 | Action | Owner | Deadline |
 |---|---|---|
 | | | |
 
 ### Recommended Actions After Launch
-
-_(Non-blocking improvements identified during T5. Track in backlog.)_
 
 | Action | Priority | Notes |
 |---|---|---|
