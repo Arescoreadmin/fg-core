@@ -2,6 +2,10 @@
 
 Status: **PENDING** — gates not yet executed
 
+**Execution ID: T5-EXEC-20260804-001**
+Reference this ID on all screenshots, SQL captures, Railway exports, logs, and evidence
+references for this execution. Used in the Launch Readiness Review and Launch Decision Record.
+
 Gate sequence: G1 (+ G1.1) → G2 → G3 → G4 → G4.5 → G5 → G6
 
 T5 closes FG-LR-004. It proves Railway production can support the first client engagement
