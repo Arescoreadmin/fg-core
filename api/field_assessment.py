@@ -9334,8 +9334,9 @@ def create_or_get_questionnaire(
     _q_id = q.id
     _already_existed = not created
     db.commit()
-    # Re-query q after commit so _questionnaire_to_response can access its attributes
-    # under the current RLS context (post-commit refresh is unsafe; re-query is correct).
+    # Re-set RLS context before re-query — SET LOCAL is lost after commit.
+    from api.db import set_tenant_context
+    set_tenant_context(db, tenant_id)
     q = db.get(FaQuestionnaire, _q_id)
     responses = list_responses(db, questionnaire_id=_q_id, tenant_id=tenant_id)
     evidence_map = _build_response_evidence_map(
