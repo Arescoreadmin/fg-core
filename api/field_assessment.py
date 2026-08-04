@@ -4510,6 +4510,7 @@ def initiate_network_scan(
         payload_summary={"target_count": len(verified_rows)},
     )
     job_id = job.id  # capture before commit — session expire guard
+    net_target_hosts = [r.target for r in verified_rows]  # capture before commit
     db.commit()
 
     run_id = job_id  # reuse job_id as run_id for in-memory state lookup
@@ -4528,7 +4529,7 @@ def initiate_network_scan(
         job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        target_hosts=[r.target for r in verified_rows],
+        target_hosts=net_target_hosts,
         actor=actor,
     )
 
@@ -4986,6 +4987,7 @@ def initiate_web_headers_scan(
         payload_summary={"target_count": len(verified_rows)},
     )
     job_id = job.id  # capture before commit — session expire guard
+    web_targets = [r.target for r in verified_rows]  # capture before commit
     db.commit()
 
     run_id = job_id
@@ -5004,7 +5006,7 @@ def initiate_web_headers_scan(
         job_id=job_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
-        targets=[r.target for r in verified_rows],
+        targets=web_targets,
         actor=actor,
     )
 
