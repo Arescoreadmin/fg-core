@@ -221,61 +221,88 @@ URL is correct.
 
 ---
 
-## PR-T6.4 — Observation Capture
+## PR-T6.4 — Evidence Signing Startup Invariant
 
 **Closes:** D-T6-005
-**Branch:** `fix/t6-observation-capture`
+**Branch:** `fix/t6-evidence-signing-startup-invariant`
 
-### Problem
+### Problem (confirmed via Railway log)
 
-`POST /field-assessment/engagements/{id}/observations` returns HTTP 500 before `db.commit()`.
-GET `/observations` confirms 0 records — nothing was persisted. This is distinct from D-T6-002
-(which commits before failing).
+`FG_EVIDENCE_SIGNING_KEY_B64` is not set in Railway production. `capture_observation_route`
+(line 1916) calls `create_evidence_provenance()` → `_try_sign_new_event()` in
+`evidence_provenance.py:505`. `_try_sign_new_event` is intentionally fail-closed in
+production — it raises `RuntimeError("evidence_authority.signing_failed: ...")` when the
+key is absent. The observation flush succeeds; signing fails before `db.commit()`;
+transaction rolls back; 0 records committed.
 
-The sequence in `capture_observation_route` (`field_assessment.py` lines 1886–1940):
+### Authority decision
 
-1. `create_observation()` → `db.flush()` (line ~1902)
-2. `create_evidence_provenance()` uses `observation.id` (line ~1920)
-3. `emit_engagement_audit_event()` uses `observation.id` (line ~1933)
-4. `db.commit()` (line 1938)
-5. `db.refresh(observation)` (line 1939)
-6. Return serialized response (line 1940)
+Do NOT copy the report QA path's "skip and continue" behavior. Evidence authority signing
+is mandatory in production. Unsigned evidence committed silently defeats the purpose of the
+evidence authority. The QA path's skip behavior is itself technical debt, not a pattern to
+spread.
 
-The 500 occurs before step 4. Railway logs are required to identify the exact failure point.
+The correct fix moves the failure from mid-transaction discovery to **deterministic startup
+validation** — the same pattern used for `MINISIGN_SECRET_KEY` (PR #539).
 
-### First action (before writing any code)
-
-Retrieve the Railway log for the T6 H13 observation POST failures. The stack trace will
-identify exactly which line raises and why. Candidates:
-
-- `db.flush()` raises integrity constraint (enum value, NOT NULL, FK violation)
-- `create_evidence_provenance()` raises (wrong argument type, missing field)
-- `emit_engagement_audit_event()` raises (event type not in enum, serialization error)
-
-**Do not guess. Read the log first.**
+**Operational prerequisite (user action, not code):** Set `FG_EVIDENCE_SIGNING_KEY_B64`
+in Railway before deploying this PR. Generate:
+```
+openssl rand -base64 32
+```
+Value is a 32-byte Ed25519 private key seed, base64-encoded (44 chars). Verify with:
+```
+python3 -c "import os,base64; b=base64.b64decode('<value>'); assert len(b)==32, f'bad length {len(b)}'"
+```
 
 ### Fix
 
-Apply the targeted fix to the identified failure point only. Do not restructure the route.
+**In `api/main.py` (startup validation):** Add `FG_EVIDENCE_SIGNING_KEY_B64` to the
+production invariant check alongside `MINISIGN_SECRET_KEY`. Validate: present, non-empty,
+valid base64, decodes to exactly 32 bytes. Fail startup with a clear `RuntimeError` if any
+check fails.
 
-Additionally — regardless of root cause — apply the D-T6-002 pattern fix to lines 1939–1940:
-capture needed attributes before `db.commit()` at line 1938 to prevent a secondary D-T6-002
-failure once the pre-commit bug is resolved.
+```python
+# In production startup validation:
+_signing_key_b64 = os.getenv("FG_EVIDENCE_SIGNING_KEY_B64", "")
+if not _signing_key_b64:
+    raise RuntimeError("FG_EVIDENCE_SIGNING_KEY_B64 is required in production")
+try:
+    key_bytes = base64.b64decode(_signing_key_b64)
+except Exception:
+    raise RuntimeError("FG_EVIDENCE_SIGNING_KEY_B64 must be valid base64")
+if len(key_bytes) != 32:
+    raise RuntimeError(f"FG_EVIDENCE_SIGNING_KEY_B64 must decode to 32 bytes (got {len(key_bytes)})")
+```
+
+**In `_try_sign_new_event` (`evidence_provenance.py`):** Current behavior is correct —
+keep fail-closed in production, return `{}` in dev/test. No change to this function.
+
+**In `capture_observation_route` (`field_assessment.py` lines 1939–1940):** Apply
+D-T6-002 pattern fix regardless — capture needed attributes before `db.commit()` at line
+1938 to prevent a secondary ORM expiry failure once the env var is configured.
+
+**Dev/test mode:** `_try_sign_new_event` already returns `{}` (unsigned) in non-production.
+Emit a log warning at WARNING level when signing is skipped: `signing skipped — non-production`.
+Do not add a startup assertion in dev/test environments.
 
 ### Acceptance criteria
 
-- [ ] `POST /field-assessment/engagements/{id}/observations` returns 201
-- [ ] `FaFieldObservation` row present in DB after POST
-- [ ] `FaEvidenceProvenance` row present in DB after POST
-- [ ] Audit event written
-- [ ] `GET /observations` returns the created observation
-- [ ] Regression test: POST observation → assert 201 → GET observations → assert count = 1
+- [ ] Production startup fails with `RuntimeError` if `FG_EVIDENCE_SIGNING_KEY_B64` is absent
+- [ ] Production startup fails if value is invalid base64 or decodes to ≠ 32 bytes
+- [ ] With key configured: `POST /observations` returns 201 with signed provenance record
+- [ ] `FaEvidenceProvenance` row has non-null `signing_key_id` and `signature` fields
+- [ ] Dev/test mode: observation succeeds with unsigned provenance (no startup failure)
+- [ ] Dev/test mode: WARNING log emitted when signing skipped
+- [ ] No unsigned evidence can be committed in production
+- [ ] Unit test: startup validation rejects missing key, bad base64, wrong length
+- [ ] Integration test: POST observation → assert 201 → assert provenance row signed
 
 ### Do NOT touch
 
-- Observation domain/type/severity enum values (fix the caller, not the enum)
-- Other evidence routes
-- Questionnaire or report routes
+- `_try_sign_new_event` fail-closed behavior in production
+- Report QA `trust_arc.persist_decision_memory` path (separate system; address separately)
+- Any other route
 - Permissions
 
 ---
@@ -344,18 +371,93 @@ it catches what nothing else catches.
 
 ---
 
+## PR-T6.6 — Portal Session Revocation SQL Fix
+
+**Closes:** D-T6-007
+**Branch:** `fix/t6-portal-session-revocation`
+**Classification: LAUNCH BLOCKER**
+
+### Problem (confirmed via Railway log)
+
+`revoke_portal_session_by_fingerprint()` PL/pgSQL function fails with:
+
+```
+psycopg.errors.AmbiguousColumn: column reference "tenant_id" is ambiguous
+LINE 8: tenant_id::TEXT AS tenant_id,
+DETAIL: It could refer to either a PL/pgSQL variable or a table column.
+```
+
+The RETURNING clause uses `tenant_id::TEXT AS tenant_id` without table qualification.
+PostgreSQL cannot resolve whether `tenant_id` refers to the function parameter or the
+column in `portal_user_sessions`. The UPDATE may commit (the SET clause uses the primary
+key filter `token_fingerprint = p_fingerprint`, which is unambiguous), but the RETURNING
+clause fails, causing the entire statement to fail.
+
+BFF `logout/route.ts` is designed fail-open — it clears the `fg_portal_session` cookie
+regardless of Core response. The operator sees a redirect to `/login`. The
+`portal_user_sessions` row remains `active`. A stolen `pnu1.` token replayed against Core
+would authenticate successfully until the 14-day Core TTL expires.
+
+Cookie clearing is browser state management. Server-side revocation is the security control.
+
+### Fix
+
+**New migration** (next available number after 0171): create or replace the function with
+all column references table-qualified in the RETURNING clause:
+
+```sql
+CREATE OR REPLACE FUNCTION revoke_portal_session_by_fingerprint(p_fingerprint TEXT)
+RETURNS TABLE (session_id UUID, tenant_id TEXT, portal_user_id UUID)
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    RETURN QUERY
+    UPDATE portal_user_sessions
+    SET    status     = 'revoked',
+           revoked_at = now()
+    WHERE  token_fingerprint = p_fingerprint
+      AND  status            = 'active'
+    RETURNING
+           portal_user_sessions.id                  AS session_id,
+           portal_user_sessions.tenant_id::TEXT      AS tenant_id,
+           portal_user_sessions.portal_user_id       AS portal_user_id;
+END;
+$$;
+```
+
+Apply the same table-qualification discipline to all other columns in the RETURNING clause.
+
+**Do NOT change the BFF fail-open behavior** — that is correct. The fix is that the Core
+revocation succeeds, not that the BFF becomes fail-closed.
+
+### Acceptance criteria
+
+- [ ] Logout calls `revoke_portal_session_by_fingerprint` → HTTP 200 from Core
+- [ ] `portal_user_sessions.status` = `revoked` after logout
+- [ ] `portal_user_sessions.revoked_at` is set
+- [ ] Replaying the revoked `pnu1.` token against Core returns 401 (`SESSION_REVOKED`)
+- [ ] Second logout (idempotent) returns 200 (token already revoked → 0 rows updated → BFF still clears cookie)
+- [ ] Cross-tenant: token from tenant A cannot be revoked by a request authenticated as tenant B
+- [ ] Migration replay passes on PostgreSQL 18 without ambiguity error
+- [ ] Unit test for `revoke_session_by_token()` in `portal_user_authority.py`: assert row status = revoked after call
+
+### Do NOT touch
+
+- BFF `logout/route.ts` fail-open cookie clearing behavior
+- `portal_user_sessions` table structure
+- Other portal user authority functions
+- Auth flow
+
+---
+
 ## Sequencing
 
-These PRs are independent and may be developed in parallel. Recommended merge order based on
-T6 second run dependency:
-
-| Order | PR | Blocks T6-second-run H-steps |
-|---|---|---|
-| 1 | PR-T6.4 (Railway log first) | H13 |
-| 2 | PR-T6.1 | H15 (QA approve) |
-| 3 | PR-T6.2 | H5, H10, H11, H17 |
-| 4 | PR-T6.3 | H8 clean (no workaround) |
-| 5 | PR-T6.5 | operational trust (not a gate for T6 second run) |
+| Order | PR | Blocks T6-second-run H-steps | Prerequisite |
+|---|---|---|---|
+| 1 | PR-T6.4 | H13 | Set `FG_EVIDENCE_SIGNING_KEY_B64` in Railway first |
+| 2 | PR-T6.6 | H18 (launch blocker) | None — DDL migration only |
+| 3+4 | PR-T6.1 + PR-T6.2 (parallel) | H15; H5/H10/H11/H17 | None |
+| 5 | PR-T6.3 | H8 clean (no workaround) | None |
+| 6 | PR-T6.5 | operational trust (does not gate T6 second run) | After T6.1–T6.4 merged |
 
 PR-T6.5 may merge after T6 second run passes — it does not gate launch but should be in
 before the Launch Decision Record is signed.
@@ -369,8 +471,16 @@ before the Launch Decision Record is signed.
 - `expire_on_commit=False` globally
 - Scan engine business logic changes
 - Permission changes
-- Schema migrations (none of these require DDL)
 - Portal UI changes beyond PR-T6.3's URL fix
+- The report QA path's `trust_arc` skip behavior (separate system; address in P1-01 era)
 
 If a reviewer proposes work not traceable to a defect in this document, it goes to a separate
 PR after T6 second run.
+
+---
+
+*Revised 2026-08-04 after Railway log analysis:*
+*D-T6-005 root cause confirmed (missing env var, not code bug); PR-T6.4 scope changed to startup invariant.*
+*D-T6-007 added (portal session revocation SQL ambiguity — launch blocker); PR-T6.6 added.*
+*H18 corrected from PARTIAL PASS to FAIL in evidence doc.*
+*T6 second run scope: H5, H10, H11, H13, H15, H17, H18 (7 steps).*

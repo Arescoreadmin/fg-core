@@ -312,7 +312,7 @@ Duration is measured in minutes from step start to step completion.
 | Expected result | Observations saved; evidence links created; no DB errors |
 | Observations created | 0 |
 | Evidence links created | 0 |
-| Actual result | **FAIL — D-T6-005.** Both observation POSTs returned HTTP 500. Unlike D-T6-002 (post-commit 500), GET fallback shows 0 observations — data was NOT committed. The 500 occurs before `db.commit()` in `capture_observation_route`. Root cause requires Railway log inspection to confirm exact failure point; candidates: `create_observation()` flush fails (constraint), `create_evidence_provenance()` throws, or `emit_engagement_audit_event()` throws unexpectedly. Evidence link not attempted (no observation IDs). |
+| Actual result | **FAIL — D-T6-005 (root cause confirmed post-run via Railway log).** Both observation POSTs returned HTTP 500. Unlike D-T6-002 (post-commit 500), GET fallback shows 0 observations — data was NOT committed. Root cause: `FG_EVIDENCE_SIGNING_KEY_B64` is not set in Railway production. `capture_observation_route` (line 1916) calls `create_evidence_provenance()` → `_try_sign_new_event()` → `sign_new_provenance_event()` in `services/field_assessment/evidence_authority.py`. `_try_sign_new_event` is intentionally fail-closed in production: raises `RuntimeError("evidence_authority.signing_failed: FG_EVIDENCE_SIGNING_KEY_B64 is required")` when key absent. The flush at `create_observation()` succeeds, the signing fails before `db.commit()`, rolling back the transaction. Evidence link not attempted (no observation IDs). Fix: set `FG_EVIDENCE_SIGNING_KEY_B64` (32-byte Ed25519 seed, base64-encoded) in Railway + add startup assertion. |
 | Evidence | `/tmp/t6_evidence/h13_evidence_curation.json` · GET /observations HTTP 200: [] (0 results after two POST 500s) |
 | Duration (min) | 2 |
 | Human actions required | 0 |
@@ -418,14 +418,14 @@ Duration is measured in minutes from step start to step completion.
 |---|---|
 | Expected result | Logout → `/login`; `portal_user_sessions` row status = `revoked`; portal inaccessible without re-auth |
 | T6 credentials revoked | 3 of 3 — original-scoped (9dd0a366), r2-scoped (38c221f2), r3-scoped (36c2550f) |
-| Portal session revocation | COMPLETE — user logout → redirected to /login; pnu1. session revoked |
-| Session row status post-revocation | revoked (logout triggered BFF session revocation → /portal/sessions/self/revoke; browser redirected to /login) |
-| Actual result | **PASS.** T6 API credentials: all 3 revoked HTTP 200 (automated, /tmp/t6_evidence/h18_revoke_creds.json). Portal user session: user logged out from https://app.frostgate.ai/ → browser redirected to /login → pnu1. session revoked. Portal inaccessible without re-auth. Full access revocation confirmed. |
-| Evidence | `/tmp/t6_evidence/h18_revoke_creds.json` · 3 credentials revoked HTTP 200 · portal logout → /login redirect confirmed by operator |
+| Portal session revocation | FAIL — BFF cookie cleared; DB row NOT revoked (D-T6-007) |
+| Session row status post-revocation | active — DB revocation failed silently (D-T6-007); `portal_user_sessions` row remains active |
+| Actual result | **FAIL — D-T6-007 (discovered post-run via Railway log).** T6 API credentials: all 3 revoked HTTP 200 (automated). Portal user session: user logged out → browser redirected to /login (BFF cookie cleared). However, Railway log shows `revoke_portal_session_by_fingerprint()` PL/pgSQL function failed with `psycopg.errors.AmbiguousColumn: column reference "tenant_id" is ambiguous` in RETURNING clause — `portal_user_sessions` row remains `active` in DB. BFF `logout/route.ts` is designed fail-open (always clears cookie regardless of Core response). Cookie clearing is browser state management, not a security control. Server-side revocation is the actual control — a stolen `pnu1.` token would still authenticate against Core. Security impact: replayed session token remains valid until TTL expiry (14-day Core TTL). |
+| Evidence | `/tmp/t6_evidence/h18_revoke_creds.json` · 3 API credentials revoked HTTP 200 · Railway log: `psycopg.errors.AmbiguousColumn: column reference "tenant_id" is ambiguous` in `revoke_portal_session_by_fingerprint` at `portal_user_authority.py:1309` |
 | Duration (min) | 2 (credentials automated 1 min + portal logout 1 min) |
 | Human actions required | 1 (portal logout) |
-| Automation coverage (%) | 85 (credentials fully automated; portal logout browser-only) |
-| Pass/Fail | **PASS** |
+| Automation coverage (%) | 50 (credentials automated; portal DB revocation failed) |
+| Pass/Fail | **FAIL — D-T6-007 (server-side session revocation broken; DB row remains active; security control not satisfied)** |
 
 ---
 
@@ -439,8 +439,9 @@ All defects found during T6. Fixes draw from the engineering buffer. No ad-hoc m
 | D-T6-002 | H4 | `create_engagement_route`: `db.refresh(eng)` fails after `db.commit()` — RLS `SET LOCAL app.tenant_id` lost when transaction commits; HTTP 500 returned even though engagement commits successfully | Medium | Open — non-blocking (engagement committed; verify via GET) | Fix: re-set RLS context after commit before refresh, or use `db.expunge(eng)` + re-query; post-T6 engineering buffer |
 | D-T6-003 | H5 | All scan initiation routes: `ObjectDeletedError` on `job.id` access after `db.commit()` — same root cause as D-T6-002. Background tasks never scheduled; scan jobs stuck in `queued` state. Rate limiter counts queued jobs as active → secondary 429 on third scan attempt. | High | Open — blocks H5, H10, H11, H17 | Fix: same as D-T6-002 root cause; `expire_on_commit=False` on scan session or capture job.id before commit |
 | D-T6-004 | H8 | Portal invitation email link missing `?tenant_id=<tenant_id>` query parameter. BFF (`accept-invite/route.ts` line 59) falls back to `process.env.CORE_TENANT_ID` (hardcoded to primary tenant, not disposable T6 tenant). Core API performs RLS lookup under wrong tenant → `get_invitation_by_token()` returns None → 404 PORTAL_INVITATION_NOT_FOUND. Invitation NOT consumed (fail at preflight). Fix: include `tenant_id` in invitation email link URL. | High | Open — workaround: navigate directly with `?tenant_id=fg-t6-rehearsal-20260804-001` appended | Update portal invitation email template to include `?tenant_id={tenant_id}` in accept URL |
-| D-T6-005 | H13 | `capture_observation_route`: HTTP 500 before `db.commit()` — observations NOT committed (GET confirms 0 records). Distinct from D-T6-002 (which commits before failing). Exact failure point requires Railway log; candidates: `create_observation()` flush constraint, `create_evidence_provenance()` unexpected throw, or `emit_engagement_audit_event()` unexpected throw. | High | Open — blocks H13; evidence curation cannot complete | Investigate Railway log for stack trace; fix pre-commit exception |
-| D-T6-006 | H15 | `qa_approve_report_route`: `ReportQaApproveResponse(... eng.status ...)` at line 7546 accesses expired ORM attribute after `db.commit()` at line 7540 — same root cause as D-T6-002. QA approval likely committed (commit at 7540 precedes the 500); unverified without DB query. | Medium | Open — qa-approve response fails; approval status uncertain | Same fix as D-T6-002: capture `eng.status` before commit or re-query after commit |
+| D-T6-005 | H13 | `capture_observation_route` (line 1916): `FG_EVIDENCE_SIGNING_KEY_B64` not set in Railway production. `_try_sign_new_event()` in `evidence_provenance.py:505` is intentionally fail-closed in prod — raises `RuntimeError("evidence_authority.signing_failed: FG_EVIDENCE_SIGNING_KEY_B64 is required")`. Observation flush succeeds; signing fails before `db.commit()`; transaction rolls back; 0 records committed. Key is a 32-byte Ed25519 seed (base64-encoded). | High | **Root cause confirmed** — env var missing in Railway | Set `FG_EVIDENCE_SIGNING_KEY_B64` in Railway (`openssl rand -base64 32`); add to startup assertion in `api/main.py`; PR-T6.4 |
+| D-T6-006 | H15 | `qa_approve_report_route`: `ReportQaApproveResponse(... eng.status ...)` at line 7546 accesses expired ORM attribute after `db.commit()` at line 7540 — same root cause as D-T6-002. QA approval confirmed committed (Railway log: `ObjectDeletedError: Instance '<FaEngagement ...>'` — commit succeeded, serialization failed). | Medium | Open — qa-approve response fails; approval committed | Same fix as D-T6-002: capture `eng.status` before commit; PR-T6.1 |
+| D-T6-007 | H18 | `revoke_portal_session_by_fingerprint()` PL/pgSQL function fails with `AmbiguousColumn: column reference "tenant_id" is ambiguous` in RETURNING clause. BFF fails open (cookie cleared; redirect to /login appears successful). `portal_user_sessions` row remains `active` in DB. Security impact: replayed `pnu1.` token remains valid against Core until 14-day TTL expires. Fail-open logout is browser state management, not a security control. **LAUNCH BLOCKER.** | High | Open — **launch blocker**; DB revocation is the security control | Migration to qualify `portal_user_sessions.tenant_id::TEXT` as `portal_user_sessions.tenant_id` in `revoke_portal_session_by_fingerprint` RETURNING clause; replay protection test; cross-tenant isolation test; PR-T6.6 |
 
 ---
 
@@ -474,24 +475,25 @@ Measured during the rehearsal. These become the reference baseline for future re
 
 | Field | Value |
 |---|---|
-| Steps passed | 12/18 — H1 (D-T6-001), H2, H3, H4 (D-T6-002), H6, H7, H8 (D-T6-004), H9, H12 (D-T6-002), H14 (D-T6-002), H16, H18 |
-| Steps failed | 6/18 — H5 (D-T6-003), H10 (D-T6-003), H11 (D-T6-003), H13 (D-T6-005), H15 (D-T6-006), H17 (D-T6-003) |
-| Defects found | 6 (D-T6-001 through D-T6-006) |
+| Steps passed | 11/18 — H1 (D-T6-001), H2, H3, H4 (D-T6-002), H6, H7, H8 (D-T6-004), H9, H12 (D-T6-002), H14 (D-T6-002), H16 |
+| Steps failed | 7/18 — H5 (D-T6-003), H10 (D-T6-003), H11 (D-T6-003), H13 (D-T6-005), H15 (D-T6-006), H17 (D-T6-003), H18 (D-T6-007) |
+| Defects found | 7 (D-T6-001 through D-T6-007; D-T6-007 discovered post-run via Railway log analysis) |
 | Defects resolved within buffer | 0 — production freeze active during T6; no mid-run patching |
-| Defects deferred (with acceptance) | 6 — all deferred to post-T6 engineering buffer |
+| Defects deferred (with acceptance) | 7 — all deferred to post-T6 engineering buffer |
+| Launch blockers identified | 1 — D-T6-007 (portal session revocation broken; replayed token remains valid) |
 | CG v0 drift summary produced | no — H17 failed; no scan baseline; deferred to T6 second run |
-| Dated log committed to `docs/operators/` | pending |
+| Dated log committed to `docs/operators/` | yes — `docs/operators/t6_exec_20260804_001.md` |
 | T6 result | **FAIL — second run required** |
 | T6 completion date | 2026-08-04 |
 
 **T6 result: FAIL**
 
-6 steps failed (threshold: >2 requires second run per failure policy). Root cause of 4/6 failures is D-T6-003 (`ObjectDeletedError` post-commit in scan initiation routes). Fix D-T6-003 + D-T6-005 from engineering buffer, then re-run T6.
+7 steps failed (threshold: >2 requires second run). D-T6-007 identified post-run via Railway log — H18 corrected from PARTIAL PASS to FAIL. D-T6-007 is a launch blocker: server-side session revocation is the actual security control; a replayed `pnu1.` token remains valid against Core until 14-day TTL.
 
-**Steps requiring second run:** H5, H10, H11, H13, H15, H17.
-**Steps that can be skipped on second run (already passed):** H1–H4, H6–H9, H12, H14, H16, H18 — unless any defect fix introduces regression.
+**Steps requiring second run:** H5, H10, H11, H13, H15, H17, H18.
+**Steps that can be skipped on second run:** H1–H4, H6–H9, H12, H14, H16 — unless any defect fix introduces regression.
 
-**Second run authorization:** pending engineering buffer delivery (D-T6-002, D-T6-003, D-T6-004, D-T6-005, D-T6-006 fixes).
+**Second run authorization:** pending engineering buffer delivery (D-T6-002 through D-T6-007 fixes) + `FG_EVIDENCE_SIGNING_KEY_B64` configured in Railway.
 
 ---
 
