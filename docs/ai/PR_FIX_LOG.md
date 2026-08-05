@@ -1,5 +1,19 @@
 # PR Fix Log (Strict)
 
+## P-54 — fix(ci): resolve launch-candidate mypy regressions — PR #610
+
+- **PR/Branch:** `fix/ci-mypy-launch-candidate` / PR #610
+- **Root cause:** PR #609 (launch-candidate merge) introduced three mypy errors in `api/`: `[arg-type]` in `db.py`, `[assignment]` in `field_assessment.py`, and `[union-attr]` in `main.py`. All are type-narrowing gaps with no logic change.
+- **Fix:**
+  - `api/db.py:102` — added `assert mig_role is not None` before passing `scalar()` result (typed `Any|None`) to `_pg_quote_ident(str)`.
+  - `api/field_assessment.py:9341` — introduced `_q_reloaded` intermediate variable so mypy sees the `FaQuestionnaire|None` → assert → `FaQuestionnaire` narrowing chain before re-assigning to `q` (typed `FaQuestionnaire` from earlier branch).
+  - `api/main.py:510` — replaced `hasattr` + direct `app.state.self_heal_watchdog.stop()` with `getattr(..., None)` + local variable; `hasattr` does not narrow `SelfHealWatchdog|None`.
+- **Behavioral impact:** None — pure type annotation fixes; runtime paths unchanged.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None — verified with `python -m mypy api/ --no-error-summary` → 0 errors.
+- **Result:** PASS (mypy clean locally).
+
 ## P-53 — fix(security): add FG_EVIDENCE_SIGNING_KEY_B64 to _seed_prod_env in compliance test
 
 - **PR/Branch:** `exec/t5-exec-20260804-001`
