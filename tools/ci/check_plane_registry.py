@@ -40,6 +40,12 @@ EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
     # Self-revocation variant: same auth pattern as /{session_id} — the pnu1.
     # token in X-FG-Portal-Session IS the credential; no service-account scope.
     ("DELETE", "/portal/named-sessions/self"),
+    # pnu1. auth pattern: X-FG-Portal-Session token is the credential. Tenant
+    # resolved via SECURITY DEFINER lookup_portal_session_by_fingerprint()
+    # (migration 0171). validate_session() enforces auth_version, membership
+    # state, and sets RLS context. Standard require_scopes dependency does not
+    # apply to named-user session flows.
+    ("GET", "/portal/named-users/me"),
 }
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
@@ -67,6 +73,11 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # Self-revocation: tenant is resolved server-side from the session record via
     # the SECURITY DEFINER function; no Depends() tenant parameter for the scanner.
     ("DELETE", "/portal/named-sessions/self"),
+    # pnu1. auth pattern: tenant resolved via SECURITY DEFINER
+    # lookup_portal_session_by_fingerprint() (migration 0171); validate_session()
+    # calls _set_tenant_rls() before any tenant-scoped query. The standard
+    # Depends() tenant parameter does not apply to named-user session flows.
+    ("GET", "/portal/named-users/me"),
 }
 
 

@@ -975,13 +975,11 @@ pip-audit: venv
 	@$(PY) -m pip_audit \
 		--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 \
 		--ignore-vuln CVE-2026-54283 --ignore-vuln CVE-2026-54282 \
-		--ignore-vuln GHSA-537c-gmf6-5ccf \
 		--ignore-vuln CVE-2026-53540 --ignore-vuln CVE-2026-53539 --ignore-vuln CVE-2026-53538 \
 		-r requirements.txt -r requirements-dev.txt
 	@$(PY) -m pip_audit \
 		--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183 --ignore-vuln MAL-2026-4750 \
 		--ignore-vuln CVE-2026-54283 --ignore-vuln CVE-2026-54282 \
-		--ignore-vuln GHSA-537c-gmf6-5ccf \
 		--ignore-vuln CVE-2026-53540 --ignore-vuln CVE-2026-53539 --ignore-vuln CVE-2026-53538 \
 		-r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 

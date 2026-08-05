@@ -1,0 +1,185 @@
+{
+  "execution_id": "T5-EXEC-20260804-001",
+  "gate": "G4",
+  "injection_utc": "2026-08-04T12:17:13+00:00",
+  "redeploy_triggered_utc": "2026-08-04T12:17:15+00:00",
+  "first_failure_utc": "2026-08-04T12:17:50+00:00",
+  "recovery_utc": "2026-08-04T12:17:59+00:00",
+  "restart_to_health_s": 8.8,
+  "first_failure_s": 40.5,
+  "recovery_time_s": 49.3,
+  "health_failure_observed": true,
+  "polls": [
+    {
+      "ts": "2026-08-04T12:17:10+00:00",
+      "status": 200,
+      "ms": 206,
+      "elapsed_s": 0.2
+    },
+    {
+      "ts": "2026-08-04T12:17:12+00:00",
+      "status": 200,
+      "ms": 255,
+      "elapsed_s": 2.5
+    },
+    {
+      "ts": "2026-08-04T12:17:15+00:00",
+      "status": 200,
+      "ms": 377,
+      "elapsed_s": 4.8
+    },
+    {
+      "ts": "2026-08-04T12:17:17+00:00",
+      "status": 200,
+      "ms": 233,
+      "elapsed_s": 7.1
+    },
+    {
+      "ts": "2026-08-04T12:17:19+00:00",
+      "status": 200,
+      "ms": 226,
+      "elapsed_s": 9.3
+    },
+    {
+      "ts": "2026-08-04T12:17:21+00:00",
+      "status": 200,
+      "ms": 230,
+      "elapsed_s": 11.5
+    },
+    {
+      "ts": "2026-08-04T12:17:24+00:00",
+      "status": 200,
+      "ms": 308,
+      "elapsed_s": 13.8
+    },
+    {
+      "ts": "2026-08-04T12:17:26+00:00",
+      "status": 200,
+      "ms": 235,
+      "elapsed_s": 16.1
+    },
+    {
+      "ts": "2026-08-04T12:17:28+00:00",
+      "status": 200,
+      "ms": 325,
+      "elapsed_s": 18.4
+    },
+    {
+      "ts": "2026-08-04T12:17:30+00:00",
+      "status": 200,
+      "ms": 237,
+      "elapsed_s": 20.6
+    },
+    {
+      "ts": "2026-08-04T12:17:33+00:00",
+      "status": 200,
+      "ms": 226,
+      "elapsed_s": 22.9
+    },
+    {
+      "ts": "2026-08-04T12:17:35+00:00",
+      "status": 200,
+      "ms": 183,
+      "elapsed_s": 25.0
+    },
+    {
+      "ts": "2026-08-04T12:17:37+00:00",
+      "status": 200,
+      "ms": 229,
+      "elapsed_s": 27.3
+    },
+    {
+      "ts": "2026-08-04T12:17:39+00:00",
+      "status": 200,
+      "ms": 190,
+      "elapsed_s": 29.5
+    },
+    {
+      "ts": "2026-08-04T12:17:41+00:00",
+      "status": 200,
+      "ms": 201,
+      "elapsed_s": 31.7
+    },
+    {
+      "ts": "2026-08-04T12:17:44+00:00",
+      "status": 200,
+      "ms": 196,
+      "elapsed_s": 33.9
+    },
+    {
+      "ts": "2026-08-04T12:17:46+00:00",
+      "status": 200,
+      "ms": 202,
+      "elapsed_s": 36.1
+    },
+    {
+      "ts": "2026-08-04T12:17:48+00:00",
+      "status": 200,
+      "ms": 203,
+      "elapsed_s": 38.3
+    },
+    {
+      "ts": "2026-08-04T12:17:50+00:00",
+      "status": 502,
+      "ms": 200,
+      "elapsed_s": 40.5
+    },
+    {
+      "ts": "2026-08-04T12:17:52+00:00",
+      "status": 502,
+      "ms": 224,
+      "elapsed_s": 42.7
+    },
+    {
+      "ts": "2026-08-04T12:17:55+00:00",
+      "status": 502,
+      "ms": 193,
+      "elapsed_s": 44.9
+    },
+    {
+      "ts": "2026-08-04T12:17:57+00:00",
+      "status": 502,
+      "ms": 229,
+      "elapsed_s": 47.1
+    },
+    {
+      "ts": "2026-08-04T12:17:59+00:00",
+      "status": 200,
+      "ms": 229,
+      "elapsed_s": 49.3
+    }
+  ],
+  "redeploy_output": {
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0
+  },
+  "pre_injection_health": {
+    "status": 200,
+    "ms": 251,
+    "body": {
+      "status": "ok",
+      "service": "frostgate-core",
+      "version": "0.8.0",
+      "api_version": "v1",
+      "env": "prod",
+      "auth_enabled": true,
+      "app_instance_id": "f989d72b-2893-4df8-bb48-1ea2cd04f785"
+    },
+    "ts": "2026-08-04T12:17:10+00:00"
+  },
+  "final_health": {
+    "status": 200,
+    "ms": 193,
+    "body": {
+      "status": "ok",
+      "service": "frostgate-core",
+      "version": "0.8.0",
+      "api_version": "v1",
+      "env": "prod",
+      "auth_enabled": true,
+      "app_instance_id": "ba9281de-811a-4adf-912e-117d7fa6f08e"
+    },
+    "ts": "2026-08-04T12:18:01+00:00"
+  }
+}

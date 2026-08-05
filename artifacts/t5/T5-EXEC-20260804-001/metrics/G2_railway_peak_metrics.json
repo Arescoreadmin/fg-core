@@ -1,0 +1,79 @@
+{
+  "cpu": {
+    "average": 0.0771090212121212,
+    "current": 0.0,
+    "limit": 8.0,
+    "max": 1.140741233333333,
+    "unit": "vCPU",
+    "utilization_pct": 0.0
+  },
+  "deployments": [
+    {
+      "created_at": "2026-08-04T02:04:58.072+00:00",
+      "id": "d71a11d2-e883-460e-919e-1adc0d81068f",
+      "status": "SUCCESS"
+    },
+    {
+      "created_at": "2026-08-04T02:01:45.875+00:00",
+      "id": "dcd8d311-472d-4336-89ae-3d718089e811",
+      "status": "REMOVED"
+    },
+    {
+      "created_at": "2026-08-04T01:46:01.909+00:00",
+      "id": "adb1433d-f63d-4910-999d-75f0d04d9df0",
+      "status": "REMOVED"
+    },
+    {
+      "created_at": "2026-08-04T00:45:02.871+00:00",
+      "id": "d4d1a1dc-be99-4c58-a23b-76bcbb43e73a",
+      "status": "REMOVED"
+    },
+    {
+      "created_at": "2026-08-04T00:13:39.865+00:00",
+      "id": "21433658-b2e0-4afb-abae-7f099add42db",
+      "status": "REMOVED"
+    }
+  ],
+  "disk": {
+    "average_mb": 0.0,
+    "current_mb": 0.0,
+    "max_mb": 0.0
+  },
+  "environment": "production",
+  "http": {
+    "2xx": 818,
+    "3xx": 0,
+    "4xx": 4,
+    "5xx": 0,
+    "error_rate": 0.0,
+    "p50_ms": 145,
+    "p90_ms": 162,
+    "p95_ms": 164,
+    "p99_ms": 168,
+    "total": 822
+  },
+  "memory": {
+    "average_mb": 393.82049973104137,
+    "current_mb": 402.560909312,
+    "limit_mb": 8192.0,
+    "max_mb": 455.081984,
+    "utilization_pct": 4.9
+  },
+  "public_network_traffic": {
+    "egress": {
+      "average_mb": 0.007837382876033059,
+      "current_mb": 0.0,
+      "max_mb": 0.11126272
+    },
+    "ingress": {
+      "average_mb": 0.006089948033057851,
+      "current_mb": 0.0,
+      "max_mb": 0.087195648
+    }
+  },
+  "service": "api",
+  "window": {
+    "since": "2026-08-04T11:11:31.871988075+00:00",
+    "until": "2026-08-04T12:11:38.453577624+00:00"
+  }
+}

@@ -97,44 +97,6 @@ dedicated dependency upgrade PR, with full gate suite passing.
 
 ---
 
-### EXC-DEP-003
-
-| Field              | Value |
-|--------------------|-------|
-| **Advisory ID**    | GHSA-537c-gmf6-5ccf |
-| **Package**        | cryptography==46.0.7 |
-| **Advisory type**  | GHSA (security vulnerability in cryptography) |
-| **Fix versions**   | 48.0.1 |
-| **Accepted date**  | 2026-06-15 |
-| **Review cadence** | Every dependency PR, or at minimum every 14 days |
-| **Owner**          | Platform & Security (EmpireOverloard) |
-
-**Reason:**
-`cryptography==46.0.7` is pinned in `requirements-dev.txt` (dev tooling only; not deployed
-to production). The 46→48 major version jump may include breaking API changes and requires
-test validation. Pre-existing on the pinned version; not introduced by any code change.
-
-**Prior certification:**
-Pinned version has been in place since before P0-9 branch; no prior CVE against it was
-active at time of pinning.
-
-**Controls in place:**
-- Used only in dev/test environments; not in production deployment path
-- Version pinned exactly in `requirements-dev.txt`
-- pip-audit remains enabled for all other advisories
-- Upgrade tracked for dedicated dependency PR
-
-**Removal condition:**
-Remove when `cryptography` is upgraded to ≥48.0.1 and all tests pass.
-
-**Removal action:**
-- Update `requirements-dev.txt` to the clean version
-- Remove `--ignore-vuln GHSA-537c-gmf6-5ccf` from both `pip-audit` invocations in `Makefile`
-- Delete this entry (or move to `## Closed Exceptions`)
-- Add entry to `docs/ai/PR_FIX_LOG.md`
-
----
-
 ### EXC-DEP-004
 
 | Field              | Value |
@@ -175,7 +137,14 @@ Remove when `python-multipart` is upgraded to ≥0.0.31 and all tests pass.
 
 ## Closed Exceptions
 
-_None._
+### EXC-DEP-003 (closed 2026-08-05)
+
+| Field              | Value |
+|--------------------|-------|
+| **Advisory ID**    | GHSA-537c-gmf6-5ccf |
+| **Package**        | cryptography==46.0.7 → cryptography==50.0.0 |
+| **Closed date**    | 2026-08-05 |
+| **Resolution**     | Upgraded `cryptography` to 50.0.0 in `requirements-shared.txt` and `requirements-dev.txt`. Fix version was ≥48.0.1; 50.0.0 also fixes PYSEC-2026-3552/3553/3554 (all three new CVEs). `msal` bumped 1.36.0→1.37.0 (`cryptography<51` compatible). `--ignore-vuln GHSA-537c-gmf6-5ccf` removed from both `pip-audit` invocations in `Makefile`. See P-52 in `docs/ai/PR_FIX_LOG.md`. |
 
 ---
 
@@ -188,4 +157,4 @@ _None._
   flag(s) in `Makefile` in the same commit.
 - **Review:** any dependency PR must check whether active exceptions can be closed.
 
-_Last updated: 2026-06-15_
+_Last updated: 2026-08-05_

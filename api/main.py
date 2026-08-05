@@ -520,6 +520,25 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        request_id = request.headers.get("x-request-id", "")
+        log.exception(
+            "unhandled_exception path=%s request_id=%s",
+            request.url.path,
+            request_id,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred.",
+                "request_id": request_id,
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(
         request: Request, exc: RequestValidationError

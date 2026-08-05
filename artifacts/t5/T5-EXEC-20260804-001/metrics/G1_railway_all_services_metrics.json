@@ -1,0 +1,95 @@
+{
+  "environment": "production",
+  "project": "frostgate-core",
+  "services": [
+    {
+      "cpu": {
+        "current": 0.001916433333333333,
+        "limit": 2.0,
+        "unit": "vCPU",
+        "utilization_pct": 0.1
+      },
+      "id": "1abc3b09-656a-4e2e-b7d0-45d081c4ec5a",
+      "memory": {
+        "current_mb": 9.56301312,
+        "limit_mb": 1023.99737856,
+        "utilization_pct": 0.9
+      },
+      "name": "Redis",
+      "network": {
+        "egress_mb": 0.0,
+        "ingress_mb": 0.0
+      },
+      "volumes": [
+        {
+          "current_mb": 48.914432,
+          "limit_mb": 500.0,
+          "mount_path": "/data",
+          "name": "redis-volume"
+        }
+      ]
+    },
+    {
+      "cpu": {
+        "current": 0.0015197666666666666,
+        "limit": 8.0,
+        "unit": "vCPU",
+        "utilization_pct": 0.0
+      },
+      "http": {
+        "2xx": 15,
+        "3xx": 0,
+        "4xx": 2,
+        "5xx": 0,
+        "error_rate": 0.0,
+        "p50_ms": 32,
+        "p90_ms": 32,
+        "p95_ms": 32,
+        "p99_ms": 32,
+        "total": 17
+      },
+      "id": "1dbe2a7b-44b6-429f-b853-1e53e44f5161",
+      "memory": {
+        "current_mb": 389.894111232,
+        "limit_mb": 8192.0,
+        "utilization_pct": 4.8
+      },
+      "name": "api",
+      "network": {
+        "egress_mb": 0.000887808,
+        "ingress_mb": 0.000673792
+      }
+    },
+    {
+      "cpu": {
+        "current": 0.00030046666666666663,
+        "limit": 2.0,
+        "unit": "vCPU",
+        "utilization_pct": 0.0
+      },
+      "id": "9c025a63-88bf-459f-bc75-c48db1b65cdb",
+      "memory": {
+        "current_mb": 84.91368448,
+        "limit_mb": 1023.99737856,
+        "utilization_pct": 8.3
+      },
+      "name": "Postgres",
+      "network": {
+        "egress_mb": 0.0,
+        "ingress_mb": 0.0
+      },
+      "volumes": [
+        {
+          "current_mb": 150.380544,
+          "limit_mb": 500.0,
+          "mount_path": "/var/lib/postgresql/data",
+          "name": "postgres-volume"
+        }
+      ]
+    }
+  ],
+  "window": {
+    "since": "2026-08-04T10:22:51.883487103+00:00",
+    "until": "2026-08-04T11:22:54.024934360+00:00"
+  }
+}

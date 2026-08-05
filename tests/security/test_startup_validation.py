@@ -108,6 +108,92 @@ def test_startup_observability_check_skipped_outside_production(monkeypatch):
     )
 
 
+def test_evidence_signing_key_absent_is_error_in_prod(monkeypatch):
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    v.env = "prod"
+    v.is_production = True
+    report = v.validate()
+
+    result = next(
+        (r for r in report.results if r.name == "evidence_signing_key_missing"), None
+    )
+    assert result is not None
+    assert not result.passed
+    assert result.severity == "error"
+
+
+def test_evidence_signing_key_absent_is_warning_non_prod(monkeypatch):
+    monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    v.env = "dev"
+    v.is_production = False
+    report = v.validate()
+
+    result = next(
+        (r for r in report.results if r.name == "evidence_signing_key_missing"), None
+    )
+    assert result is not None
+    assert not result.passed
+    assert result.severity == "warning"
+
+
+def test_evidence_signing_key_invalid_base64(monkeypatch):
+    monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", "not-valid-base64!!!")
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    report = v.validate()
+
+    result = next(
+        (r for r in report.results if r.name == "evidence_signing_key_invalid"), None
+    )
+    assert result is not None
+    assert not result.passed
+    assert result.severity == "error"
+
+
+def test_evidence_signing_key_wrong_length(monkeypatch):
+    import base64
+
+    # 16 bytes — valid base64 but not 32 bytes
+    monkeypatch.setenv(
+        "FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(b"x" * 16).decode()
+    )
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    report = v.validate()
+
+    result = next(
+        (r for r in report.results if r.name == "evidence_signing_key_invalid"), None
+    )
+    assert result is not None
+    assert not result.passed
+    assert result.severity == "error"
+
+
+def test_evidence_signing_key_valid_32_bytes(monkeypatch):
+    import base64
+    import os
+
+    monkeypatch.setenv(
+        "FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(os.urandom(32)).decode()
+    )
+    from api.config.startup_validation import StartupValidator
+
+    v = StartupValidator()
+    report = v.validate()
+
+    result = next((r for r in report.results if r.name == "evidence_signing_key"), None)
+    assert result is not None
+    assert result.passed
+
+
 def test_startup_passes_observability_config_present(monkeypatch):
     monkeypatch.setenv("SENTRY_DSN", "https://example@o0.ingest.sentry.io/0")
     monkeypatch.setenv("FG_OTEL_ENDPOINT", "http://otel-collector:4318/v1/traces")

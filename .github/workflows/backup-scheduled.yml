@@ -1,0 +1,76 @@
+name: scheduled-backup
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC daily
+  workflow_dispatch:        # allow manual trigger for drill runs
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Daily DB backup → R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      FG_BACKUP_DB_URL:               ${{ secrets.FG_BACKUP_DB_URL }}
+      FG_BACKUP_ENCRYPT:              "true"
+      FG_BACKUP_ENCRYPTION_KEY:       ${{ secrets.FG_BACKUP_ENCRYPTION_KEY }}
+      FG_BACKUP_MANIFEST_HMAC_KEY:    ${{ secrets.FG_BACKUP_MANIFEST_HMAC_KEY }}
+      FG_BACKUP_OFFSITE_PROVIDER:     "s3"
+      FG_BACKUP_S3_BUCKET:            ${{ secrets.FG_BACKUP_S3_BUCKET }}
+      FG_BACKUP_S3_ENDPOINT:          ${{ secrets.FG_BACKUP_S3_ENDPOINT }}
+      FG_BACKUP_S3_PREFIX:            "frostgate/backups"
+      AWS_ACCESS_KEY_ID:              ${{ secrets.FG_BACKUP_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:          ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}
+      FG_BACKUP_OPERATOR:             "ops@frostgate.ai"
+      FG_BACKUP_DOCKER_IMAGE:         "pgvector/pgvector:pg18"
+      FG_BACKUP_DIR:                  "/tmp/fg-backups"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          missing=()
+          [[ -z "$FG_BACKUP_DB_URL" ]] && missing+=(FG_BACKUP_DB_URL)
+          [[ -z "$FG_BACKUP_ENCRYPTION_KEY" ]] && missing+=(FG_BACKUP_ENCRYPTION_KEY)
+          [[ -z "$FG_BACKUP_MANIFEST_HMAC_KEY" ]] && missing+=(FG_BACKUP_MANIFEST_HMAC_KEY)
+          [[ -z "$FG_BACKUP_S3_BUCKET" ]] && missing+=(FG_BACKUP_S3_BUCKET)
+          [[ -z "$FG_BACKUP_S3_ENDPOINT" ]] && missing+=(FG_BACKUP_S3_ENDPOINT)
+          [[ -z "$AWS_ACCESS_KEY_ID" ]] && missing+=(FG_BACKUP_R2_ACCESS_KEY_ID)
+          [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && missing+=(FG_BACKUP_R2_SECRET_ACCESS_KEY)
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "FATAL: missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets present."
+
+      - name: Install aws-cli
+        run: |
+          if ! command -v aws &>/dev/null; then
+            pip install awscli --quiet
+          fi
+
+      - name: Pull pg_dump Docker image
+        run: docker pull --quiet pgvector/pgvector:pg18
+
+      - name: Run scheduled backup
+        id: backup
+        run: |
+          chmod +x scripts/backup/fg_backup.sh
+          scripts/backup/fg_backup.sh backup --type scheduled
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Report backup ID
+        if: success()
+        run: scripts/backup/fg_backup.sh status 2>/dev/null | head -5 || true
+
+      - name: Fail loudly on backup error
+        if: failure()
+        run: |
+          echo "::error::Scheduled backup FAILED. Check the workflow log and run 'fg_backup.sh status' against production to inspect backup_health.json."
+          exit 1

@@ -10,7 +10,7 @@ pydantic-settings==2.5.2
 requests>=2.31
 pre-commit==4.0.1
 PyJWT[crypto]==2.13.0
-cryptography==46.0.7
+cryptography==50.0.0
 pygments==2.20.0
 mypy==1.5.1
 pip-audit==2.0.0

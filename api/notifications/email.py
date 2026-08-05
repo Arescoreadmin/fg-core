@@ -52,9 +52,9 @@ class EmailDeliveryResult:
     retryable: bool = False
 
 
-def build_invitation_url(raw_token: str) -> str:
+def build_invitation_url(raw_token: str, tenant_id: str) -> str:
     """Return the canonical portal acceptance URL for this invitation token."""
-    return f"{_invitation_base_url()}?token={raw_token}"
+    return f"{_invitation_base_url()}?token={raw_token}&tenant_id={tenant_id}"
 
 
 _HTML_TEMPLATE = """\

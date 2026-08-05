@@ -1,5 +1,33 @@
 # PR Fix Log (Strict)
 
+## P-53 — fix(security): add FG_EVIDENCE_SIGNING_KEY_B64 to _seed_prod_env in compliance test
+
+- **PR/Branch:** `exec/t5-exec-20260804-001`
+- **Date:** 2026-08-05
+- **Files changed:** `tests/security/test_compliance_modules.py`
+- **Root cause:** Commit 206552d1 (D-T6-005) added `FG_EVIDENCE_SIGNING_KEY_B64` as a required startup invariant in prod. `_seed_prod_env()` was not updated to include this var, so `validate_startup_config(fail_on_error=True)` raised `RuntimeError` on every test that calls `_seed_prod_env`, including `test_ui_disabled_by_default_in_prod_returns_404`.
+- **Fix:** Added `"FG_EVIDENCE_SIGNING_KEY_B64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="` (32-byte CI seed, same value as in `tests/security/test_tenant_context_spoof.py` and `docker-ci.yml`) to the `env` dict, with a comment referencing D-T6-005.
+- **Security impact:** None — test-only file, fixed value is the CI seed (not a real secret).
+- **Schema/API impact:** None.
+- **Tests added:** N/A — this restores an existing passing test.
+- **Result:** `python -m pytest tests/security/test_compliance_modules.py -x -q` passes.
+
+---
+
+## P-52 — fix(deps): upgrade cryptography 46.0.7→50.0.0, msal 1.36.0→1.37.0; close EXC-DEP-003
+
+- **PR/Branch:** `exec/t5-exec-20260804-001`
+- **Date:** 2026-08-05
+- **Files changed:** `requirements-shared.txt`, `requirements-dev.txt`, `requirements.txt`, `Makefile`, `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md`
+- **Root cause:** pip-audit flagged three new CVEs against `cryptography==46.0.7`: PYSEC-2026-3552 (fix ≥50.0.0), PYSEC-2026-3553 (fix ≥49.0.0), PYSEC-2026-3554 (fix ≥49.0.0). None were in the `--ignore-vuln` list; fix required a version upgrade.
+- **Fix:** Upgraded `cryptography` to `50.0.0` in `requirements-shared.txt` (production + admin_gateway path) and `requirements-dev.txt` (dev/test tooling). `msal==1.36.0` caps `cryptography<49`; upgraded to `msal==1.37.0` which allows `cryptography<51`. Removed `--ignore-vuln GHSA-537c-gmf6-5ccf` from both `pip-audit` invocations in `Makefile` (EXC-DEP-003 removal condition now met: ≥48.0.1 installed). Moved EXC-DEP-003 to Closed Exceptions in `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md`.
+- **Security impact:** Positive — three PYSEC CVEs resolved, one GHSA exception retired.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by `make pip-audit` passing.
+- **Result:** `make pip-audit` passes.
+
+---
+
 ## P-51 — fix(email): add User-Agent header to Resend API calls to bypass Cloudflare bot block
 
 - **PR/Branch:** `fix/resend-user-agent`
@@ -20931,3 +20959,74 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Tests added:** None — covered by existing 25 tests.
 - **Result:** 25 tests pass.
+
+---
+
+## P-37 — fix(ci): add FG_EVIDENCE_SIGNING_KEY_B64 to docker-ci .env.ci (D-T6-005 follow-up) — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` / PR #609
+- **Root cause:** Commit 206552d1 (D-T6-005) added `FG_EVIDENCE_SIGNING_KEY_B64` as a required startup invariant under `FG_ENV=prod`. The `docker-ci.yml` `.env.ci` generation block was never updated, so the Docker CI container failed health check on startup with "FG_EVIDENCE_SIGNING_KEY_B64 is not set."
+- **Fix:** Added `FG_EVIDENCE_SIGNING_KEY_B64=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=` (base64 of `bytes(range(1,33))` — the same fixed 32-byte CI seed used in `tests/security/test_tenant_context_spoof.py`) to the `.env.ci` generation block in `.github/workflows/docker-ci.yml`.
+- **Behavioral impact:** Docker CI container now starts successfully. The key is a fixed CI-only value; it is not a production secret.
+- **Security impact:** None — the value is a public CI dummy seed, identical to what the existing security test suite already uses. No production key material is introduced.
+- **Schema/API impact:** None.
+- **Tests added:** None — `tests/security/test_startup_validation.py` already covers this validation path.
+- **Result:** Committed; CI re-triggered.
+
+## P-34 — fix(D-T6-004): portal invitation URL missing tenant_id — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `api/notifications/email.py`, `api/portal.py`
+- **Root cause:** `build_invitation_url()` in `api/notifications/email.py` did not accept or embed `tenant_id`. The portal acceptance flow at `/accept-invite` requires `?token=…&tenant_id=…` to resolve which tenant the invitation belongs to. Without `tenant_id`, the accept flow cannot locate the invitation and fails with a generic error.
+- **Fix:** `build_invitation_url(raw_token, tenant_id)` now accepts `tenant_id` as a required second argument and appends `&tenant_id={tenant_id}` to the URL. Call site in `api/portal.py` updated to pass `tenant_id` from the invitation record.
+- **Behavioral impact:** Portal invitation emails now include the correct acceptance URL. Pre-existing sent invitations with the old URL format continue to fail (no backfill possible for emails already sent).
+- **Security impact:** None — `tenant_id` is not a secret; it is already present in the invitation token payload.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by T4 Gold Path G3 (portal invite delivery verified end-to-end).
+- **Result:** PASS.
+
+---
+
+## P-35 — fix(PR-T6.5): unhandled exceptions returned HTML instead of JSON — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `api/main.py`
+- **Root cause:** FastAPI/Starlette's default handler for unhandled Python exceptions returns an HTML error page (`text/html; charset=utf-8`). Any exception not caught by a route handler or Pydantic's `RequestValidationError` handler produced a non-JSON 500 response. This is a reliability and trust issue for API clients and operator consoles that expect structured JSON on all error paths.
+- **Fix:** Added `@app.exception_handler(Exception)` before the `RequestValidationError` handler in `api/main.py`. The handler logs the exception (including traceback), extracts `x-request-id` from the request headers, and returns `{"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred.", "request_id": "…"}` as JSON with status 500. No stack trace is exposed to the caller.
+- **Behavioral impact:** All unhandled Python exceptions now return structured JSON. Operator and portal clients no longer receive HTML 500 pages.
+- **Security impact:** Positive — stack traces and internal details are no longer leaked to callers. Error is logged server-side with full traceback.
+- **Schema/API impact:** Breaking for any caller that was parsing the HTML error body (none known).
+- **Tests added:** None — verified via T6 second run (D-T6-005 area) and Gold Path.
+- **Result:** PASS.
+
+---
+
+## P-36 — fix(ci): portal_named_user_me missing from DB + scope lint exemptions — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `tools/ci/check_db_dependency.py`, `tools/ci/check_route_scopes.py`
+- **Root cause:** `GET /portal/named-users/me` authenticates via the `pnu1.` session token in `X-FG-Portal-Session` rather than the standard tenant-header + `require_scopes`/`require_permission` FastAPI dependency chain. Two CI gates did not know about this alternative pattern: (1) `check_db_dependency.py` flags non-public routes using `Depends(get_db)` directly; (2) `check_route_scopes.py` flags non-public routes without an explicit scope dependency. Both gates flagged the route as a violation, blocking `frostgate-core-ci` on main since the T4 named-user route was merged.
+- **Fix:** Both gates now have a `_EXEMPTIONS: frozenset[str]` containing `/portal/named-users/me`. Each exemption is documented inline with the alternative auth pattern: tenant resolved via SECURITY DEFINER `lookup_portal_session_by_fingerprint()` (migration 0171); `validate_session()` calls `_set_tenant_rls()` before any tenant-scoped query; auth_version + membership-active checks enforced before any data access.
+- **Behavioral impact:** None — runtime behaviour of the route is unchanged.
+- **Security impact:** None — the route's auth is correctly implemented; the exemption is a CI gate annotation, not a bypass of any runtime enforcement.
+- **Schema/API impact:** None.
+- **Tests added:** None — existing portal named-user tests (47 in T4) cover the auth flow.
+- **Result:** PASS (local verification: both gates print OK).
+
+---
+
+## P-38 — fix(ci): check_plane_registry missing scoped-auth + tenant-binding exemptions for /portal/named-users/me — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `tools/ci/check_plane_registry.py`
+- **Root cause:** `GET /portal/named-users/me` uses the pnu1. alternative auth pattern (X-FG-Portal-Session token; tenant resolved via SECURITY DEFINER `lookup_portal_session_by_fingerprint()` in migration 0171). The plane registry checker (`check_plane_registry.py`) enforces two orthogonal invariants for control-plane routes: (1) every route must have scoped auth (`require_any_scope`), unless listed in `EXACT_PUBLIC_ROUTE_EXCEPTIONS`; (2) every route must be tenant-bound via a `Depends()` parameter, unless listed in `EXACT_TENANT_BINDING_EXCEPTIONS`. The route is `scoped=false` and `tenant_bound=false` in the route inventory because it does not use standard `require_scopes` or a `Depends()` tenant parameter — both invariants flagged it as a violation, causing the `control-plane-check` Makefile target to exit 1 in CI.
+- **Fix:** Added `("GET", "/portal/named-users/me")` to both `EXACT_PUBLIC_ROUTE_EXCEPTIONS` and `EXACT_TENANT_BINDING_EXCEPTIONS` in `tools/ci/check_plane_registry.py`. Each entry is documented inline with the pnu1. justification. Only this exact method+path tuple is added; no prefix or wildcard exemption is used.
+- **Behavioral impact:** None — runtime behaviour of the route is unchanged.
+- **Security impact:** None. The route is fully authenticated via `validate_session()`, which enforces session token validity, `auth_version`, membership-active state, and calls `_set_tenant_rls()` before any tenant-scoped query. The exemption is a CI gate annotation for an alternative-but-documented auth pattern, not a bypass of any runtime guard.
+- **Schema/API impact:** None.
+- **Tests added:** None — existing portal named-user tests cover the auth flow; `make control-plane-check` passes locally.
+- **Result:** PASS (`plane registry check: OK` confirmed locally).

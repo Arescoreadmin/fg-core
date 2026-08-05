@@ -28,12 +28,28 @@ def _auth_module_uses_get_db() -> bool:
     return False
 
 
+# Routes that use Depends(get_db) on a non-public path via a documented alternative
+# auth pattern. Each exemption must justify WHY the standard tenant-header RLS path
+# does not apply and how RLS context is established instead.
+_EXEMPTIONS: frozenset[str] = frozenset(
+    [
+        # pnu1. token is the credential; tenant resolved via SECURITY DEFINER
+        # lookup_portal_session_by_fingerprint() (migration 0171, no RLS needed for
+        # lookup). validate_session() calls _set_tenant_rls() before any tenant-scoped
+        # query. Standard X-Tenant-Id header flow does not apply to named-user sessions.
+        "/portal/named-users/me",
+    ]
+)
+
+
 def main() -> int:
     api_root = Path("api")
     violations = [
         r
         for r in iter_route_records(api_root)
-        if not is_public_path(r.full_path) and r.route_has_db_dependency
+        if not is_public_path(r.full_path)
+        and r.route_has_db_dependency
+        and r.full_path not in _EXEMPTIONS
     ]
 
     if _auth_module_uses_get_db():

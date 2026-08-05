@@ -1670,3 +1670,33 @@ def test_upload_artifact_file_persisted_to_storage(upload_client) -> None:
     stored = list((artifact_dir / "evidence_files").iterdir())
     assert len(stored) == 1
     assert stored[0].read_bytes() == content
+
+
+# ---------------------------------------------------------------------------
+# Regression: D-T6-002 — post-commit ORM attribute access (create_engagement)
+# ---------------------------------------------------------------------------
+
+
+def test_create_engagement_response_fields_not_500(client: TestClient) -> None:
+    """POST /engagements must return 201 with all expected fields (D-T6-002).
+
+    Guards against SQLAlchemy DetachedInstanceError caused by accessing ORM
+    attributes after db.commit() expiry when db.refresh() is removed.
+    """
+    resp = client.post(
+        "/field-assessment/engagements",
+        json={
+            "client_name": "T6 Regression Corp",
+            "assessor_id": "assessor-t6",
+            "assessment_type": "ai_governance",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert "id" in data
+    assert data["client_name"] == "T6 Regression Corp"
+    assert data["status"] == "in_progress"
+    assert data["assessment_type"] == "ai_governance"
+    assert "tenant_id" in data
+    assert "created_at" in data
+    assert "updated_at" in data
