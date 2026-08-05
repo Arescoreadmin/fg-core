@@ -109,8 +109,6 @@ def test_startup_observability_check_skipped_outside_production(monkeypatch):
 
 
 def test_evidence_signing_key_absent_is_error_in_prod(monkeypatch):
-    import base64
-
     monkeypatch.delenv("FG_EVIDENCE_SIGNING_KEY_B64", raising=False)
     from api.config.startup_validation import StartupValidator
 

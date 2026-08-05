@@ -17,7 +17,6 @@ from __future__ import annotations
 import ast
 import os
 import secrets
-import textwrap
 from pathlib import Path
 
 os.environ.setdefault("FG_ENV", "test")
@@ -111,7 +110,6 @@ class _CommitThenIdVisitor(ast.NodeVisitor):
                 assert isinstance(stmt, ast.Assign)
                 val = stmt.value
                 assert isinstance(val, ast.Attribute)
-                obj_name = val.value.id  # type: ignore[union-attr]
                 for target in stmt.targets:
                     if isinstance(target, ast.Name):
                         safe_captures.add(target.id)
@@ -130,13 +128,7 @@ class _CommitThenIdVisitor(ast.NodeVisitor):
                         and isinstance(node.value, ast.Name)
                         and node.value.id in ("job", "source_scan")
                     ):
-                        # Check if this is a capture assignment (ok) or a read (bad)
-                        parent_is_capture = (
-                            isinstance(stmt, ast.Assign)
-                            and stmt.value is node
-                            and not after_commit
-                        )
-                        # If we're here, after_commit is True — any job.id access is bad
+                        # after_commit is True here — any job.id access is bad
                         self.violations.append(
                             (
                                 node.lineno,
