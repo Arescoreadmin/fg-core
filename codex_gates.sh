@@ -46,40 +46,43 @@ echo "==> Gates: pip check"
 python -m pip check
 
 echo "==> Gates: basic secret scan (cheap tripwire)"
-# Detect accidental key commits. rg finds candidate lines; grep -v removes
-# known-safe reference contexts so that legitimate env-var name uses do not
-# trigger the gate. See tests/test_secret_scan_gate.py for regression coverage.
+# Detect accidental key commits. See tests/test_secret_scan_gate.py for
+# regression coverage of both the detector pattern and the safe-ref filter.
 #
-# Safe reference contexts (removed by grep -v post-filter):
-#   ${{ secrets.FOO }}          GitHub Actions injection — value not stored in repo
-#   -z "$VAR" / "${VAR:-}"      shell presence test — name reference, not a value
-#   VAR=...  VAR=<placeholder>  documentation placeholder assignment
-#   `VAR_NAME`                  markdown name-only backtick span
-#   process.env.VAR             JS/Node env-var access — name reference, not a value
-#   :[N]:#...                   rg output line whose content is a comment (# ...)
+# Detector: env-var names require '=' so that name-only references (comments,
+# shell presence tests, GH Actions env blocks, markdown, process.env access)
+# are eliminated at detection time rather than by a broad post-filter.
+# PEM markers and Slack tokens are matched without '=' (they are never
+# legitimate as bare strings in source).
 #
-# Excluded paths (third-party or generated content where patterns are structural):
-#   codex_gates.sh              contains the detection pattern strings
-#   .claude/worktrees/**        scratch space may hold stale detector regexes
+# Post-filter: only placeholder assignment values remain after the tighter
+# detector, so the filter is narrow:
+#   VAR=...  VAR=<placeholder>   documentation placeholder
+#   VAR=${{ secrets.X }}         GitHub Actions inline injection (unusual but valid)
+#
+# Excluded paths (third-party or generated content, or files that contain the
+# detection strings as code/fixture data rather than actual credentials):
+#   codex_gates.sh                    contains the detection pattern strings
+#   tests/test_secret_scan_gate.py    contains fixture strings with the patterns
+#   .claude/worktrees/**              scratch space may hold stale detector regexes
 #   services/ai_plane_extension/policy_engine.py  re.compile deny-list, not secrets
-#   .venv/**                    Python virtualenv — third-party code
-#   apps/**/node_modules/**     third-party JS (e.g. jose) with PEM marker strings
-#   apps/**/.next/**            Next.js build artifacts that bundle those strings
-#   docs/ai/**                  audit logs and PR fix log quote env-var names as docs
-#   apps/console/.../route.ts   uses 'OPENAI_API_KEY is not configured' as an error string
-#   .git/**                     git internals (COMMIT_EDITMSG) quote detector patterns
-_SAFE_REF='\$\{\{[^}]*\}\}|-z\s|=\.\.\.(\s|$)|=<[^>]*>|`[A-Z_]+`|process\.env\.|:[0-9]+:\s*#'
+#   .venv/**                          Python virtualenv — third-party code
+#   apps/**/node_modules/**           third-party JS (e.g. jose) with PEM marker strings
+#   apps/**/.next/**                  Next.js build artifacts that bundle those strings
+#   docs/ai/**                        audit logs and PR fix log quote env-var names as docs
+#   .git/**                           git internals (COMMIT_EDITMSG) quote detector patterns
+_SAFE_REF='=\.\.\.(\s|$)|=<[^>]*>|\$\{\{[^}]*\}\}'
 _SECRET_HITS=$(rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
+  --glob '!tests/test_secret_scan_gate.py' \
   --glob '!.claude/worktrees/**' \
   --glob '!services/ai_plane_extension/policy_engine.py' \
   --glob '!.venv/**' \
   --glob '!apps/**/node_modules/**' \
   --glob '!apps/**/.next/**' \
   --glob '!docs/ai/**' \
-  --glob '!apps/console/app/api/field-assessment/transcribe/route.ts' \
   --glob '!.git/**' \
-  "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
+  "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY)=|(BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . 2>/dev/null | grep -vE "$_SAFE_REF" || true)
 if [ -n "$_SECRET_HITS" ]; then
   printf '%s\n' "$_SECRET_HITS"

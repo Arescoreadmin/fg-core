@@ -4,12 +4,12 @@
 
 - **PR/Branch:** `fix/gates-secret-scan-v3` / PR #613
 - **Root cause:** Backup scripts, operator runbooks, and workflow files reference `AWS_SECRET_ACCESS_KEY` and `OPENAI_API_KEY` by name only (comments, shell presence tests, GitHub Actions secret refs, doc placeholders). The tripwire has no way to distinguish name references from real committed values, so it false-positives on all of them.
-- **Fix:** Replace the two-pass glob-exclusion approach (`#612`) with a single-pass scan plus a `grep -vE` post-filter that removes known-safe reference contexts: `${{ secrets.* }}`, `-z "$VAR"` shell tests, `=...`/`=<placeholder>` doc assignments, markdown backtick spans, `process.env.` accesses, and comment lines (`:[N]:#`). All paths remain in scope for the full detector regex including PEM markers and Slack tokens — no broad directory is skipped.
-- **Behavioral impact:** None — false positives removed; all real-secret patterns still detected.
-- **Security impact:** None; coverage is equal or broader than before (backup dirs now fully scanned for PEM/Slack).
+- **Fix:** Tighten the env-var-name detector to `(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY)=` (require `=`). Name-only references — comments, shell presence tests, GH Actions env blocks with `:`, markdown spans, `process.env.` calls, error-message string literals — are eliminated at detection time, not by a broad post-filter that could hide real secrets. The post-filter narrows to only three forms still containing `=`: `=...`, `=<placeholder>`, and `=${{ secrets.X }}`. Remove the route.ts whole-file exclusion (P2); its `'OPENAI_API_KEY is not configured'` string contains no `=` after the name, so the tighter detector never matches it. Add `tests/test_secret_scan_gate.py` exclusion (contains pattern strings as fixtures). Secrets committed inside comments (`# AWS_SECRET_ACCESS_KEY=REALKEY`) are now correctly detected (P1 fix).
+- **Behavioral impact:** Improved — previously the `:[N]:#` comment-line filter would have hidden real credentials committed in comments; now they are detected.
+- **Security impact:** Positive — real secrets in comments are no longer silently dropped.
 - **Schema/API impact:** None.
-- **Tests added:** `tests/test_secret_scan_gate.py` — 18 tests covering 6 detect cases and 12 ignore cases.
-- **Result:** 18/18 PASS; scan CLEAN locally.
+- **Tests added:** `tests/test_secret_scan_gate.py` — 20 tests: 7 detect (including comment-secret case), 13 ignore.
+- **Result:** 20/20 PASS; scan CLEAN locally.
 
 ## P-55 — fix(mypy): make _FakeRequest satisfy Request[Any] and fix detail indexing — PR #611
 
