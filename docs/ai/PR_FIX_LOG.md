@@ -20987,3 +20987,18 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Tests added:** None — existing portal named-user tests (47 in T4) cover the auth flow.
 - **Result:** PASS (local verification: both gates print OK).
+
+---
+
+## P-38 — fix(ci): check_plane_registry missing scoped-auth + tenant-binding exemptions for /portal/named-users/me — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` (#609)
+- **Date:** 2026-08-04
+- **Files changed:** `tools/ci/check_plane_registry.py`
+- **Root cause:** `GET /portal/named-users/me` uses the pnu1. alternative auth pattern (X-FG-Portal-Session token; tenant resolved via SECURITY DEFINER `lookup_portal_session_by_fingerprint()` in migration 0171). The plane registry checker (`check_plane_registry.py`) enforces two orthogonal invariants for control-plane routes: (1) every route must have scoped auth (`require_any_scope`), unless listed in `EXACT_PUBLIC_ROUTE_EXCEPTIONS`; (2) every route must be tenant-bound via a `Depends()` parameter, unless listed in `EXACT_TENANT_BINDING_EXCEPTIONS`. The route is `scoped=false` and `tenant_bound=false` in the route inventory because it does not use standard `require_scopes` or a `Depends()` tenant parameter — both invariants flagged it as a violation, causing the `control-plane-check` Makefile target to exit 1 in CI.
+- **Fix:** Added `("GET", "/portal/named-users/me")` to both `EXACT_PUBLIC_ROUTE_EXCEPTIONS` and `EXACT_TENANT_BINDING_EXCEPTIONS` in `tools/ci/check_plane_registry.py`. Each entry is documented inline with the pnu1. justification. Only this exact method+path tuple is added; no prefix or wildcard exemption is used.
+- **Behavioral impact:** None — runtime behaviour of the route is unchanged.
+- **Security impact:** None. The route is fully authenticated via `validate_session()`, which enforces session token validity, `auth_version`, membership-active state, and calls `_set_tenant_rls()` before any tenant-scoped query. The exemption is a CI gate annotation for an alternative-but-documented auth pattern, not a bypass of any runtime guard.
+- **Schema/API impact:** None.
+- **Tests added:** None — existing portal named-user tests cover the auth flow; `make control-plane-check` passes locally.
+- **Result:** PASS (`plane registry check: OK` confirmed locally).

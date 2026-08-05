@@ -6496,3 +6496,23 @@ Same `_EXEMPTIONS` frozenset for `/portal/named-users/me`, same pnu1. rationale.
 - Production `FG_EVIDENCE_SIGNING_KEY_B64` is not set in this workflow; it comes from Railway/Vercel environment variables in production deployments.
 
 **SOC review outcome:** approved. `.github/workflows/docker-ci.yml` is listed under the SOC critical-file watchlist. This change wires a missing CI-only environment variable to fix a container health check failure introduced by the D-T6-005 startup invariant. It does not weaken any security gate, introduce any real credentials, or change any runtime auth or audit path.
+
+---
+
+## exec/t5-exec-20260804-001 — check_plane_registry pnu1. exemptions for /portal/named-users/me (2026-08-04)
+
+**Critical files changed:** `tools/ci/check_plane_registry.py`
+
+**Change scope:** CI gate annotation only — adds exact method+path exemptions to `EXACT_PUBLIC_ROUTE_EXCEPTIONS` and `EXACT_TENANT_BINDING_EXCEPTIONS` for `GET /portal/named-users/me`. No runtime auth logic, RLS policies, OPA policies, migrations, or API routes modified.
+
+**Change detail:** `check_plane_registry.py` enforces two control-plane invariants: (1) every route must declare scoped auth (`require_any_scope`), and (2) every route must be tenant-bound via a `Depends()` parameter. `GET /portal/named-users/me` uses the pnu1. alternative auth pattern — X-FG-Portal-Session token as credential; tenant resolved via SECURITY DEFINER `lookup_portal_session_by_fingerprint()` (migration 0171); `validate_session()` calls `_set_tenant_rls()` before any tenant-scoped query. The route is therefore `scoped=false` and `tenant_bound=false` in the route inventory, causing the gate to fail. The exemption entries are exact `(method, path)` tuples — no prefix or wildcard. The gate continues to enforce both invariants for all other routes.
+
+**Security invariants confirmed:**
+
+- The gate is not disabled or weakened — only a single exact route tuple is exempted from each invariant.
+- `GET /portal/named-users/me` is fully authenticated: `validate_session()` enforces session token validity, `auth_version`, membership-active state, and calls `_set_tenant_rls()` before any tenant-scoped query. The alternative auth mechanism is at least as restrictive as the standard path.
+- Tenant isolation is maintained: the SECURITY DEFINER function runs under a fixed DB role with no caller RLS bypass; `_set_tenant_rls()` sets the RLS context to the session's tenant before data access.
+- No auth middleware, OPA policies, migrations, or cryptographic material modified.
+- SOC-HIGH-002 (critical-file change without SOC doc update) would fire if this entry were absent.
+
+**SOC review outcome:** approved. `tools/ci/` is listed under the SOC critical-file watchlist. The change adds narrow, documented CI gate exemptions for a single route that uses a correctly-implemented alternative auth pattern. Both invariants remain fully enforced for all non-exempted routes. The exemption is structurally identical to the pattern already approved for `/portal/named-sessions/self` and `/portal/invitations/{token}/accept` in the same file.
