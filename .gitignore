@@ -116,7 +116,7 @@ state/
 !state/.gitkeep
 models/
 !models/.gitkeep
-artifacts/
+artifacts/*
 .pytest_cache/
 __pycache__/
 *.db
@@ -169,8 +169,10 @@ supervisor-sidecar/supervisor-sidecar
 tools/ci/*.json
 tools/ci/*.sha256
 artifacts/platform_inventory.json
-# Artifacts are generally not committed
-artifacts/
+# Artifacts are generally not committed — use artifacts/* not artifacts/ so that
+# negation rules below can reach specific subdirectories (Git does not traverse
+# into an ignored directory, so a bare artifacts/ would swallow all negations).
+artifacts/*
 
 # But deterministic governance baselines ARE committed
 !artifacts/platform_inventory.det.json
