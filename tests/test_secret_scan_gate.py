@@ -12,8 +12,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
-
 # Env-var names require '=' so name-only references (comments, shell tests,
 # GH Actions env blocks, markdown, process.env access) are eliminated at
 # detection time rather than by a post-filter that could hide real secrets.
