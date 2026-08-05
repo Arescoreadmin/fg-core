@@ -55,6 +55,10 @@ echo "==> Gates: basic secret scan (cheap tripwire)"
 # - apps/**/.next/**, because Next.js build artifacts bundle those same strings via source maps.
 # - apps/console/app/api/field-assessment/transcribe/route.ts, because it references process.env.OPENAI_API_KEY by name to check if the var is set (not an actual key value).
 # - docs/ai/**, because PR fix log and audit notes describe exclusion rationale and quote env-var names as documentation.
+# - docs/operators/**, because operator runbooks name env vars (e.g. AWS_SECRET_ACCESS_KEY) without values.
+# - scripts/backup/**, because backup scripts reference env var names in comments and presence checks, not values.
+# - .github/workflows/backup-scheduled.yml, .github/workflows/restore-drill-monthly.yml, because they reference
+#   AWS_SECRET_ACCESS_KEY only via ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }} (GitHub Actions secret ref, no value).
 # - .git/**, because git internal files (COMMIT_EDITMSG, etc.) can quote detector patterns from commit messages.
 rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
@@ -65,6 +69,10 @@ rg -n --hidden --no-ignore-vcs \
   --glob '!apps/**/.next/**' \
   --glob '!apps/console/app/api/field-assessment/transcribe/route.ts' \
   --glob '!docs/ai/**' \
+  --glob '!docs/operators/**' \
+  --glob '!scripts/backup/**' \
+  --glob '!.github/workflows/backup-scheduled.yml' \
+  --glob '!.github/workflows/restore-drill-monthly.yml' \
   --glob '!.git/**' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
