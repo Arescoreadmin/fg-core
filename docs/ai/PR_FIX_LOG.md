@@ -20934,6 +20934,17 @@ returns the tenant — filesystem can be empty and tenants resolve.
 
 ---
 
+## P-37 — fix(ci): add FG_EVIDENCE_SIGNING_KEY_B64 to docker-ci .env.ci (D-T6-005 follow-up) — PR #609
+
+- **PR/Branch:** `exec/t5-exec-20260804-001` / PR #609
+- **Root cause:** Commit 206552d1 (D-T6-005) added `FG_EVIDENCE_SIGNING_KEY_B64` as a required startup invariant under `FG_ENV=prod`. The `docker-ci.yml` `.env.ci` generation block was never updated, so the Docker CI container failed health check on startup with "FG_EVIDENCE_SIGNING_KEY_B64 is not set."
+- **Fix:** Added `FG_EVIDENCE_SIGNING_KEY_B64=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=` (base64 of `bytes(range(1,33))` — the same fixed 32-byte CI seed used in `tests/security/test_tenant_context_spoof.py`) to the `.env.ci` generation block in `.github/workflows/docker-ci.yml`.
+- **Behavioral impact:** Docker CI container now starts successfully. The key is a fixed CI-only value; it is not a production secret.
+- **Security impact:** None — the value is a public CI dummy seed, identical to what the existing security test suite already uses. No production key material is introduced.
+- **Schema/API impact:** None.
+- **Tests added:** None — `tests/security/test_startup_validation.py` already covers this validation path.
+- **Result:** Committed; CI re-triggered.
+
 ## P-34 — fix(D-T6-004): portal invitation URL missing tenant_id — PR #609
 
 - **PR/Branch:** `exec/t5-exec-20260804-001` (#609)

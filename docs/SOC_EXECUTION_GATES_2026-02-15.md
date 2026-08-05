@@ -6477,3 +6477,22 @@ Same `_EXEMPTIONS` frozenset for `/portal/named-users/me`, same pnu1. rationale.
 - No auth middleware, API routes, RLS policies, OPA policies, migrations, or cryptographic material modified.
 
 **SOC review outcome:** approved. `.github/workflows/` and `tools/ci/` are listed under the SOC critical-file watchlist. The workflow additions satisfy the C1 backup hardening launch constraint without touching any auth, RLS, or audit path. The CI lint exemptions document and preserve the intended security invariant for the pnu1. auth pattern: the route is authenticated, just via a different, documented mechanism. Both gates remain enforced for all other routes.
+
+---
+
+## exec/t5-exec-20260804-001 — docker-ci.yml FG_EVIDENCE_SIGNING_KEY_B64 CI wire-up (2026-08-04)
+
+**Critical files changed:** `.github/workflows/docker-ci.yml`
+
+**Change scope:** CI-only fix — added missing `FG_EVIDENCE_SIGNING_KEY_B64` to the `.env.ci` generation block so the Docker CI container can start under `FG_ENV=prod`. No production secrets or auth logic modified.
+
+**Change detail:** Commit 206552d1 (D-T6-005) added a startup invariant requiring `FG_EVIDENCE_SIGNING_KEY_B64` (base64 Ed25519 seed) when `FG_ENV=prod`. The Docker CI job runs with `FG_ENV=prod` but the `.env.ci` generation block was never updated, causing the frostgate-core container health check to fail. Added the fixed CI seed `AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=` (base64 of `bytes(range(1,33))`) — the same public seed used by `tests/security/test_tenant_context_spoof.py`.
+
+**Security invariants confirmed:**
+
+- The value added is a public CI dummy seed identical to what the existing security test suite already uses. It is not a production secret.
+- No auth logic, RLS policies, OPA policies, or API routes modified.
+- The `docker-ci.yml` change is additive only — one line added to the existing CI env generation block.
+- Production `FG_EVIDENCE_SIGNING_KEY_B64` is not set in this workflow; it comes from Railway/Vercel environment variables in production deployments.
+
+**SOC review outcome:** approved. `.github/workflows/docker-ci.yml` is listed under the SOC critical-file watchlist. This change wires a missing CI-only environment variable to fix a container health check failure introduced by the D-T6-005 startup invariant. It does not weaken any security gate, introduce any real credentials, or change any runtime auth or audit path.
