@@ -65,6 +65,8 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_BILLING_EVIDENCE_HMAC_KEY": "test-billing-hmac-key-32-bytes-x",
         # TC-0: startup validation errors in prod when MINISIGN_SECRET_KEY is absent.
         "MINISIGN_SECRET_KEY": "test-minisign-secret-key-for-ci-only",
+        # D-T6-005: startup validation errors in prod when FG_EVIDENCE_SIGNING_KEY_B64 is absent.
+        "FG_EVIDENCE_SIGNING_KEY_B64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

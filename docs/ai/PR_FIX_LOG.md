@@ -1,5 +1,33 @@
 # PR Fix Log (Strict)
 
+## P-53 — fix(security): add FG_EVIDENCE_SIGNING_KEY_B64 to _seed_prod_env in compliance test
+
+- **PR/Branch:** `exec/t5-exec-20260804-001`
+- **Date:** 2026-08-05
+- **Files changed:** `tests/security/test_compliance_modules.py`
+- **Root cause:** Commit 206552d1 (D-T6-005) added `FG_EVIDENCE_SIGNING_KEY_B64` as a required startup invariant in prod. `_seed_prod_env()` was not updated to include this var, so `validate_startup_config(fail_on_error=True)` raised `RuntimeError` on every test that calls `_seed_prod_env`, including `test_ui_disabled_by_default_in_prod_returns_404`.
+- **Fix:** Added `"FG_EVIDENCE_SIGNING_KEY_B64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="` (32-byte CI seed, same value as in `tests/security/test_tenant_context_spoof.py` and `docker-ci.yml`) to the `env` dict, with a comment referencing D-T6-005.
+- **Security impact:** None — test-only file, fixed value is the CI seed (not a real secret).
+- **Schema/API impact:** None.
+- **Tests added:** N/A — this restores an existing passing test.
+- **Result:** `python -m pytest tests/security/test_compliance_modules.py -x -q` passes.
+
+---
+
+## P-52 — fix(deps): upgrade cryptography 46.0.7→50.0.0, msal 1.36.0→1.37.0; close EXC-DEP-003
+
+- **PR/Branch:** `exec/t5-exec-20260804-001`
+- **Date:** 2026-08-05
+- **Files changed:** `requirements-shared.txt`, `requirements-dev.txt`, `requirements.txt`, `Makefile`, `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md`
+- **Root cause:** pip-audit flagged three new CVEs against `cryptography==46.0.7`: PYSEC-2026-3552 (fix ≥50.0.0), PYSEC-2026-3553 (fix ≥49.0.0), PYSEC-2026-3554 (fix ≥49.0.0). None were in the `--ignore-vuln` list; fix required a version upgrade.
+- **Fix:** Upgraded `cryptography` to `50.0.0` in `requirements-shared.txt` (production + admin_gateway path) and `requirements-dev.txt` (dev/test tooling). `msal==1.36.0` caps `cryptography<49`; upgraded to `msal==1.37.0` which allows `cryptography<51`. Removed `--ignore-vuln GHSA-537c-gmf6-5ccf` from both `pip-audit` invocations in `Makefile` (EXC-DEP-003 removal condition now met: ≥48.0.1 installed). Moved EXC-DEP-003 to Closed Exceptions in `docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md`.
+- **Security impact:** Positive — three PYSEC CVEs resolved, one GHSA exception retired.
+- **Schema/API impact:** None.
+- **Tests added:** None — covered by `make pip-audit` passing.
+- **Result:** `make pip-audit` passes.
+
+---
+
 ## P-51 — fix(email): add User-Agent header to Resend API calls to bypass Cloudflare bot block
 
 - **PR/Branch:** `fix/resend-user-agent`
