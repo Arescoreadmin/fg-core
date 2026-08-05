@@ -32,6 +32,10 @@ from argon2 import PasswordHasher
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from typing import Any
+
+from starlette.requests import Request
+
 import api.credential_authority as ca
 from api.actor_context import ALL_PERMISSIONS
 from api.platform_service_principal import (
@@ -1460,13 +1464,21 @@ class _FakeAuth:
             setattr(self, k, v)
 
 
-class _FakeRequest:
-    """Minimal stand-in for FastAPI Request."""
+class _FakeRequest(Request):
+    """Minimal stand-in satisfying Request[Any] for extract_api_key_actor tests."""
 
     def __init__(self, auth: object) -> None:
-        from types import SimpleNamespace
-
-        self.state = SimpleNamespace(auth=auth, request_id="req-psp-test")
+        scope: dict[str, Any] = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [],
+        }
+        super().__init__(scope)
+        self.state.auth = auth
+        self.state.request_id = "req-psp-test"
 
 
 def test_psp_key_populates_service_principal_id(
@@ -1617,6 +1629,7 @@ def test_require_psp_actor_denies_non_psp() -> None:
         dep(actor=actor)
 
     assert exc_info.value.status_code == 403
+    assert isinstance(exc_info.value.detail, dict)
     assert exc_info.value.detail["code"] == "PSP_ACTOR_REQUIRED"
 
 
@@ -1790,6 +1803,7 @@ def test_psp_resolve_exception_leaves_request_valid_but_require_psp_denies(
     with pytest.raises(HTTPException) as exc_info:
         dep(actor=actor)
     assert exc_info.value.status_code == 403
+    assert isinstance(exc_info.value.detail, dict)
     assert exc_info.value.detail["code"] == "PSP_ACTOR_REQUIRED"
 
 

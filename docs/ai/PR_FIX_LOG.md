@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-55 — fix(mypy): make _FakeRequest satisfy Request[Any] and fix detail indexing — PR #611
+
+- **PR/Branch:** `fix/ci-mypy-test-strict` / PR #611
+- **Root cause:** Two test files had strict mypy failures not covered by PR #610: `_FakeRequest` in `test_platform_service_principal.py` was a plain class incompatible with `Request[Any]`; `exc_info.value.detail["code"]` was indexing `str` with a `str` key; `fake_request` in `test_audit_rls_tenant_context.py` lacked a type annotation.
+- **Fix:**
+  - `tests/test_platform_service_principal.py` — added `from starlette.requests import Request` + `from typing import Any`; changed `_FakeRequest` to subclass `Request` with a minimal ASGI scope; added `assert isinstance(exc_info.value.detail, dict)` before both `detail["code"]` subscripts to narrow `str | dict` → `dict`.
+  - `tests/postgres/test_audit_rls_tenant_context.py:252` — added explicit `StarletteRequest` annotation to `fake_request`.
+- **Behavioral impact:** None — pure type fixes; all test assertions preserved.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None — verified with `python -m mypy tests/test_platform_service_principal.py tests/postgres/test_audit_rls_tenant_context.py` → 0 errors.
+- **Result:** PASS.
+
 ## P-54 — fix(ci): resolve launch-candidate mypy regressions — PR #610
 
 - **PR/Branch:** `fix/ci-mypy-launch-candidate` / PR #610

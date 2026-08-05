@@ -249,7 +249,7 @@ def test_create_tenant_audit_failure_compensates(pg_engine, monkeypatch) -> None
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 12345),
     }
-    fake_request = StarletteRequest(scope)
+    fake_request: StarletteRequest = StarletteRequest(scope)
     fake_request.state.auth = None
     fake_request.state.request_id = "test-req-e"
 
