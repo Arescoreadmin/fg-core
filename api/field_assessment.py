@@ -9338,7 +9338,9 @@ def create_or_get_questionnaire(
     from api.db import set_tenant_context
 
     set_tenant_context(db, tenant_id)
-    q = db.get(FaQuestionnaire, _q_id)
+    _q_reloaded = db.get(FaQuestionnaire, _q_id)
+    assert _q_reloaded is not None, f"questionnaire {_q_id} vanished after commit"
+    q = _q_reloaded
     responses = list_responses(db, questionnaire_id=_q_id, tenant_id=tenant_id)
     evidence_map = _build_response_evidence_map(
         db,

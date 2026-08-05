@@ -99,6 +99,7 @@ def _grant_runtime_role_access(mig_engine: "Engine", runtime_engine: "Engine") -
     qr = _pg_quote_ident(runtime_role)
     with mig_engine.begin() as conn:
         mig_role = conn.exec_driver_sql("SELECT current_user").scalar()
+        assert mig_role is not None, "current_user returned NULL"
         qm = _pg_quote_ident(mig_role)
         for stmt in (
             # Schema USAGE must come first — without it, all object-level grants

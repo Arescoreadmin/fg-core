@@ -505,9 +505,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         yield
 
-        if hasattr(app.state, "self_heal_watchdog"):
+        _watchdog = getattr(app.state, "self_heal_watchdog", None)
+        if _watchdog is not None:
             try:
-                app.state.self_heal_watchdog.stop()
+                _watchdog.stop()
             except Exception:
                 pass
 
