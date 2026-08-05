@@ -47,26 +47,49 @@ python -m pip check
 
 echo "==> Gates: basic secret scan (cheap tripwire)"
 # Prevent accidental key commits. Extend patterns over time.
-# Excluded:
-# - codex_gates.sh itself, because it contains the detection patterns.
-# - .claude/worktrees/**, because Claude/Codex scratch worktrees can contain detector regexes and stale generated code.
-# - services/ai_plane_extension/policy_engine.py, because it contains re.compile deny-list patterns, not secrets.
-# - apps/**/node_modules/**, because third-party JS libs (e.g. jose) contain PEM marker strings for key validation.
-# - apps/**/.next/**, because Next.js build artifacts bundle those same strings via source maps.
-# - apps/console/app/api/field-assessment/transcribe/route.ts, because it references process.env.OPENAI_API_KEY by name to check if the var is set (not an actual key value).
-# - docs/ai/**, because PR fix log and audit notes describe exclusion rationale and quote env-var names as documentation.
-# - .git/**, because git internal files (COMMIT_EDITMSG, etc.) can quote detector patterns from commit messages.
+#
+# Two-pass approach: patterns are split by legitimacy of name-only references.
+#
+# Pass 1 — "never legitimate anywhere": PEM markers and Slack tokens are never
+# correct to appear by name in infra or docs, so ALL paths are scanned.
+# Excluded paths (apply to both passes):
+# - codex_gates.sh itself: contains the detection patterns.
+# - .claude/worktrees/**: Claude/Codex scratch worktrees may contain detector regexes.
+# - services/ai_plane_extension/policy_engine.py: re.compile deny-list patterns, not secrets.
+# - apps/**/node_modules/**: third-party JS libs (e.g. jose) contain PEM marker strings.
+# - apps/**/.next/**: Next.js build artifacts bundle those strings via source maps.
+# - docs/ai/**: PR fix log and audit notes quote env-var names as documentation.
+# - .git/**: git internal files (COMMIT_EDITMSG, etc.) can quote detector patterns.
+_SECRET_SCAN_BASE_GLOBS=(
+  --glob '!codex_gates.sh'
+  --glob '!.claude/worktrees/**'
+  --glob '!services/ai_plane_extension/policy_engine.py'
+  --glob '!.venv/**'
+  --glob '!apps/**/node_modules/**'
+  --glob '!apps/**/.next/**'
+  --glob '!docs/ai/**'
+  --glob '!.git/**'
+)
 rg -n --hidden --no-ignore-vcs \
-  --glob '!codex_gates.sh' \
-  --glob '!.claude/worktrees/**' \
-  --glob '!services/ai_plane_extension/policy_engine.py' \
-  --glob '!.venv/**' \
-  --glob '!apps/**/node_modules/**' \
-  --glob '!apps/**/.next/**' \
+  "${_SECRET_SCAN_BASE_GLOBS[@]}" \
+  "(BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
+  . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
+
+# Pass 2 — "env-var names that are legitimate in infra/ops paths": OPENAI_API_KEY and
+# AWS_SECRET_ACCESS_KEY appear by name (not as values) in backup scripts, operator runbooks,
+# and the two backup workflow files that use ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}.
+# Those 4 infra paths are excluded here; they remain in scope for Pass 1.
+# Additional exclusion:
+# - apps/console/app/api/field-assessment/transcribe/route.ts: references process.env.OPENAI_API_KEY
+#   by name to check if the var is set (not a value).
+rg -n --hidden --no-ignore-vcs \
+  "${_SECRET_SCAN_BASE_GLOBS[@]}" \
   --glob '!apps/console/app/api/field-assessment/transcribe/route.ts' \
-  --glob '!docs/ai/**' \
-  --glob '!.git/**' \
-  "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
+  --glob '!docs/operators/**' \
+  --glob '!scripts/backup/**' \
+  --glob '!.github/workflows/backup-scheduled.yml' \
+  --glob '!.github/workflows/restore-drill-monthly.yml' \
+  "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
 
 echo "==> Gates: contract/authority checks (if Makefile exists)"

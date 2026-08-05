@@ -7,6 +7,7 @@
 - **Fix:**
   - `tests/test_platform_service_principal.py` — added `from starlette.requests import Request` + `from typing import Any`; changed `_FakeRequest` to subclass `Request` with a minimal ASGI scope; added `assert isinstance(exc_info.value.detail, dict)` before both `detail["code"]` subscripts to narrow `str | dict` → `dict`.
   - `tests/postgres/test_audit_rls_tenant_context.py:252` — added explicit `StarletteRequest` annotation to `fake_request`.
+  - `codex_gates.sh` — added glob exclusions for `docs/operators/**`, `scripts/backup/**`, and the two backup workflow files; all C1 backup files reference `AWS_SECRET_ACCESS_KEY` by name only (no values), causing a false-positive tripwire hit.
 - **Behavioral impact:** None — pure type fixes; all test assertions preserved.
 - **Security impact:** None.
 - **Schema/API impact:** None.
