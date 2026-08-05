@@ -140,7 +140,9 @@ class _CommitThenIdVisitor(ast.NodeVisitor):
             _check_stmt(stmt)
 
 
-def _get_scan_route_functions(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+def _get_scan_route_functions(
+    tree: ast.Module,
+) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
     """Return top-level functions that appear to be scan-initiation routes.
 
     Heuristic: the function body contains both a call to _c6_create_scan_job

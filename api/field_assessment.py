@@ -9336,6 +9336,7 @@ def create_or_get_questionnaire(
     db.commit()
     # Re-set RLS context before re-query — SET LOCAL is lost after commit.
     from api.db import set_tenant_context
+
     set_tenant_context(db, tenant_id)
     q = db.get(FaQuestionnaire, _q_id)
     responses = list_responses(db, questionnaire_id=_q_id, tenant_id=tenant_id)

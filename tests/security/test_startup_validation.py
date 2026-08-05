@@ -161,7 +161,9 @@ def test_evidence_signing_key_wrong_length(monkeypatch):
     import base64
 
     # 16 bytes — valid base64 but not 32 bytes
-    monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(b"x" * 16).decode())
+    monkeypatch.setenv(
+        "FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(b"x" * 16).decode()
+    )
     from api.config.startup_validation import StartupValidator
 
     v = StartupValidator()
@@ -179,15 +181,15 @@ def test_evidence_signing_key_valid_32_bytes(monkeypatch):
     import base64
     import os
 
-    monkeypatch.setenv("FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(os.urandom(32)).decode())
+    monkeypatch.setenv(
+        "FG_EVIDENCE_SIGNING_KEY_B64", base64.b64encode(os.urandom(32)).decode()
+    )
     from api.config.startup_validation import StartupValidator
 
     v = StartupValidator()
     report = v.validate()
 
-    result = next(
-        (r for r in report.results if r.name == "evidence_signing_key"), None
-    )
+    result = next((r for r in report.results if r.name == "evidence_signing_key"), None)
     assert result is not None
     assert result.passed
 
