@@ -50,7 +50,9 @@ def _is_admin_route_path(request_path: Optional[str]) -> bool:
         "/portal/invitations",
         "/workforce/users",
     }
-    return request_path in _OPERATOR_PORTAL_PATHS or request_path.startswith("/workforce/users/")
+    return request_path in _OPERATOR_PORTAL_PATHS or request_path.startswith(
+        "/workforce/users/"
+    )
 
 
 def _admin_gateway_internal_token() -> str:
