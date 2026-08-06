@@ -105,11 +105,15 @@ In the Railway dashboard:
 3. Find the row for `DEPLOY_BEFORE`.
 4. Click **Redeploy** (or the three-dot menu → **Rollback**).
 
-Via CLI (if you have the deployment ID):
+Via CLI — restore the broken variable instead (the CLI does not support targeting a
+specific deployment ID; `railway redeploy` always redeploys the latest):
 
 ```
-railway redeploy <DEPLOY_BEFORE> --service api
+railway variable set DATABASE_URL=<correct_value> --service api
 ```
+
+This triggers a new deployment with the correct variable and is faster than the
+dashboard when you have the real value already saved.
 
 Monitor the deployment log until the service shows **Healthy**.
 
@@ -136,14 +140,20 @@ Record the /health response body below (or paste to drill log):
 
 ### Step 6 — Verify audit log continuity
 
-Confirm the audit chain was not broken by the incident:
+Confirm the audit chain was not broken by the incident. Use the console forensics
+view (no API key required beyond normal login) or call the API directly with a
+tenant-scoped credential that has `forensics:verify` scope:
 
 ```
-curl -s -H "X-API-Key: <operator-key>" \
-  https://api.frostgate.ai/api/core/audit/chain/verify
+curl -s -H "Authorization: Bearer <tenant-jwt>" \
+  "https://api.frostgate.ai/forensics/chain/verify?limit=20"
 ```
 
-Expected: `"status": "verified"` (or equivalent chain-ok response). If the chain shows a gap, escalate per `disaster_recovery.md §6`.
+Expected: `"status": "verified"` and `"gaps": 0` (or equivalent chain-ok response).
+If the chain shows a gap, escalate per `disaster_recovery.md §6`.
+
+Note: the `FG_API_KEY` environment variable is not a valid credential for this
+endpoint — it requires a tenant API key or session token.
 
 - [ ] Audit chain: verified
 

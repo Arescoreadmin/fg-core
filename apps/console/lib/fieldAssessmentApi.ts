@@ -6,7 +6,6 @@
  * which injects X-Tenant-ID from CORE_TENANT_ID server-side.
  *
  * Security invariants:
- *  - tenant_id is NEVER sent in request bodies or query params
  *  - raw scan payloads are never stored in frontend state beyond submission
  *  - evidence hashes are displayed but payloads are not echoed to the UI
  */
@@ -14,6 +13,16 @@
 import { assertConsoleApiResponse, resolveConsoleRequestHeaders, resolveConsoleUrl } from '@/lib/consoleUrl';
 
 const BASE = '/api/core/field-assessment';
+
+// When the console is viewing a client tenant's data (e.g. via ?tenant_id=demo-bank),
+// set this so every request appends the param for the BFF tenant-key lookup.
+// Guard: no-op on the server — module-level state is shared across concurrent SSR
+// requests, so only the browser should write it.
+let _tenantId: string | undefined;
+export function setFieldAssessmentTenant(id: string | undefined): void {
+  if (typeof window === 'undefined') return;
+  _tenantId = id;
+}
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -793,7 +802,10 @@ async function request<T>(
     'Content-Type': 'application/json',
     ...(init?.headers ?? {}),
   });
-  const target = `${BASE}${path}`;
+  const resolvedPath = _tenantId
+    ? `${path}${path.includes('?') ? '&' : '?'}tenant_id=${encodeURIComponent(_tenantId)}`
+    : path;
+  const target = `${BASE}${resolvedPath}`;
   const res = await fetch(await resolveConsoleUrl(target), {
     ...init,
     headers,

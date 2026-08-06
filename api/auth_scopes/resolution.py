@@ -42,12 +42,17 @@ def _is_admin_route_path(request_path: Optional[str]) -> bool:
         return False
     if request_path == "/admin" or request_path.startswith("/admin/"):
         return True
-    # Portal invitation and named-user management are operator-issued actions
+    # Portal invitation and workforce user writes are operator-issued actions
     # that must be reachable via the internal admin gateway.
+    # /workforce/users requires admin:write + identity.scim — only the admin
+    # gateway token carries those scopes; tenant portal keys do not.
     _OPERATOR_PORTAL_PATHS = {
         "/portal/invitations",
+        "/workforce/users",
     }
-    return request_path in _OPERATOR_PORTAL_PATHS
+    return request_path in _OPERATOR_PORTAL_PATHS or request_path.startswith(
+        "/workforce/users/"
+    )
 
 
 def _admin_gateway_internal_token() -> str:

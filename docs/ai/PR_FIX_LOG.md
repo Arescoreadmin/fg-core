@@ -1,5 +1,32 @@
 # PR Fix Log (Strict)
 
+## P-59 — fix(core): register /workforce/users as admin-internal path in _is_admin_route_path (AUTH-001 part 2)
+
+- **PR/Branch:** `fix/h0-pr1-workforce-admin-credentials`
+- **Date:** 2026-08-06
+- **Files changed:** `api/auth_scopes/resolution.py`, `tests/test_core_invariants.py`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`
+- **Root cause:** P-58 fixed the BFF to send `ADMIN_GATEWAY_TOKEN` for `POST/PATCH /workforce/users`, but Core's `_is_admin_route_path()` only recognized `/admin*` and `/portal/invitations`. For `/workforce/users`, the condition returned `False`, so Core skipped the `admin_internal_token` auth branch entirely and fell through to DB key validation — where `ADMIN_GATEWAY_TOKEN` failed. AUTH-001 remained unresolved end-to-end.
+- **Fix:** Added `/workforce/users` to `_OPERATOR_PORTAL_PATHS` and added `request_path.startswith("/workforce/users/")` prefix check. Covers `POST /workforce/users` (exact) and `PATCH /workforce/users/{id}` (prefix). No other logic changed.
+- **Behavioral impact:** `POST /workforce/users` and `PATCH /workforce/users/{id}` now activate the `admin_internal_token` auth branch when `X-Admin-Gateway-Internal: true` is present. GET/HEAD unaffected.
+- **Security impact:** Narrows attack surface — now production requires the admin gateway token for these writes. Tenant isolation preserved via BFF session auth + Core `auth_gate.py:192-194` injection.
+- **Schema/API impact:** None.
+- **Tests added:** `test_workforce_users_routes_accept_admin_internal_token` in `TestINV001_NoUnauthenticatedAccess` — verifies both `/workforce/users` and `/workforce/users/{id}` return `reason="admin_internal_token"` with `admin:write`. PASS.
+- **SOC:** `docs/SOC_ARCH_REVIEW_2026-02-15.md` updated (SOC-HIGH-002). `soc-review-sync`: OK.
+- **Result:** 3/3 tests PASS. `soc-review-sync` OK. AUTH-001 fully resolved end-to-end.
+
+## P-58 — fix(bff): route POST/PATCH workforce/users through admin gateway credentials — H0-PR1
+
+- **PR/Branch:** `plan/tenant-identity-administration-platform-20260806`
+- **Date:** 2026-08-06
+- **Files changed:** `apps/console/app/api/core/[...path]/route.ts`, `apps/console/tests/workforce-invitation-authority.test.js`
+- **Root cause (AUTH-001 / P0):** Console `POST /workforce/users` returned 403. The BFF's `proxyToCore()` used the tenant portal API key (from `resolveCoreAuth()`) for all non-admin-path requests. Core's `workforce.py:158-159` requires `admin:write` + `identity.scim` scopes for this route; tenant portal keys lack both scopes. Core correctly rejected the call.
+- **Fix:** Added `isWorkforceAdminMutation(path, method)` predicate (returns true for POST/PATCH on workforce/users) and a new `else if (isWorkforceMutation)` branch in `proxyToCore()`. That branch sends `ADMIN_GATEWAY_TOKEN` as `X-API-Key` and `X-FG-Internal-Token`, sets `X-Admin-Gateway-Internal: true`, and forwards `X-Tenant-ID` for Core's `auth_gate.py:192-194` tenant injection. Workforce mutations remain outside `isCrossTenantAdminPath()` so `resolveAuthorizedTenant()` still validates the session.
+- **Behavioral impact:** `POST /workforce/users` and `PATCH /workforce/users/{id}` now succeed when the calling session is authorized for the target tenant. Read operations (GET/HEAD) are unaffected — still use tenant key path.
+- **Security impact:** Tenant is still resolved via `resolveAuthorizedTenant()` before `proxyToCore()` is called. The admin token is only forwarded after session authorization passes; `X-Tenant-ID` binds the request to the validated tenant. No elevation for other paths.
+- **Schema/API impact:** None.
+- **Tests added:** `apps/console/tests/workforce-invitation-authority.test.js` — 18 tests (WF-1 through WF-14c): predicate logic, credential header simulation, source-level structural guards. All 18 PASS.
+- **Result:** 18/18 PASS. AUTH-001 root cause addressed. T9 gate unblocked pending merge.
+
 ## P-57 — fix(ci): bump fg-fast budget 900→960s nominal / 930→990s hard_max — PR #613
 
 - **PR/Branch:** `fix/gates-secret-scan-v3` / PR #613

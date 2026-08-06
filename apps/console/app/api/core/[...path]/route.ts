@@ -413,6 +413,20 @@ function isCrossTenantAdminPath(path: string[]): boolean {
   );
 }
 
+// POST and PATCH on workforce/users require admin:write + identity.scim at Core.
+// Tenant portal API keys lack these scopes. Admin gateway credentials must be used.
+// Tenant context is still validated by resolveAuthorizedTenant before this path runs;
+// X-Tenant-ID forwards the authorized tenant so Core's auth_gate injects it
+// (auth_gate.py:192-194: admin_internal_token + requested_tenant → tenant_is_key_bound).
+function isWorkforceAdminMutation(path: string[], method: string): boolean {
+  return (
+    (method === 'POST' || method === 'PATCH') &&
+    path.length >= 2 &&
+    path[0] === 'workforce' &&
+    path[1] === 'users'
+  );
+}
+
 function buildAdminUrl(path: string[], request: NextRequest): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
@@ -453,6 +467,7 @@ function isPrivateHost(hostname: string): boolean {
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
   const isAdminPath = isCrossTenantAdminPath(path);
+  const isWorkforceMutation = isWorkforceAdminMutation(path, request.method);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
@@ -466,6 +481,12 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
+  } else if (isWorkforceMutation) {
+    if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
+    headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
+    headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
+    headers.set('X-Admin-Gateway-Internal', 'true');
+    if (tenantId) headers.set('X-Tenant-ID', tenantId);
   } else {
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {

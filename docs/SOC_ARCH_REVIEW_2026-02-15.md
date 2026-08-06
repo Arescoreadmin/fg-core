@@ -3806,3 +3806,24 @@ Validation evidence:
 - make route-inventory-generate completed before this SOC entry.
 
 SOC review outcome: approved. The new route is internal/admin-gateway only and read-only. The schema change is additive and deterministic. Customer is the safe legacy default. No credentials are issued, rotated, revoked, exposed, or selected by this migration. No production tenant is created or promoted to internal_platform. Lace Money Group remains an ordinary customer tenant.
+
+---
+
+## 2026-08-06 — H0-PR1: BFF Credential Routing for Workforce User Mutations (AUTH-001)
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth subsystem change: `api/auth_scopes/resolution.py`).
+
+Scope: Fixes AUTH-001 — console `POST /workforce/users` returning 403. Root cause: BFF `proxyToCore()` used the tenant portal API key for all non-admin-path requests; Core's `workforce.py` requires `admin:write` + `identity.scim` which tenant portal keys do not carry. Two-part fix: BFF routes workforce mutations through the admin gateway token; Core registers `/workforce/users` as an admin-internal path so the `admin_internal_token` auth branch activates.
+
+Security posture: `_is_admin_route_path()` extended to include `/workforce/users` (exact) and `/workforce/users/` (prefix, for PATCH on specific IDs). This means `POST /workforce/users` and `PATCH /workforce/users/{id}` now require `X-Admin-Gateway-Internal: true` plus a valid `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` in production — identical enforcement to `/admin/*` routes. Non-mutation methods (GET, HEAD) on this path do not hit the admin_internal_token branch (they do not set `X-Admin-Gateway-Internal`) and continue through ordinary key validation unchanged. Tenant context: BFF still calls `resolveAuthorizedTenant()` before `proxyToCore()`, so the session must be authorized for the target tenant before the admin token is forwarded. Core injects `X-Tenant-ID` into `request.state.tenant_id` via `auth_gate.py:192-194` when `result.reason == "admin_internal_token"`.
+
+Critical-path files changed:
+- `api/auth_scopes/resolution.py`: `_is_admin_route_path()` extended with `/workforce/users` exact match and `/workforce/users/` prefix. No other logic changed.
+- `apps/console/app/api/core/[...path]/route.ts`: `isWorkforceAdminMutation()` predicate added; new `else if (isWorkforceMutation)` credential branch in `proxyToCore()` sends `ADMIN_GATEWAY_TOKEN` + `X-Tenant-ID`. Existing paths (isAdminPath branch, tenant-key else branch) unchanged.
+
+Validation evidence:
+- `tests/test_core_invariants.py::TestINV001_NoUnauthenticatedAccess::test_workforce_users_routes_accept_admin_internal_token`: verifies `/workforce/users` and `/workforce/users/{id}` return `reason="admin_internal_token"` with `admin:write` in scopes when the gateway token is presented.
+- `apps/console/tests/workforce-invitation-authority.test.js` WF-1–WF-14c (18/18 PASS): predicate logic, credential header simulation, source-level structural guards.
+- Existing `test_admin_path_rejects_non_dedicated_token_in_production`, `test_admin_internal_token_enforces_required_scopes` continue to pass — no regression on `/admin/*` paths.
+
+SOC review outcome: approved. The change narrows, not broadens, the attack surface for `/workforce/users`: previously any caller with a token that passed DB key validation could attempt these endpoints; now only the admin gateway token is accepted in production. Tenant isolation is preserved — `X-Tenant-ID` is validated by BFF session authorization before being forwarded, and Core injects it only after the admin token authenticates. No credentials are issued, rotated, or revoked by this change.
