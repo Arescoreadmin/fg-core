@@ -1,4 +1,5 @@
 'use strict';
+// @version 1
 
 /**
  * workforce-invitation-authority.test.js
