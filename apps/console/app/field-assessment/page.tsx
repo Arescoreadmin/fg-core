@@ -1,8 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -146,7 +144,7 @@ function CreateEngagementForm({ onCreated }: { onCreated: (e: Engagement) => voi
   );
 }
 
-export default function FieldAssessmentListPage() {
+function FieldAssessmentListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tenantId = searchParams.get('tenant_id') ?? undefined;
@@ -271,5 +269,13 @@ export default function FieldAssessmentListPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function FieldAssessmentListPage() {
+  return (
+    <Suspense>
+      <FieldAssessmentListContent />
+    </Suspense>
   );
 }

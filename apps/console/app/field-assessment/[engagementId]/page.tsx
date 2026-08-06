@@ -1,8 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
@@ -201,7 +199,7 @@ function AuditEventModal({ event, engagementId, onClose }: { event: AuditEvent; 
   );
 }
 
-export default function EngagementWorkspacePage() {
+function EngagementWorkspaceContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1332,5 +1330,13 @@ export default function EngagementWorkspacePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EngagementWorkspacePage() {
+  return (
+    <Suspense>
+      <EngagementWorkspaceContent />
+    </Suspense>
   );
 }
