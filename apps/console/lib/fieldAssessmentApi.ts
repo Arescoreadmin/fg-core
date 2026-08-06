@@ -16,8 +16,11 @@ const BASE = '/api/core/field-assessment';
 
 // When the console is viewing a client tenant's data (e.g. via ?tenant_id=demo-bank),
 // set this so every request appends the param for the BFF tenant-key lookup.
+// Guard: no-op on the server — module-level state is shared across concurrent SSR
+// requests, so only the browser should write it.
 let _tenantId: string | undefined;
 export function setFieldAssessmentTenant(id: string | undefined): void {
+  if (typeof window === 'undefined') return;
   _tenantId = id;
 }
 
