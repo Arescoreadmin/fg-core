@@ -2172,7 +2172,13 @@ def get_credential(
     Raises:
         CredentialNotFoundError: not found or belongs to a different tenant.
     """
+    is_pg = engine.dialect.name == "postgresql"
     with engine.connect() as conn:
+        if is_pg:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         row = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
