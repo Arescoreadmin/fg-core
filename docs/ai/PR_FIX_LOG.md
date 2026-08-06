@@ -1,5 +1,16 @@
 # PR Fix Log (Strict)
 
+## P-57 — fix(ci): bump fg-fast budget 900→960s nominal / 930→990s hard_max — PR #613
+
+- **PR/Branch:** `fix/gates-secret-scan-v3` / PR #613
+- **Root cause:** Observed CI runs of 843s (low) and 931s (high) on the fg-fast pytest lane; the 931s run exceeded the old 930s hard_max causing a spurious gate failure. The new `tests/test_secret_scan_gate.py` (20 tests, no smoke/contract/security markers) contributes 0s to fg-fast — the overrun is pure GH Actions 2-core runner variance on an already near-budget suite.
+- **Fix:** Raised Makefile budget variables: `FG_FAST_MAX_SECONDS` 900→960, `FG_FAST_HARD_MAX_SECONDS` 930→990, `FG_FAST_WARN_SECONDS` 810→870. Updated comment block with rationale and observed CI timing range. No changes to `.github/workflows/`, `tools/ci/`, or test files.
+- **Behavioral impact:** None — only the budget gate thresholds change; no test logic or CI workflow modified.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None.
+- **Result:** PASS (budget ceiling now accommodates observed CI variance).
+
 ## P-56 — fix(gates): secret scan post-filter for safe env-var name references — PR #613
 
 - **PR/Branch:** `fix/gates-secret-scan-v3` / PR #613

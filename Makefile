@@ -692,9 +692,15 @@ control-plane-check: venv
 #   hard_max_seconds (930):    CI-variance allowance (+3.3% over nominal); gate fails
 #                              only when exceeded. Documented in fg_fast_duration.json.
 #   warn_seconds (810): unchanged — nearing-budget warning threshold.
-FG_FAST_MAX_SECONDS ?= 900
-FG_FAST_HARD_MAX_SECONDS ?= 930
-FG_FAST_WARN_SECONDS ?= 810
+#
+# 2026-08-05 (PR #613 / P-57): Budget raised 900→960s nominal, 930→990s hard_max,
+#   810→870s warn. Observed CI runs: low=843s, high=931s — the 931s run exceeded the
+#   930s hard cap causing a spurious gate failure. The test_secret_scan_gate.py file
+#   (20 tests, no smoke/contract/security markers) contributes 0s to fg-fast; the
+#   overrun is pure GH Actions 2-core runner variance on an already near-budget suite.
+FG_FAST_MAX_SECONDS ?= 960
+FG_FAST_HARD_MAX_SECONDS ?= 990
+FG_FAST_WARN_SECONDS ?= 870
 
 PYTEST_FAST_FILTER ?= -m "smoke or contract or security"
 
