@@ -5,56 +5,70 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-05
+**Date:** 2026-08-06
 
 **Current Branch:** `main`
 
-**Current Commit:** `1bcddc16` (fix(gates): replace two-pass secret scan with single-pass + post-filter, #613)
+**Current Commit:** `c11c4300` (ops(c1): restore drill PASS 2026-08-06 — C1 backup hardening COMPLETE)
 
-**Current PR:** None open — LDR-2026-001 CONDITIONAL GO issued 2026-08-04T19:40:00Z; C2+C3 DONE; C1+C4 remain.
+**Current PR:** None open.
 
-**Overall Status:** YELLOW (transitioning to GREEN — all functional gates PASS; C1+C4 operational execution outstanding)
+**Overall Status:** YELLOW → GREEN (C1 CLOSED; C4 is the only remaining engineering gate; L14 is founder track)
 
-**Launch Confidence (%):** 95
+**Launch Confidence (%):** 97
 
-**Current Critical Path:** ~~T1–T6 all gates~~ ✅ → ~~LDR-2026-001 CONDITIONAL GO~~ ✅ → **C1: backup hardening (7 GitHub secrets + workflow dispatch)** → **C4: T8/T9/T10/T13 operator execution** → L14 commercial paper → first client onboarding.
+**Current Critical Path:** ~~C1 backup hardening~~ ✅ → **C4: T8/T9/T10/T13 operator execution** → ~~L14 commercial paper~~ (parallel, founder) → first client onboarding.
 
-**Current Phase:** Launch Constraint Closure — C1 (backup config) + C4 (operational drills)
+**Current Phase:** C4 Operational Validation — T8 / T9 / T10 / T13
 
-**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — 2 constraints outstanding (C1: backup config; C4: drills/walkthroughs). C2 (invitation URL fix) and C3 (global JSON handler) are DONE.
+**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — 1 constraint outstanding (C4). C1/C2/C3 all DONE.
 
-**Platform Freeze:** ACTIVE — no feature PRs, schema changes, infra changes, or env var additions until first client engagement completes.
+**Platform Freeze:** ACTIVE — no feature PRs, schema changes, infra changes, or env var additions until first client engagement completes. Exception: production defects discovered during C4 execution.
 
-**Current DoD Progress:** 10/14 Launch DoD items PASS. L7/L8/L9/L11 → READY TO EXECUTE (runbooks committed). L12 IN PROGRESS (FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; accepted risk). L13 CONDITIONAL on L7. L14 FOUNDER TRACK.
+**Current DoD Progress:** 10/14 Launch DoD items PASS. L7/L8/L9/L11 → READY TO EXECUTE (runbooks committed). L12 IN PROGRESS (accepted risk; rotate before second engagement). L13 CONDITIONAL on L7. L14 FOUNDER TRACK.
 
-**Completed Since Last Update (2026-08-04 → 2026-08-05):**
-- PR #609 (a19c8f15): T6 H1-H18 PASS (second run, T6-EXEC-20260804-002); 8 defects found and resolved; Stage 1 Gold Path 15/15 PASS (12.9s, 0 interventions); LDR-2026-001 CONDITIONAL GO issued; L3/L5/L6/L7/L8/L9/L11 runbooks committed; C2 (invitation URL) + C3 (global JSON handler) DONE; 54 files, 9,455 insertions.
-- PR #610 (c16cb58e): mypy regressions resolved post-launch-candidate.
-- PR #611 (c406d0c0): _FakeRequest mypy fix + detail indexing fix.
-- PR #612 (258e0c97): exclude backup files from secret scan tripwire.
-- PR #613 (1bcddc16): single-pass secret scan with post-filter.
-- DoD progress: 3/14 → 10/14 PASS across the week.
+**Completed Since Last Update (2026-08-05 → 2026-08-06):**
+- C1 CLOSED 2026-08-06: encrypted scheduled backup (02:00 UTC cron, R2 offsite); restore drill PASS (17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches). Evidence: `docs/governance/status/restore_drill_evidence_20260806.md`.
+- fix(backup): `fg_backup.sh` migrated from `alembic_version` to `schema_migrations` (commit 2f1d41f4).
+- fix(db): migration 0173 — dropped orphaned production function referencing `alembic_version` (commit e82166fa → psycopg3 fix c11c4300 via e82166fa).
+- LDR-2026-001 C1 status updated to DONE.
 
 **Current Blockers:**
-- **C1 (backup hardening):** requires 7 GitHub secrets (FG_DB_URL, FG_BACKUP_ENCRYPTION_KEY, FG_BACKUP_MANIFEST_HMAC_KEY, offsite provider creds) + `workflow_dispatch` on backup + restore-drill workflows. Founder action; no code work. Workflows already committed (498c0b34 backup, current restore-drill).
-- **C4 (operational gates):** T8 incident drill (timed Railway rollback), T9 console UX walkthrough (≤9 nav items), T10 portal UX walkthrough (real-data check), T13 deletion purge drill. All runbooks committed. ~2 engineering days to execute.
-- **L12 gap:** FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; written rationale in L12 manifest. Must rotate before second engagement. Accepted risk for Stage 1.
-- **L14 (commercial paper):** price card, CG v0 one-pager, Stripe invoice flow confirmation, design-partner scheduling. Founder track; 0 engineering days.
+- **C4 (operational gates):** T8 incident drill (timed Railway rollback, <15 min, recorded), T9 console UX walkthrough (≤9 nav items, operator completes engagement), T10 portal UX walkthrough (every visible page real data, discoveries-first), T13 deletion purge drill (all 3 DPA triggers, execute once on test tenant). All runbooks committed. ~2 days to execute.
+- **L12 gap:** FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; written acceptance in L12 manifest. Must rotate before second engagement.
+- **L14 (commercial paper):** price card, CG v0 one-pager, Stripe invoice flow, design-partner scheduled. Founder track; 0 engineering days. This is the longest pole.
 
 **Top Three Priorities:**
-1. **C1: Configure backup hardening** — set 7 GitHub secrets and run workflow_dispatch on backup + restore-drill. No code. Founder operational action. Unblocks launch authorization.
-2. **C4: Execute T8+T9+T10+T13** — timed incident drill, console walkthrough, portal walkthrough, deletion purge drill. ~2d. Closes L7/L8/L9/L11 and L13 (roll-up). 
-3. **L14: Commercial paper + design partner scheduling** — price card finalized, one design partner warm and on the calendar. The date is not real until a client is scheduled.
+1. **C4: Execute T8+T9+T10+T13** — all runbooks at `docs/operators/`. ~2 days. Closes L7/L8/L9/L11 and L13. When done: update LDR-2026-001, tag v1.0.0-rc1, freeze engineering.
+2. **L14: Commercial paper + design partner scheduling** — price card, one-pager, Stripe flow, first warm candidate on the calendar. Running in parallel with C4. No engineering dependency.
+3. **v1.0.0-rc1 tag** — after C4 evidence is committed and LDR updated. Signals engineering freeze and shift to delivery mode.
 
-**Next Required PR:** None for C1/C4/L14 — these are operational execution and founder commercial actions. No code PR is on the critical path to first client.
+**Next Required PR:** None — C4 is operator execution. After C4, one PR to update LDR-2026-001 and tag RC1.
 
-**Estimated Engineering Days Remaining:** ~2.0 (C4 execution only; C1 is config, L14 is founder).
+**Estimated Engineering Days Remaining:** ~2.0 (C4 execution only).
 
-**Estimated Launch Date:** 2026-08-10 (assuming C1+C4 close this week and L14 in parallel).
+**Estimated Launch Date:** 2026-08-08 to 2026-08-10 (C4 + LDR update + RC1 tag; first client date depends on L14).
 
-**Roadmap Drift:** PRs #601-608 (IA-1 + IA-2 provisioning) not in the frozen 30-day plan — noted in prior reviews; justified (IA-1 was a T4 prerequisite). PRs #609-613 are T6 defect burn-down + CI stabilization — on-plan. No new drift.
+**Roadmap Drift:** PRs #601-608 (IA-1/IA-2, justified), #609-613 (T6 burn-down + CI), backup fix + migration 0173 (C1 defects, on-plan). No scope additions.
 
 **Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
+
+**C1 Result:**
+
+| Field | Value |
+|---|---|
+| C1 status | COMPLETE 2026-08-06 |
+| Scheduled backup | PASS — cron 02:00 UTC, encrypted, R2 offsite, run 31073455901 |
+| Manual backup (drill source) | FG-BKP-20260806-00001 · `frostgate_20260806_104220_manual.dump.enc` · 1,883,376 bytes · encrypted: true · offsite: true |
+| Restore drill | PASS — run 31094275553 · 1m4s |
+| Tenants | 17 (expected 17) |
+| Engagements | 17 (expected 17) |
+| Findings | 101 (expected 101) |
+| Audit events | 346 (expected 346) |
+| Migration version | 0172 (expected 0172) |
+| Mismatches | 0 |
+| Evidence file | `docs/governance/status/restore_drill_evidence_20260806.md` |
+| Fixes required | migration 0173 (orphaned alembic_version fn); fg_backup.sh schema_migrations; quote_ident() psycopg3 compat |
 
 **Repository Health:** Working tree clean on main. CI green (all gates pass post #613). 1bcddc16 is the launch candidate + 4 stabilization fixes. No open mypy errors. No open gate failures.
 
@@ -158,6 +172,30 @@ Launch Readiness Review issued CONDITIONAL GO. Pre-T6 backup checkpoint `FG-BKP-
 **Updated Launch Confidence:** 92%
 
 **Next:** Backup authority reconciliation (Condition 1) → T6 H1-H18.
+
+---
+
+### 2026-08-06 — C1 COMPLETE · Backup Hardening Operationally Proven
+
+**Review Type:** Gate Execution
+
+**Summary:** C1 backup hardening closed. Scheduled cron backup PASS (02:00 UTC, encrypted, R2 offsite). Restore drill PASS in 1m4s — 17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches. Three production defects found and fixed during C1 execution: (1) `fg_backup.sh` queried nonexistent `alembic_version` table instead of `schema_migrations`; (2) production database contained an orphaned stored function referencing `alembic_version` that caused `pg_restore --exit-on-error` to abort the restore; (3) migration 0173's initial `format('%I', ...)` syntax was rejected by psycopg3 (`only '%s', '%b', '%t' allowed`) — rewritten with `quote_ident()` concatenation. All three defects found, diagnosed, and resolved in a single session. API remained healthy post-migration. C1 is the last infrastructure constraint. The platform is operationally proven end-to-end.
+
+**Major Changes:**
+- `scripts/backup/fg_backup.sh` — replaced `alembic_version`/`version_num` with `schema_migrations`/`version` at lines 552, 1155, 1194 (commit 2f1d41f4)
+- `migrations/postgres/0173_drop_alembic_version_fn.sql` — drops orphaned production function; uses `quote_ident()` for psycopg3 compatibility (commits e82166fa, c11c4300 fix, final e82166fa)
+- `docs/governance/status/restore_drill_evidence_20260806.md` — PASS evidence committed (commit c11c4300)
+- `docs/governance/status/LAUNCH_DECISION_RECORD.md` — C1 status → DONE with full evidence citation
+- `docs/governance/status/EXECUTION_STATE.md` — current status updated; confidence 95% → 97%
+
+**Decisions Made:**
+- C1 closed on evidence, not on intent. Three real defects found; no shortcuts taken.
+- Overall status: YELLOW→GREEN transition. One constraint (C4) remains before full GO.
+- Engineering is now the shortest pole. L14 (commercial paper + design partner) is the critical path to first revenue.
+
+**Updated Launch Confidence:** 97%
+
+**Next:** C4 execution (T8/T9/T10/T13) → LDR update → v1.0.0-rc1 tag → L14 design partner scheduling.
 
 ---
 

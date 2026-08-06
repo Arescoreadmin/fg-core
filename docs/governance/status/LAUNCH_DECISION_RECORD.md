@@ -109,7 +109,7 @@ The following conditions must be confirmed closed before the first client engage
 
 | # | Constraint | Acceptance criteria | Status | Owner | Target |
 |---|---|---|---|---|---|
-| C1 | Backup hardening: scheduling + encryption + offsite + restore proof | Scheduled cron produces non-zero encrypted artifact; HMAC-signed manifest; R2 offsite upload verified; restore drill PASS (row counts + migration version match) | **WORKFLOWS DONE** (backup: 498c0b34, restore-drill: current); requires 7 GitHub secrets + `workflow_dispatch` on both workflows | jcosat | Before client onboarding |
+| C1 | Backup hardening: scheduling + encryption + offsite + restore proof | Scheduled cron produces non-zero encrypted artifact; HMAC-signed manifest; R2 offsite upload verified; restore drill PASS (row counts + migration version match) | **DONE** 2026-08-06 — scheduled cron PASS (02:00 UTC, encrypted, R2); restore drill PASS (17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches); evidence: `docs/governance/status/restore_drill_evidence_20260806.md`; fixes: migration 0173 (orphaned alembic_version fn), fg_backup.sh schema_migrations | jcosat | ✅ |
 | C2 | Portal invitation URL fix (D-T6-004) | Invitation emails include `?tenant_id=` in accept URL | **DONE** (commit 5a9440bf) | jcosat | ✅ |
 | C3 | Global JSON exception handler (PR-T6.5) | All unhandled exceptions return structured JSON; no HTML 500 pages | **DONE** (commit 98088457) | jcosat | ✅ |
 | C4 | Launch DoD operational gates (L7, L8, L9, L11) | T8 (incident drill PASS), T9 (console UX PASS), T10 (portal UX PASS), T13 (deletion runbook executed) | **RUNBOOKS DONE** (commit ce37680a); requires operator execution | jcosat | Before client engagement |
