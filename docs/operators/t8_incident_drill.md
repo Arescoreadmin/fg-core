@@ -105,11 +105,15 @@ In the Railway dashboard:
 3. Find the row for `DEPLOY_BEFORE`.
 4. Click **Redeploy** (or the three-dot menu → **Rollback**).
 
-Via CLI (if you have the deployment ID):
+Via CLI — restore the broken variable instead (the CLI does not support targeting a
+specific deployment ID; `railway redeploy` always redeploys the latest):
 
 ```
-railway redeploy <DEPLOY_BEFORE> --service api
+railway variable set DATABASE_URL=<correct_value> --service api
 ```
+
+This triggers a new deployment with the correct variable and is faster than the
+dashboard when you have the real value already saved.
 
 Monitor the deployment log until the service shows **Healthy**.
 
