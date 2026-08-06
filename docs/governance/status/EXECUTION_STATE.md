@@ -5,91 +5,69 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-04
+**Date:** 2026-08-05
 
-**Current Branch:** `exec/t5-exec-20260804-001` (T5 evidence) / `main` (code)
+**Current Branch:** `main`
 
-**Current Commit:** `fb97d337` (T5 G2-G6 evidence commit on T5 branch)
+**Current Commit:** `1bcddc16` (fix(gates): replace two-pass secret scan with single-pass + post-filter, #613)
 
-**Current PR:** None — T5 COMPLETE; LRR CONDITIONAL GO; Condition 1 CLOSED; T6 READY TO EXECUTE.
+**Current PR:** None open — LDR-2026-001 CONDITIONAL GO issued 2026-08-04T19:40:00Z; C2+C3 DONE; C1+C4 remain.
 
-**Overall Status:** GREEN
+**Overall Status:** YELLOW (transitioning to GREEN — all functional gates PASS; C1+C4 operational execution outstanding)
 
-**Launch Confidence (%):** 92
+**Launch Confidence (%):** 95
 
-**Current Critical Path:** ~~T5 infra headroom~~ ✅ → ~~Launch Readiness Review~~ ✅ CONDITIONAL GO → ~~backup authority reconciliation~~ ✅ CLOSED → **T6 H1-H18 dry run** → Launch Decision Record → launch DoD sweep.
+**Current Critical Path:** ~~T1–T6 all gates~~ ✅ → ~~LDR-2026-001 CONDITIONAL GO~~ ✅ → **C1: backup hardening (7 GitHub secrets + workflow dispatch)** → **C4: T8/T9/T10/T13 operator execution** → L14 commercial paper → first client onboarding.
 
-**Current Phase:** T6 Operational Rehearsal — READY TO EXECUTE
+**Current Phase:** Launch Constraint Closure — C1 (backup config) + C4 (operational drills)
 
-**Launch Authorization:** BLOCKED — pending backup hardening: (1) scheduled backup automation, (2) backup encryption, (3) manifest signing, (4) offsite replication.
+**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — 2 constraints outstanding (C1: backup config; C4: drills/walkthroughs). C2 (invitation URL fix) and C3 (global JSON handler) are DONE.
 
-**Platform Freeze: LIFTED for LRR/backup work — REACTIVATE before T6**
+**Platform Freeze:** ACTIVE — no feature PRs, schema changes, infra changes, or env var additions until first client engagement completes.
 
-T5 production freeze is lifted. Permitted: backup authority reconciliation, credential_delivery.md update, EXECUTION_STATE updates. Reactivate freeze immediately before T6 begins.
+**Current DoD Progress:** 10/14 Launch DoD items PASS. L7/L8/L9/L11 → READY TO EXECUTE (runbooks committed). L12 IN PROGRESS (FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; accepted risk). L13 CONDITIONAL on L7. L14 FOUNDER TRACK.
 
-| Prohibited (during T6) | Why |
-|---|---|
-| Feature PRs | Baseline instability; deferred to post-launch backlog |
-| Dependency upgrades | Untested behavior under operational load |
-| Schema changes / migrations | Migration risk during T6 rehearsal window |
-| Infrastructure changes (Railway / Vercel) | Invalidates T6 baseline |
-| Environment variable additions | Configuration drift |
-| Auth0 / Resend / vendor changes | Invalidates T4 configuration fingerprints |
-
-**Current DoD Progress:** 3/14 Launch DoD items checked (L4: PASS, L2: PASS via T4, L10: PASS via T5). L12 remains IN PROGRESS.
-
-**Completed Since Last Update:** T5 COMPLETE 2026-08-04. G1–G6 all PASS. 805/805 requests OK (0 5xx); CPU peak 1.14 vCPU (14%); memory 455 MB (5.6%); DB 3 of 100 connections; Redis 9.83 MB of 1024 MB; 8.8s restart-to-health; no data/session/audit loss. G6: PASS — hobby plan sufficient; no upgrade required. LRR issued CONDITIONAL GO. Pre-T6 backup checkpoint `FG-BKP-20260804-00001` taken (1.73 MB; SHA-256 verified; 2026-08-04T12:28:56Z). T5 branch: `exec/t5-exec-20260804-001`, commit `fb97d337`.
-
-**T5 Key Finding:** No tenant with `tenant_id='default'` in `tenants` registry. 7 engagements + 11 scan jobs exist under orphaned legacy `default` tenant_id. P1 data-governance defect; non-blocking for T6 (T6 uses fresh disposable tenant). Migrate before commercial use.
-
-**Admin auth mechanism (discovered during T5):** `/admin/...` endpoints require BOTH `X-API-Key: {FG_INTERNAL_GATEWAY_SECRET}` + `X-Admin-Gateway-Internal: true` (for auth gate internal scopes) AND `x-fg-internal-token: {FG_INTERNAL_GATEWAY_SECRET}` (for `require_internal_admin_gateway`). Both headers must be present.
+**Completed Since Last Update (2026-08-04 → 2026-08-05):**
+- PR #609 (a19c8f15): T6 H1-H18 PASS (second run, T6-EXEC-20260804-002); 8 defects found and resolved; Stage 1 Gold Path 15/15 PASS (12.9s, 0 interventions); LDR-2026-001 CONDITIONAL GO issued; L3/L5/L6/L7/L8/L9/L11 runbooks committed; C2 (invitation URL) + C3 (global JSON handler) DONE; 54 files, 9,455 insertions.
+- PR #610 (c16cb58e): mypy regressions resolved post-launch-candidate.
+- PR #611 (c406d0c0): _FakeRequest mypy fix + detail indexing fix.
+- PR #612 (258e0c97): exclude backup files from secret scan tripwire.
+- PR #613 (1bcddc16): single-pass secret scan with post-filter.
+- DoD progress: 3/14 → 10/14 PASS across the week.
 
 **Current Blockers:**
-- FG-LR-004: CLOSED — T5 PASS. Railway headroom proven sufficient.
-- **Condition 1: CLOSED (T6 AUTHORIZED)** — T1.5 accepted as production backup authority for Stage 1. Pre-T6 checkpoint exists; restore proven.
-- FG-LR-001: no verified end-to-end production dry run on the current identity/provisioning stack (T6).
-- FG-LR-005: incident/rollback runbook and timed drill missing (T8/T9).
-- L12 gap: FG_SIGNING_SECRET and FG_KEY_PEPPER not yet rotated.
-
-**Outstanding Launch Blockers (must close before launch authorization):**
-1. Scheduled backup automation — produce successful non-zero automated scheduled backup artifact
-2. Backup encryption — configure `FG_BACKUP_ENCRYPTION_KEY` and verify encrypted backup roundtrip
-3. Manifest signing — configure `FG_BACKUP_MANIFEST_HMAC_KEY` and verify HMAC-signed manifests
-4. Offsite replication — configure S3/R2/B2 destination; verify upload and remote restore source
+- **C1 (backup hardening):** requires 7 GitHub secrets (FG_DB_URL, FG_BACKUP_ENCRYPTION_KEY, FG_BACKUP_MANIFEST_HMAC_KEY, offsite provider creds) + `workflow_dispatch` on backup + restore-drill workflows. Founder action; no code work. Workflows already committed (498c0b34 backup, current restore-drill).
+- **C4 (operational gates):** T8 incident drill (timed Railway rollback), T9 console UX walkthrough (≤9 nav items), T10 portal UX walkthrough (real-data check), T13 deletion purge drill. All runbooks committed. ~2 engineering days to execute.
+- **L12 gap:** FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; written rationale in L12 manifest. Must rotate before second engagement. Accepted risk for Stage 1.
+- **L14 (commercial paper):** price card, CG v0 one-pager, Stripe invoice flow confirmation, design-partner scheduling. Founder track; 0 engineering days.
 
 **Top Three Priorities:**
-1. T6 H1-H18 production dry run — Condition 1 CLOSED; T6 is now unblocked.
-2. Backup hardening (four items above) — required for launch authorization.
-3. Launch DoD L1-L14 sweep — after T6.
+1. **C1: Configure backup hardening** — set 7 GitHub secrets and run workflow_dispatch on backup + restore-drill. No code. Founder operational action. Unblocks launch authorization.
+2. **C4: Execute T8+T9+T10+T13** — timed incident drill, console walkthrough, portal walkthrough, deletion purge drill. ~2d. Closes L7/L8/L9/L11 and L13 (roll-up). 
+3. **L14: Commercial paper + design partner scheduling** — price card finalized, one design partner warm and on the calendar. The date is not real until a client is scheduled.
 
-**T5 Result:**
+**Next Required PR:** None for C1/C4/L14 — these are operational execution and founder commercial actions. No code PR is on the critical path to first client.
 
-| Field | Value |
-|-------|-------|
-| T5 status | COMPLETE |
-| L10 status | PASS |
-| FG-LR-004 status | CLOSED |
-| Execution ID | T5-EXEC-20260804-001 |
-| G6 decision | PASS — hobby plan sufficient; no upgrade required |
-| CPU peak | 1.14 vCPU of 8.0 (14.3%) |
-| Memory peak | 455 MB of 8192 MB (5.6%) |
-| 5xx rate | 0.0% |
-| Restart-to-health | 8.8 s |
-| State integrity | PASS — zero data/session/audit loss |
-| Pre-T6 backup | FG-BKP-20260804-00001 · 2026-08-04T12:28:56Z |
-| Branch | exec/t5-exec-20260804-001 |
-| Commit | fb97d337 |
-| Evidence file | `docs/governance/status/T5_INFRASTRUCTURE_HEADROOM_EVIDENCE.md` |
+**Estimated Engineering Days Remaining:** ~2.0 (C4 execution only; C1 is config, L14 is founder).
 
-**Next Required PR:** None — T6 is operational gate execution. Backup authority reconciliation is an operator decision, not a code PR.
+**Estimated Launch Date:** 2026-08-10 (assuming C1+C4 close this week and L14 in parallel).
 
-**Estimated Engineering Days Remaining:** ~10.5 (T1 1.5d, T1.5 ~1.0d, T2+T3 ~0.5d, IA-1 ~3.5d, T4 ~2.0d consumed of 19.0 budget).
-
-**Estimated Launch Date:** 2026-08-27, contingent on all Launch DoD L1-L14 passing.
-
-**Roadmap Drift:** PRs #601-608 (IA-1 provisioning work + audit RLS fix) not in the frozen 30-day launch plan. T4 completed on plan. No new drift.
+**Roadmap Drift:** PRs #601-608 (IA-1 + IA-2 provisioning) not in the frozen 30-day plan — noted in prior reviews; justified (IA-1 was a T4 prerequisite). PRs #609-613 are T6 defect burn-down + CI stabilization — on-plan. No new drift.
 
 **Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
+
+**Repository Health:** Working tree clean on main. CI green (all gates pass post #613). 1bcddc16 is the launch candidate + 4 stabilization fixes. No open mypy errors. No open gate failures.
+
+**Open Risks:**
+- DB startup ordering defect (`_grant_runtime_role_access()` race): accepted; documented; fix tracked pre-Stage 2 concurrent client.
+- Orphaned `default` tenant data (7 engagements, 11 scan jobs): P1 data-governance; non-blocking Stage 1; must migrate/archive before commercial use.
+- No automated alerting: Railway plan limitation; add 5xx spike alert before engagement start.
+- L12 deferred rotation: written acceptance; must close before second engagement.
+- `FG_DB_MIGRATIONS_RISK_ACCEPTED=1` still set in Railway (D-T6-001): non-blocking; clear before any schema change.
+
+**Recommended Next Action:** C1 first (backup secrets, 30 min founder action) → C4 execution (2 days) → L14 in parallel. If design partner is warm: schedule before C4 completes — the engagement starts when the date is confirmed, not when the drills close.
+
+**Execution Notes:** T6 passed on second run with 8 defects found and burned down from the buffer. Gold Path 15/15 at 12.9s sets the Stage 2 KPI baseline (target <30s). LDR-2026-001 is immutable. Stage 1 capacity limits: 1 design partner, ≤3 tenants, ≤5 named users, 1 concurrent engagement. PRs #610-613 required same-day CI stabilization after the launch candidate merge — expected, not alarming, and now resolved.
 
 **T4 Result:**
 
@@ -180,6 +158,53 @@ Launch Readiness Review issued CONDITIONAL GO. Pre-T6 backup checkpoint `FG-BKP-
 **Updated Launch Confidence:** 92%
 
 **Next:** Backup authority reconciliation (Condition 1) → T6 H1-H18.
+
+---
+
+### 2026-08-05 — Weekly CEO Executive Review · LDR-2026-001 CONDITIONAL GO · Launch Candidate Stabilized
+
+**Review Type:** Weekly CEO Review
+
+**Summary:** Full executive review across ROADMAP.md, THIRTY_DAY_LAUNCH_PLAN.md, LAUNCH_DEFINITION_OF_DONE.md, FIRST_CLIENT_PLAYBOOK.md, TOP_ROI_ACTIONS.md, and repository state. The week delivered the single most consequential gate sequence in the launch plan: T4 COMPLETE (named-user portal proof), T5 COMPLETE (infra headroom, 94.4% memory headroom), T6 COMPLETE (H1-H18 dry run, second run PASS, 8 defects resolved), Stage 1 Gold Path 15/15 PASS (12.9s, 0 interventions), and LDR-2026-001 CONDITIONAL GO issued. 13 PRs merged (#601–613). DoD progress: 3/14 → 10/14. Launch confidence: 92% → 95%. Estimated launch date revised from 2026-08-27 to 2026-08-10. Platform is functionally complete and operationally proven. Remaining work is execution (C4 drills: ~2d) and configuration (C1 backup secrets: founder action) and commercial (L14: price card + design partner scheduling).
+
+**Major Changes:**
+- PR #601-608: IA-1 Client Organization Provisioning + 5 prod-critical auth/DB fixes (roadmap drift; T4 prerequisite).
+- PR #609 (a19c8f15): T6 PASS; Gold Path 15/15 PASS; LDR-2026-001 CONDITIONAL GO; C2+C3 DONE; runbooks for T8/T9/T10/T13 committed (54 files, 9,455 insertions).
+- PR #610-613: CI/gate stabilization post-launch-candidate (mypy, secret scan).
+- EXECUTION_STATE.md: current status updated to reflect LDR-2026-001 CONDITIONAL GO, DoD 10/14, launch confidence 95%, launch date 2026-08-10.
+
+**Completed Tasks:**
+- T4: Portal named-user proof — COMPLETE (L1/L2 PASS)
+- T5: Infrastructure headroom — COMPLETE (L10 PASS)
+- T6: H1-H18 production dry run — COMPLETE (L2/L5/L6 PASS; 8 defects burned from buffer)
+- Gold Path: 15/15 PASS, 12.9s, 0 interventions
+- LDR-2026-001: CONDITIONAL GO issued
+- C2 (invitation URL): DONE (commit 5a9440bf)
+- C3 (global JSON handler): DONE (commit 98088457)
+- Runbooks: T8/T9/T10/T13 committed (docs/operators/)
+
+**New Risks:**
+- IA-2 merged before IA-1 COMPLETE (noted gate violation; cannot be unshipped; no impact on DoD).
+- 4 post-merge CI fixes required same day as launch candidate — expected defect burn-down; now resolved.
+- Orphaned `default` tenant data (7 engagements, 11 scan jobs): P1; must migrate before commercial use.
+
+**Decisions Made:**
+- Overall status: YELLOW (C1+C4 outstanding; functional platform GREEN).
+- Launch confidence raised from 92% to 95%.
+- Estimated launch date: 2026-08-10 (C1+C4 this week + L14 commercial paper).
+- T7 PDF content checklist accepted as partially met by Gold Path (Ed25519 + QA-approved); full section-by-section checklist execution deferred to C4 window.
+- L12 accepted risk (FG_SIGNING_SECRET + FG_KEY_PEPPER): maintained; rotate before Stage 2.
+- No scope additions approved; v1 architecture freeze maintained.
+- Commercial acquisition: YES WITH CONDITIONS — C1+C4 must close first; design partner should be scheduled now in parallel.
+
+**Next Week's Three Objectives:**
+1. C1: Configure 7 GitHub secrets + run backup/restore-drill workflows (founder action; <1d).
+2. C4: Execute T8 (incident drill), T9 (console walkthrough), T10 (portal walkthrough), T13 (deletion purge drill) (~2d).
+3. L14: Finalize price card, confirm Stripe invoice flow, schedule design partner (founder commercial track; 0 eng days).
+
+**Updated Launch Confidence:** 95%
+
+**Next:** C1 backup secrets → C4 execution → first client.
 
 ---
 
