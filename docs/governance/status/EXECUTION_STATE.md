@@ -35,17 +35,24 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Current Blockers:**
 - **C4 (operational gates):** T8 incident drill (timed Railway rollback, <15 min, recorded), T9 console UX walkthrough (≤9 nav items, operator completes engagement), T10 portal UX walkthrough (every visible page real data, discoveries-first), T13 deletion purge drill (all 3 DPA triggers, execute once on test tenant). All runbooks committed. ~2 days to execute.
+- **T9 BLOCKED — identity-critical defect AUTH-001:** Console invitation 403 root cause identified in pre-T9 audit (`docs/audits/console_tenant_ux_authority_audit_20260806.md`). BFF uses tenant portal API key for `POST /workforce/users`; Core correctly rejects (requires `admin:write` + `identity.scim`). T9 cannot pass the invitation step until H0-PR1 ships. T8 and T13 are not blocked and can run now. T10 is conditional (see below).
+- **C4 gate status:** T8 — NOT BLOCKED; T9 — BLOCKED on H0-PR1; T10 — CONDITIONAL (can skip portal grant creation using Gold Path grants; blocked on H0-PR3/H0-PR4 if portal access creation is required); T13 — NOT BLOCKED.
 - **L12 gap:** FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; written acceptance in L12 manifest. Must rotate before second engagement.
 - **L14 (commercial paper):** price card, CG v0 one-pager, Stripe invoice flow, design-partner scheduled. Founder track; 0 engineering days. This is the longest pole.
 
 **Top Three Priorities:**
-1. **C4: Execute T8+T9+T10+T13** — all runbooks at `docs/operators/`. ~2 days. Closes L7/L8/L9/L11 and L13. When done: update LDR-2026-001, tag v1.0.0-rc1, freeze engineering.
-2. **L14: Commercial paper + design partner scheduling** — price card, one-pager, Stripe flow, first warm candidate on the calendar. Running in parallel with C4. No engineering dependency.
-3. **v1.0.0-rc1 tag** — after C4 evidence is committed and LDR updated. Signals engineering freeze and shift to delivery mode.
+1. **H0-PR1: Fix console invitation 403 root cause** — BFF authority routing correction for `POST /workforce/users`. 1–2 engineering days. Unblocks T9. This is the critical path. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`.
+2. **C4: Execute T8+T13 now; T9 after H0-PR1; T10 in parallel or after H0-PR3/H0-PR4** — all runbooks at `docs/operators/`. When all 4 PASS: update LDR-2026-001, tag v1.0.0-rc1, freeze engineering.
+3. **L14: Commercial paper + design partner scheduling** — price card, one-pager, Stripe flow, first warm candidate on the calendar. Running in parallel. No engineering dependency.
 
-**Next Required PR:** None — C4 is operator execution. After C4, one PR to update LDR-2026-001 and tag RC1.
+**Next Required PR:** **H0-PR1** — Fix console invitation 403 root cause. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`. Unblocks T9 and C4.
 
-**Estimated Engineering Days Remaining:** ~2.0 (C4 execution only).
+**Post-RC1 — Tenant Identity & Administration Platform stream:**
+After RC1 tag: H0-PR2 through H0-PR5 (canonical tenant-context, engagement selector, portal grant ownership, cross-tenant regression). Then H1-PR1 through H1-PR10 (design-partner self-administration surface). Then H2-PR1 (Unified Invitation Authority, P1-01 first PR). Reference: `docs/plans/tenant_identity_administration_platform_roadmap_20260806.md`.
+
+**No feature expansion before RC1:** Platform freeze remains active. H0-PR1 through H0-PR5 are production defects discovered during C4 pre-execution audit — not new features. H1 and beyond do not start until RC1 is tagged.
+
+**Estimated Engineering Days Remaining:** ~2.0 (C4 execution) + ~8–12 days (H0-PR1 through H0-PR5, can begin immediately in parallel with T8/T13).
 
 **Estimated Launch Date:** 2026-08-08 to 2026-08-10 (C4 + LDR update + RC1 tag; first client date depends on L14).
 
