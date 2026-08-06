@@ -1,14 +1,13 @@
 -- Migration 0173: drop any stored functions referencing alembic_version.
 --
 -- The production database contains one or more stored functions whose bodies
--- query alembic_version (SQLAlchemy's migration table). FrostGate uses
--- schema_migrations instead; alembic_version never existed in this schema.
+-- query alembic_version (SQLAlchemy migration table). FrostGate uses
+-- schema_migrations instead; alembic_version was never part of this schema.
 -- The orphaned function(s) cause pg_restore to fail with --exit-on-error
--- during the C1 restore drill, as the table they reference is not in the dump.
+-- during the C1 restore drill.
 --
--- This DO block is self-discovering and idempotent: it drops every function
--- whose prosrc contains 'alembic_version', regardless of name or arity.
--- Safe to run on any environment; does nothing if no such functions exist.
+-- Uses quote_ident() + concatenation rather than format('%I', ...) to avoid
+-- psycopg3 treating PostgreSQL format specifiers as Python placeholders.
 
 DO $$
 DECLARE
@@ -17,7 +16,6 @@ DECLARE
 BEGIN
     FOR r IN
         SELECT
-            p.oid,
             n.nspname                                         AS schema_name,
             p.proname                                         AS func_name,
             pg_get_function_identity_arguments(p.oid)        AS func_args
@@ -25,13 +23,12 @@ BEGIN
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE p.prosrc LIKE '%alembic_version%'
     LOOP
-        drop_sql := format(
-            'DROP FUNCTION IF EXISTS %I.%I(%s) CASCADE',
-            r.schema_name, r.func_name, r.func_args
-        );
+        drop_sql := 'DROP FUNCTION IF EXISTS '
+            || quote_ident(r.schema_name) || '.'
+            || quote_ident(r.func_name)   || '('
+            || r.func_args || ') CASCADE';
         EXECUTE drop_sql;
-        RAISE NOTICE 'migration 0173: dropped % (%.%(%s))',
-            drop_sql, r.schema_name, r.func_name, r.func_args;
+        RAISE NOTICE 'migration 0173: dropped alembic_version function';
     END LOOP;
 END
 $$;
