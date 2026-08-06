@@ -2207,7 +2207,13 @@ def list_credentials(
         params["status"] = status
 
     where = " AND ".join(clauses)
+    is_pg = engine.dialect.name == "postgresql"
     with engine.connect() as conn:
+        if is_pg:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": tenant_id},
+            )
         rows = conn.execute(
             text(
                 f"SELECT {_RECORD_SELECT} FROM tenant_credentials "
