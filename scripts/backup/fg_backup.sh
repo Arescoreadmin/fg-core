@@ -549,7 +549,7 @@ cmd_backup() {
 
   # Metadata: migration + db version.
   local migration_version db_version
-  migration_version="$(psql_scalar 'SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1')"
+  migration_version="$(psql_scalar 'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1')"
   [[ -n "$migration_version" ]] || migration_version="unknown"
   db_version="$(psql_scalar 'SELECT version()')"
   [[ -n "$db_version" ]] || db_version="unknown"
@@ -1061,7 +1061,7 @@ cmd_restore() {
     planned_target="${target:-frostgate-restore-${stamp}-${rand}}"
     scratch_port="${FG_BACKUP_SCRATCH_PORT:-5434}"
     dry_run_check "restore backup=$file target=$planned_target port=$scratch_port"
-    dry_run_check "would compare row counts across: fa_engagements, fa_normalized_findings, fa_engagement_audit_events, fa_scan_results, tenants, alembic_version"
+    dry_run_check "would compare row counts across: fa_engagements, fa_normalized_findings, fa_engagement_audit_events, fa_scan_results, tenants, schema_migrations"
     dry_run_check "no scratch container will be created and no database will be touched"
     return 0
   fi
@@ -1152,7 +1152,7 @@ cmd_restore() {
        (SELECT COUNT(*) FROM fa_engagement_audit_events),
        (SELECT COUNT(*) FROM fa_scan_results),
        (SELECT COUNT(*) FROM tenants),
-       COALESCE((SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1),'unknown')")"
+       COALESCE((SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1),'unknown')")"
 
   # Compare scratch counts against the manifest's captured source_row_counts
   # (frozen at backup time) rather than against live production, which drifts
@@ -1191,7 +1191,7 @@ PYEOF
          (SELECT COUNT(*) FROM fa_engagement_audit_events),
          (SELECT COUNT(*) FROM fa_scan_results),
          (SELECT COUNT(*) FROM tenants),
-         COALESCE((SELECT version_num FROM alembic_version ORDER BY version_num DESC LIMIT 1),'unknown')")"
+         COALESCE((SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1),'unknown')")"
   fi
 
   # Compare.
