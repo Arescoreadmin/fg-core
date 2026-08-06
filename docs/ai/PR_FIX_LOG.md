@@ -1,5 +1,19 @@
 # PR Fix Log (Strict)
 
+## P-59 — fix(core): register /workforce/users as admin-internal path in _is_admin_route_path (AUTH-001 part 2)
+
+- **PR/Branch:** `fix/h0-pr1-workforce-admin-credentials`
+- **Date:** 2026-08-06
+- **Files changed:** `api/auth_scopes/resolution.py`, `tests/test_core_invariants.py`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`
+- **Root cause:** P-58 fixed the BFF to send `ADMIN_GATEWAY_TOKEN` for `POST/PATCH /workforce/users`, but Core's `_is_admin_route_path()` only recognized `/admin*` and `/portal/invitations`. For `/workforce/users`, the condition returned `False`, so Core skipped the `admin_internal_token` auth branch entirely and fell through to DB key validation — where `ADMIN_GATEWAY_TOKEN` failed. AUTH-001 remained unresolved end-to-end.
+- **Fix:** Added `/workforce/users` to `_OPERATOR_PORTAL_PATHS` and added `request_path.startswith("/workforce/users/")` prefix check. Covers `POST /workforce/users` (exact) and `PATCH /workforce/users/{id}` (prefix). No other logic changed.
+- **Behavioral impact:** `POST /workforce/users` and `PATCH /workforce/users/{id}` now activate the `admin_internal_token` auth branch when `X-Admin-Gateway-Internal: true` is present. GET/HEAD unaffected.
+- **Security impact:** Narrows attack surface — now production requires the admin gateway token for these writes. Tenant isolation preserved via BFF session auth + Core `auth_gate.py:192-194` injection.
+- **Schema/API impact:** None.
+- **Tests added:** `test_workforce_users_routes_accept_admin_internal_token` in `TestINV001_NoUnauthenticatedAccess` — verifies both `/workforce/users` and `/workforce/users/{id}` return `reason="admin_internal_token"` with `admin:write`. PASS.
+- **SOC:** `docs/SOC_ARCH_REVIEW_2026-02-15.md` updated (SOC-HIGH-002). `soc-review-sync`: OK.
+- **Result:** 3/3 tests PASS. `soc-review-sync` OK. AUTH-001 fully resolved end-to-end.
+
 ## P-58 — fix(bff): route POST/PATCH workforce/users through admin gateway credentials — H0-PR1
 
 - **PR/Branch:** `plan/tenant-identity-administration-platform-20260806`

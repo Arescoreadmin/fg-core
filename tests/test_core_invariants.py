@@ -211,6 +211,43 @@ class TestINV001_NoUnauthenticatedAccess:
             assert not result.valid
             assert result.reason == "no_key_provided"
 
+    def test_workforce_users_routes_accept_admin_internal_token(self):
+        """POST /workforce/users and PATCH /workforce/users/{id} must be reachable
+        via the internal admin gateway token (AUTH-001 regression guard).
+
+        Tenant portal keys lack admin:write + identity.scim; only the admin
+        gateway token carries these scopes.  _is_admin_route_path() must include
+        /workforce/users so Core activates the admin_internal_token auth branch.
+        """
+        from api.auth_scopes import verify_api_key_detailed
+
+        paths = ["/workforce/users", "/workforce/users/some-user-id"]
+        for path in paths:
+            mock_request = MagicMock()
+            mock_request.url.path = path
+            mock_request.headers = {"X-Admin-Gateway-Internal": "true"}
+            mock_request.client = None
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FG_ENV": "production",
+                    "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "test-admin-gateway-token",
+                },
+            ):
+                result = verify_api_key_detailed(
+                    raw="test-admin-gateway-token",
+                    required_scopes=None,
+                    request=mock_request,
+                )
+                assert result.valid, f"admin token rejected for {path}: {result.reason}"
+                assert result.reason == "admin_internal_token", (
+                    f"expected admin_internal_token for {path}, got {result.reason}"
+                )
+                assert "admin:write" in result.scopes, (
+                    f"admin:write missing from scopes for {path}"
+                )
+
     def test_protected_routes_list_is_comprehensive(self):
         """All non-health routes must require authentication."""
         from api.middleware.auth_gate import AuthGateConfig
