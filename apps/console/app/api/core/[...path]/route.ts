@@ -413,18 +413,16 @@ function isCrossTenantAdminPath(path: string[]): boolean {
   );
 }
 
-// POST and PATCH on workforce/users require admin:write + identity.scim at Core.
-// Tenant portal API keys lack these scopes. Admin gateway credentials must be used.
+// All methods on workforce/users require admin-gateway credentials at Core:
+//   GET  requires admin:read  (workforce.py:250)
+//   POST requires admin:write + identity.scim  (workforce.py:158-159)
+//   PATCH requires admin:write + identity.scim  (workforce.py:292-293)
+// Tenant portal API keys carry none of these scopes. Admin gateway credentials must be used.
 // Tenant context is still validated by resolveAuthorizedTenant before this path runs;
 // X-Tenant-ID forwards the authorized tenant so Core's auth_gate injects it
 // (auth_gate.py:192-194: admin_internal_token + requested_tenant → tenant_is_key_bound).
-function isWorkforceAdminMutation(path: string[], method: string): boolean {
-  return (
-    (method === 'POST' || method === 'PATCH') &&
-    path.length >= 2 &&
-    path[0] === 'workforce' &&
-    path[1] === 'users'
-  );
+function isWorkforceAdminPath(path: string[]): boolean {
+  return path.length >= 2 && path[0] === 'workforce' && path[1] === 'users';
 }
 
 function buildAdminUrl(path: string[], request: NextRequest): string {
@@ -467,7 +465,7 @@ function isPrivateHost(hostname: string): boolean {
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
   const isAdminPath = isCrossTenantAdminPath(path);
-  const isWorkforceMutation = isWorkforceAdminMutation(path, request.method);
+  const isWorkforceAdmin = isWorkforceAdminPath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
@@ -481,7 +479,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
-  } else if (isWorkforceMutation) {
+  } else if (isWorkforceAdmin) {
     if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
     headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);

@@ -56,109 +56,102 @@ function extractFunction(src, name) {
   throw new Error(`Unterminated function ${name}`);
 }
 
-// Inline JS-compatible version of isWorkforceAdminMutation for runtime testing
+// Inline JS-compatible version of isWorkforceAdminPath for runtime testing
 // (mirrors the TS source exactly — only strips TypeScript type annotations)
-function isWorkforceAdminMutation(path, method) {
-  return (
-    (method === 'POST' || method === 'PATCH') &&
-    path.length >= 2 &&
-    path[0] === 'workforce' &&
-    path[1] === 'users'
-  );
+// All methods on workforce/users use admin gateway: GET requires admin:read,
+// POST/PATCH require admin:write + identity.scim. Portal keys carry neither.
+function isWorkforceAdminPath(path) {
+  return path.length >= 2 && path[0] === 'workforce' && path[1] === 'users';
 }
 
 // ─── Source-level guards ──────────────────────────────────────────────────────
 
-test('WF-13 source: isWorkforceAdminMutation function is defined in route.ts', () => {
+test('WF-13 source: isWorkforceAdminPath function is defined in route.ts', () => {
   assert.ok(
-    ROUTE_SRC.includes('function isWorkforceAdminMutation('),
-    'isWorkforceAdminMutation function definition not found in route.ts',
+    ROUTE_SRC.includes('function isWorkforceAdminPath('),
+    'isWorkforceAdminPath function definition not found in route.ts',
   );
 });
 
-test('WF-14 source: isWorkforceAdminMutation is referenced inside proxyToCore', () => {
+test('WF-14 source: isWorkforceAdminPath is referenced inside proxyToCore', () => {
   const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
   assert.ok(proxStart !== -1, 'proxyToCore function not found');
   const proxBody = ROUTE_SRC.slice(proxStart);
   assert.ok(
-    proxBody.includes('isWorkforceAdminMutation('),
-    'isWorkforceAdminMutation is not referenced inside proxyToCore',
+    proxBody.includes('isWorkforceAdminPath('),
+    'isWorkforceAdminPath is not referenced inside proxyToCore',
   );
 });
 
-test('WF-14b source: workforce mutation branch sets X-Admin-Gateway-Internal', () => {
+test('WF-14b source: workforce admin branch sets X-Admin-Gateway-Internal', () => {
   const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
   const proxBody = ROUTE_SRC.slice(proxStart);
-  // Anchor to the else-if branch itself, not the assignment (which appears earlier)
-  const branchMarker = '} else if (isWorkforceMutation)';
-  const mutBranchIdx = proxBody.indexOf(branchMarker);
-  assert.ok(mutBranchIdx !== -1, 'isWorkforceMutation else-if branch not found in proxyToCore');
-  const branchBody = proxBody.slice(mutBranchIdx, mutBranchIdx + 600);
+  const branchMarker = '} else if (isWorkforceAdmin)';
+  const branchIdx = proxBody.indexOf(branchMarker);
+  assert.ok(branchIdx !== -1, 'isWorkforceAdmin else-if branch not found in proxyToCore');
+  const branchBody = proxBody.slice(branchIdx, branchIdx + 600);
   assert.ok(
     branchBody.includes('X-Admin-Gateway-Internal'),
-    'workforce mutation branch does not set X-Admin-Gateway-Internal',
+    'workforce admin branch does not set X-Admin-Gateway-Internal',
   );
   assert.ok(
     branchBody.includes('X-FG-Internal-Token'),
-    'workforce mutation branch does not set X-FG-Internal-Token',
+    'workforce admin branch does not set X-FG-Internal-Token',
   );
   assert.ok(
     branchBody.includes('X-Tenant-ID'),
-    'workforce mutation branch does not set X-Tenant-ID',
+    'workforce admin branch does not set X-Tenant-ID',
   );
 });
 
-test('WF-14c source: workforce mutation branch does not call resolveCoreAuth (no tenant portal key)', () => {
+test('WF-14c source: workforce admin branch does not call resolveCoreAuth (no tenant portal key)', () => {
   const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
   const proxBody = ROUTE_SRC.slice(proxStart);
-  // The isWorkforceMutation else-if block must end before resolveCoreAuth is called
-  // Verify the structure: isWorkforceMutation branch is an else-if before the else that calls resolveCoreAuth
   assert.ok(
-    proxBody.includes('} else if (isWorkforceMutation)'),
-    'workforce mutation is not an else-if branch (structural requirement)',
+    proxBody.includes('} else if (isWorkforceAdmin)'),
+    'workforce admin is not an else-if branch (structural requirement)',
   );
-  // The branch with resolveCoreAuth must be the else (tenant-key path), not the isWorkforceMutation branch
-  const workforceBranchStart = proxBody.indexOf('} else if (isWorkforceMutation)');
+  const workforceBranchStart = proxBody.indexOf('} else if (isWorkforceAdmin)');
   const resolveCoreAuthInBranch = proxBody.slice(workforceBranchStart, workforceBranchStart + 300).indexOf('resolveCoreAuth(');
   assert.equal(
     resolveCoreAuthInBranch,
     -1,
-    'resolveCoreAuth is called inside the workforce mutation branch — it must not be (no tenant portal key)',
+    'resolveCoreAuth is called inside the workforce admin branch — it must not be (no tenant portal key)',
   );
 });
 
 // ─── Predicate logic tests ────────────────────────────────────────────────────
 
 test('WF-1 POST workforce/users returns true', () => {
-  assert.equal(isWorkforceAdminMutation(['workforce', 'users'], 'POST'), true);
+  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
 });
 
 test('WF-2 PATCH workforce/users/{id} returns true', () => {
-  assert.equal(isWorkforceAdminMutation(['workforce', 'users', 'some-user-id'], 'PATCH'), true);
+  assert.equal(isWorkforceAdminPath(['workforce', 'users', 'some-user-id']), true);
 });
 
-test('WF-3 GET workforce/users returns false (read uses tenant key)', () => {
-  assert.equal(isWorkforceAdminMutation(['workforce', 'users'], 'GET'), false);
+test('WF-3 GET workforce/users returns true (admin:read required — portal key lacks it)', () => {
+  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
 });
 
-test('WF-4 HEAD workforce/users returns false', () => {
-  assert.equal(isWorkforceAdminMutation(['workforce', 'users'], 'HEAD'), false);
+test('WF-4 HEAD workforce/users returns true (all methods use admin path)', () => {
+  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
 });
 
 test('WF-5 POST decisions returns false (unrelated path)', () => {
-  assert.equal(isWorkforceAdminMutation(['decisions'], 'POST'), false);
+  assert.equal(isWorkforceAdminPath(['decisions']), false);
 });
 
 test('WF-6 POST portal/grants returns false (separate isCrossTenantAdminPath)', () => {
-  assert.equal(isWorkforceAdminMutation(['portal', 'grants'], 'POST'), false);
+  assert.equal(isWorkforceAdminPath(['portal', 'grants']), false);
 });
 
 test('WF-6b DELETE portal/grants returns false', () => {
-  assert.equal(isWorkforceAdminMutation(['portal', 'grants'], 'DELETE'), false);
+  assert.equal(isWorkforceAdminPath(['portal', 'grants']), false);
 });
 
 test('WF-6c POST workforce/risk-profiles returns false (different sub-path)', () => {
-  assert.equal(isWorkforceAdminMutation(['workforce', 'risk-profiles'], 'POST'), false);
+  assert.equal(isWorkforceAdminPath(['workforce', 'risk-profiles']), false);
 });
 
 // ─── Credential header simulation ────────────────────────────────────────────
@@ -166,7 +159,7 @@ test('WF-6c POST workforce/risk-profiles returns false (different sub-path)', ()
 const ADMIN_GATEWAY_TOKEN = 'fgi.test-admin-gateway-secret';
 const TENANT_ID = 'odin-financial-group';
 
-function simulateWorkforceMutationHeaders(tenantId, gatewayToken) {
+function simulateWorkforceAdminHeaders(tenantId, gatewayToken) {  // covers GET, POST, PATCH
   const headers = new Map();
   if (!gatewayToken) return { error: 'Admin gateway token is not configured', status: 503 };
   headers.set('X-API-Key', gatewayToken);
@@ -184,25 +177,25 @@ function simulateTenantKeyHeaders(tenantApiKey, tenantId) {
   return { headers, status: null };
 }
 
-test('WF-7 workforce mutation branch sets X-Admin-Gateway-Internal: true', () => {
-  const { headers } = simulateWorkforceMutationHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
+test('WF-7 workforce admin branch sets X-Admin-Gateway-Internal: true', () => {
+  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
   assert.equal(headers.get('X-Admin-Gateway-Internal'), 'true');
 });
 
-test('WF-8 workforce mutation branch sets X-FG-Internal-Token to admin gateway token', () => {
-  const { headers } = simulateWorkforceMutationHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
+test('WF-8 workforce admin branch sets X-FG-Internal-Token to admin gateway token', () => {
+  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
   assert.equal(headers.get('X-FG-Internal-Token'), ADMIN_GATEWAY_TOKEN);
   assert.equal(headers.get('X-API-Key'), ADMIN_GATEWAY_TOKEN);
 });
 
-test('WF-9 workforce mutation branch sets X-Tenant-ID to authorized tenant', () => {
-  const { headers } = simulateWorkforceMutationHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
+test('WF-9 workforce admin branch sets X-Tenant-ID to authorized tenant', () => {
+  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
   assert.equal(headers.get('X-Tenant-ID'), TENANT_ID);
 });
 
-test('WF-10 workforce mutation branch does not use tenant portal API key', () => {
+test('WF-10 workforce admin branch does not use tenant portal API key', () => {
   const TENANT_PORTAL_KEY = 'fgk.abc.portal-key-for-tenant';
-  const { headers } = simulateWorkforceMutationHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
+  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
   const apiKey = headers.get('X-API-Key');
   assert.notEqual(apiKey, TENANT_PORTAL_KEY);
   assert.equal(apiKey, ADMIN_GATEWAY_TOKEN);
@@ -221,8 +214,8 @@ test('WF-11 isCrossTenantAdminPath does not include workforce/users (tenant stil
   );
 });
 
-test('WF-12 missing ADMIN_GATEWAY_TOKEN returns 503 for workforce mutation', () => {
-  const result = simulateWorkforceMutationHeaders(TENANT_ID, null);
+test('WF-12 missing ADMIN_GATEWAY_TOKEN returns 503 for workforce admin path', () => {
+  const result = simulateWorkforceAdminHeaders(TENANT_ID, null);
   assert.equal(result.status, 503);
   assert.ok(result.error.includes('not configured'));
 });
