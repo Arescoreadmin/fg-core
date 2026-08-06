@@ -125,6 +125,7 @@ function CreateEngagementForm({ onCreated }: { onCreated: (e: Engagement) => voi
             <Input
               id="eng-scheduled-date"
               type="date"
+              className="[color-scheme:light] dark:[color-scheme:dark]"
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
             />
