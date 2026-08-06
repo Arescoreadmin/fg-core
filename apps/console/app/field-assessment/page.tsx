@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@fg/ui';
@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/field-assessment/StatusBadge';
 import { ConsoleTopNav } from '@/components/ConsoleTopNav';
 import {
   fieldAssessmentApi,
+  setFieldAssessmentTenant,
   type Engagement,
   type AssessmentType,
   type CreateEngagementPayload,
@@ -145,6 +146,10 @@ function CreateEngagementForm({ onCreated }: { onCreated: (e: Engagement) => voi
 
 export default function FieldAssessmentListPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tenantId = searchParams.get('tenant_id') ?? undefined;
+  setFieldAssessmentTenant(tenantId);
+
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +176,7 @@ export default function FieldAssessmentListPage() {
   function handleCreated(eng: Engagement) {
     setShowCreate(false);
     setEngagements((prev) => [eng, ...prev]);
-    router.push(`/field-assessment/${eng.id}`);
+    router.push(`/field-assessment/${eng.id}${tenantId ? `?tenant_id=${tenantId}` : ''}`);
   }
 
   return (
@@ -243,9 +248,9 @@ export default function FieldAssessmentListPage() {
                 <TableRow
                   key={eng.id}
                   className="cursor-pointer"
-                  onClick={() => router.push(`/field-assessment/${eng.id}`)}
+                  onClick={() => router.push(`/field-assessment/${eng.id}${tenantId ? `?tenant_id=${tenantId}` : ''}`)}
                   tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && router.push(`/field-assessment/${eng.id}`)}
+                  onKeyDown={(e) => e.key === 'Enter' && router.push(`/field-assessment/${eng.id}${tenantId ? `?tenant_id=${tenantId}` : ''}`)}
                   aria-label={`Open engagement: ${eng.client_name}`}
                 >
                   <TableCell>

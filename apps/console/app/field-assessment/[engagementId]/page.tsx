@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fg/ui';
@@ -38,6 +38,7 @@ import { QuestionnairePanel } from '@/components/field-assessment/QuestionnaireP
 import { ConsoleTopNav } from '@/components/ConsoleTopNav';
 import {
   fieldAssessmentApi,
+  setFieldAssessmentTenant,
   type Engagement,
   type EngagementStatus,
   type EngagementSummary,
@@ -201,6 +202,8 @@ function AuditEventModal({ event, engagementId, onClose }: { event: AuditEvent; 
 export default function EngagementWorkspacePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  setFieldAssessmentTenant(searchParams.get('tenant_id') ?? undefined);
   const engagementId = params.engagementId as string;
 
   const [engagement, setEngagement] = useState<Engagement | null>(null);
