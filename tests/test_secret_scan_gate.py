@@ -84,13 +84,17 @@ def test_detects_aws_secret_in_comment() -> None:
 
 def test_ignores_github_actions_colon_form() -> None:
     """YAML env block uses ':' not '=' — name-only, not matched by detector."""
-    line = "      AWS_SECRET_ACCESS_KEY: ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}\n"
+    line = (
+        "      AWS_SECRET_ACCESS_KEY: ${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}\n"
+    )
     assert not _scan(line)
 
 
 def test_ignores_github_actions_inline_equals() -> None:
     """Inline shell assignment with GH Actions injection — filtered by ${{ }}."""
-    line = "export AWS_SECRET_ACCESS_KEY=${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}\n"
+    line = (
+        "export AWS_SECRET_ACCESS_KEY=${{ secrets.FG_BACKUP_R2_SECRET_ACCESS_KEY }}\n"
+    )
     assert not _scan(line)
 
 
