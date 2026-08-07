@@ -215,7 +215,8 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [clientId, setClientId] = useState('');
+  const [engagements, setEngagements] = useState<{ id: string; client_name: string; status: string }[]>([]);
+  const [engagementsLoading, setEngagementsLoading] = useState(false);
   const [engagementId, setEngagementId] = useState('');
   const [portalRole, setPortalRole] = useState('general');
   const [ttlDays, setTtlDays] = useState(365);
@@ -234,14 +235,31 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Load tenant-owned engagements from server when the create modal opens.
+  // Uses H0-PR3 API — server validates ownership; browser never decides which
+  // engagements belong to this tenant.
+  useEffect(() => {
+    if (!showCreate) return;
+    setEngagementsLoading(true);
+    coreApi<{ items: { id: string; client_name: string; status: string }[] }>(
+      `admin/identity/tenants/${tenantId}/engagements`,
+      tenantId,
+    )
+      .then(r => { setEngagements(r.items ?? []); })
+      .catch(() => { setEngagements([]); })
+      .finally(() => { setEngagementsLoading(false); });
+  }, [showCreate, tenantId]);
+
   async function handleCreate() {
     setSubmitting(true); setError(null); setGrantEmailStatus('idle');
     try {
+      // client_id is intentionally omitted — the server derives it from the
+      // engagement record after validating ownership.
       const r = await coreApi<{ raw_secret: string; portal_login_url: string; portal_role: string; expires_at?: string }>('portal/grants', tenantId, {
         method: 'POST',
-        body: JSON.stringify({ client_id: clientId, engagement_id: engagementId, portal_role: portalRole, ttl_days: ttlDays }),
+        body: JSON.stringify({ engagement_id: engagementId, portal_role: portalRole, ttl_days: ttlDays }),
       });
-      setCreated(r); setShowCreate(false); setClientId(''); setEngagementId('');
+      setCreated(r); setShowCreate(false); setEngagementId('');
       await load();
       // Auto-send portal credentials if recipient email provided
       if (recipientEmail) {
@@ -316,8 +334,20 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
         <div style={s.backdrop}>
           <div style={s.modal}>
             <h2 style={s.modalTitle}>Create portal grant</h2>
-            <label style={s.field}>Client ID<input style={s.input} value={clientId} onChange={e => setClientId(e.target.value)} placeholder="acme-corp" /></label>
-            <label style={s.field}>Engagement ID<input style={s.input} value={engagementId} onChange={e => setEngagementId(e.target.value)} placeholder="acme-corp-assessment-2026" /></label>
+            <label style={s.field}>
+              Engagement
+              <select
+                style={s.input}
+                value={engagementId}
+                onChange={e => setEngagementId(e.target.value)}
+                disabled={engagementsLoading}
+              >
+                <option value="">{engagementsLoading ? 'Loading…' : engagements.length === 0 ? 'No engagements found' : 'Select engagement…'}</option>
+                {engagements.map(e => (
+                  <option key={e.id} value={e.id}>{e.client_name} ({e.status})</option>
+                ))}
+              </select>
+            </label>
             <label style={s.field}>Portal view type
               <select style={s.input} value={portalRole} onChange={e => setPortalRole(e.target.value)}>
                 {PORTAL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>)}
@@ -330,7 +360,7 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
             <label style={s.field}>Recipient name<input style={s.input} value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="Jane Smith" /></label>
             <div style={s.modalActions}>
               <button style={s.secondaryBtn} onClick={() => setShowCreate(false)} disabled={submitting}>Cancel</button>
-              <button style={s.primaryBtn} onClick={handleCreate} disabled={submitting || !clientId || !engagementId}>{submitting ? 'Creating…' : recipientEmail ? 'Create & email' : 'Create grant'}</button>
+              <button style={s.primaryBtn} onClick={handleCreate} disabled={submitting || !engagementId}>{submitting ? 'Creating…' : recipientEmail ? 'Create & email' : 'Create grant'}</button>
             </div>
           </div>
         </div>

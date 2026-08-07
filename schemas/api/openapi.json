@@ -11584,10 +11584,6 @@
       "CreateGrantRequest": {
         "additionalProperties": false,
         "properties": {
-          "client_id": {
-            "title": "Client Id",
-            "type": "string"
-          },
           "engagement_id": {
             "title": "Engagement Id",
             "type": "string"
@@ -11604,7 +11600,6 @@
           }
         },
         "required": [
-          "client_id",
           "engagement_id"
         ],
         "title": "CreateGrantRequest",

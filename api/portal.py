@@ -30,6 +30,8 @@ from services.portal_grant_service import (
     _list_canonical_engagement_ids,
     portal_grant_svc,
 )
+from services.field_assessment.store import get_engagement
+from services.field_assessment.models import EngagementNotFound
 from services.identity_resolver import IdentityResolver, IdentityResolutionError
 from api.identity_providers.auth0 import validate_auth0_token
 from api.notifications.email import build_invitation_url, send_portal_invitation
@@ -361,7 +363,6 @@ def list_portal_grants(
 
 class CreateGrantRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    client_id: str
     engagement_id: str
     portal_role: str = "general"
     ttl_days: int = 365
@@ -407,11 +408,28 @@ def create_portal_grant(
             ),
         )
 
+    # Ownership gate: engagement must exist in this tenant.
+    # Returns ENGAGEMENT_NOT_FOUND for both missing and cross-tenant cases
+    # to avoid leaking whether the engagement exists in another tenant.
+    try:
+        eng = get_engagement(db, engagement_id=body.engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "ENGAGEMENT_NOT_FOUND",
+                f"engagement {body.engagement_id!r} not found for this tenant",
+            ),
+        )
+
+    # client_id is derived from the engagement record — never from the request body.
+    client_id = eng.client_name
+
     try:
         result = portal_grant_svc.create_grant(
             db,
             tenant_id=tenant_id,
-            client_id=body.client_id,
+            client_id=client_id,
             engagement_id=body.engagement_id,
             created_by=actor,
             ttl_days=body.ttl_days,
@@ -431,7 +449,7 @@ def create_portal_grant(
         entity_id=result.credential_id,
         payload={
             "credential_id": result.credential_id,
-            "client_id": result.client_id,
+            "client_id": client_id,
             "portal_role": role,
         },
     )
