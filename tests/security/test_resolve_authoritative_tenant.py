@@ -178,7 +178,9 @@ class TestMutationRouteIntegration:
         tenant_a = "h0pr2-integ-cross-a-01"
         tenant_b = "h0pr2-integ-cross-b-01"
         app = build_app(auth_enabled=True, api_key="")
-        key_a = mint_key("admin:read", "admin:write", tenant_id=tenant_a, ttl_seconds=3600)
+        key_a = mint_key(
+            "admin:read", "admin:write", tenant_id=tenant_a, ttl_seconds=3600
+        )
         c = TestClient(app)
 
         r = c.put(
@@ -196,7 +198,9 @@ class TestMutationRouteIntegration:
         tenant_a = "h0pr2-integ-invite-a-01"
         tenant_b = "h0pr2-integ-invite-b-01"
         app = build_app(auth_enabled=True, api_key="")
-        key_a = mint_key("admin:read", "admin:write", tenant_id=tenant_a, ttl_seconds=3600)
+        key_a = mint_key(
+            "admin:read", "admin:write", tenant_id=tenant_a, ttl_seconds=3600
+        )
         c = TestClient(app)
 
         r = c.post(

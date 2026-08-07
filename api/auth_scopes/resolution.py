@@ -1023,9 +1023,7 @@ def resolve_authoritative_tenant(
                                           disagreement; not re-emitted here
     """
     resolved = bind_tenant_id(request, route_tenant_id)
-    actor_tenant = (
-        str(actor_ctx.tenant_id).strip() if actor_ctx.tenant_id else None
-    )
+    actor_tenant = str(actor_ctx.tenant_id).strip() if actor_ctx.tenant_id else None
     if actor_tenant and actor_tenant != resolved:
         _log_auth_event(
             "identity.tenant.stale_session",
