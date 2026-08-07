@@ -21162,5 +21162,5 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Security impact:** None — this is a typing-only test fix for existing portal grant ownership coverage.
 - **Schema/API impact:** None.
 - **Tests added:** None.
-- **Validation:** `python tools/ci/guard_pr_fix_log.py --base origin/main --head HEAD`.
+- **Validation:** `scripts/ci/enforce_pr_fix_log.sh`; `.venv/bin/python -m pytest tests/security/test_portal_grant_ownership.py`.
 - **Result:** PASS.
