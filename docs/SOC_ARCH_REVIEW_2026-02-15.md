@@ -7,12 +7,12 @@
 **Security posture:** Route uses `resolve_authoritative_tenant()` (H0-PR2) for tenant authority — both the key-binding check (`bind_tenant_id`) and the actor session cross-check run before any DB access. The `list_engagements()` store call always filters by `tenant_id = resolved`, so a DB query cannot return engagements from another tenant regardless of key binding. Response is a minimal projection (`id`, `client_name`, `status`) — no sensitive fields, no metadata, no assessor identifiers. Requires `admin:read` scope + `assessment.read` permission; `governance:read`-only keys are rejected 403. No new permissions added to the permission registry.
 
 **Critical-path files changed:**
-- `api/admin_identity.py`: one new `GET` route + `EngagementSelectorItem` model + two new imports (`FaEngagement`, `list_engagements`). No existing routes modified.
-- `contracts/core/openapi.json`: one new path entry for the selector route.
-- `BLUEPRINT_STAGED.md`, `CONTRACT.md`: contract authority SHA updated to match new openapi.json.
-- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate`.
+- `api/admin_identity.py`: one new `GET` route + `EngagementSelectorItem` + `EngagementSelectorList` models + imports (`FaEngagement`, `list_engagements`, `func`, `select`, `Query`). Response carries `items`, `next_cursor`, `total_count`. No existing routes modified.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`: new path + `EngagementSelectorList` schema entry.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`: contract authority SHA updated.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate` (topology hash changes because new response schema added).
 
-**Tests:** 5 integration tests via `build_app`/`TestClient` — own-tenant 200+data, cross-tenant 403, empty-state [], server-side isolation (tenant B excluded from A's list), wrong-scope 403.
+**Tests:** 6 integration tests via `build_app`/`TestClient` — own-tenant 200+data+total_count, cross-tenant 403, empty-state `{items:[],total_count:0,next_cursor:null}`, server-side isolation, wrong-scope 403, cursor pagination (2-page walk with distinct IDs + consistent total_count).
 
 ## 2026-08-07 — SOC-HIGH-002 — H0-PR2: Canonical tenant authority resolver for admin mutations (#616)
 
