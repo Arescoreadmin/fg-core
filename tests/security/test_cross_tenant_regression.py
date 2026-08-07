@@ -141,9 +141,9 @@ class TestCrossTenantRegression:
             json={},
             headers={"x-api-key": gov_b},
         )
-        assert r.status_code in (403, 404), r.text
-        if r.status_code == 404:
-            assert r.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
+        # Must be 404 — a 403 would confirm resource existence to the attacker.
+        assert r.status_code == 404, r.text
+        assert r.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
 
     def test_ct4_engagement_read_blocked_across_tenant(self, build_app):
         """GET /field-assessment/engagements/{id} — tenant B key + tenant A's engagement → 404."""
@@ -161,9 +161,9 @@ class TestCrossTenantRegression:
             f"/field-assessment/engagements/{eng_id}",
             headers={"x-api-key": gov_b},
         )
-        assert r.status_code in (403, 404), r.text
-        if r.status_code == 404:
-            assert r.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
+        # Must be 404 — a 403 would confirm resource existence to the attacker.
+        assert r.status_code == 404, r.text
+        assert r.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
 
     def test_ct5_engagement_list_excludes_other_tenant(self, build_app):
         """GET /field-assessment/engagements — tenant B's list never contains tenant A's engagement."""
@@ -259,13 +259,13 @@ class TestCrossTenantRegression:
             f"/field-assessment/engagements/{eng_id}/portal-grants",
             json={},
             headers={"x-api-key": key_b_gov},
-        ).status_code in (403, 404)
+        ).status_code == 404
 
         # 5. B tries to read A's engagement directly
         assert c.get(
             f"/field-assessment/engagements/{eng_id}",
             headers={"x-api-key": key_b_gov},
-        ).status_code in (403, 404)
+        ).status_code == 404
 
         # A's resources must still be fully accessible after all attacks
         r_eng = c.get(
