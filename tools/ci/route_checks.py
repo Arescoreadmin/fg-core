@@ -350,6 +350,7 @@ def _function_has_tenant_binding(
             name = _get_name(nested.func) or ""
             if (
                 name.endswith("bind_tenant_id")
+                or name.endswith("resolve_authoritative_tenant")
                 or name.endswith("require_bound_tenant")
                 or name.endswith("_require_known_tenant")
                 or name.endswith("tenant_db_required")
