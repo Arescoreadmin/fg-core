@@ -235,6 +235,9 @@ def invite_user(
         identity_policy_config_id=config.id,
     )
     inv.identity_type = "human"
+    # Capture id before commit: set_config('app.tenant_id', ..., true) is
+    # transaction-scoped and resets on commit, so post-commit lazy-loads fail RLS.
+    invitation_id = inv.id
     db.commit()
 
     return {
@@ -242,8 +245,8 @@ def invite_user(
         "email": payload.email.lower(),
         "display_name": payload.display_name,
         "role": payload.role,
-        "invitation_id": inv.id,
-        "invitation_url": f"/identity/invitations/{inv.id}",
+        "invitation_id": invitation_id,
+        "invitation_url": f"/identity/invitations/{invitation_id}",
     }
 
 
