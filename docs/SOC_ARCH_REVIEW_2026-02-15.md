@@ -1,3 +1,18 @@
+## 2026-08-07 — SOC-HIGH-002 — H0-PR2: Canonical tenant authority resolver for admin mutations (#616)
+
+**Reviewer:** jcosat | **Classification:** SOC-HIGH-002 (auth subsystem changes: `api/auth_scopes/`; CI gate changes: `tools/ci/route_checks.py`)
+
+**Scope:** Introduces `resolve_authoritative_tenant()` as the single entry point for all tenant-admin mutations. All 9 POST/PUT routes in `api/admin_identity.py` migrated from bare `bind_tenant_id()` to the new resolver. Three new `IdentityEventType` members define the audit taxonomy. `tools/ci/route_checks.py` updated to recognize the new resolver as a tenant-binding call.
+
+**Security posture:** `resolve_authoritative_tenant()` wraps `bind_tenant_id()` (existing key-binding enforcement, unchanged) and adds an explicit `actor_ctx.tenant_id` cross-check. If the actor session claims a different tenant than the route, the request is rejected 403 before reaching any business logic and logged as `identity.tenant.stale_session`. Admin/service keys with `actor_ctx.tenant_id = None` are exempt (unscoped admin keys remain supported — intentional). The route inventory gate (`SOC-P1-001`) continues to classify all 9 migrated routes as `tenant_bound: True` after the `route_checks.py` update. No credentials issued, rotated, or revoked. No new routes. Wire protocol unchanged.
+
+**Critical-path files changed:**
+- `api/auth_scopes/resolution.py`: adds `resolve_authoritative_tenant()` and `TYPE_CHECKING` import for `ActorContext`. No existing functions modified.
+- `api/auth_scopes/__init__.py`: exports `resolve_authoritative_tenant`. No other changes.
+- `tools/ci/route_checks.py`: adds `resolve_authoritative_tenant` to `_function_has_tenant_binding` allowlist so the AST scanner continues to classify migrated routes as tenant-bound. No detection logic removed.
+
+**Tests:** 7 unit tests (resolver branches) + 3 integration tests via `build_app`/`TestClient` (own-tenant 200, cross-tenant 403). fg-fast 496 pass. fg-security 1216 pass. route-inventory-audit OK locally.
+
 ## 2026-08-03 — T4: Portal Named-User Invitation Email Delivery + `/portal/named-users/me`
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH (route inventory, plane registry, topology hash, and contract routes changed; new portal endpoint added; schema migration with SECURITY DEFINER function)

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
-from api.auth_scopes import bind_tenant_id, require_scopes
+from api.auth_scopes import bind_tenant_id, require_scopes, resolve_authoritative_tenant
 from api.entitlements import require_capability
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import (
@@ -538,7 +538,7 @@ def upsert_config(
                 "message": f"mode must be one of {sorted(IDENTITY_MODES)}",
             },
         )
-    bind_tenant_id(request, tenant_id)
+    resolve_authoritative_tenant(request, actor_ctx, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _get_config(db, tenant_id)
@@ -808,7 +808,7 @@ def create_invitation(
                 "message": f"identity_type must be one of {sorted(IDENTITY_TYPES)}",
             },
         )
-    bind_tenant_id(request, tenant_id)
+    resolve_authoritative_tenant(request, actor_ctx, tenant_id)
     db = _admin_db(tenant_id)
     try:
         config = _require_config(db, tenant_id)
@@ -869,7 +869,7 @@ def revoke_invitation(
         )
         if inv is None:
             raise HTTPException(status_code=404, detail={"code": "INVITE_NOT_FOUND"})
-        bind_tenant_id(request, inv.tenant_id)
+        resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         set_tenant_context(db, inv.tenant_id)
         if "revoked" not in INVITATION_TRANSITIONS.get(inv.status, frozenset()):
             raise HTTPException(
@@ -923,7 +923,7 @@ def resend_invitation(
                     "message": f"Cannot resend invitation in status {inv.status!r}",
                 },
             )
-        bind_tenant_id(request, inv.tenant_id)
+        resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         set_tenant_context(db, inv.tenant_id)
         inv.status = "pending"
         inv.revoked_at = None
@@ -2144,7 +2144,7 @@ def request_approval(
         )
         if inv is None:
             raise HTTPException(status_code=404, detail="Invitation not found")
-        bind_tenant_id(request, inv.tenant_id)
+        resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         inv.approval_required = True
         inv.approval_state = "pending"
         if body.reason:
@@ -2187,7 +2187,7 @@ def approve_invitation(
         )
         if inv is None:
             raise HTTPException(status_code=404, detail="Invitation not found")
-        bind_tenant_id(request, inv.tenant_id)
+        resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         current_state = getattr(inv, "approval_state", "not_required")
         if current_state not in {"pending", "not_required"}:
             raise HTTPException(
@@ -2247,7 +2247,7 @@ def reject_approval(
         )
         if inv is None:
             raise HTTPException(status_code=404, detail="Invitation not found")
-        bind_tenant_id(request, inv.tenant_id)
+        resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         current_state = getattr(inv, "approval_state", "not_required")
         if current_state == "rejected":
             raise HTTPException(
@@ -2430,7 +2430,7 @@ def take_governance_snapshot(
     tenant_id: str,
     actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> dict[str, Any]:
-    bind_tenant_id(request, tenant_id)
+    resolve_authoritative_tenant(request, actor_ctx, tenant_id)
     db = _admin_db(tenant_id)
     try:
         import json as _json
@@ -3380,7 +3380,7 @@ def create_governance_action(
     Enforces the state machine — rejected and implemented are terminal;
     invalid transitions return 409.
     """
-    bind_tenant_id(request, tenant_id)
+    resolve_authoritative_tenant(request, actor_ctx, tenant_id)
 
     if body.action_state not in _VALID_ACTION_STATES:
         raise HTTPException(

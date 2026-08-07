@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-60 — fix(identity): canonical tenant authority resolver for admin mutations (H0-PR2)
+
+- **PR/Branch:** `fix/h0-pr2-canonical-tenant-authority` (#616)
+- **Date:** 2026-08-07
+- **Files changed:** `api/auth_scopes/resolution.py`, `api/auth_scopes/__init__.py`, `api/identity_authority/audit.py`, `api/admin_identity.py`, `tools/ci/route_checks.py`, `tests/security/test_resolve_authoritative_tenant.py`, `ROADMAP.md`, `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`
+- **Root cause:** All 9 POST/PUT mutation routes in `api/admin_identity.py` called bare `bind_tenant_id()`, which validates API key binding but never cross-checks `actor_ctx.tenant_id`. A session carrying a stale or cross-tenant claim could proceed to business logic without a rejection or structured audit event.
+- **Fix:** Introduced `resolve_authoritative_tenant(request, actor_ctx, route_tenant_id)` in `api/auth_scopes/resolution.py`. Wraps `bind_tenant_id()` and adds explicit `actor_ctx.tenant_id` cross-check: mismatch → 403 + `identity.tenant.stale_session` log event. Success → `identity.tenant.context_verified` log event. All 9 mutation routes migrated. GET routes unchanged. Added `resolve_authoritative_tenant` to the `_function_has_tenant_binding` allowlist in `tools/ci/route_checks.py` so the route inventory continues to classify migrated routes as `tenant_bound: True`.
+- **Behavioral impact:** Mutations now fail closed if actor session tenant disagrees with route tenant. Admin/service keys with `actor_ctx.tenant_id = None` are exempt from the cross-check (intentional — unscoped admin keys remain supported).
+- **Security impact:** Closes the actor-context cross-check gap on all 9 admin mutation routes. Adds structured audit events distinguishing stale-session rejection (`identity.tenant.stale_session`) from key/route disagreement (`identity.auth.tenant_mismatch`, emitted by `bind_tenant_id`).
+- **Schema/API impact:** None. Wire protocol unchanged. No new routes.
+- **Tests added:** `tests/security/test_resolve_authoritative_tenant.py` — 7 unit tests (resolver branches) + 3 integration tests through real `build_app`/`TestClient` (own-tenant 200, cross-tenant 403 on `upsert_config` and `create_invitation`). 10/10 PASS. fg-fast 496 pass, fg-security 1216 pass.
+- **Result:** All gates pass post-fix. H0-PR2 of P1-01 TIAP H0 sequence.
+
 ## P-59 — fix(core): register /workforce/users as admin-internal path in _is_admin_route_path (AUTH-001 part 2)
 
 - **PR/Branch:** `fix/h0-pr1-workforce-admin-credentials`

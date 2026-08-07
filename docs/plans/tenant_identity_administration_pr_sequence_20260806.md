@@ -68,7 +68,14 @@ All H0 PRs are bounded by the launch freeze. Only production defects discovered 
 **PR ID:** H0-PR2  
 **Title:** Canonical tenant-context contract for tenant admin actions  
 **Horizon:** H0 — RC1 Launch Repair  
+**Status:** IMPLEMENTED / VALIDATING — 2026-08-07; branch `fix/h0-pr2-canonical-tenant-authority` (not yet committed or merged)
 **Objective:** Enforce one tenant authority path across BFF and Core; reject payload tenant/client overrides.
+
+**What shipped:**
+- `resolve_authoritative_tenant(request, actor_ctx, route_tenant_id)` added to `api/auth_scopes/resolution.py` — single canonical resolver wrapping `bind_tenant_id()` with explicit actor_ctx.tenant_id cross-check
+- 3 new `IdentityEventType` members with explicit taxonomy: `TENANT_CONTEXT_VERIFIED` (all agree), `STALE_TENANT_SESSION` (actor session claims different tenant than route), `RESOURCE_TENANT_MISMATCH` (reserved for downstream object-ownership checks). `identity.auth.tenant_mismatch` remains the bind_tenant_id key/route event — not reused here.
+- All 9 POST/PUT mutation routes in `api/admin_identity.py` migrated from bare `bind_tenant_id()` to `resolve_authoritative_tenant()`
+- Unit tests (resolver helper) + integration test (real route dependency stack) in `tests/security/test_resolve_authoritative_tenant.py`
 
 **Exact scope:**
 - Shared route/header/body contract: tenant comes from route or trusted header, not mutation payload
