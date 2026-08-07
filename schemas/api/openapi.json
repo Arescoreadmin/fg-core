@@ -15083,6 +15083,29 @@
         "title": "EngagementResponse",
         "type": "object"
       },
+      "EngagementSelectorItem": {
+        "properties": {
+          "client_name": {
+            "title": "Client Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "client_name",
+          "status"
+        ],
+        "title": "EngagementSelectorItem",
+        "type": "object"
+      },
       "EngagementSummaryResponse": {
         "properties": {
           "client_name": {

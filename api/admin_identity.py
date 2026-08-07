@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
 from api.auth_scopes import bind_tenant_id, require_scopes, resolve_authoritative_tenant
+from api.db_models_field_assessment import FaEngagement
 from api.entitlements import require_capability
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import (
@@ -35,6 +36,7 @@ from api.identity.store import (
     TenantIdentityStore,
     emit_identity_audit_event,
 )
+from services.field_assessment.store import list_engagements
 from api.identity.tenant_identity_policy import (
     IDENTITY_MODES,
     IdentityPolicyError,
@@ -373,6 +375,12 @@ class GovernanceActionBody(BaseModel):
     outcome: str | None = None
     deferred_until: str | None = None
     snapshot_id: str | None = None
+
+
+class EngagementSelectorItem(BaseModel):
+    id: str
+    client_name: str
+    status: str
 
 
 # ── Governance action state machine ──────────────────────────────────────────
@@ -786,6 +794,29 @@ def list_invitations(
             "tenant_id": tenant_id,
             "invitations": [_serialize_invitation(r) for r in rows],
         }
+    finally:
+        db.close()
+
+
+@router.get(
+    "/tenants/{tenant_id}/engagements",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def list_tenant_engagements(
+    request: Request,
+    tenant_id: str,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
+) -> list[EngagementSelectorItem]:
+    resolved = resolve_authoritative_tenant(request, actor_ctx, tenant_id)
+    db = _admin_db(resolved)
+    try:
+        rows = list_engagements(
+            db, tenant_id=resolved, status_filter=None, limit=100, cursor=None
+        )
+        return [
+            EngagementSelectorItem(id=r.id, client_name=r.client_name, status=r.status)
+            for r in rows
+        ]
     finally:
         db.close()
 

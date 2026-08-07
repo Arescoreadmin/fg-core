@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-61 — feat(identity): tenant-scoped engagement selector API (H0-PR3)
+
+- **PR/Branch:** `fix/h0-pr3-engagement-selector` (open)
+- **Date:** 2026-08-07
+- **Files changed:** `api/admin_identity.py`, `tests/security/test_admin_engagement_selector.py`, `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `ROADMAP.md`, `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`
+- **Root cause:** No admin-scoped read path existed for listing tenant-owned engagements. Tenant admin UI required users to type raw engagement IDs, and H0-PR4 (portal grant ownership validation) needs a safe engagement list to validate against.
+- **Fix:** Added `GET /admin/identity/tenants/{tenant_id}/engagements` to `api/admin_identity.py`. Uses `resolve_authoritative_tenant()` (H0-PR2) for full authority chain; queries `list_engagements()` from `services/field_assessment/store.py` filtered strictly by resolved tenant_id; returns minimal `EngagementSelectorItem(id, client_name, status)` projection. Requires `admin:read` scope + `assessment.read` permission.
+- **Behavioral impact:** New read endpoint; no existing behaviour changed. Keys with only `governance:read` scope → 403.
+- **Security impact:** Cross-tenant access impossible: `resolve_authoritative_tenant` rejects key/route mismatch before DB access; `list_engagements` filters by resolved tenant_id; response projection omits assessor identifiers and engagement metadata.
+- **Schema/API impact:** New `GET` route in `contracts/core/openapi.json`; authority SHA updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`; route inventory regenerated.
+- **Tests added:** `tests/security/test_admin_engagement_selector.py` — 5 integration tests (own-tenant 200+data, cross-tenant 403, empty-state [], server-side isolation, wrong-scope 403). 5/5 PASS. fg-fast PASS. fg-security PASS.
+- **Result:** H0-PR3 of P1-01 TIAP H0 sequence; unblocks H0-PR4.
+
 ## P-60 — fix(identity): canonical tenant authority resolver for admin mutations (H0-PR2)
 
 - **PR/Branch:** `fix/h0-pr2-canonical-tenant-authority` (#616)
