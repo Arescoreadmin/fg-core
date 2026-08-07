@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-63 — security(portal): H0-PR5 — cross-tenant regression suite — PR #619
+
+- **PR/Branch:** `fix/h0-pr5-cross-tenant-regression` (#619)
+- **Date:** 2026-08-07
+- **Files changed:** `tests/security/test_cross_tenant_regression.py`, `tests/security/PLAN_H0_PR5.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** No systematic cross-tenant regression coverage existed for the portal grant lifecycle beyond the creation gate (H0-PR4). The routes `GET /portal/grants`, `DELETE /portal/grants/{id}`, `GET /field-assessment/engagements/{id}`, `GET /field-assessment/engagements`, and `POST /field-assessment/engagements/{id}/portal-grants` all had correct tenant_id filtering in production code but no dedicated cross-tenant security tests exercising those filters end-to-end.
+- **Fix:** Added `tests/security/test_cross_tenant_regression.py` — 7 tests (CT-1 through CT-7) proving the cross-tenant boundary holds across the full engagement and portal grant lifecycle. CT-7 is the compositional proof: all attack vectors fired in sequence, followed by verification that tenant A's resources remain fully accessible.
+- **Behavioral impact:** None — no production code changes. Tests only.
+- **Security impact:** Establishes regression coverage for the five downstream routes not covered by H0-PR4. If any of these routes regresses (tenant_id filter removed or bypassed), CI will catch it.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/security/test_cross_tenant_regression.py` — CT-1 through CT-7, all PASS.
+- **Result:** PASS (7 passed in 19.95s).
+
+---
+
 ## P-62 — security(portal): H0-PR4 — enforce tenant ownership on portal grant creation — PR #618
 
 - **PR/Branch:** `fix/h0-pr4-portal-grant-ownership` (#618)
