@@ -291,11 +291,11 @@ test('operations-center registry entry has correct route', () => {
   assert.match(src, /\/operations-center/);
 });
 
-test('operations-center registry entry is visible', () => {
+test('operations-center registry entry is launch-gated (hidden)', () => {
   const src = readRepo('packages/navigation/src/registrations/console.ts');
   const block = src.match(/operations-center[\s\S]{0,400}/);
   assert.ok(block, 'operations-center entry not found');
-  assert.match(block[0], /visibility.*visible|visible.*visibility/);
+  assert.match(block[0], /visibility.*hidden|hidden.*visibility/);
 });
 
 // ─── H: Sidebar icon mapping ──────────────────────────────────────────────────
