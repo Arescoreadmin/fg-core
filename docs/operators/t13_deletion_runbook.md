@@ -103,6 +103,20 @@ Execute in this order. Each step is a separate SQL transaction. Do not combine i
 
 **Substitution:** replace `<ENGAGEMENT_ID>` and `<TENANT_ID>` with the actual values throughout.
 
+### Step 0 — Unlock locked evidence (required if any locked rows exist)
+
+`fa_evidence_delete_guard()` blocks deletion of rows linked to evidence in `locked` state. Section 2.1 authorizes purge of locked evidence after confirmed report delivery. Run this step only after verifying delivery in §2.3:
+
+```sql
+UPDATE fa_evidence
+SET lifecycle_state = 'pending_purge'
+WHERE engagement_id = '<ENGAGEMENT_ID>'
+  AND tenant_id = '<TENANT_ID>'
+  AND lifecycle_state = 'locked';
+```
+
+If the lifecycle check in §2.1 returned no locked rows, skip this step.
+
 ### Step 1 — Evidence links
 
 ```sql
@@ -119,13 +133,9 @@ WHERE engagement_id = '<ENGAGEMENT_ID>'
   AND tenant_id = '<TENANT_ID>';
 ```
 
-### Step 3 — Evidence report links
+### Step 3 — Evidence report links (SKIP — append-only audit ledger)
 
-```sql
-DELETE FROM fa_evidence_report_links
-WHERE engagement_id = '<ENGAGEMENT_ID>'
-  AND tenant_id = '<TENANT_ID>';
-```
+`fa_evidence_report_links` is an append-only audit table protected by `append_only_guard()`. It is subject to 7-year retention per `docs/observability/retention_policy.md §Tier 4` and must NOT be deleted as part of a DPA purge. The link records contain no client PII (only evidence IDs and report IDs). Skip this step.
 
 ### Step 4 — Scan results and associated data
 
@@ -308,23 +318,23 @@ Run the post-purge verification queries. Record results:
 
 | Field | Value |
 |---|---|
-| Drill date | |
-| Operator | |
+| Drill date | 2026-08-06 |
+| Operator | jcosat |
 | DPA trigger type simulated | Day-90 (Trigger 1) |
-| Test tenant used | |
-| Test engagement ID | |
-| Pre-purge: scan_results count | |
-| Pre-purge: observations count | |
-| Pre-purge: report_versions count | |
-| Pre-purge: audit_events count | |
-| Post-purge: scan_results count | |
-| Post-purge: findings count | |
-| Post-purge: report_versions count | |
-| Post-purge: audit_events count (must be > 0) | |
-| Engagement status after purge | |
+| Test tenant used | `fg-t13-purge-test-20260806` |
+| Test engagement ID | `02ce5049a7c94963073458f756470dfa` |
+| Pre-purge: scan_results count | 3 |
+| Pre-purge: observations count | 0 |
+| Pre-purge: report_versions count | 0 |
+| Pre-purge: audit_events count | preserved (not counted) |
+| Post-purge: scan_results count | 3 (orphaned by locked-evidence guard — Step 0 not executed; see t13_evidence_20260806.md Gap 1) |
+| Post-purge: findings count | 0 |
+| Post-purge: report_versions count | 0 |
+| Post-purge: audit_events count (must be > 0) | preserved |
+| Engagement status after purge | `purged` / `[PURGED]` |
 | Legal hold check result | No active holds |
-| Lifecycle lock check result | |
-| Purge completed within deadline | [ ] Yes |
+| Lifecycle lock check result | 2 locked evidence rows (43dfa222..., f346f841...) — Step 0 not executed in drill (gap identified and patched) |
+| Purge completed within deadline | [x] Yes — CONDITIONAL PASS; evidence: `docs/governance/status/t13_evidence_20260806.md` |
 
 ---
 
