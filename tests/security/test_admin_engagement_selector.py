@@ -11,7 +11,6 @@ Invariants proved:
 from __future__ import annotations
 
 import os
-import pytest
 
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_AUTH_ENABLED", "1")
@@ -45,7 +44,9 @@ class TestAdminEngagementSelector:
         from api.auth_scopes import mint_key
 
         app = build_app(auth_enabled=True, api_key="")
-        gov_key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A, ttl_seconds=3600)
+        gov_key = mint_key(
+            "governance:read", "governance:write", tenant_id=_TENANT_A, ttl_seconds=3600
+        )
         admin_key = mint_key("admin:read", tenant_id=_TENANT_A, ttl_seconds=3600)
         c = TestClient(app)
 
@@ -100,8 +101,12 @@ class TestAdminEngagementSelector:
         from api.auth_scopes import mint_key
 
         app = build_app(auth_enabled=True, api_key="")
-        gov_a = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A, ttl_seconds=3600)
-        gov_b = mint_key("governance:read", "governance:write", tenant_id=_TENANT_B, ttl_seconds=3600)
+        gov_a = mint_key(
+            "governance:read", "governance:write", tenant_id=_TENANT_A, ttl_seconds=3600
+        )
+        gov_b = mint_key(
+            "governance:read", "governance:write", tenant_id=_TENANT_B, ttl_seconds=3600
+        )
         admin_a = mint_key("admin:read", tenant_id=_TENANT_A, ttl_seconds=3600)
         c = TestClient(app)
 
@@ -123,7 +128,9 @@ class TestAdminEngagementSelector:
         from api.auth_scopes import mint_key
 
         app = build_app(auth_enabled=True, api_key="")
-        gov_only_key = mint_key("governance:read", tenant_id=_TENANT_A, ttl_seconds=3600)
+        gov_only_key = mint_key(
+            "governance:read", tenant_id=_TENANT_A, ttl_seconds=3600
+        )
         c = TestClient(app)
 
         r = c.get(
