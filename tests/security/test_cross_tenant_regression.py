@@ -82,10 +82,18 @@ class TestCrossTenantRegression:
         eng_id = _create_engagement(c, gov_a)
         grant_id = _create_grant(c, _admin_write_key(mint_key, _TENANT_A), eng_id)
 
-        r = c.get("/portal/grants", headers={"x-api-key": _admin_read_key(mint_key, _TENANT_B)})
+        r = c.get(
+            "/portal/grants",
+            headers={"x-api-key": _admin_read_key(mint_key, _TENANT_B)},
+        )
         assert r.status_code == 200, r.text
-        ids = [g.get("grant_id") or g.get("credential_id") for g in r.json().get("items", [])]
-        assert grant_id not in ids, "tenant A's grant must not appear in tenant B's list"
+        ids = [
+            g.get("grant_id") or g.get("credential_id")
+            for g in r.json().get("items", [])
+        ]
+        assert grant_id not in ids, (
+            "tenant A's grant must not appear in tenant B's list"
+        )
 
     def test_ct2_grant_delete_blocked_across_tenant(self, build_app):
         """DELETE /portal/grants/{id} — tenant B cannot revoke tenant A's grant; grant survives."""
@@ -111,14 +119,23 @@ class TestCrossTenantRegression:
 
         # Tenant A's grant must still exist AND be active — ID presence alone does
         # not prove the revoke didn't partially succeed (list includes revoked items).
-        r2 = c.get("/portal/grants", headers={"x-api-key": _admin_read_key(mint_key, _TENANT_A)})
+        r2 = c.get(
+            "/portal/grants",
+            headers={"x-api-key": _admin_read_key(mint_key, _TENANT_A)},
+        )
         assert r2.status_code == 200, r2.text
         items = r2.json().get("items", [])
         match = next(
-            (g for g in items if (g.get("grant_id") or g.get("credential_id")) == grant_id),
+            (
+                g
+                for g in items
+                if (g.get("grant_id") or g.get("credential_id")) == grant_id
+            ),
             None,
         )
-        assert match is not None, "tenant A's grant must still exist after B's revoke attempt"
+        assert match is not None, (
+            "tenant A's grant must still exist after B's revoke attempt"
+        )
         assert match.get("status") == "active", (
             f"tenant A's grant must still be active after B's revoke attempt, got: {match.get('status')}"
         )
@@ -180,7 +197,9 @@ class TestCrossTenantRegression:
         r = c.get("/field-assessment/engagements", headers={"x-api-key": gov_b})
         assert r.status_code == 200, r.text
         ids = [item["id"] for item in r.json().get("items", [])]
-        assert eng_id not in ids, "tenant A's engagement must not appear in tenant B's list"
+        assert eng_id not in ids, (
+            "tenant A's engagement must not appear in tenant B's list"
+        )
 
     def test_ct6_error_codes_are_uniform_no_oracle_leakage(self, build_app):
         """Cross-tenant errors use not-found codes — never codes that reveal resource existence."""
@@ -237,43 +256,73 @@ class TestCrossTenantRegression:
         key_b_gov = _gov_key(mint_key, _TENANT_B)
 
         # 1. B tries to revoke A's grant
-        assert c.delete(
-            f"/portal/grants/{grant_id}", headers={"x-api-key": key_b_write}
-        ).status_code == 404
+        assert (
+            c.delete(
+                f"/portal/grants/{grant_id}", headers={"x-api-key": key_b_write}
+            ).status_code
+            == 404
+        )
 
         # 2. B's grant list must not include A's grant
-        r_list = c.get("/portal/grants", headers={"x-api-key": _admin_read_key(mint_key, _TENANT_B)})
+        r_list = c.get(
+            "/portal/grants",
+            headers={"x-api-key": _admin_read_key(mint_key, _TENANT_B)},
+        )
         assert r_list.status_code == 200
-        b_ids = [g.get("grant_id") or g.get("credential_id") for g in r_list.json().get("items", [])]
+        b_ids = [
+            g.get("grant_id") or g.get("credential_id")
+            for g in r_list.json().get("items", [])
+        ]
         assert grant_id not in b_ids
 
         # 3. B tries POST /portal/grants with A's engagement_id
-        assert c.post(
-            "/portal/grants",
-            json={"engagement_id": eng_id, "portal_role": "general", "ttl_days": 30},
-            headers={"x-api-key": key_b_write},
-        ).status_code == 404
+        assert (
+            c.post(
+                "/portal/grants",
+                json={
+                    "engagement_id": eng_id,
+                    "portal_role": "general",
+                    "ttl_days": 30,
+                },
+                headers={"x-api-key": key_b_write},
+            ).status_code
+            == 404
+        )
 
         # 4. B tries engagement-scoped grant route with A's engagement_id
-        assert c.post(
-            f"/field-assessment/engagements/{eng_id}/portal-grants",
-            json={},
-            headers={"x-api-key": key_b_gov},
-        ).status_code == 404
+        assert (
+            c.post(
+                f"/field-assessment/engagements/{eng_id}/portal-grants",
+                json={},
+                headers={"x-api-key": key_b_gov},
+            ).status_code
+            == 404
+        )
 
         # 5. B tries to read A's engagement directly
-        assert c.get(
-            f"/field-assessment/engagements/{eng_id}",
-            headers={"x-api-key": key_b_gov},
-        ).status_code == 404
+        assert (
+            c.get(
+                f"/field-assessment/engagements/{eng_id}",
+                headers={"x-api-key": key_b_gov},
+            ).status_code
+            == 404
+        )
 
         # A's resources must still be fully accessible after all attacks
         r_eng = c.get(
             f"/field-assessment/engagements/{eng_id}", headers={"x-api-key": gov_a}
         )
-        assert r_eng.status_code == 200, f"A's engagement inaccessible after attack chain: {r_eng.text}"
+        assert r_eng.status_code == 200, (
+            f"A's engagement inaccessible after attack chain: {r_eng.text}"
+        )
 
-        r_grants = c.get("/portal/grants", headers={"x-api-key": _admin_read_key(mint_key, _TENANT_A)})
+        r_grants = c.get(
+            "/portal/grants",
+            headers={"x-api-key": _admin_read_key(mint_key, _TENANT_A)},
+        )
         assert r_grants.status_code == 200
-        a_ids = [g.get("grant_id") or g.get("credential_id") for g in r_grants.json().get("items", [])]
+        a_ids = [
+            g.get("grant_id") or g.get("credential_id")
+            for g in r_grants.json().get("items", [])
+        ]
         assert grant_id in a_ids, "A's grant must survive after all B attack attempts"
