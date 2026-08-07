@@ -68,7 +68,7 @@ All H0 PRs are bounded by the launch freeze. Only production defects discovered 
 **PR ID:** H0-PR2  
 **Title:** Canonical tenant-context contract for tenant admin actions  
 **Horizon:** H0 — RC1 Launch Repair  
-**Status:** IMPLEMENTED / VALIDATING — 2026-08-07; branch `fix/h0-pr2-canonical-tenant-authority` (not yet committed or merged)
+**Status:** COMPLETE — 2026-08-07; #616 merged and revalidated on main (fg-fast 496 pass, fg-security 1216 pass, 10 targeted tests pass)
 **Objective:** Enforce one tenant authority path across BFF and Core; reject payload tenant/client overrides.
 
 **What shipped:**
@@ -117,7 +117,16 @@ All H0 PRs are bounded by the launch freeze. Only production defects discovered 
 **PR ID:** H0-PR3  
 **Title:** Tenant-scoped engagement selector API  
 **Horizon:** H0 — RC1 Launch Repair  
+**Status:** IMPLEMENTING — 2026-08-07; branch `fix/h0-pr3-engagement-selector` (open, not yet merged)
 **Objective:** Provide an operator-safe list of engagements owned by the selected tenant; replace raw engagement ID typing.
+
+**What shipped:**
+- `GET /admin/identity/tenants/{tenant_id}/engagements` added to `api/admin_identity.py`
+- Uses `resolve_authoritative_tenant()` (H0-PR2) for tenant authority — key-binding + actor session cross-check before any DB access
+- `list_engagements()` store call always filters by `tenant_id = resolved`; minimal projection: `EngagementSelectorItem(id, client_name, status)`
+- Requires `admin:read` scope + `assessment.read` permission; `governance:read`-only keys → 403
+- 5 integration tests in `tests/security/test_admin_engagement_selector.py`
+- Contract SHA updated; route inventory regenerated
 
 **Exact scope:**
 - Read-only BFF/Core path for tenant-owned engagements

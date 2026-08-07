@@ -15083,6 +15083,62 @@
         "title": "EngagementResponse",
         "type": "object"
       },
+      "EngagementSelectorItem": {
+        "properties": {
+          "client_name": {
+            "title": "Client Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "client_name",
+          "status"
+        ],
+        "title": "EngagementSelectorItem",
+        "type": "object"
+      },
+      "EngagementSelectorList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EngagementSelectorItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "total_count"
+        ],
+        "title": "EngagementSelectorList",
+        "type": "object"
+      },
       "EngagementSummaryResponse": {
         "properties": {
           "client_name": {
