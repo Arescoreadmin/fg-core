@@ -235,19 +235,37 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Load tenant-owned engagements from server when the create modal opens.
-  // Uses H0-PR3 API — server validates ownership; browser never decides which
-  // engagements belong to this tenant.
+  // Load all tenant-owned engagements when the create modal opens.
+  // Follows next_cursor until exhausted so tenants with >100 engagements are
+  // fully represented. Cancellation flag prevents state updates after unmount.
   useEffect(() => {
     if (!showCreate) return;
+    let cancelled = false;
     setEngagementsLoading(true);
-    coreApi<{ items: { id: string; client_name: string; status: string }[] }>(
-      `admin/identity/tenants/${tenantId}/engagements`,
-      tenantId,
-    )
-      .then(r => { setEngagements(r.items ?? []); })
-      .catch(() => { setEngagements([]); })
-      .finally(() => { setEngagementsLoading(false); });
+    (async () => {
+      const all: { id: string; client_name: string; status: string }[] = [];
+      let cursor: string | null = null;
+      try {
+        do {
+          const params = new URLSearchParams({ tenant_id: tenantId });
+          if (cursor) params.set('cursor', cursor);
+          const res = await fetch(
+            `/api/core/admin/identity/tenants/${tenantId}/engagements?${params}`,
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+          if (!res.ok) break;
+          const data: { items: { id: string; client_name: string; status: string }[]; next_cursor?: string | null } = await res.json();
+          all.push(...(data.items ?? []));
+          cursor = data.next_cursor ?? null;
+        } while (cursor);
+        if (!cancelled) setEngagements(all);
+      } catch {
+        if (!cancelled) setEngagements([]);
+      } finally {
+        if (!cancelled) setEngagementsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [showCreate, tenantId]);
 
   async function handleCreate() {
