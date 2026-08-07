@@ -5,90 +5,97 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-06
+**Date:** 2026-08-07
 
 **Current Branch:** `main`
 
-**Current Commit:** `c11c4300` (ops(c1): restore drill PASS 2026-08-06 — C1 backup hardening COMPLETE)
+**Current Commit:** `4bf99a3f` (feat(identity): tenant-scoped engagement selector API (H0-PR3) #617)
 
 **Current PR:** None open.
 
-**Overall Status:** YELLOW → GREEN (C1 CLOSED; C4 is the only remaining engineering gate; L14 is founder track)
+**Overall Status:** GREEN — all 4 launch constraints DONE. v1.0.0-rc1 tagged. Platform ready for first client engagement.
 
-**Launch Confidence (%):** 97
+**Launch Confidence (%):** 99
 
-**Current Critical Path:** ~~C1 backup hardening~~ ✅ → **C4: T8/T9/T10/T13 operator execution** → ~~L14 commercial paper~~ (parallel, founder) → first client onboarding.
+**Current Critical Path:** ~~C1~~ ✅ → ~~C2~~ ✅ → ~~C3~~ ✅ → ~~C4~~ ✅ → ~~H0-PR1~~ ✅ → ~~H0-PR2~~ ✅ → ~~H0-PR3~~ ✅ → **H0-PR4** (portal grant ownership) → **H0-PR5** (cross-tenant regression) → [parallel] **L14** (design partner scheduled, commercial paper).
 
-**Current Phase:** C4 Operational Validation — T8 / T9 / T10 / T13
+**Current Phase:** H0 Post-RC1 — Tenant Identity Administration hardening; L14 commercial (founder track, parallel).
 
-**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — 1 constraint outstanding (C4). C1/C2/C3 all DONE.
+**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — **all 4 constraints DONE.** v1.0.0-rc1 tagged at commit `e1f807dd`. Platform is in FULL GO state.
 
-**Platform Freeze:** ACTIVE — no feature PRs, schema changes, infra changes, or env var additions until first client engagement completes. Exception: production defects discovered during C4 execution.
+**Platform Freeze:** ACTIVE through first client engagement completion. H0-PR4 and H0-PR5 are authorized post-RC1 security hardening (H0 horizon, not new features). H1 and beyond do not start until RC1 is tagged — RC1 is NOW tagged; H1 starts when design partner is active.
 
-**Current DoD Progress:** 10/14 Launch DoD items PASS. L7/L8/L9/L11 → READY TO EXECUTE (runbooks committed). L12 IN PROGRESS (accepted risk; rotate before second engagement). L13 CONDITIONAL on L7. L14 FOUNDER TRACK.
+**Current DoD Progress:** 13/14 gates resolved. L7 PASS (T8). L8 PASS (T9). L9 CONDITIONAL PASS (T10 — portal mechanics proven; data rendering deferred to first engagement). L11 PASS (T13). L12 accepted/deferred (must rotate before second engagement). L13 PASS (L7 complete). L14 FOUNDER TRACK.
 
-**Completed Since Last Update (2026-08-05 → 2026-08-06):**
-- C1 CLOSED 2026-08-06: encrypted scheduled backup (02:00 UTC cron, R2 offsite); restore drill PASS (17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches). Evidence: `docs/governance/status/restore_drill_evidence_20260806.md`.
-- fix(backup): `fg_backup.sh` migrated from `alembic_version` to `schema_migrations` (commit 2f1d41f4).
-- fix(db): migration 0173 — dropped orphaned production function referencing `alembic_version` (commit e82166fa → psycopg3 fix c11c4300 via e82166fa).
-- LDR-2026-001 C1 status updated to DONE.
+**Completed Since Last Update (2026-08-06 → 2026-08-07):**
+- **C4 COMPLETE 2026-08-06:** T8 PASS (incident drill; Railway rollback <15 min; D-T8-001/002/003 documented); T9 PASS (8 nav items; engagement end-to-end via visible nav; D-T9-002/003 fixed same session; D-T9-001/004 open); T10 CONDITIONAL PASS (portal mechanics proven via T4; data rendering deferred to first engagement); T13 CONDITIONAL PASS (core data purged; 2 runbook gaps patched). Evidence: `docs/governance/status/t8_evidence_20260806.md`, `t9_evidence_20260806.md`, `t10_evidence_20260806.md`, `t13_evidence_20260806.md`.
+- **v1.0.0-rc1 TAGGED** at commit `e1f807dd` — launch candidate commit.
+- **LDR-2026-001 C4 status → DONE.** All 4 constraints closed.
+- **H0-PR1 merged (#615):** AUTH-001 — BFF routes `POST/PATCH /workforce/users` through admin gateway (`admin:write` + `identity.scim`); GET admin path expanded; `invitation_id` captured before commit to avoid RLS expiry.
+- **H0-PR2 merged (#616):** Canonical tenant authority resolver — `resolve_authoritative_tenant()` in `api/auth_scopes/resolution.py`; all 9 mutation routes in `api/admin_identity.py` migrated; 3 new `IdentityEventType` values.
+- **H0-PR3 merged (#617):** Tenant-scoped engagement selector — `GET /admin/identity/tenants/{tenant_id}/engagements`; uses `resolve_authoritative_tenant()`; 5 isolation tests. Unblocks H0-PR4.
+- **C4 session fixes merged to main:** wildcard `"*"` scope → platform_admin (D-T9-002, 6299daac); dark mode date input (D-T9-003, 7a2ed2f9); DB slot/RLS sync (2bbcf90e); stuck console-bff-key slot reset migration 0174 (7983afab); `app.tenant_id` in `get_credential` (c9a63c9a); `CORE_TENANT_ID=demo-bank` console redeploy (d15d0b19); nav gating to ≤9 items (f3594066).
 
 **Current Blockers:**
-- **C4 (operational gates):** T8 incident drill (timed Railway rollback, <15 min, recorded), T9 console UX walkthrough (≤9 nav items, operator completes engagement), T10 portal UX walkthrough (every visible page real data, discoveries-first), T13 deletion purge drill (all 3 DPA triggers, execute once on test tenant). All runbooks committed. ~2 days to execute.
-- **T9 BLOCKED — identity-critical defect AUTH-001:** Console invitation 403 root cause identified in pre-T9 audit (`docs/audits/console_tenant_ux_authority_audit_20260806.md`). BFF uses tenant portal API key for `POST /workforce/users`; Core correctly rejects (requires `admin:write` + `identity.scim`). T9 cannot pass the invitation step until H0-PR1 ships. T8 and T13 are not blocked and can run now. T10 is conditional (see below).
-- **C4 gate status:** T8 — NOT BLOCKED; T9 — BLOCKED on H0-PR1; T10 — CONDITIONAL (can skip portal grant creation using Gold Path grants; blocked on H0-PR3/H0-PR4 if portal access creation is required); T13 — NOT BLOCKED.
-- **L12 gap:** FG_SIGNING_SECRET + FG_KEY_PEPPER deferred; written acceptance in L12 manifest. Must rotate before second engagement.
-- **L14 (commercial paper):** price card, CG v0 one-pager, Stripe invoice flow, design-partner scheduled. Founder track; 0 engineering days. This is the longest pole.
+- **H0-PR4 (next PR):** Portal grant form + server-side engagement ownership validation — remove editable `client_id` from grant form; validate `engagement_id` belongs to route tenant before grant issuance. 2–3 days. Depends on H0-PR3 (DONE).
+- **H0-PR5:** Cross-tenant enforcement regression suite — tests first for invitation/grant/list/revocation isolation; minimal fixes for any failures. 2–3 days. Depends on H0-PR1–PR4.
+- **L14 (commercial paper, founder track):** Price card, CG v0 one-pager, Stripe invoice flow, design partner scheduled. 0 engineering days. This is the critical-path-to-revenue item.
+- **D-T8-001 (open defect):** `/health` endpoint does not verify DB connectivity — Railway health probe can show 200 with unreachable DB. Hardening PR needed; not a Stage 1 blocker.
+- **D-T9-001 (open defect):** Clients → Assessments returns 401 — no portal key at `portal:tenant:{id}:key` in Upstash for client tenants. Operational fix during onboarding, not a code change.
+- **D-T9-004 (open defect):** Verification bundle generation fails from console UI. Investigate post-T9.
+- **L12 deferred rotation:** FG_SIGNING_SECRET + FG_KEY_PEPPER not rotated; documented acceptance; must close before second engagement.
 
 **Top Three Priorities:**
-1. **H0-PR1: Fix console invitation 403 root cause** — BFF authority routing correction for `POST /workforce/users`. 1–2 engineering days. Unblocks T9. This is the critical path. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`.
-2. **C4: Execute T8+T13 now; T9 after H0-PR1; T10 in parallel or after H0-PR3/H0-PR4** — all runbooks at `docs/operators/`. When all 4 PASS: update LDR-2026-001, tag v1.0.0-rc1, freeze engineering.
-3. **L14: Commercial paper + design partner scheduling** — price card, one-pager, Stripe flow, first warm candidate on the calendar. Running in parallel. No engineering dependency.
+1. **H0-PR4:** Portal grant form + server-side engagement ownership validation. Closes API-001 (browser-supplied authority-bearing identifiers). Unblocks H0-PR5 and eventually H1-PR7/PR8. 2–3 days.
+2. **H0-PR5:** Cross-tenant enforcement regression suite. Security gate before first client data enters the system. 2–3 days.
+3. **L14 (founder, parallel):** Design partner scheduling + commercial paper. Longest pole to first revenue. 0 engineering days.
 
-**Next Required PR:** **H0-PR1** — Fix console invitation 403 root cause. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md`. Unblocks T9 and C4.
+**Next Required PR:** **H0-PR4** — Portal grant form and server-side engagement ownership validation. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md` §H0-PR4.
 
-**Post-RC1 — Tenant Identity & Administration Platform stream:**
-After RC1 tag: H0-PR2 through H0-PR5 (canonical tenant-context, engagement selector, portal grant ownership, cross-tenant regression). Then H1-PR1 through H1-PR10 (design-partner self-administration surface). Then H2-PR1 (Unified Invitation Authority, P1-01 first PR). Reference: `docs/plans/tenant_identity_administration_platform_roadmap_20260806.md`.
+**Post-H0 — Tenant Identity & Administration Platform stream:**
+After H0-PR5: H1-PR1 through H1-PR10 (design-partner self-administration surface). H1 starts when RC1 is tagged (DONE) and design partner is scheduled. Stop H1 when the design partner can securely self-administer routine users without founder intervention — not all 10 PRs required. Then H2-PR1 (Unified Invitation Authority, P1-01 first PR).
 
-**No feature expansion before RC1:** Platform freeze remains active. H0-PR1 through H0-PR5 are production defects discovered during C4 pre-execution audit — not new features. H1 and beyond do not start until RC1 is tagged.
+**Estimated Engineering Days Remaining:** ~5–7 (H0-PR4: 2–3d, H0-PR5: 2–3d; then re-evaluate H1 need vs. first engagement timeline).
 
-**Estimated Engineering Days Remaining:** ~2.0 (C4 execution) + ~8–12 days (H0-PR1 through H0-PR5, can begin immediately in parallel with T8/T13).
+**Estimated Launch Date:** Platform GO NOW. First engagement date set by L14 (design partner scheduled).
 
-**Estimated Launch Date:** 2026-08-08 to 2026-08-10 (C4 + LDR update + RC1 tag; first client date depends on L14).
-
-**Roadmap Drift:** PRs #601-608 (IA-1/IA-2, justified), #609-613 (T6 burn-down + CI), backup fix + migration 0173 (C1 defects, on-plan). No scope additions.
+**Roadmap Drift:** H0-PR1 through H0-PR3 shipped post-RC1 as planned (H0 horizon, production defects). v1.0.0-rc1 tagged 2026-08-06 (on schedule). No scope additions.
 
 **Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
 
-**C1 Result:**
+**C4 Result Summary:**
+
+| Gate | Result | Key finding |
+|---|---|---|
+| T8 — Incident drill | PASS | Dashboard rollback <1 min; 3 defects (D-T8-001/002/003); runbooks corrected |
+| T9 — Console UX | PASS | 8 nav items; full engagement flow via visible nav; D-T9-002/003 fixed same session |
+| T10 — Portal UX | CONDITIONAL PASS | Portal mechanics proven via T4; data rendering deferred to first engagement |
+| T13 — Deletion drill | CONDITIONAL PASS | Core data purged; 2 runbook gaps patched; 3 orphaned scan_result rows (no PII) |
+
+**C1 Result (for reference):**
 
 | Field | Value |
 |---|---|
 | C1 status | COMPLETE 2026-08-06 |
-| Scheduled backup | PASS — cron 02:00 UTC, encrypted, R2 offsite, run 31073455901 |
-| Manual backup (drill source) | FG-BKP-20260806-00001 · `frostgate_20260806_104220_manual.dump.enc` · 1,883,376 bytes · encrypted: true · offsite: true |
-| Restore drill | PASS — run 31094275553 · 1m4s |
-| Tenants | 17 (expected 17) |
-| Engagements | 17 (expected 17) |
-| Findings | 101 (expected 101) |
-| Audit events | 346 (expected 346) |
-| Migration version | 0172 (expected 0172) |
-| Mismatches | 0 |
+| Restore drill | PASS — 17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches |
 | Evidence file | `docs/governance/status/restore_drill_evidence_20260806.md` |
-| Fixes required | migration 0173 (orphaned alembic_version fn); fg_backup.sh schema_migrations; quote_ident() psycopg3 compat |
 
-**Repository Health:** Working tree clean on main. CI green (all gates pass post #613). 1bcddc16 is the launch candidate + 4 stabilization fixes. No open mypy errors. No open gate failures.
+**Repository Health:** Working tree clean on main. CI green (all gates pass through #617). No open mypy errors. No open gate failures. Migration 0174 applied (slot reset for frostgate-internal). 3 commits ahead of v1.0.0-rc1 (H0-PR1 session, H0-PR2, H0-PR3) — all planned H0 hardening.
 
 **Open Risks:**
-- DB startup ordering defect (`_grant_runtime_role_access()` race): accepted; documented; fix tracked pre-Stage 2 concurrent client.
-- Orphaned `default` tenant data (7 engagements, 11 scan jobs): P1 data-governance; non-blocking Stage 1; must migrate/archive before commercial use.
+- D-T8-001: `/health` does not verify DB connectivity — hardening PR before Stage 2.
+- D-T9-001: Clients → Assessments 401 — provision Upstash portal key during client tenant onboarding.
+- D-T9-004: Verification bundle generation fails from console UI — investigate post-first-engagement.
+- T10 data rendering: deferred to first live client engagement.
+- DB startup ordering defect (`_grant_runtime_role_access()` race): accepted; fix tracked pre-Stage 2 concurrent client.
+- Orphaned `default` tenant data (7 engagements, 11 scan jobs): P1 data-governance; must migrate/archive before commercial use.
 - No automated alerting: Railway plan limitation; add 5xx spike alert before engagement start.
 - L12 deferred rotation: written acceptance; must close before second engagement.
 - `FG_DB_MIGRATIONS_RISK_ACCEPTED=1` still set in Railway (D-T6-001): non-blocking; clear before any schema change.
 
-**Recommended Next Action:** C1 first (backup secrets, 30 min founder action) → C4 execution (2 days) → L14 in parallel. If design partner is warm: schedule before C4 completes — the engagement starts when the date is confirmed, not when the drills close.
+**Recommended Next Action:** Begin H0-PR4 (portal grant ownership validation, 2–3 days). In parallel: L14 founder action (design partner scheduled, commercial paper finalized). H0-PR5 follows H0-PR4. First engagement begins as soon as L14 closes and pre-engagement pg_dump is taken.
 
-**Execution Notes:** T6 passed on second run with 8 defects found and burned down from the buffer. Gold Path 15/15 at 12.9s sets the Stage 2 KPI baseline (target <30s). LDR-2026-001 is immutable. Stage 1 capacity limits: 1 design partner, ≤3 tenants, ≤5 named users, 1 concurrent engagement. PRs #610-613 required same-day CI stabilization after the launch candidate merge — expected, not alarming, and now resolved.
+**Execution Notes:** v1.0.0-rc1 tagged on the C4 close commit. Three post-RC1 H0 PRs (#615-617) shipped same day — all planned, all CI-green. The Gold Path 15/15 at 12.9s (FG-GP-20260804-004) is the Stage 2 KPI baseline (target <30s). Stage 1 capacity limits: 1 design partner, ≤3 tenants, ≤5 named users, 1 concurrent engagement. Engineering is no longer the critical path. L14 (commercial) controls the date.
 
 **T4 Result:**
 
@@ -150,6 +157,47 @@ After RC1 tag: H0-PR2 through H0-PR5 (canonical tenant-context, engagement selec
 **Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
 
 ## Execution History (recent, newest first)
+
+### 2026-08-07 — Daily Execution Review · C4 COMPLETE · v1.0.0-rc1 TAGGED · H0-PR1/PR2/PR3 MERGED
+
+**Review Type:** Daily Execution Review
+
+**Summary:** Full executive delivery review across ROADMAP.md, EXECUTION_STATE.md, LDR-2026-001, H0 PR sequence plan, and repository state (commits c11c4300 through 4bf99a3f). All 4 launch constraints (C1–C4) are now DONE. v1.0.0-rc1 tagged at e1f807dd. H0-PR1 (#615), H0-PR2 (#616), H0-PR3 (#617) all merged. LDR-2026-001 is fully satisfied. The platform is in FULL GO state. Engineering is no longer the critical path — L14 (commercial paper + design partner scheduling) is the longest pole. DoD: 13/14 gates resolved (L9 conditional, L12 accepted, L14 founder track). Launch confidence raised from 97% to 99%.
+
+**Major Changes:**
+- C4 COMPLETE: T8/T9/T10/T13 all executed 2026-08-06. Evidence files committed. LDR-2026-001 C4 → DONE.
+- v1.0.0-rc1 tagged at `e1f807dd` (close C4 commit).
+- H0-PR1 merged (#615): AUTH-001 fix — BFF routes workforce mutations through admin gateway; invitation_id RLS fix.
+- H0-PR2 merged (#616): `resolve_authoritative_tenant()` — canonical resolver for all mutation routes.
+- H0-PR3 merged (#617): `GET /admin/identity/tenants/{tenant_id}/engagements` — tenant-scoped engagement selector API; unblocks H0-PR4.
+- C4 session fixes merged to main: D-T9-002 wildcard scope (6299daac), D-T9-003 dark mode (7a2ed2f9), DB RLS/slot fixes (2bbcf90e, 7983afab, c9a63c9a), migration 0174, nav ≤9 items (f3594066).
+- EXECUTION_STATE.md updated in place: all current status fields refreshed.
+
+**Completed Tasks:**
+- T8: PASS — D-T8-001/002/003 documented; runbooks corrected; rollback proven <15 min.
+- T9: PASS — 8 nav items; D-T9-002/003 fixed same session; D-T9-001/004 open (non-blocking).
+- T10: CONDITIONAL PASS — portal mechanics proven via T4; data rendering deferred to first engagement.
+- T13: CONDITIONAL PASS — core data purged; 2 runbook gaps (Gap 1: locked evidence Step 0; Gap 2: audit ledger non-deletable) patched immediately.
+- H0-PR1, H0-PR2, H0-PR3: all merged. H0 is 3/5 complete.
+- All 4 LDR constraints: DONE.
+
+**New Risks:**
+- D-T8-001: /health does not fail when DATABASE_URL is unreachable — silent false-positive from Railway health probe. Hardening PR needed before Stage 2.
+- D-T9-001: Cross-tenant portal access requires Upstash key provisioning on client onboarding — operational gap, not a code change.
+- D-T9-004: Verification bundle UI fails silently — root cause not investigated during T9; deferred.
+
+**Decisions Made:**
+- Overall status: GREEN. All engineering gates closed. Commercial (L14) is the critical path to first revenue.
+- H0-PR4 is today's primary engineering objective. H0-PR5 follows.
+- H1 starts when design partner is active; stop H1 when the exit criterion is met (design partner can self-administer), not when all 10 PRs ship.
+- T10 data rendering deferral accepted: portal mechanics proven by T4; no live client engagement exists yet to validate data rendering against.
+- v1.0.0-rc1 is immutable. Any subsequent hotfixes will be v1.0.0-rc2 or v1.0.1.
+
+**Updated Launch Confidence:** 99%
+
+**Next:** H0-PR4 (portal grant ownership) → H0-PR5 (cross-tenant regression) → first engagement (when L14 closes).
+
+---
 
 ### 2026-08-04 — T5 COMPLETE · LRR issued CONDITIONAL GO
 

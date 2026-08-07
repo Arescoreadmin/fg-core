@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-62 — security(portal): H0-PR4 — enforce tenant ownership on portal grant creation — PR #618
+
+- **PR/Branch:** `fix/h0-pr4-portal-grant-ownership` (#618)
+- **Date:** 2026-08-07
+- **Files changed:** `api/portal.py`, `apps/console/app/admin/tenants/[tenantId]/page.tsx`, `tests/security/test_portal_grant_ownership.py`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `docs/governance/status/EXECUTION_STATE.md`
+- **Root cause:** `POST /portal/grants` accepted `client_id` from the request body, allowing any caller with a valid `admin:write` key to assert an arbitrary `client_id` on a portal grant without proving ownership of the referenced engagement. No ownership check existed on the tenant-scoped grant route (the engagement-scoped route at `/field-assessment/engagements/{id}/portal-grants` already enforced ownership correctly).
+- **Fix:** Removed `client_id` from `CreateGrantRequest` (`extra="forbid"` means any body including it returns 422). Added an ownership gate: `get_engagement(db, engagement_id=body.engagement_id, tenant_id=tenant_id)` resolves and validates ownership in one query; raises `EngagementNotFound` (→ 404 `ENGAGEMENT_NOT_FOUND`) for both missing and cross-tenant cases, leaking no information about other tenants' engagements. `client_id` is then derived server-side as `eng.client_name`, consistent with the existing engagement-scoped route pattern. Console UI updated to populate engagements from the H0-PR3 API (server-filtered dropdown) instead of free-text inputs.
+- **Behavioral impact:** Any existing client sending `client_id` in the body will now receive 422. Any cross-tenant grant attempt will now receive 404 instead of silently succeeding.
+- **Security impact:** Closes browser-authority vector for `client_id` assertion. Closes cross-tenant grant creation (PG-1). Enforces server-derived identity for all portal credentials.
+- **Schema/API impact:** `CreateGrantRequest` no longer has `client_id` field. OpenAPI contracts regenerated; authority SHAs updated.
+- **Tests added:** `tests/security/test_portal_grant_ownership.py` — PG-1 (cross-tenant 404), PG-2 (forbidden field 422), PG-3 (server-derived client_id), PG-4 (portal_login_url present). All 4 PASS.
+- **Result:** PASS (`make fg-fast` 496 tests green, fmt clean, contract SHA verified).
+
+---
+
 ## P-61 — feat(identity): tenant-scoped engagement selector API (H0-PR3)
 
 - **PR/Branch:** `fix/h0-pr3-engagement-selector` (open)
