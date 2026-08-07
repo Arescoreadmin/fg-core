@@ -1,7 +1,7 @@
 # H0-PR5 Plan — Cross-Tenant Regression Suite
 
 **Branch:** `fix/h0-pr5-cross-tenant-regression`
-**Status:** PLAN ONLY — not implemented
+**Status:** IMPLEMENTED — `tests/security/test_cross_tenant_regression.py`
 
 ---
 
@@ -44,6 +44,7 @@ Keys needed per test:
 - `admin_write_a` = `admin:write` scoped to A (create grant)
 - `admin_write_b` = `admin:write` scoped to B (attacker)
 - `admin_read_b` = `admin:read` scoped to B (attacker, for list)
+- `admin_read_a` = `admin:read` scoped to A (CT-2 survival check: GET /portal/grants requires admin:read)
 
 ---
 
@@ -78,7 +79,7 @@ revoke path has never been exercised in a security test.
 Setup: A creates engagement → record eng_id
 Attack: B calls POST /field-assessment/engagements/{eng_id}/portal-grants
         (governance:write, tenant B key)
-Assert: 403 or 404
+Assert: 404 ENGAGEMENT_NOT_FOUND (strict — 403 would reveal resource existence)
 ```
 
 Why this matters: This is the OTHER grant creation route. H0-PR4 fixed
@@ -90,7 +91,7 @@ already uses the same ownership pattern but has no cross-tenant security test.
 ```
 Setup: A creates engagement → record eng_id
 Attack: B calls GET /field-assessment/engagements/{eng_id} (governance:read, B key)
-Assert: 403 or 404
+Assert: 404 ENGAGEMENT_NOT_FOUND (strict — 403 would reveal resource existence)
 ```
 
 Why this matters: Single-resource read endpoint. Confirms the ownership
@@ -131,8 +132,8 @@ Attack sequence (all using B's key):
   1. B tries DELETE /portal/grants/{grant_id}     → 404
   2. B tries GET /portal/grants                   → grant not in list
   3. B tries POST /portal/grants {engagement_id}  → 404
-  4. B tries POST /field-assessment/engagements/{id}/portal-grants → 403/404
-  5. B tries GET /field-assessment/engagements/{id} → 403/404
+  4. B tries POST /field-assessment/engagements/{id}/portal-grants → 404
+  5. B tries GET /field-assessment/engagements/{id} → 404
 Assert: Each step blocked; A can still use all resources after all attacks
 ```
 
