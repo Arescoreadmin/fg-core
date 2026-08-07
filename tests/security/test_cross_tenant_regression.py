@@ -109,11 +109,19 @@ class TestCrossTenantRegression:
         body = r.json()
         assert body["detail"]["code"] == "GRANT_NOT_FOUND"
 
-        # Tenant A's grant must still be active
+        # Tenant A's grant must still exist AND be active — ID presence alone does
+        # not prove the revoke didn't partially succeed (list includes revoked items).
         r2 = c.get("/portal/grants", headers={"x-api-key": _admin_read_key(mint_key, _TENANT_A)})
         assert r2.status_code == 200, r2.text
-        ids = [g.get("grant_id") or g.get("credential_id") for g in r2.json().get("items", [])]
-        assert grant_id in ids, "tenant A's grant must still exist after B's revoke attempt"
+        items = r2.json().get("items", [])
+        match = next(
+            (g for g in items if (g.get("grant_id") or g.get("credential_id")) == grant_id),
+            None,
+        )
+        assert match is not None, "tenant A's grant must still exist after B's revoke attempt"
+        assert match.get("status") == "active", (
+            f"tenant A's grant must still be active after B's revoke attempt, got: {match.get('status')}"
+        )
 
     def test_ct3_engagement_scoped_grant_route_blocked(self, build_app):
         """POST /field-assessment/engagements/{id}/portal-grants — B key + A's engagement → 404."""
@@ -203,14 +211,14 @@ class TestCrossTenantRegression:
         assert r2.status_code == 404
         assert r2.json()["detail"]["code"] == "GRANT_NOT_FOUND"
 
-        # GET /field-assessment/engagements/{id} cross-tenant
+        # GET /field-assessment/engagements/{id} cross-tenant — must be 404, not 403.
+        # A 403 would reveal the resource exists in another tenant; 404 gives no signal.
         r3 = c.get(
             f"/field-assessment/engagements/{eng_id}",
             headers={"x-api-key": key_b_gov},
         )
-        assert r3.status_code in (403, 404)
-        if r3.status_code == 404:
-            assert r3.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
+        assert r3.status_code == 404, r3.text
+        assert r3.json()["detail"]["code"] == "ENGAGEMENT_NOT_FOUND"
 
     def test_ct7_full_lifecycle_chain(self, build_app):
         """All cross-tenant attack vectors fail in sequence; tenant A's resources survive intact."""
