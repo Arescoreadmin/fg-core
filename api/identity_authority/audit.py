@@ -50,6 +50,9 @@ class IdentityEventType(str, Enum):
     TENANT_RESOLVED = "identity.tenant.resolved"
     TENANT_RESOLUTION_FAILED = "identity.tenant.resolution_failed"
     TENANT_CROSS_ACCESS_DENIED = "identity.tenant.cross_access_denied"
+    TENANT_CONTEXT_VERIFIED = "identity.tenant.context_verified"
+    RESOURCE_TENANT_MISMATCH = "identity.tenant.resource_mismatch"
+    STALE_TENANT_SESSION = "identity.tenant.stale_session"
     # Machine / agent
     MACHINE_AUTH_SUCCESS = "identity.machine.auth_success"
     MACHINE_AUTH_FAILED = "identity.machine.auth_failed"

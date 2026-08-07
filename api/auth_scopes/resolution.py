@@ -7,7 +7,10 @@ import os
 import re
 import sqlite3
 import time
-from typing import Callable, Optional, Set
+from typing import TYPE_CHECKING, Callable, Optional, Set
+
+if TYPE_CHECKING:
+    from api.actor_context import ActorContext
 
 from fastapi import Depends, Header, HTTPException, Request
 
@@ -995,6 +998,51 @@ def bind_tenant_id(
             "tenant_id required for unscoped keys", generic="invalid request"
         ),
     )
+
+
+def resolve_authoritative_tenant(
+    request: Request,
+    actor_ctx: "ActorContext",
+    route_tenant_id: str,
+) -> str:
+    """Canonical tenant authority resolver for all tenant-admin mutations.
+
+    Wraps bind_tenant_id() and adds an explicit actor_ctx.tenant_id cross-check.
+    The route tenant is the only authoritative source; the actor session must
+    agree or the request is rejected with 403.
+
+    Audit event taxonomy:
+    - identity.tenant.context_verified  — route, key binding, and actor session all agree
+    - identity.tenant.stale_session     — actor_ctx.tenant_id disagrees with route tenant;
+                                          the session is carrying a claim from a different
+                                          (stale or revoked) tenant context
+    - identity.tenant.resource_mismatch — reserved for downstream callers detecting that a
+                                          fetched object's tenant_id differs from the
+                                          authoritative route tenant
+    - identity.auth.tenant_mismatch     — emitted by bind_tenant_id() for key/route
+                                          disagreement; not re-emitted here
+    """
+    resolved = bind_tenant_id(request, route_tenant_id)
+    actor_tenant = (
+        str(actor_ctx.tenant_id).strip() if actor_ctx.tenant_id else None
+    )
+    if actor_tenant and actor_tenant != resolved:
+        _log_auth_event(
+            "identity.tenant.stale_session",
+            success=False,
+            tenant_id=resolved,
+            reason="actor_tenant_mismatch",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("tenant mismatch", generic="forbidden"),
+        )
+    _log_auth_event(
+        "identity.tenant.context_verified",
+        success=True,
+        tenant_id=resolved,
+    )
+    return resolved
 
 
 def require_bound_tenant(request: Request) -> str:
