@@ -53,7 +53,6 @@ from api.exception_breakglass import router as exception_breakglass_router
 from api.feed import router as feed_router
 from api.forensics import router as forensics_router
 from api.ingest import router as ingest_router
-from api.keys import router as keys_router
 from api.planes import router as planes_router
 from api.stats import router as stats_router
 from api.testing_control_tower import router as testing_control_tower_router
@@ -805,7 +804,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if _testing_control_tower_enabled():
             app.include_router(ui_testing_control_tower_router)
 
-    app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)
@@ -978,7 +976,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             _ready_db_backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
 
             if _ready_db_backend == "postgres":
-                # Postgres mode: probe api_keys table via the shared engine.
+                # Postgres mode: probe tenant_credentials table via the shared engine.
                 try:
                     from api.auth_scopes.store import probe_auth_store
 
@@ -1286,7 +1284,6 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(evidence_index_router)
     app.include_router(workforce_router)
     app.include_router(admin_identity_router)
-    app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)

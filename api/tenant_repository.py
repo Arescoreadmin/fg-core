@@ -359,13 +359,13 @@ class TenantRepository:
         return row
 
     def credential_prefixes(self, tenant_id: str) -> List[str]:
-        """Return active API key prefixes for a tenant (informational, for migration verification)."""
+        """Return active credential IDs for a tenant (informational)."""
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
                     """
-                    SELECT prefix FROM api_keys
-                    WHERE tenant_id = :tid AND enabled IS TRUE
+                    SELECT credential_id FROM tenant_credentials
+                    WHERE tenant_id = :tid AND status = 'active'
                     """
                 ),
                 {"tid": tenant_id},

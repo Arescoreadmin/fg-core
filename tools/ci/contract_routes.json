@@ -4838,36 +4838,6 @@
     },
     {
       "method": "GET",
-      "path": "/keys",
-      "scopes": [],
-      "source": "contract"
-    },
-    {
-      "method": "POST",
-      "path": "/keys",
-      "scopes": [],
-      "source": "contract"
-    },
-    {
-      "method": "POST",
-      "path": "/keys/revoke",
-      "scopes": [],
-      "source": "contract"
-    },
-    {
-      "method": "POST",
-      "path": "/keys/rotate",
-      "scopes": [],
-      "source": "contract"
-    },
-    {
-      "method": "DELETE",
-      "path": "/keys/{prefix}",
-      "scopes": [],
-      "source": "contract"
-    },
-    {
-      "method": "GET",
       "path": "/missions",
       "scopes": [],
       "source": "contract"
@@ -6145,7 +6115,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-08-03T21:07:49.366483+00:00",
+  "generated_at": "2026-08-08T15:59:54.493130+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

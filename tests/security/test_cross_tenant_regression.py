@@ -25,7 +25,7 @@ os.environ.setdefault("FG_AUTH_ENABLED", "1")
 _TENANT_A = "h0pr5-ct-a-01"
 _TENANT_B = "h0pr5-ct-b-01"
 
-_ENG_BODY = {
+_ENG_BODY: dict[str, object] = {
     "client_name": "CT Regression Client",
     "client_domain": "ct-regression.example.com",
     "assessor_id": "assessor-h0pr5",

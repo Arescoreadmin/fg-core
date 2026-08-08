@@ -1571,26 +1571,7 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/admin.py",
-      "method": "GET",
-      "path": "/admin/keys",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "keys:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
+        "rate"
       ],
       "file": "api/admin.py",
       "method": "POST",
@@ -1602,25 +1583,7 @@
         "keys:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/admin.py",
-      "method": "POST",
-      "path": "/admin/keys/{key_prefix}/revoke",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "keys:write"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
+      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -16204,96 +16167,6 @@
     },
     {
       "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/keys.py",
-      "method": "GET",
-      "path": "/keys",
-      "plane": "security",
-      "plane_id": "security",
-      "scoped": true,
-      "scopes": [
-        "keys:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/keys.py",
-      "method": "POST",
-      "path": "/keys",
-      "plane": "security",
-      "plane_id": "security",
-      "scoped": true,
-      "scopes": [
-        "keys:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/keys.py",
-      "method": "POST",
-      "path": "/keys/revoke",
-      "plane": "security",
-      "plane_id": "security",
-      "scoped": true,
-      "scopes": [
-        "keys:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/keys.py",
-      "method": "POST",
-      "path": "/keys/rotate",
-      "plane": "security",
-      "plane_id": "security",
-      "scoped": true,
-      "scopes": [
-        "keys:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/keys.py",
-      "method": "DELETE",
-      "path": "/keys/{prefix}",
-      "plane": "security",
-      "plane_id": "security",
-      "scoped": true,
-      "scopes": [
-        "keys:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
         "auth"
       ],
       "file": "api/main.py",
@@ -20704,7 +20577,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-08-07T13:24:43.446280+00:00",
+  "generated_at": "2026-08-08T15:13:27.145428+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

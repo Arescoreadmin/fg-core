@@ -142,15 +142,13 @@ def main() -> int:
             "tests/",
             "tools/ci/",
             ".claude/",  # local dev worktrees — not present in CI
-            # Pre-R4.8 writers not retired in this PR (cleaned up separately)
-            # api/auth_scopes/mapping.py: mint_key / revoke_api_key / _update_key_usage
-            # write to the legacy api_keys table (SQLite + Postgres paths).  These
-            # functions are still called at runtime by api/keys.py and api/admin.py
-            # for the legacy key-minting surface.  Retirement tracked separately.
+            # R4.9: api/keys.py deleted; api/auth_scopes/store.py write functions deleted.
+            # Remaining api_keys writers are SQLite dev/test paths only:
+            # api/auth_scopes/mapping.py: _mint_key_sqlite / revoke_api_key SQLite path
+            # api/auth_scopes/resolution.py: _row_for SQLite lookup (dev/test only)
+            # Full SQLite path retirement tracked as follow-on cleanup after R4.9.
             "api/auth_scopes/mapping.py",
             "api/auth_scopes/resolution.py",
-            "api/auth_scopes/store.py",
-            "api/keys.py",
             "api/tenant_rbac.py",
             "api/tripwires.py",
             "tools/seed/",

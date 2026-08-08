@@ -37,7 +37,6 @@ def client(build_app, fresh_db: str, monkeypatch: pytest.MonkeyPatch) -> TestCli
         ("GET", "/feed/live?limit=1", ("feed:read",), None),
         ("GET", "/stats", ("stats:read",), None),
         ("POST", "/defend", ("defend:write",), _defend_payload()),
-        ("GET", "/keys", ("keys:admin",), None),
     ],
 )
 def test_tenant_contract_missing_invalid_and_scoped_success(
