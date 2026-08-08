@@ -208,49 +208,6 @@ class TestComplianceReviewerRiskAccept:
 
 
 # ---------------------------------------------------------------------------
-# 6. tenant_admin can manage keys
-# ---------------------------------------------------------------------------
-
-
-class TestTenantAdminKeyManage:
-    """tenant_admin has key.manage; key routes must not 403."""
-
-    def test_tenant_admin_can_list_keys(self, build_app) -> None:
-        # keys:admin satisfies the router-level require_scopes; tenant_admin → key.manage cap
-        _, admin = _mint(
-            build_app,
-            "keys:admin",
-            tenant_id=_TENANT,
-            role="tenant_admin",
-        )
-        resp = admin.get("/keys")
-        assert resp.status_code != 403, resp.text
-
-
-# ---------------------------------------------------------------------------
-# 7. viewer denied key management
-# ---------------------------------------------------------------------------
-
-
-class TestViewerKeyManageDenied:
-    """viewer lacks key.manage; key routes must 403."""
-
-    def test_viewer_cannot_list_keys(self, build_app) -> None:
-        _, viewer = _mint(
-            build_app, "governance:read", tenant_id=_TENANT, role="read_only"
-        )
-        resp = viewer.get("/keys")
-        assert resp.status_code == 403, resp.text
-
-    def test_viewer_cannot_create_key(self, build_app) -> None:
-        _, viewer = _mint(
-            build_app, "governance:read", tenant_id=_TENANT, role="read_only"
-        )
-        resp = viewer.post("/keys", json={"name": "test-key", "scopes": []})
-        assert resp.status_code == 403, resp.text
-
-
-# ---------------------------------------------------------------------------
 # 8. Legacy admin:write scope → platform_admin fallback
 # ---------------------------------------------------------------------------
 

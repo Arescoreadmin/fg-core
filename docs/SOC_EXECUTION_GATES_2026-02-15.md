@@ -6536,3 +6536,56 @@ Same `_EXEMPTIONS` frozenset for `/portal/named-users/me`, same pnu1. rationale.
 - The `workflow_dispatch` trigger is retained, allowing manual runs.
 
 **SOC review outcome:** approved. `.github/workflows/fg-required.yml` is listed under the SOC critical-file watchlist. This change widens CI enforcement by removing a path filter that was silently skipping the full test suite on test-only and doc-only PRs. It does not weaken any existing gate and has no runtime security impact.
+
+
+---
+
+## feat/r4.9-credential-authority — Legacy api_keys Authority Retirement (2026-08-08)
+
+**Critical files changed:** `api/auth_scopes/mapping.py`, `api/auth_scopes/resolution.py`, `api/auth_scopes/store.py`, `api/middleware/security_headers.py`, `tools/ci/check_credential_authority.py`, `tools/ci/check_security_regression_gates.py`, `tools/ci/plane_registry_checks.py`, `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`
+
+**Change scope:** R4.9 — removes all Postgres write paths for the legacy `api_keys` table from production code; retires the `/keys` router and its admin surface; updates the CI credential authority gate; updates the route inventory to reflect the retired routes.
+
+**Rationale:** R4.8 (merged previously) already cut the Postgres `api_keys` authentication fallback — any key not prefixed `fgk.` returns `key_not_found` immediately without consulting `api_keys`. However, production code continued writing dead-end rows to `api_keys` via `_mint_key_postgres` in `mapping.py` and `store.insert_key_row`. These writes produced credentials that the auth path could never verify (SHA-256 vs Argon2id hash algorithm mismatch). R4.9 removes those dead-end writers, retires the `/keys` router, and closes the CI carve-outs that were holding the gate open for these legacy paths.
+
+**Change to `api/auth_scopes/mapping.py`:**
+- Removed `_mint_key_postgres` function and its dispatch block in `mint_key()`
+- Removed Postgres dispatch blocks in `revoke_api_key()`, `list_api_keys()`, `_update_key_usage()`
+- SQLite dev/test paths are retained (marked `# dev/test only`) and are unchanged
+
+**Change to `api/auth_scopes/resolution.py`:**
+- Added comment marking the SQLite `api_keys` auth path as dev/test only — no logic changed
+- The R4.8 Postgres early-return guard at lines 524–533 is unchanged
+
+**Change to `api/auth_scopes/store.py`:**
+- Removed all `api_keys` write functions (`insert_key_row`, `update_key_enabled`, `update_key_usage`, `list_key_rows`) — these had zero production callers after mapping.py cleanup
+- Retained `probe_auth_store()` (called by startup validation and readiness probe)
+- Updated `probe_auth_store()` to query `tenant_credentials` (the canonical auth store) instead of `api_keys`
+
+**Change to `api/middleware/security_headers.py`:**
+- Removed `/keys` from `sensitive_paths` — the `/keys` route no longer exists after `api/keys.py` was deleted
+
+**Change to `tools/ci/check_credential_authority.py`:**
+- Removed `api/keys.py` from grandfathered list (file deleted)
+- Removed `api/auth_scopes/store.py` from grandfathered list (write functions deleted)
+- Updated comment to reflect R4.9 state
+
+**Change to `tools/ci/check_security_regression_gates.py`:**
+- Removed `api/keys.py` from the tenant-binding-helper audit list (file deleted)
+
+**Change to `tools/ci/plane_registry_checks.py`:**
+- Removed `/keys` from the rate-limited-path prefix list (route retired)
+
+**Route inventory / plane registry snapshot:** regenerated via `make route-inventory-generate` to reflect the retired `/keys` routes. The 410 stub at `POST /admin/keys` remains and appears in the inventory under `/admin/keys`.
+
+**Security invariants confirmed:**
+
+- The R4.8 Postgres guard (`if _is_postgres: return AuthResult(valid=False, reason="key_not_found")`) is unchanged. No non-`fgk.` key can authenticate on Postgres.
+- Removing dead-end writers does not widen any attack surface — it narrows the write footprint to the canonical authority only.
+- The canonical credential path (`fgk.*` prefix, Argon2id verification via `tenant_credentials`) is unmodified.
+- The SQLite dev/test auth path is unchanged — test suites continue to work.
+- Two regression tests added: `test_la1_postgres_legacy_key_returns_key_not_found` and `test_la2_canonical_credential_issues_and_validates`.
+- No RLS policies, OPA rules, migrations, or cryptographic material modified.
+- CI credential authority gate is tightened (not weakened): `api/keys.py` and `api/auth_scopes/store.py` removed from the grandfathered exception list.
+
+**SOC review outcome:** approved. All modified critical files reduce or eliminate legacy attack surface. No auth gate is weakened. The Postgres `api_keys` fallback remains dead (R4.8). The canonical `tenant_credentials` credential authority is the sole Postgres auth path after this PR.

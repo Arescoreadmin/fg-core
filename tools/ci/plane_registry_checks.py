@@ -61,7 +61,6 @@ def dependency_categories_for_record(rec) -> list[str]:
             "/control-plane",
             "/ui",
             "/auth",
-            "/keys",
             "/evidence",
             "/approvals",
             "/audit",

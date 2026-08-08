@@ -55,7 +55,6 @@ def test_auth_modes_for_representative_tenant_endpoints(client: TestClient):
                 "payload": {},
             },
         ),
-        ("GET", "/keys", None),
         ("GET", "/admin/tenants/tenant-a/usage", None),
         ("GET", "/forensics/chain/verify?limit=5", None),
     ]
@@ -99,7 +98,9 @@ def test_cross_tenant_overrides_are_denied(client: TestClient, fresh_db: str):
     )
     assert decisions.status_code == 403
 
-    keys = client.get("/keys?tenant_id=tenant-b", headers={"X-API-Key": key_a})
+    keys = client.get(
+        "/admin/tenants/tenant-b/credentials", headers={"X-API-Key": key_a}
+    )
     assert keys.status_code == 403
 
     ingest = client.post(

@@ -8,7 +8,6 @@ def test_api_surface_smoke_imports() -> None:
         "api.decisions",
         "api.dev_events",
         "api.ingest",
-        "api.keys",
         "api.schemas",
         "api.stats",
         "api.ui_dashboards",

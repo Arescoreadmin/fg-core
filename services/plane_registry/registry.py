@@ -304,7 +304,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
     ),
     PlaneDef(
         plane_id="security",
-        route_prefixes=("/auth", "/keys"),
+        route_prefixes=("/auth",),
         allowed_dependency_categories=("auth", "tenant", "db", "rate", "breakglass"),
         required_make_targets=("security-regression-gates",),
         required_ci_gates=COMMON_GATES,

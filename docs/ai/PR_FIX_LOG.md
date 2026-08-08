@@ -21179,3 +21179,67 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** None.
 - **Validation:** `scripts/ci/enforce_pr_fix_log.sh`; `.venv/bin/python -m pytest tests/security/test_portal_grant_ownership.py`.
 - **Result:** PASS.
+
+---
+
+## P-43 — fix(r4.9): remove TestTenantAdminKeyManage + TestViewerKeyManageDenied from phase5 enforcement tests — PR #623
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#623)
+- **Date:** 2026-08-08
+- **Files changed:** `tests/test_phase5_p0p1_enforcement.py`
+- **Root cause:** `TestViewerKeyManageDenied` (`test_viewer_cannot_list_keys`, `test_viewer_cannot_create_key`) called `GET /keys` and `POST /keys` from the deleted `api/keys.py` module. Both routes now return 404; the tests asserted 403, causing `assert 404 == 403`. `TestTenantAdminKeyManage::test_tenant_admin_can_list_keys` also called `GET /keys` but asserted `!= 403` (vacuously passed with 404). Note: the `POST /keys` stub in `api/admin.py` is at `/admin/keys`, not `/keys` — so the old `/keys` path is completely unrouted.
+- **Fix:** Removed both class blocks (sections 6 and 7) from `test_phase5_p0p1_enforcement.py`. The key.manage RBAC capability is now irrelevant for the retired routes; credential management RBAC is exercised via `/admin/tenants/{tenant_id}/credentials` routes which have their own test coverage.
+- **Behavioral impact:** None.
+- **Security impact:** None — the retired routes do not exist; credential authority RBAC is separately tested.
+- **Schema/API impact:** None.
+- **Tests added:** None.
+- **Validation:** `.venv/bin/python -m pytest tests/test_phase5_p0p1_enforcement.py -q` → 13 passed.
+- **Result:** PASS.
+
+---
+
+## P-42 — fix(r4.9): retire test_keys_admin_tenant_scope — PR #623
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#623)
+- **Date:** 2026-08-08
+- **Files changed:** `tests/security/test_keys_admin_tenant_scope.py` (deleted)
+- **Root cause:** `test_keys_admin_tenant_scope` asserts `GET /keys` returns HTTP 200 and `POST /keys/revoke` returns HTTP 403. Both routes were deleted in R4.9. CI hardening gates (`ci-hardening` Security regression tests) and fg-required `fg-security` lane both failed with `assert 404 == 200` on the GET assertion.
+- **Fix:** Deleted `tests/security/test_keys_admin_tenant_scope.py`. The tenant isolation invariant it enforced (tenant A's admin key cannot affect tenant B's credentials) is now covered by `test_cross_tenant_regression.py` (CT-1 through CT-7) and `test_tenant_binding_global.py`.
+- **Behavioral impact:** None — no runtime behaviour changes.
+- **Security impact:** None — the cross-tenant isolation property is retained and tested by the H0-PR5 cross-tenant regression suite.
+- **Schema/API impact:** None.
+- **Tests added:** None (coverage maintained by existing suites).
+- **Validation:** `gh run view 31271026795 --log-failed` confirmed the specific failure; CT-1 through CT-7 in `test_cross_tenant_regression.py` cover the equivalent isolation contract.
+- **Result:** PASS.
+
+---
+
+## P-41 — fix(r4.9): active_key_count compat alias + remove stale api.keys test imports — PR #622
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#622)
+- **Date:** 2026-08-08
+- **Files changed:** `api/control_tower_snapshot.py`, `tests/test_api_surface_changes.py`, `tests/api/test_keys.py` (deleted)
+- **Root cause:** R4.9 renamed `key_lifecycle.active_key_count` to `active_credential_count` in the control tower snapshot, but 8 console consumers still reference `active_key_count` (`apps/console/lib/coreApi.ts:341`, `AuthorityHealthMap.tsx:59`, `OperationalHealthMatrix.tsx:75,139`, `TrustCenterSummary.tsx:54,94`, `ExecutiveKPIBar.tsx:75`, `page.tsx:173`). Separately, `tests/api/test_keys.py` and `tests/test_api_surface_changes.py` still imported `api.keys`, which was deleted, causing `ModuleNotFoundError` on collection.
+- **Fix:** Added `active_key_count` as a compat alias in `key_lifecycle` (same value as `active_credential_count`) so console consumers continue to work without a coordinated console migration. Deleted `tests/api/test_keys.py` (entire file tested the now-deleted module). Removed `"api.keys"` from the smoke import list in `tests/test_api_surface_changes.py`.
+- **Behavioral impact:** Control tower snapshot now emits both `active_credential_count` and `active_key_count` with identical values. No console behaviour changes.
+- **Security impact:** None.
+- **Schema/API impact:** `active_key_count` is re-added to `key_lifecycle` as a compat alias alongside the new canonical `active_credential_count` field.
+- **Tests added:** None.
+- **Validation:** `grep -n "active_key_count" api/control_tower_snapshot.py`; `cat tests/test_api_surface_changes.py`; `ls tests/api/test_keys.py` (not found).
+- **Result:** PASS.
+
+---
+
+## P-40 — feat(r4.9): retire legacy api/keys.py and Postgres api_keys write path — PR #622
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#622)
+- **Date:** 2026-08-08
+- **Files changed:** `api/keys.py` (deleted), `api/admin.py`, `api/auth_scopes/mapping.py`, `api/auth_scopes/resolution.py`, `api/auth_scopes/store.py`, `api/config/startup_validation.py`, `api/control_tower_snapshot.py`, `api/main.py`, `api/middleware/security_headers.py`, `api/tenant_repository.py`, `services/plane_registry/registry.py`, `tools/ci/check_credential_authority.py`, `tools/ci/check_security_regression_gates.py`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_checks.py`, `tests/security/test_legacy_auth_retirement.py` (new), `tests/security/test_cross_tenant_regression.py`, `tests/security/test_tenant_binding_global.py`, `tests/security/test_tenant_contract_endpoints.py`, `tests/test_auth_postgres_store.py` (deleted)
+- **Root cause:** R4.9 completes the R4.8 cleanup sequence: the legacy `api/keys.py` module (plain-string api_keys for SQLite dev) was never wired for Postgres production. The Postgres write path (`insert_key_row`, `update_key_enabled`, `_mint_key_postgres`) was dead code post-R4.8. `POST /admin/keys` was an orphaned endpoint returning 410 Gone. Retaining these paths created false surface area in the plane registry, contract inventory, and startup validation.
+- **Fix:** Deleted `api/keys.py` and `tests/test_auth_postgres_store.py`; reduced `POST /admin/keys` to a permanent 410 stub in `api/admin.py`; removed `import time` leftover; updated `probe_auth_store()` to query `tenant_credentials`; regenerated `contract_routes.json` after removing `/keys` from OpenAPI spec; updated plane registry and CI gate scripts to reflect the retired route. Added `tests/security/test_legacy_auth_retirement.py` (LA-1: non-fgk key on Postgres returns `key_not_found`; LA-2: canonical credential issue/validate round-trip). Fixed pre-existing mypy `var-annotated` error in `test_cross_tenant_regression.py`.
+- **Behavioral impact:** `POST /admin/keys` now always returns 410 Gone (was also 410 but via a code path that referenced deleted symbols). No other runtime behaviour changes — the SQLite dev/test path in `resolution.py` (`mint_key`, `_row_for`) is retained with explicit dev/test-only guards.
+- **Security impact:** Positive — dead Postgres write path removed from attack surface; LA-1 regression test pins the R4.8 Postgres guard (`fgk.` prefix check in `resolution.py:524–533`).
+- **Schema/API impact:** `DELETE /keys` route removed from contract inventory and plane registry. `POST /admin/keys` still present as 410 stub (no change to external contract).
+- **Tests added:** `tests/security/test_legacy_auth_retirement.py` — LA-1 (Postgres legacy key guard), LA-2 (credential authority issue/validate round-trip).
+- **Validation:** `bash codex_gates.sh` strict mode — ruff lint, ruff format, mypy, fg-fast, fg-security all green.
+- **Result:** PASS.
