@@ -1,7 +1,7 @@
 # H0-PR5 Plan — Cross-Tenant Regression Suite
 
 **Branch:** `fix/h0-pr5-cross-tenant-regression`
-**Status:** PLAN ONLY — not implemented
+**Status:** IMPLEMENTED — `tests/security/test_cross_tenant_regression.py`
 
 ---
 
@@ -39,11 +39,12 @@ _TENANT_A = "h0pr5-ct-a-01"
 _TENANT_B = "h0pr5-ct-b-01"
 ```
 
-Keys needed per test (or shared via class-level fixture pattern):
+Keys needed per test:
 - `gov_a` = `governance:read governance:write` scoped to A (create engagement)
 - `admin_write_a` = `admin:write` scoped to A (create grant)
 - `admin_write_b` = `admin:write` scoped to B (attacker)
 - `admin_read_b` = `admin:read` scoped to B (attacker, for list)
+- `admin_read_a` = `admin:read` scoped to A (CT-2 survival check: GET /portal/grants requires admin:read)
 
 ---
 
@@ -78,7 +79,7 @@ revoke path has never been exercised in a security test.
 Setup: A creates engagement → record eng_id
 Attack: B calls POST /field-assessment/engagements/{eng_id}/portal-grants
         (governance:write, tenant B key)
-Assert: 403 or 404
+Assert: 404 ENGAGEMENT_NOT_FOUND (strict — 403 would reveal resource existence)
 ```
 
 Why this matters: This is the OTHER grant creation route. H0-PR4 fixed
@@ -90,7 +91,7 @@ already uses the same ownership pattern but has no cross-tenant security test.
 ```
 Setup: A creates engagement → record eng_id
 Attack: B calls GET /field-assessment/engagements/{eng_id} (governance:read, B key)
-Assert: 403 or 404
+Assert: 404 ENGAGEMENT_NOT_FOUND (strict — 403 would reveal resource existence)
 ```
 
 Why this matters: Single-resource read endpoint. Confirms the ownership
@@ -112,7 +113,7 @@ the list query is correctly tenant-scoped.
 ```
 Setup: A creates engagement + grant
 Attack: B sends cross-tenant requests to:
-  - POST /portal/grants (already PG-1, regression only)
+  - POST /portal/grants (regression anchor from PG-1)
   - DELETE /portal/grants/{id}
   - GET /field-assessment/engagements/{id}
 Assert: All return the canonical not-found code (ENGAGEMENT_NOT_FOUND /
@@ -131,8 +132,8 @@ Attack sequence (all using B's key):
   1. B tries DELETE /portal/grants/{grant_id}     → 404
   2. B tries GET /portal/grants                   → grant not in list
   3. B tries POST /portal/grants {engagement_id}  → 404
-  4. B tries POST /field-assessment/engagements/{id}/portal-grants → 403/404
-  5. B tries GET /field-assessment/engagements/{id} → 403/404
+  4. B tries POST /field-assessment/engagements/{id}/portal-grants → 404
+  5. B tries GET /field-assessment/engagements/{id} → 404
 Assert: Each step blocked; A can still use all resources after all attacks
 ```
 
@@ -145,21 +146,27 @@ not just at a single gate.
 
 - Use `build_app(auth_enabled=True, api_key="")` pattern from H0-PR4.
 - `mint_key` from `api.auth_scopes` for all key generation.
-- `_create_engagement` helper identical to H0-PR4 (copy or import from
-  `tests.security.test_portal_grant_ownership`).
+- `_create_engagement` helper identical to H0-PR4.
 - `_create_grant` helper: `POST /portal/grants` with `admin:write` key for A.
 - CT-7 should run as a single test to keep the chain atomic.
 - All tenant IDs must be unique across the test suite (prefix `h0pr5-ct-`).
 
 ---
 
+## If CT-3 fails
+
+If `POST /field-assessment/engagements/{id}/portal-grants` does NOT reject a
+cross-tenant key, that is a new finding. Stop, report it, and fix it in a
+separate PR with its own security contract and audit entry. Do not fix inline.
+
+---
+
 ## CI gate impact
 
-- Adds to `make fg-fast` — estimated 7 new tests.
-- `docs/ai/PR_FIX_LOG.md` entry required (touches `tests/security/` and implicitly
-  validates `api/` surface).
-- No schema or contract changes; no OpenAPI regeneration required.
-- No new `ROADMAP.md` row needed (security regression, not a feature).
+- +7 tests to `make fg-fast` (496 → ~503)
+- `docs/ai/PR_FIX_LOG.md` entry required (P-63)
+- No schema changes, no OpenAPI regen, no migrations
+- No `ROADMAP.md` row (security regression, not a feature)
 
 ---
 
