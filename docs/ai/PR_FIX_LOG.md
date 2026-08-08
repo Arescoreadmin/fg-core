@@ -21179,3 +21179,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** None.
 - **Validation:** `scripts/ci/enforce_pr_fix_log.sh`; `.venv/bin/python -m pytest tests/security/test_portal_grant_ownership.py`.
 - **Result:** PASS.
+
+---
+
+## P-40 — feat(r4.9): retire legacy api/keys.py and Postgres api_keys write path — PR #622
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#622)
+- **Date:** 2026-08-08
+- **Files changed:** `api/keys.py` (deleted), `api/admin.py`, `api/auth_scopes/mapping.py`, `api/auth_scopes/resolution.py`, `api/auth_scopes/store.py`, `api/config/startup_validation.py`, `api/control_tower_snapshot.py`, `api/main.py`, `api/middleware/security_headers.py`, `api/tenant_repository.py`, `services/plane_registry/registry.py`, `tools/ci/check_credential_authority.py`, `tools/ci/check_security_regression_gates.py`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_checks.py`, `tests/security/test_legacy_auth_retirement.py` (new), `tests/security/test_cross_tenant_regression.py`, `tests/security/test_tenant_binding_global.py`, `tests/security/test_tenant_contract_endpoints.py`, `tests/test_auth_postgres_store.py` (deleted)
+- **Root cause:** R4.9 completes the R4.8 cleanup sequence: the legacy `api/keys.py` module (plain-string api_keys for SQLite dev) was never wired for Postgres production. The Postgres write path (`insert_key_row`, `update_key_enabled`, `_mint_key_postgres`) was dead code post-R4.8. `POST /admin/keys` was an orphaned endpoint returning 410 Gone. Retaining these paths created false surface area in the plane registry, contract inventory, and startup validation.
+- **Fix:** Deleted `api/keys.py` and `tests/test_auth_postgres_store.py`; reduced `POST /admin/keys` to a permanent 410 stub in `api/admin.py`; removed `import time` leftover; updated `probe_auth_store()` to query `tenant_credentials`; regenerated `contract_routes.json` after removing `/keys` from OpenAPI spec; updated plane registry and CI gate scripts to reflect the retired route. Added `tests/security/test_legacy_auth_retirement.py` (LA-1: non-fgk key on Postgres returns `key_not_found`; LA-2: canonical credential issue/validate round-trip). Fixed pre-existing mypy `var-annotated` error in `test_cross_tenant_regression.py`.
+- **Behavioral impact:** `POST /admin/keys` now always returns 410 Gone (was also 410 but via a code path that referenced deleted symbols). No other runtime behaviour changes — the SQLite dev/test path in `resolution.py` (`mint_key`, `_row_for`) is retained with explicit dev/test-only guards.
+- **Security impact:** Positive — dead Postgres write path removed from attack surface; LA-1 regression test pins the R4.8 Postgres guard (`fgk.` prefix check in `resolution.py:524–533`).
+- **Schema/API impact:** `DELETE /keys` route removed from contract inventory and plane registry. `POST /admin/keys` still present as 410 stub (no change to external contract).
+- **Tests added:** `tests/security/test_legacy_auth_retirement.py` — LA-1 (Postgres legacy key guard), LA-2 (credential authority issue/validate round-trip).
+- **Validation:** `bash codex_gates.sh` strict mode — ruff lint, ruff format, mypy, fg-fast, fg-security all green.
+- **Result:** PASS.
