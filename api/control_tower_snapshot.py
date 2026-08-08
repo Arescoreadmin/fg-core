@@ -134,6 +134,9 @@ def control_tower_snapshot_v1(
         },
         "key_lifecycle": {
             "active_credential_count": len(active_creds),
+            "active_key_count": len(
+                active_creds
+            ),  # compat alias — console consumers not yet migrated
             "last_rotation": max(
                 (_iso(c.issued_at) for c in active_creds if c.issued_at),
                 default=None,

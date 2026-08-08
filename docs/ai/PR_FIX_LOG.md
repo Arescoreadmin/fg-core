@@ -21182,6 +21182,22 @@ returns the tenant — filesystem can be empty and tenants resolve.
 
 ---
 
+## P-41 — fix(r4.9): active_key_count compat alias + remove stale api.keys test imports — PR #622
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#622)
+- **Date:** 2026-08-08
+- **Files changed:** `api/control_tower_snapshot.py`, `tests/test_api_surface_changes.py`, `tests/api/test_keys.py` (deleted)
+- **Root cause:** R4.9 renamed `key_lifecycle.active_key_count` to `active_credential_count` in the control tower snapshot, but 8 console consumers still reference `active_key_count` (`apps/console/lib/coreApi.ts:341`, `AuthorityHealthMap.tsx:59`, `OperationalHealthMatrix.tsx:75,139`, `TrustCenterSummary.tsx:54,94`, `ExecutiveKPIBar.tsx:75`, `page.tsx:173`). Separately, `tests/api/test_keys.py` and `tests/test_api_surface_changes.py` still imported `api.keys`, which was deleted, causing `ModuleNotFoundError` on collection.
+- **Fix:** Added `active_key_count` as a compat alias in `key_lifecycle` (same value as `active_credential_count`) so console consumers continue to work without a coordinated console migration. Deleted `tests/api/test_keys.py` (entire file tested the now-deleted module). Removed `"api.keys"` from the smoke import list in `tests/test_api_surface_changes.py`.
+- **Behavioral impact:** Control tower snapshot now emits both `active_credential_count` and `active_key_count` with identical values. No console behaviour changes.
+- **Security impact:** None.
+- **Schema/API impact:** `active_key_count` is re-added to `key_lifecycle` as a compat alias alongside the new canonical `active_credential_count` field.
+- **Tests added:** None.
+- **Validation:** `grep -n "active_key_count" api/control_tower_snapshot.py`; `cat tests/test_api_surface_changes.py`; `ls tests/api/test_keys.py` (not found).
+- **Result:** PASS.
+
+---
+
 ## P-40 — feat(r4.9): retire legacy api/keys.py and Postgres api_keys write path — PR #622
 
 - **PR/Branch:** `feat/r4.9-credential-authority` (#622)
