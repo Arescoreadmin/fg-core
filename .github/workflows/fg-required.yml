@@ -3,22 +3,6 @@ name: fg-required
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - ".gitignore"
-      - ".editorconfig"
-      - "tools/testing/**"
-      - "tools/ci/**"
-      - "tests/tools_minimal/**"
-      - "tests/**"
-      - "Makefile"
-      - "requirements.txt"
-      - "requirements-dev.txt"
-      - "requirements.lock"
-      - "requirements-dev.lock"
-      - "constraints.txt"
-      - "pyproject.toml"
   workflow_dispatch:
 
 concurrency:

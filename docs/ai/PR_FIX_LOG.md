@@ -21163,3 +21163,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Schema/API impact:** None.
 - **Tests added:** None — existing portal named-user tests cover the auth flow; `make control-plane-check` passes locally.
 - **Result:** PASS (`plane registry check: OK` confirmed locally).
+
+---
+
+## P-39 — fix(ci): type portal grant ownership test payload — PR #620
+
+- **PR/Branch:** `fix/h0-pr4-mypy-eng-body` (#620)
+- **Date:** 2026-08-07
+- **Files changed:** `tests/security/test_portal_grant_ownership.py`
+- **Root cause:** The H0-PR4 portal grant ownership regression test payload mixed strings, `None`, and nested metadata in an unannotated module-level dict. Type inference narrowed the payload too aggressively for downstream JSON request usage, causing guard lane type checks to require an explicit payload type.
+- **Fix:** Added an explicit `_ENG_BODY: dict[str, str | None | dict[str, object]]` annotation so the test payload type matches the JSON-compatible values it intentionally contains.
+- **Behavioral impact:** None — test data and assertions are unchanged.
+- **Security impact:** None — this is a typing-only test fix for existing portal grant ownership coverage.
+- **Schema/API impact:** None.
+- **Tests added:** None.
+- **Validation:** `scripts/ci/enforce_pr_fix_log.sh`; `.venv/bin/python -m pytest tests/security/test_portal_grant_ownership.py`.
+- **Result:** PASS.
