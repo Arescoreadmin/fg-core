@@ -20,7 +20,6 @@ import json
 import logging
 import os
 import re
-import time
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
@@ -39,10 +38,7 @@ from api.auth_dispatch import require_permission
 from api.auth_scopes import (
     _validate_tenant_id,
     bind_tenant_id,
-    list_api_keys,
-    mint_key,
     require_scopes,
-    revoke_api_key,
 )
 from api.credential_authority import (
     CredentialNotFoundError,
@@ -76,17 +72,9 @@ from api.platform_service_principal import (
     suspend_service_principal,
 )
 from api.db_models import SecurityAuditLog
-from api.keys import (
-    CreateKeyResponse,
-    KeyInfo,
-    ListKeysResponse,
-    RevokeKeyResponse,
-)
 from api.security_audit import (
     AuditPersistenceError,
     audit_admin_action,
-    audit_key_created,
-    audit_key_revoked,
 )
 from api.tenant_authority import (
     TenantKind,
@@ -169,51 +157,6 @@ class TenantTierUpdate(BaseModel):
     tier: str = Field(
         ...,
         description="Subscription tier (free, starter, pro, enterprise, internal)",
-    )
-
-
-class AdminCreateKeyRequest(BaseModel):
-    """Request to create a new API key via admin."""
-
-    name: Optional[str] = Field(
-        default=None,
-        max_length=128,
-        description="Human-readable name for the key",
-    )
-    scopes: list[str] = Field(
-        default_factory=list,
-        description="List of scopes to grant to the key",
-    )
-    tenant_id: str = Field(
-        ...,
-        max_length=128,
-        description="Tenant ID to associate with the key",
-    )
-    ttl_seconds: int = Field(
-        default=86400,
-        ge=60,
-        le=365 * 24 * 3600,
-        description="Time-to-live in seconds (default 24 hours)",
-    )
-
-
-class AdminRotateKeyRequest(BaseModel):
-    """Request to rotate an API key via admin."""
-
-    ttl_seconds: int = Field(
-        default=86400,
-        ge=60,
-        le=365 * 24 * 3600,
-        description="TTL for the new key (default 24 hours)",
-    )
-    revoke_old: bool = Field(
-        default=True,
-        description="Whether to revoke the old key immediately",
-    )
-    tenant_id: Optional[str] = Field(
-        default=None,
-        max_length=128,
-        description="Optional tenant ID for validation",
     )
 
 
@@ -1929,31 +1872,17 @@ async def get_tenant(
 
 
 # =============================================================================
-# API Key Admin Endpoints
+# API Key Admin Endpoints (legacy — retired R4.9)
 # =============================================================================
-
-
-@router.get(
-    "/keys",
-    response_model=ListKeysResponse,
-    dependencies=[Depends(require_scopes("keys:read"))],
-)
-async def admin_list_keys(
-    request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-    tenant_id: Optional[str] = Query(default=None, max_length=128),
-    include_disabled: bool = Query(default=False),
-) -> ListKeysResponse:
-    """List API keys for admin usage."""
-    bound_tenant = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,
-    )
-
-    keys = list_api_keys(tenant_id=bound_tenant, include_disabled=include_disabled)
-    key_infos = [KeyInfo(**k) for k in keys]
-    return ListKeysResponse(keys=key_infos, total=len(key_infos))
+# POST /admin/keys is retained as a 410 stub for one deprecation window so
+# existing callers get an explicit migration signal instead of a 404.
+# GET /admin/keys and POST /admin/keys/{prefix}/revoke are removed — they read
+# and write api_keys which is no longer the canonical credential store.
+# Issue, list, rotate, and revoke credentials via:
+#   POST   /admin/tenants/{tenant_id}/credentials
+#   GET    /admin/tenants/{tenant_id}/credentials
+#   POST   /admin/tenants/{tenant_id}/credentials/{id}/rotate
+#   POST   /admin/tenants/{tenant_id}/credentials/{id}/revoke
 
 
 @router.get(
@@ -2222,93 +2151,19 @@ async def export_audit_events(
 
 @router.post(
     "/keys",
-    response_model=CreateKeyResponse,
     dependencies=[Depends(require_scopes("keys:write"))],
 )
-async def admin_create_key(
-    req: AdminCreateKeyRequest,
-    request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-) -> CreateKeyResponse:
-    """Create a new API key via admin."""
-    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
-        raise HTTPException(
-            status_code=410,
-            detail=(
-                "POST /admin/keys is retired on Postgres (R4.8). "
+async def admin_create_key(request: Request) -> dict:
+    """Retired in R4.9. Issue credentials via POST /admin/tenants/{tenant_id}/credentials."""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "ENDPOINT_RETIRED",
+            "message": (
+                "POST /admin/keys is retired. "
                 "Issue credentials via POST /admin/tenants/{tenant_id}/credentials."
             ),
-        )
-
-    bound_tenant = bind_tenant_id(
-        request,
-        req.tenant_id,
-        require_explicit_for_unscoped=True,
-    )
-
-    key = mint_key(
-        *req.scopes,
-        ttl_seconds=req.ttl_seconds,
-        tenant_id=bound_tenant,
-    )
-
-    parts = key.split(".")
-    prefix = parts[0] if parts else "fgk"
-
-    expires_at = int(time.time()) + req.ttl_seconds
-
-    audit_key_created(
-        key_prefix=prefix,
-        scopes=req.scopes,
-        tenant_id=bound_tenant,
-        request=request,
-        ttl_seconds=req.ttl_seconds,
-    )
-
-    return CreateKeyResponse(
-        key=key,
-        prefix=prefix,
-        scopes=req.scopes,
-        tenant_id=bound_tenant,
-        ttl_seconds=req.ttl_seconds,
-        expires_at=expires_at,
-    )
-
-
-@router.post(
-    "/keys/{key_prefix}/revoke",
-    response_model=RevokeKeyResponse,
-    dependencies=[Depends(require_scopes("keys:write"))],
-)
-async def admin_revoke_key(
-    key_prefix: str,
-    request: Request,
-    actor_ctx: ActorContext = Depends(require_permission("key.manage")),
-    tenant_id: Optional[str] = Query(default=None, max_length=128),
-) -> RevokeKeyResponse:
-    """Revoke an API key by prefix."""
-    bound_tenant = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,
-    )
-    keys = list_api_keys(tenant_id=bound_tenant, include_disabled=True)
-    if not any(k.get("prefix") == key_prefix for k in keys):
-        raise HTTPException(status_code=404, detail="Key not found")
-
-    revoked = revoke_api_key(key_prefix, tenant_id=bound_tenant)
-    if revoked:
-        audit_key_revoked(key_prefix=key_prefix, request=request)
-        return RevokeKeyResponse(
-            revoked=True,
-            prefix=key_prefix,
-            message="Key successfully revoked",
-        )
-
-    return RevokeKeyResponse(
-        revoked=False,
-        prefix=key_prefix,
-        message="Key not found or already revoked",
+        },
     )
 
 

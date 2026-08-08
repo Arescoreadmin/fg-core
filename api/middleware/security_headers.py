@@ -60,7 +60,7 @@ class SecurityHeadersConfig:
 
     # Cache Control for sensitive endpoints
     cache_control_sensitive: str = "no-store, no-cache, must-revalidate, private"
-    sensitive_paths: tuple = ("/defend", "/status", "/stats", "/decisions", "/keys")
+    sensitive_paths: tuple = ("/defend", "/status", "/stats", "/decisions")
 
     # Request ID header name
     request_id_header: str = "X-Request-ID"

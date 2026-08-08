@@ -532,7 +532,9 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="key_not_found")
 
-    # SQLite legacy api_keys path (dev/test backend only; Postgres uses canonical above).
+    # dev/test only — SQLite api_keys path for test fixtures using mint_key().
+    # Postgres uses the canonical tenant_credentials path exclusively (R4.8/R4.9).
+    # Retirement of this SQLite path is tracked as a follow-on cleanup item.
     def _row_for(
         prefix: str,
         lookup_hash: Optional[str],

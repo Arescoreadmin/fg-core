@@ -82,21 +82,7 @@ def _update_key_usage(
     tenant_id: Optional[str] = None,
 ) -> None:
     """Atomically update last_used_at and use_count for a key (best effort)."""
-    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
-        try:
-            from .store import update_key_usage as _pg_update_key_usage
-
-            _pg_update_key_usage(
-                prefix=prefix,
-                identifier_col=identifier_col,
-                identifier=identifier,
-                tenant_id=tenant_id,
-            )
-        except Exception:
-            pass
-        return
-
-    # SQLite path (unchanged)
+    # dev/test SQLite path only — Postgres no longer uses api_keys (R4.9)
     try:
         con = sqlite3.connect(sqlite_path, timeout=5.0)
         try:
@@ -157,22 +143,6 @@ def mint_key(
     key_hash, hash_alg, hash_params, key_lookup = hash_key(secret)
     scopes_csv = ",".join(scopes)
 
-    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
-        return _mint_key_postgres(
-            scopes=scopes,
-            prefix=prefix,
-            token=token,
-            secret=secret,
-            key_hash=key_hash,
-            hash_alg=hash_alg,
-            hash_params=hash_params,
-            key_lookup=key_lookup,
-            scopes_csv=scopes_csv,
-            tenant_id=tenant_id,
-            now_i=now_i,
-            exp_i=exp_i,
-        )
-
     return _mint_key_sqlite(
         scopes=scopes,
         prefix=prefix,
@@ -187,48 +157,6 @@ def mint_key(
         now_i=now_i,
         exp_i=exp_i,
     )
-
-
-def _mint_key_postgres(
-    *,
-    scopes,
-    prefix: str,
-    token: str,
-    secret: str,
-    key_hash: str,
-    hash_alg: str,
-    hash_params: dict,
-    key_lookup: str,
-    scopes_csv: str,
-    tenant_id: Optional[str],
-    now_i: int,
-    exp_i: int,
-) -> str:
-    if not tenant_id:
-        raise ValueError(
-            "tenant_id is required for Postgres key minting (FG_DB_BACKEND=postgres)"
-        )
-
-    from .store import insert_key_row
-
-    insert_key_row(
-        {
-            "name": ("minted:" + (scopes_csv or "none"))[:128],
-            "prefix": prefix,
-            "key_hash": key_hash,
-            "key_lookup": key_lookup,
-            "hash_alg": hash_alg,
-            "hash_params": hash_params,
-            "scopes_csv": scopes_csv,
-            "enabled": True,
-            "tenant_id": tenant_id,
-            "created_at": now_i,
-            "expires_at": exp_i,
-            "version": 1,
-            "use_count": 0,
-        }
-    )
-    return f"{prefix}.{token}.{secret}"
 
 
 def _mint_key_sqlite(
@@ -336,23 +264,7 @@ def revoke_api_key(
     tenant_id: Optional[str] = None,
     key_hash: Optional[str] = None,
 ) -> bool:
-    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
-        from .store import update_key_enabled
-
-        rowcount = update_key_enabled(
-            prefix=key_prefix,
-            key_hash=key_hash,
-            enabled=False,
-            tenant_id=tenant_id,
-        )
-        revoked = rowcount > 0
-        if revoked:
-            from .resolution import _log_auth_event
-
-            _log_auth_event("key_revoked", success=True, key_prefix=key_prefix)
-        return revoked
-
-    # SQLite path (unchanged)
+    # dev/test SQLite path only — Postgres no longer uses api_keys (R4.9)
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         return False
@@ -396,12 +308,7 @@ def list_api_keys(
     tenant_id: Optional[str] = None,
     include_disabled: bool = False,
 ) -> list[dict]:
-    if (os.getenv("FG_DB_BACKEND") or "").strip().lower() == "postgres":
-        from .store import list_key_rows
-
-        return list_key_rows(tenant_id=tenant_id, include_disabled=include_disabled)
-
-    # SQLite path (unchanged)
+    # dev/test SQLite path only — Postgres no longer uses api_keys (R4.9)
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         return []

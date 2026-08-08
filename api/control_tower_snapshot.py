@@ -10,7 +10,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
-from api.auth_scopes.mapping import list_api_keys
+from api.credential_authority import list_credentials
+from api.db import get_engine
 from api.db_models import (
     AgentDeviceRegistry,
     AuditLedgerRecord,
@@ -56,8 +57,10 @@ def control_tower_snapshot_v1(
     )
 
     chain_result = verify_chain_for_tenant(db, tenant_id=tenant_id, limit=25)
-    keys = list_api_keys(tenant_id=tenant_id, include_disabled=True)
-    active_keys = [k for k in keys if bool(k.get("enabled", False))]
+    credentials = list_credentials(
+        get_engine(), tenant_id, credential_type="tenant_api_key", limit=100
+    )
+    active_creds = [c for c in credentials if c.status == "active"]
 
     connector_rows = (
         db.query(ConnectorTenantState)
@@ -130,15 +133,19 @@ def control_tower_snapshot_v1(
             else None,
         },
         "key_lifecycle": {
-            "active_key_count": len(active_keys),
+            "active_credential_count": len(active_creds),
             "last_rotation": max(
-                (_iso(k.get("created_at")) for k in active_keys if k.get("created_at")),
+                (_iso(c.issued_at) for c in active_creds if c.issued_at),
                 default=None,
             ),
             "grace_window_seconds": None,
             "recent_actions": [
-                {"prefix": k.get("prefix"), "enabled": bool(k.get("enabled", False))}
-                for k in sorted(keys, key=lambda x: str(x.get("prefix", "")))[:10]
+                {"credential_id": c.credential_id, "status": c.status}
+                for c in sorted(
+                    credentials,
+                    key=lambda x: x.issued_at or "",
+                    reverse=True,
+                )[:10]
             ],
         },
         "connectors": {
@@ -182,7 +189,7 @@ def control_tower_snapshot_v1(
             "audit": "/audit/sessions",
             "chain_verify": "/forensics/chain/verify",
             "connectors": "/admin/connectors/status",
-            "keys": "/keys",
+            "credentials": f"/admin/tenants/{tenant_id}/credentials",
             "lockers": "/control-plane/lockers",
         },
     }

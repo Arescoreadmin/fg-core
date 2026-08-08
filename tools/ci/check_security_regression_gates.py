@@ -149,7 +149,6 @@ def check_tenant_binding_helper_usage(failures: list[str]) -> None:
     route_files = [
         "api/decisions.py",
         "api/ingest.py",
-        "api/keys.py",
         "api/admin.py",
         "api/forensics.py",
         "api/feed.py",

@@ -744,12 +744,12 @@ class StartupValidator:
                     message=(
                         "FG_DB_URL is required when FG_DB_BACKEND=postgres and "
                         "FG_AUTH_ENABLED=true. Auth resolver cannot connect to "
-                        "Postgres api_keys without a database URL."
+                        "Postgres tenant_credentials without a database URL."
                     ),
                     severity="error",
                 )
             else:
-                # Connectivity check: confirm api_keys table is reachable.
+                # Connectivity check: confirm tenant_credentials table is reachable.
                 try:
                     from api.auth_scopes.store import probe_auth_store
 
@@ -767,7 +767,7 @@ class StartupValidator:
                             passed=False,
                             message=(
                                 f"Postgres auth store check failed: {reason}. "
-                                "Ensure api_keys table exists and FG_DB_URL is correct."
+                                "Ensure tenant_credentials table exists and FG_DB_URL is correct."
                             ),
                             severity="error",
                         )
@@ -778,7 +778,7 @@ class StartupValidator:
                         message=(
                             f"Postgres auth store connectivity check raised "
                             f"{type(exc).__name__}. "
-                            "Ensure FG_DB_URL is correct and api_keys table exists."
+                            "Ensure FG_DB_URL is correct and tenant_credentials table exists."
                         ),
                         severity="error",
                     )
