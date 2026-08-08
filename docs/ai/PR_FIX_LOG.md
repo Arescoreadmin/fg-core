@@ -21182,6 +21182,22 @@ returns the tenant — filesystem can be empty and tenants resolve.
 
 ---
 
+## P-43 — fix(r4.9): remove TestTenantAdminKeyManage + TestViewerKeyManageDenied from phase5 enforcement tests — PR #623
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#623)
+- **Date:** 2026-08-08
+- **Files changed:** `tests/test_phase5_p0p1_enforcement.py`
+- **Root cause:** `TestViewerKeyManageDenied` (`test_viewer_cannot_list_keys`, `test_viewer_cannot_create_key`) called `GET /keys` and `POST /keys` from the deleted `api/keys.py` module. Both routes now return 404; the tests asserted 403, causing `assert 404 == 403`. `TestTenantAdminKeyManage::test_tenant_admin_can_list_keys` also called `GET /keys` but asserted `!= 403` (vacuously passed with 404). Note: the `POST /keys` stub in `api/admin.py` is at `/admin/keys`, not `/keys` — so the old `/keys` path is completely unrouted.
+- **Fix:** Removed both class blocks (sections 6 and 7) from `test_phase5_p0p1_enforcement.py`. The key.manage RBAC capability is now irrelevant for the retired routes; credential management RBAC is exercised via `/admin/tenants/{tenant_id}/credentials` routes which have their own test coverage.
+- **Behavioral impact:** None.
+- **Security impact:** None — the retired routes do not exist; credential authority RBAC is separately tested.
+- **Schema/API impact:** None.
+- **Tests added:** None.
+- **Validation:** `.venv/bin/python -m pytest tests/test_phase5_p0p1_enforcement.py -q` → 13 passed.
+- **Result:** PASS.
+
+---
+
 ## P-42 — fix(r4.9): retire test_keys_admin_tenant_scope — PR #623
 
 - **PR/Branch:** `feat/r4.9-credential-authority` (#623)
