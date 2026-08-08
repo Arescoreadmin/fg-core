@@ -78,6 +78,10 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # calls _set_tenant_rls() before any tenant-scoped query. The standard
     # Depends() tenant parameter does not apply to named-user session flows.
     ("GET", "/portal/named-users/me"),
+    # R4.9 retirement stub: POST /admin/keys always raises HTTP 410 Gone and
+    # performs no tenant-scoped queries. Tenant binding is irrelevant — the
+    # handler unconditionally rejects every request before touching any data.
+    ("POST", "/admin/keys"),
 }
 
 
