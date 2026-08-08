@@ -21182,6 +21182,22 @@ returns the tenant — filesystem can be empty and tenants resolve.
 
 ---
 
+## P-42 — fix(r4.9): retire test_keys_admin_tenant_scope — PR #623
+
+- **PR/Branch:** `feat/r4.9-credential-authority` (#623)
+- **Date:** 2026-08-08
+- **Files changed:** `tests/security/test_keys_admin_tenant_scope.py` (deleted)
+- **Root cause:** `test_keys_admin_tenant_scope` asserts `GET /keys` returns HTTP 200 and `POST /keys/revoke` returns HTTP 403. Both routes were deleted in R4.9. CI hardening gates (`ci-hardening` Security regression tests) and fg-required `fg-security` lane both failed with `assert 404 == 200` on the GET assertion.
+- **Fix:** Deleted `tests/security/test_keys_admin_tenant_scope.py`. The tenant isolation invariant it enforced (tenant A's admin key cannot affect tenant B's credentials) is now covered by `test_cross_tenant_regression.py` (CT-1 through CT-7) and `test_tenant_binding_global.py`.
+- **Behavioral impact:** None — no runtime behaviour changes.
+- **Security impact:** None — the cross-tenant isolation property is retained and tested by the H0-PR5 cross-tenant regression suite.
+- **Schema/API impact:** None.
+- **Tests added:** None (coverage maintained by existing suites).
+- **Validation:** `gh run view 31271026795 --log-failed` confirmed the specific failure; CT-1 through CT-7 in `test_cross_tenant_regression.py` cover the equivalent isolation contract.
+- **Result:** PASS.
+
+---
+
 ## P-41 — fix(r4.9): active_key_count compat alias + remove stale api.keys test imports — PR #622
 
 - **PR/Branch:** `feat/r4.9-credential-authority` (#622)
