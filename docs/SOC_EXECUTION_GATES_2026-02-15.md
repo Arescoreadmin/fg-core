@@ -6516,3 +6516,23 @@ Same `_EXEMPTIONS` frozenset for `/portal/named-users/me`, same pnu1. rationale.
 - SOC-HIGH-002 (critical-file change without SOC doc update) would fire if this entry were absent.
 
 **SOC review outcome:** approved. `tools/ci/` is listed under the SOC critical-file watchlist. The change adds narrow, documented CI gate exemptions for a single route that uses a correctly-implemented alternative auth pattern. Both invariants remain fully enforced for all non-exempted routes. The exemption is structurally identical to the pattern already approved for `/portal/named-sessions/self` and `/portal/invitations/{token}/accept` in the same file.
+
+
+---
+
+## fix/ci-always-run-fg-required — remove paths-ignore from fg-required (2026-08-07)
+
+**Critical files changed:** `.github/workflows/fg-required.yml`
+
+**Change scope:** CI configuration only — removes the `paths-ignore` block. No runtime auth logic, RLS policies, OPA policies, API routes, migrations, or cryptographic material modified.
+
+**Change detail:** `fg-required.yml` had a 16-entry `paths-ignore` block that silently skipped the full `fg-required` test suite (fg-fast + security suite) on any PR that only touched `tests/**`, `docs/**`, `*.md`, `Makefile`, or requirements files. Security test additions (H0-PR4, H0-PR5) were the immediate trigger: those PRs changed only `tests/security/` and `docs/ai/` files, so `fg-required` never ran. The block is removed so that `fg-required` fires unconditionally on every PR to `main`.
+
+**Security invariants confirmed:**
+
+- This change increases CI coverage — no gate is weakened or removed.
+- `fg-required` now runs more often, not less. The security test suite runs on every PR regardless of which files changed.
+- No auth logic, tenant isolation, RLS, OPA, migrations, or API contracts modified.
+- The `workflow_dispatch` trigger is retained, allowing manual runs.
+
+**SOC review outcome:** approved. `.github/workflows/fg-required.yml` is listed under the SOC critical-file watchlist. This change widens CI enforcement by removing a path filter that was silently skipping the full test suite on test-only and doc-only PRs. It does not weaken any existing gate and has no runtime security impact.
