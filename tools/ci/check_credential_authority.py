@@ -131,8 +131,7 @@ def main() -> int:
                 return 1
 
     # R4.8: block direct api_keys writes outside allowed paths.
-    # Pre-existing writers below are grandfathered; any NEW file not in this list
-    # that adds api_keys DML will fail this gate.
+    # R4.10: api/tenant_rbac.py removed from allowlist — no longer writes to api_keys.
     _LEGACY_WRITE_RE = re.compile(
         r"\b(?:INSERT\s+INTO|UPDATE)\s+api_keys\b", re.IGNORECASE
     )
@@ -142,14 +141,9 @@ def main() -> int:
             "tests/",
             "tools/ci/",
             ".claude/",  # local dev worktrees — not present in CI
-            # R4.9: api/keys.py deleted; api/auth_scopes/store.py write functions deleted.
-            # Remaining api_keys writers are SQLite dev/test paths only:
-            # api/auth_scopes/mapping.py: _mint_key_sqlite / revoke_api_key SQLite path
-            # api/auth_scopes/resolution.py: _row_for SQLite lookup (dev/test only)
-            # Full SQLite path retirement tracked as follow-on cleanup after R4.9.
+            # SQLite dev/test paths only. Retirement tracked in R4.11.
             "api/auth_scopes/mapping.py",
             "api/auth_scopes/resolution.py",
-            "api/tenant_rbac.py",
             "api/tripwires.py",
             "tools/seed/",
             "tools/scripts/",
@@ -168,6 +162,45 @@ def main() -> int:
         if _LEGACY_WRITE_RE.search(src):
             print(
                 f"❌ check-credential-authority: {relative_file} writes directly to api_keys table",
+                file=sys.stderr,
+            )
+            return 1
+
+    # R4.10: block production SELECT from api_keys outside explicit SQLite allowlist.
+    # Canonical RBAC reads from tenant_credential_roles; api_keys reads are SQLite-only.
+    _LEGACY_READ_RE = re.compile(
+        r"\bSELECT\b.*\bFROM\s+api_keys\b", re.IGNORECASE | re.DOTALL
+    )
+    _LEGACY_READ_ALLOWED = frozenset(
+        {
+            "migrations/",
+            "tests/",
+            "tools/ci/",
+            ".claude/",
+            # SQLite dev/test paths only. Retirement tracked in R4.11.
+            "api/auth_scopes/mapping.py",
+            "api/auth_scopes/resolution.py",
+            "api/auth_scopes/validation.py",  # sqlite3.connect() path, dev/test only
+            "api/tenant_rbac.py",  # _legacy_get_key_role: dead code in production
+            "api/tripwires.py",
+            "tools/seed/",
+            "tools/scripts/",
+            "tools/tenants/",  # migration/diagnostic tooling, not production code
+            "tools/patch_chain_and_ui_single_use.py",
+            "scripts/",
+        }
+    )
+    for py_file in sorted(REPO.rglob("*.py")):
+        relative_file = py_file.relative_to(REPO).as_posix()
+        if any(relative_file.startswith(prefix) for prefix in _LEGACY_READ_ALLOWED):
+            continue
+        try:
+            src = py_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if _LEGACY_READ_RE.search(src):
+            print(
+                f"❌ check-credential-authority: {relative_file} reads directly from api_keys table",
                 file=sys.stderr,
             )
             return 1

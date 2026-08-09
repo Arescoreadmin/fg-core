@@ -394,11 +394,19 @@ class TestPromotionServiceDirect:
 
 
 def _make_admin_client(app, tenant_id: str):
-    """Mint a key with tenant_admin role (has governance.promote) for the promote route."""
+    """Mint a key with tenant_admin role (has governance.promote) for the promote route.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
     from fastapi.testclient import TestClient
 
     key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
@@ -411,13 +419,11 @@ def _make_admin_client(app, tenant_id: str):
             ),
             {"t": tenant_id},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="tenant_admin",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'tenant_admin' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
     return TestClient(app, headers={"X-API-Key": key})

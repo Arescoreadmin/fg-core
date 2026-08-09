@@ -138,12 +138,20 @@ _TENANT_ID = "tenant-fa-test"
 
 @pytest.fixture()
 def client(build_app: object) -> TestClient:
-    """Auth-enabled client with assessor-level permissions."""
+    """Auth-enabled client with assessor-level permissions.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -157,13 +165,11 @@ def client(build_app: object) -> TestClient:
             ),
             {"t": _TENANT_ID},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 
@@ -1347,12 +1353,20 @@ _TENANT_ID_B = "tenant-fa-test-b"  # second tenant for isolation tests
 
 @pytest.fixture()
 def upload_client(build_app: object, tmp_path, monkeypatch):
-    """Client with a temp artifact storage dir wired via FG_ARTIFACTS_DIR."""
+    """Client with a temp artifact storage dir wired via FG_ARTIFACTS_DIR.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     artifact_dir = tmp_path / "fa_artifacts"
     artifact_dir.mkdir()
@@ -1374,13 +1388,11 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
             ),
             {"t": _TENANT_ID},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 
@@ -1389,12 +1401,20 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
 
 @pytest.fixture()
 def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
-    """Second-tenant client sharing the same app as upload_client for isolation tests."""
+    """Second-tenant client sharing the same app as upload_client for isolation tests.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     artifact_dir = tmp_path / "fa_artifacts_b"
     artifact_dir.mkdir()
@@ -1415,13 +1435,11 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
             ),
             {"t": _TENANT_ID_B},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID_B,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 

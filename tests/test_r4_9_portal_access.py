@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS tenant_credential_events (
     metadata          TEXT,
     schema_version    INTEGER      NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS tenant_credential_roles (
+    id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    tenant_id   TEXT     NOT NULL,
+    credential_id TEXT   NOT NULL,
+    role_name   TEXT     NOT NULL,
+    granted_at  TEXT     NOT NULL,
+    granted_by  TEXT     NOT NULL,
+    revoked_at  TEXT,
+    revoked_by  TEXT
+);
 """
 
 _TID = "tenant-portal-test"

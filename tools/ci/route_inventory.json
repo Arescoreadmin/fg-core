@@ -17300,7 +17300,7 @@
       ],
       "file": "api/tenant_rbac_router.py",
       "method": "DELETE",
-      "path": "/rbac/assignments/{key_id}",
+      "path": "/rbac/assignments/{credential_id}",
       "plane": "rbac",
       "plane_id": "rbac",
       "scoped": true,
@@ -20577,7 +20577,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-08-08T15:13:27.145428+00:00",
+  "generated_at": "2026-08-08T23:11:55.018459+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

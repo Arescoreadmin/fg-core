@@ -31,10 +31,18 @@ _TENANT_OTHER = "tenant-p3-other"
 
 
 def _mint(build_app, *scopes: str, tenant_id: str, role: str | None = None) -> tuple:
-    """Mint an API key, optionally assign a DB role; return (app, client)."""
+    """Mint an API key, optionally assign a DB role; return (app, client).
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)
     key = mint_key(*scopes, tenant_id=tenant_id)
@@ -49,13 +57,11 @@ def _mint(build_app, *scopes: str, tenant_id: str, role: str | None = None) -> t
                 ),
                 {"t": tenant_id},
             ).scalar_one()
-            assign_role(
-                db,
-                tenant_id=tenant_id,
-                actor_key_prefix="pytest",
-                target_key_id=int(key_id),
-                role_name=role,
+            db.execute(
+                sa_text("UPDATE api_keys SET role = :role WHERE id = :id"),
+                {"role": role, "id": key_id},
             )
+            db.commit()
         finally:
             db.close()
 

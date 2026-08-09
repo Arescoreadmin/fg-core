@@ -148,6 +148,17 @@ CREATE TABLE IF NOT EXISTS agent_enrollment_tokens (
     reason      VARCHAR(256) NOT NULL DEFAULT 'unspecified',
     ticket      VARCHAR(128)
 );
+
+CREATE TABLE IF NOT EXISTS tenant_credential_roles (
+    id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    tenant_id   TEXT     NOT NULL,
+    credential_id TEXT   NOT NULL,
+    role_name   TEXT     NOT NULL,
+    granted_at  TEXT     NOT NULL,
+    granted_by  TEXT     NOT NULL,
+    revoked_at  TEXT,
+    revoked_by  TEXT
+);
 """
 
 _TID = "tenant-agent-test"

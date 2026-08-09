@@ -1,15 +1,17 @@
 """
-api/tenant_rbac.py — Intra-tenant RBAC for FrostGate (PR 57).
+api/tenant_rbac.py — Intra-tenant RBAC for FrostGate.
 
-Architecture:
-- Roles are assigned to API keys (the identity primitive in this system).
-- Built-in roles define a scope hierarchy; custom roles are future-ready.
-- Role resolution happens at request time via require_role() dependency.
-- All role changes are append-only audited in tenant_role_audit.
+R4.10: Roles are stored in tenant_credential_roles and bound to canonical
+credential_id (UUID). All production auth resolves roles via credential_id.
+
+Legacy path (_legacy_get_key_role):
+- Supports SQLite dev/test auth where key_db_id is set but credential_id is not.
+- Dead code in production — Postgres auth (R4.8) always yields credential_id.
+- Retirement tracked in R4.11 alongside api_keys table drop.
 
 Security invariants:
-- Deny-by-default: no role or unknown role → only explicit scopes; require_role denies.
-- Cross-tenant: all lookups scoped to tenant_id; role assignment requires tenant_admin.
+- Deny-by-default: no role or unknown role → require_role denies.
+- Cross-tenant: all lookups scoped to tenant_id; role assignment verifies tenant.
 - Immutable audit: tenant_role_audit rows are never updated or deleted.
 - Raw key material never appears in logs or error messages.
 """
@@ -32,10 +34,6 @@ log = logging.getLogger("frostgate.rbac")
 # Built-in role definitions
 # ---------------------------------------------------------------------------
 
-#: Ordered role hierarchy. A role implies all roles that appear after it in
-#: the chain for its branch. tenant_admin implies all other roles.
-#: Stored as a mapping: role → frozenset of directly implied scopes.
-
 BUILTIN_ROLES: tuple[str, ...] = (
     "tenant_admin",
     "governance_admin",
@@ -44,8 +42,6 @@ BUILTIN_ROLES: tuple[str, ...] = (
     "read_only",
 )
 
-#: Scope bundles for each built-in role.
-#: A key with role R gets the union of its explicit scopes_csv AND these scopes.
 _ROLE_SCOPES: dict[str, frozenset[str]] = {
     "tenant_admin": frozenset(
         {
@@ -111,8 +107,6 @@ _ROLE_SCOPES: dict[str, frozenset[str]] = {
     ),
 }
 
-#: Role hierarchy: a role implies these other roles (for require_role checks).
-#: If a route requires "auditor", then governance_admin and tenant_admin also pass.
 _ROLE_IMPLIES: dict[str, frozenset[str]] = {
     "tenant_admin": frozenset(
         {"tenant_admin", "governance_admin", "analyst", "auditor", "read_only"}
@@ -168,56 +162,25 @@ def _new_event_id() -> str:
     return str(uuid.uuid4())
 
 
-def _table_columns(conn: Session, table: str) -> set[str]:
-    """Return column names for a table (works for SQLite and PostgreSQL)."""
-    try:
-        rows = conn.execute(
-            text(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
-            ),
-            {"t": table},
-        ).fetchall()
-        if rows:
-            return {r[0] for r in rows}
-    except Exception:
-        pass
-    try:
-        rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-        return {r[1] for r in rows}
-    except Exception:
-        return set()
+# ---------------------------------------------------------------------------
+# Canonical RBAC — tenant_credential_roles
+# ---------------------------------------------------------------------------
 
 
-def get_key_role(conn: Session, *, tenant_id: str, key_id: int) -> Optional[str]:
-    """Return the role assigned to an API key by its DB id, or None."""
-    cols = _table_columns(conn, "api_keys")
-    if "role" not in cols:
-        return None
-    row = conn.execute(
-        text("SELECT role FROM api_keys WHERE id = :id AND tenant_id = :tenant_id"),
-        {"id": key_id, "tenant_id": tenant_id},
-    ).fetchone()
-    if row is None:
-        return None
-    return str(row[0]) if row[0] else None
-
-
-def _get_key_role_by_prefix(
-    conn: Session, *, tenant_id: str, key_prefix: str
+def get_credential_role(
+    conn: Session, *, tenant_id: str, credential_id: str
 ) -> Optional[str]:
-    """Fallback: look up role by prefix+tenant (used only when key_db_id unavailable)."""
-    cols = _table_columns(conn, "api_keys")
-    if "role" not in cols:
-        return None
+    """Return the active role for a canonical credential, or None if none assigned."""
     row = conn.execute(
         text(
-            "SELECT role FROM api_keys WHERE prefix = :prefix AND tenant_id = :tenant_id LIMIT 1"
+            "SELECT role_name FROM tenant_credential_roles "
+            "WHERE tenant_id = :tenant_id "
+            "  AND credential_id = :credential_id "
+            "  AND revoked_at IS NULL"
         ),
-        {"prefix": key_prefix, "tenant_id": tenant_id},
+        {"tenant_id": tenant_id, "credential_id": credential_id},
     ).fetchone()
-    if row is None:
-        return None
-    return str(row[0]) if row[0] else None
+    return str(row[0]) if row and row[0] else None
 
 
 def assign_role(
@@ -225,44 +188,71 @@ def assign_role(
     *,
     tenant_id: str,
     actor_key_prefix: str,
-    target_key_id: int,
+    credential_id: str,
     role_name: str,
 ) -> dict[str, Any]:
-    """Assign a built-in role to an API key within a tenant.
+    """Assign a built-in role to a canonical credential within a tenant.
 
-    Uses api_keys.id as the unambiguous assignment target.
+    Revokes any existing active role first, then inserts the new one.
     Raises ValueError for invalid tenant ownership or role names.
     Appends an immutable audit record.
     """
     if not tenant_id or not str(tenant_id).strip():
         raise ValueError("tenant_id must not be blank")
+    if not credential_id or not str(credential_id).strip():
+        raise ValueError("credential_id must not be blank")
     if role_name not in VALID_ROLE_NAMES:
         raise ValueError(
             f"Unknown role: {role_name!r}. Valid roles: {sorted(VALID_ROLE_NAMES)}"
         )
 
-    # Verify target key belongs to this tenant — use id for unambiguous lookup.
-    target_row = conn.execute(
-        text("SELECT id, name FROM api_keys WHERE id = :id AND tenant_id = :t"),
-        {"id": target_key_id, "t": tenant_id},
+    # Verify credential belongs to this tenant (belt-and-suspenders; FK enforced in Postgres).
+    row = conn.execute(
+        text(
+            "SELECT credential_id FROM tenant_credentials "
+            "WHERE credential_id = :cid AND tenant_id = :tid"
+        ),
+        {"cid": credential_id, "tid": tenant_id},
     ).fetchone()
-    if target_row is None:
+    if row is None:
         raise ValueError(
-            f"key_id={target_key_id!r} not found for tenant_id={tenant_id!r}"
-        )
-    display_name = target_row[1] if target_row[1] else None
-
-    # Update role column (guarded by _table_columns).
-    cols = _table_columns(conn, "api_keys")
-    if "role" in cols:
-        conn.execute(
-            text(
-                "UPDATE api_keys SET role = :role WHERE id = :id AND tenant_id = :tenant_id"
-            ),
-            {"role": role_name, "id": target_key_id, "tenant_id": tenant_id},
+            f"credential_id={credential_id!r} not found for tenant_id={tenant_id!r}"
         )
 
     now = _utc_now_iso()
+
+    # Revoke any existing active role before granting the new one.
+    conn.execute(
+        text(
+            "UPDATE tenant_credential_roles "
+            "SET revoked_at = :now, revoked_by = :actor "
+            "WHERE tenant_id = :tenant_id "
+            "  AND credential_id = :credential_id "
+            "  AND revoked_at IS NULL"
+        ),
+        {
+            "now": now,
+            "actor": actor_key_prefix,
+            "tenant_id": tenant_id,
+            "credential_id": credential_id,
+        },
+    )
+
+    conn.execute(
+        text(
+            "INSERT INTO tenant_credential_roles "
+            "(tenant_id, credential_id, role_name, granted_at, granted_by) "
+            "VALUES (:tenant_id, :credential_id, :role_name, :now, :actor)"
+        ),
+        {
+            "tenant_id": tenant_id,
+            "credential_id": credential_id,
+            "role_name": role_name,
+            "now": now,
+            "actor": actor_key_prefix,
+        },
+    )
+
     event_id = _new_event_id()
     _append_role_audit(
         conn,
@@ -270,7 +260,7 @@ def assign_role(
         tenant_id=tenant_id,
         actor_key_prefix=actor_key_prefix,
         action="assign_role",
-        target_key_id=str(target_key_id),
+        target_credential_id=credential_id,
         role_name=role_name,
         timestamp=now,
         success=1,
@@ -283,14 +273,13 @@ def assign_role(
             "event": "rbac.role_assigned",
             "tenant_id": tenant_id,
             "actor_key_prefix": actor_key_prefix,
-            "target_key_id": target_key_id,
+            "rbac_target": credential_id,
             "role_name": role_name,
         },
     )
     return {
         "tenant_id": tenant_id,
-        "key_id": target_key_id,
-        "display_name": display_name,
+        "credential_id": credential_id,
         "role": role_name,
         "assigned_by": actor_key_prefix,
         "assigned_at": now,
@@ -303,32 +292,43 @@ def revoke_role(
     *,
     tenant_id: str,
     actor_key_prefix: str,
-    target_key_id: int,
+    credential_id: str,
 ) -> dict[str, Any]:
-    """Remove the role from an API key within a tenant."""
+    """Remove the active role from a canonical credential within a tenant."""
     if not tenant_id or not str(tenant_id).strip():
         raise ValueError("tenant_id must not be blank")
+    if not credential_id or not str(credential_id).strip():
+        raise ValueError("credential_id must not be blank")
 
-    target_row = conn.execute(
-        text("SELECT id, name FROM api_keys WHERE id = :id AND tenant_id = :t"),
-        {"id": target_key_id, "t": tenant_id},
+    row = conn.execute(
+        text(
+            "SELECT credential_id FROM tenant_credentials "
+            "WHERE credential_id = :cid AND tenant_id = :tid"
+        ),
+        {"cid": credential_id, "tid": tenant_id},
     ).fetchone()
-    if target_row is None:
+    if row is None:
         raise ValueError(
-            f"key_id={target_key_id!r} not found for tenant_id={tenant_id!r}"
-        )
-    display_name = target_row[1] if target_row[1] else None
-
-    cols = _table_columns(conn, "api_keys")
-    if "role" in cols:
-        conn.execute(
-            text(
-                "UPDATE api_keys SET role = NULL WHERE id = :id AND tenant_id = :tenant_id"
-            ),
-            {"id": target_key_id, "tenant_id": tenant_id},
+            f"credential_id={credential_id!r} not found for tenant_id={tenant_id!r}"
         )
 
     now = _utc_now_iso()
+    conn.execute(
+        text(
+            "UPDATE tenant_credential_roles "
+            "SET revoked_at = :now, revoked_by = :actor "
+            "WHERE tenant_id = :tenant_id "
+            "  AND credential_id = :credential_id "
+            "  AND revoked_at IS NULL"
+        ),
+        {
+            "now": now,
+            "actor": actor_key_prefix,
+            "tenant_id": tenant_id,
+            "credential_id": credential_id,
+        },
+    )
+
     event_id = _new_event_id()
     _append_role_audit(
         conn,
@@ -336,7 +336,7 @@ def revoke_role(
         tenant_id=tenant_id,
         actor_key_prefix=actor_key_prefix,
         action="revoke_role",
-        target_key_id=str(target_key_id),
+        target_credential_id=credential_id,
         role_name=None,
         timestamp=now,
         success=1,
@@ -349,13 +349,12 @@ def revoke_role(
             "event": "rbac.role_revoked",
             "tenant_id": tenant_id,
             "actor_key_prefix": actor_key_prefix,
-            "target_key_id": target_key_id,
+            "rbac_target": credential_id,
         },
     )
     return {
         "tenant_id": tenant_id,
-        "key_id": target_key_id,
-        "display_name": display_name,
+        "credential_id": credential_id,
         "role": None,
         "revoked_by": actor_key_prefix,
         "revoked_at": now,
@@ -370,18 +369,16 @@ def list_role_assignments(
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """Return all API keys with assigned roles for a tenant."""
+    """Return all canonical credentials with active role assignments for a tenant."""
     if not tenant_id or not str(tenant_id).strip():
         raise ValueError("tenant_id must not be blank")
-    cols = _table_columns(conn, "api_keys")
-    if "role" not in cols:
-        return []
     rows = (
         conn.execute(
             text(
-                "SELECT id, name, role, scopes_csv FROM api_keys "
-                "WHERE tenant_id = :tenant_id AND role IS NOT NULL AND enabled = 1 "
-                "ORDER BY id "
+                "SELECT credential_id, role_name, granted_at, granted_by "
+                "FROM tenant_credential_roles "
+                "WHERE tenant_id = :tenant_id AND revoked_at IS NULL "
+                "ORDER BY granted_at "
                 "LIMIT :limit OFFSET :offset"
             ),
             {"tenant_id": tenant_id, "limit": limit, "offset": offset},
@@ -391,12 +388,10 @@ def list_role_assignments(
     )
     return [
         {
-            "key_id": int(r["id"]),
-            "display_name": r.get("name"),
-            "role": str(r["role"]),
-            "scopes": str(r.get("scopes_csv") or "").split(",")
-            if r.get("scopes_csv")
-            else [],
+            "credential_id": str(r["credential_id"]),
+            "role": str(r["role_name"]),
+            "granted_at": str(r["granted_at"]),
+            "granted_by": r.get("granted_by"),
         }
         for r in rows
     ]
@@ -412,14 +407,18 @@ def get_role_audit_log(
     """Return the immutable role change audit log for a tenant."""
     if not tenant_id or not str(tenant_id).strip():
         raise ValueError("tenant_id must not be blank")
-    cols = _table_columns(conn, "tenant_role_audit")
+    cols = _audit_columns(conn)
     if not cols:
         return []
+
+    select_cols = "event_id, actor_key_prefix, action, target_key_prefix, role_name, timestamp, success"
+    if "target_credential_id" in cols:
+        select_cols += ", target_credential_id"
+
     rows = (
         conn.execute(
             text(
-                "SELECT event_id, actor_key_prefix, action, target_key_prefix, "
-                "role_name, timestamp, success "
+                f"SELECT {select_cols} "
                 "FROM tenant_role_audit "
                 "WHERE tenant_id = :tenant_id "
                 "ORDER BY timestamp DESC "
@@ -435,7 +434,8 @@ def get_role_audit_log(
             "event_id": str(r["event_id"]),
             "actor_key_prefix": r.get("actor_key_prefix"),
             "action": str(r["action"]),
-            # target_key_prefix column stores the string repr of target_key_id
+            "target_credential_id": r.get("target_credential_id"),
+            # Preserved for historical events written before R4.10.
             "target_key_id": r.get("target_key_prefix"),
             "role_name": r.get("role_name"),
             "timestamp": str(r["timestamp"]),
@@ -445,6 +445,26 @@ def get_role_audit_log(
     ]
 
 
+def _audit_columns(conn: Session) -> set[str]:
+    """Return column names for tenant_role_audit (works for SQLite and PostgreSQL)."""
+    try:
+        rows = conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'tenant_role_audit'"
+            )
+        ).fetchall()
+        if rows:
+            return {r[0] for r in rows}
+    except Exception:
+        pass
+    try:
+        rows = conn.execute(text("PRAGMA table_info(tenant_role_audit)")).fetchall()
+        return {r[1] for r in rows}
+    except Exception:
+        return set()
+
+
 def _append_role_audit(
     conn: Session,
     *,
@@ -452,38 +472,88 @@ def _append_role_audit(
     tenant_id: str,
     actor_key_prefix: str,
     action: str,
-    target_key_id: str,
+    target_credential_id: str,
     role_name: Optional[str],
     timestamp: str,
     success: int,
 ) -> None:
     """Append an immutable audit event. Never updates or deletes existing rows.
 
-    target_key_id (string repr of api_keys.id) is stored in the target_key_prefix
-    column for backward-compatible schema compatibility.
+    target_credential_id is the canonical credential UUID (R4.10+).
+    target_key_prefix is set to NULL for new events; historical rows retain their
+    original string value (str repr of api_keys.id) unchanged.
     """
-    cols = _table_columns(conn, "tenant_role_audit")
+    cols = _audit_columns(conn)
     if not cols:
         return
-    conn.execute(
-        text(
-            "INSERT INTO tenant_role_audit "
-            "(event_id, tenant_id, actor_key_prefix, action, target_key_prefix, "
-            "role_name, timestamp, success) "
-            "VALUES (:event_id, :tenant_id, :actor_key_prefix, :action, "
-            ":target_key_prefix, :role_name, :timestamp, :success)"
-        ),
-        {
-            "event_id": event_id,
-            "tenant_id": tenant_id,
-            "actor_key_prefix": actor_key_prefix,
-            "action": action,
-            "target_key_prefix": target_key_id,
-            "role_name": role_name,
-            "timestamp": timestamp,
-            "success": success,
-        },
-    )
+
+    if "target_credential_id" in cols:
+        conn.execute(
+            text(
+                "INSERT INTO tenant_role_audit "
+                "(event_id, tenant_id, actor_key_prefix, action, target_key_prefix, "
+                "target_credential_id, role_name, timestamp, success) "
+                "VALUES (:event_id, :tenant_id, :actor_key_prefix, :action, "
+                "NULL, :target_credential_id, :role_name, :timestamp, :success)"
+            ),
+            {
+                "event_id": event_id,
+                "tenant_id": tenant_id,
+                "actor_key_prefix": actor_key_prefix,
+                "action": action,
+                "target_credential_id": target_credential_id,
+                "role_name": role_name,
+                "timestamp": timestamp,
+                "success": success,
+            },
+        )
+    else:
+        # Fallback for DBs where migration 0177 has not yet run (e.g. test isolation).
+        conn.execute(
+            text(
+                "INSERT INTO tenant_role_audit "
+                "(event_id, tenant_id, actor_key_prefix, action, target_key_prefix, "
+                "role_name, timestamp, success) "
+                "VALUES (:event_id, :tenant_id, :actor_key_prefix, :action, "
+                ":target_key_prefix, :role_name, :timestamp, :success)"
+            ),
+            {
+                "event_id": event_id,
+                "tenant_id": tenant_id,
+                "actor_key_prefix": actor_key_prefix,
+                "action": action,
+                "target_key_prefix": target_credential_id,
+                "role_name": role_name,
+                "timestamp": timestamp,
+                "success": success,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Legacy path — SQLite dev/test only
+# ---------------------------------------------------------------------------
+
+
+def _legacy_get_key_role(
+    conn: Session, *, tenant_id: str, key_id: int
+) -> Optional[str]:
+    """Return role from api_keys for a legacy key_db_id.
+
+    Used only by _get_auth_role when credential_id is absent (SQLite test mode).
+    Dead code in production — Postgres auth (R4.8) always sets credential_id.
+    Retirement tracked in R4.11.
+    """
+    try:
+        row = conn.execute(
+            text("SELECT role FROM api_keys WHERE id = :id AND tenant_id = :tenant_id"),
+            {"id": key_id, "tenant_id": tenant_id},
+        ).fetchone()
+    except Exception:
+        return None
+    if row is None:
+        return None
+    return str(row[0]) if row[0] else None
 
 
 # ---------------------------------------------------------------------------
@@ -492,11 +562,10 @@ def _append_role_audit(
 
 
 def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
-    """Resolve the RBAC role for the authenticated key from the DB.
+    """Resolve the RBAC role for the authenticated credential from the DB.
 
-    Uses key_db_id (api_keys.id) when available for unambiguous lookup.
-    Falls back to prefix-based lookup for backward compatibility with
-    old-format keys or test mocks that don't carry key_db_id.
+    Canonical path (production): credential_id → tenant_credential_roles.
+    Legacy path (SQLite dev/test): key_db_id → api_keys.role.
     """
     auth = getattr(getattr(request, "state", None), "auth", None)
     if auth is None:
@@ -504,33 +573,27 @@ def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
     tenant_id = getattr(auth, "tenant_id", None)
     if not tenant_id:
         return None
+
+    # Canonical path: always taken in production (Postgres auth sets credential_id).
+    credential_id = getattr(auth, "credential_id", None)
+    if credential_id is not None:
+        return get_credential_role(
+            conn, tenant_id=tenant_id, credential_id=str(credential_id)
+        )
+
+    # Legacy path: SQLite dev/test only. Dead code in production.
     key_db_id = getattr(auth, "key_db_id", None)
     if key_db_id is not None:
-        return get_key_role(conn, tenant_id=tenant_id, key_id=int(key_db_id))
-    # Canonical credentials carry credential_id but no key_db_id.  The prefix
-    # fallback below selects an arbitrary legacy api_keys row by prefix+tenant,
-    # which would allow a canonical credential to inherit a legacy key's role.
-    # Short-circuit here: canonical auth has no RBAC role binding yet.
-    if getattr(auth, "credential_id", None) is not None:
-        return None
-    key_prefix = getattr(auth, "key_prefix", None)
-    if not key_prefix:
-        return None
-    return _get_key_role_by_prefix(conn, tenant_id=tenant_id, key_prefix=key_prefix)
+        return _legacy_get_key_role(conn, tenant_id=tenant_id, key_id=int(key_db_id))
+
+    return None
 
 
 def require_role(*allowed_roles: str):
-    """FastAPI dependency factory: enforce that the authenticated key holds one of the given roles.
+    """FastAPI dependency factory: enforce that the authenticated credential holds one of the given roles.
 
-    Deny-by-default: a key with no role or an unknown role is rejected with 403.
+    Deny-by-default: a credential with no role or an unknown role is rejected with 403.
     Role hierarchy is respected: tenant_admin passes any require_role check.
-
-    Usage:
-        @router.get("/sensitive")
-        def endpoint(
-            _: None = Depends(require_role("auditor")),
-            ...
-        ):
     """
     needed: set[str] = {str(r).strip() for r in allowed_roles if str(r).strip()}
 
@@ -569,5 +632,5 @@ def get_request_role(
     request: Request,
     conn: Session = Depends(auth_ctx_db_session),
 ) -> Optional[str]:
-    """FastAPI dependency: resolve the authenticated key's role (None if unassigned)."""
+    """FastAPI dependency: resolve the authenticated credential's role (None if unassigned)."""
     return _get_auth_role(request, conn)
