@@ -12,10 +12,6 @@ All through the real init_db / get_engine() flow, not a custom in-memory schema.
 
 from __future__ import annotations
 
-import os
-import tempfile
-from unittest.mock import patch
-
 import pytest
 
 from api.credential_authority import issue_credential
