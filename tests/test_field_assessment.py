@@ -148,32 +148,41 @@ def client(build_app: object) -> TestClient:
     Canonical production path: get_credential_role() → tenant_credential_roles.
     Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
     """
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
     from sqlalchemy import text as sa_text
-
-    from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
+    from sqlalchemy.orm import Session
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"t": _TENANT_ID},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
-            {"id": key_id},
+            {"tid": _TENANT_ID},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=_TENANT_ID,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name="analyst",
         )
         db.commit()
-    finally:
-        db.close()
 
-    return TestClient(app, headers={"X-API-Key": key})
+    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
 
 
 @pytest.fixture()
@@ -948,10 +957,28 @@ def test_audit_events_not_found(client: TestClient) -> None:
 @pytest.fixture()
 def portal_client(build_app: object) -> TestClient:
     """Portal-flavored client: X-Portal-Source header + governance scopes."""
-    from api.auth_scopes import mint_key
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from sqlalchemy import text as sa_text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa_text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
+            ),
+            {"tid": _TENANT_ID},
+        )
+    key = issue_credential(
+        engine,
+        tenant_id=_TENANT_ID,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    ).plaintext_secret
     return TestClient(
         app,
         headers={
@@ -1083,15 +1110,28 @@ def qa_client(build_app: object) -> TestClient:
     qa_reviewer (from governance:qa_approve) capabilities, giving both
     assessment.create and report.qa_approve without an RBAC role assignment.
     """
-    from api.auth_scopes import mint_key
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from sqlalchemy import text as sa_text
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key = mint_key(
-        "governance:read",
-        "governance:write",
-        "governance:qa_approve",
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa_text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
+            ),
+            {"tid": _TENANT_ID},
+        )
+    key = issue_credential(
+        engine,
         tenant_id=_TENANT_ID,
-    )
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write", "governance:qa_approve"],
+    ).plaintext_secret
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -1363,10 +1403,12 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
     Canonical production path: get_credential_role() → tenant_credential_roles.
     Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
     """
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
     from sqlalchemy import text as sa_text
-
-    from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
+    from sqlalchemy.orm import Session
 
     artifact_dir = tmp_path / "fa_artifacts"
     artifact_dir.mkdir()
@@ -1377,26 +1419,33 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
     )
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"t": _TENANT_ID},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
-            {"id": key_id},
+            {"tid": _TENANT_ID},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=_TENANT_ID,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name="analyst",
         )
         db.commit()
-    finally:
-        db.close()
 
-    return TestClient(app, headers={"X-API-Key": key}), artifact_dir
+    return TestClient(app, headers={"X-API-Key": result.plaintext_secret}), artifact_dir
 
 
 @pytest.fixture()
@@ -1411,10 +1460,12 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
     Canonical production path: get_credential_role() → tenant_credential_roles.
     Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
     """
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
     from sqlalchemy import text as sa_text
-
-    from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
+    from sqlalchemy.orm import Session
 
     artifact_dir = tmp_path / "fa_artifacts_b"
     artifact_dir.mkdir()
@@ -1424,26 +1475,33 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
     )
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID_B)
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"t": _TENANT_ID_B},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
-            {"id": key_id},
+            {"tid": _TENANT_ID_B},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=_TENANT_ID_B,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=_TENANT_ID_B,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name="analyst",
         )
         db.commit()
-    finally:
-        db.close()
 
-    return TestClient(app, headers={"X-API-Key": key}), artifact_dir
+    return TestClient(app, headers={"X-API-Key": result.plaintext_secret}), artifact_dir
 
 
 def _upload_pdf(client, eng_id: str, content: bytes, **extra_form):

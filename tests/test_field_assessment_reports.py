@@ -54,117 +54,103 @@ _REPORT_BODY = {
 # ---------------------------------------------------------------------------
 
 
-def _assign_analyst(tenant_id: str) -> None:
-    """Assign analyst role (→ assessor) to the most recently minted key for tenant_id.
+def _assign_analyst(tenant_id: str, credential_id: str) -> None:
+    """Assign analyst role to the given canonical credential."""
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
+    from sqlalchemy.orm import Session
 
-    SQLite dev/test path only.  resolution.py:437 gates canonical credential
-    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
-    authenticate via api_keys regardless of key prefix.  Role is set on
-    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
-
-    Canonical production path: get_credential_role() → tenant_credential_roles.
-    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
-    """
-    from sqlalchemy import text as sa_text
-
-    from api.db import get_sessionmaker
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
-            sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
-            {"id": key_id},
+    with Session(get_engine()) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=credential_id,
+            role_name="analyst",
         )
         db.commit()
-    finally:
-        db.close()
 
 
-def _assign_read_only(tenant_id: str) -> None:
-    """Assign read_only role (→ viewer) to the most recently minted key for tenant_id.
+def _assign_read_only(tenant_id: str, credential_id: str) -> None:
+    """Assign read_only role to the given canonical credential."""
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
+    from sqlalchemy.orm import Session
 
-    SQLite dev/test path only.  resolution.py:437 gates canonical credential
-    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
-    authenticate via api_keys regardless of key prefix.  Role is set on
-    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
-
-    Canonical production path: get_credential_role() → tenant_credential_roles.
-    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
-    """
-    from sqlalchemy import text as sa_text
-
-    from api.db import get_sessionmaker
-
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
-            sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'read_only' WHERE id = :id"),
-            {"id": key_id},
+    with Session(get_engine()) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=credential_id,
+            role_name="read_only",
         )
         db.commit()
-    finally:
-        db.close()
+
+
+def _issue_key(tenant_id: str, *scopes: str) -> tuple[str, str]:
+    """Ensure tenant exists, issue canonical credential; return (key, credential_id)."""
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from sqlalchemy import text as sa_text
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa_text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
+            ),
+            {"tid": tenant_id},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=list(scopes),
+    )
+    return result.plaintext_secret, result.record.credential_id
 
 
 @pytest.fixture()
 def client(build_app, monkeypatch):
     """Tenant A client with assessor-level permissions and signing key set."""
-    from api.auth_scopes import mint_key
-
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
-    _assign_analyst(_TENANT_A)
+    key, cred_id = _issue_key(_TENANT_A, "governance:read", "governance:write")
+    _assign_analyst(_TENANT_A, cred_id)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def client_b(build_app, monkeypatch):
     """Tenant B client — used to verify cross-tenant isolation."""
-    from api.auth_scopes import mint_key
-
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
-    _assign_analyst(_TENANT_B)
+    key, cred_id = _issue_key(_TENANT_B, "governance:read", "governance:write")
+    _assign_analyst(_TENANT_B, cred_id)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def read_only_client(build_app, monkeypatch):
     """Tenant A client with viewer-level permissions (no write)."""
-    from api.auth_scopes import mint_key
-
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", tenant_id=_TENANT_A)
-    _assign_read_only(_TENANT_A)
+    key, cred_id = _issue_key(_TENANT_A, "governance:read")
+    _assign_read_only(_TENANT_A, cred_id)
     return TestClient(app, headers={"X-API-Key": key})
 
 
 @pytest.fixture()
 def no_key_client(build_app, monkeypatch):
     """Client with no signing key set — for key-missing tests."""
-    from api.auth_scopes import mint_key
-
     monkeypatch.delenv("FG_REPORT_SIGNING_KEY", raising=False)
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
-    _assign_analyst(_TENANT_A)
+    key, cred_id = _issue_key(_TENANT_A, "governance:read", "governance:write")
+    _assign_analyst(_TENANT_A, cred_id)
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -686,17 +672,9 @@ def test_get_next_version_empty(build_app, monkeypatch) -> None:
 def test_get_next_version_increments(build_app, monkeypatch) -> None:
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    from api.auth_scopes import mint_key
-
-    tc = TestClient(
-        app,
-        headers={
-            "X-API-Key": mint_key(
-                "governance:read", "governance:write", tenant_id="t-ver-incr"
-            )
-        },
-    )
-    _assign_analyst("t-ver-incr")
+    key, cred_id = _issue_key("t-ver-incr", "governance:read", "governance:write")
+    _assign_analyst("t-ver-incr", cred_id)
+    tc = TestClient(app, headers={"X-API-Key": key})
 
     eid_resp = tc.post("/field-assessment/engagements", json=_ENGAGEMENT_BODY)
     assert eid_resp.status_code == 201
@@ -732,17 +710,9 @@ def test_concurrent_report_versions_are_unique(build_app, monkeypatch) -> None:
 
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    from api.auth_scopes import mint_key
-
-    tc = TestClient(
-        app,
-        headers={
-            "X-API-Key": mint_key(
-                "governance:read", "governance:write", tenant_id="t-concurrent"
-            )
-        },
-    )
-    _assign_analyst("t-concurrent")
+    key, cred_id = _issue_key("t-concurrent", "governance:read", "governance:write")
+    _assign_analyst("t-concurrent", cred_id)
+    tc = TestClient(app, headers={"X-API-Key": key})
 
     eid_resp = tc.post("/field-assessment/engagements", json=_ENGAGEMENT_BODY)
     assert eid_resp.status_code == 201
@@ -816,15 +786,13 @@ def qa_approve_client(build_app, monkeypatch):
     No DB role assigned — scope fallback unions assessor (assessment.create) and
     qa_reviewer (report.qa_approve) capabilities without a DB role row.
     """
-    from api.auth_scopes import mint_key
-
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    key = mint_key(
+    key, _ = _issue_key(
+        _TENANT_QA,
         "governance:read",
         "governance:write",
         "governance:qa_approve",
-        tenant_id=_TENANT_QA,
     )
     return TestClient(app, headers={"X-API-Key": key})
 
