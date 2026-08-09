@@ -55,7 +55,16 @@ _REPORT_BODY = {
 
 
 def _assign_analyst(tenant_id: str) -> None:
-    """Assign analyst role (→ assessor) to the most recently minted key for tenant_id."""
+    """Assign analyst role (→ assessor) to the most recently minted key for tenant_id.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.db import get_sessionmaker
@@ -79,7 +88,16 @@ def _assign_analyst(tenant_id: str) -> None:
 
 
 def _assign_read_only(tenant_id: str) -> None:
-    """Assign read_only role (→ viewer) to the most recently minted key for tenant_id."""
+    """Assign read_only role (→ viewer) to the most recently minted key for tenant_id.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.db import get_sessionmaker

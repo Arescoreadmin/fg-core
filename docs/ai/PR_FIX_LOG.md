@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-64 — feat(r4.10): canonical credential RBAC authority — PR TBD
+
+- **PR/Branch:** `r4.10-canonical-credential-rbac-authority` (TBD)
+- **Date:** 2026-08-08
+- **Files changed:** `migrations/postgres/0177_canonical_credential_rbac.sql` (new), `api/tenant_rbac.py` (rewrite), `api/tenant_rbac_router.py`, `api/identity_providers/api_key.py`, `api/db.py`, `tools/ci/check_credential_authority.py`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `ROADMAP.md`, `tests/fa_forensic_helpers.py`, `tests/security/test_rbac_security.py`, `tests/test_tenant_rbac.py`, 9 enforcement test fixtures, `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`
+- **Root cause:** Every production RBAC decision was still reading from `api_keys.role` — a legacy SQLite column that is dead in Postgres (R4.8 cut all api_keys auth). The RBAC router accepted an integer `key_id` parameter. There was no `tenant_credential_roles` table or canonical RBAC store for credentials issued via `tenant_credentials`.
+- **Fix:** Created `tenant_credential_roles` (FK → `tenant_credentials`, unique partial index one-active-role-per-credential, RLS enabled, soft-delete). Rewrote `api/tenant_rbac.py`: `get_credential_role()`, `assign_role()`, `revoke_role()` against canonical table; `_legacy_get_key_role()` retained as dead-code SQLite-only fallback. RBAC router: `/rbac/assignments/{credential_id}` UUID-only; integer path → 410. `api/identity_providers/api_key.py`: dual-path role lookup — canonical (`credential_id` → `get_credential_role()`) for Postgres, legacy (`key_db_id` → `_legacy_get_key_role()`) for SQLite dev/test. CI gate: R4.10 block prevents production `SELECT FROM api_keys` outside SQLite allowlist. SQLite schema (`api/db.py`): `tenant_credential_roles` + `target_credential_id` additive column. 9 enforcement test fixtures migrated from `assign_role(target_key_id=...)` to direct `UPDATE api_keys SET role=...` (correct SQLite test path — canonical auth is Postgres-only per resolution.py:437); all 9 documented with SQLite constraint. Bug found and fixed: initial api_key.py update dropped the `key_db_id` branch, breaking SQLite role enforcement; restored as `elif key_db_id is not None` calling `_legacy_get_key_role()`.
+- **Behavioral impact:** In production (Postgres): all role assignments write to `tenant_credential_roles`; all role lookups read from `tenant_credential_roles`. In dev/test (SQLite): role assignment is via direct `UPDATE api_keys SET role=...`; role lookup via `_legacy_get_key_role()` → `api_keys.role`. Integer RBAC route returns 410 Gone.
+- **Security impact:** Positive — RBAC is now bound to canonical `credential_id` (UUID) rather than an integer foreign key to a legacy table. RLS enforced on `tenant_credential_roles`. CI gate prevents accidental re-introduction of production `api_keys` RBAC reads. SOC-HIGH-002 entry filed.
+- **Schema/API impact:** `AssignRoleRequest` changed from `key_id: integer` to `credential_id: string (UUID, len 36)`. Contract SHA updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- **Tests added:** 71 targeted RBAC tests: `TestCanonicalRBACGuarantees` (RBAC-1 through RBAC-8) in `test_tenant_rbac.py`; `TestAuditIntegrity`, `TestCrossTenantIsolation`, `TestErrorMessageSafety`, `TestRequireRoleDenyByDefault` in `test_rbac_security.py`.
+- **Validation:** `make fg-fast` PASS (496 tests); `make fg-security` PASS (1234 tests); `make fg-contract` PASS; mypy clean; ruff clean; `check_credential_authority` gate PASS; `check_core_rls` PASS (149 tables); SOC-HIGH-002 entry in `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+- **Result:** PASS.
+
+---
+
 ## P-63 — security(portal): H0-PR5 — cross-tenant regression suite — PR #619
 
 - **PR/Branch:** `fix/h0-pr5-cross-tenant-regression` (#619)

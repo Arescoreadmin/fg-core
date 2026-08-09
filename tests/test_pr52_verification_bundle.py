@@ -72,6 +72,14 @@ def _sessionmaker():
 def _mint_key_with_role(
     *scopes: str, tenant_id: str, role_name: str, session_factory
 ) -> str:
+    """SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
     from api.auth_scopes import mint_key
 

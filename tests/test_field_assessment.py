@@ -138,7 +138,16 @@ _TENANT_ID = "tenant-fa-test"
 
 @pytest.fixture()
 def client(build_app: object) -> TestClient:
-    """Auth-enabled client with assessor-level permissions."""
+    """Auth-enabled client with assessor-level permissions.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
@@ -1344,7 +1353,16 @@ _TENANT_ID_B = "tenant-fa-test-b"  # second tenant for isolation tests
 
 @pytest.fixture()
 def upload_client(build_app: object, tmp_path, monkeypatch):
-    """Client with a temp artifact storage dir wired via FG_ARTIFACTS_DIR."""
+    """Client with a temp artifact storage dir wired via FG_ARTIFACTS_DIR.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
@@ -1383,7 +1401,16 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
 
 @pytest.fixture()
 def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
-    """Second-tenant client sharing the same app as upload_client for isolation tests."""
+    """Second-tenant client sharing the same app as upload_client for isolation tests.
+
+    SQLite dev/test path only.  resolution.py:437 gates canonical credential
+    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
+    authenticate via api_keys regardless of key prefix.  Role is set on
+    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
+
+    Canonical production path: get_credential_role() → tenant_credential_roles.
+    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
+    """
     from sqlalchemy import text as sa_text
 
     from api.auth_scopes import mint_key
