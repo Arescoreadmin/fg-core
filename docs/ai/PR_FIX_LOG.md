@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-65 — feat(r4.11): canonical SQLite auth — legacy api_keys retirement steps 1-6 — PR #625
+
+- **PR/Branch:** `feat/r4.11-legacy-api-keys-retirement` (#625)
+- **Date:** 2026-08-09
+- **Files changed:** `api/auth_scopes/resolution.py`, `api/db.py`, `tests/test_r4_11_sqlite_canonical_auth_proof.py` (new), `docs/r4_evidence/R4_11_PHASE1_EVIDENCE.md` (new), `docs/r4_evidence/R4_11_PHASE2_SQLITE_DECISION.md` (new), `docs/r4_evidence/r4_11_api_keys_legacy_evidence_20260809.csv` (new), `tests/fa_forensic_helpers.py`, `tests/test_field_assessment.py`, `tests/test_field_assessment_promotion.py`, `tests/test_field_assessment_reports.py`, `tests/test_h14_governance_decisions.py`, `tests/test_phase3_fa_read_enforcement.py`, `tests/test_phase4_gov_read_enforcement.py`, `tests/test_phase5_p0p1_enforcement.py`, `tests/test_pr52_5_verification_bundle_hardening.py`, `tests/test_pr52_verification_bundle.py`
+- **Root cause:** R4.11 step 1-6: The `_is_postgres` guard in `resolution.py:437` prevented canonical `fgk.*` credential auth from working in SQLite; SQLite still created the `api_keys` table on init; 9 test fixtures used `mint_key()+UPDATE api_keys SET role=` instead of the canonical `issue_credential()+assign_role()` authority. This preserved the exact dual-authority code R4.11 is designed to eradicate.
+- **Fix:** Step 1 — Removed `and _is_postgres` from `resolution.py:437`; canonical `fgk.*` auth now works on all backends. Step 3 — Rewrote `_ensure_api_keys_sqlite()` to create only canonical tables (`credential_slots`, `tenant_credentials` with `ix_tc_slot_generation` unique index, `tenant_credential_events`, `tenant_credential_roles` with `uidx_tcr_active_role` partial unique index, `tenant_role_audit`); removed `api_keys` column-migration block from `_auto_migrate_sqlite()`; updated `init_db()` sanity warning to check `tenant_credentials`. Step 5 — All 9 fixtures migrated to `issue_credential()+assign_role()`: `fa_forensic_helpers.py` (_mint_admin_key + make_context), `test_phase3/4/5` (_mint helper), `test_h14/test_pr52/test_pr52_5` (_mint_key_with_role helper), `test_field_assessment` (client/portal_client/qa_client/upload_client/other_tenant_upload_client), `test_field_assessment_reports` (_assign_analyst/_assign_read_only + all fixtures + inline test funcs), `test_field_assessment_promotion` (_make_admin_client + inline assessor key).
+- **Behavioral impact:** SQLite now authenticates `fgk.*` keys via `tenant_credentials` (canonical path) instead of `api_keys` (legacy path). Test fixtures create canonical credentials instead of legacy api_keys rows. Legacy `api_keys` fallback in `resolution.py` still active for SQLite until steps 7-9 remove it.
+- **Security impact:** Canonical HMAC-SHA256 fingerprint + Argon2id hash verification now enforced in SQLite dev/test environment, matching production Postgres. `api_keys` legacy path is still reachable in SQLite but no new credentials are written to it.
+- **Schema/API impact:** `api/db.py` bootstrap no longer creates `api_keys` table for new SQLite databases. Existing databases with `api_keys` are unaffected (no DROP).
+- **Tests added:** `tests/test_r4_11_sqlite_canonical_auth_proof.py` — 3 guardrail proof tests: `test_canonical_issue_and_resolve`, `test_canonical_rbac_resolve`, `test_no_api_keys_read_during_canonical_auth`. All 3 PASS before and after schema change.
+- **Validation:** Guardrail 3/3 PASS; enforcement suite 304/305 PASS (1 pre-existing SQLite concurrency flake: `test_concurrent_report_versions_are_unique` fails 4/5 on branch vs 1/5 on main — docstring describes a `get_next_version` mock that was removed; canonical auth adds ~5ms latency per request which narrows the timing window). ruff clean on all changed files.
+- **Result:** In progress (steps 7-16 follow in next PR after CI green).
+
+---
+
 ## P-64 — feat(r4.10): canonical credential RBAC authority — PR TBD
 
 - **PR/Branch:** `r4.10-canonical-credential-rbac-authority` (TBD)
