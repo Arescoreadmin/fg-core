@@ -38,9 +38,12 @@ def sqlite_env(tmp_path, monkeypatch):
 
     # Seed a tenant row so credential issuance and RLS-equivalent checks pass.
     from sqlalchemy import text
+
     with engine.begin() as conn:
         conn.execute(
-            text("INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state) VALUES (:tid, 'active')"),
+            text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state) VALUES (:tid, 'active')"
+            ),
             {"tid": "proof-tenant"},
         )
 
@@ -76,6 +79,7 @@ def test_canonical_issue_and_resolve(sqlite_env, monkeypatch):
 def test_canonical_rbac_resolve(sqlite_env, monkeypatch):
     """Role assigned in tenant_credential_roles is readable after canonical auth."""
     from sqlalchemy.orm import Session
+
     engine = sqlite_env
     monkeypatch.setenv("FG_KEY_PEPPER", "r4-11-proof-pepper")
 
@@ -97,7 +101,9 @@ def test_canonical_rbac_resolve(sqlite_env, monkeypatch):
         )
         session.commit()
 
-        role = get_credential_role(session, tenant_id="proof-tenant", credential_id=cred_id)
+        role = get_credential_role(
+            session, tenant_id="proof-tenant", credential_id=cred_id
+        )
 
     assert role == "analyst"
 
