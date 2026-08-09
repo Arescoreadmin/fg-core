@@ -1621,6 +1621,30 @@ def rotate_credential(
             record_hash=rec_hash,
         )
 
+        # Carry active RBAC role from old credential to new one so that role
+        # assignments survive rotation.  INSERT...SELECT is a no-op when the
+        # old credential has no active role (e.g. SQLite dev/test path or
+        # credentials that predate canonical RBAC).
+        conn.execute(
+            text(
+                "INSERT INTO tenant_credential_roles"
+                "    (tenant_id, credential_id, role_name, granted_at, granted_by)"
+                " SELECT :new_tid, :new_cid, role_name, :now, :actor"
+                " FROM tenant_credential_roles"
+                " WHERE tenant_id = :tid"
+                "   AND credential_id = :old_cid"
+                "   AND revoked_at IS NULL"
+            ),
+            {
+                "new_tid": tenant_id,
+                "new_cid": new_cred_id,
+                "now": now_iso,
+                "actor": actor_id or "rotation",
+                "tid": tenant_id,
+                "old_cid": old_record.credential_id,
+            },
+        )
+
         # Mark old generation rotated (immediate cutover default).
         conn.execute(
             text(

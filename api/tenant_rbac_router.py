@@ -42,6 +42,7 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+_INT_RE = re.compile(r"^\d+$")
 
 
 def _actor_key_prefix(request: Request) -> str:
@@ -121,6 +122,14 @@ def get_assignments(
     ],
     status_code=201,
 )
+# Bootstrap note: the first role for a new tenant must be assigned by a caller
+# that already carries tenant_admin permission via an alternative path — either
+# the Platform Service Principal (PSP, which holds platform_admin) or a legacy
+# scope key with admin:write/keys:admin scopes (scope-fallback grants
+# platform_admin during the R4.10 migration window).  Once the first
+# tenant_admin credential is recorded in tenant_credential_roles, that
+# credential can self-serve further assignments.  R4.11 must populate
+# tenant_credential_roles from api_keys.role before removing the scope fallback.
 def assign_role_endpoint(
     body: AssignRoleRequest,
     request: Request,
@@ -154,15 +163,23 @@ def revoke_role_endpoint(
     conn: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     if not _UUID_RE.match(credential_id):
-        # Integer path (old route used key_id: int) — explicitly retired.
+        if _INT_RE.match(credential_id):
+            # Integer path (old route used key_id: int) — explicitly retired.
+            raise HTTPException(
+                status_code=410,
+                detail={
+                    "code": "ROUTE_RETIRED",
+                    "message": (
+                        "DELETE /rbac/assignments/{key_id} (integer) is retired. "
+                        "Use DELETE /rbac/assignments/{credential_id} (UUID)."
+                    ),
+                },
+            )
         raise HTTPException(
-            status_code=410,
+            status_code=422,
             detail={
-                "code": "ROUTE_RETIRED",
-                "message": (
-                    "DELETE /rbac/assignments/{key_id} (integer) is retired. "
-                    "Use DELETE /rbac/assignments/{credential_id} (UUID)."
-                ),
+                "code": "INVALID_CREDENTIAL_ID",
+                "message": "credential_id must be a valid UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).",
             },
         )
     tenant_id = require_bound_tenant(request)

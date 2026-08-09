@@ -107,6 +107,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_tc_slot_generation
 CREATE INDEX IF NOT EXISTS ix_tc_lookup_fingerprint
     ON tenant_credentials (lookup_fingerprint);
 
+CREATE TABLE IF NOT EXISTS tenant_credential_roles (
+    id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    tenant_id   TEXT     NOT NULL,
+    credential_id TEXT   NOT NULL,
+    role_name   TEXT     NOT NULL,
+    granted_at  TEXT     NOT NULL,
+    granted_by  TEXT     NOT NULL,
+    revoked_at  TEXT,
+    revoked_by  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS tenant_credential_events (
     event_id          VARCHAR(64)  NOT NULL PRIMARY KEY,
     tenant_id         VARCHAR(128) NOT NULL,
