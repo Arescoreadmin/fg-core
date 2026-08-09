@@ -8,9 +8,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import mint_key
-from api.db import get_sessionmaker
-from api.tenant_rbac import assign_role
-from api.db import get_engine
+from api.db import get_engine, get_sessionmaker
 from services.field_assessment.store import create_finding
 
 TENANT_A = "test-tenant-fa"
@@ -56,7 +54,12 @@ class ForensicContext:
 
 
 def _mint_admin_key(app: Any, tenant_id: str) -> TestClient:
-    """Mint a key with tenant_admin role (has governance.promote)."""
+    """Mint a key with tenant_admin role (has governance.promote).
+
+    SQLite dev/test path: updates api_keys.role directly because mint_key()
+    issues legacy api_keys credentials (no canonical credential_id in auth).
+    _legacy_get_key_role() in tenant_rbac reads this column for key_db_id auth.
+    """
     key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
     SM = get_sessionmaker()
     db = SM()
@@ -67,13 +70,13 @@ def _mint_admin_key(app: Any, tenant_id: str) -> TestClient:
             ),
             {"t": tenant_id},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="tenant_admin",
+        db.execute(
+            sa_text(
+                "UPDATE api_keys SET role = 'tenant_admin' WHERE id = :id AND tenant_id = :t"
+            ),
+            {"id": key_id, "t": tenant_id},
         )
+        db.commit()
     finally:
         db.close()
     return TestClient(app, headers={"X-API-Key": key})

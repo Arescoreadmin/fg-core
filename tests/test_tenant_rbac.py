@@ -1,15 +1,16 @@
 """
-tests/test_tenant_rbac.py — Functional tests for intra-tenant RBAC (PR 57).
+tests/test_tenant_rbac.py — Functional tests for intra-tenant RBAC (R4.10).
 
 Coverage:
-- Role hierarchy: role_satisfies / role_satisfies_any
-- Scope expansion: get_role_scopes
-- DB operations: assign_role, revoke_role, get_key_role, list_role_assignments
-- Audit trail: every assignment and revocation appends a record
-- Deny-by-default: require_role raises 403 when key has no role or insufficient role
+- Role hierarchy: role_satisfies / role_satisfies_any (pure logic, unchanged)
+- Scope expansion: get_role_scopes (pure logic, unchanged)
+- Canonical DB operations: assign_role, revoke_role, get_credential_role, list_role_assignments
+- Audit trail: every assignment and revocation appends a record with target_credential_id
+- Deny-by-default: require_role raises 403 when credential has no role or insufficient role
 - require_role: 401 when unauthenticated, 403 for wrong role, pass for correct role
-- Multi-key disambiguation: id-based lookup is unambiguous when multiple keys share a prefix
+- Canonical identity: credential_id-based lookup is unambiguous for any UUID pair
 - Scope-less authorization: require_role passes based on role alone, not scopes_csv
+- Legacy isolation: api_keys.role cannot influence canonical credential role (RBAC-7)
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from api.tenant_rbac import (
     BUILTIN_ROLES,
     VALID_ROLE_NAMES,
     assign_role,
-    get_key_role,
+    get_credential_role,
     get_role_audit_log,
     get_role_scopes,
     list_role_assignments,
@@ -61,35 +62,33 @@ def db(tmp_path, monkeypatch):
         reset_engine_cache()
 
 
-def _insert_key(
-    conn, *, prefix: str, tenant_id: str, scopes_csv: str = "keys:read"
-) -> int:
-    """Insert a minimal api_keys row and return its integer primary key."""
-    result = conn.execute(
+def _insert_credential(conn, *, tenant_id: str) -> str:
+    """Insert a minimal tenant_credentials row and return its credential_id (UUID string)."""
+    credential_id = str(uuid.uuid4())
+    conn.execute(
         text(
-            "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, tenant_id, enabled) "
-            "VALUES (:name, :prefix, :key_hash, :scopes_csv, :tenant_id, 1)"
+            "INSERT INTO tenant_credentials "
+            "(credential_id, tenant_id, credential_type, credential_slot, generation, "
+            "lookup_fingerprint, lookup_key_version, secret_prefix, secret_hash, "
+            "hash_algorithm, hash_params, status, issued_at, approximate_use_count, schema_version) "
+            "VALUES "
+            "(:cid, :tid, 'test_credential', :slot, 1, "
+            ":cid, 1, 'tst_', 'test_hash', 'sha256', '{}', 'active', CURRENT_TIMESTAMP, 0, 1)"
         ),
-        {
-            "name": f"test:{prefix}",
-            "prefix": prefix,
-            "key_hash": f"hash_{prefix}_{uuid.uuid4().hex[:12]}",
-            "scopes_csv": scopes_csv,
-            "tenant_id": tenant_id,
-        },
+        {"cid": credential_id, "tid": tenant_id, "slot": f"test:{credential_id[:8]}"},
     )
     conn.commit()
-    return result.lastrowid
+    return credential_id
 
 
 def _make_request(
-    key_prefix: str, tenant_id: str, key_db_id: int | None = None
+    key_prefix: str, tenant_id: str, credential_id: str | None = None
 ) -> Request:
-    """Create a minimal mock Request with auth state."""
+    """Create a minimal mock Request with canonical credential_id auth state."""
     scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
     req: Request = Request(scope)
     req.state.auth = SimpleNamespace(
-        key_prefix=key_prefix, tenant_id=tenant_id, key_db_id=key_db_id
+        key_prefix=key_prefix, tenant_id=tenant_id, credential_id=credential_id
     )
     req.state.tenant_id = tenant_id
     req.state.tenant_is_key_bound = True
@@ -190,99 +189,103 @@ class TestRoleScopes:
 
 class TestAssignRoleDB:
     def test_assign_role_persists(self, db):
-        key_id = _insert_key(db, prefix="kA", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor-key",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="analyst",
         )
-        assert get_key_role(db, tenant_id="tenant-a", key_id=key_id) == "analyst"
+        assert (
+            get_credential_role(db, tenant_id="tenant-a", credential_id=cid)
+            == "analyst"
+        )
 
     def test_assign_updates_existing_role(self, db):
-        key_id = _insert_key(db, prefix="kB", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="read_only",
         )
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="governance_admin",
         )
         assert (
-            get_key_role(db, tenant_id="tenant-a", key_id=key_id) == "governance_admin"
+            get_credential_role(db, tenant_id="tenant-a", credential_id=cid)
+            == "governance_admin"
         )
 
     def test_assign_unknown_role_raises(self, db):
-        key_id = _insert_key(db, prefix="kC", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         with pytest.raises(ValueError, match="Unknown role"):
             assign_role(
                 db,
                 tenant_id="tenant-a",
                 actor_key_prefix="actor",
-                target_key_id=key_id,
+                credential_id=cid,
                 role_name="superuser",
             )
 
     def test_assign_to_wrong_tenant_raises(self, db):
-        key_id = _insert_key(db, prefix="kD", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         with pytest.raises(ValueError, match="not found"):
             assign_role(
                 db,
                 tenant_id="tenant-b",
                 actor_key_prefix="actor",
-                target_key_id=key_id,
+                credential_id=cid,
                 role_name="analyst",
             )
 
     def test_revoke_clears_role(self, db):
-        key_id = _insert_key(db, prefix="kE", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="auditor",
         )
         revoke_role(
-            db, tenant_id="tenant-a", actor_key_prefix="actor", target_key_id=key_id
+            db, tenant_id="tenant-a", actor_key_prefix="actor", credential_id=cid
         )
-        assert get_key_role(db, tenant_id="tenant-a", key_id=key_id) is None
+        assert get_credential_role(db, tenant_id="tenant-a", credential_id=cid) is None
 
-    def test_get_key_role_returns_none_when_no_role(self, db):
-        key_id = _insert_key(db, prefix="kF", tenant_id="tenant-a")
-        assert get_key_role(db, tenant_id="tenant-a", key_id=key_id) is None
+    def test_get_credential_role_returns_none_when_no_role(self, db):
+        cid = _insert_credential(db, tenant_id="tenant-a")
+        assert get_credential_role(db, tenant_id="tenant-a", credential_id=cid) is None
 
-    def test_list_assignments_only_returns_keys_with_roles(self, db):
-        id_g = _insert_key(db, prefix="kG", tenant_id="tenant-b")
-        id_h = _insert_key(db, prefix="kH", tenant_id="tenant-b")
+    def test_list_assignments_only_returns_credentials_with_roles(self, db):
+        cid_g = _insert_credential(db, tenant_id="tenant-b")
+        cid_h = _insert_credential(db, tenant_id="tenant-b")
         assign_role(
             db,
             tenant_id="tenant-b",
             actor_key_prefix="actor",
-            target_key_id=id_g,
+            credential_id=cid_g,
             role_name="analyst",
         )
         assignments = list_role_assignments(db, tenant_id="tenant-b")
-        key_ids = [a["key_id"] for a in assignments]
-        assert id_g in key_ids
-        assert id_h not in key_ids
+        cids = [a["credential_id"] for a in assignments]
+        assert cid_g in cids
+        assert cid_h not in cids
 
     def test_all_builtin_roles_accepted(self, db):
-        for i, role in enumerate(BUILTIN_ROLES):
-            key_id = _insert_key(db, prefix=f"k-builtin-{i}", tenant_id="tenant-c")
+        for role in BUILTIN_ROLES:
+            cid = _insert_credential(db, tenant_id="tenant-c")
             result = assign_role(
                 db,
                 tenant_id="tenant-c",
                 actor_key_prefix="actor",
-                target_key_id=key_id,
+                credential_id=cid,
                 role_name=role,
             )
             assert result["role"] == role
@@ -295,49 +298,46 @@ class TestAssignRoleDB:
 
 class TestRoleAuditTrail:
     def test_assign_creates_audit_record(self, db):
-        key_id = _insert_key(db, prefix="kAudit1", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor-k",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="analyst",
         )
         log = get_role_audit_log(db, tenant_id="tenant-a")
         assert any(
-            e["action"] == "assign_role" and e["target_key_id"] == str(key_id)
+            e["action"] == "assign_role" and e["target_credential_id"] == cid
             for e in log
         )
 
     def test_revoke_creates_audit_record(self, db):
-        key_id = _insert_key(db, prefix="kAudit2", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor-k",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="auditor",
         )
         revoke_role(
-            db,
-            tenant_id="tenant-a",
-            actor_key_prefix="actor-k",
-            target_key_id=key_id,
+            db, tenant_id="tenant-a", actor_key_prefix="actor-k", credential_id=cid
         )
         log = get_role_audit_log(db, tenant_id="tenant-a")
         assert any(
-            e["action"] == "revoke_role" and e["target_key_id"] == str(key_id)
+            e["action"] == "revoke_role" and e["target_credential_id"] == cid
             for e in log
         )
 
     def test_audit_records_have_unique_event_ids(self, db):
-        key_id = _insert_key(db, prefix="kAudit3", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         for role in ("analyst", "auditor", "read_only"):
             assign_role(
                 db,
                 tenant_id="tenant-a",
                 actor_key_prefix="actor",
-                target_key_id=key_id,
+                credential_id=cid,
                 role_name=role,
             )
         log = get_role_audit_log(db, tenant_id="tenant-a")
@@ -345,28 +345,28 @@ class TestRoleAuditTrail:
         assert len(event_ids) == len(set(event_ids))
 
     def test_audit_scoped_to_tenant(self, db):
-        id_x = _insert_key(db, prefix="kAuditX", tenant_id="tenant-x")
-        id_y = _insert_key(db, prefix="kAuditY", tenant_id="tenant-y")
+        cid_x = _insert_credential(db, tenant_id="tenant-x")
+        cid_y = _insert_credential(db, tenant_id="tenant-y")
         assign_role(
             db,
             tenant_id="tenant-x",
             actor_key_prefix="actor",
-            target_key_id=id_x,
+            credential_id=cid_x,
             role_name="analyst",
         )
         assign_role(
             db,
             tenant_id="tenant-y",
             actor_key_prefix="actor",
-            target_key_id=id_y,
+            credential_id=cid_y,
             role_name="auditor",
         )
 
         log_x = get_role_audit_log(db, tenant_id="tenant-x")
         log_y = get_role_audit_log(db, tenant_id="tenant-y")
 
-        assert all(e["target_key_id"] == str(id_x) for e in log_x)
-        assert all(e["target_key_id"] == str(id_y) for e in log_y)
+        assert all(e["target_credential_id"] == cid_x for e in log_x)
+        assert all(e["target_credential_id"] == cid_y for e in log_y)
 
 
 # ---------------------------------------------------------------------------
@@ -382,87 +382,86 @@ class TestDenyByDefault:
             dep(request=req, conn=db)
         assert exc_info.value.status_code == 401
 
-    def test_key_with_no_role_raises_403(self, db):
-        key_id = _insert_key(db, prefix="kNoRole", tenant_id="tenant-a")
+    def test_credential_with_no_role_raises_403(self, db):
+        cid = _insert_credential(db, tenant_id="tenant-a")
         dep = require_role("read_only")
         req = _make_request(
-            key_prefix="kNoRole", tenant_id="tenant-a", key_db_id=key_id
+            key_prefix="kNoRole", tenant_id="tenant-a", credential_id=cid
         )
         with pytest.raises(HTTPException) as exc_info:
             dep(request=req, conn=db)
         assert exc_info.value.status_code == 403
 
     def test_insufficient_role_raises_403(self, db):
-        key_id = _insert_key(db, prefix="kLow", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="read_only",
         )
         dep = require_role("governance_admin")
-        req = _make_request(key_prefix="kLow", tenant_id="tenant-a", key_db_id=key_id)
+        req = _make_request(key_prefix="kLow", tenant_id="tenant-a", credential_id=cid)
         with pytest.raises(HTTPException) as exc_info:
             dep(request=req, conn=db)
         assert exc_info.value.status_code == 403
 
     def test_exact_role_passes(self, db):
-        key_id = _insert_key(db, prefix="kExact", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="auditor",
         )
         dep = require_role("auditor")
-        req = _make_request(key_prefix="kExact", tenant_id="tenant-a", key_db_id=key_id)
-        dep(request=req, conn=db)  # should not raise
+        req = _make_request(
+            key_prefix="kExact", tenant_id="tenant-a", credential_id=cid
+        )
+        dep(request=req, conn=db)  # must not raise
 
     def test_superior_role_satisfies_require_role(self, db):
-        key_id = _insert_key(db, prefix="kSuper", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="tenant_admin",
         )
         for required_role in BUILTIN_ROLES:
             dep = require_role(required_role)
             req = _make_request(
-                key_prefix="kSuper", tenant_id="tenant-a", key_db_id=key_id
+                key_prefix="kSuper", tenant_id="tenant-a", credential_id=cid
             )
             dep(request=req, conn=db)  # must not raise for any role
 
     def test_revoked_role_raises_403(self, db):
-        key_id = _insert_key(db, prefix="kRevoked", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="analyst",
         )
         revoke_role(
-            db,
-            tenant_id="tenant-a",
-            actor_key_prefix="actor",
-            target_key_id=key_id,
+            db, tenant_id="tenant-a", actor_key_prefix="actor", credential_id=cid
         )
         dep = require_role("analyst")
         req = _make_request(
-            key_prefix="kRevoked", tenant_id="tenant-a", key_db_id=key_id
+            key_prefix="kRevoked", tenant_id="tenant-a", credential_id=cid
         )
         with pytest.raises(HTTPException) as exc_info:
             dep(request=req, conn=db)
         assert exc_info.value.status_code == 403
 
     def test_403_response_includes_required_roles(self, db):
-        key_id = _insert_key(db, prefix="kErr", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         dep = require_role("governance_admin", "tenant_admin")
-        req = _make_request(key_prefix="kErr", tenant_id="tenant-a", key_db_id=key_id)
+        req = _make_request(key_prefix="kErr", tenant_id="tenant-a", credential_id=cid)
         with pytest.raises(HTTPException) as exc_info:
             dep(request=req, conn=db)
         detail = exc_info.value.detail
@@ -485,99 +484,95 @@ class TestValidRoleNames:
         assert VALID_ROLE_NAMES == frozenset(BUILTIN_ROLES)
 
     def test_invalid_role_raises_value_error(self, db):
-        key_id = _insert_key(db, prefix="kVal", tenant_id="tenant-a")
+        cid = _insert_credential(db, tenant_id="tenant-a")
         with pytest.raises(ValueError):
             assign_role(
                 db,
                 tenant_id="tenant-a",
                 actor_key_prefix="a",
-                target_key_id=key_id,
+                credential_id=cid,
                 role_name="invalid_role",
             )
 
 
 # ---------------------------------------------------------------------------
-# TestMultiKeyDisambiguation
+# TestCanonicalCredentialDisambiguation
 # ---------------------------------------------------------------------------
 
 
-class TestMultiKeyDisambiguation:
-    """Prove that id-based assignment is unambiguous when keys share the same prefix."""
+class TestCanonicalCredentialDisambiguation:
+    """Prove that canonical UUID-based role assignment is unambiguous."""
 
-    def test_role_assigned_to_correct_key_by_id(self, db):
-        id1 = _insert_key(db, prefix="fgk", tenant_id="tenant-multi")
-        id2 = _insert_key(db, prefix="fgk", tenant_id="tenant-multi")
+    def test_role_assigned_to_correct_credential(self, db):
+        cid1 = _insert_credential(db, tenant_id="tenant-multi")
+        cid2 = _insert_credential(db, tenant_id="tenant-multi")
         assign_role(
             db,
             tenant_id="tenant-multi",
             actor_key_prefix="actor",
-            target_key_id=id1,
+            credential_id=cid1,
             role_name="analyst",
         )
-        assert get_key_role(db, tenant_id="tenant-multi", key_id=id1) == "analyst"
-        assert get_key_role(db, tenant_id="tenant-multi", key_id=id2) is None
+        assert (
+            get_credential_role(db, tenant_id="tenant-multi", credential_id=cid1)
+            == "analyst"
+        )
+        assert (
+            get_credential_role(db, tenant_id="tenant-multi", credential_id=cid2)
+            is None
+        )
 
-    def test_revoke_only_affects_target_key(self, db):
-        id1 = _insert_key(db, prefix="fgk", tenant_id="tenant-multi2")
-        id2 = _insert_key(db, prefix="fgk", tenant_id="tenant-multi2")
+    def test_revoke_only_affects_target_credential(self, db):
+        cid1 = _insert_credential(db, tenant_id="tenant-multi2")
+        cid2 = _insert_credential(db, tenant_id="tenant-multi2")
         assign_role(
             db,
             tenant_id="tenant-multi2",
             actor_key_prefix="actor",
-            target_key_id=id1,
+            credential_id=cid1,
             role_name="analyst",
         )
         assign_role(
             db,
             tenant_id="tenant-multi2",
             actor_key_prefix="actor",
-            target_key_id=id2,
+            credential_id=cid2,
             role_name="auditor",
         )
         revoke_role(
-            db,
-            tenant_id="tenant-multi2",
-            actor_key_prefix="actor",
-            target_key_id=id1,
+            db, tenant_id="tenant-multi2", actor_key_prefix="actor", credential_id=cid1
         )
-        assert get_key_role(db, tenant_id="tenant-multi2", key_id=id1) is None
-        assert get_key_role(db, tenant_id="tenant-multi2", key_id=id2) == "auditor"
-
-    def test_id_based_lookup_unaffected_by_prefix_collision(self, db):
-        id1 = _insert_key(db, prefix="fgk", tenant_id="tenant-coll")
-        id2 = _insert_key(db, prefix="fgk", tenant_id="tenant-coll")
-        id3 = _insert_key(db, prefix="fgk", tenant_id="tenant-coll")
-        assign_role(
-            db,
-            tenant_id="tenant-coll",
-            actor_key_prefix="actor",
-            target_key_id=id2,
-            role_name="governance_admin",
-        )
-        assert get_key_role(db, tenant_id="tenant-coll", key_id=id1) is None
         assert (
-            get_key_role(db, tenant_id="tenant-coll", key_id=id2) == "governance_admin"
+            get_credential_role(db, tenant_id="tenant-multi2", credential_id=cid1)
+            is None
         )
-        assert get_key_role(db, tenant_id="tenant-coll", key_id=id3) is None
+        assert (
+            get_credential_role(db, tenant_id="tenant-multi2", credential_id=cid2)
+            == "auditor"
+        )
 
-    def test_require_role_resolves_correct_key_via_db_id(self, db):
-        id1 = _insert_key(db, prefix="fgk", tenant_id="tenant-res")
-        id2 = _insert_key(db, prefix="fgk", tenant_id="tenant-res")
+    def test_require_role_resolves_correct_credential_via_uuid(self, db):
+        cid1 = _insert_credential(db, tenant_id="tenant-res")
+        cid2 = _insert_credential(db, tenant_id="tenant-res")
         assign_role(
             db,
             tenant_id="tenant-res",
             actor_key_prefix="actor",
-            target_key_id=id2,
+            credential_id=cid2,
             role_name="auditor",
         )
         dep = require_role("auditor")
-        # id1 has no role → 403
-        req1 = _make_request(key_prefix="fgk", tenant_id="tenant-res", key_db_id=id1)
+        # cid1 has no role → 403
+        req1 = _make_request(
+            key_prefix="fgk", tenant_id="tenant-res", credential_id=cid1
+        )
         with pytest.raises(HTTPException) as exc_info:
             dep(request=req1, conn=db)
         assert exc_info.value.status_code == 403
-        # id2 has auditor → passes
-        req2 = _make_request(key_prefix="fgk", tenant_id="tenant-res", key_db_id=id2)
+        # cid2 has auditor → passes
+        req2 = _make_request(
+            key_prefix="fgk", tenant_id="tenant-res", credential_id=cid2
+        )
         dep(request=req2, conn=db)
 
 
@@ -587,55 +582,182 @@ class TestMultiKeyDisambiguation:
 
 
 class TestScopelessRoleAuthorization:
-    """Prove require_role passes based on role alone; scopes_csv is not checked."""
+    """Prove require_role passes based on role alone; scopes are not checked."""
 
     def test_tenant_admin_role_passes_without_explicit_keys_write(self, db):
-        key_id = _insert_key(
-            db, prefix="kScopeless", tenant_id="tenant-scope", scopes_csv="keys:read"
-        )
+        cid = _insert_credential(db, tenant_id="tenant-scope")
         assign_role(
             db,
             tenant_id="tenant-scope",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="tenant_admin",
         )
         dep = require_role("tenant_admin")
         req = _make_request(
-            key_prefix="kScopeless", tenant_id="tenant-scope", key_db_id=key_id
+            key_prefix="kScopeless", tenant_id="tenant-scope", credential_id=cid
         )
         dep(request=req, conn=db)  # must not raise
 
     def test_auditor_role_passes_without_explicit_audit_read(self, db):
-        key_id = _insert_key(
-            db, prefix="kAuditRole", tenant_id="tenant-scope", scopes_csv="keys:read"
-        )
+        cid = _insert_credential(db, tenant_id="tenant-scope")
         assign_role(
             db,
             tenant_id="tenant-scope",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="auditor",
         )
         dep = require_role("auditor")
         req = _make_request(
-            key_prefix="kAuditRole", tenant_id="tenant-scope", key_db_id=key_id
+            key_prefix="kAuditRole", tenant_id="tenant-scope", credential_id=cid
         )
         dep(request=req, conn=db)  # must not raise
 
     def test_governance_admin_role_passes_without_governance_write_scope(self, db):
-        key_id = _insert_key(
-            db, prefix="kGovRole", tenant_id="tenant-scope", scopes_csv="keys:read"
-        )
+        cid = _insert_credential(db, tenant_id="tenant-scope")
         assign_role(
             db,
             tenant_id="tenant-scope",
             actor_key_prefix="actor",
-            target_key_id=key_id,
+            credential_id=cid,
             role_name="governance_admin",
         )
         dep = require_role("governance_admin")
         req = _make_request(
-            key_prefix="kGovRole", tenant_id="tenant-scope", key_db_id=key_id
+            key_prefix="kGovRole", tenant_id="tenant-scope", credential_id=cid
         )
         dep(request=req, conn=db)  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# TestCanonicalRBACGuarantees (RBAC-1 through RBAC-8)
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalRBACGuarantees:
+    """R4.10 canonical authority guarantees."""
+
+    def test_rbac1_credential_with_role_passes_require_role(self, db):
+        """RBAC-1: canonical credential with assigned role passes require_role."""
+        cid = _insert_credential(db, tenant_id="tenant-g1")
+        assign_role(
+            db,
+            tenant_id="tenant-g1",
+            actor_key_prefix="actor",
+            credential_id=cid,
+            role_name="analyst",
+        )
+        dep = require_role("analyst")
+        req = _make_request(key_prefix="k", tenant_id="tenant-g1", credential_id=cid)
+        dep(request=req, conn=db)  # must not raise
+
+    def test_rbac2_credential_without_role_gets_403(self, db):
+        """RBAC-2: canonical credential without role gets 403."""
+        cid = _insert_credential(db, tenant_id="tenant-g2")
+        dep = require_role("read_only")
+        req = _make_request(key_prefix="k", tenant_id="tenant-g2", credential_id=cid)
+        with pytest.raises(HTTPException) as exc_info:
+            dep(request=req, conn=db)
+        assert exc_info.value.status_code == 403
+
+    def test_rbac3_cross_tenant_credential_cannot_read_other_tenant_role(self, db):
+        """RBAC-3: cross-tenant credential cannot read another tenant's role."""
+        cid = _insert_credential(db, tenant_id="tenant-g3a")
+        assign_role(
+            db,
+            tenant_id="tenant-g3a",
+            actor_key_prefix="actor",
+            credential_id=cid,
+            role_name="analyst",
+        )
+        assert (
+            get_credential_role(db, tenant_id="tenant-g3b", credential_id=cid) is None
+        )
+
+    def test_rbac4_cross_tenant_role_assignment_fails(self, db):
+        """RBAC-4: cross-tenant role assignment raises ValueError."""
+        cid = _insert_credential(db, tenant_id="tenant-g4-real")
+        with pytest.raises(ValueError, match="not found"):
+            assign_role(
+                db,
+                tenant_id="tenant-g4-evil",
+                actor_key_prefix="attacker",
+                credential_id=cid,
+                role_name="tenant_admin",
+            )
+
+    def test_rbac5_cross_tenant_role_revoke_fails(self, db):
+        """RBAC-5: cross-tenant role revoke raises ValueError."""
+        cid = _insert_credential(db, tenant_id="tenant-g5-real")
+        assign_role(
+            db,
+            tenant_id="tenant-g5-real",
+            actor_key_prefix="actor",
+            credential_id=cid,
+            role_name="analyst",
+        )
+        with pytest.raises(ValueError, match="not found"):
+            revoke_role(
+                db,
+                tenant_id="tenant-g5-evil",
+                actor_key_prefix="attacker",
+                credential_id=cid,
+            )
+
+    def test_rbac6_list_role_assignments_is_tenant_isolated(self, db):
+        """RBAC-6: list_role_assignments is scoped to the requesting tenant."""
+        cid_a = _insert_credential(db, tenant_id="tenant-g6a")
+        cid_b = _insert_credential(db, tenant_id="tenant-g6b")
+        assign_role(
+            db,
+            tenant_id="tenant-g6a",
+            actor_key_prefix="actor",
+            credential_id=cid_a,
+            role_name="analyst",
+        )
+        assign_role(
+            db,
+            tenant_id="tenant-g6b",
+            actor_key_prefix="actor",
+            credential_id=cid_b,
+            role_name="auditor",
+        )
+        for_a = list_role_assignments(db, tenant_id="tenant-g6a")
+        for_b = list_role_assignments(db, tenant_id="tenant-g6b")
+        assert all(r["credential_id"] == cid_a for r in for_a)
+        assert all(r["credential_id"] == cid_b for r in for_b)
+
+    def test_rbac7_legacy_api_keys_role_cannot_influence_canonical_credential(self, db):
+        """RBAC-7: api_keys.role cannot influence canonical credential role resolution."""
+        cid = _insert_credential(db, tenant_id="tenant-g7")
+        # Write a role directly into api_keys (legacy table) for the same tenant.
+        # Canonical RBAC must NOT read this.
+        db.execute(
+            text(
+                "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, tenant_id, enabled, role) "
+                "VALUES ('legacy', 'fgk_legacy', 'h_legacy', 'keys:read', 'tenant-g7', 1, 'tenant_admin')"
+            )
+        )
+        db.commit()
+        # The canonical credential has no role in tenant_credential_roles.
+        assert get_credential_role(db, tenant_id="tenant-g7", credential_id=cid) is None
+        # require_role must deny even though api_keys has a tenant_admin row.
+        dep = require_role("read_only")
+        req = _make_request(key_prefix="k", tenant_id="tenant-g7", credential_id=cid)
+        with pytest.raises(HTTPException) as exc_info:
+            dep(request=req, conn=db)
+        assert exc_info.value.status_code == 403
+
+    def test_rbac8_audit_event_records_target_credential_id(self, db):
+        """RBAC-8: audit event records canonical credential identity."""
+        cid = _insert_credential(db, tenant_id="tenant-g8")
+        assign_role(
+            db,
+            tenant_id="tenant-g8",
+            actor_key_prefix="actor",
+            credential_id=cid,
+            role_name="analyst",
+        )
+        log = get_role_audit_log(db, tenant_id="tenant-g8")
+        assert any(e["target_credential_id"] == cid for e in log)

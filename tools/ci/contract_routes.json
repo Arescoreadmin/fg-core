@@ -5246,7 +5246,7 @@
     },
     {
       "method": "DELETE",
-      "path": "/rbac/assignments/{key_id}",
+      "path": "/rbac/assignments/{credential_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -6115,7 +6115,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-08-08T15:59:54.493130+00:00",
+  "generated_at": "2026-08-08T23:11:55.044477+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

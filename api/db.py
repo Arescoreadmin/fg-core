@@ -452,6 +452,37 @@ def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS ix_tenant_role_audit_tenant_ts "
             "ON tenant_role_audit (tenant_id, timestamp)"
         )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_credential_roles (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id     TEXT    NOT NULL,
+                credential_id TEXT    NOT NULL,
+                role_name     TEXT    NOT NULL,
+                granted_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                granted_by    TEXT    NOT NULL,
+                revoked_at    TEXT,
+                revoked_by    TEXT
+            )
+            """
+        )
+        con.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uidx_tcr_active_role "
+            "ON tenant_credential_roles (tenant_id, credential_id) "
+            "WHERE revoked_at IS NULL"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tcr_tenant_id "
+            "ON tenant_credential_roles (tenant_id)"
+        )
+        # Add target_credential_id to audit log if missing (R4.10 additive).
+        existing_cols = {
+            r[1] for r in con.execute("PRAGMA table_info(tenant_role_audit)")
+        }
+        if "target_credential_id" not in existing_cols:
+            con.execute(
+                "ALTER TABLE tenant_role_audit ADD COLUMN target_credential_id TEXT"
+            )
         con.commit()
     finally:
         con.close()
@@ -1841,6 +1872,32 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 schema_version    INTEGER      NOT NULL DEFAULT 1
             )
             """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_credential_roles (
+                id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+                tenant_id     TEXT     NOT NULL,
+                credential_id TEXT     NOT NULL,
+                role_name     TEXT     NOT NULL,
+                granted_at    TEXT     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                granted_by    TEXT     NOT NULL,
+                revoked_at    TEXT,
+                revoked_by    TEXT
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uidx_tcr_active_role "
+            "ON tenant_credential_roles (tenant_id, credential_id) "
+            "WHERE revoked_at IS NULL"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_tcr_tenant_id "
+            "ON tenant_credential_roles (tenant_id)"
+        )
+        _sqlite_add_column_if_missing(
+            conn, "tenant_role_audit", "target_credential_id", "TEXT"
         )
 
 

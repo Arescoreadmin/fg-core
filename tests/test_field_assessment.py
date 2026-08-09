@@ -143,7 +143,6 @@ def client(build_app: object) -> TestClient:
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)  # type: ignore[operator]
     key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_ID)
@@ -157,13 +156,11 @@ def client(build_app: object) -> TestClient:
             ),
             {"t": _TENANT_ID},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 
@@ -1352,7 +1349,6 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     artifact_dir = tmp_path / "fa_artifacts"
     artifact_dir.mkdir()
@@ -1374,13 +1370,11 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
             ),
             {"t": _TENANT_ID},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 
@@ -1394,7 +1388,6 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
 
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     artifact_dir = tmp_path / "fa_artifacts_b"
     artifact_dir.mkdir()
@@ -1415,13 +1408,11 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
             ),
             {"t": _TENANT_ID_B},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=_TENANT_ID_B,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 

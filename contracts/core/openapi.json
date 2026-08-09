@@ -4303,10 +4303,11 @@
       },
       "AssignRoleRequest": {
         "properties": {
-          "key_id": {
-            "exclusiveMinimum": 0.0,
-            "title": "Key Id",
-            "type": "integer"
+          "credential_id": {
+            "maxLength": 36,
+            "minLength": 36,
+            "title": "Credential Id",
+            "type": "string"
           },
           "role": {
             "maxLength": 64,
@@ -4316,7 +4317,7 @@
           }
         },
         "required": [
-          "key_id",
+          "credential_id",
           "role"
         ],
         "title": "AssignRoleRequest",
@@ -109196,7 +109197,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List API keys with assigned roles for this tenant",
+        "summary": "List canonical credentials with assigned roles for this tenant",
         "tags": [
           "rbac"
         ]
@@ -109236,23 +109237,23 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Assign a role to an API key (tenant_admin only)",
+        "summary": "Assign a role to a canonical credential (tenant_admin only)",
         "tags": [
           "rbac"
         ]
       }
     },
-    "/rbac/assignments/{key_id}": {
+    "/rbac/assignments/{credential_id}": {
       "delete": {
-        "operationId": "revoke_role_endpoint_rbac_assignments__key_id__delete",
+        "operationId": "revoke_role_endpoint_rbac_assignments__credential_id__delete",
         "parameters": [
           {
             "in": "path",
-            "name": "key_id",
+            "name": "credential_id",
             "required": true,
             "schema": {
-              "title": "Key Id",
-              "type": "integer"
+              "title": "Credential Id",
+              "type": "string"
             }
           }
         ],
@@ -109261,7 +109262,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Revoke Role Endpoint Rbac Assignments  Key Id  Delete",
+                  "title": "Response Revoke Role Endpoint Rbac Assignments  Credential Id  Delete",
                   "type": "object"
                 }
               }
@@ -109279,7 +109280,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Revoke the role from an API key (tenant_admin only)",
+        "summary": "Revoke the role from a canonical credential (tenant_admin only)",
         "tags": [
           "rbac"
         ]

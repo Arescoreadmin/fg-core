@@ -32,7 +32,6 @@ def _mint(build_app, *scopes: str, tenant_id: str, role: str | None = None) -> t
     """Mint an API key, optionally assign a DB role; return (app, client)."""
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     app = build_app(auth_enabled=True)
     key = mint_key(*scopes, tenant_id=tenant_id)
@@ -47,13 +46,11 @@ def _mint(build_app, *scopes: str, tenant_id: str, role: str | None = None) -> t
                 ),
                 {"t": tenant_id},
             ).scalar_one()
-            assign_role(
-                db,
-                tenant_id=tenant_id,
-                actor_key_prefix="pytest",
-                target_key_id=int(key_id),
-                role_name=role,
+            db.execute(
+                sa_text("UPDATE api_keys SET role = :role WHERE id = :id"),
+                {"role": role, "id": key_id},
             )
+            db.commit()
         finally:
             db.close()
 

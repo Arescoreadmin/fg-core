@@ -398,7 +398,6 @@ def _make_admin_client(app, tenant_id: str):
     from sqlalchemy import text as sa_text
     from api.auth_scopes import mint_key
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
     from fastapi.testclient import TestClient
 
     key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
@@ -411,13 +410,11 @@ def _make_admin_client(app, tenant_id: str):
             ),
             {"t": tenant_id},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="tenant_admin",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'tenant_admin' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
     return TestClient(app, headers={"X-API-Key": key})

@@ -1,23 +1,25 @@
 """
-api/tenant_rbac_router.py — RBAC management endpoints for FrostGate (PR 57).
+api/tenant_rbac_router.py — RBAC management endpoints for FrostGate.
 
 Routes:
-  GET  /rbac/roles            — list built-in roles and scope bundles (read_only+)
-  GET  /rbac/assignments      — list role assignments for tenant (governance_admin+)
-  POST /rbac/assignments      — assign role to key by id (tenant_admin only)
-  DELETE /rbac/assignments/{key_id} — revoke role (tenant_admin only)
-  GET  /rbac/audit            — immutable audit log (auditor+)
+  GET  /rbac/roles                          — list built-in roles (read_only+)
+  GET  /rbac/assignments                    — list role assignments (governance_admin+)
+  POST /rbac/assignments                    — assign role to credential (tenant_admin only)
+  DELETE /rbac/assignments/{credential_id}  — revoke role (tenant_admin only)
+  DELETE /rbac/assignments/{key_id}         — 410 Gone (retired integer route, R4.10)
+  GET  /rbac/audit                          — immutable audit log (auditor+)
 
-Authorization: require_role is the sole gate on all routes; require_scopes is not used.
+Authorization: require_role is the sole gate on all routes.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import authz_scope, require_bound_tenant
@@ -36,6 +38,11 @@ log = logging.getLogger("frostgate.rbac")
 
 router = APIRouter(prefix="/rbac", tags=["rbac"])
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
 
 def _actor_key_prefix(request: Request) -> str:
     auth = getattr(getattr(request, "state", None), "auth", None)
@@ -51,8 +58,15 @@ def _actor_key_prefix(request: Request) -> str:
 
 
 class AssignRoleRequest(BaseModel):
-    key_id: int = Field(..., gt=0)
+    credential_id: str = Field(..., min_length=36, max_length=36)
     role: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("credential_id")
+    @classmethod
+    def _validate_uuid(cls, v: str) -> str:
+        if not _UUID_RE.match(v):
+            raise ValueError("credential_id must be a valid UUID")
+        return v
 
 
 class RoleDetail(BaseModel):
@@ -82,7 +96,7 @@ def list_roles() -> list[RoleDetail]:
 
 @router.get(
     "/assignments",
-    summary="List API keys with assigned roles for this tenant",
+    summary="List canonical credentials with assigned roles for this tenant",
     dependencies=[
         Depends(authz_scope("keys:read")),
         Depends(require_role("governance_admin")),
@@ -100,7 +114,7 @@ def get_assignments(
 
 @router.post(
     "/assignments",
-    summary="Assign a role to an API key (tenant_admin only)",
+    summary="Assign a role to a canonical credential (tenant_admin only)",
     dependencies=[
         Depends(authz_scope("keys:write")),
         Depends(require_role("tenant_admin")),
@@ -119,7 +133,7 @@ def assign_role_endpoint(
             conn,
             tenant_id=tenant_id,
             actor_key_prefix=actor,
-            target_key_id=body.key_id,
+            credential_id=body.credential_id,
             role_name=body.role,
         )
     except ValueError as exc:
@@ -127,18 +141,30 @@ def assign_role_endpoint(
 
 
 @router.delete(
-    "/assignments/{key_id}",
-    summary="Revoke the role from an API key (tenant_admin only)",
+    "/assignments/{credential_id}",
+    summary="Revoke the role from a canonical credential (tenant_admin only)",
     dependencies=[
         Depends(authz_scope("keys:write")),
         Depends(require_role("tenant_admin")),
     ],
 )
 def revoke_role_endpoint(
-    key_id: int,
+    credential_id: str,
     request: Request,
     conn: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
+    if not _UUID_RE.match(credential_id):
+        # Integer path (old route used key_id: int) — explicitly retired.
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "ROUTE_RETIRED",
+                "message": (
+                    "DELETE /rbac/assignments/{key_id} (integer) is retired. "
+                    "Use DELETE /rbac/assignments/{credential_id} (UUID)."
+                ),
+            },
+        )
     tenant_id = require_bound_tenant(request)
     actor = _actor_key_prefix(request)
     try:
@@ -146,7 +172,7 @@ def revoke_role_endpoint(
             conn,
             tenant_id=tenant_id,
             actor_key_prefix=actor,
-            target_key_id=key_id,
+            credential_id=credential_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

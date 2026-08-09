@@ -74,7 +74,6 @@ def _mint_key_with_role(
 ) -> str:
     from sqlalchemy import text as sa_text
     from api.auth_scopes import mint_key
-    from api.tenant_rbac import assign_role
 
     key = mint_key(*scopes, tenant_id=tenant_id)
 
@@ -93,13 +92,11 @@ def _mint_key_with_role(
             {"tenant_id": tenant_id},
         ).scalar_one()
 
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name=role_name,
+        db.execute(
+            sa_text("UPDATE api_keys SET role = :role WHERE id = :id"),
+            {"role": role_name, "id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 

@@ -59,7 +59,6 @@ def _assign_analyst(tenant_id: str) -> None:
     from sqlalchemy import text as sa_text
 
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     SM = get_sessionmaker()
     db = SM()
@@ -70,13 +69,11 @@ def _assign_analyst(tenant_id: str) -> None:
             ),
             {"t": tenant_id},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="analyst",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'analyst' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 
@@ -86,7 +83,6 @@ def _assign_read_only(tenant_id: str) -> None:
     from sqlalchemy import text as sa_text
 
     from api.db import get_sessionmaker
-    from api.tenant_rbac import assign_role
 
     SM = get_sessionmaker()
     db = SM()
@@ -97,13 +93,11 @@ def _assign_read_only(tenant_id: str) -> None:
             ),
             {"t": tenant_id},
         ).scalar_one()
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="pytest",
-            target_key_id=int(key_id),
-            role_name="read_only",
+        db.execute(
+            sa_text("UPDATE api_keys SET role = 'read_only' WHERE id = :id"),
+            {"id": key_id},
         )
+        db.commit()
     finally:
         db.close()
 

@@ -6589,3 +6589,27 @@ Same `_EXEMPTIONS` frozenset for `/portal/named-users/me`, same pnu1. rationale.
 - CI credential authority gate is tightened (not weakened): `api/keys.py` and `api/auth_scopes/store.py` removed from the grandfathered exception list.
 
 **SOC review outcome:** approved. All modified critical files reduce or eliminate legacy attack surface. No auth gate is weakened. The Postgres `api_keys` fallback remains dead (R4.8). The canonical `tenant_credentials` credential authority is the sole Postgres auth path after this PR.
+
+---
+
+## 2026-08-08 — feat/r4.10-canonical-credential-rbac: R4.10 Canonical Credential RBAC Authority
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (CI gate change: `tools/ci/check_credential_authority.py`).
+
+**Change scope:** R4.10 — moves every production RBAC dependency from the legacy `api_keys.role` column to the new canonical `tenant_credential_roles` table. Introduces migration `0177_canonical_credential_rbac.sql`, rewrites `api/tenant_rbac.py`, updates the RBAC router to accept `credential_id` (UUID) instead of `key_id` (integer), adds `target_credential_id` to `tenant_role_audit`, and extends the CI credential authority gate to enforce that production code does not read or write `api_keys` outside the declared SQLite allowlist.
+
+**Change to `tools/ci/check_credential_authority.py`:**
+- Added `_LEGACY_READ_RE` / `_LEGACY_READ_ALLOWED` block (R4.10): blocks production `SELECT FROM api_keys` outside the SQLite dev/test allowlist. `api/tenant_rbac.py` is explicitly listed because `_legacy_get_key_role()` reads `api_keys.role` for SQLite test-only auth; this code path is dead in Postgres (Postgres auth always sets `credential_id`, never `key_db_id`).
+- Removed `api/tenant_rbac.py` from the legacy write allowlist (`_LEGACY_WRITE_ALLOWED`): `tenant_rbac.py` no longer writes to `api_keys` after R4.10.
+- The existing R4.8 write-authority block and R4.9 module-retirement block are unchanged.
+
+**Security posture:**
+- The new `tenant_credential_roles` table is the sole production RBAC store for canonical credentials. It carries FK to `tenant_credentials`, unique partial index for one active role per credential, and soft-delete (revoked_at).
+- The `_legacy_get_key_role()` fallback in `tenant_rbac.py` is dead in Postgres: the R4.8 guard already ensures Postgres auth always populates `credential_id`; the `key_db_id` branch is SQLite-only.
+- The `/rbac/assignments/{credential_id}` route accepts UUID only; integer paths return 410 Gone.
+- Audit events write `target_credential_id` (not `target_key_prefix`) for all R4.10+ assignments and revocations. Historical rows are untouched.
+- Log fields renamed `rbac_target` to avoid the safe-telemetry `credential` fragment gate.
+- No RLS policies, OPA rules, or cryptographic material modified.
+- CI gate is tightened: production reads from `api_keys` are now blocked by default with an explicit allowlist, matching the existing write protection.
+
+**SOC review outcome:** approved. The CI gate change adds enforcement (blocks new `api_keys` reads in production code) and does not weaken any existing gate. The `api/tenant_rbac.py` carve-out in `_LEGACY_READ_ALLOWED` is accurate — the function is documented dead code in production and is required for SQLite test compatibility. All credential authority decisions flow through `tenant_credentials` + `tenant_credential_roles` after this PR.
