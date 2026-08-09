@@ -108,6 +108,8 @@ def test_canonical_rbac_resolve(sqlite_env, monkeypatch):
 
 def test_no_api_keys_read_during_canonical_auth(sqlite_env, monkeypatch):
     """Canonical resolution must not touch api_keys table."""
+    from sqlalchemy import event as sa_event
+
     engine = sqlite_env
     monkeypatch.setenv("FG_KEY_PEPPER", "r4-11-proof-pepper")
 
@@ -119,28 +121,21 @@ def test_no_api_keys_read_during_canonical_auth(sqlite_env, monkeypatch):
     )
     raw_key = result.plaintext_secret
 
-    import sqlite3 as _sqlite3
-    sqlite_path = os.environ["FG_SQLITE_PATH"]
+    # Use a SQLAlchemy execution event so the listener fires on the already-open
+    # engine pool connection — reliable regardless of connection reuse.
     api_keys_reads: list[str] = []
 
-    orig_connect = _sqlite3.connect
+    def _before_exec(conn, cursor, statement, parameters, context, executemany):
+        if "api_keys" in statement.lower():
+            api_keys_reads.append(statement.strip()[:120])
 
-    def patched_connect(path, **kw):
-        conn = orig_connect(path, **kw)
-        orig_execute = conn.execute
-
-        def tracked_execute(sql, *args):
-            if "api_keys" in sql.lower():
-                api_keys_reads.append(sql.strip()[:120])
-            return orig_execute(sql, *args)
-
-        conn.execute = tracked_execute
-        return conn
-
-    with patch("sqlite3.connect", side_effect=patched_connect):
+    sa_event.listen(engine, "before_cursor_execute", _before_exec)
+    try:
         auth = verify_api_key_detailed(raw=raw_key, required_scopes=None)
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", _before_exec)
 
     assert auth.valid, f"Auth failed: {auth.reason}"
     assert api_keys_reads == [], (
-        f"Canonical auth unexpectedly read api_keys:\n" + "\n".join(api_keys_reads)
+        "Canonical auth unexpectedly read api_keys:\n" + "\n".join(api_keys_reads)
     )

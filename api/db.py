@@ -396,20 +396,46 @@ def _sqlite_add_col_if_missing(
 
 
 def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
-    """Bootstrap canonical credential tables in the SQLite dev/test database.
+    """Bootstrap SQLite dev/test database with legacy and canonical credential tables.
 
-    R4.11: api_keys creation removed.  This function now ensures the canonical
-    authority tables (tenant_credentials, credential_slots, tenant_credential_events,
-    tenant_credential_roles) and the role-audit table exist via raw sqlite3 before
-    the SQLAlchemy engine is initialised.  _auto_migrate_sqlite() runs immediately
-    after and is idempotent, so duplicated CREATE IF NOT EXISTS statements are safe.
+    R4.11 step 3 adds canonical tables alongside the legacy api_keys table.
+    api_keys creation is retained until steps 7-9 remove all legacy callers
+    (_legacy_get_key_role, mint_key, test_rbac7 isolation test).  Once those
+    callers are removed the api_keys block below can be deleted.
+    _auto_migrate_sqlite() runs immediately after and is idempotent.
     """
     con = sqlite3.connect(sqlite_path)
     try:
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA foreign_keys=ON")
 
-        # Canonical credential slot registry — uniqueness enforced by PK.
+        # ---- Legacy api_keys table (retained until steps 7-9) ---------------
+        if not _sqlite_table_exists(con, "api_keys"):
+            con.execute(
+                """
+                CREATE TABLE api_keys (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT,
+                    prefix      TEXT    NOT NULL,
+                    key_hash    TEXT    NOT NULL,
+                    scopes_csv  TEXT    NOT NULL,
+                    enabled     INTEGER NOT NULL DEFAULT 1,
+                    tenant_id   TEXT,
+                    created_at  INTEGER,
+                    last_used_at INTEGER,
+                    expires_at  INTEGER,
+                    hash_alg    TEXT,
+                    hash_params TEXT,
+                    key_lookup  TEXT
+                )
+                """
+            )
+        _sqlite_add_col_if_missing(con, "api_keys", "hash_alg", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "hash_params", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "key_lookup", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "role", "TEXT")
+
+        # ---- Canonical credential slot registry — uniqueness enforced by PK.
         con.execute(
             """
             CREATE TABLE IF NOT EXISTS credential_slots (
@@ -687,6 +713,13 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
+
+        # Legacy api_keys column migrations (retained until steps 7-9 remove callers).
+        if "api_keys" in tables:
+            _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
+            _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
+            _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
+            _sqlite_add_column_if_missing(conn, "api_keys", "role", "TEXT")
 
         # PR 57 — tenant RBAC: append-only role audit (idempotent)
         conn.exec_driver_sql(
