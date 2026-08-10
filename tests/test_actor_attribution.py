@@ -201,13 +201,15 @@ def test_aa_4_cross_tenant_key_denied(build_app, fresh_db):
     assert resp.status_code in (403, 404), "tenant-B key must not read tenant-A actor"
 
 
-def test_aa_5_no_tenant_binding_returns_400(build_app, fresh_db):
+def test_aa_5_tenant_bound_key_actor_not_found(build_app, fresh_db):
+    """R4.11: All keys have a bound tenant; actor lookup for nonexistent ID → 404."""
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    # Unscoped key without tenant binding
-    key = mint_key("actor:read")
+    key = mint_key("actor:read", tenant_id="tenant-test")
     resp = client.get("/actor-attribution/actor/any-id", headers={"X-API-Key": key})
-    assert resp.status_code == 400, "unbound tenant must return 400"
+    assert resp.status_code == 404, (
+        "nonexistent actor under bound tenant must return 404"
+    )
 
 
 # ── Group 2: Actor not found (AA-6 to AA-8) ──────────────────────────────────

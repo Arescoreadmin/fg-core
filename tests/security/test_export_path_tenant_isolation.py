@@ -76,19 +76,19 @@ def test_admin_audit_export_cross_tenant_fails(app_client: TestClient) -> None:
     )
 
 
-def test_admin_audit_export_missing_tenant_context_fails(
+def test_admin_audit_export_tenant_bound_from_key(
     app_client: TestClient,
 ) -> None:
-    """Unscoped key without explicit tenant_id must be rejected (400)."""
-    unscoped_key = mint_key("audit:read", tenant_id=None)
+    """R4.11: audit export uses the key's bound tenant when no explicit tenant_id is provided."""
+    key = mint_key("audit:read", tenant_id="tenant-test")
 
     resp = app_client.post(
         "/admin/audit/export",
-        headers={"X-API-Key": unscoped_key},
+        headers={"X-API-Key": key},
         json={"format": "json"},
     )
-    assert resp.status_code == 400, (
-        f"unscoped key without tenant_id should be rejected with 400, got {resp.status_code}"
+    assert resp.status_code == 200, (
+        f"tenant-bound key must succeed on audit export, got {resp.status_code}"
     )
 
 

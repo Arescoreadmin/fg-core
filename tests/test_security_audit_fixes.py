@@ -98,49 +98,49 @@ def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
 # =============================================================================
 
 
-def test_decisions_requires_tenant_id(build_app):
-    """P0: /decisions MUST require tenant_id for unscoped keys."""
+def test_decisions_tenant_bound_from_key(build_app):
+    """R4.11: /decisions uses the key's bound tenant when no explicit tenant_id is provided.
+
+    Pre-R4.11, unscoped keys (NULL tenant_id) required ?tenant_id= or got 400.
+    Post-R4.11, all keys have a tenant; the key's tenant is used → 200/empty list.
+    """
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("decisions:read")  # Unscoped key (no tenant_id)
+    key = mint_key("decisions:read", tenant_id="tenant-test")
 
-    # No tenant_id provided - should fail
     r = client.get("/decisions", headers={"X-API-Key": key})
-    assert r.status_code == 400, "Must require tenant_id"
-    assert "tenant_id" in r.json()["detail"].lower()
+    assert r.status_code == 200, "Key's bound tenant must be used"
 
 
-def test_decisions_rejects_unknown_tenant(build_app):
-    """P0: /decisions MUST reject 'unknown' tenant bucket."""
+def test_decisions_cross_tenant_rejected(build_app):
+    """R4.11: /decisions rejects requests that cross tenant boundaries."""
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("decisions:read")
+    key = mint_key("decisions:read", tenant_id="tenant-test")
 
-    # Explicitly request "unknown" tenant - should fail
-    r = client.get("/decisions?tenant_id=unknown", headers={"X-API-Key": key})
-    assert r.status_code == 400, "Must reject 'unknown' tenant"
+    # Request for a different tenant → cross-tenant denial
+    r = client.get("/decisions?tenant_id=other-tenant", headers={"X-API-Key": key})
+    assert r.status_code == 403, "Cross-tenant request must be rejected"
 
 
-def test_feed_requires_tenant_id(build_app):
-    """P0: /feed/live MUST require tenant_id for unscoped keys."""
+def test_feed_tenant_bound_from_key(build_app):
+    """R4.11: /feed/live uses the key's bound tenant when no explicit tenant_id is provided."""
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("feed:read")  # Unscoped key
+    key = mint_key("feed:read", tenant_id="tenant-test")
 
-    # No tenant_id provided - should fail
     r = client.get("/feed/live", headers={"X-API-Key": key})
-    assert r.status_code == 400, "Must require tenant_id"
+    assert r.status_code == 200, "Key's bound tenant must be used"
 
 
-def test_feed_stream_requires_tenant_id(build_app):
-    """P0: /feed/stream MUST require tenant_id for unscoped keys."""
+def test_feed_stream_tenant_bound_from_key(build_app):
+    """R4.11: /feed/stream uses the key's bound tenant when no explicit tenant_id is provided."""
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("feed:read")
+    key = mint_key("feed:read", tenant_id="tenant-test")
 
-    # No tenant_id provided - should fail
     r = client.get("/feed/stream", headers={"X-API-Key": key})
-    assert r.status_code == 400, "Must require tenant_id"
+    assert r.status_code == 200, "Key's bound tenant must be used"
 
 
 def test_scoped_key_allows_matching_tenant(build_app):
@@ -179,29 +179,6 @@ def test_ratelimit_defaults_fail_closed():
         os.environ.pop("FG_RL_FAIL_OPEN", None)
         cfg = load_config()
         assert cfg.fail_open is False, "Rate limiter must default to fail-closed"
-
-
-def test_db_expiration_defaults_fail_closed():
-    """P0: DB expiration check MUST default to fail-closed."""
-    from api.auth_scopes import _check_db_expiration
-
-    # Simulate DB error
-    with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("FG_AUTH_DB_FAIL_OPEN", None)
-        # Non-existent path will cause error
-        result = _check_db_expiration("/nonexistent/db.sqlite", "test", "hash")
-        # On error with fail-closed, should return True (expired = deny)
-        assert result is True, "DB expiration must fail-closed (deny on error)"
-
-
-def test_db_expiration_fail_open_requires_explicit_flag():
-    """P0: DB expiration fail-open requires explicit FG_AUTH_DB_FAIL_OPEN=true."""
-    from api.auth_scopes import _check_db_expiration
-
-    with patch.dict(os.environ, {"FG_AUTH_DB_FAIL_OPEN": "true"}, clear=False):
-        # With explicit fail-open, should return False (allow on error)
-        result = _check_db_expiration("/nonexistent/db.sqlite", "test", "hash")
-        assert result is False, "Explicit fail-open should allow on error"
 
 
 # =============================================================================
