@@ -42,8 +42,6 @@ class TestExpiredKeys:
 
     def test_expired_credential_fails(self, fresh_db, fresh_engine):
         """Credentials issued with expires_in_seconds=1 and manually expired should fail auth."""
-        import time
-        from api.db import get_engine as _eng
         from sqlalchemy import text as _text
 
         ensure_tenant_canonical_row(fresh_db, "tenant-test")

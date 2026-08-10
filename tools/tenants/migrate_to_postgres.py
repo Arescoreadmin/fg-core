@@ -190,7 +190,6 @@ def run_migration(
         return result
 
     from api.tenant_repository import TenantRepository
-    from sqlalchemy import text
 
     repo = TenantRepository(engine)
 

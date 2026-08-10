@@ -20,7 +20,6 @@ from .helpers import (
     _constant_time_compare,
 )
 from .validation import (
-    _is_key_expired,
     _is_production_env,
     _validate_tenant_id,
 )
