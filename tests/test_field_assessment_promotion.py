@@ -394,51 +394,69 @@ class TestPromotionServiceDirect:
 
 
 def _make_admin_client(app, tenant_id: str):
-    """Mint a key with tenant_admin role (has governance.promote) for the promote route.
-
-    SQLite dev/test path only.  resolution.py:437 gates canonical credential
-    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
-    authenticate via api_keys regardless of key prefix.  Role is set on
-    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
-
-    Canonical production path: get_credential_role() → tenant_credential_roles.
-    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
-    """
-    from sqlalchemy import text as sa_text
-    from api.auth_scopes import mint_key
-    from api.db import get_sessionmaker
+    """Issue a canonical credential with tenant_admin role for the promote route."""
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
     from fastapi.testclient import TestClient
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.orm import Session
 
-    key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"t": tenant_id},
-        ).scalar_one()
-        db.execute(
-            sa_text("UPDATE api_keys SET role = 'tenant_admin' WHERE id = :id"),
-            {"id": key_id},
+            {"tid": tenant_id},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name="tenant_admin",
         )
         db.commit()
-    finally:
-        db.close()
-    return TestClient(app, headers={"X-API-Key": key})
+    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
 
 
 class TestPromotionAdminRoute:
     def test_promote_route_returns_409_for_non_delivered(self, build_app) -> None:
-        from api.auth_scopes import mint_key
+        import uuid as _uuid
+        from api.credential_authority import issue_credential
+        from api.db import get_engine
         from fastapi.testclient import TestClient
+        from sqlalchemy import text as sa_text
 
         app = build_app(auth_enabled=True)
+        engine = get_engine()
+        with engine.begin() as conn:
+            conn.execute(
+                sa_text(
+                    "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                    " VALUES (:tid, 'active')"
+                ),
+                {"tid": _TENANT},
+            )
         # Assessor key creates the engagement; admin key (tenant_admin) calls promote.
-        assessor_key = mint_key(
-            "governance:read", "governance:write", tenant_id=_TENANT
-        )
+        assessor_key = issue_credential(
+            engine,
+            tenant_id=_TENANT,
+            credential_type="tenant_api_key",
+            credential_slot=f"test:{_uuid.uuid4()}",
+            scopes=["governance:read", "governance:write"],
+        ).plaintext_secret
         assessor = TestClient(app, headers={"X-API-Key": assessor_key})
         admin = _make_admin_client(app, _TENANT)
 

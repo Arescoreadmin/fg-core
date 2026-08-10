@@ -433,8 +433,10 @@ def verify_api_key_detailed(
     # through — the canonical path must never block the hot auth path.
     # Migration telemetry: reason="canonical_validated" in auth_attempt
     # log distinguishes canonical hits from legacy hits.
+    # R4.11: removed _is_postgres guard — canonical auth runs on all backends.
+    # SQLite now resolves fgk.* via tenant_credentials exactly as Postgres does.
     # ------------------------------------------------------------------
-    if raw.startswith("fgk.") and _is_postgres:
+    if raw.startswith("fgk."):
         _ca_principal = None
         try:
             from api.credential_authority import (  # noqa: PLC0415

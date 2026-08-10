@@ -165,45 +165,42 @@ def _make_report(SM, *, tenant_id: str, engagement_id: str) -> str:
 
 
 def _mint_key_with_role(
-    *scopes: str, tenant_id: str, role_name: str, session_factory
+    *scopes: str, tenant_id: str, role_name: str, session_factory=None
 ) -> str:
-    """SQLite dev/test path only.  resolution.py:437 gates canonical credential
-    auth (tenant_credentials) on _is_postgres; in SQLite mode all requests
-    authenticate via api_keys regardless of key prefix.  Role is set on
-    api_keys.role and read by _legacy_get_key_role() in tenant_rbac.py.
-
-    Canonical production path: get_credential_role() → tenant_credential_roles.
-    Migration to canonical SQLite auth is tracked for R4.11 (api_keys drop).
-    """
+    """Issue a canonical credential with a role; return plaintext key."""
+    import uuid as _uuid
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+    from api.db import get_engine
     from sqlalchemy import text as sa_text
-    from api.auth_scopes import mint_key
+    from sqlalchemy.orm import Session
 
-    key = mint_key(*scopes, tenant_id=tenant_id)
-
-    db = session_factory()()
-    try:
-        key_id = db.execute(
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                """
-                SELECT id
-                FROM api_keys
-                WHERE tenant_id = :tenant_id
-                ORDER BY id DESC
-                LIMIT 1
-                """
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"tenant_id": tenant_id},
-        ).scalar_one()
-
-        db.execute(
-            sa_text("UPDATE api_keys SET role = :role WHERE id = :id"),
-            {"role": role_name, "id": key_id},
+            {"tid": tenant_id},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=list(scopes),
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name=role_name,
         )
         db.commit()
-    finally:
-        db.close()
-
-    return key
+    return result.plaintext_secret
 
 
 # ---------------------------------------------------------------------------

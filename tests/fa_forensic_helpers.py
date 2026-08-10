@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid as _uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,8 +8,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import mint_key
-from api.db import get_engine, get_sessionmaker
+from api.credential_authority import issue_credential
+from api.db import get_engine
+from api.tenant_rbac import assign_role
 from services.field_assessment.store import create_finding
 
 TENANT_A = "test-tenant-fa"
@@ -54,58 +56,72 @@ class ForensicContext:
 
 
 def _mint_admin_key(app: Any, tenant_id: str) -> TestClient:
-    """Mint a key with tenant_admin role (has governance.promote).
-
-    SQLite dev/test path: updates api_keys.role directly because mint_key()
-    issues legacy api_keys credentials (no canonical credential_id in auth).
-    _legacy_get_key_role() in tenant_rbac reads this column for key_db_id auth.
-    """
-    key = mint_key("governance:read", "governance:write", tenant_id=tenant_id)
-    SM = get_sessionmaker()
-    db = SM()
-    try:
-        key_id = db.execute(
+    """Issue a canonical credential with tenant_admin role (has governance.promote)."""
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
             sa_text(
-                "SELECT id FROM api_keys WHERE tenant_id = :t ORDER BY id DESC LIMIT 1"
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
             ),
-            {"t": tenant_id},
-        ).scalar_one()
-        db.execute(
-            sa_text(
-                "UPDATE api_keys SET role = 'tenant_admin' WHERE id = :id AND tenant_id = :t"
-            ),
-            {"id": key_id, "t": tenant_id},
+            {"tid": tenant_id},
+        )
+    result = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write"],
+    )
+    with Session(engine) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=result.record.credential_id,
+            role_name="tenant_admin",
         )
         db.commit()
-    finally:
-        db.close()
-    return TestClient(app, headers={"X-API-Key": key})
+    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
 
 
 def make_context(build_app: object) -> ForensicContext:
     app = build_app(auth_enabled=True)  # type: ignore[operator]
+    engine = get_engine()
+
+    for tid in (TENANT_A, TENANT_B):
+        with engine.begin() as conn:
+            conn.execute(
+                sa_text(
+                    "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                    " VALUES (:tid, 'active')"
+                ),
+                {"tid": tid},
+            )
 
     # No DB role assigned — scope fallback unions assessor (governance:write) and
     # qa_reviewer (governance:qa_approve) capabilities for the migration period.
-    key_a = mint_key(
-        "governance:read",
-        "governance:write",
-        "governance:qa_approve",
+    key_a = issue_credential(
+        engine,
         tenant_id=TENANT_A,
-    )
-    key_b = mint_key(
-        "governance:read",
-        "governance:write",
-        "governance:qa_approve",
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write", "governance:qa_approve"],
+    ).plaintext_secret
+    key_b = issue_credential(
+        engine,
         tenant_id=TENANT_B,
-    )
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=["governance:read", "governance:write", "governance:qa_approve"],
+    ).plaintext_secret
 
     promote_client = _mint_admin_key(app, TENANT_A)
 
     return ForensicContext(
         client_a=TestClient(app, headers={"X-API-Key": key_a}),
         client_b=TestClient(app, headers={"X-API-Key": key_b}),
-        engine=get_engine(),
+        engine=engine,
         promote_client_a=promote_client,
     )
 

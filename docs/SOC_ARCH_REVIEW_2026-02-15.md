@@ -3858,3 +3858,24 @@ Validation evidence:
 - Existing `test_admin_path_rejects_non_dedicated_token_in_production`, `test_admin_internal_token_enforces_required_scopes` continue to pass — no regression on `/admin/*` paths.
 
 SOC review outcome: approved. The change narrows, not broadens, the attack surface for `/workforce/users`: previously any caller with a token that passed DB key validation could attempt these endpoints; now only the admin gateway token is accepted in production. Tenant isolation is preserved — `X-Tenant-ID` is validated by BFF session authorization before being forwarded, and Core injects it only after the admin token authenticates. No credentials are issued, rotated, or revoked by this change.
+
+---
+
+## 2026-08-09 — R4.11 Step 1: Remove _is_postgres guard from canonical fgk.* auth (AUTH-002)
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth subsystem change: `api/auth_scopes/resolution.py`).
+
+Scope: R4.11 legacy api_keys retirement, step 1. Removes the `_is_postgres` guard in `verify_api_key_detailed()` that was preventing canonical `fgk.*` credential resolution on SQLite backends. With the guard removed, canonical auth runs identically on both SQLite (dev/test) and Postgres (production): a `fgk.*`-prefixed key is resolved through `tenant_credentials` → `verify_credential()` → `get_credential_role()` — never through the legacy `api_keys` table.
+
+Security posture: The guard removal does not weaken production security. In production, `_is_postgres` was always `True`, so the canonical path was already the only path for `fgk.*` keys. Removing the guard makes SQLite and Postgres behavior identical, which eliminates the class of "passes SQLite CI, breaks Postgres production" bugs. The canonical resolution path (`verify_credential()`) uses Argon2id PBKDF2 verification with pepper, tenant binding, credential lifecycle checks, and credential_slot uniqueness — all enforced identically on both backends. Legacy `api_keys`-based resolution remains unchanged for legacy-prefixed keys and continues to function until steps 7-9 of R4.11 retire it.
+
+Critical-path files changed:
+- `api/auth_scopes/resolution.py`: one-line change — `if raw.startswith("fgk.") and _is_postgres:` → `if raw.startswith("fgk."):`. No other logic changed.
+
+Validation evidence:
+- `tests/test_r4_11_sqlite_canonical_auth_proof.py` (3 new guardrail tests): `test_canonical_issue_and_resolve` (full issue→resolve chain, reason="canonical_validated"), `test_canonical_rbac_resolve` (assign_role → get_credential_role), `test_no_api_keys_read_during_canonical_auth` (SQLAlchemy event listener confirms api_keys table is never queried during canonical auth).
+- `tests/test_tenant_rbac.py::TestCanonicalRBACGuarantees::test_rbac7_legacy_api_keys_role_cannot_influence_canonical_credential`: PASS — legacy api_keys role cannot influence canonical credential resolution.
+- `tests/test_key_lifecycle.py` (13/13): PASS — no regression on existing key lifecycle paths.
+- `make fg-fast`: 496 passed, 2 skipped. All lint, format, and contract gates green.
+
+SOC review outcome: approved. The single-line guard removal is strictly a backend-parity fix. The canonical resolution path was already the production-hardened auth path for `fgk.*` keys; this change makes SQLite CI enforce the same invariant. No credential issuance, rotation, revocation, or scope escalation occurs. No legacy caller is removed in this PR — api_keys schema is preserved until R4.11 steps 7-9.
