@@ -98,16 +98,17 @@ def test_mismatched_tenant_input_surfaces_denied(
         ("GET", "/admin/tenants/tenant-a/usage", ("admin:read",), None),
     ],
 )
-def test_unscoped_key_with_explicit_tenant_denied_400(
+def test_cross_tenant_key_denied_403(
     client: TestClient,
     method: str,
     path: str,
     scopes: tuple[str, ...],
     payload: dict | None,
 ):
-    key = mint_key(*scopes)
+    """R4.11: key bound to tenant-test accessing tenant-a resource → cross-tenant denial (403)."""
+    key = mint_key(*scopes, tenant_id="tenant-test")
     resp = client.request(method, path, headers={"X-API-Key": key}, json=payload)
-    assert resp.status_code == 400
+    assert resp.status_code == 403
 
 
 def test_header_tenant_mismatch_surface_denied(client: TestClient):

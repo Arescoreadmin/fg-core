@@ -25,17 +25,16 @@ def audit_client(tmp_path, monkeypatch):
     return client, api_key
 
 
-def test_unscoped_key_denied_for_audit_search(audit_client):
-    """Unscoped key is denied for tenant-scoped audit search."""
+def test_cross_tenant_key_denied_for_audit_search(audit_client):
+    """R4.11: Key bound to tenant-test cannot search tenant-a audit records (cross-tenant → 403)."""
     client, _ = audit_client
-    api_key = mint_key("audit:read", ttl_seconds=3600)
+    api_key = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-test")
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": api_key},
         params={"tenant_id": "tenant-a"},
     )
-    assert response.status_code == 400
-    assert "tenant_id required" in response.json()["detail"]
+    assert response.status_code == 403
 
 
 def test_audit_filters_by_tenant(audit_client):

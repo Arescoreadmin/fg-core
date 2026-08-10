@@ -1038,12 +1038,13 @@ def test_ia_139_write_scope_needed_for_recalculate(build_app, fresh_db):
     assert resp.status_code == 403
 
 
-def test_ia_140_unbound_tenant_returns_400(build_app, fresh_db):
+def test_ia_140_tenant_bound_key_assurance_not_found(build_app, fresh_db):
+    """R4.11: All keys have a bound tenant; lookup of nonexistent assurance record → 404."""
     app = build_app(auth_enabled=True, sqlite_path=fresh_db)
     client = TestClient(app)
-    key = mint_key("assurance:read")
+    key = mint_key("assurance:read", tenant_id="tenant-test")
     resp = client.get("/actor-assurance/any-id", headers={"X-API-Key": key})
-    assert resp.status_code == 400
+    assert resp.status_code == 404
 
 
 # ── Group 10: API — GET assurance record (IA-141 .. IA-150) ───────────────────
