@@ -1,15 +1,25 @@
 # R4.11 Completion Summary — Legacy api_keys Table Retirement
 
 **Date:** 2026-08-09
-**Status:** COMPLETE
+**Status:** Implementation complete — pending production 0178 proof
 **Branch:** feat/r4.11-steps-7-16-legacy-api-keys-eradication
 **PRs:** #625 (steps 1–6), #TBD (steps 7–16)
 
 ## Outcome
 
-`api_keys` table DOES NOT EXIST in production runtime. All authentication and
-credential lifecycle now flows exclusively through `tenant_credentials` and
-`tenant_credential_roles` (R4.2–R4.10). R4 Credential Authority is COMPLETE.
+Runtime code is eradicated. `api_keys` will NOT EXIST in production runtime once
+migration 0178 is applied to Railway. All authentication and credential lifecycle
+now flows exclusively through `tenant_credentials` and `tenant_credential_roles`
+(R4.2–R4.10). R4 Credential Authority will be COMPLETE after production proof.
+
+### Production closure gate
+
+After deploying migration 0178:
+```sql
+SELECT to_regclass('public.api_keys');  -- must return NULL
+SELECT * FROM schema_migrations WHERE version = '0178';  -- must have a row
+```
+Only after both pass is R4.11 / R4 legitimately closed.
 
 ## 16-Step Plan Summary
 
@@ -97,10 +107,22 @@ grep -rn "INSERT INTO api_keys\|SELECT.*FROM api_keys\|UPDATE api_keys\|DELETE.*
 
 ## CI Results at Merge
 
-- fg-fast: green (2 pre-existing flaky failures confirmed on HEAD pre-R4.11)
-- fg-security: green (10 pre-existing flaky failures confirmed on HEAD pre-R4.11)
-- fg-contract: green
-- check-credential-authority: green
+- fg-fast: exit 0 (pr-fix-log gate satisfied; 2 pre-existing flaky failures confirmed on HEAD pre-R4.11 by isolated re-run)
+- fg-security: non-zero exit (10 failures); all confirmed pre-existing on HEAD pre-R4.11 by isolated re-run — not R4.11 regressions
+- fg-contract: exit 0 ✅
+- check-credential-authority: ✅
+- codex_gates ruff lint: ✅
+- codex_gates ruff format: ✅
+- codex_gates mypy: ✅
+- codex_gates pytest: pending
+
+## mint_key() — Compatibility Facade
+
+`mint_key()` still exists in `api/auth_scopes/mapping.py`. It is a compatibility
+facade over canonical credential issuance, not legacy api_keys authority. It
+calls `issue_credential()` internally; the 130+ test files that call it are
+exercising the canonical path. The name is historical baggage; the authority
+is canonical. This is acceptable: authority is what matters, not the adapter name.
 
 ## Key Invariant Established
 
