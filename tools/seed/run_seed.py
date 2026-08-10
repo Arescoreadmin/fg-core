@@ -87,7 +87,7 @@ def _set_default_env() -> SeedConfig:
 
 def _validate_existing_seed(config: SeedConfig) -> None:
     from api.db import get_engine
-    from api.db_models import ApiKey, AuditLedgerRecord
+    from api.db_models import AuditLedgerRecord
     from sqlalchemy.orm import Session
     from tools.tenants.registry import load_registry
 
@@ -121,28 +121,6 @@ def _validate_existing_seed(config: SeedConfig) -> None:
         if not has_ledger:
             raise SeedBootstrapError("SEED_CONFLICT:audit ledger rows missing on rerun")
 
-        required_prefixes = {
-            _seed_key_prefix_identity(os.environ["FG_ADMIN_KEY"]),
-            _seed_key_prefix_identity(os.environ["FG_AGENT_KEY"]),
-        }
-        existing = {row[0] for row in db.query(ApiKey.prefix).all()}
-        if not required_prefixes.issubset(existing):
-            raise SeedBootstrapError("SEED_CONFLICT:seeded api keys missing on rerun")
-
-
-def _run_seed_apikeys() -> None:
-    """Upsert all seeded API keys (idempotent). Called on both fresh and re-runs."""
-    script_path = ROOT / "scripts" / "seed_apikeys_db.py"
-    env = dict(os.environ)
-    python_path = env.get("PYTHONPATH", "").strip()
-    env["PYTHONPATH"] = str(ROOT) if not python_path else f"{str(ROOT)}:{python_path}"
-    subprocess.run(
-        [sys.executable, str(script_path)],
-        check=True,
-        cwd=str(ROOT),
-        env=env,
-    )
-
 
 def _seed_once(config: SeedConfig) -> dict[str, Any]:
     from api.db import init_db, reset_engine_cache
@@ -152,8 +130,6 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
     seed_marker = Path(config.state_path)
     if seed_marker.exists():
         _validate_existing_seed(config)
-        # Backfill any new seeded keys added after initial bootstrap (idempotent).
-        _run_seed_apikeys()
         payload = _load_json(seed_marker)
         payload["status"] = "already_seeded"
         return payload
@@ -168,8 +144,6 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         name="Primary Seed Tenant",
         api_key=os.environ["FG_ADMIN_KEY"],
     )
-
-    _run_seed_apikeys()
 
     engine = AuditEngine()
     session_id = engine.run_cycle("light", tenant_id=config.tenant_id)
