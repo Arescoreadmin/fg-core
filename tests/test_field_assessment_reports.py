@@ -111,7 +111,9 @@ def _issue_key(tenant_id: str, *scopes: str) -> tuple[str, str]:
         credential_slot=f"test:{_uuid.uuid4()}",
         scopes=list(scopes),
     )
-    return result.plaintext_secret, result.record.credential_id
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return plaintext_secret, result.record.credential_id
 
 
 @pytest.fixture()

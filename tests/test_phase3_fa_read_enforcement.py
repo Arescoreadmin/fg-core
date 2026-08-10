@@ -66,7 +66,9 @@ def _mint(build_app, *scopes: str, tenant_id: str, role: str | None = None) -> t
             )
             db.commit()
 
-    return app, TestClient(app, headers={"X-API-Key": result.plaintext_secret})
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return app, TestClient(app, headers={"X-API-Key": plaintext_secret})
 
 
 def _make_engagement(client: TestClient, tenant_id: str) -> str:

@@ -182,7 +182,9 @@ def client(build_app: object) -> TestClient:
         )
         db.commit()
 
-    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return TestClient(app, headers={"X-API-Key": plaintext_secret})
 
 
 @pytest.fixture()
@@ -979,6 +981,7 @@ def portal_client(build_app: object) -> TestClient:
         credential_slot=f"test:{_uuid.uuid4()}",
         scopes=["governance:read", "governance:write"],
     ).plaintext_secret
+    assert key is not None
     return TestClient(
         app,
         headers={
@@ -1132,6 +1135,7 @@ def qa_client(build_app: object) -> TestClient:
         credential_slot=f"test:{_uuid.uuid4()}",
         scopes=["governance:read", "governance:write", "governance:qa_approve"],
     ).plaintext_secret
+    assert key is not None
     return TestClient(app, headers={"X-API-Key": key})
 
 
@@ -1445,7 +1449,9 @@ def upload_client(build_app: object, tmp_path, monkeypatch):
         )
         db.commit()
 
-    return TestClient(app, headers={"X-API-Key": result.plaintext_secret}), artifact_dir
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return TestClient(app, headers={"X-API-Key": plaintext_secret}), artifact_dir
 
 
 @pytest.fixture()
@@ -1501,7 +1507,9 @@ def other_tenant_upload_client(build_app: object, tmp_path, monkeypatch):
         )
         db.commit()
 
-    return TestClient(app, headers={"X-API-Key": result.plaintext_secret}), artifact_dir
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return TestClient(app, headers={"X-API-Key": plaintext_secret}), artifact_dir
 
 
 def _upload_pdf(client, eng_id: str, content: bytes, **extra_form):
