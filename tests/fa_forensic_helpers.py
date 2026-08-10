@@ -82,7 +82,9 @@ def _mint_admin_key(app: Any, tenant_id: str) -> TestClient:
             role_name="tenant_admin",
         )
         db.commit()
-    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return TestClient(app, headers={"X-API-Key": plaintext_secret})
 
 
 def make_context(build_app: object) -> ForensicContext:
@@ -108,6 +110,7 @@ def make_context(build_app: object) -> ForensicContext:
         credential_slot=f"test:{_uuid.uuid4()}",
         scopes=["governance:read", "governance:write", "governance:qa_approve"],
     ).plaintext_secret
+    assert key_a is not None
     key_b = issue_credential(
         engine,
         tenant_id=TENANT_B,
@@ -115,6 +118,7 @@ def make_context(build_app: object) -> ForensicContext:
         credential_slot=f"test:{_uuid.uuid4()}",
         scopes=["governance:read", "governance:write", "governance:qa_approve"],
     ).plaintext_secret
+    assert key_b is not None
 
     promote_client = _mint_admin_key(app, TENANT_A)
 

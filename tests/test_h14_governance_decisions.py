@@ -200,7 +200,9 @@ def _mint_key_with_role(
             role_name=role_name,
         )
         db.commit()
-    return result.plaintext_secret
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return plaintext_secret
 
 
 # ---------------------------------------------------------------------------

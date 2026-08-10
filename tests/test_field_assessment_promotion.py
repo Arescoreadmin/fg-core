@@ -428,7 +428,9 @@ def _make_admin_client(app, tenant_id: str):
             role_name="tenant_admin",
         )
         db.commit()
-    return TestClient(app, headers={"X-API-Key": result.plaintext_secret})
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return TestClient(app, headers={"X-API-Key": plaintext_secret})
 
 
 class TestPromotionAdminRoute:
@@ -457,6 +459,7 @@ class TestPromotionAdminRoute:
             credential_slot=f"test:{_uuid.uuid4()}",
             scopes=["governance:read", "governance:write"],
         ).plaintext_secret
+        assert assessor_key is not None
         assessor = TestClient(app, headers={"X-API-Key": assessor_key})
         admin = _make_admin_client(app, _TENANT)
 
