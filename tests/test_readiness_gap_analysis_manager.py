@@ -687,9 +687,7 @@ def test_cross_tenant_overlay_isolation(shared_db_clients):
     beta_resp = beta_client.get(
         f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
     )
-    assert beta_resp.status_code == 404, (
-        "Beta must not access alpha's assessment"
-    )
+    assert beta_resp.status_code == 404, "Beta must not access alpha's assessment"
     beta_body_str = str(beta_resp.json())
     assert ctrl_alpha not in beta_body_str, (
         "Alpha control ID must not leak into beta response"

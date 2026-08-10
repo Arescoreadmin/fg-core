@@ -33,6 +33,7 @@ def mint_key(
     # Ensure SQLite schema and tenant row exist before calling issue_credential.
     # init_db() is idempotent; this handles callers that run before app lifespan fires.
     import os
+
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if sqlite_path and engine.dialect.name == "sqlite":
         init_db()

@@ -8,7 +8,6 @@ DB_FILE = ROOT / "api" / "db.py"
 CHAIN_FILE = ROOT / "api" / "evidence_chain.py"
 
 
-
 EVIDENCE_CHAIN_CLEAN = r"""from __future__ import annotations
 
 import hashlib
@@ -238,9 +237,7 @@ def main() -> None:
     # 1) Rewrite evidence_chain cleanly (fix your mangled file)
     CHAIN_FILE.write_text(EVIDENCE_CHAIN_CLEAN, encoding="utf-8")
 
-    print(
-        "OK: rewrote api/evidence_chain.py"
-    )
+    print("OK: rewrote api/evidence_chain.py")
 
 
 if __name__ == "__main__":

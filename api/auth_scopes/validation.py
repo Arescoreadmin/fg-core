@@ -54,5 +54,3 @@ def _validate_tenant_id(tenant_id: str) -> Tuple[bool, str]:
         return False, "tenant_id contains invalid characters"
 
     return True, ""
-
-
