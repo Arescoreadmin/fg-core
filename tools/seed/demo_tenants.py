@@ -16,13 +16,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import secrets
 import sys
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -31,9 +29,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from api.auth_scopes.helpers import _b64url, hash_key  # noqa: E402
 from api.db import get_engine, get_sessionmaker, reset_engine_cache, set_tenant_context  # noqa: E402
-from api.db_models import ApiKey, TenantUser  # noqa: E402
+from api.db_models import TenantUser  # noqa: E402
 from api.db_models_field_assessment import FaEngagement  # noqa: E402
 from api.db_models_governance_report import GovernanceReportRecord  # noqa: E402
 from api.db_models_portal import PortalGrant  # noqa: E402
@@ -57,23 +54,6 @@ from services.field_assessment.store import (  # noqa: E402
     list_observations,
 )
 from services.portal_grant_service import portal_grant_svc  # noqa: E402
-
-
-DEMO_SCOPES = (
-    "governance:read",
-    "governance:write",
-    "governance:qa_approve",
-    "ui:read",
-    "control-plane:read",
-    "audit:read",
-    "audit:export",
-    "decisions:read",
-    "feed:read",
-    "ingest:write",
-    "keys:read",
-    "keys:write",
-    "admin:read",
-)
 
 
 @dataclass(frozen=True)
@@ -1087,162 +1067,64 @@ def _table_has_column(table_name: str, column_name: str) -> bool:
         return any(row[1] == column_name for row in rows)
 
 
-def _create_demo_api_key(
+_DEMO_CREDENTIAL_SCOPES = [
+    "governance:read",
+    "governance:write",
+    "governance:qa_approve",
+    "ui:read",
+    "control-plane:read",
+    "audit:read",
+    "audit:export",
+    "decisions:read",
+    "feed:read",
+    "ingest:write",
+    "keys:read",
+    "keys:write",
+    "admin:read",
+]
+
+
+def _create_demo_credential(
     tenant: DemoTenant, *, force_rotate: bool = False
 ) -> tuple[str | None, str]:
     """Return (raw_key, status) where status is 'created', 'rotated', or 'unchanged'.
 
-    When status is 'unchanged' raw_key is None — the plaintext was never stored
-    and can't be recovered.  The caller should preserve the existing Vercel value.
-    Pass force_rotate=True to explicitly replace the key (e.g. suspected compromise).
+    Issues a canonical tenant_api_key via the credential authority.
+    When force_rotate=False and an active credential already exists in the
+    'demo-bff-key' slot, returns (None, 'unchanged').
     """
-    name = "demo-bff-key"
+    from api.credential_authority import issue_credential
+
     engine = get_engine()
+    slot = "demo-bff-key"
 
     if not force_rotate:
-        # Check for an already-enabled key; if found, skip rotation entirely.
-        if engine.dialect.name == "postgresql":
-            with engine.begin() as conn:
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
                 conn.execute(
-                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                    {"tenant_id": tenant.tenant_id},
+                    text("SELECT set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant.tenant_id},
                 )
-                row = conn.execute(
-                    text(
-                        "SELECT 1 FROM api_keys WHERE tenant_id = :tid AND name = :name AND enabled = true LIMIT 1"
-                    ),
-                    {"tid": tenant.tenant_id, "name": name},
-                ).first()
-            if row is not None:
-                return None, "unchanged"
-        else:
-            SessionLocal = get_sessionmaker()
-            with SessionLocal() as db:
-                set_tenant_context(db, tenant.tenant_id)
-                existing = db.execute(
-                    select(ApiKey).where(
-                        ApiKey.tenant_id == tenant.tenant_id,
-                        ApiKey.name == name,
-                        ApiKey.enabled.is_(True),
-                    )
-                ).scalar_one_or_none()
-            if existing is not None:
-                return None, "unchanged"
+            row = conn.execute(
+                text(
+                    "SELECT 1 FROM tenant_credentials "
+                    "WHERE tenant_id = :tid AND credential_slot = :slot "
+                    "AND status = 'active' LIMIT 1"
+                ),
+                {"tid": tenant.tenant_id, "slot": slot},
+            ).first()
+        if row is not None:
+            return None, "unchanged"
 
-    now_i = int(time.time())
-    exp_i = now_i + 365 * 24 * 60 * 60
-    secret = secrets.token_urlsafe(32)
-    token = _b64url(
-        json.dumps(
-            {
-                "scopes": list(DEMO_SCOPES),
-                "tenant_id": tenant.tenant_id,
-                "iat": now_i,
-                "exp": exp_i,
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
+    result = issue_credential(
+        engine,
+        tenant_id=tenant.tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=slot,
+        scopes=_DEMO_CREDENTIAL_SCOPES,
     )
-    key_hash, hash_alg, hash_params, key_lookup = hash_key(secret)
-    raw_key = f"fgk.{token}.{secret}"
-    is_rotate = force_rotate
-
-    if engine.dialect.name == "postgresql":
-        with engine.begin() as conn:
-            conn.execute(
-                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                {"tenant_id": tenant.tenant_id},
-            )
-            conn.execute(
-                text(
-                    "UPDATE api_keys SET enabled = false WHERE tenant_id = :tenant_id AND name = :name"
-                ),
-                {"tenant_id": tenant.tenant_id, "name": name},
-            )
-        with engine.begin() as conn:
-            conn.execute(
-                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                {"tenant_id": tenant.tenant_id},
-            )
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO api_keys
-                      (name, prefix, key_hash, key_lookup, hash_alg, hash_params,
-                       scopes_csv, enabled, tenant_id, created_at, expires_at,
-                       version, use_count)
-                    VALUES
-                      (:name, :prefix, :key_hash, :key_lookup, :hash_alg, CAST(:hash_params AS jsonb),
-                       :scopes_csv, :enabled, :tenant_id, :created_at, :expires_at,
-                       :version, :use_count)
-                    """
-                ),
-                {
-                    "name": name,
-                    "prefix": "fgk",
-                    "key_hash": key_hash,
-                    "key_lookup": key_lookup,
-                    "hash_alg": hash_alg,
-                    "hash_params": json.dumps(
-                        hash_params, sort_keys=True, separators=(",", ":")
-                    ),
-                    "scopes_csv": ",".join(DEMO_SCOPES),
-                    "enabled": True,
-                    "tenant_id": tenant.tenant_id,
-                    "created_at": datetime.fromtimestamp(now_i, tz=timezone.utc),
-                    "expires_at": datetime.fromtimestamp(exp_i, tz=timezone.utc),
-                    "version": 1,
-                    "use_count": 0,
-                },
-            )
-        if _table_has_column("api_keys", "role"):
-            with engine.begin() as conn:
-                conn.execute(
-                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                    {"tenant_id": tenant.tenant_id},
-                )
-                conn.execute(
-                    text(
-                        "UPDATE api_keys SET role = 'tenant_admin' WHERE tenant_id = :tenant_id AND key_lookup = :key_lookup"
-                    ),
-                    {"tenant_id": tenant.tenant_id, "key_lookup": key_lookup},
-                )
-        return raw_key, "rotated" if is_rotate else "created"
-
-    SessionLocal = get_sessionmaker()
-    with SessionLocal() as db:
-        set_tenant_context(db, tenant.tenant_id)
-        rows = cast(
-            list[ApiKey],
-            db.execute(
-                select(ApiKey).where(
-                    ApiKey.tenant_id == tenant.tenant_id, ApiKey.name == name
-                )
-            )
-            .scalars()
-            .all(),
-        )
-        for api_key in rows:
-            api_key.enabled = False
-        db.add(
-            ApiKey(
-                name=name,
-                prefix="fgk",
-                key_hash=key_hash,
-                key_lookup=key_lookup,
-                hash_alg=hash_alg,
-                hash_params=hash_params,
-                scopes_csv=",".join(DEMO_SCOPES),
-                enabled=True,
-                tenant_id=tenant.tenant_id,
-                expires_at=datetime.fromtimestamp(exp_i, tz=timezone.utc),
-                created_by="demo_seed",
-                description="Demo BFF tenant key",
-            )
-        )
-        db.commit()
-    return raw_key, "rotated" if is_rotate else "created"
+    status = "rotated" if force_rotate else "created"
+    return result.plaintext_secret, status
 
 
 def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
@@ -1269,7 +1151,7 @@ def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
     new_key_map: dict[str, str] = {}
     unchanged_tenants: list[str] = []
     for tenant in DEMO_TENANTS:
-        api_key, key_status = _create_demo_api_key(tenant, force_rotate=rotate_keys)
+        api_key, key_status = _create_demo_credential(tenant, force_rotate=rotate_keys)
         if api_key is not None:
             new_key_map[tenant.tenant_id] = api_key
         else:

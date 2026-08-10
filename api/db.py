@@ -395,192 +395,6 @@ def _sqlite_add_col_if_missing(
         con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
-def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
-    """Bootstrap SQLite dev/test database with legacy and canonical credential tables.
-
-    R4.11 step 3 adds canonical tables alongside the legacy api_keys table.
-    api_keys creation is retained until steps 7-9 remove all legacy callers
-    (_legacy_get_key_role, mint_key, test_rbac7 isolation test).  Once those
-    callers are removed the api_keys block below can be deleted.
-    _auto_migrate_sqlite() runs immediately after and is idempotent.
-    """
-    con = sqlite3.connect(sqlite_path)
-    try:
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("PRAGMA foreign_keys=ON")
-
-        # ---- Legacy api_keys table (retained until steps 7-9) ---------------
-        if not _sqlite_table_exists(con, "api_keys"):
-            con.execute(
-                """
-                CREATE TABLE api_keys (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name        TEXT,
-                    prefix      TEXT    NOT NULL,
-                    key_hash    TEXT    NOT NULL,
-                    scopes_csv  TEXT    NOT NULL,
-                    enabled     INTEGER NOT NULL DEFAULT 1,
-                    tenant_id   TEXT,
-                    created_at  INTEGER,
-                    last_used_at INTEGER,
-                    expires_at  INTEGER,
-                    hash_alg    TEXT,
-                    hash_params TEXT,
-                    key_lookup  TEXT
-                )
-                """
-            )
-        _sqlite_add_col_if_missing(con, "api_keys", "hash_alg", "TEXT")
-        _sqlite_add_col_if_missing(con, "api_keys", "hash_params", "TEXT")
-        _sqlite_add_col_if_missing(con, "api_keys", "key_lookup", "TEXT")
-        _sqlite_add_col_if_missing(con, "api_keys", "role", "TEXT")
-
-        # ---- Canonical credential slot registry — uniqueness enforced by PK.
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS credential_slots (
-                tenant_id           TEXT    NOT NULL,
-                credential_type     TEXT    NOT NULL,
-                credential_slot     TEXT    NOT NULL,
-                current_generation  INTEGER NOT NULL DEFAULT 0,
-                rotation_policy     TEXT    NOT NULL DEFAULT 'immediate',
-                max_overlap_count   INTEGER NOT NULL DEFAULT 1,
-                created_at          TEXT,
-                updated_at          TEXT,
-                PRIMARY KEY (tenant_id, credential_type, credential_slot)
-            )
-            """
-        )
-
-        # Canonical credential store — slot+generation uniqueness mirrors Postgres.
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tenant_credentials (
-                credential_id               TEXT    NOT NULL PRIMARY KEY,
-                tenant_id                   TEXT    NOT NULL,
-                credential_type             TEXT    NOT NULL,
-                credential_slot             TEXT    NOT NULL,
-                generation                  INTEGER NOT NULL DEFAULT 1,
-                lookup_fingerprint          TEXT    NOT NULL,
-                lookup_key_version          INTEGER NOT NULL DEFAULT 1,
-                secret_prefix               TEXT    NOT NULL,
-                secret_hash                 TEXT    NOT NULL,
-                hash_algorithm              TEXT    NOT NULL DEFAULT 'argon2id',
-                hash_params                 TEXT    NOT NULL,
-                status                      TEXT    NOT NULL DEFAULT 'active',
-                expires_at                  TEXT,
-                issued_at                   TEXT    NOT NULL,
-                activated_at                TEXT,
-                rotated_at                  TEXT,
-                revoked_at                  TEXT,
-                replaced_by_credential_id   TEXT,
-                created_by_actor_id         TEXT,
-                request_id                  TEXT,
-                idempotency_key             TEXT,
-                last_used_at                TEXT,
-                approximate_use_count       INTEGER NOT NULL DEFAULT 0,
-                scopes_csv                  TEXT,
-                metadata                    TEXT,
-                schema_version              INTEGER NOT NULL DEFAULT 1,
-                record_hash                 TEXT,
-                UNIQUE (tenant_id, idempotency_key)
-            )
-            """
-        )
-        con.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_tc_slot_generation "
-            "ON tenant_credentials (tenant_id, credential_type, credential_slot, generation)"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS ix_tc_lookup_fingerprint "
-            "ON tenant_credentials (lookup_fingerprint)"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS ix_tc_tenant_status "
-            "ON tenant_credentials (tenant_id, status)"
-        )
-
-        # Credential lifecycle events.
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tenant_credential_events (
-                event_id          TEXT    NOT NULL PRIMARY KEY,
-                tenant_id         TEXT    NOT NULL,
-                credential_id     TEXT,
-                credential_type   TEXT,
-                credential_slot   TEXT,
-                generation        INTEGER,
-                event_type        TEXT    NOT NULL,
-                actor_id          TEXT,
-                request_id        TEXT,
-                occurred_at       TEXT    NOT NULL,
-                outcome           TEXT    NOT NULL DEFAULT 'success',
-                failure_reason    TEXT,
-                metadata          TEXT,
-                schema_version    INTEGER NOT NULL DEFAULT 1
-            )
-            """
-        )
-
-        # Canonical RBAC: one active role per credential, enforced by partial unique index.
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tenant_credential_roles (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                tenant_id     TEXT    NOT NULL,
-                credential_id TEXT    NOT NULL,
-                role_name     TEXT    NOT NULL,
-                granted_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                granted_by    TEXT    NOT NULL,
-                revoked_at    TEXT,
-                revoked_by    TEXT
-            )
-            """
-        )
-        con.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uidx_tcr_active_role "
-            "ON tenant_credential_roles (tenant_id, credential_id) "
-            "WHERE revoked_at IS NULL"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tcr_tenant_id "
-            "ON tenant_credential_roles (tenant_id)"
-        )
-
-        # Role-change audit log (append-only).
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tenant_role_audit (
-                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id             TEXT    NOT NULL UNIQUE,
-                tenant_id            TEXT    NOT NULL,
-                actor_key_prefix     TEXT,
-                action               TEXT    NOT NULL,
-                target_key_prefix    TEXT,
-                target_credential_id TEXT,
-                role_name            TEXT,
-                timestamp            TEXT    NOT NULL,
-                success              INTEGER NOT NULL DEFAULT 1
-            )
-            """
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS ix_tenant_role_audit_tenant_ts "
-            "ON tenant_role_audit (tenant_id, timestamp)"
-        )
-        # Additive migration: target_credential_id may be absent on older DBs.
-        existing_cols = {
-            r[1] for r in con.execute("PRAGMA table_info(tenant_role_audit)")
-        }
-        if "target_credential_id" not in existing_cols:
-            con.execute(
-                "ALTER TABLE tenant_role_audit ADD COLUMN target_credential_id TEXT"
-            )
-        con.commit()
-    finally:
-        con.close()
-
-
 def _ensure_connectors_sqlite(sqlite_path: str) -> None:
     """
     Ensure connector control-plane tables exist in sqlite (dev/test).
@@ -713,13 +527,6 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-
-        # Legacy api_keys column migrations (retained until steps 7-9 remove callers).
-        if "api_keys" in tables:
-            _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
-            _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
-            _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
-            _sqlite_add_column_if_missing(conn, "api_keys", "role", "TEXT")
 
         # PR 57 — tenant RBAC: append-only role audit (idempotent)
         conn.exec_driver_sql(
@@ -2023,6 +1830,24 @@ def ensure_tenant_canonical_row(sqlite_path: str, tenant_id: str) -> None:
     try:
         con.execute(
             """
+            CREATE TABLE IF NOT EXISTS tenants (
+                tenant_id         VARCHAR(128) PRIMARY KEY,
+                display_name      TEXT         NOT NULL DEFAULT '',
+                lifecycle_state   VARCHAR(32)  NOT NULL DEFAULT 'active',
+                created_at        TEXT,
+                updated_at        TEXT,
+                created_by        TEXT,
+                metadata          TEXT         NOT NULL DEFAULT '{}',
+                canonical_version INTEGER      NOT NULL DEFAULT 1,
+                last_reconciled_at TEXT,
+                archived_at       TEXT,
+                migration_source  TEXT,
+                migration_version TEXT
+            )
+            """
+        )
+        con.execute(
+            """
             INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)
             VALUES (?, ?, 'active')
             """,
@@ -2042,14 +1867,11 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(bind=engine)
 
-        # Ensure sqlite3-backed auth_scopes key store exists in same file
-        resolved = _resolve_sqlite_path(sqlite_path)
-        _ensure_api_keys_sqlite(resolved)
-
         # Ensure connector sqlite tables exist (including idempotency)
+        resolved = _resolve_sqlite_path(sqlite_path)
         _ensure_connectors_sqlite(resolved)
 
-        # Best-effort sqlite migrations (keeps tests + mint_key working)
+        # Best-effort sqlite migrations (keeps tests working)
         try:
             _auto_migrate_sqlite(engine)
         except Exception:

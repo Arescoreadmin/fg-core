@@ -205,7 +205,6 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
 
     tenant_id: str = getattr(auth, "tenant_id", None) or ""
     key_prefix: str = getattr(auth, "key_prefix", None) or ""
-    key_db_id: Optional[int] = getattr(auth, "key_db_id", None)
     credential_id: Optional[str] = getattr(auth, "credential_id", None)
     credential_slot: Optional[str] = getattr(auth, "credential_slot", None)
 
@@ -240,27 +239,12 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
 
     raw_role: Optional[str] = None
     if credential_id is not None and tenant_id:
-        # Canonical path (Postgres): credential_id set by R4.7+ dual-validation.
+        # Canonical path: credential_id set by R4.7+ dual-validation.
         try:
             from api.tenant_rbac import get_credential_role
 
             raw_role = get_credential_role(
                 conn, tenant_id=tenant_id, credential_id=str(credential_id)
-            )
-        except Exception as exc:
-            log.warning(
-                "api_key_actor.role_lookup_failed",
-                extra={"key_prefix": key_prefix[:8], "exc": str(exc)},
-            )
-    elif key_db_id is not None and tenant_id:
-        # Legacy path (SQLite dev/test): key_db_id set by api_keys auth.
-        # Dead in production — Postgres auth always sets credential_id (R4.8).
-        # Retirement tracked for R4.11 (api_keys drop).
-        try:
-            from api.tenant_rbac import _legacy_get_key_role
-
-            raw_role = _legacy_get_key_role(
-                conn, tenant_id=tenant_id, key_id=int(key_db_id)
             )
         except Exception as exc:
             log.warning(

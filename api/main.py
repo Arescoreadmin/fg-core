@@ -23,7 +23,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import _ensure_api_keys_sqlite, get_engine, get_sessionmaker, init_db
+from api.db import get_engine, get_sessionmaker, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -366,13 +366,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     Path(_auth_sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
-
-            # In Postgres mode, _ensure_api_keys_sqlite must not run.
-            # In SQLite mode, initialize the auth store file so the readiness
-            # probe finds it on the first health check.
-            if resolved_auth_enabled and _db_backend != "postgres":
-                if _auth_sqlite_path:
-                    _ensure_api_keys_sqlite(_auth_sqlite_path)
 
             _engine = get_engine()
             if _db_backend == "postgres" and _engine.dialect.name == "postgresql":
@@ -995,22 +988,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                         detail=f"auth_store_backend_error:{type(exc).__name__}",
                     )
             else:
-                # SQLite mode: existing file/schema/writable-dir checks (PR 16).
+                # SQLite mode: file existence, writable dir, and canonical credential schema.
                 import sqlite3 as _sqlite3
 
-                _REQUIRED_AUTH_COLS = frozenset(
-                    {
-                        "prefix",
-                        "key_hash",
-                        "key_lookup",
-                        "hash_alg",
-                        "hash_params",
-                        "scopes_csv",
-                        "enabled",
-                        "tenant_id",
-                        "expires_at",
-                    }
-                )
                 _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
                 if not _auth_path:
                     raise HTTPException(
@@ -1028,27 +1008,23 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     raise HTTPException(
                         status_code=503,
                         detail=(
-                            "auth_store_dir_not_writable: key minting will fail. "
+                            "auth_store_dir_not_writable: credential issuance will fail. "
                             "Ensure FG_SQLITE_PATH is on a writable volume mount."
                         ),
                     )
                 try:
                     _acon = _sqlite3.connect(_auth_path, timeout=1.0)
                     try:
-                        _present = {
-                            r[1]
+                        _tables = {
+                            r[0]
                             for r in _acon.execute(
-                                "PRAGMA table_info(api_keys)"
+                                "SELECT name FROM sqlite_master WHERE type='table'"
                             ).fetchall()
                         }
-                        _missing = _REQUIRED_AUTH_COLS - _present
-                        if _missing:
+                        if "tenant_credentials" not in _tables:
                             raise HTTPException(
                                 status_code=503,
-                                detail=(
-                                    f"auth_store_schema_incomplete: "
-                                    f"missing columns {sorted(_missing)}"
-                                ),
+                                detail="auth_store_schema_incomplete: tenant_credentials table missing",
                             )
                     finally:
                         _acon.close()

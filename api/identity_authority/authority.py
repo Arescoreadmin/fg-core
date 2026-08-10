@@ -134,54 +134,6 @@ class IdentityAuthority:
             )
             raise
 
-    def authenticate_api_key(
-        self,
-        key_id: str,
-        key_secret: str,
-        *,
-        tenant_id_hint: Optional[str] = None,
-        correlation_id: Optional[str] = None,
-        db: Optional[Session] = None,
-    ) -> AuthorizationContext:
-        """Authenticate an API key credential pair.
-
-        Delegates to MachineIdentityAuthority for key validation.
-        """
-        from api.identity_authority.machine_identity import get_machine_authority
-
-        cid = correlation_id or secrets.token_hex(8)
-        machine_auth = get_machine_authority()
-
-        identity = machine_auth.authenticate_api_key(
-            key_id=key_id,
-            key_secret=key_secret,
-            db=db,
-            correlation_id=cid,
-        )
-
-        ctx = self._build_authorization_context(
-            identity=identity,
-            tenant_id_hint=tenant_id_hint,
-            correlation_id=cid,
-            db=db,
-        )
-
-        AUTH_SUCCESS_TOTAL.labels(
-            provider="api_key",
-            identity_type=identity.identity_type,
-        ).inc()
-
-        self._auditor.emit(
-            IdentityEventType.MACHINE_AUTH_SUCCESS,
-            subject=identity.subject,
-            tenant_id=ctx.tenant_id,
-            provider="api_key",
-            correlation_id=cid,
-            details={"identity_type": identity.identity_type},
-        )
-
-        return ctx
-
     # ------------------------------------------------------------------
     # Session management
     # ------------------------------------------------------------------

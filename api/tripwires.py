@@ -580,93 +580,6 @@ def check_auth_anomaly(
     return False
 
 
-def seed_canary_key_if_missing() -> Optional[str]:
-    """
-    Seed a canary API key into the database if one doesn't exist.
-
-    Returns the canary key prefix if seeded, None if already exists.
-
-    This should be called during application startup.
-    """
-    import sqlite3
-
-    sqlite_path = os.getenv("FG_SQLITE_PATH", "").strip()
-    if not sqlite_path:
-        log.debug("No SQLite path configured, skipping canary seed")
-        return None
-
-    try:
-        con = sqlite3.connect(sqlite_path)
-        try:
-            # Check if canary key already exists
-            row = con.execute(
-                "SELECT prefix FROM api_keys WHERE prefix LIKE ? LIMIT 1",
-                (f"{CANARY_KEY_PREFIX}%",),
-            ).fetchone()
-
-            if row:
-                log.debug(f"Canary key already exists: {row[0]}")
-                return None
-
-            # Seed a new canary key (disabled, but present)
-            import secrets
-            import json
-            from api.auth_scopes import hash_key
-
-            canary_prefix = f"{CANARY_KEY_PREFIX}{secrets.token_hex(4)}"
-            canary_secret = secrets.token_urlsafe(32)
-            canary_hash, hash_alg, hash_params, key_lookup = hash_key(canary_secret)
-            hash_params_json = json.dumps(
-                hash_params, separators=(",", ":"), sort_keys=True
-            )
-
-            # Check schema for required columns
-            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
-            col_names = {r[1] for r in cols}
-
-            if {"key_lookup", "hash_alg", "hash_params"}.issubset(col_names):
-                con.execute(
-                    "INSERT INTO api_keys (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        "CANARY_DO_NOT_USE",
-                        canary_prefix,
-                        canary_hash,
-                        key_lookup,
-                        hash_alg,
-                        hash_params_json,
-                        "",
-                        0,
-                    ),
-                )
-            elif "name" in col_names:
-                con.execute(
-                    "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, enabled) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        "CANARY_DO_NOT_USE",
-                        canary_prefix,
-                        canary_hash,
-                        "",  # No scopes
-                        0,  # Disabled
-                    ),
-                )
-            else:
-                con.execute(
-                    "INSERT INTO api_keys (prefix, key_hash, scopes_csv, enabled) VALUES (?, ?, ?, ?)",
-                    (canary_prefix, canary_hash, "", 0),
-                )
-
-            con.commit()
-            log.info(f"Seeded canary API key: {canary_prefix}")
-            return canary_prefix
-
-        finally:
-            con.close()
-
-    except Exception as e:
-        log.warning(f"Failed to seed canary key: {e}")
-        return None
-
-
 __all__ = [
     "CANARY_KEY_PREFIX",
     "TripwireAlert",
@@ -676,7 +589,6 @@ __all__ = [
     "check_canary_key",
     "check_honeypot_path",
     "check_auth_anomaly",
-    "seed_canary_key_if_missing",
     "queue_webhook_delivery",
     "deliver_webhook_async",
     "get_delivery_service",

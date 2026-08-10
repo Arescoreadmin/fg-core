@@ -145,7 +145,6 @@ def assert_tenant_rls(engine: Engine) -> None:
     expected_tables = {
         "decisions",
         "decision_evidence_artifacts",
-        "api_keys",
         "security_audit_log",
         "policy_change_requests",
         "billing_devices",

@@ -11,12 +11,7 @@ from .helpers import (
     hash_key,
     verify_key,
 )
-from .mapping import (
-    _update_key_usage,
-    list_api_keys,
-    mint_key,
-    revoke_api_key,
-)
+from .mapping import mint_key
 from .resolution import (
     _apply_tenant_context,
     _extract_key,
@@ -35,7 +30,6 @@ from .resolution import (
     verify_api_key_raw,
 )
 from .validation import (
-    _check_db_expiration,
     _env_bool_auth,
     _is_key_expired,
     _is_production_env,
@@ -57,8 +51,6 @@ __all__ = [
     "is_prod_like_env",
     "log_tenant_denial_event",
     "redact_detail",
-    "revoke_api_key",
-    "list_api_keys",
     "_extract_key",
     "_validate_tenant_id",
     "_log_auth_event",
@@ -74,8 +66,6 @@ __all__ = [
     "_parse_scopes_csv",
     "hash_key",
     "verify_key",
-    "_update_key_usage",
-    "_check_db_expiration",
     "_env_bool_auth",
     "_is_key_expired",
     "_is_production_env",
