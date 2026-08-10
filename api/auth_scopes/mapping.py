@@ -48,6 +48,7 @@ def mint_key(
         credential_slot=slot,
         scopes=list(scopes) if scopes else None,
     )
+    assert result.plaintext_secret is not None
     return result.plaintext_secret
 
 
