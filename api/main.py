@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import uuid
@@ -570,13 +569,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     single_use_prefixes = ("/ui/decision/",)
     single_use_ui_scoped_exact = {"/ui/forensics/chain/verify"}
 
-    def _b64url_decode(value: str) -> bytes:
-        import base64
-
-        normalized = value.strip().replace("-", "+").replace("_", "/")
-        pad = "=" * ((4 - (len(normalized) % 4)) % 4)
-        return base64.b64decode(normalized + pad)
-
     def _scopes_from_key(api_key: str) -> frozenset[str]:
         cache = app.state._ui_key_scopes_cache
         if api_key in cache:
@@ -584,12 +576,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         scopes: frozenset[str] = frozenset()
         try:
-            parts = api_key.split(".", 2)
-            if len(parts) >= 2:
-                payload = json.loads(_b64url_decode(parts[1]).decode("utf-8"))
-                raw_scopes = payload.get("scopes") or []
-                if isinstance(raw_scopes, list):
-                    scopes = frozenset(str(item) for item in raw_scopes)
+            from api.credential_authority import validate_credential
+            from api.db import get_engine
+
+            principal = validate_credential(get_engine(), api_key)
+            scopes = principal.scopes
         except Exception:
             scopes = frozenset()
 

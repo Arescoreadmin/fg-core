@@ -19,6 +19,7 @@ DEFAULT_ADMIN_KEY = "seedadmin_primary_key_000000000000"
 DEFAULT_AGENT_KEY = "seedagent_primary_key_000000000000"
 DEFAULT_AUDIT_HMAC_KEY = "seed-audit-hmac-key-material-000000"
 DEFAULT_AUDIT_HMAC_KEY_ID = "seed-ak1"
+DEFAULT_KEY_PEPPER = "seed-local-key-pepper-material-000000"
 SEED_CREDENTIAL_TTL_SECONDS = 0
 SEED_CREDENTIAL_SPECS = {
     "admin": {
@@ -108,6 +109,7 @@ def _set_default_env() -> SeedConfig:
     )
     os.environ.setdefault("FG_AUDIT_HMAC_KEY_CURRENT", DEFAULT_AUDIT_HMAC_KEY)
     os.environ.setdefault("FG_AUDIT_HMAC_KEY_ID_CURRENT", DEFAULT_AUDIT_HMAC_KEY_ID)
+    os.environ.setdefault("FG_KEY_PEPPER", DEFAULT_KEY_PEPPER)
     return SeedConfig(
         sqlite_path=sqlite_path,
         registry_path=registry_path,

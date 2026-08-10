@@ -14,6 +14,7 @@ This is the minimum-viable path that proves the system works end-to-end. Execute
 ```
 FG_ENV=dev
 FG_SQLITE_PATH=state/frostgate.db
+FG_KEY_PEPPER=seed-local-key-pepper-material-000000
 AG_CORE_BASE_URL=http://localhost:8000
 FG_KEYCLOAK_BASE_URL=http://localhost:8081
 FG_KEYCLOAK_REALM=FrostGate
@@ -32,9 +33,12 @@ Captures from output (or from state file after first run):
 ```bash
 EXPORT_PATH=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['export_path'])")
 SEED_SESSION_ID=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['session_id'])")
+SEED_ADMIN_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['admin_api_key'])")
+SEED_AGENT_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['agent_api_key'])")
+SEED_AUDIT_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['audit_api_key'])")
 ```
 
-Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `session_id`, and `export_path`.
+Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `session_id`, `export_path`, and `seed_credentials` containing `fgk.*` admin, agent, and audit keys.
 
 **Checkpoint:** `state/seed/bootstrap_state.json` exists. Audit cycle ran. Evidence bundle exported.
 
@@ -46,12 +50,10 @@ Start Keycloak (Docker required). This provisions the OIDC endpoint used for aut
 KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh
 ```
 
-The seed admin key (`seedadmin_`) has `decisions:read,defend:write,ingest:write` scopes only. The audit
-proxy endpoints require `audit:read`. The seed also provisions a gateway API key (`seedauditgwkey0_`)
-with `audit:read,audit:export` scopes. Set it now:
+The audit proxy endpoints require `audit:read`. The seed provisions a canonical audit gateway credential in `seed_credentials.audit_api_key`. Set it now:
 
 ```bash
-export AG_CORE_API_KEY=seedauditgwkey0_000000000000
+export AG_CORE_API_KEY="$SEED_AUDIT_API_KEY"
 ```
 
 **Checkpoint:** Keycloak healthy at `http://localhost:8081`. `AG_CORE_API_KEY` is set.
@@ -62,6 +64,7 @@ export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 
 ```bash
 export FG_SQLITE_PATH=state/frostgate.db
+export FG_KEY_PEPPER=seed-local-key-pepper-material-000000
 export FG_ADMIN_KEY=seedadmin_primary_key_000000000000
 export FG_AGENT_KEY=seedagent_primary_key_000000000000
 uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -76,7 +79,7 @@ export FG_KEYCLOAK_REALM=FrostGate
 export FG_KEYCLOAK_CLIENT_ID=fg-service
 export FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
 export AG_CORE_BASE_URL=http://localhost:8000
-export AG_CORE_API_KEY=seedauditgwkey0_000000000000
+export AG_CORE_API_KEY="$SEED_AUDIT_API_KEY"
 uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
 ```
 
@@ -197,6 +200,11 @@ Expected output (JSON):
   "export_path": "state/seed/...",
   "registry_path": "state/tenants.json",
   "session_id": "<uuid>",
+  "seed_credentials": {
+    "admin_api_key": "fgk....",
+    "agent_api_key": "fgk....",
+    "audit_api_key": "fgk...."
+  },
   "sqlite_path": "state/frostgate.db",
   "status": "seeded",
   "tenant_id": "tenant-seed-primary"
@@ -210,8 +218,9 @@ If `"status": "already_seeded"` appears, the environment was already bootstrappe
 | Resource | Value |
 |---|---|
 | Tenant ID | `tenant-seed-primary` |
-| Admin API key prefix | `seedadmin_` |
-| Agent API key prefix | `seedagent_` |
+| Admin API key | `seed_credentials.admin_api_key` (`fgk.*`) |
+| Agent API key | `seed_credentials.agent_api_key` (`fgk.*`) |
+| Audit gateway API key | `seed_credentials.audit_api_key` (`fgk.*`) |
 | SQLite database | `state/frostgate.db` |
 | Tenant registry | `state/tenants.json` |
 
@@ -231,7 +240,7 @@ export FG_DEV_AUTH_BYPASS=1
 export FG_DEV_AUTH_TENANT_ID=tenant-seed-primary
 export FG_DEV_AUTH_TENANTS=tenant-seed-primary
 export AG_CORE_BASE_URL=http://localhost:8000   # core API address
-export AG_CORE_API_KEY=seedadmin_primary_key_000000000000
+export AG_CORE_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['admin_api_key'])")
 ```
 
 ### Start the gateway
@@ -269,6 +278,7 @@ The admin gateway proxies audit, key, and tenant routes to the core API. Skip th
 export FG_ENV=dev
 export FG_AUTH_ENABLED=1
 export FG_SQLITE_PATH=state/frostgate.db
+export FG_KEY_PEPPER=seed-local-key-pepper-material-000000
 export FG_ADMIN_KEY=seedadmin_primary_key_000000000000
 export FG_AGENT_KEY=seedagent_primary_key_000000000000
 
@@ -366,7 +376,7 @@ Proxied to core. Expected: usage counters (`request_count`, `decision_count`, `q
 GET /admin/keys?tenant_id=tenant-seed-primary
 ```
 
-Proxied to core. Expected: key list with `seedadmin_` and `seedagent_` prefixes.
+Proxied to core. Expected: key list with canonical seed credential slots for admin, agent, and audit.
 
 ### 5.5 Search Audit Log
 

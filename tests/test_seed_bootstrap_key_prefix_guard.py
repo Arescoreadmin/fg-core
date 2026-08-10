@@ -20,6 +20,19 @@ def test_guard_fails_when_seed_prefix_identities_collide() -> None:
     assert "SEED_CONFLICT:key_prefix_collision" in str(exc.value)
 
 
+def test_set_default_env_sets_key_pepper(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "seed.db"))
+    monkeypatch.setenv("FG_TENANT_REGISTRY_PATH", str(tmp_path / "tenants.json"))
+    monkeypatch.setenv("FG_SEED_STATE_PATH", str(tmp_path / "state.json"))
+    monkeypatch.delenv("FG_KEY_PEPPER", raising=False)
+
+    run_seed._set_default_env()
+
+    assert run_seed.DEFAULT_KEY_PEPPER
+    assert run_seed.DEFAULT_KEY_PEPPER != "ci-test-pepper"
+    assert run_seed.DEFAULT_KEY_PEPPER == run_seed.os.environ["FG_KEY_PEPPER"]
+
+
 def test_seed_credentials_are_canonical_and_reused(tmp_path, monkeypatch) -> None:
     from api.credential_authority import validate_credential
     from api.db import get_engine, init_db, reset_engine_cache

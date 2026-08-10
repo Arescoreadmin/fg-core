@@ -45,7 +45,7 @@
   "item": [
     {
       "name": "0 \u2014 Canonical Tester Journey",
-      "description": "Minimum required sequence for a fresh tester. Run these requests top-to-bottom to prove the system works end-to-end: seed output exists, auth works, audit data is retrievable, and bundle export succeeds.\n\nPREREQUISITES (run once before this folder):\n1. python tools/seed/run_seed.py\n   -> Runs audit cycle, captures session_id + export_path in state/seed/bootstrap_state.json\n2. Create audit API key (needed for steps 4-5):\n   python -c \"\nimport os; os.environ.setdefault('FG_SQLITE_PATH','state/frostgate.db')\nfrom api.auth_scopes import mint_key\nprint(mint_key('audit:read','audit:export',tenant_id='tenant-seed-primary',ttl_seconds=86400))\"\n3. Start admin gateway with that key as AG_CORE_API_KEY (see quickstart Step 2)\n4. (Offline) Verify bundle: python tools/verify_bundle.py --bundle <export_path from seed output>",
+      "description": "Minimum required sequence for a fresh tester. Run these requests top-to-bottom to prove the system works end-to-end: seed output exists, auth works, audit data is retrievable, and bundle export succeeds.\n\nPREREQUISITES (run once before this folder):\n1. python tools/seed/run_seed.py\n   -> Runs audit cycle, captures session_id + export_path in state/seed/bootstrap_state.json\n2. Export the seeded audit key from state/seed/bootstrap_state.json:\n   export AG_CORE_API_KEY=$(python -c \"import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['audit_api_key'])\")\n3. Start admin gateway with AG_CORE_API_KEY set (see quickstart Step 2)\n4. (Offline) Verify bundle: python tools/verify_bundle.py --bundle <export_path from seed output>",
       "item": [
         {
           "name": "CTJ-1: Gateway Health",
@@ -214,7 +214,7 @@
                 }
               ]
             },
-            "description": "STEP 5 \u2014 Retrieve the security audit log entries generated during and after seeding. Proxied to core GET /admin/audit/search (requires audit:read on AG_CORE_API_KEY \u2014 see prerequisites). Expected: 200 with items array. After seeding and authenticating, there will be at least one audit entry. If 503: AG_CORE_BASE_URL not configured. If 403: AG_CORE_API_KEY lacks audit:read \u2014 create an audit key (see prerequisites)."
+            "description": "STEP 5 \u2014 Retrieve the security audit log entries generated during and after seeding. Proxied to core GET /admin/audit/search (requires audit:read on AG_CORE_API_KEY \u2014 see prerequisites). Expected: 200 with items array. After seeding and authenticating, there will be at least one audit entry. If 503: AG_CORE_BASE_URL not configured. If 403: AG_CORE_API_KEY lacks audit:read \u2014 export seed_credentials.audit_api_key from the seed marker."
           },
           "response": []
         },
@@ -487,7 +487,7 @@
                 }
               ]
             },
-            "description": "List API keys scoped to the seed tenant. Proxied to core GET /admin/keys. Requires session + keys:read. After seeding, expect to see the seedadmin_ and seedagent_ prefixes."
+            "description": "List API keys scoped to the seed tenant. Proxied to core GET /admin/keys. Requires session + keys:read. After seeding, expect to see canonical seed credential slots for admin, agent, and audit."
           },
           "response": []
         }
