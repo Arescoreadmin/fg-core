@@ -728,21 +728,17 @@ class TestCanonicalRBACGuarantees:
         assert all(r["credential_id"] == cid_a for r in for_a)
         assert all(r["credential_id"] == cid_b for r in for_b)
 
-    def test_rbac7_legacy_api_keys_role_cannot_influence_canonical_credential(self, db):
-        """RBAC-7: api_keys.role cannot influence canonical credential role resolution."""
+    def test_rbac7_credential_without_role_is_denied(self, db):
+        """RBAC-7: a credential with no role in tenant_credential_roles is denied.
+
+        R4.11: api_keys table is retired. The invariant is now enforced structurally —
+        the legacy table no longer exists. This test verifies the positive side:
+        canonical RBAC requires an explicit tenant_credential_roles entry.
+        """
         cid = _insert_credential(db, tenant_id="tenant-g7")
-        # Write a role directly into api_keys (legacy table) for the same tenant.
-        # Canonical RBAC must NOT read this.
-        db.execute(
-            text(
-                "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, tenant_id, enabled, role) "
-                "VALUES ('legacy', 'fgk_legacy', 'h_legacy', 'keys:read', 'tenant-g7', 1, 'tenant_admin')"
-            )
-        )
-        db.commit()
-        # The canonical credential has no role in tenant_credential_roles.
+        # No role assigned in tenant_credential_roles.
         assert get_credential_role(db, tenant_id="tenant-g7", credential_id=cid) is None
-        # require_role must deny even though api_keys has a tenant_admin row.
+        # require_role must deny a credential with no assigned role.
         dep = require_role("read_only")
         req = _make_request(key_prefix="k", tenant_id="tenant-g7", credential_id=cid)
         with pytest.raises(HTTPException) as exc_info:

@@ -1216,13 +1216,13 @@ class TestCreateMonitoringRun:
         # No auth key and no tenant context → 401/403 depending on middleware
         assert resp.status_code in (201, 401, 403)
 
-    def test_403_when_no_tenant_context_in_auth_key(self, api_client):
-        """API key without tenant_id returns 403."""
+    def test_api_key_with_implicit_tenant_can_create_run(self, api_client):
+        """R4.11: all keys have an explicit tenant; api_client uses 'tenant-test'."""
         resp = api_client.post(
             "/control-plane/readiness/monitoring/run",
             json={"eval_window_hours": 24},
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 201
 
     def test_success_with_tenant_context(self, tenant_client):
         resp = tenant_client.post(
@@ -1361,9 +1361,10 @@ class TestCreateMonitoringRun:
 
 @pytest.mark.contract
 class TestListMonitoringRuns:
-    def test_403_when_no_tenant_context(self, api_client):
+    def test_api_key_with_implicit_tenant_sees_own_runs(self, api_client):
+        """R4.11: api_client uses 'tenant-test'; list returns 200 for its own tenant."""
         resp = api_client.get("/control-plane/readiness/monitoring/runs")
-        assert resp.status_code == 403
+        assert resp.status_code == 200
 
     def test_empty_list_before_any_runs(self, tenant_client):
         resp = tenant_client.get("/control-plane/readiness/monitoring/runs")
@@ -1443,9 +1444,10 @@ class TestListMonitoringRuns:
 
 @pytest.mark.contract
 class TestGetMonitoringRun:
-    def test_403_when_no_tenant_context(self, api_client):
+    def test_nonexistent_run_returns_404_for_implicit_tenant(self, api_client):
+        """R4.11: api_client uses 'tenant-test'; fake run ID → 404."""
         resp = api_client.get("/control-plane/readiness/monitoring/runs/fake-run-id")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_404_on_nonexistent_run(self, tenant_client):
         resp = tenant_client.get(

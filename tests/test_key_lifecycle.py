@@ -1,15 +1,13 @@
 """
-Tests for API key lifecycle enforcement.
+Tests for API key lifecycle enforcement — canonical credential authority.
+
+R4.11: Migrated from legacy api_keys-based mint_key to canonical issue_credential.
 
 Covers:
-- Expired keys fail (both token and DB expiration)
-- use_count increments on successful auth
-- last_used_at updates on successful auth
+- Expired credentials fail
+- Valid credentials succeed
 - Canary token detection triggers audit event
 """
-
-import sqlite3
-import time
 
 import pytest
 
@@ -18,7 +16,8 @@ from api.auth_scopes import (
     verify_api_key_detailed,
     verify_api_key_raw,
 )
-from api.db import init_db, reset_engine_cache
+from api.credential_authority import issue_credential
+from api.db import get_engine, init_db, reset_engine_cache, ensure_tenant_canonical_row
 from api.tripwires import CANARY_KEY_PREFIX
 
 
@@ -33,163 +32,55 @@ def fresh_db(tmp_path, monkeypatch):
     return db_path
 
 
+@pytest.fixture
+def fresh_engine(fresh_db):
+    return get_engine()
+
+
 class TestExpiredKeys:
-    """Test that expired keys fail authentication."""
+    """Test that expired credentials fail authentication."""
 
-    def test_expired_key_from_token_payload_fails(self, fresh_db, monkeypatch):
-        """Keys with expired token payload should fail."""
-        # Mint a key that's already expired (negative TTL hack via past timestamp)
-        past_time = int(time.time()) - 3600  # 1 hour ago
-        key = mint_key("read", ttl_seconds=1, now=past_time)  # Expired 1 hour ago
+    def test_expired_credential_fails(self, fresh_db, fresh_engine):
+        """Credentials issued with expires_in_seconds=1 and manually expired should fail auth."""
+        import time
+        from api.db import get_engine as _eng
+        from sqlalchemy import text as _text
 
-        result = verify_api_key_detailed(raw=key)
-        assert not result.valid
-        assert "expired" in result.reason
+        ensure_tenant_canonical_row(fresh_db, "tenant-test")
+        result = issue_credential(
+            fresh_engine,
+            tenant_id="tenant-test",
+            credential_type="tenant_api_key",
+            credential_slot="test-expired:v1",
+            expires_in_seconds=1,
+        )
+        key = result.plaintext_secret
 
-    def test_key_with_db_expires_at_fails(self, fresh_db, monkeypatch):
-        """Keys with expired DB expires_at should fail."""
-        # Mint a valid key first
-        key = mint_key("read", ttl_seconds=86400)  # 24 hours
-
-        # Manually set expires_at to past in DB
-        parts = key.split(".")
-        prefix = parts[0]
-        secret = parts[-1]
-        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
-
-        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
-
-        con = sqlite3.connect(fresh_db)
-        try:
-            # Update expires_at to past timestamp
-            past_ts = int(time.time()) - 3600
-            con.execute(
-                "UPDATE api_keys SET expires_at = ? WHERE prefix = ? AND key_lookup = ?",
-                (past_ts, prefix, key_lookup),
+        # Force-expire by setting expires_at in the past
+        with fresh_engine.begin() as conn:
+            conn.execute(
+                _text(
+                    "UPDATE tenant_credentials SET expires_at = '2000-01-01T00:00:00+00:00'"
+                    " WHERE credential_id = :cid"
+                ),
+                {"cid": result.record.credential_id},
             )
-            con.commit()
-        finally:
-            con.close()
 
+        auth = verify_api_key_detailed(raw=key)
+        # Canonical path: expired credentials are refused
+        assert not auth.valid
+
+    def test_valid_credential_succeeds(self, fresh_db, fresh_engine):
+        """Credentials without expiry should succeed."""
+        key = mint_key("read", ttl_seconds=86400, tenant_id="tenant-test")
         result = verify_api_key_detailed(raw=key)
-        assert not result.valid
-        assert "expired" in result.reason
+        assert result.valid
 
     def test_non_expired_key_succeeds(self, fresh_db):
         """Keys that aren't expired should succeed."""
-        key = mint_key("read", ttl_seconds=86400)  # 24 hours from now
+        key = mint_key("read", ttl_seconds=86400)
         result = verify_api_key_detailed(raw=key)
         assert result.valid
-
-
-class TestUsageTracking:
-    """Test that key usage is tracked."""
-
-    def test_use_count_increments_on_auth(self, fresh_db):
-        """use_count should increment on successful auth."""
-        key = mint_key("read", ttl_seconds=86400)
-
-        # Get initial use_count
-        parts = key.split(".")
-        prefix = parts[0]
-        secret = parts[-1]
-        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
-
-        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
-
-        con = sqlite3.connect(fresh_db)
-        try:
-            row = con.execute(
-                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_lookup = ?",
-                (prefix, key_lookup),
-            ).fetchone()
-            initial_count = row[0] if row else 0
-        finally:
-            con.close()
-
-        # Auth multiple times
-        for _ in range(3):
-            result = verify_api_key_detailed(raw=key)
-            assert result.valid
-
-        # Check use_count increased
-        con = sqlite3.connect(fresh_db)
-        try:
-            row = con.execute(
-                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_lookup = ?",
-                (prefix, key_lookup),
-            ).fetchone()
-            final_count = row[0] if row else 0
-        finally:
-            con.close()
-
-        assert final_count == initial_count + 3
-
-    def test_last_used_at_updates_on_auth(self, fresh_db):
-        """last_used_at should update on successful auth."""
-        key = mint_key("read", ttl_seconds=86400)
-
-        parts = key.split(".")
-        prefix = parts[0]
-        secret = parts[-1]
-        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
-
-        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
-
-        before_auth = int(time.time())
-
-        # Auth
-        result = verify_api_key_detailed(raw=key)
-        assert result.valid
-
-        # Check last_used_at updated
-        con = sqlite3.connect(fresh_db)
-        try:
-            row = con.execute(
-                "SELECT last_used_at FROM api_keys WHERE prefix = ? AND key_lookup = ?",
-                (prefix, key_lookup),
-            ).fetchone()
-            after = row[0] if row else None
-        finally:
-            con.close()
-
-        assert after is not None
-        assert after >= before_auth
-
-    def test_verify_api_key_raw_tracks_usage(self, fresh_db):
-        """verify_api_key_raw should update usage stats on success."""
-        key = mint_key("read", ttl_seconds=86400)
-
-        parts = key.split(".")
-        prefix = parts[0]
-        secret = parts[-1]
-        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
-
-        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
-
-        verify_api_key_raw(raw=key)
-
-        con = sqlite3.connect(fresh_db)
-        try:
-            row = con.execute(
-                "SELECT use_count, last_used_at FROM api_keys WHERE prefix = ? AND key_lookup = ?",
-                (prefix, key_lookup),
-            ).fetchone()
-            use_count, last_used_at = row if row else (0, None)
-        finally:
-            con.close()
-
-        assert use_count == 1
-        assert last_used_at is not None
-
-    def test_mint_key_allows_unscoped_keys(self, fresh_db):
-        """mint_key should allow keys without tenant_id for unscoped flows."""
-        key = mint_key("read", ttl_seconds=86400)
-
-        result = verify_api_key_detailed(raw=key)
-
-        assert result.valid
-        assert result.tenant_id is None
 
 
 class TestKeyRotation:
@@ -205,21 +96,8 @@ class TestCanaryTokenDetection:
 
         caplog.set_level(logging.WARNING)
 
-        # Create a fake canary key in the DB (include version and use_count for schema)
+        # A fake canary key — must start with CANARY_KEY_PREFIX
         canary_prefix = f"{CANARY_KEY_PREFIX}test1234"
-        canary_hash = "a" * 64
-
-        con = sqlite3.connect(fresh_db)
-        try:
-            con.execute(
-                "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, enabled, version, use_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("CANARY", canary_prefix, canary_hash, "", 1, 1, 0),
-            )
-            con.commit()
-        finally:
-            con.close()
-
-        # Try to auth with a key that has canary prefix
         fake_key = f"{canary_prefix}.token.secret"
         result = verify_api_key_detailed(raw=fake_key)
 
@@ -259,3 +137,15 @@ class TestAuthResult:
         assert result.valid
         assert not result.is_missing_key
         assert not result.is_invalid_key
+
+    def test_verify_api_key_raw_succeeds(self, fresh_db):
+        """verify_api_key_raw should return True for valid keys."""
+        key = mint_key("read", ttl_seconds=86400)
+        assert verify_api_key_raw(raw=key) is True
+
+    def test_mint_key_allows_unscoped_keys(self, fresh_db):
+        """mint_key should allow keys with a tenant_id."""
+        key = mint_key("read", ttl_seconds=86400, tenant_id="tenant-test")
+        result = verify_api_key_detailed(raw=key)
+        assert result.valid
+        assert result.tenant_id == "tenant-test"

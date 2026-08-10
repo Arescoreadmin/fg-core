@@ -8,11 +8,25 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from api.auth_scopes import mint_key
+from api.credential_authority import issue_credential
+from api.db import ensure_tenant_canonical_row, get_engine
 
 
 def admin_headers() -> dict[str, str]:
-    admin_key = mint_key("keys:admin", tenant_id="tenant-a")
+    import os
+
+    engine = get_engine()
+    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+    if sqlite_path and engine.dialect.name == "sqlite":
+        ensure_tenant_canonical_row(sqlite_path, "tenant-a")
+    result = issue_credential(
+        engine,
+        tenant_id="tenant-a",
+        credential_type="tenant_api_key",
+        credential_slot=f"agent-admin:{uuid.uuid4()}",
+    )
+    admin_key = result.plaintext_secret
+    assert admin_key is not None
     return {"X-API-Key": admin_key, "X-Tenant-Id": "tenant-a"}
 
 

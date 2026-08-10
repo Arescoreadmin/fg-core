@@ -185,13 +185,12 @@ def _create_maturity_tier(
 
 
 @pytest.mark.contract
-def test_gap_analysis_requires_tenant_context(api_client):
-    """Platform-scoped key (no tenant_id) must be rejected with 403."""
+def test_gap_analysis_nonexistent_assessment_returns_404(api_client):
+    """R4.11: api_client uses 'tenant-test'; unknown assessment → 404."""
     resp = api_client.get("/control-plane/readiness/assessments/any-id/gap-analysis")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
     body = resp.json()
     assert "detail" in body
-    assert "code" in body["detail"]
 
 
 @pytest.mark.contract
@@ -663,26 +662,19 @@ def shared_db_clients(tmp_path, monkeypatch):
 
 @pytest.mark.contract
 def test_cross_tenant_overlay_isolation(shared_db_clients):
-    """tenant-beta's controls/domains must not appear in tenant-alpha's gap result.
+    """tenant-alpha's framework data must not appear in tenant-beta's gap result.
 
-    Regression for Fix 2: framework metadata loads must pass tenant_id so that
-    overlays from other tenants are filtered out at the store layer.
+    R4.11: the 'shared platform framework' concept (no-tenant key creating shared
+    content) no longer exists. This test verifies cross-tenant isolation: beta
+    cannot access alpha's frameworks or assessments.
     """
-    platform_client, alpha_client, beta_client = shared_db_clients
+    _, alpha_client, beta_client = shared_db_clients
 
-    # Platform framework: both tenants can add overlays
-    fw_id = _create_draft_framework(platform_client, slug="fw-overlay-shared")
-
-    # Alpha adds its own domain+control overlay
+    # Alpha creates and activates its own framework
+    fw_id = _create_draft_framework(alpha_client, slug="fw-overlay-alpha-owned")
     dom_alpha = _create_domain(alpha_client, fw_id, slug="dom-overlay-alpha")
-    _create_control(alpha_client, fw_id, dom_alpha, identifier="OVR-A")
-
-    # Beta adds its own domain+control overlay (different tenant)
-    dom_beta = _create_domain(beta_client, fw_id, slug="dom-overlay-beta")
-    ctrl_beta = _create_control(beta_client, fw_id, dom_beta, identifier="OVR-B")
-
-    # Platform activates the shared framework
-    _activate_framework(platform_client, fw_id)
+    ctrl_alpha = _create_control(alpha_client, fw_id, dom_alpha, identifier="OVR-A")
+    _activate_framework(alpha_client, fw_id)
 
     # Alpha creates an assessment and runs gap analysis
     assessment_id = _create_assessment(alpha_client, fw_id)
@@ -690,37 +682,42 @@ def test_cross_tenant_overlay_isolation(shared_db_clients):
         f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
     )
     assert resp.status_code == 200
-    body_str = str(resp.json())
 
-    # Beta's domain and control IDs must NOT appear in alpha's result
-    assert ctrl_beta not in body_str, (
-        "Beta control ID must not leak into alpha gap result"
+    # Beta cannot see alpha's assessment (cross-tenant isolation)
+    beta_resp = beta_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
     )
-    assert dom_beta not in body_str, (
-        "Beta domain ID must not leak into alpha gap result"
+    assert beta_resp.status_code == 404, (
+        "Beta must not access alpha's assessment"
     )
-
-    # Alpha's own control may appear (it's in the framework for alpha)
-    # (no assertion on ctrl_alpha presence — it may or may not be in gap depending on engine)
+    beta_body_str = str(beta_resp.json())
+    assert ctrl_alpha not in beta_body_str, (
+        "Alpha control ID must not leak into beta response"
+    )
 
 
 @pytest.mark.contract
-def test_platform_client_gap_analysis_rejected(shared_db_clients):
-    """Platform-scoped key (no tenant) must be rejected with 403 for gap analysis."""
+def test_cross_tenant_gap_analysis_isolation(shared_db_clients):
+    """R4.11: a key for a different tenant cannot access another tenant's assessment.
+
+    The 'platform_client' fixture now uses 'tenant-test'; alpha's assessment is
+    isolated from tenant-test by tenant isolation (404, not info-disclosing 403).
+    """
     platform_client, alpha_client, _ = shared_db_clients
 
     fw_id = _create_active_framework(alpha_client, slug="fw-plat-rej")
     assessment_id = _create_assessment(alpha_client, fw_id)
 
-    # Platform key (no tenant_id) must not access gap analysis
+    # tenant-test cannot see tenant-alpha's assessment (cross-tenant isolation)
     resp = platform_client.get(
         f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
     body = resp.json()
     assert "detail" in body
-    # Must not reveal whether the assessment exists
-    assert assessment_id not in str(body)
+    # Cross-tenant isolation: result content must not be present
+    assert "gap" not in str(body).lower()
+    assert "framework_id" not in str(body)
 
 
 # ---------------------------------------------------------------------------
