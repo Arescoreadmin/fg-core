@@ -80,6 +80,28 @@ class TestExpiredKeys:
         result = verify_api_key_detailed(raw=key)
         assert result.valid
 
+    def test_mint_key_respects_requested_ttl(self, fresh_db, fresh_engine):
+        """mint_key(ttl_seconds=...) forwards expiry to credential authority."""
+        from datetime import datetime, timezone
+
+        from api.credential_authority import validate_credential
+        from sqlalchemy import text as _text
+
+        key = mint_key("read", ttl_seconds=3600, tenant_id="tenant-test")
+        principal = validate_credential(fresh_engine, key)
+        with fresh_engine.connect() as conn:
+            expires_at = conn.execute(
+                _text(
+                    "SELECT expires_at FROM tenant_credentials "
+                    "WHERE credential_id = :cid"
+                ),
+                {"cid": principal.credential_id},
+            ).scalar_one()
+
+        expires_dt = datetime.fromisoformat(str(expires_at))
+        delta = expires_dt - datetime.now(timezone.utc)
+        assert 3500 <= delta.total_seconds() <= 3700
+
 
 class TestKeyRotation:
     """Test key rotation behavior."""

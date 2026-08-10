@@ -19,6 +19,37 @@ DEFAULT_ADMIN_KEY = "seedadmin_primary_key_000000000000"
 DEFAULT_AGENT_KEY = "seedagent_primary_key_000000000000"
 DEFAULT_AUDIT_HMAC_KEY = "seed-audit-hmac-key-material-000000"
 DEFAULT_AUDIT_HMAC_KEY_ID = "seed-ak1"
+SEED_CREDENTIAL_TTL_SECONDS = 0
+SEED_CREDENTIAL_SPECS = {
+    "admin": {
+        "slot": "seed-admin-key",
+        "scopes": [
+            "admin:read",
+            "admin:write",
+            "audit:read",
+            "audit:export",
+            "decisions:read",
+            "defend:write",
+            "ingest:write",
+            "keys:read",
+            "keys:write",
+        ],
+    },
+    "agent": {
+        "slot": "seed-agent-key",
+        "scopes": [
+            "decisions:read",
+            "ingest:write",
+        ],
+    },
+    "audit": {
+        "slot": "seed-audit-gateway-key",
+        "scopes": [
+            "audit:read",
+            "audit:export",
+        ],
+    },
+}
 
 
 class SeedBootstrapError(RuntimeError):
@@ -122,6 +153,129 @@ def _validate_existing_seed(config: SeedConfig) -> None:
             raise SeedBootstrapError("SEED_CONFLICT:audit ledger rows missing on rerun")
 
 
+def _ensure_seed_tenant_row(config: SeedConfig) -> None:
+    from api.db import ensure_tenant_canonical_row, get_engine
+    from api.tenant_repository import TenantRepository
+
+    engine = get_engine()
+    if engine.dialect.name == "sqlite":
+        sqlite_path = engine.url.database or config.sqlite_path
+        if sqlite_path and sqlite_path != ":memory:":
+            ensure_tenant_canonical_row(str(sqlite_path), config.tenant_id)
+        return
+
+    TenantRepository(engine).upsert(
+        config.tenant_id,
+        "Primary Seed Tenant",
+        lifecycle_state="active",
+        tenant_kind="validation",
+        migration_source="tools.seed.run_seed",
+        migration_version="r4.11",
+    )
+
+
+def _seed_credential_is_valid(
+    engine: Any,
+    *,
+    raw_key: str,
+    tenant_id: str,
+    role: str,
+    scopes: list[str],
+) -> bool:
+    from api.credential_authority import validate_credential
+
+    try:
+        principal = validate_credential(engine, raw_key)
+    except Exception:
+        return False
+    return (
+        principal.tenant_id == tenant_id
+        and principal.credential_slot == SEED_CREDENTIAL_SPECS[role]["slot"]
+        and set(scopes).issubset(principal.scopes)
+    )
+
+
+def _issue_or_rotate_seed_credential(
+    engine: Any,
+    *,
+    tenant_id: str,
+    role: str,
+    slot: str,
+    scopes: list[str],
+) -> str:
+    from api.credential_authority import (
+        CredentialStateError,
+        issue_credential,
+        rotate_credential,
+    )
+
+    try:
+        result = issue_credential(
+            engine,
+            tenant_id=tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=slot,
+            scopes=scopes,
+            metadata={"seed_role": role},
+            expires_in_seconds=SEED_CREDENTIAL_TTL_SECONDS,
+            actor_id="tools.seed.run_seed",
+        )
+    except CredentialStateError:
+        result = rotate_credential(
+            engine,
+            tenant_id=tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=slot,
+            actor_id="tools.seed.run_seed",
+            expires_in_seconds=SEED_CREDENTIAL_TTL_SECONDS,
+        )
+
+    if result.plaintext_secret is None:
+        raise SeedBootstrapError(f"SEED_CONFLICT:{role} seed credential replayed")
+    return result.plaintext_secret
+
+
+def _ensure_seed_credentials(
+    config: SeedConfig, payload: dict[str, Any]
+) -> dict[str, Any]:
+    from api.db import get_engine
+
+    _ensure_seed_tenant_row(config)
+
+    engine = get_engine()
+    existing = payload.get("seed_credentials")
+    credentials: dict[str, str] = dict(existing) if isinstance(existing, dict) else {}
+    credential_status: dict[str, str] = {}
+
+    for role, spec in SEED_CREDENTIAL_SPECS.items():
+        field = f"{role}_api_key"
+        scopes = list(spec["scopes"])
+        current = credentials.get(field)
+        if isinstance(current, str) and _seed_credential_is_valid(
+            engine,
+            raw_key=current,
+            tenant_id=config.tenant_id,
+            role=role,
+            scopes=scopes,
+        ):
+            credential_status[role] = "existing"
+            continue
+
+        credentials[field] = _issue_or_rotate_seed_credential(
+            engine,
+            tenant_id=config.tenant_id,
+            role=role,
+            slot=str(spec["slot"]),
+            scopes=scopes,
+        )
+        credential_status[role] = "issued" if current is None else "rotated"
+
+    payload["seed_credentials"] = credentials
+    payload["seed_credential_status"] = credential_status
+    payload["ag_core_api_key"] = credentials["audit_api_key"]
+    return payload
+
+
 def _seed_once(config: SeedConfig) -> dict[str, Any]:
     from api.db import init_db, reset_engine_cache
     from services.audit_engine.engine import AuditEngine
@@ -131,7 +285,9 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
     if seed_marker.exists():
         _validate_existing_seed(config)
         payload = _load_json(seed_marker)
+        payload = _ensure_seed_credentials(config, payload)
         payload["status"] = "already_seeded"
+        seed_marker.write_text(_json_dump(payload), encoding="utf-8")
         return payload
 
     seed_marker.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +300,7 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         name="Primary Seed Tenant",
         api_key=os.environ["FG_ADMIN_KEY"],
     )
+    _ensure_seed_tenant_row(config)
 
     engine = AuditEngine()
     session_id = engine.run_cycle("light", tenant_id=config.tenant_id)
@@ -167,6 +324,7 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         "sqlite_path": config.sqlite_path,
         "tenant_id": config.tenant_id,
     }
+    payload = _ensure_seed_credentials(config, payload)
     seed_marker.write_text(_json_dump(payload), encoding="utf-8")
     return {**payload, "status": "seeded"}
 

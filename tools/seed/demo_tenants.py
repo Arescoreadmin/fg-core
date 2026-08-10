@@ -1093,7 +1093,7 @@ def _create_demo_credential(
     When force_rotate=False and an active credential already exists in the
     'demo-bff-key' slot, returns (None, 'unchanged').
     """
-    from api.credential_authority import issue_credential
+    from api.credential_authority import issue_credential, rotate_credential
 
     engine = get_engine()
     slot = "demo-bff-key"
@@ -1116,13 +1116,21 @@ def _create_demo_credential(
         if row is not None:
             return None, "unchanged"
 
-    result = issue_credential(
-        engine,
-        tenant_id=tenant.tenant_id,
-        credential_type="tenant_api_key",
-        credential_slot=slot,
-        scopes=_DEMO_CREDENTIAL_SCOPES,
-    )
+    if force_rotate:
+        result = rotate_credential(
+            engine,
+            tenant_id=tenant.tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=slot,
+        )
+    else:
+        result = issue_credential(
+            engine,
+            tenant_id=tenant.tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=slot,
+            scopes=_DEMO_CREDENTIAL_SCOPES,
+        )
     status = "rotated" if force_rotate else "created"
     return result.plaintext_secret, status
 

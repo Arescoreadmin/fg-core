@@ -13,6 +13,7 @@ log = logging.getLogger("frostgate")
 def mint_key(
     *scopes: str,
     tenant_id: Optional[str] = None,
+    ttl_seconds: Optional[int] = None,
     **_ignored,
 ) -> str:
     """Issue a canonical tenant_api_key via the credential authority.
@@ -48,6 +49,7 @@ def mint_key(
         credential_type="tenant_api_key",
         credential_slot=slot,
         scopes=list(scopes) if scopes else None,
+        expires_in_seconds=ttl_seconds,
     )
     assert result.plaintext_secret is not None
     return result.plaintext_secret
