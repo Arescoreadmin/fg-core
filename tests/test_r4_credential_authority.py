@@ -1440,16 +1440,14 @@ class TestK_CredentialAuthorityGate:
             "Gate regex must match UPDATE api_keys"
         )
 
-    def test_grandfathered_mapping_py_passes_gate(self) -> None:
-        """api/auth_scopes/mapping.py is grandfathered and must not trip the gate."""
+    def test_mapping_py_removed_from_allowlist(self) -> None:
+        """R4.11: mapping.py no longer has api_keys SQL and must not appear in the allowlist."""
         gate = self._load_gate()
-        # If the gate passes (tested in test_gate_passes_clean_tree), mapping.py
-        # is correctly in the allowlist.  This test makes the intent explicit.
         import inspect
 
         src = inspect.getsource(gate.main)
-        assert "api/auth_scopes/mapping.py" in src, (
-            "mapping.py must appear in _LEGACY_WRITE_ALLOWED"
+        assert "api/auth_scopes/mapping.py" not in src, (
+            "mapping.py was cleaned in R4.11 and must not be in _LEGACY_WRITE_ALLOWED"
         )
 
 
