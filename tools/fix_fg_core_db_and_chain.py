@@ -8,8 +8,6 @@ DB_FILE = ROOT / "api" / "db.py"
 CHAIN_FILE = ROOT / "api" / "evidence_chain.py"
 
 
-PATCH_MARK = "PATCH_FG_API_KEYS_SQLITE_V1"
-
 
 EVIDENCE_CHAIN_CLEAN = r"""from __future__ import annotations
 
@@ -236,110 +234,12 @@ def verify_chain_for_tenant(
 """
 
 
-DB_PATCH = r'''
-# ===================== PATCH_FG_API_KEYS_SQLITE_V1 =====================
-# This project mints/verifies API keys via sqlite3 in api/auth_scopes.py.
-# That means init_db() MUST ensure api_keys exists (and auto-migrate columns)
-# in the sqlite file chosen by FG_SQLITE_PATH or passed sqlite_path.
-# ======================================================================
-
-from __future__ import annotations
-
-from typing import Optional
-
-
-def _sqlite_table_exists(con: sqlite3.Connection, name: str) -> bool:
-    row = con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        (name,),
-    ).fetchone()
-    return row is not None
-
-
-def _sqlite_cols(con: sqlite3.Connection, table: str) -> set[str]:
-    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
-
-
-def _sqlite_add_col_if_missing(con: sqlite3.Connection, table: str, col: str, decl: str) -> None:
-    cols = _sqlite_cols(con, table)
-    if col not in cols:
-        con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
-
-
-def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
-    con = sqlite3.connect(sqlite_path)
-    try:
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("PRAGMA foreign_keys=ON")
-
-        if not _sqlite_table_exists(con, "api_keys"):
-            # Minimal schema required by tests + auth_scopes minting.
-            con.execute(
-                """
-                CREATE TABLE api_keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    prefix TEXT NOT NULL,
-                    key_hash TEXT NOT NULL,
-                    scopes_csv TEXT NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 1,
-                    tenant_id TEXT,
-                    created_at INTEGER,
-                    last_used_at INTEGER,
-                    expires_at INTEGER,
-                    hash_alg TEXT,
-                    hash_params TEXT,
-                    key_lookup TEXT
-                )
-                """
-            )
-
-        # Auto-migrate new hash columns if older table exists.
-        _sqlite_add_col_if_missing(con, "api_keys", "hash_alg", "TEXT")
-        _sqlite_add_col_if_missing(con, "api_keys", "hash_params", "TEXT")
-        _sqlite_add_col_if_missing(con, "api_keys", "key_lookup", "TEXT")
-
-        con.commit()
-    finally:
-        con.close()
-
-
-# Wrap existing init_db to also ensure api_keys is present (sqlite only).
-try:
-    _orig_init_db = init_db  # type: ignore[name-defined]
-except Exception:
-    _orig_init_db = None  # type: ignore[assignment]
-
-
-def init_db(*, sqlite_path: Optional[str] = None) -> None:  # type: ignore[override]
-    # Call original init_db first (SQLAlchemy tables), then enforce api_keys.
-    if _orig_init_db is not None:
-        _orig_init_db(sqlite_path=sqlite_path)
-
-    # Resolve the sqlite path the same way the rest of api/db.py does.
-    try:
-        resolved = _resolve_sqlite_path(sqlite_path)  # type: ignore[name-defined]
-    except Exception:
-        resolved = str(sqlite_path) if sqlite_path else ""
-
-    if resolved:
-        _ensure_api_keys_sqlite(resolved)
-
-# =================== END PATCH_FG_API_KEYS_SQLITE_V1 ====================
-'''
-
-
 def main() -> None:
     # 1) Rewrite evidence_chain cleanly (fix your mangled file)
     CHAIN_FILE.write_text(EVIDENCE_CHAIN_CLEAN, encoding="utf-8")
 
-    # 2) Append db.py patch once
-    db_text = DB_FILE.read_text(encoding="utf-8")
-    if PATCH_MARK not in db_text:
-        DB_FILE.write_text(db_text.rstrip() + "\n" + DB_PATCH, encoding="utf-8")
-
     print(
-        "OK: rewrote api/evidence_chain.py and patched api/db.py for api_keys sqlite init/migration"
+        "OK: rewrote api/evidence_chain.py"
     )
 
 
