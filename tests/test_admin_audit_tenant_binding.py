@@ -152,52 +152,49 @@ def test_scoped_key_can_search_own_tenant_explicitly(audit_tenant_client):
     assert all(item["tenant_id"] == "tenant-a" for item in payload["items"])
 
 
-def test_unscoped_key_cannot_search_any_tenant(audit_tenant_client):
-    """Unscoped key is denied even with explicit tenant_id."""
+def test_cross_tenant_key_cannot_search_other_tenant(audit_tenant_client):
+    """R4.11: Key bound to tenant-test cannot search tenant-b audit records → 403."""
     client = audit_tenant_client
-    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+    key_global = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-test")
 
-    # Search tenant-b's audit logs
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": key_global},
         params={"tenant_id": "tenant-b"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 403
 
 
-def test_unscoped_key_requires_tenant_id_for_search(audit_tenant_client):
-    """Unscoped key without tenant_id returns 400 for search."""
+def test_tenant_bound_key_search_uses_key_tenant(audit_tenant_client):
+    """R4.11: Key with bound tenant uses that tenant implicitly when no tenant_id is supplied."""
     client = audit_tenant_client
-    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+    key_global = mint_key("audit:read", ttl_seconds=3600)  # defaults to tenant-test
 
-    # Search without tenant_id - should require explicit tenant_id
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": key_global},
     )
 
-    # Should return 400 because unscoped keys must provide tenant_id
-    assert response.status_code == 400
-    assert response.json()["detail"] == "tenant_id required for unscoped keys"
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload["items"], list)
+    # tenant-test has no audit records in fixture → all items belong to key's tenant
+    assert all(item["tenant_id"] == "tenant-test" for item in payload["items"])
 
 
-def test_unscoped_key_requires_tenant_id_for_export(audit_tenant_client):
-    """Unscoped key without tenant_id returns 400 for export."""
+def test_tenant_bound_key_export_uses_key_tenant(audit_tenant_client):
+    """R4.11: Key with bound tenant uses that tenant implicitly when no tenant_id is supplied in export."""
     client = audit_tenant_client
-    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+    key_global = mint_key("audit:read", ttl_seconds=3600)  # defaults to tenant-test
 
-    # Export without tenant_id - should require explicit tenant_id
     response = client.post(
         "/admin/audit/export",
         headers={"X-API-Key": key_global},
         json={"format": "json"},
     )
 
-    # Should return 400 because unscoped keys must provide tenant_id
-    assert response.status_code == 400
-    assert response.json()["detail"] == "tenant_id required for unscoped keys"
+    assert response.status_code == 200
 
 
 def test_audit_search_redacts_ip_and_user_agent(audit_tenant_client):
@@ -345,32 +342,30 @@ def test_export_filename_includes_tenant_and_timestamp(audit_tenant_client):
     )
 
 
-def test_unscoped_key_export_with_explicit_tenant_denied(audit_tenant_client):
-    """Unscoped key export is denied even when tenant_id is supplied."""
+def test_cross_tenant_key_export_denied(audit_tenant_client):
+    """R4.11: Key bound to tenant-test cannot export tenant-b audit records → 403."""
     client = audit_tenant_client
-    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+    key_global = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-test")
 
-    # Export with explicit tenant_id should still be denied
     response = client.post(
         "/admin/audit/export",
         headers={"X-API-Key": key_global},
         json={"format": "json", "tenant_id": "tenant-b"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 403
 
 
-def test_invalid_tenant_id_format_returns_400(audit_tenant_client):
-    """Invalid tenant_id format returns 400."""
+def test_cross_tenant_invalid_format_denied(audit_tenant_client):
+    """R4.11: Cross-tenant check fires before format validation → 403 not 400."""
     client = audit_tenant_client
-    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+    key_global = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-test")
 
-    # Search with invalid tenant_id format
+    # "tenant@invalid!" != "tenant-test" → cross-tenant mismatch → 403
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": key_global},
         params={"tenant_id": "tenant@invalid!"},
     )
 
-    assert response.status_code == 400
-    assert "invalid" in response.json()["detail"].lower()
+    assert response.status_code == 403

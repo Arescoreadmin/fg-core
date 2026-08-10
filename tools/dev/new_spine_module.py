@@ -22,7 +22,9 @@ def _write(path: Path, content: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate fail-closed spine module scaffolding")
+    parser = argparse.ArgumentParser(
+        description="Generate fail-closed spine module scaffolding"
+    )
     parser.add_argument("--module-id", required=True)
     parser.add_argument("--plane", required=True)
     parser.add_argument("--route-prefix", default="/v1/<module>")
@@ -45,13 +47,18 @@ def main() -> int:
     )
     _write(
         REPO / f"docs/modules/{module_id}.md",
-        _render("module_doc.md.tmpl", module_id=module_id, plane=args.plane, route_prefixes=route_prefix),
+        _render(
+            "module_doc.md.tmpl",
+            module_id=module_id,
+            plane=args.plane,
+            route_prefixes=route_prefix,
+        ),
     )
 
     print(f"generated module skeleton for {module_id}")
     print("next steps:")
-    print(f"  1) append module to tools/testing/policy/ownership_map.yaml")
-    print(f"  2) append module to tools/testing/policy/module_manifest.yaml")
+    print("  1) append module to tools/testing/policy/ownership_map.yaml")
+    print("  2) append module to tools/testing/policy/module_manifest.yaml")
     return 0
 
 

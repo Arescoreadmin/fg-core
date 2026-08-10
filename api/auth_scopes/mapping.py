@@ -32,12 +32,13 @@ def mint_key(
 
     # Ensure SQLite schema and tenant row exist before calling issue_credential.
     # init_db() is idempotent; this handles callers that run before app lifespan fires.
-    import os
-
-    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if sqlite_path and engine.dialect.name == "sqlite":
-        init_db()
-        ensure_tenant_canonical_row(sqlite_path, resolved_tenant)
+    # Always derive the path from the live engine URL — using the env var instead risks
+    # a mismatch when fixtures reset the engine cache but not the env var.
+    if engine.dialect.name == "sqlite":
+        sqlite_path = engine.url.database
+        if sqlite_path and sqlite_path != ":memory:":
+            init_db()
+            ensure_tenant_canonical_row(str(sqlite_path), resolved_tenant)
 
     scopes_tag = ",".join(scopes) if scopes else "none"
     slot = f"test-key:{scopes_tag}:{uuid.uuid4()}"
