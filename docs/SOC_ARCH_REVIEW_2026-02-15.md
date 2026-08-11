@@ -1,3 +1,20 @@
+## 2026-08-11 — SOC-P1-002 — fix/rbac-role-backfill-and-provisioning: Credential role bootstrap endpoint + provisioning fix
+
+**Reviewer:** jcosat | **Classification:** SOC-P1-002 (route inventory change: new `POST /admin/tenants/{tenant_id}/credentials/{credential_id}/role` endpoint; tools/ci generated artifacts updated)
+
+**Scope:** Closes the R4 provisioning bootstrap gap where credentials were issued into `tenant_credentials` without a corresponding row in `tenant_credential_roles`, causing CORE_ACCESS_DENIED on all RBAC-gated endpoints. Two changes: (1) a new admin-path role-assign endpoint that bypasses the tenant-RBAC bootstrap paradox; (2) provisioning pipeline updated to call this endpoint atomically after credential issuance, fail-closed.
+
+**Security posture:** New endpoint requires both `admin:write` scope AND `require_permission("platform.admin")` — the internal gateway path, not the tenant credential's own RBAC role. Cross-tenant protection: `assign_role()` verifies `credential_id` belongs to `tenant_id` before any write; wrong-tenant → ValueError → 422. Role validation: only roles in `VALID_ROLE_NAMES` accepted; unknown role → 422. Idempotent: revoke-then-insert ensures exactly one active role row. Audit: every call appends an immutable record to `tenant_role_audit`. Provisioning fail-closed: on role-assign failure, the dangling credential is immediately revoked before returning error. No credential returned as "active" without a role.
+
+**Critical-path files changed:**
+- `api/admin.py`: one new `POST` route + `AssignCredentialRoleRequest` model. No existing routes modified.
+- `apps/console/app/api/admin/provision-tenant/route.ts`: Step 2b added after credential issuance; fail-closed. No existing auth paths changed.
+- `tools/ci/route_inventory.json`, `route_inventory_summary.json`, `plane_registry_snapshot.json`, `topology.sha256`: regenerated to reflect new route. Route classified: control plane, scoped, `admin:write`, tenant-bound.
+
+**SOC review outcome:** approved. Route is additive, operator-gated (platform.admin), cross-tenant-safe, auditable, and idempotent. Provisioning change is strictly fail-closed. No new permissions. No schema changes. No `api_keys` path.
+
+---
+
 ## 2026-08-07 — SOC-P1-001 — H0-PR3: Tenant-scoped engagement selector API
 
 **Reviewer:** jcosat | **Classification:** SOC-P1-001 (route inventory change: new `GET /admin/identity/tenants/{tenant_id}/engagements` endpoint)
