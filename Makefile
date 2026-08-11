@@ -118,6 +118,8 @@ FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
 FG_API_KEY              ?=
 FG_KEY_PEPPER           ?= ci-test-pepper
+FG_SIGNING_SECRET       ?= ci-signing-secret-32-bytes-minimum
+FG_INTERNAL_AUTH_SECRET ?= ci-internal-auth-secret-32-bytes
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -838,8 +840,8 @@ billing-evidence-verify: venv
 db-postgres-up:
 	@$(MAKE) -s require-docker
 	@if [ ! -f .env ]; then \
-		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_APP_USER=%s\nPOSTGRES_APP_PASSWORD=%s\nPOSTGRES_APP_DB=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" \
-			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "$(APP_DB_USER)" "$(APP_DB_PASSWORD)" "$(POSTGRES_DB)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" > .env; \
+		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_APP_USER=%s\nPOSTGRES_APP_PASSWORD=%s\nPOSTGRES_APP_DB=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\nFG_KEY_PEPPER=%s\nFG_SIGNING_SECRET=%s\nFG_INTERNAL_AUTH_SECRET=%s\n" \
+			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "$(APP_DB_USER)" "$(APP_DB_PASSWORD)" "$(POSTGRES_DB)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" "$(FG_KEY_PEPPER)" "$(FG_SIGNING_SECRET)" "$(FG_INTERNAL_AUTH_SECRET)" > .env; \
 	fi
 	@POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
 		docker compose down -v --remove-orphans || true
@@ -1568,4 +1570,3 @@ runtime-summary: venv
 		--history-dir $(_RI_HIS_DIR) \
 		--dry-run \
 		|| true
-
