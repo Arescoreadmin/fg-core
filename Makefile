@@ -862,6 +862,9 @@ db-postgres-up:
 	END
 	$$$$;
 
+	/* Extensions require the privileged bootstrap identity. */
+	CREATE EXTENSION IF NOT EXISTS vector;
+
 	ALTER DATABASE $(POSTGRES_DB) OWNER TO $(APP_DB_USER);
 	GRANT ALL ON SCHEMA public TO $(APP_DB_USER);
 	SQL

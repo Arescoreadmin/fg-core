@@ -21312,3 +21312,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** None.
 - **Validation:** Pre-fix clean CI-like aggregate `make release-gate` failed; pre-fix standalone `make db-postgres-verify` failed and exposed missing `FG_SIGNING_SECRET`, then blank host-expanded `FG_DB_BACKEND`; post-fix clean CI-like `make db-postgres-verify` passed; post-fix clean CI-like aggregate `make release-gate` passed; `git diff --check`; `git diff --cached --check`; `make soc-review-sync`; `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py`; `make policy-validate`.
 - **Result:** PASS locally; PR #628 CI rerun pending after this fix-log entry.
+
+---
+
+## P-45 — fix(db): bootstrap pgvector before app migrations — PR #629
+
+- **PR/Branch:** `fix/postgres-vector-bootstrap` (#629)
+- **Date:** 2026-08-11
+- **Files changed:** `Makefile`
+- **Root cause:** Fresh Postgres volumes failed during migration `0038_embedding_vectors.sql` because app migrations run as `fg_app`, which is intentionally unprivileged. That migration requires the `vector` extension, but `CREATE EXTENSION IF NOT EXISTS vector` must be performed by the privileged bootstrap identity before the application migration role takes over.
+- **Fix:** Added `CREATE EXTENSION IF NOT EXISTS vector;` to the privileged `db-postgres-up` bootstrap SQL before ownership is handed to `fg_app`. The app role remains unprivileged (`NOSUPERUSER`, `NOCREATEROLE`, `NOCREATEDB`, `NOBYPASSRLS`).
+- **Behavioral impact:** Fresh-volume Postgres bootstrap now installs `pgvector` before application migrations run. Existing migrated databases are unaffected because the statement is idempotent.
+- **Security impact:** Positive for least privilege. The extension is installed by the bootstrap identity while `fg_app` remains an unprivileged runtime/migration role.
+- **Schema/API impact:** Postgres bootstrap now guarantees the `vector` extension exists before migrations that use vector columns or indexes. No API contract changes.
+- **Tests added:** None.
+- **Validation:** Fresh Postgres volume recreated from scratch; privileged `CREATE EXTENSION vector` succeeded; `vector` present at version `0.8.2`; `fg_app` verified as non-superuser/non-role-creator/non-db-creator/non-RLS-bypass; migrations `0001` through `0123` passed; migration assertions passed; `make db-postgres-verify` exited 0; `make release-gate` exited 0; `git diff --check` passed.
+- **Result:** PASS locally; PR #629 guard failure was missing fix-log evidence, not a pgvector bootstrap regression.
