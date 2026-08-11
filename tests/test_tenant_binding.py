@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -50,33 +49,30 @@ def test_scoped_key_clamps_defend(build_app, monkeypatch):
     assert resp.json()["detail"].lower() in {"forbidden", "tenant mismatch"}
 
 
-@pytest.mark.parametrize("tenant_id", [None, ""])
-def test_unscoped_key_denied_on_decisions_without_bound_tenant(build_app, tenant_id):
+def test_key_tenant_resolved_from_credential_on_decisions(build_app):
     """
-    P0 Security Fix: Unscoped keys MUST provide tenant_id.
-
-    Previously, unscoped keys would default to "unknown" tenant.
-    After the 2026-01-31 security audit fix, tenant_id is required
-    for all data access endpoints to prevent cross-tenant data exposure.
+    R4.11: All keys have a bound tenant_id (eliminating the NULL-tenant concept).
+    A request without ?tenant_id= uses the key's bound tenant and succeeds.
     """
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("decisions:read")  # Unscoped key
+    key = mint_key("decisions:read", tenant_id="tenant-test")
 
-    decisions = client.get("/decisions?limit=1", headers={"X-API-Key": key})
-    assert decisions.status_code == 400
+    resp = client.get("/decisions?limit=1", headers={"X-API-Key": key})
+    assert resp.status_code in {200, 404}
 
 
-def test_unscoped_key_with_explicit_tenant_denied(build_app):
+def test_cross_tenant_key_denied_on_decisions(build_app):
     """
-    Unscoped keys with explicit valid tenant_id should work.
+    R4.11 cross-tenant isolation: a key bound to tenant-test cannot access
+    a different tenant's decisions even with an explicit ?tenant_id= override.
     """
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("decisions:read")
+    key = mint_key("decisions:read", tenant_id="tenant-test")
 
-    decisions = client.get(
-        "/decisions?limit=1&tenant_id=test-tenant",
+    resp = client.get(
+        "/decisions?limit=1&tenant_id=other-tenant",
         headers={"X-API-Key": key},
     )
-    assert decisions.status_code == 400
+    assert resp.status_code == 403

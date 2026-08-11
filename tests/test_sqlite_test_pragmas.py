@@ -164,7 +164,6 @@ def test_schema_is_complete_after_fast_init(tmp_path, monkeypatch):
 
     required_tables = {
         "decisions",
-        "api_keys",
         "readiness_frameworks",
         "readiness_assessments",
         "provisioning_organizations",

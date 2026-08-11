@@ -32,3 +32,17 @@ def test_machine_readable_blocks_exist_and_parse() -> None:
 def test_full_mcim_check_passes() -> None:
     root = repo_root()
     assert run_checks(root) == []
+
+
+def test_seed_bootstrap_docs_use_canonical_generated_credentials() -> None:
+    from tools.seed import run_seed
+
+    root = repo_root()
+    quickstart = (root / "docs/tester_quickstart.md").read_text(encoding="utf-8")
+    collection = (root / "docs/tester_collection.json").read_text(encoding="utf-8")
+
+    assert run_seed.DEFAULT_KEY_PEPPER in quickstart
+    assert "seed_credentials.audit_api_key" in quickstart
+    assert "seed_credentials']['audit_api_key" in collection
+    assert "seedauditgwkey0_000000000000" not in quickstart
+    assert "mint_key('audit:read'" not in collection

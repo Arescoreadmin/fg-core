@@ -11,13 +11,11 @@ Steps:
  2. Validate every record
  3. Detect duplicate tenant IDs (defensive check)
  4. Detect malformed records
- 5. Compare tenant_id references in api_keys table
- 6. Create missing canonical tenant rows
- 7. Log orphaned keys (keys with no matching tenant in JSON)
- 8. Verify Postgres lookup for each migrated tenant
- 9. Verify at least one credential prefix exists per tenant (informational)
-10. Write migration ledger entry
-11. Freeze JSON (write .frozen sentinel; stop new JSON writes)
+ 5. Create missing canonical tenant rows
+ 6. Verify Postgres lookup for each migrated tenant
+ 7. Verify at least one credential prefix exists per tenant (informational)
+ 8. Write migration ledger entry
+ 9. Freeze JSON (write .frozen sentinel; stop new JSON writes)
 """
 
 from __future__ import annotations
@@ -192,7 +190,6 @@ def run_migration(
         return result
 
     from api.tenant_repository import TenantRepository
-    from sqlalchemy import text
 
     repo = TenantRepository(engine)
 
@@ -260,29 +257,6 @@ def run_migration(
         valid_records[tenant_id] = payload
 
     result.tenants_found = len(raw_data)
-
-    # Step 5: detect orphaned api_keys (keys whose tenant_id is not in JSON).
-    try:
-        with engine.connect() as conn:
-            key_rows = conn.execute(
-                text(
-                    """
-                    SELECT DISTINCT tenant_id FROM api_keys
-                    WHERE enabled IS TRUE AND tenant_id IS NOT NULL
-                    """
-                )
-            ).fetchall()
-        key_tenant_ids = {r[0] for r in key_rows if r[0]}
-        orphaned = key_tenant_ids - set(raw_data.keys())
-        if orphaned:
-            result.orphaned_key_tenant_ids = sorted(orphaned)
-            warn = f"Orphaned api_key tenant_ids (not in JSON): {sorted(orphaned)}"
-            result.warnings.append(warn)
-            log.warning(warn)
-    except Exception as exc:
-        # api_keys table may not exist in test/minimal envs; non-fatal.
-        result.warnings.append(f"Could not query api_keys table: {exc}")
-        log.warning("orphan_check_failed error=%s", exc)
 
     # Steps 6–9: upsert each valid tenant.
     for tenant_id, payload in valid_records.items():
@@ -435,7 +409,7 @@ def _print_readiness_report(result: MigrationResult) -> None:
     print(f"Malformed records       : {result.tenants_malformed}")
     print(f"Would insert            : {result.tenants_created}")
     print(f"Would skip (existing)   : {result.tenants_skipped}")
-    print(f"Orphaned api_keys       : {len(result.orphaned_key_tenant_ids)}")
+    print(f"Orphaned key tenant IDs : {len(result.orphaned_key_tenant_ids)}")
     print()
     if result.source_fingerprint:
         print(f"Source fingerprint      : {result.source_fingerprint}")

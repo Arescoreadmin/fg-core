@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import uuid
@@ -23,7 +22,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import _ensure_api_keys_sqlite, get_engine, get_sessionmaker, init_db
+from api.db import get_engine, get_sessionmaker, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -367,13 +366,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
             init_db()
 
-            # In Postgres mode, _ensure_api_keys_sqlite must not run.
-            # In SQLite mode, initialize the auth store file so the readiness
-            # probe finds it on the first health check.
-            if resolved_auth_enabled and _db_backend != "postgres":
-                if _auth_sqlite_path:
-                    _ensure_api_keys_sqlite(_auth_sqlite_path)
-
             _engine = get_engine()
             if _db_backend == "postgres" and _engine.dialect.name == "postgresql":
                 try:
@@ -577,13 +569,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     single_use_prefixes = ("/ui/decision/",)
     single_use_ui_scoped_exact = {"/ui/forensics/chain/verify"}
 
-    def _b64url_decode(value: str) -> bytes:
-        import base64
-
-        normalized = value.strip().replace("-", "+").replace("_", "/")
-        pad = "=" * ((4 - (len(normalized) % 4)) % 4)
-        return base64.b64decode(normalized + pad)
-
     def _scopes_from_key(api_key: str) -> frozenset[str]:
         cache = app.state._ui_key_scopes_cache
         if api_key in cache:
@@ -591,12 +576,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         scopes: frozenset[str] = frozenset()
         try:
-            parts = api_key.split(".", 2)
-            if len(parts) >= 2:
-                payload = json.loads(_b64url_decode(parts[1]).decode("utf-8"))
-                raw_scopes = payload.get("scopes") or []
-                if isinstance(raw_scopes, list):
-                    scopes = frozenset(str(item) for item in raw_scopes)
+            from api.credential_authority import validate_credential
+            from api.db import get_engine
+
+            principal = validate_credential(get_engine(), api_key)
+            scopes = principal.scopes
         except Exception:
             scopes = frozenset()
 
@@ -995,22 +979,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                         detail=f"auth_store_backend_error:{type(exc).__name__}",
                     )
             else:
-                # SQLite mode: existing file/schema/writable-dir checks (PR 16).
+                # SQLite mode: file existence, writable dir, and canonical credential schema.
                 import sqlite3 as _sqlite3
 
-                _REQUIRED_AUTH_COLS = frozenset(
-                    {
-                        "prefix",
-                        "key_hash",
-                        "key_lookup",
-                        "hash_alg",
-                        "hash_params",
-                        "scopes_csv",
-                        "enabled",
-                        "tenant_id",
-                        "expires_at",
-                    }
-                )
                 _auth_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
                 if not _auth_path:
                     raise HTTPException(
@@ -1028,27 +999,23 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     raise HTTPException(
                         status_code=503,
                         detail=(
-                            "auth_store_dir_not_writable: key minting will fail. "
+                            "auth_store_dir_not_writable: credential issuance will fail. "
                             "Ensure FG_SQLITE_PATH is on a writable volume mount."
                         ),
                     )
                 try:
                     _acon = _sqlite3.connect(_auth_path, timeout=1.0)
                     try:
-                        _present = {
-                            r[1]
+                        _tables = {
+                            r[0]
                             for r in _acon.execute(
-                                "PRAGMA table_info(api_keys)"
+                                "SELECT name FROM sqlite_master WHERE type='table'"
                             ).fetchall()
                         }
-                        _missing = _REQUIRED_AUTH_COLS - _present
-                        if _missing:
+                        if "tenant_credentials" not in _tables:
                             raise HTTPException(
                                 status_code=503,
-                                detail=(
-                                    f"auth_store_schema_incomplete: "
-                                    f"missing columns {sorted(_missing)}"
-                                ),
+                                detail="auth_store_schema_incomplete: tenant_credentials table missing",
                             )
                     finally:
                         _acon.close()

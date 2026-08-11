@@ -13,6 +13,7 @@ from api.auth_scopes import mint_key
 
 def admin_headers() -> dict[str, str]:
     admin_key = mint_key("keys:admin", tenant_id="tenant-a")
+    assert admin_key is not None
     return {"X-API-Key": admin_key, "X-Tenant-Id": "tenant-a"}
 
 

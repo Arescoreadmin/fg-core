@@ -1092,12 +1092,13 @@ class TestCreateAlertRun:
         )
         assert resp.status_code == 404
 
-    def test_403_when_no_tenant_context(self, no_tenant_client, monkeypatch):
+    def test_missing_monitoring_run_returns_404(self, no_tenant_client, monkeypatch):
+        """R4.11: no-tenant key uses 'tenant-test'; unknown monitoring_run_id → 404."""
         resp = no_tenant_client.post(
             "/control-plane/readiness/alerting/runs",
             json={"monitoring_run_id": "mon-run-1"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_401_no_auth(self, no_auth_client):
         # build_app(auth_enabled=False) — no auth middleware; POST should work or fail without 401

@@ -126,7 +126,7 @@ __all__ = ["get_db", "tenant_db_required", "tenant_db"]
 """,
     )
 
-    # --- 2) db.py (ensure init_db creates api_keys and sqlite adds hash columns) ---
+    # --- 2) db.py (ensure init_db creates canonical tables and sqlite adds missing columns) ---
     dbpy = ROOT / "api" / "db.py"
     marker = "### PATCH_FG_CORE_DB_INIT_V1 ###"
     patch_block = """
@@ -211,11 +211,7 @@ def _sqlite_add_column_if_missing(conn, table: str, col: str, col_type: str) -> 
 
 def _auto_migrate_sqlite(engine: Engine) -> None:
     with engine.begin() as conn:
-        tables = {{r[0] for r in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}}
-        if "api_keys" in tables:
-            _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
-            _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
-            _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
+        pass  # placeholder for future migrations
 
 
 def init_db(*, sqlite_path: str | None = None) -> None:

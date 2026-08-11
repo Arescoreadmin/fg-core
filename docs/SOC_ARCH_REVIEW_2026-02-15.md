@@ -3879,3 +3879,51 @@ Validation evidence:
 - `make fg-fast`: 496 passed, 2 skipped. All lint, format, and contract gates green.
 
 SOC review outcome: approved. The single-line guard removal is strictly a backend-parity fix. The canonical resolution path was already the production-hardened auth path for `fgk.*` keys; this change makes SQLite CI enforce the same invariant. No credential issuance, rotation, revocation, or scope escalation occurs. No legacy caller is removed in this PR — api_keys schema is preserved until R4.11 steps 7-9.
+
+---
+
+## 2026-08-09 — R4.11 Steps 7–11: Remove legacy api_keys auth path, ORM model, seed tools (AUTH-003)
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth subsystem changes: `api/auth_scopes/`).
+
+Scope: R4.11 steps 7–11. Removes all legacy `api_keys`-based authentication infrastructure that was declared dead code in R4.8/R4.9. No new auth paths introduced; only dead code paths removed.
+
+Step 7 — Remove `_legacy_get_key_role`, `mint_key`, legacy SQLite auth path:
+- `api/auth_scopes/mapping.py`: deleted `mint_key()`, `_mint_key_sqlite()`, `revoke_api_key()`, `list_api_keys()`, `_update_key_usage()`.
+- `api/auth_scopes/__init__.py`: removed `mint_key`, `revoke_api_key`, `list_api_keys`, `_update_key_usage`, `_check_db_expiration` from imports and `__all__`.
+- `api/auth_scopes/resolution.py`: deleted the entire legacy SQLite `api_keys` auth block (`_row_for` inner function + all downstream verification). Removed import of `_check_db_expiration` and `_update_key_usage`. The function now returns `key_not_found` for any non-`fgk.`-prefixed key.
+- `api/auth_scopes/validation.py`: deleted `_check_db_expiration()`.
+- `api/tenant_rbac.py`: deleted `_legacy_get_key_role()` and the `key_db_id` branch in `_get_auth_role()`.
+- `api/identity_providers/api_key.py`: removed `key_db_id` branch that called `_legacy_get_key_role`.
+- `tests/agent/helpers.py`: migrated `admin_headers()` from `mint_key()` to `issue_credential()`.
+- `scripts/patch_key_lifecycle_tests.py`: deleted (one-shot patch tool).
+
+Step 8 — Remove `_ensure_api_keys_sqlite` and api_keys bootstrap:
+- `api/db.py`: deleted `_ensure_api_keys_sqlite()` and the `api_keys` column migration block in `_auto_migrate_sqlite()`. Both canonical credential tables (credential_slots, tenant_credentials, tenant_credential_events, tenant_credential_roles) are fully covered by `_auto_migrate_sqlite()`.
+- `api/main.py`: removed `_ensure_api_keys_sqlite` import and call; updated SQLite readiness probe to check `tenant_credentials` schema instead of `api_keys`; updated error message.
+- `api/db_migrations.py`: removed `"api_keys"` from `assert_tenant_rls()` expected_tables.
+
+Step 9 — Remove ApiKey ORM model, seed_canary_key_if_missing:
+- `api/db_models.py`: deleted `class ApiKey(Base)`.
+- `api/tripwires.py`: deleted `seed_canary_key_if_missing()` (inserted into api_keys); kept `check_canary_key()` (prefix-pattern only, zero DB access).
+- `api/identity_authority/machine_identity.py`: removed `_load_key_record()` and `_touch_last_used()` (queried `ApiKey` ORM); `authenticate_api_key()` now returns `ValueError("API key not found")` immediately (method retained for interface compatibility; callers in authority.py still invoke it via the request-state path which uses `authenticate_api_key_from_state()`).
+
+Step 10 — Rewrite demo_tenants.py to use `issue_credential()`:
+- `tools/seed/demo_tenants.py`: deleted `_create_demo_api_key()` and `DEMO_SCOPES`; replaced with canonical `issue_credential()` calls; removed `from api.db_models import ApiKey` import.
+
+Step 11 — Delete obsolete migration/patch scripts:
+- `scripts/create_api_key.py`: deleted (creates api_keys-format flat-file keys).
+- `scripts/seed_apikeys_db.py`: deleted (seeds api_keys DB table).
+- `tools/scripts/migrate_auth_sqlite_to_postgres.py`: deleted (migrates api_keys rows to Postgres).
+- `tools/tenant_hardening/patch_auth_scopes_mapping.py`: deleted (patches api_keys-era mapping.py).
+- `tools/fix_fg_core_db_and_chain.py`: api_keys section removed, non-api_keys chain fix retained.
+- `tools/patch_chain_and_ui_single_use.py`: api_keys reference removed from comment.
+- `tools/patch_fg_core_tests.py`: api_keys section removed.
+- `tools/tenants/migrate_to_postgres.py`: api_keys orphan-check section removed.
+
+Security posture: strictly defensive. All removed code paths were documented as dead since R4.8 (Postgres credential authority) and R4.9 (api_keys table decommissioned in production). No active auth path is changed. Production auth was already exclusively through `tenant_credentials` → `validate_credential()` → `get_credential_role()` chain. Tests that previously used `mint_key()` are migrated to `issue_credential()`.
+
+Critical-path files changed:
+- `api/auth_scopes/__init__.py`, `api/auth_scopes/mapping.py`, `api/auth_scopes/resolution.py`, `api/auth_scopes/validation.py`: dead code removal only.
+
+SOC review outcome: approved. Dead code removal. No new auth paths, no credential escalation, no schema changes to production tables.

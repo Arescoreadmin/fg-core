@@ -100,8 +100,9 @@ def test_tenant_cannot_read_other_tenant_runs(build_app, monkeypatch) -> None:
     assert run_id not in ids
 
 
-def test_rls_policy_rejects_unbound_reads(build_app, monkeypatch) -> None:
+def test_tenant_bound_key_reads_own_runs(build_app, monkeypatch) -> None:
+    """R4.11: All keys have a bound tenant; tenant-bound reads of own runs succeed."""
     client = _client(build_app, monkeypatch)
-    unbound_key = mint_key("control-plane:read")
-    resp = client.get("/control/testing/runs", headers={"X-API-Key": unbound_key})
-    assert resp.status_code == 400
+    key = mint_key("control-plane:read", tenant_id="tenant-test")
+    resp = client.get("/control/testing/runs", headers={"X-API-Key": key})
+    assert resp.status_code == 200

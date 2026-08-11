@@ -2,12 +2,9 @@
 api/tenant_rbac.py — Intra-tenant RBAC for FrostGate.
 
 R4.10: Roles are stored in tenant_credential_roles and bound to canonical
-credential_id (UUID). All production auth resolves roles via credential_id.
+credential_id (UUID). All auth resolves roles via credential_id.
 
-Legacy path (_legacy_get_key_role):
-- Supports SQLite dev/test auth where key_db_id is set but credential_id is not.
-- Dead code in production — Postgres auth (R4.8) always yields credential_id.
-- Retirement tracked in R4.11 alongside api_keys table drop.
+R4.11: Legacy _legacy_get_key_role (api_keys path) removed.
 
 Security invariants:
 - Deny-by-default: no role or unknown role → require_role denies.
@@ -531,32 +528,6 @@ def _append_role_audit(
 
 
 # ---------------------------------------------------------------------------
-# Legacy path — SQLite dev/test only
-# ---------------------------------------------------------------------------
-
-
-def _legacy_get_key_role(
-    conn: Session, *, tenant_id: str, key_id: int
-) -> Optional[str]:
-    """Return role from api_keys for a legacy key_db_id.
-
-    Used only by _get_auth_role when credential_id is absent (SQLite test mode).
-    Dead code in production — Postgres auth (R4.8) always sets credential_id.
-    Retirement tracked in R4.11.
-    """
-    try:
-        row = conn.execute(
-            text("SELECT role FROM api_keys WHERE id = :id AND tenant_id = :tenant_id"),
-            {"id": key_id, "tenant_id": tenant_id},
-        ).fetchone()
-    except Exception:
-        return None
-    if row is None:
-        return None
-    return str(row[0]) if row[0] else None
-
-
-# ---------------------------------------------------------------------------
 # FastAPI dependencies
 # ---------------------------------------------------------------------------
 
@@ -564,8 +535,7 @@ def _legacy_get_key_role(
 def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
     """Resolve the RBAC role for the authenticated credential from the DB.
 
-    Canonical path (production): credential_id → tenant_credential_roles.
-    Legacy path (SQLite dev/test): key_db_id → api_keys.role.
+    Canonical path: credential_id → tenant_credential_roles.
     """
     auth = getattr(getattr(request, "state", None), "auth", None)
     if auth is None:
@@ -574,17 +544,11 @@ def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
     if not tenant_id:
         return None
 
-    # Canonical path: always taken in production (Postgres auth sets credential_id).
     credential_id = getattr(auth, "credential_id", None)
     if credential_id is not None:
         return get_credential_role(
             conn, tenant_id=tenant_id, credential_id=str(credential_id)
         )
-
-    # Legacy path: SQLite dev/test only. Dead code in production.
-    key_db_id = getattr(auth, "key_db_id", None)
-    if key_db_id is not None:
-        return _legacy_get_key_role(conn, tenant_id=tenant_id, key_id=int(key_db_id))
 
     return None
 

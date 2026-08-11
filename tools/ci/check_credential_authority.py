@@ -131,7 +131,7 @@ def main() -> int:
                 return 1
 
     # R4.8: block direct api_keys writes outside allowed paths.
-    # R4.10: api/tenant_rbac.py removed from allowlist — no longer writes to api_keys.
+    # R4.11: all legacy callers retired — allowlist now contains only permanent paths.
     _LEGACY_WRITE_RE = re.compile(
         r"\b(?:INSERT\s+INTO|UPDATE)\s+api_keys\b", re.IGNORECASE
     )
@@ -141,14 +141,7 @@ def main() -> int:
             "tests/",
             "tools/ci/",
             ".claude/",  # local dev worktrees — not present in CI
-            # SQLite dev/test paths only. Retirement tracked in R4.11.
-            "api/auth_scopes/mapping.py",
-            "api/auth_scopes/resolution.py",
-            "api/tripwires.py",
-            "tools/seed/",
-            "tools/scripts/",
-            "tools/patch_chain_and_ui_single_use.py",
-            "scripts/",
+            "docs/r4_evidence/",
         }
     )
     for py_file in sorted(REPO.rglob("*.py")):
@@ -166,8 +159,8 @@ def main() -> int:
             )
             return 1
 
-    # R4.10: block production SELECT from api_keys outside explicit SQLite allowlist.
-    # Canonical RBAC reads from tenant_credential_roles; api_keys reads are SQLite-only.
+    # R4.10: block production SELECT from api_keys outside explicit allowlist.
+    # R4.11: all legacy callers retired — allowlist now contains only permanent paths.
     _LEGACY_READ_RE = re.compile(
         r"\bSELECT\b.*\bFROM\s+api_keys\b", re.IGNORECASE | re.DOTALL
     )
@@ -177,17 +170,7 @@ def main() -> int:
             "tests/",
             "tools/ci/",
             ".claude/",
-            # SQLite dev/test paths only. Retirement tracked in R4.11.
-            "api/auth_scopes/mapping.py",
-            "api/auth_scopes/resolution.py",
-            "api/auth_scopes/validation.py",  # sqlite3.connect() path, dev/test only
-            "api/tenant_rbac.py",  # _legacy_get_key_role: dead code in production
-            "api/tripwires.py",
-            "tools/seed/",
-            "tools/scripts/",
-            "tools/tenants/",  # migration/diagnostic tooling, not production code
-            "tools/patch_chain_and_ui_single_use.py",
-            "scripts/",
+            "docs/r4_evidence/",
         }
     )
     for py_file in sorted(REPO.rglob("*.py")):

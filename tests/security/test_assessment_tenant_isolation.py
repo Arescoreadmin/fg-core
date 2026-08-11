@@ -300,36 +300,39 @@ def test_pretenant_caller_cannot_access_tenant_bound_assessment(build_app):
     assert resp.status_code == 404
 
 
-def test_pretenant_report_poll_requires_assessment_id_header(build_app):
-    """Unbound caller polling a report without X-Assessment-Id header must get 404."""
+def test_tenant_bound_report_poll_succeeds_without_assessment_id_header(build_app):
+    """R4.11: Tenant-bound callers access reports via tenant binding (no X-Assessment-Id needed).
+
+    Pre-R4.11, null-tenant callers required X-Assessment-Id as an ownership proof.
+    With R4.11, all callers have a bound tenant; tenant binding IS the ownership proof.
+    """
     app = build_app(auth_enabled=True)
     client = TestClient(app)
 
-    unbound_key = mint_key("ingest:assessment")
-    assessment_id = _prepare_scored_assessment(client, unbound_key)
-    report_id = _enqueue_report(client, unbound_key, assessment_id)
+    key = mint_key("ingest:assessment", tenant_id="tenant-test")
+    assessment_id = _prepare_scored_assessment(client, key)
+    report_id = _enqueue_report(client, key, assessment_id)
 
-    # No ownership header → fail closed.
     resp = client.get(
         f"/ingest/assessment/reports/{report_id}",
-        headers={"X-API-Key": unbound_key},
+        headers={"X-API-Key": key},
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 200
 
 
-def test_pretenant_report_poll_wrong_assessment_id_fails(build_app):
-    """Unbound caller providing wrong assessment_id in header must get 404."""
+def test_cross_tenant_report_poll_denied_with_assessment_id(build_app):
+    """R4.11: Cross-tenant report access is denied even when X-Assessment-Id is provided."""
     app = build_app(auth_enabled=True)
     client = TestClient(app)
 
-    unbound_key = mint_key("ingest:assessment")
-    assessment_id = _prepare_scored_assessment(client, unbound_key)
-    report_id = _enqueue_report(client, unbound_key, assessment_id)
+    key_a = mint_key("ingest:assessment", tenant_id="tenant-a")
+    assessment_id = _prepare_scored_assessment(client, key_a)
+    report_id = _enqueue_report(client, key_a, assessment_id)
 
-    wrong_id = str(uuid.uuid4())
+    key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
     resp = client.get(
         f"/ingest/assessment/reports/{report_id}",
-        headers={"X-API-Key": unbound_key, "X-Assessment-Id": wrong_id},
+        headers={"X-API-Key": key_b, "X-Assessment-Id": assessment_id},
     )
     assert resp.status_code == 404
 

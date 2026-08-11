@@ -141,88 +141,62 @@ def test_missing_pepper_is_error_in_dev_not_just_production() -> None:
 # ---------------------------------------------------------------------------
 # Readiness probe: auth store schema check logic (direct, no HTTP)
 # ---------------------------------------------------------------------------
-# These tests verify the PRAGMA-based schema validation that health_ready()
-# uses. Testing directly avoids coupling to the full app lifespan while still
-# proving the logic that runs in production.
-
-_REQUIRED_AUTH_COLS = frozenset(
-    {
-        "prefix",
-        "key_hash",
-        "key_lookup",
-        "hash_alg",
-        "hash_params",
-        "scopes_csv",
-        "enabled",
-        "tenant_id",
-        "expires_at",
-    }
-)
+# R4.11: the readiness probe now checks for tenant_credentials table existence
+# instead of api_keys column set. Tests verify the new logic directly.
 
 
-def _present_cols(db_path: str) -> set[str]:
+def _has_tenant_credentials(db_path: str) -> bool:
     con = sqlite3.connect(db_path)
     try:
-        return {r[1] for r in con.execute("PRAGMA table_info(api_keys)").fetchall()}
+        tables = {
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        return "tenant_credentials" in tables
     finally:
         con.close()
 
 
-def _make_auth_db(path: str, with_required_cols: bool = True) -> None:
+def _make_auth_db(path: str, *, with_canonical_tables: bool = True) -> None:
     con = sqlite3.connect(path)
-    if with_required_cols:
+    if with_canonical_tables:
         con.execute(
             """
-            CREATE TABLE api_keys (
-                id INTEGER PRIMARY KEY,
-                prefix TEXT NOT NULL,
-                key_hash TEXT NOT NULL,
-                key_lookup TEXT,
-                hash_alg TEXT,
-                hash_params TEXT,
-                scopes_csv TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                tenant_id TEXT,
-                expires_at INTEGER,
-                created_at INTEGER
+            CREATE TABLE tenant_credentials (
+                credential_id TEXT NOT NULL PRIMARY KEY,
+                tenant_id     TEXT NOT NULL,
+                status        TEXT NOT NULL DEFAULT 'active'
             )
             """
         )
-    else:
-        con.execute("CREATE TABLE api_keys (id INTEGER PRIMARY KEY, name TEXT)")
     con.commit()
     con.close()
 
 
-def test_readiness_schema_check_rejects_missing_cols() -> None:
-    """PRAGMA table_info detects missing required columns → schema_incomplete."""
+def test_readiness_schema_check_rejects_missing_table() -> None:
+    """Auth store without tenant_credentials table → schema_incomplete."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         path = f.name
     try:
-        _make_auth_db(path, with_required_cols=False)
-        present = _present_cols(path)
-        missing = _REQUIRED_AUTH_COLS - present
-        assert missing, (
-            "Expected missing required columns in minimal schema, got none missing.\n"
-            f"Present: {present}"
+        _make_auth_db(path, with_canonical_tables=False)
+        assert not _has_tenant_credentials(path), (
+            "Expected tenant_credentials to be absent in empty schema"
         )
-        # Verify the missing set contains exactly what we expect
-        assert "key_lookup" in missing
-        assert "key_hash" in missing
-        assert "tenant_id" in missing
     finally:
         os.unlink(path)
 
 
-def test_readiness_schema_check_accepts_full_schema() -> None:
-    """PRAGMA table_info finds all required columns → no missing → auth store ok."""
+def test_readiness_schema_check_accepts_canonical_schema() -> None:
+    """Auth store with tenant_credentials table → auth store ok."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         path = f.name
     try:
-        _make_auth_db(path, with_required_cols=True)
-        present = _present_cols(path)
-        missing = _REQUIRED_AUTH_COLS - present
-        assert not missing, f"Unexpected missing columns in full schema: {missing}"
+        _make_auth_db(path, with_canonical_tables=True)
+        assert _has_tenant_credentials(path), (
+            "Expected tenant_credentials to be present in canonical schema"
+        )
     finally:
         os.unlink(path)
 
@@ -238,7 +212,7 @@ def test_readiness_writable_dir_check_passes_for_tmpdir() -> None:
     """os.access(parent, W_OK) passes for a writable temp directory.
 
     This mirrors the happy path: FG_SQLITE_PATH on a volume-mounted directory
-    that the container process can write to (mint_key() will succeed).
+    that the container process can write to (credential issuance will succeed).
     """
     with tempfile.TemporaryDirectory() as d:
         auth_path = os.path.join(d, "auth.db")
