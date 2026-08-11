@@ -102,6 +102,30 @@ class TestExpiredKeys:
         delta = expires_dt - datetime.now(timezone.utc)
         assert 3500 <= delta.total_seconds() <= 3700
 
+    def test_mint_key_seeds_default_active_config(self, fresh_db, fresh_engine):
+        """mint_key preserves the SQLite test shim's default config side effect."""
+        from sqlalchemy import text as _text
+
+        mint_key("ingest:write", tenant_id="tenant-config-default")
+
+        with fresh_engine.connect() as conn:
+            active_hash = conn.execute(
+                _text(
+                    "SELECT active_config_hash FROM tenant_config_active "
+                    "WHERE tenant_id = :tenant_id"
+                ),
+                {"tenant_id": "tenant-config-default"},
+            ).scalar_one()
+            config_hash = conn.execute(
+                _text(
+                    "SELECT config_hash FROM config_versions "
+                    "WHERE tenant_id = :tenant_id"
+                ),
+                {"tenant_id": "tenant-config-default"},
+            ).scalar_one()
+
+        assert active_hash == config_hash
+
 
 class TestKeyRotation:
     """Test key rotation behavior."""

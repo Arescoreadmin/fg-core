@@ -40,6 +40,7 @@ def mint_key(
         if sqlite_path and sqlite_path != ":memory:":
             init_db()
             ensure_tenant_canonical_row(str(sqlite_path), resolved_tenant)
+            _ensure_default_config_for_tenant(str(sqlite_path), resolved_tenant)
 
     scopes_tag = ",".join(scopes) if scopes else "none"
     slot = f"test-key:{scopes_tag}:{uuid.uuid4()}"
