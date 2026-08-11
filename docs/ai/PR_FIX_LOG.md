@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-67 — fix(test): clear CI-injected internal gateway secrets in build_app — PR #630
+
+- **PR/Branch:** `fix/release-images-admin-gateway-test-isolation` (#630)
+- **Date:** 2026-08-11
+- **Files changed:** `tests/conftest.py`
+- **Root cause:** `frostgate-release-images` generates a random `FG_INTERNAL_AUTH_SECRET` per run and exports it to all steps. `require_internal_admin_gateway` (applied at the admin router level) enforces `x-fg-internal-token` whenever any internal gateway secret is configured — including in non-prod. The `build_app` fixture inherited the CI env var, so tests that call admin routes without `x-fg-internal-token` received 403 instead of 200. `frostgate-core-ci` does not set `FG_INTERNAL_AUTH_SECRET`, which is why the same tests passed there. The failure was pre-existing across all commits back to `20b3100b` (2026-08-10) — not introduced by R4.11.
+- **Fix:** In `build_app._factory`, clear `FG_INTERNAL_GATEWAY_SECRET`, `FG_ADMIN_GATEWAY_INTERNAL_TOKEN`, and `FG_INTERNAL_AUTH_SECRET` via `monkeypatch.delenv(..., raising=False)`. `FG_INTERNAL_TOKEN` is excluded: it is a test-only alias used by `_client()` helpers in `test_testing_runs_api.py` and `test_testing_runs_rls.py` — they set it before calling `build_app` to configure `_internal_guard`, and deleting it removed their intentional setup.
+- **Behavioral impact:** Admin route tests using `build_app(auth_enabled=True)` now work correctly when run in environments that configure `FG_INTERNAL_AUTH_SECRET`. Tests that explicitly set up gateway authentication via `FG_INTERNAL_TOKEN` are unaffected. No production behavior changes.
+- **Security impact:** None. The change is test-infrastructure only. `require_internal_admin_gateway` enforcement is unchanged in all runtime environments.
+- **Schema/API impact:** None.
+- **Tests added:** None; 10/10 `test_dashboard_p0_hardening.py`+`test_admin_audit_required_fields.py` pass with `FG_INTERNAL_AUTH_SECRET` set; 6/6 `test_testing_runs_rls.py`+`test_testing_runs_api.py` pass unchanged.
+- **Validation:** `FG_INTERNAL_AUTH_SECRET=random pytest tests/security/test_dashboard_p0_hardening.py tests/security/test_admin_audit_required_fields.py tests/security/test_testing_runs_rls.py tests/control_plane/test_testing_runs_api.py` — 16 passed.
+- **Result:** PASS locally.
+
+---
+
 ## P-66 — feat(r4.11): legacy api_keys table retirement steps 7-16 — PR TBD
 
 - **PR/Branch:** `feat/r4.11-steps-7-16-legacy-api-keys-eradication` (#TBD)
