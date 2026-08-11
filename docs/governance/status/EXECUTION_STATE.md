@@ -7,13 +7,13 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Date:** 2026-08-10
 
-**Current Branch:** `main`
+**Current Branch:** `fix/release-gate-env-drift`
 
-**Current Commit:** `84296c14` (feat(r4.11): legacy api_keys table retirement - steps 7-16 (#627))
+**Current Commit:** HEAD of `fix/release-gate-env-drift` (PR #628 release-gate environment propagation repair)
 
-**Current PR:** None open. PR #627 merged to `main` on 2026-08-11 01:54 UTC.
+**Current PR:** PR #628 - `fix(ci): repair release gate environment propagation` targeting `main`. PR #627 merged to `main` on 2026-08-11 01:54 UTC.
 
-**Overall Status:** YELLOW - launch plan remains valid and H0 hardening is complete, but main is not fully green: `frostgate-release-images` failed the Release Gate on `db-postgres-verify`. Root cause has been reproduced and a local fix is staged; status remains YELLOW until the fix is merged/pushed and release-images reruns green.
+**Overall Status:** YELLOW - launch plan remains valid and H0 hardening is complete, but main is not fully green: `frostgate-release-images` failed the Release Gate on `db-postgres-verify` on the pre-fix main SHA. The release-gate repair is now landed on PR #628; status remains YELLOW until PR #628 is merged and `frostgate-release-images` reruns green on main.
 
 **Launch Confidence (%):** 97
 
@@ -39,20 +39,20 @@ Update current status fields in place. Preserve historical entries under `Execut
 - **R4.11 steps 7-16 merged (#627):** Legacy `api_keys` table retirement implementation merged; migration `0178_drop_legacy_api_keys.sql` is now on main.
 
 **Current Blockers:**
-- **Critical engineering blocker:** `frostgate-release-images` failed on main at Release Gate: `db-postgres-verify` reported failed, even though the standalone `DB Postgres Verify` job in `frostgate-core-ci` passed on the same SHA. Root cause: release-images/Makefile fallback env omitted Compose-required auth secrets, and the migrate service entrypoint host-interpolated `FG_DB_BACKEND` to blank in CI-like environments. Local fix verified in a clean worktree; publication remains blocked until fix is on main and release-images reruns green.
+- **Critical engineering blocker:** `frostgate-release-images` failed on main at Release Gate: `db-postgres-verify` reported failed, even though the standalone `DB Postgres Verify` job in `frostgate-core-ci` passed on the same SHA. Root cause: release-images/Makefile fallback env omitted Compose-required auth secrets, and the migrate service entrypoint host-interpolated `FG_DB_BACKEND` to blank in CI-like environments. The repair is present in PR #628 and verified locally in a clean worktree; publication remains blocked until PR #628 merges and release-images reruns green on main.
 - **CI still running:** `frostgate-core-ci` on `84296c14` is in progress; Guard, migrations replay, DB Postgres Verify, admin, PT, contract, enforcement matrix, and Unit have passed. Hardening/agent/integration follow-on jobs were still running at latest check.
 - **R4.11 production proof pending:** apply/verify production migration 0178 and prove `public.api_keys` is absent. This is required to mark R4 Credential Authority closed.
 - **L14 founder/commercial track:** design partner scheduling, price card, CG v0 one-pager, Stripe invoice flow, and commercial paper remain the date-setting items for customer one.
 - **Known accepted operational risks remain:** D-T8-001 health endpoint DB connectivity gap; D-T9-001 portal key provisioning during onboarding; D-T9-004 verification bundle UI investigation; L12 deferred FG_SIGNING_SECRET/FG_KEY_PEPPER rotation before second engagement.
 
 **Top Three Priorities:**
-1. **Restore main release-gate green:** land the release-env/Compose interpolation fix and rerun release-images so release artifacts are publishable from main.
+1. **Restore main release-gate green:** merge PR #628 and rerun/observe release-images so release artifacts are publishable from main.
 2. **Close R4.11 production proof:** apply migration 0178 where required and capture `to_regclass('public.api_keys') = NULL` evidence.
 3. **Advance L14 founder track:** schedule design partner and finalize commercial paper; this remains the direct path to customer one once CI/release health is green.
 
-**Next Required PR:** Release-gate repair for the reproduced workflow/Makefile/Compose env defect, then R4.11 production-proof evidence capture.
+**Next Required PR:** PR #628 is the current required release-gate repair. After it merges and release-images is green, the next engineering action is R4.11 production-proof evidence capture.
 
-**Estimated Engineering Days Remaining:** <1 engineering day for the release-gate repair merge/rerun plus R4.11 production proof. Customer-one timing is otherwise governed by L14 and pre-engagement operations, not feature build.
+**Estimated Engineering Days Remaining:** <1 engineering day for PR #628 review/merge, release-images rerun, and R4.11 production proof. Customer-one timing is otherwise governed by L14 and pre-engagement operations, not feature build.
 
 **Estimated Launch Date:** Platform remains GO for Stage 1 after CI/release-gate is restored and L14 closes. Frozen audit recommended 2026-08-27; current expected date is the earliest scheduled design-partner date after L14, release-gate green, production 0178 proof, and pre-engagement `pg_dump`.
 
@@ -62,10 +62,10 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Repository Health:** Local checkout is on `main` and matches `origin/main` at `84296c14`. Working tree has pre-existing untracked audit artifacts under `artifacts/audits/`; no tracked code changes at review start. Open PRs: none. Recent merged PRs since the last execution review: #618, #620, #621, #622, #623, #624, #625, #626, #627.
 
-**CI Status:** YELLOW. Latest main CI: `frostgate-docker-ci` PASS; `frostgate-release-images` FAIL at Release Gate (`db-postgres-verify`) on pre-fix SHA; `frostgate-core-ci` in progress with Guard, migration replay, DB Postgres Verify, admin gateway, PT, contract authority, enforcement matrix, and Unit passing at latest check. Local clean-worktree verification of the staged fix: CI-like `make db-postgres-verify` PASS and CI-like aggregate `make release-gate` PASS. Previous local validation from PR #627 included `make fg-security` PASS (1234 passed, 1 skipped), `make required-tests-gate` PASS, and targeted R4.11 tests PASS.
+**CI Status:** YELLOW. Latest main CI: `frostgate-docker-ci` PASS; `frostgate-release-images` FAIL at Release Gate (`db-postgres-verify`) on pre-fix SHA; `frostgate-core-ci` in progress with Guard, migration replay, DB Postgres Verify, admin gateway, PT, contract authority, enforcement matrix, and Unit passing at latest check. PR #628 checks are in progress. Local clean-worktree verification of the landed PR #628 repair: CI-like `make db-postgres-verify` PASS and CI-like aggregate `make release-gate` PASS. Previous local validation from PR #627 included `make fg-security` PASS (1234 passed, 1 skipped), `make required-tests-gate` PASS, and targeted R4.11 tests PASS.
 
 **Open Risks:**
-- Release-image publication blocked until the staged release-gate repair is merged/pushed and release-images reruns green.
+- Release-image publication blocked until PR #628 merges and release-images reruns green on main.
 - R4.11 cannot be called production-closed until migration 0178 proof is captured.
 - L14 remains outside engineering but controls first-client date.
 - D-T8-001 `/health` can be a false positive for DB outage; hardening before Stage 2 remains prudent.
@@ -73,9 +73,9 @@ Update current status fields in place. Preserve historical entries under `Execut
 - D-T9-004 verification bundle UI failure remains deferred.
 - L12 deferred rotation must close before second engagement.
 
-**Recommended Next Action:** Today: commit/push the release-gate env repair, rerun/observe release-images green, then collect R4.11 production proof. In parallel, founder advances L14. Do not start H1 feature work until customer one is scheduled or repository evidence shows a first-client blocker.
+**Recommended Next Action:** Today: complete PR #628 review/merge, rerun/observe release-images green on main, then collect R4.11 production proof. In parallel, founder advances L14. Do not start H1 feature work until customer one is scheduled or repository evidence shows a first-client blocker.
 
-**Execution Notes:** The frozen launch plan still says the highest ROI is verification/subtraction, not construction. Since H0-PR4 and H0-PR5 are complete and PR #627 merged, the remaining engineering work is release confidence and production evidence. The current red release gate is the only repository-proven reason to spend engineering time before customer-one operations. L14 remains the largest non-engineering critical path. 2026-08-10 follow-up reproduced the release-images failure in a clean worktree and verified the staged repair with both standalone and aggregate gates passing.
+**Execution Notes:** The frozen launch plan still says the highest ROI is verification/subtraction, not construction. Since H0-PR4 and H0-PR5 are complete and PR #627 merged, the remaining engineering work is release confidence and production evidence. The current red release gate is the only repository-proven reason to spend engineering time before customer-one operations. L14 remains the largest non-engineering critical path. 2026-08-10 follow-up reproduced the release-images failure in a clean worktree and verified the PR #628 repair with both standalone and aggregate gates passing.
 
 ## Execution History
 
@@ -83,7 +83,7 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 **Review Type:** Daily Execution Review
 
-**Summary:** Reviewed ROADMAP.md, THIRTY_DAY_LAUNCH_PLAN.md, LAUNCH_DEFINITION_OF_DONE.md, FIRST_CLIENT_PLAYBOOK.md, TOP_ROI_ACTIONS.md, EXECUTION_STATE.md, current git state, open/merged PRs, recent commits, and current CI. Since the 2026-08-07 execution review, H0-PR4 (#618/#620) and H0-PR5 (#621) merged, completing the post-RC1 tenant-isolation hardening sequence. R4.9-R4.11 credential authority work merged through PR #627, including migration 0178 to drop legacy `api_keys`. Current status is YELLOW because main has a failed `frostgate-release-images` Release Gate on `db-postgres-verify`. Follow-up reproduced the failure in a clean CI-like worktree and staged a release-env/Compose interpolation fix that passes local standalone and aggregate release gates.
+**Summary:** Reviewed ROADMAP.md, THIRTY_DAY_LAUNCH_PLAN.md, LAUNCH_DEFINITION_OF_DONE.md, FIRST_CLIENT_PLAYBOOK.md, TOP_ROI_ACTIONS.md, EXECUTION_STATE.md, current git state, open/merged PRs, recent commits, and current CI. Since the 2026-08-07 execution review, H0-PR4 (#618/#620) and H0-PR5 (#621) merged, completing the post-RC1 tenant-isolation hardening sequence. R4.9-R4.11 credential authority work merged through PR #627, including migration 0178 to drop legacy `api_keys`. Current status is YELLOW because main has a failed `frostgate-release-images` Release Gate on `db-postgres-verify`. Follow-up reproduced the failure in a clean CI-like worktree and landed a release-env/Compose interpolation fix in PR #628 that passes local standalone and aggregate release gates.
 
 **Major Changes:**
 - H0-PR4 complete: portal grant creation now enforces tenant-owned engagement validation.
@@ -97,11 +97,11 @@ Update current status fields in place. Preserve historical entries under `Execut
 - H0 sequence is now 5/5 complete.
 - Current branch is main at `84296c14`; no open PRs.
 - Recent PR #627 review comments were resolved before merge; local validation included full `make fg-security` PASS.
-- Clean CI-like reproduction before fix: aggregate `make release-gate` failed and standalone `make db-postgres-verify` exposed missing `FG_SIGNING_SECRET`; after adding required env, standalone exposed blank `FG_DB_BACKEND`; both issues are now addressed in the staged patch.
+- Clean CI-like reproduction before fix: aggregate `make release-gate` failed and standalone `make db-postgres-verify` exposed missing `FG_SIGNING_SECRET`; after adding required env, standalone exposed blank `FG_DB_BACKEND`; both issues are now addressed in PR #628.
 - Clean CI-like verification after fix: `make db-postgres-verify` PASS and aggregate `make release-gate` PASS.
 
 **New Risks:**
-- Main release gate is red on the pre-fix run: `frostgate-release-images` failed `db-postgres-verify` inside `make release-gate`; staged fix must be committed/pushed and rerun.
+- Main release gate is red on the pre-fix run: `frostgate-release-images` failed `db-postgres-verify` inside `make release-gate`; PR #628 must merge and release-images must rerun green on main.
 - R4.11 production closure proof is pending until migration 0178 is applied/verified in production.
 - Core CI was still in progress during this review; final hardening/unit outcome must be checked before declaring repository GREEN.
 
