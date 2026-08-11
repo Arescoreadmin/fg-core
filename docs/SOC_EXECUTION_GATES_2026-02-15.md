@@ -6613,3 +6613,31 @@ Reviewer: Codex. Classification: SOC-HIGH-002 (CI gate change: `tools/ci/check_c
 - CI gate is tightened: production reads from `api_keys` are now blocked by default with an explicit allowlist, matching the existing write protection.
 
 **SOC review outcome:** approved. The CI gate change adds enforcement (blocks new `api_keys` reads in production code) and does not weaken any existing gate. The `api/tenant_rbac.py` carve-out in `_LEGACY_READ_ALLOWED` is accurate — the function is documented dead code in production and is required for SQLite test compatibility. All credential authority decisions flow through `tenant_credentials` + `tenant_credential_roles` after this PR.
+
+---
+
+## 2026-08-10 — SOC-HIGH-002 — PR #628 release-gate environment propagation repair
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (CI workflow change: `.github/workflows/release-images.yml`; release gate execution path: `Makefile`, `docker-compose.yml`).
+
+Scope: Repair the post-merge `frostgate-release-images` release gate failure without changing database logic, runtime authorization, migrations, or product behavior.
+
+Critical files changed:
+- `.github/workflows/release-images.yml`: generated and verified CI secret-shaped test values for `FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET`, and `FG_KEY_PEPPER` before running `make release-gate`.
+- `Makefile`: aligned clean fallback `.env` generation for `db-postgres-up` with the Compose-required auth values so clean local/CI-like runs do not diverge from developer machines with an existing `.env`.
+- `docker-compose.yml`: escaped `FG_DB_BACKEND` in the `frostgate-migrate` entrypoint so expansion happens inside the container environment, preserving the service default of `postgres`.
+
+Security posture:
+- This change adds CI/local test placeholder values only; no production secret values are introduced.
+- Release gating remains fail-closed. The fix removes environment drift that prevented the existing `db-postgres-verify` readiness check from executing reliably.
+- No auth scopes, credential issuance semantics, RLS policies, OPA rules, or migration DDL are modified.
+- The Compose change preserves the existing `FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}` contract and prevents host-shell interpolation from converting it to an empty backend.
+
+Validation evidence:
+- Pre-fix clean CI-like aggregate `make release-gate`: FAIL.
+- Pre-fix clean CI-like standalone `make db-postgres-verify`: FAIL, exposing missing `FG_SIGNING_SECRET`; after adding required env, exposed blank host-expanded `FG_DB_BACKEND`.
+- Post-fix clean CI-like `make db-postgres-verify`: PASS.
+- Post-fix clean CI-like aggregate `make release-gate`: PASS.
+- `git diff --check`: PASS.
+
+SOC review outcome: approved. The workflow change strengthens release determinism and preserves fail-closed release behavior. No runtime security gate is weakened.

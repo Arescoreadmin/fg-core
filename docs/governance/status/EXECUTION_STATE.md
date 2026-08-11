@@ -5,158 +5,117 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-07
+**Date:** 2026-08-10
 
-**Current Branch:** `main`
+**Current Branch:** `fix/release-gate-env-drift`
 
-**Current Commit:** `4bf99a3f` (feat(identity): tenant-scoped engagement selector API (H0-PR3) #617)
+**Current Commit:** HEAD of `fix/release-gate-env-drift` (PR #628 release-gate environment propagation repair)
 
-**Current PR:** None open.
+**Current PR:** PR #628 - `fix(ci): repair release gate environment propagation` targeting `main`. PR #627 merged to `main` on 2026-08-11 01:54 UTC.
 
-**Overall Status:** GREEN — all 4 launch constraints DONE. v1.0.0-rc1 tagged. Platform ready for first client engagement.
+**Overall Status:** YELLOW - launch plan remains valid and H0 hardening is complete, but main is not fully green: `frostgate-release-images` failed the Release Gate on `db-postgres-verify` on the pre-fix main SHA. The release-gate repair is now landed on PR #628; status remains YELLOW until PR #628 is merged and `frostgate-release-images` reruns green on main.
 
-**Launch Confidence (%):** 99
+**Launch Confidence (%):** 97
 
-**Current Critical Path:** ~~C1~~ ✅ → ~~C2~~ ✅ → ~~C3~~ ✅ → ~~C4~~ ✅ → ~~H0-PR1~~ ✅ → ~~H0-PR2~~ ✅ → ~~H0-PR3~~ ✅ → **H0-PR4** (portal grant ownership) → **H0-PR5** (cross-tenant regression) → [parallel] **L14** (design partner scheduled, commercial paper).
+**Current Critical Path:** H0-PR1 through H0-PR5 COMPLETE -> R4.11 merged -> restore main release-gate/CI green -> production 0178 proof (`SELECT to_regclass('public.api_keys') IS NULL`) -> L14 design-partner scheduling and commercial paper -> pre-engagement `pg_dump` -> customer one.
 
-**Current Phase:** H0 Post-RC1 — Tenant Identity Administration hardening; L14 commercial (founder track, parallel).
+**Current Phase:** Post-RC1 customer-one readiness validation; production credential-authority closure and CI/release-gate stabilization.
 
-**Launch Authorization:** LDR-2026-001 CONDITIONAL GO — **all 4 constraints DONE.** v1.0.0-rc1 tagged at commit `e1f807dd`. Platform is in FULL GO state.
+**Launch Authorization:** LDR-2026-001 CONDITIONAL GO - all 4 launch constraints remain DONE. v1.0.0-rc1 remains the launch candidate baseline. Current work is post-RC1 hardening and release hygiene, not roadmap redesign.
 
-**Platform Freeze:** ACTIVE through first client engagement completion. H0-PR4 and H0-PR5 are authorized post-RC1 security hardening (H0 horizon, not new features). H1 and beyond do not start until RC1 is tagged — RC1 is NOW tagged; H1 starts when design partner is active.
+**Platform Freeze:** ACTIVE through first client engagement completion. No new product surface, no refactors, no trust-layer expansion unless repository evidence proves the frozen plan is wrong.
 
-**Current DoD Progress:** 13/14 gates resolved. L7 PASS (T8). L8 PASS (T9). L9 CONDITIONAL PASS (T10 — portal mechanics proven; data rendering deferred to first engagement). L11 PASS (T13). L12 accepted/deferred (must rotate before second engagement). L13 PASS (L7 complete). L14 FOUNDER TRACK.
+**Current DoD Progress:** 13/14 gates resolved. L1-L13 are PASS/accepted/conditional per Launch Decision Record and prior execution state. L14 remains founder/commercial track. H0 security hardening after RC1 is now complete through H0-PR5.
 
-**Completed Since Last Update (2026-08-06 → 2026-08-07):**
-- **C4 COMPLETE 2026-08-06:** T8 PASS (incident drill; Railway rollback <15 min; D-T8-001/002/003 documented); T9 PASS (8 nav items; engagement end-to-end via visible nav; D-T9-002/003 fixed same session; D-T9-001/004 open); T10 CONDITIONAL PASS (portal mechanics proven via T4; data rendering deferred to first engagement); T13 CONDITIONAL PASS (core data purged; 2 runbook gaps patched). Evidence: `docs/governance/status/t8_evidence_20260806.md`, `t9_evidence_20260806.md`, `t10_evidence_20260806.md`, `t13_evidence_20260806.md`.
-- **v1.0.0-rc1 TAGGED** at commit `e1f807dd` — launch candidate commit.
-- **LDR-2026-001 C4 status → DONE.** All 4 constraints closed.
-- **H0-PR1 merged (#615):** AUTH-001 — BFF routes `POST/PATCH /workforce/users` through admin gateway (`admin:write` + `identity.scim`); GET admin path expanded; `invitation_id` captured before commit to avoid RLS expiry.
-- **H0-PR2 merged (#616):** Canonical tenant authority resolver — `resolve_authoritative_tenant()` in `api/auth_scopes/resolution.py`; all 9 mutation routes in `api/admin_identity.py` migrated; 3 new `IdentityEventType` values.
-- **H0-PR3 merged (#617):** Tenant-scoped engagement selector — `GET /admin/identity/tenants/{tenant_id}/engagements`; uses `resolve_authoritative_tenant()`; 5 isolation tests. Unblocks H0-PR4.
-- **C4 session fixes merged to main:** wildcard `"*"` scope → platform_admin (D-T9-002, 6299daac); dark mode date input (D-T9-003, 7a2ed2f9); DB slot/RLS sync (2bbcf90e); stuck console-bff-key slot reset migration 0174 (7983afab); `app.tenant_id` in `get_credential` (c9a63c9a); `CORE_TENANT_ID=demo-bank` console redeploy (d15d0b19); nav gating to ≤9 items (f3594066).
+**Completed Since Last Update (2026-08-07 -> 2026-08-11):**
+- **H0-PR4 merged (#618):** Portal grant ownership validation - server-side engagement ownership enforced before grant issuance.
+- **H0-PR4 CI repair merged (#620):** Typed portal grant ownership payload fix.
+- **H0-PR5 merged (#621):** Cross-tenant regression suite for portal grant/list/revocation and engagement isolation.
+- **fg-required always-on merged (#622):** Full required suite no longer skipped by path filters.
+- **R4.9 credential authority merged (#623):** Credential authority stream continued.
+- **R4.10 merged (#624):** Canonical credential RBAC authority; production RBAC moved to `tenant_credential_roles`.
+- **R4.11 steps 1-6 merged (#625):** Canonical SQLite auth and first legacy `api_keys` retirement tranche.
+- **Canonical fixture proof merged (#626):** Proved canonical credential plaintext is present in tests.
+- **R4.11 steps 7-16 merged (#627):** Legacy `api_keys` table retirement implementation merged; migration `0178_drop_legacy_api_keys.sql` is now on main.
 
 **Current Blockers:**
-- **H0-PR4 (next PR):** Portal grant form + server-side engagement ownership validation — remove editable `client_id` from grant form; validate `engagement_id` belongs to route tenant before grant issuance. 2–3 days. Depends on H0-PR3 (DONE).
-- **H0-PR5:** Cross-tenant enforcement regression suite — tests first for invitation/grant/list/revocation isolation; minimal fixes for any failures. 2–3 days. Depends on H0-PR1–PR4.
-- **L14 (commercial paper, founder track):** Price card, CG v0 one-pager, Stripe invoice flow, design partner scheduled. 0 engineering days. This is the critical-path-to-revenue item.
-- **D-T8-001 (open defect):** `/health` endpoint does not verify DB connectivity — Railway health probe can show 200 with unreachable DB. Hardening PR needed; not a Stage 1 blocker.
-- **D-T9-001 (open defect):** Clients → Assessments returns 401 — no portal key at `portal:tenant:{id}:key` in Upstash for client tenants. Operational fix during onboarding, not a code change.
-- **D-T9-004 (open defect):** Verification bundle generation fails from console UI. Investigate post-T9.
-- **L12 deferred rotation:** FG_SIGNING_SECRET + FG_KEY_PEPPER not rotated; documented acceptance; must close before second engagement.
+- **Critical engineering blocker:** `frostgate-release-images` failed on main at Release Gate: `db-postgres-verify` reported failed, even though the standalone `DB Postgres Verify` job in `frostgate-core-ci` passed on the same SHA. Root cause: release-images/Makefile fallback env omitted Compose-required auth secrets, and the migrate service entrypoint host-interpolated `FG_DB_BACKEND` to blank in CI-like environments. The repair is present in PR #628 and verified locally in a clean worktree; publication remains blocked until PR #628 merges and release-images reruns green on main.
+- **CI still running:** `frostgate-core-ci` on `84296c14` is in progress; Guard, migrations replay, DB Postgres Verify, admin, PT, contract, enforcement matrix, and Unit have passed. Hardening/agent/integration follow-on jobs were still running at latest check.
+- **R4.11 production proof pending:** apply/verify production migration 0178 and prove `public.api_keys` is absent. This is required to mark R4 Credential Authority closed.
+- **L14 founder/commercial track:** design partner scheduling, price card, CG v0 one-pager, Stripe invoice flow, and commercial paper remain the date-setting items for customer one.
+- **Known accepted operational risks remain:** D-T8-001 health endpoint DB connectivity gap; D-T9-001 portal key provisioning during onboarding; D-T9-004 verification bundle UI investigation; L12 deferred FG_SIGNING_SECRET/FG_KEY_PEPPER rotation before second engagement.
 
 **Top Three Priorities:**
-1. **H0-PR4:** Portal grant form + server-side engagement ownership validation. Closes API-001 (browser-supplied authority-bearing identifiers). Unblocks H0-PR5 and eventually H1-PR7/PR8. 2–3 days.
-2. **H0-PR5:** Cross-tenant enforcement regression suite. Security gate before first client data enters the system. 2–3 days.
-3. **L14 (founder, parallel):** Design partner scheduling + commercial paper. Longest pole to first revenue. 0 engineering days.
+1. **Restore main release-gate green:** merge PR #628 and rerun/observe release-images so release artifacts are publishable from main.
+2. **Close R4.11 production proof:** apply migration 0178 where required and capture `to_regclass('public.api_keys') = NULL` evidence.
+3. **Advance L14 founder track:** schedule design partner and finalize commercial paper; this remains the direct path to customer one once CI/release health is green.
 
-**Next Required PR:** **H0-PR4** — Portal grant form and server-side engagement ownership validation. See `docs/plans/tenant_identity_administration_pr_sequence_20260806.md` §H0-PR4.
+**Next Required PR:** PR #628 is the current required release-gate repair. After it merges and release-images is green, the next engineering action is R4.11 production-proof evidence capture.
 
-**Post-H0 — Tenant Identity & Administration Platform stream:**
-After H0-PR5: H1-PR1 through H1-PR10 (design-partner self-administration surface). H1 starts when RC1 is tagged (DONE) and design partner is scheduled. Stop H1 when the design partner can securely self-administer routine users without founder intervention — not all 10 PRs required. Then H2-PR1 (Unified Invitation Authority, P1-01 first PR).
+**Estimated Engineering Days Remaining:** <1 engineering day for PR #628 review/merge, release-images rerun, and R4.11 production proof. Customer-one timing is otherwise governed by L14 and pre-engagement operations, not feature build.
 
-**Estimated Engineering Days Remaining:** ~5–7 (H0-PR4: 2–3d, H0-PR5: 2–3d; then re-evaluate H1 need vs. first engagement timeline).
+**Estimated Launch Date:** Platform remains GO for Stage 1 after CI/release-gate is restored and L14 closes. Frozen audit recommended 2026-08-27; current expected date is the earliest scheduled design-partner date after L14, release-gate green, production 0178 proof, and pre-engagement `pg_dump`.
 
-**Estimated Launch Date:** Platform GO NOW. First engagement date set by L14 (design partner scheduled).
+**Roadmap Drift:** None. H0-PR4/H0-PR5 and R4.9-R4.11 are roadmap-tracked hardening/credential-retirement work. No new launch surface is authorized.
 
-**Roadmap Drift:** H0-PR1 through H0-PR3 shipped post-RC1 as planned (H0 horizon, production defects). v1.0.0-rc1 tagged 2026-08-06 (on schedule). No scope additions.
+**Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. No new governance deviation identified in this review.
 
-**Known Governance Deviation:** GD-2026-001 CLOSED 2026-08-03. See `GOVERNANCE_DEVIATIONS.md`.
+**Repository Health:** Local checkout is on `main` and matches `origin/main` at `84296c14`. Working tree has pre-existing untracked audit artifacts under `artifacts/audits/`; no tracked code changes at review start. Open PRs: none. Recent merged PRs since the last execution review: #618, #620, #621, #622, #623, #624, #625, #626, #627.
 
-**C4 Result Summary:**
-
-| Gate | Result | Key finding |
-|---|---|---|
-| T8 — Incident drill | PASS | Dashboard rollback <1 min; 3 defects (D-T8-001/002/003); runbooks corrected |
-| T9 — Console UX | PASS | 8 nav items; full engagement flow via visible nav; D-T9-002/003 fixed same session |
-| T10 — Portal UX | CONDITIONAL PASS | Portal mechanics proven via T4; data rendering deferred to first engagement |
-| T13 — Deletion drill | CONDITIONAL PASS | Core data purged; 2 runbook gaps patched; 3 orphaned scan_result rows (no PII) |
-
-**C1 Result (for reference):**
-
-| Field | Value |
-|---|---|
-| C1 status | COMPLETE 2026-08-06 |
-| Restore drill | PASS — 17 tenants / 17 engagements / 101 findings / 346 audit events / migration 0172 / zero mismatches |
-| Evidence file | `docs/governance/status/restore_drill_evidence_20260806.md` |
-
-**Repository Health:** Working tree clean on main. CI green (all gates pass through #617). No open mypy errors. No open gate failures. Migration 0174 applied (slot reset for frostgate-internal). 3 commits ahead of v1.0.0-rc1 (H0-PR1 session, H0-PR2, H0-PR3) — all planned H0 hardening.
+**CI Status:** YELLOW. Latest main CI: `frostgate-docker-ci` PASS; `frostgate-release-images` FAIL at Release Gate (`db-postgres-verify`) on pre-fix SHA; `frostgate-core-ci` in progress with Guard, migration replay, DB Postgres Verify, admin gateway, PT, contract authority, enforcement matrix, and Unit passing at latest check. PR #628 checks are in progress. Local clean-worktree verification of the landed PR #628 repair: CI-like `make db-postgres-verify` PASS and CI-like aggregate `make release-gate` PASS. Previous local validation from PR #627 included `make fg-security` PASS (1234 passed, 1 skipped), `make required-tests-gate` PASS, and targeted R4.11 tests PASS.
 
 **Open Risks:**
-- D-T8-001: `/health` does not verify DB connectivity — hardening PR before Stage 2.
-- D-T9-001: Clients → Assessments 401 — provision Upstash portal key during client tenant onboarding.
-- D-T9-004: Verification bundle generation fails from console UI — investigate post-first-engagement.
-- T10 data rendering: deferred to first live client engagement.
-- DB startup ordering defect (`_grant_runtime_role_access()` race): accepted; fix tracked pre-Stage 2 concurrent client.
-- Orphaned `default` tenant data (7 engagements, 11 scan jobs): P1 data-governance; must migrate/archive before commercial use.
-- No automated alerting: Railway plan limitation; add 5xx spike alert before engagement start.
-- L12 deferred rotation: written acceptance; must close before second engagement.
-- `FG_DB_MIGRATIONS_RISK_ACCEPTED=1` still set in Railway (D-T6-001): non-blocking; clear before any schema change.
+- Release-image publication blocked until PR #628 merges and release-images reruns green on main.
+- R4.11 cannot be called production-closed until migration 0178 proof is captured.
+- L14 remains outside engineering but controls first-client date.
+- D-T8-001 `/health` can be a false positive for DB outage; hardening before Stage 2 remains prudent.
+- D-T9-001 portal key provisioning is an onboarding operational dependency.
+- D-T9-004 verification bundle UI failure remains deferred.
+- L12 deferred rotation must close before second engagement.
 
-**Recommended Next Action:** Begin H0-PR4 (portal grant ownership validation, 2–3 days). In parallel: L14 founder action (design partner scheduled, commercial paper finalized). H0-PR5 follows H0-PR4. First engagement begins as soon as L14 closes and pre-engagement pg_dump is taken.
+**Recommended Next Action:** Today: complete PR #628 review/merge, rerun/observe release-images green on main, then collect R4.11 production proof. In parallel, founder advances L14. Do not start H1 feature work until customer one is scheduled or repository evidence shows a first-client blocker.
 
-**Execution Notes:** v1.0.0-rc1 tagged on the C4 close commit. Three post-RC1 H0 PRs (#615-617) shipped same day — all planned, all CI-green. The Gold Path 15/15 at 12.9s (FG-GP-20260804-004) is the Stage 2 KPI baseline (target <30s). Stage 1 capacity limits: 1 design partner, ≤3 tenants, ≤5 named users, 1 concurrent engagement. Engineering is no longer the critical path. L14 (commercial) controls the date.
+**Execution Notes:** The frozen launch plan still says the highest ROI is verification/subtraction, not construction. Since H0-PR4 and H0-PR5 are complete and PR #627 merged, the remaining engineering work is release confidence and production evidence. The current red release gate is the only repository-proven reason to spend engineering time before customer-one operations. L14 remains the largest non-engineering critical path. 2026-08-10 follow-up reproduced the release-images failure in a clean worktree and verified the PR #628 repair with both standalone and aggregate gates passing.
 
-**T4 Result:**
+## Execution History
 
-| Field | Value |
-|-------|-------|
-| T4 status | COMPLETE |
-| L2 status | PASS |
-| FG-LR-002 status | CLOSED |
-| Invitee | jason@frostgate.ai |
-| Tenant | the-wick-network |
-| Invitation ID | 81b40050-39b2-4a6e-a57b-c830489e7a93 |
-| Auth0 user ID | auth0\|6a1a0e50c88714c3166670c3 |
-| Auth0 app | cvasuyBjdFg4KnidIxKZIFBJFvGdYjF4 |
-| Auth0 tenant | dev-22nn3c7muqjk4tgu.us.auth0.com |
-| Session type | pnu1. (named-user) |
-| Portal role | viewer |
-| G1–G6 | ALL PASS |
-| Completion date | 2026-08-04 |
-| Evidence file | `docs/governance/status/T4_OPERATIONAL_EVIDENCE.md` |
-| Commit | e4d70804 |
+### 2026-08-10 - Daily Execution Review - H0 COMPLETE - R4.11 MERGED - RELEASE GATE YELLOW
 
-**T1 Result:**
+**Review Type:** Daily Execution Review
 
-| Field | Value |
-|-------|-------|
-| T1 status | COMPLETE |
-| L4 status | PASS |
-| FG-LR-003 status | CLOSED |
-| Railway plan tier | hobby |
-| Automatic Railway backups | None (hobby plan: `maxBackupsCount = 0`) |
-| Backup mechanism | Manual `pg_dump` via Docker (`pgvector/pgvector:pg18`) |
-| Production DB | PostgreSQL 18.4, migration 0168, 372 tables, 7 engagements |
-| Dump size | 1.7 MB (compressed custom format) |
-| Restore start | 2026-07-30T20:11:42Z |
-| Restore complete | 2026-07-30T20:11:46Z |
-| Restore duration | ~4 seconds |
-| Scratch target | `frostgate-restore-proof-20260730` (local Docker, isolated) |
-| Row-count result | PASS — all tables match exactly |
-| ENG-RESTORE-PROOF-01 | PASS — engagement, findings, audit_events, scan_results all match |
-| Runbook | `docs/operators/backup_restore.md` |
-| Evidence manifest | `docs/governance/status/L04_evidence_manifest.md` |
-| Secrets committed | None |
-| Production modified | None |
+**Summary:** Reviewed ROADMAP.md, THIRTY_DAY_LAUNCH_PLAN.md, LAUNCH_DEFINITION_OF_DONE.md, FIRST_CLIENT_PLAYBOOK.md, TOP_ROI_ACTIONS.md, EXECUTION_STATE.md, current git state, open/merged PRs, recent commits, and current CI. Since the 2026-08-07 execution review, H0-PR4 (#618/#620) and H0-PR5 (#621) merged, completing the post-RC1 tenant-isolation hardening sequence. R4.9-R4.11 credential authority work merged through PR #627, including migration 0178 to drop legacy `api_keys`. Current status is YELLOW because main has a failed `frostgate-release-images` Release Gate on `db-postgres-verify`. Follow-up reproduced the failure in a clean CI-like worktree and landed a release-env/Compose interpolation fix in PR #628 that passes local standalone and aggregate release gates.
 
-**Plan upgrade note:** Railway Pro is required for automatic backups (`maxBackupsCount > 0`). T5 infra headroom task should include the plan upgrade decision. Until then, pre-engagement manual `pg_dump` is the production backup strategy (see `docs/operators/backup_restore.md` §5 and `first_client_prep.md`).
+**Major Changes:**
+- H0-PR4 complete: portal grant creation now enforces tenant-owned engagement validation.
+- H0-PR5 complete: cross-tenant portal/engagement regression coverage merged.
+- R4.10 complete: canonical credential RBAC authority merged (#624).
+- R4.11 implementation merged: legacy `api_keys` retirement steps 1-16 merged (#625/#627), with migration 0178 present on main.
+- fg-required workflow hardening merged (#622), forcing required suite execution independent of path filters.
+- Release-gate failure root cause identified: missing Compose-required CI auth env plus host interpolation of `FG_DB_BACKEND` in the migrate service entrypoint.
 
-**Roadmap Drift:** T1 complete on Day 1 as planned. No drift.
+**Completed Tasks:**
+- H0 sequence is now 5/5 complete.
+- Current branch is main at `84296c14`; no open PRs.
+- Recent PR #627 review comments were resolved before merge; local validation included full `make fg-security` PASS.
+- Clean CI-like reproduction before fix: aggregate `make release-gate` failed and standalone `make db-postgres-verify` exposed missing `FG_SIGNING_SECRET`; after adding required env, standalone exposed blank `FG_DB_BACKEND`; both issues are now addressed in PR #628.
+- Clean CI-like verification after fix: `make db-postgres-verify` PASS and aggregate `make release-gate` PASS.
 
-**Repository Health:** Working tree clean on main before branching. `docs/operators/backup_restore.md` and `docs/governance/status/L04_evidence_manifest.md` added.
+**New Risks:**
+- Main release gate is red on the pre-fix run: `frostgate-release-images` failed `db-postgres-verify` inside `make release-gate`; PR #628 must merge and release-images must rerun green on main.
+- R4.11 production closure proof is pending until migration 0178 is applied/verified in production.
+- Core CI was still in progress during this review; final hardening/unit outcome must be checked before declaring repository GREEN.
 
-**Open Risks:**
-- FG-LR-001, FG-LR-002, FG-LR-004, FG-LR-005 remain open — no durable evidence yet.
-- Railway hobby plan confirmed with no automatic backups; manual `pg_dump` is the current backup path; upgrade decision deferred to T5.
-- `CLIENT_READINESS.md` is stale relative to the named-user portal cutover.
-- `credential_delivery.md` still needs the T14 named-user rewrite.
+**Decisions Made:**
+- Overall status moved from GREEN to YELLOW due to live release-gate failure on main; remains YELLOW until patched release-images reruns green.
+- Primary objective for today is release/CI health, not roadmap expansion.
+- Secondary objective remains L14 founder/commercial closure because it is the longest pole to customer one.
+- No new product work is authorized; H1 remains deferred until design partner evidence requires it.
 
-**Recommended Next Action:** Resolve the remaining L12 rotation gap or record an approved DoD amendment, then execute T4 portal named-user production proof.
+**Updated Launch Confidence:** 97%
 
-**Execution Notes:** The frozen audit is the source of truth. PR #599 merged the T2/T3 operational evidence and runbook updates. PR #600 reconciled L12 evidence manifest header contradictions introduced during external edits. T2 is complete. T3 and L12 remain partially complete until FG_SIGNING_SECRET and FG_KEY_PEPPER are rotated or the frozen DoD is formally amended.
+**Next:** Restore release-gate green -> collect R4.11 production 0178 proof -> close L14/design-partner scheduling -> pre-engagement `pg_dump` -> customer one.
 
-## Execution History (recent, newest first)
+---
 
 ### 2026-08-07 — Daily Execution Review · C4 COMPLETE · v1.0.0-rc1 TAGGED · H0-PR1/PR2/PR3 MERGED
 

@@ -231,8 +231,8 @@ services:
       - -lc
       - >
         set -eux;
-        python -m api.db_migrations --backend "${FG_DB_BACKEND}" --apply;
-        python -m api.db_migrations --backend "${FG_DB_BACKEND}" --assert
+        python -m api.db_migrations --backend "$${FG_DB_BACKEND}" --apply;
+        python -m api.db_migrations --backend "$${FG_DB_BACKEND}" --assert
     restart: "no"
     read_only: true
     networks:

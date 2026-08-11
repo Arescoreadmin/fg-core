@@ -69,6 +69,9 @@ jobs:
           print(f"FG_WEBHOOK_SECRET={tok(32)}")
           print(f"FG_ENCRYPTION_KEY={tok(32)}")
           print(f"FG_JWT_SECRET={tok(32)}")
+          print(f"FG_SIGNING_SECRET={tok(32)}")
+          print(f"FG_INTERNAL_AUTH_SECRET={tok(32)}")
+          print(f"FG_KEY_PEPPER={tok(32)}")
           print("FG_ENV=dev")
           PY
 
@@ -86,6 +89,9 @@ jobs:
             FG_WEBHOOK_SECRET \
             FG_ENCRYPTION_KEY \
             FG_JWT_SECRET \
+            FG_SIGNING_SECRET \
+            FG_INTERNAL_AUTH_SECRET \
+            FG_KEY_PEPPER \
             FG_ENV
           do
             if [ -n "${!var:-}" ]; then
