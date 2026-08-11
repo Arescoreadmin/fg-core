@@ -117,7 +117,7 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("FG_API_KEY", api_key_value)
         monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
         for _gw in ("FG_INTERNAL_GATEWAY_SECRET", "FG_ADMIN_GATEWAY_INTERNAL_TOKEN",
-                    "FG_INTERNAL_AUTH_SECRET", "FG_INTERNAL_TOKEN"):
+                    "FG_INTERNAL_AUTH_SECRET"):
             monkeypatch.delenv(_gw, raising=False)
         monkeypatch.setenv("FG_DEV_EVENTS_ENABLED", "1" if dev_events_enabled else "0")
         monkeypatch.setenv(
