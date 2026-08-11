@@ -545,6 +545,63 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     was_rotated: wasRotated, stage: 'credential_issued',
   });
 
+  // Step 2b: Assign tenant_admin role to the new credential.
+  // Fail-closed: a credential without a role cannot access any RBAC-gated endpoint.
+  // Rotation carries the role forward in credential_authority.py, so this is only
+  // strictly necessary on fresh issuance — but calling it on both paths is idempotent
+  // (assign_role revokes any existing active role then re-inserts) and safe.
+  {
+    let roleRes: Response;
+    try {
+      roleRes = await fetch(
+        `${CORE_API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/credentials/${encodeURIComponent(keyData.credential_id as string)}/role`,
+        {
+          method: 'POST',
+          headers: adminHeaders(),
+          body: JSON.stringify({ role: 'tenant_admin' }),
+          cache: 'no-store',
+        },
+      );
+    } catch (fetchErr) {
+      logEvent('error', 'provision.upstream.unreachable', {
+        request_id: requestId, tenant_id: tenantId, stage: 'role_assign',
+        credential_id: keyData.credential_id,
+        error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
+      });
+      // Revoke the dangling credential so Postgres does not accumulate unroled credentials.
+      await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      return NextResponse.json(
+        {
+          error: 'ROLE_ASSIGN_UNAVAILABLE',
+          detail: 'Backend unreachable during RBAC role assignment. Credential has been revoked.',
+          request_id: requestId,
+        },
+        { status: 503, headers: { 'x-request-id': requestId } },
+      );
+    }
+    if (!roleRes.ok) {
+      const roleErr = await roleRes.json().catch(() => ({})) as Record<string, unknown>;
+      logEvent('error', 'provision.role_assign.failed', {
+        request_id: requestId, tenant_id: tenantId, credential_id: keyData.credential_id,
+        status: roleRes.status, detail: roleErr.detail ?? 'unknown',
+      });
+      // Revoke the dangling credential — do not leave a credential with no role.
+      await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      return NextResponse.json(
+        {
+          error: 'ROLE_ASSIGN_FAILED',
+          detail: `RBAC role assignment failed (HTTP ${roleRes.status}). Credential has been revoked. ${roleErr.detail ?? ''}`.trim(),
+          request_id: requestId,
+        },
+        { status: 500, headers: { 'x-request-id': requestId } },
+      );
+    }
+    logEvent('info', 'provision.role_assign.ok', {
+      request_id: requestId, tenant_id: tenantId, credential_id: keyData.credential_id,
+      role: 'tenant_admin', stage: 'role_assigned',
+    });
+  }
+
   // A slot conflict means the tenant existed regardless of what Step 1 returned.
   const alreadyExisted = tenantAlreadyExisted || wasRotated;
 

@@ -53,6 +53,7 @@ from api.credential_authority import (
     revoke_credential,
     rotate_credential,
 )
+from api.tenant_rbac import VALID_ROLE_NAMES, assign_role as rbac_assign_role
 from api.error_contracts import api_error
 from api.db import get_engine
 from api.internal_platform_authority import (
@@ -891,6 +892,14 @@ class RotateCredentialRequest(BaseModel):
     request_id: Optional[str] = None
 
 
+class AssignCredentialRoleRequest(BaseModel):
+    """Request to assign an RBAC role to a credential (operator/admin path)."""
+
+    model_config = {"extra": "forbid"}
+
+    role: str = Field(..., min_length=1, max_length=64)
+
+
 class RevokeCredentialRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -1154,6 +1163,49 @@ async def revoke_tenant_credential(
         metadata={"admin_route": "revoke", "reason": req.reason},
     )
     return _credential_record_dict(rec)
+
+
+@router.post(
+    "/tenants/{tenant_id}/credentials/{credential_id}/role",
+    status_code=201,
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def assign_tenant_credential_role(
+    tenant_id: str,
+    credential_id: str,
+    req: AssignCredentialRoleRequest,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> Dict[str, Any]:
+    """Assign an RBAC role to a tenant credential via the operator (admin) path.
+
+    This endpoint is used during provisioning to bootstrap the initial role for a
+    new credential before the credential can self-serve via /rbac/assignments.
+    It requires platform.admin permission (internal gateway auth) rather than
+    require_role("tenant_admin") on the *target* credential.
+
+    Idempotent: assigning the same role to an already-assigned credential replaces
+    it (via assign_role's revoke-then-insert logic).
+    """
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    if req.role not in VALID_ROLE_NAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown role: {req.role!r}. Valid roles: {sorted(VALID_ROLE_NAMES)}",
+        )
+    engine = get_engine()
+    try:
+        with Session(engine) as session:
+            result = rbac_assign_role(
+                session,
+                tenant_id=tenant_id,
+                actor_key_prefix=actor_ctx.subject or "operator:admin",
+                credential_id=credential_id,
+                role_name=req.role,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
 
 
 @router.get(
