@@ -253,10 +253,22 @@ async function safe<T>(fn: () => Promise<T>): Promise<SafeResult<T>> {
 
 const base = (tenantId: string) => `/admin/identity/tenants/${encodeURIComponent(tenantId)}`;
 
+function withTenantContext(path: string, tenantId: string): string {
+  const [pathname, query = ''] = path.split('?', 2);
+  const params = new URLSearchParams(query);
+  params.set('tenant_id', tenantId);
+  const qs = params.toString();
+  return `${pathname}${qs ? `?${qs}` : ''}`;
+}
+
+function tenantPath(tenantId: string, suffix = ''): string {
+  return withTenantContext(`${base(tenantId)}${suffix}`, tenantId);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function getIdentityConfig(tenantId: string): Promise<SafeResult<IdentityConfig>> {
-  return safe(() => identityRequest<IdentityConfig>(`${base(tenantId)}/config`));
+  return safe(() => identityRequest<IdentityConfig>(tenantPath(tenantId, '/config')));
 }
 
 export async function upsertIdentityConfig(
@@ -264,7 +276,7 @@ export async function upsertIdentityConfig(
   payload: ConfigUpsertPayload,
 ): Promise<SafeResult<IdentityConfig>> {
   return safe(() =>
-    identityRequest<IdentityConfig>(`${base(tenantId)}/config`, {
+    identityRequest<IdentityConfig>(tenantPath(tenantId, '/config'), {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
@@ -272,11 +284,11 @@ export async function upsertIdentityConfig(
 }
 
 export async function getIdentityReadiness(tenantId: string): Promise<SafeResult<IdentityReadiness>> {
-  return safe(() => identityRequest<IdentityReadiness>(`${base(tenantId)}/readiness`));
+  return safe(() => identityRequest<IdentityReadiness>(tenantPath(tenantId, '/readiness')));
 }
 
 export async function listInvitations(tenantId: string): Promise<SafeResult<InvitationsResponse>> {
-  return safe(() => identityRequest<InvitationsResponse>(`${base(tenantId)}/invitations`));
+  return safe(() => identityRequest<InvitationsResponse>(tenantPath(tenantId, '/invitations')));
 }
 
 export async function createInvitation(
@@ -284,53 +296,53 @@ export async function createInvitation(
   payload: InviteCreatePayload,
 ): Promise<SafeResult<IdentityInvitation>> {
   return safe(() =>
-    identityRequest<IdentityInvitation>(`${base(tenantId)}/invitations`, {
+    identityRequest<IdentityInvitation>(tenantPath(tenantId, '/invitations'), {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   );
 }
 
-export async function revokeInvitation(invitationId: string): Promise<SafeResult<{ invitation_id: string; status: string }>> {
+export async function revokeInvitation(tenantId: string, invitationId: string): Promise<SafeResult<{ invitation_id: string; status: string }>> {
   return safe(() =>
-    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/revoke`, {
+    identityRequest(withTenantContext(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/revoke`, tenantId), {
       method: 'POST',
     }),
   );
 }
 
-export async function resendInvitation(invitationId: string): Promise<SafeResult<{ invitation_id: string; status: string; resent: boolean }>> {
+export async function resendInvitation(tenantId: string, invitationId: string): Promise<SafeResult<{ invitation_id: string; status: string; resent: boolean }>> {
   return safe(() =>
-    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/resend`, {
+    identityRequest(withTenantContext(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/resend`, tenantId), {
       method: 'POST',
     }),
   );
 }
 
 export async function getAuditSummary(tenantId: string): Promise<SafeResult<AuditSummary>> {
-  return safe(() => identityRequest<AuditSummary>(`${base(tenantId)}/audit-summary`));
+  return safe(() => identityRequest<AuditSummary>(tenantPath(tenantId, '/audit-summary')));
 }
 
 export async function getGovernanceScore(tenantId: string): Promise<SafeResult<GovernanceScore>> {
-  return safe(() => identityRequest<GovernanceScore>(`${base(tenantId)}/governance-score`));
+  return safe(() => identityRequest<GovernanceScore>(tenantPath(tenantId, '/governance-score')));
 }
 
 export async function getDrift(tenantId: string): Promise<SafeResult<DriftReport>> {
-  return safe(() => identityRequest<DriftReport>(`${base(tenantId)}/drift`));
+  return safe(() => identityRequest<DriftReport>(tenantPath(tenantId, '/drift')));
 }
 
 export async function getIdentityTimeline(tenantId: string, limit = 50): Promise<SafeResult<IdentityTimeline>> {
   return safe(() =>
-    identityRequest<IdentityTimeline>(`${base(tenantId)}/timeline?limit=${limit}`),
+    identityRequest<IdentityTimeline>(tenantPath(tenantId, `/timeline?limit=${limit}`)),
   );
 }
 
 export async function getReadinessHistory(tenantId: string): Promise<SafeResult<ReadinessHistory>> {
-  return safe(() => identityRequest<ReadinessHistory>(`${base(tenantId)}/readiness-history`));
+  return safe(() => identityRequest<ReadinessHistory>(tenantPath(tenantId, '/readiness-history')));
 }
 
 export async function getIdentityRisk(tenantId: string): Promise<SafeResult<IdentityRisk>> {
-  return safe(() => identityRequest<IdentityRisk>(`${base(tenantId)}/risk`));
+  return safe(() => identityRequest<IdentityRisk>(tenantPath(tenantId, '/risk')));
 }
 
 // ── Identity Type Governance ──────────────────────────────────────────────────
@@ -351,7 +363,7 @@ export interface IdentityTypeGovernance {
 }
 
 export async function getIdentityTypeGovernance(tenantId: string): Promise<SafeResult<IdentityTypeGovernance>> {
-  return safe(() => identityRequest<IdentityTypeGovernance>(`${base(tenantId)}/identity-types`));
+  return safe(() => identityRequest<IdentityTypeGovernance>(tenantPath(tenantId, '/identity-types')));
 }
 
 // ── Session Provenance ────────────────────────────────────────────────────────
@@ -398,7 +410,7 @@ export async function getSessionProvenance(
   if (params.email) qs.set('email', params.email);
   if (params.user_id) qs.set('user_id', params.user_id);
   return safe(() =>
-    identityRequest<ProvenanceResult>(`${base(tenantId)}/provenance?${qs.toString()}`),
+    identityRequest<ProvenanceResult>(tenantPath(tenantId, `/provenance?${qs.toString()}`)),
   );
 }
 
@@ -423,7 +435,7 @@ export interface PolicyViolationsReport {
 }
 
 export async function getPolicyViolations(tenantId: string): Promise<SafeResult<PolicyViolationsReport>> {
-  return safe(() => identityRequest<PolicyViolationsReport>(`${base(tenantId)}/policy-violations`));
+  return safe(() => identityRequest<PolicyViolationsReport>(tenantPath(tenantId, '/policy-violations')));
 }
 
 // ── Approval Workflows ────────────────────────────────────────────────────────
@@ -440,11 +452,12 @@ export interface ApprovalQueueResponse {
 }
 
 export async function requestApproval(
+  tenantId: string,
   invitationId: string,
   payload: ApprovalActionPayload = {},
 ): Promise<SafeResult<{ invitation_id: string; approval_state: string }>> {
   return safe(() =>
-    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/request-approval`, {
+    identityRequest(withTenantContext(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/request-approval`, tenantId), {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -452,11 +465,12 @@ export async function requestApproval(
 }
 
 export async function approveInvitation(
+  tenantId: string,
   invitationId: string,
   payload: ApprovalActionPayload = {},
 ): Promise<SafeResult<{ invitation_id: string; approval_state: string; approved_by_user_id: string | null; approved_at: string }>> {
   return safe(() =>
-    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/approve`, {
+    identityRequest(withTenantContext(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/approve`, tenantId), {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -464,11 +478,12 @@ export async function approveInvitation(
 }
 
 export async function rejectApproval(
+  tenantId: string,
   invitationId: string,
   payload: ApprovalActionPayload = {},
 ): Promise<SafeResult<{ invitation_id: string; approval_state: string; reason: string | null }>> {
   return safe(() =>
-    identityRequest(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/reject-approval`, {
+    identityRequest(withTenantContext(`/admin/identity/invitations/${encodeURIComponent(invitationId)}/reject-approval`, tenantId), {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -476,7 +491,7 @@ export async function rejectApproval(
 }
 
 export async function getApprovalQueue(tenantId: string): Promise<SafeResult<ApprovalQueueResponse>> {
-  return safe(() => identityRequest<ApprovalQueueResponse>(`${base(tenantId)}/approval-queue`));
+  return safe(() => identityRequest<ApprovalQueueResponse>(tenantPath(tenantId, '/approval-queue')));
 }
 
 // ── Governance Snapshots ──────────────────────────────────────────────────────
@@ -501,7 +516,7 @@ export interface GovernanceSnapshotsReport {
 
 export async function takeGovernanceSnapshot(tenantId: string): Promise<SafeResult<GovernanceSnapshot & { snapshot_id: string; tenant_id: string }>> {
   return safe(() =>
-    identityRequest(`${base(tenantId)}/governance-snapshots`, { method: 'POST' }),
+    identityRequest(tenantPath(tenantId, '/governance-snapshots'), { method: 'POST' }),
   );
 }
 
@@ -510,7 +525,7 @@ export async function getGovernanceSnapshots(
   days = 90,
 ): Promise<SafeResult<GovernanceSnapshotsReport>> {
   return safe(() =>
-    identityRequest<GovernanceSnapshotsReport>(`${base(tenantId)}/governance-snapshots?days=${days}`),
+    identityRequest<GovernanceSnapshotsReport>(tenantPath(tenantId, `/governance-snapshots?days=${days}`)),
   );
 }
 
@@ -538,7 +553,7 @@ export interface RecommendationsReport {
 }
 
 export async function getRecommendations(tenantId: string): Promise<SafeResult<RecommendationsReport>> {
-  return safe(() => identityRequest<RecommendationsReport>(`${base(tenantId)}/recommendations`));
+  return safe(() => identityRequest<RecommendationsReport>(tenantPath(tenantId, '/recommendations')));
 }
 
 // ── Gap A: Governance Trend Analytics ────────────────────────────────────────
@@ -572,7 +587,7 @@ export async function getGovernanceTrend(
   snapshots = 5,
 ): Promise<SafeResult<GovernanceTrend>> {
   return safe(() =>
-    identityRequest<GovernanceTrend>(`${base(tenantId)}/governance-trend?snapshots=${snapshots}`),
+    identityRequest<GovernanceTrend>(tenantPath(tenantId, `/governance-trend?snapshots=${snapshots}`)),
   );
 }
 
@@ -605,7 +620,7 @@ export async function getGovernanceForecast(
   days = 30,
 ): Promise<SafeResult<GovernanceForecast>> {
   return safe(() =>
-    identityRequest<GovernanceForecast>(`${base(tenantId)}/governance-forecast?days=${days}`),
+    identityRequest<GovernanceForecast>(tenantPath(tenantId, `/governance-forecast?days=${days}`)),
   );
 }
 
@@ -632,7 +647,7 @@ export interface GovernanceSlaReport {
 }
 
 export async function getGovernanceSla(tenantId: string): Promise<SafeResult<GovernanceSlaReport>> {
-  return safe(() => identityRequest<GovernanceSlaReport>(`${base(tenantId)}/governance-sla`));
+  return safe(() => identityRequest<GovernanceSlaReport>(tenantPath(tenantId, '/governance-sla')));
 }
 
 // ── Gap D: Cross-Tenant Benchmarking ─────────────────────────────────────────
@@ -658,7 +673,7 @@ export interface GovernanceBenchmark {
 }
 
 export async function getGovernanceBenchmark(tenantId: string): Promise<SafeResult<GovernanceBenchmark>> {
-  return safe(() => identityRequest<GovernanceBenchmark>(`${base(tenantId)}/governance-benchmark`));
+  return safe(() => identityRequest<GovernanceBenchmark>(tenantPath(tenantId, '/governance-benchmark')));
 }
 
 // ── Gap E: Governance Findings ────────────────────────────────────────────────
@@ -689,7 +704,7 @@ export interface GovernanceFindingsReport {
 
 export async function getGovernanceFindings(tenantId: string): Promise<SafeResult<GovernanceFindingsReport>> {
   return safe(() =>
-    identityRequest<GovernanceFindingsReport>(`${base(tenantId)}/governance-findings`),
+    identityRequest<GovernanceFindingsReport>(tenantPath(tenantId, '/governance-findings')),
   );
 }
 
@@ -762,7 +777,7 @@ export async function recordGovernanceAction(
   payload: RecordGovernanceActionPayload,
 ): Promise<SafeResult<GovernanceAction>> {
   return safe(() =>
-    identityRequest<GovernanceAction>(`${base(tenantId)}/governance-actions`, {
+    identityRequest<GovernanceAction>(tenantPath(tenantId, '/governance-actions'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -781,7 +796,7 @@ export async function listGovernanceActions(
   const qs = params.toString();
   return safe(() =>
     identityRequest<GovernanceActionsLedger>(
-      `${base(tenantId)}/governance-actions${qs ? `?${qs}` : ''}`,
+      tenantPath(tenantId, `/governance-actions${qs ? `?${qs}` : ''}`),
     ),
   );
 }
@@ -790,6 +805,6 @@ export async function getGovernanceActionSummary(
   tenantId: string,
 ): Promise<SafeResult<GovernanceActionSummary>> {
   return safe(() =>
-    identityRequest<GovernanceActionSummary>(`${base(tenantId)}/governance-action-summary`),
+    identityRequest<GovernanceActionSummary>(tenantPath(tenantId, '/governance-action-summary')),
   );
 }

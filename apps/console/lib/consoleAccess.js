@@ -637,10 +637,10 @@ const CORE_API_POLICIES = [
   { prefix: 'field-assessment/engagements', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'governance/graph', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: true, clientSafe: false, readOnly: false, mutationRoles: INTERNAL_ONLY_ROLES },
   { prefix: 'governance/assets', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: true, clientSafe: false, readOnly: true },
-  { prefix: 'workforce/users', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: false, clientSafe: false, readOnly: false, mutationRoles: INTERNAL_ONLY_ROLES },
-  { prefix: 'portal/grants', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: false, clientSafe: false, readOnly: false, mutationRoles: INTERNAL_ONLY_ROLES },
-  { prefix: 'admin/identity/tenants', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: false, clientSafe: false, readOnly: false, mutationRoles: INTERNAL_ONLY_ROLES },
-  { prefix: 'admin/identity/invitations', allowedRoles: INTERNAL_ONLY_ROLES, tenantScoped: false, clientSafe: false, readOnly: false, mutationRoles: INTERNAL_ONLY_ROLES },
+  { prefix: 'workforce/users', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
+  { prefix: 'portal/grants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
+  { prefix: 'admin/identity/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
+  { prefix: 'admin/identity/invitations', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'api/executive', allowedRoles: CLIENT_CONSOLE_ALLOWED_ROLES, tenantScoped: true, clientSafe: true, readOnly: true },
 ];
 

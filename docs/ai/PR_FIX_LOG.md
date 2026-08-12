@@ -21424,3 +21424,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** None.
 - **Validation:** Fresh Postgres volume recreated from scratch; privileged `CREATE EXTENSION vector` succeeded; `vector` present at version `0.8.2`; `fg_app` verified as non-superuser/non-role-creator/non-db-creator/non-RLS-bypass; migrations `0001` through `0123` passed; migration assertions passed; `make db-postgres-verify` exited 0; `make release-gate` exited 0; `git diff --check` passed.
 - **Result:** PASS locally; PR #629 guard failure was missing fix-log evidence, not a pgvector bootstrap regression.
+
+---
+
+## P-46 — fix(console): canonicalize tenant-admin BFF Core auth path — branch `fix/console-bff-tenant-admin-auth`
+
+- **PR/Branch:** `fix/console-bff-tenant-admin-auth` (PR pending)
+- **Date:** 2026-08-12
+- **Files changed:** `apps/console/app/api/core/[...path]/route.ts`, `apps/console/lib/identityApi.ts`, `apps/console/lib/consoleAccess.js`, `apps/console/components/identity/IdentityGovernancePanel.tsx`, `apps/console/tests/workforce-invitation-authority.test.js`, `apps/console/tests/tenant-resolution.test.js`, `apps/console/tests/console-access-policy.test.js`, `docs/architecture/admin_gateway_identity_enforcement.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** The shared Console `/api/core` proxy still contained divergent tenant-admin branches. `workforce/users` resolved the target tenant and forwarded admin gateway credentials with `X-Tenant-ID`, while `portal/grants` and `admin/identity/*` were treated as tenant-independent admin paths: they skipped BFF tenant authorization and forwarded admin gateway credentials without tenant binding. Identity Governance client calls also omitted `tenant_id` query context, and invitation-id operations had no tenant source at all. This made Console Users, Portal Access, engagement lookup, and Identity Governance depend on different auth/header conventions.
+- **Fix:** Replaced the split predicates with one `isTenantAdminCorePath()` contract covering `workforce/users`, `portal/grants`, `admin/identity/tenants/*`, and `admin/identity/invitations/*`. All tenant-admin Core paths now run through `resolveAuthorizedTenant()` before proxying and forward the same internal gateway headers plus the resolved `X-Tenant-ID`. Identity API calls append explicit `tenant_id` context, including invitation-id actions. Console access policy now permits `tenant_admin` on these tenant-scoped APIs while preserving cross-tenant denial through BFF tenant resolution.
+- **Behavioral impact:** Same-tenant tenant-admin Console surfaces use a single BFF/Core authority path. Cross-tenant requests are denied before Core forwarding unless the session is an internal console operator. Core 401/403/5xx responses are normalized for all proxied paths, including tenant-admin paths.
+- **Security impact:** Positive — removes an unbound internal-token path and prevents new per-tab auth/header construction. No production RBAC data, backfills, RLS policies, role inference, wildcard tenant authority, legacy `api_keys` fallback, or browser-visible credential handling were added.
+- **Schema/API impact:** None.
+- **Tests added/updated:** Rewrote `workforce-invitation-authority.test.js` as the tenant-admin BFF auth invariant suite; updated tenant-resolution and console-access policy tests to assert one helper, tenant resolution before proxying, `X-Tenant-ID` forwarding, identity tenant query propagation, and `tenant_admin` same-tenant access policy.
+- **Validation:** `git diff --check` PASS; `npm test -- tests/workforce-invitation-authority.test.js tests/tenant-resolution.test.js tests/console-access-policy.test.js` PASS (38/38). Broader gates and live production/synthetic tenant proof remain pending.
+- **Result:** PASS locally; production proof pending.

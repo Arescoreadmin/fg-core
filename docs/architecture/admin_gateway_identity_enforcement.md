@@ -38,9 +38,13 @@ Identity transitions use the PR 1 append-only hash-chain audit ledger. Events co
 
 The tenant_identity_auth_states table stores only SHA-256 state digests and validated identity metadata, expires records, prevents state/correlation reuse, and enforces forced PostgreSQL RLS. Invitation routes require an explicit tenant header and always query by both tenant and invitation ID.
 
-## Console BFF Enforcement Seam
+## Console BFF Tenant-Admin Enforcement Seam
 
-The Console Core BFF removes incoming tenant_id and reinjects only server-authoritative CORE_TENANT_ID. URL query parameters cannot override tenant authority. Full Console adoption of Admin Gateway governed session context remains a later UI/BFF migration; existing machine/internal API-key flows are unchanged.
+Tenant-admin Console surfaces use one BFF-to-Core authority contract. The browser session authorizes the requested target tenant first: internal console operators may target any tenant, and console-enabled client users may target only their own session tenant. The BFF rejects malformed, missing, or mismatched tenant context before forwarding.
+
+For tenant-admin Core routes (`workforce/users`, `portal/grants`, `admin/identity/tenants/*`, and `admin/identity/invitations/*`), the BFF forwards the internal admin gateway authority with `X-API-Key`, `X-FG-Internal-Token`, `X-Admin-Gateway-Internal: true`, `X-Request-ID`, and the session-authorized `X-Tenant-ID`. Core then authenticates the internal gateway token, injects the explicit tenant context, and enforces the route's `require_scopes`, `require_permission`, and tenant-binding checks.
+
+No tenant-admin tab may resolve credentials or construct auth headers independently. The BFF does not expose raw credentials to the browser, does not accept `tenant_id` from request bodies, does not fall back to legacy `api_keys`, and normalizes Core 401/403/5xx denials with request IDs and safe diagnostics. Non-tenant-admin tenant-key routes continue to use canonical tenant credential resolution; configured operator fallback remains limited to non-tenant-admin paths.
 
 ## Auth0 Adapter (PR 3)
 

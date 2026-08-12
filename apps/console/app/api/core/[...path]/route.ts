@@ -233,13 +233,43 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
  *   - console_enabled_client → may only act on their own session tenant
  *   - All others → 403
  */
+function tenantIdFromCorePath(path: string[]): string | null {
+  if (path.length >= 4 && path[0] === 'admin' && path[1] === 'identity' && path[2] === 'tenants') {
+    return path[3] || null;
+  }
+  return null;
+}
+
+function isTenantAdminCorePath(path: string[]): boolean {
+  const joined = path.join('/');
+  return (
+    joined.startsWith('workforce/users') ||
+    joined === 'portal/grants' ||
+    joined.startsWith('portal/grants/') ||
+    joined.startsWith('admin/identity/tenants/') ||
+    joined === 'admin/identity/invitations' ||
+    joined.startsWith('admin/identity/invitations/')
+  );
+}
+
 function resolveAuthorizedTenant(
   request: NextRequest,
+  path: string[],
   session: Session,
   requestId: string,
 ): { tenantId: string } | NextResponse {
   const url = new URL(request.url);
-  const raw = url.searchParams.get('tenant_id');
+  const queryTenantId = url.searchParams.get('tenant_id');
+  const pathTenantId = tenantIdFromCorePath(path);
+  const raw = queryTenantId ?? pathTenantId;
+
+  if (queryTenantId !== null && pathTenantId !== null && queryTenantId.trim() !== pathTenantId.trim()) {
+    return jsonError('Forbidden: tenant_id does not match route tenant', 403, requestId);
+  }
+
+  if (raw === null && isTenantAdminCorePath(path)) {
+    return jsonError('tenant_id is required for tenant-admin Core routes', 422, requestId);
+  }
 
   if (raw === null) {
     return resolveConfiguredOperatorTenant(requestId);
@@ -402,29 +432,6 @@ function isAlignmentArtifact(path: string[]) {
   return path.length === 1 && path[0] === 'alignment-artifact';
 }
 
-function isCrossTenantAdminPath(path: string[]): boolean {
-  const joined = path.join('/');
-  return (
-    joined.startsWith('admin/identity/tenants/') ||
-    joined === 'admin/identity/invitations' ||
-    joined.startsWith('admin/identity/invitations/') ||
-    joined === 'portal/grants' ||
-    joined.startsWith('portal/grants/')
-  );
-}
-
-// All methods on workforce/users require admin-gateway credentials at Core:
-//   GET  requires admin:read  (workforce.py:250)
-//   POST requires admin:write + identity.scim  (workforce.py:158-159)
-//   PATCH requires admin:write + identity.scim  (workforce.py:292-293)
-// Tenant portal API keys carry none of these scopes. Admin gateway credentials must be used.
-// Tenant context is still validated by resolveAuthorizedTenant before this path runs;
-// X-Tenant-ID forwards the authorized tenant so Core's auth_gate injects it
-// (auth_gate.py:192-194: admin_internal_token + requested_tenant → tenant_is_key_bound).
-function isWorkforceAdminPath(path: string[]): boolean {
-  return path.length >= 2 && path[0] === 'workforce' && path[1] === 'users';
-}
-
 function buildAdminUrl(path: string[], request: NextRequest): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
@@ -434,7 +441,6 @@ function buildAdminUrl(path: string[], request: NextRequest): string {
 
 function tenantIndependentRateLimitTenant(path: string[]): string {
   if (isAlignmentArtifact(path)) return 'alignment-artifact';
-  if (isCrossTenantAdminPath(path)) return 'admin-gateway';
   return 'tenant-independent';
 }
 
@@ -464,8 +470,7 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
-  const isAdminPath = isCrossTenantAdminPath(path);
-  const isWorkforceAdmin = isWorkforceAdminPath(path);
+  const isTenantAdminPath = isTenantAdminCorePath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
@@ -474,12 +479,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   const headers = new Headers();
   headers.set('X-Request-ID', requestId);
 
-  if (isAdminPath) {
-    if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
-    headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
-    headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
-    headers.set('X-Admin-Gateway-Internal', 'true');
-  } else if (isWorkforceAdmin) {
+  if (isTenantAdminPath) {
     if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
     headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
@@ -530,33 +530,33 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     }
   }
 
-  const target = isAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request, tenantId);
-  console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
+  const target = isTenantAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request, tenantId);
+  console.info(
+    `[core-proxy] request_id=${requestId} method=${request.method} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'}`,
+  );
 
   const response = await fetch(target, init);
 
   // Translate Core auth rejections and upstream outages into structured BFF errors.
   // Never pass raw 401/403 or 5xx bodies back to the browser — they may contain
   // key hints or internal detail. Always include request_id for traceability.
-  if (!isAdminPath) {
-    if (response.status === 401) {
-      console.warn(
-        `[core-proxy] CORE_AUTH_REJECTED status=401 tenant_id=${tenantId} target=${target} request_id=${requestId}`,
-      );
-      return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
-    }
-    if (response.status === 403) {
-      console.warn(
-        `[core-proxy] CORE_ACCESS_DENIED status=403 tenant_id=${tenantId} target=${target} request_id=${requestId}`,
-      );
-      return credentialError('CORE_ACCESS_DENIED', 403, requestId, tenantId);
-    }
-    if (response.status === 502 || response.status === 503 || response.status === 504) {
-      console.warn(
-        `[core-proxy] CORE_UNAVAILABLE status=${response.status} tenant_id=${tenantId} request_id=${requestId}`,
-      );
-      return credentialError('CORE_UNAVAILABLE', response.status, requestId, tenantId);
-    }
+  if (response.status === 401) {
+    console.warn(
+      `[core-proxy] CORE_AUTH_REJECTED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=401 normalized_error=CORE_AUTH_REJECTED`,
+    );
+    return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
+  }
+  if (response.status === 403) {
+    console.warn(
+      `[core-proxy] CORE_ACCESS_DENIED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=403 normalized_error=CORE_ACCESS_DENIED`,
+    );
+    return credentialError('CORE_ACCESS_DENIED', 403, requestId, tenantId);
+  }
+  if (response.status === 502 || response.status === 503 || response.status === 504) {
+    console.warn(
+      `[core-proxy] CORE_UNAVAILABLE request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=${response.status} normalized_error=CORE_UNAVAILABLE`,
+    );
+    return credentialError('CORE_UNAVAILABLE', response.status, requestId, tenantId);
   }
 
   const body = await response.text();
@@ -627,7 +627,6 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const requestId = getRequestId(request);
   const path = params.path || [];
   const routeGroup = path[0] || 'unknown';
-  const isAdminPath = isCrossTenantAdminPath(path);
 
   const session = await auth();
   if (!session?.user) return jsonError('Unauthorized', 401, requestId);
@@ -646,18 +645,7 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     if (rate) return rate;
     return getAlignmentArtifact(requestId);
   }
-  if (isAdminPath) {
-    const rate = await enforceRateLimit(
-      request,
-      requestId,
-      routeGroup,
-      tenantIndependentRateLimitTenant(path),
-    );
-    if (rate) return rate;
-    return proxyToCore(request, path, requestId, '');
-  }
-
-  const tenantResolution = resolveAuthorizedTenant(request, session, requestId);
+  const tenantResolution = resolveAuthorizedTenant(request, path, session, requestId);
   if (tenantResolution instanceof NextResponse) return tenantResolution;
   const { tenantId } = tenantResolution;
 
