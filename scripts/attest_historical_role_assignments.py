@@ -128,9 +128,11 @@ def _timestamps_match(supplied: str, actual: str | None) -> bool:
     if actual is None:
         return False
     try:
+
         def _parse(s: str) -> datetime:
             s = s.replace("Z", "+00:00")
             return datetime.fromisoformat(s).astimezone(timezone.utc)
+
         return abs((_parse(supplied) - _parse(actual)).total_seconds()) <= 1.0
     except ValueError:
         return False

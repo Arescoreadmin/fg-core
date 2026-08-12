@@ -209,8 +209,13 @@ def assign_role(
     # to the current transaction; callers using engine.begin() or Session with
     # autobegin get the same transaction-scoped behaviour.
     _bind = getattr(conn, "bind", None)
-    if _bind is not None and getattr(getattr(_bind, "dialect", None), "name", "") == "postgresql":
-        conn.execute(text("SELECT set_config('app.tenant_id', :tid, true)"), {"tid": tenant_id})
+    if (
+        _bind is not None
+        and getattr(getattr(_bind, "dialect", None), "name", "") == "postgresql"
+    ):
+        conn.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"), {"tid": tenant_id}
+        )
 
     # Verify credential belongs to this tenant (belt-and-suspenders; FK enforced in Postgres).
     row = conn.execute(
