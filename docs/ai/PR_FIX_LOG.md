@@ -1,5 +1,28 @@
 # PR Fix Log (Strict)
 
+## P-69 — fix(rbac): address PR #631 review findings (RLS, audit, rotation guard) — PR #632
+
+- **PR/Branch:** `fix/rbac-pr631-followups` (#632)
+- **Date:** 2026-08-12
+- **Files changed:**
+  - `api/admin.py` — added `set_tenant_context(session, tenant_id)` before `rbac_assign_role()` in `assign_tenant_credential_role`
+  - `apps/console/app/api/admin/provision-tenant/route.ts` — guarded role-assign failure revocation with `wasRotated`; only revoke on fresh-issuance failure, not rotation
+  - `scripts/backfill_credential_roles.py` — prefer `FG_DB_OPERATOR_URL` over `FG_DB_URL` for cross-tenant reads; replaced direct `INSERT` write path with `assign_role()` per row (sets tenant context + writes audit record)
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Root cause (four findings from codex review of #631):**
+  1. `assign_tenant_credential_role` opened a `Session(engine)` without calling `set_tenant_context()`. On PostgreSQL with RLS, the credential-ownership SELECT inside `assign_role()` is filtered by `app.tenant_id`; with no GUC set it returned nothing → `ValueError` → 422 on every provisioning bootstrap call.
+  2. `provision-tenant/route.ts` unconditionally revoked the replacement credential on role-assign failure. On the rotation path, `rotate_credential()` had already revoked the predecessor, so revoking the replacement left the tenant with zero usable credentials.
+  3. `_fetch_all_credentials()` is a cross-tenant SELECT. The documented `FG_DB_URL` is the restricted runtime role, subject to `app.tenant_id` RLS; with no context set the query returned zero rows. The original dry-run only worked because `DATABASE_PUBLIC_URL` (`postgres` superuser) was used.
+  4. The direct `INSERT INTO tenant_credential_roles` write path never appended a `tenant_role_audit` row, making backfilled grants invisible to audit-log consumers.
+- **Fix:** (1) `set_tenant_context` before `assign_role`. (2) `!wasRotated` guard on both failure revocation branches. (3) New `FG_DB_OPERATOR_URL` env var (superuser/`pg_read_all_data`) checked first; `FG_DB_URL` accepted with stderr warning. (4) Write path replaced with `assign_role()` per row, which calls `set_tenant_context` internally and writes `tenant_role_audit`.
+- **Behavioral impact:** Admin role-bootstrap endpoint now works on PostgreSQL with RLS. Provisioning rotation-path failures no longer orphan tenants. Backfill operator correctly uses superuser URL. All backfilled grants produce audit records.
+- **Security impact:** None — tightening only. RLS compliance improved.
+- **Schema/API impact:** None.
+- **Tests added:** None (existing N07/N08 cover session/audit path; no new surface area).
+- **Result:** PENDING
+
+---
+
 ## P-68 — fix(rbac): backfill credential roles + atomic role assignment at provisioning — PR TBD
 
 - **PR/Branch:** `fix/rbac-credential-role-backfill` (TBD)
