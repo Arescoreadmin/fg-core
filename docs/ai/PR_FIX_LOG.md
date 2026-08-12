@@ -1,5 +1,27 @@
 # PR Fix Log (Strict)
 
+## P-68 — fix(rbac): backfill credential roles + atomic role assignment at provisioning — PR TBD
+
+- **PR/Branch:** `fix/rbac-credential-role-backfill` (TBD)
+- **Date:** 2026-08-11
+- **Files changed:**
+  - `api/admin.py` — added `AssignCredentialRoleRequest` model + `assign_tenant_credential_role` endpoint (`POST /admin/tenants/{tenant_id}/credentials/{credential_id}/role`); imported `rbac_assign_role` from `api.tenant_rbac`
+  - `apps/console/app/api/admin/provision-tenant/route.ts` — added Step 2b: call role-assign admin endpoint after credential issuance; fail-closed (revoke credential on role-assign failure; never return OK with unroled credential)
+  - `scripts/backfill_credential_roles.py` — new operator script; classifies existing credentials by `tenant_kind`; inserts `tenant_admin` for active customer credentials; skips internal/validation/demo; idempotent; dry-run mode; auditable `granted_by` constant
+  - `tests/test_backfill_credential_roles.py` — 15 new tests covering B01–B10 (backfill) and N01–N05 (new provisioning regression)
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Root cause:** The R4 Credential Authority work moved all credential storage to `tenant_credentials` + `tenant_credential_roles`, but the provisioning pipeline (`provision-tenant/route.ts`) was never updated to write the initial role at issuance time. `assign_role()` in `api/tenant_rbac.py` is gated by `require_role("tenant_admin")` (a RBAC check on the *calling* credential), creating a bootstrap paradox: new credentials can never self-assign their first role. The result: all credentials issued post-R4 have zero rows in `tenant_credential_roles`, causing every `require_role()` check to return 403 (`CORE_ACCESS_DENIED` at the BFF layer). Additionally, `rotate_credential()` in `credential_authority.py` carries roles forward via `INSERT … SELECT`, which means rotated credentials inherit the absence.
+- **Fix — Responsibility 1 (backfill):** `scripts/backfill_credential_roles.py` queries all `tenant_credentials` rows that have no active `tenant_credential_roles` entry, joins to `tenants` to read `tenant_kind`, and inserts `tenant_admin` for `customer`+`active` credentials. Non-customer tenants are skipped with logged reason. Uses guard SELECT + `INSERT OR IGNORE` (SQLite) / guard SELECT + plain `INSERT` (Postgres). `granted_by = 'operator:backfill-20260811'`. Dry-run flag prints plan without writing.
+- **Fix — Responsibility 2 (future provisioning):** Added admin endpoint `POST /admin/tenants/{tenant_id}/credentials/{credential_id}/role` in `api/admin.py`. Requires `admin:write` scope + `platform.admin` permission (internal gateway path — bypasses the RBAC bootstrap paradox). Updated `provision-tenant/route.ts` to call this endpoint immediately after credential issuance. Fail-closed: on any failure (network, API error), the dangling credential is revoked and an error is returned to the caller.
+- **Behavioral impact:** New tenants get `tenant_admin` role atomically at provisioning time. Rotated credentials continue to inherit roles from `rotate_credential()`. All endpoints gated by `require_role()` now work immediately after provisioning without manual intervention.
+- **Security impact:** No weakening of `CORE_ACCESS_DENIED` or `require_role()`. The new admin endpoint requires `platform.admin` (operator path) — it is not callable by tenant credentials. Internal/test/validation tenants are not over-privileged by the backfill.
+- **Schema/API impact:** New admin API endpoint `POST /admin/tenants/{tenant_id}/credentials/{credential_id}/role`. No schema migration required (writes to existing `tenant_credential_roles` table). No `api_keys` reference introduced.
+- **Tests added:** `tests/test_backfill_credential_roles.py` — 15 tests (B01–B10, N01–N05). B-series covers backfill classification, idempotency, dry-run, granted_by. N-series covers admin endpoint validation, RBAC bootstrap, and cross-tenant isolation.
+- **Constraints met:** No `api_keys` references. No fallback to legacy path. `CORE_ACCESS_DENIED` denial path unchanged. Platform freeze exception: bug fix to onboarding contract.
+- **Result:** PENDING
+
+---
+
 ## P-67 — fix(test): clear CI-injected internal gateway secrets in build_app — PR #630
 
 - **PR/Branch:** `fix/release-images-admin-gateway-test-isolation` (#630)
