@@ -23,6 +23,7 @@ Coverage:
     N06 — endpoint denies caller without platform.admin permission
     N07 — endpoint is idempotent: two calls produce exactly one active role row
     N08 — assignment writes an immutable audit record to tenant_role_audit
+    N09 — complete provisioning invariant: issue → assign → own-tenant pass → cross-tenant fail → audit exists
 """
 
 from __future__ import annotations
@@ -710,3 +711,92 @@ class TestAdminCredentialRoleEndpoint:
 
         assert row is not None, "audit record must exist after role assignment"
         assert row[1] == "tenant_admin", f"audit record role_name mismatch: {row[1]!r}"
+
+    def test_N09_complete_provisioning_invariant(self, db_engine, monkeypatch):
+        """N09: complete provisioning invariant — full lifecycle in one test.
+
+        Sequence:
+          1. New credential issued for tenant-n09a (no role yet → require_role denies).
+          2. Admin endpoint assigns tenant_admin role.
+          3. require_role("tenant_admin") passes for the credential on tenant-n09a.
+          4. The same credential cannot access tenant-n09b (cross-tenant isolation holds).
+          5. An audit record exists in tenant_role_audit for the assignment.
+
+        This is the regression guard for the bootstrap gap closed by PR #631.
+        Any regression in the assign-then-enforce pipeline will surface here.
+        """
+        import asyncio
+        from api.admin import AssignCredentialRoleRequest, assign_tenant_credential_role
+        from api.tenant_rbac import require_role
+        from fastapi import HTTPException, Request as FastAPIRequest
+
+        _insert_tenant(db_engine, "tenant-n09a")
+        _insert_tenant(db_engine, "tenant-n09b")
+        cid = _insert_credential(db_engine, "tenant-n09a")
+
+        monkeypatch.setattr("api.admin.get_engine", lambda: db_engine)
+        monkeypatch.setattr("api.admin.bind_tenant_id", lambda *a, **kw: None)
+
+        # Step 1: credential exists but has no role — access must be denied.
+        with Session(db_engine) as session:
+            dep = require_role("tenant_admin")
+            scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
+            req = FastAPIRequest(scope)
+            req.state.auth = SimpleNamespace(
+                key_prefix="k", tenant_id="tenant-n09a", credential_id=cid
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                dep(request=req, conn=session)
+            assert exc_info.value.status_code == 403, "pre-assign: must return 403"
+
+        # Step 2: assign tenant_admin via the admin endpoint (simulates provisioning pipeline).
+        body = AssignCredentialRoleRequest(role="tenant_admin")
+        actor = self._mock_actor(subject="operator:provisioning-n09")
+        asyncio.run(
+            assign_tenant_credential_role(
+                tenant_id="tenant-n09a",
+                credential_id=cid,
+                req=body,
+                request=MagicMock(),
+                actor_ctx=actor,
+            )
+        )
+
+        # Step 3: own-tenant access must now pass.
+        with Session(db_engine) as session:
+            dep = require_role("tenant_admin")
+            scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
+            req = FastAPIRequest(scope)
+            req.state.auth = SimpleNamespace(
+                key_prefix="k", tenant_id="tenant-n09a", credential_id=cid
+            )
+            dep(request=req, conn=session)  # must not raise
+
+        # Step 4: cross-tenant access must still be denied.
+        with Session(db_engine) as session:
+            dep = require_role("tenant_admin")
+            scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
+            req = FastAPIRequest(scope)
+            req.state.auth = SimpleNamespace(
+                key_prefix="k", tenant_id="tenant-n09b", credential_id=cid
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                dep(request=req, conn=session)
+            assert exc_info.value.status_code == 403, "cross-tenant: must return 403"
+
+        # Step 5: audit record must exist for the assignment.
+        with db_engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT action, role_name, target_credential_id "
+                    "FROM tenant_role_audit "
+                    "WHERE tenant_id = 'tenant-n09a' AND target_credential_id = :cid "
+                    "ORDER BY timestamp DESC LIMIT 1"
+                ),
+                {"cid": cid},
+            ).fetchone()
+
+        assert row is not None, (
+            "audit record must exist after provisioning role assignment"
+        )
+        assert row[1] == "tenant_admin", f"audit role_name mismatch: {row[1]!r}"
