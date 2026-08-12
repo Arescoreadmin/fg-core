@@ -102,7 +102,8 @@ def _check_existing(conn, tenant_id: str, credential_id: str) -> bool:
     return row is not None
 
 
-def _verify_role_exists(conn, tenant_id: str, credential_id: str) -> bool:
+def _get_active_role(conn, tenant_id: str, credential_id: str) -> str:
+    """Return the active role_name, or '<no active role>' if none exists."""
     from sqlalchemy import text
 
     row = conn.execute(
@@ -112,7 +113,7 @@ def _verify_role_exists(conn, tenant_id: str, credential_id: str) -> bool:
         ),
         {"tid": tenant_id, "cid": credential_id},
     ).fetchone()
-    return row is not None
+    return str(row[0]) if row else "<no active role>"
 
 
 def run(credentials: list[dict], dry_run: bool) -> int:
@@ -128,10 +129,11 @@ def run(credentials: list[dict], dry_run: bool) -> int:
             cid = entry["credential_id"]
             original_granted_at = entry.get("original_granted_at", "unknown")
 
-            if not _verify_role_exists(conn, tid, cid):
+            actual = _get_active_role(conn, tid, cid)
+            if actual != "tenant_admin":
                 print(
-                    f"ERROR: no active role found for {tid}/{cid} — "
-                    "cannot attest a non-existent assignment",
+                    f"ERROR: {tid}/{cid[:8]}... — active role is {actual!r}, "
+                    "expected 'tenant_admin'. Refusing to attest a mismatched assignment.",
                     file=sys.stderr,
                 )
                 sys.exit(1)
