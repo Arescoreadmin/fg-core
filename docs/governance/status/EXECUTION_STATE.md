@@ -5,29 +5,33 @@ Update current status fields in place. Preserve historical entries under `Execut
 
 ## Current Status
 
-**Date:** 2026-08-10
+**Date:** 2026-08-12
 
-**Current Branch:** `fix/release-gate-env-drift`
+**Current Branch:** `ops/rbac-remediation-proof-2026-08-12`
 
-**Current Commit:** HEAD of `fix/release-gate-env-drift` (PR #628 release-gate environment propagation repair)
+**Current Commit:** `5dd7464e` — `fix: assign_role sets RLS tenant context directly (production credential lookup bug)`
 
-**Current PR:** PR #628 - `fix(ci): repair release gate environment propagation` targeting `main`. PR #627 merged to `main` on 2026-08-11 01:54 UTC.
+**Current PR:** No PR open. `ops/rbac-remediation-proof-2026-08-12` branch contains N09 regression test, remediation scripts, assign_role RLS fix, and all proof evidence. Target: merge to main after founder review.
 
-**Overall Status:** YELLOW - launch plan remains valid and H0 hardening is complete, but main is not fully green: `frostgate-release-images` failed the Release Gate on `db-postgres-verify` on the pre-fix main SHA. The release-gate repair is now landed on PR #628; status remains YELLOW until PR #628 is merged and `frostgate-release-images` reruns green on main.
+**Overall Status:** YELLOW - TENANT PROVISIONING: PRODUCTION PROVEN as of 2026-08-12. Remaining blockers: (1) merge ops branch to main; (2) L14 design partner scheduling; (3) pre-engagement pg_dump.
 
-**Launch Confidence (%):** 97
+**Launch Confidence (%):** 98
 
-**Current Critical Path:** H0-PR1 through H0-PR5 COMPLETE -> R4.11 merged -> restore main release-gate/CI green -> production 0178 proof (`SELECT to_regclass('public.api_keys') IS NULL`) -> L14 design-partner scheduling and commercial paper -> pre-engagement `pg_dump` -> customer one.
+**Current Critical Path:** TENANT PROVISIONING proven -> merge ops branch -> L14 design-partner scheduling -> pre-engagement `pg_dump` -> customer one.
 
-**Current Phase:** Post-RC1 customer-one readiness validation; production credential-authority closure and CI/release-gate stabilization.
+**Current Phase:** Post-RC1 customer-one readiness; provisioning/RBAC proof complete; L14 commercial track.
 
-**Launch Authorization:** LDR-2026-001 CONDITIONAL GO - all 4 launch constraints remain DONE. v1.0.0-rc1 remains the launch candidate baseline. Current work is post-RC1 hardening and release hygiene, not roadmap redesign.
+**Launch Authorization:** LDR-2026-001 CONDITIONAL GO - all 4 launch constraints remain DONE. v1.0.0-rc1 remains the launch candidate baseline.
 
-**Platform Freeze:** ACTIVE through first client engagement completion. No new product surface, no refactors, no trust-layer expansion unless repository evidence proves the frozen plan is wrong.
+**Platform Freeze:** ACTIVE through first client engagement completion.
 
-**Current DoD Progress:** 13/14 gates resolved. L1-L13 are PASS/accepted/conditional per Launch Decision Record and prior execution state. L14 remains founder/commercial track. H0 security hardening after RC1 is now complete through H0-PR5.
+**Current DoD Progress:** 13/14 gates resolved. L1-L13 are PASS/accepted/conditional per Launch Decision Record and prior execution state. L14 remains founder/commercial track.
 
-**Completed Since Last Update (2026-08-07 -> 2026-08-11):**
+**Completed Since Last Update (2026-08-10 -> 2026-08-12):**
+- **TENANT PROVISIONING: PRODUCTION PROVEN (2026-08-12):** G1-G9 all PASS on proof tenant `fg-provisioning-proof-20260812-001`. Credential issued, `tenant_admin` role assigned via admin gateway, credential authenticated and saw own role/audit, cross-tenant deny confirmed (403), cross-tenant role assign rejected (422), credential revoked, tenant suspended. Full customer-one path through production API is proven.
+- **assign_role RLS fix deployed (`5dd7464e`):** `tenant_rbac.py:assign_role()` now sets `app.tenant_id` via `set_config` before the credential ownership SELECT. Root cause: SQLAlchemy 2.0 Session autobegin for SELECT statements did not guarantee `set_config LOCAL` persisted when called via `set_tenant_context`. Fix mirrors the self-sufficient pattern in `credential_authority.py`. N09 regression test added (20/20 pass).
+- **Tenant kind remediation (13 rows):** `scripts/remediate_tenant_kinds.py` committed and run in production. `demo-bank`, `demo-healthcare` → `demo`; `lace-money-group`, `fg-gold-path-*`, `fg-t6-rehearsal-*`, `fg-t13-purge-test-*` → `validation`. Backfill dry-run post-remediation: 0 MANUAL_REVIEW.
+- **Historical audit attestation (3 records):** `scripts/attest_historical_role_assignments.py` committed and run. `action=historical_assignment_attested` records written to `tenant_role_audit` for `odin-financial-group` (b50ea02a) and `the-wick-network` (4921106c, c672771d). No RBAC state changed.
 - **H0-PR4 merged (#618):** Portal grant ownership validation - server-side engagement ownership enforced before grant issuance.
 - **H0-PR4 CI repair merged (#620):** Typed portal grant ownership payload fix.
 - **H0-PR5 merged (#621):** Cross-tenant regression suite for portal grant/list/revocation and engagement isolation.
@@ -78,6 +82,37 @@ Update current status fields in place. Preserve historical entries under `Execut
 **Execution Notes:** The frozen launch plan still says the highest ROI is verification/subtraction, not construction. Since H0-PR4 and H0-PR5 are complete and PR #627 merged, the remaining engineering work is release confidence and production evidence. The current red release gate is the only repository-proven reason to spend engineering time before customer-one operations. L14 remains the largest non-engineering critical path. 2026-08-10 follow-up reproduced the release-images failure in a clean worktree and verified the PR #628 repair with both standalone and aggregate gates passing.
 
 ## Execution History
+
+### 2026-08-12 — TENANT PROVISIONING: PRODUCTION PROVEN · assign_role RLS fix · Tenant kind remediation · Historical audit attestation
+
+**Review Type:** Ops execution — provisioning/RBAC closure
+
+**Summary:** Completed the production provisioning and RBAC proof sequence (G1-G9) on tenant `fg-provisioning-proof-20260812-001`. Discovered and fixed a production bug in `assign_role` (tenant_credentials RLS context not set under SQLAlchemy 2.0 Session autobegin), added N09 regression test, ran tenant kind remediation (13 rows), and wrote historical audit attestations (3 records). All gates pass.
+
+**Major Changes:**
+- `api/tenant_rbac.py`: `assign_role()` now calls `set_config('app.tenant_id', ..., true)` directly before the credential ownership SELECT. Root cause: the `tenant_credentials` RLS policy (`USING (tenant_id = current_setting('app.tenant_id', true))`) filtered all rows when `app.tenant_id` was not set. SQLAlchemy 2.0 ORM Session autobegin for SELECT statements does not guarantee `set_config LOCAL` is in scope when called via `set_tenant_context` before passing the session to `assign_role`. The fix makes `assign_role` self-sufficient — matching the pattern used throughout `credential_authority.py`.
+- `tests/test_backfill_credential_roles.py`: N09 complete provisioning invariant test added. 20/20 tests pass. Ruff clean.
+- `scripts/remediate_tenant_kinds.py`: created, committed, run in production — 13 rows updated.
+- `scripts/attest_historical_role_assignments.py`: created, committed, run in production — 3 attestation records written.
+- `docs/governance/status/PROVISIONING_PROOF_RUNBOOK.md`: 9-gate G1-G9 runbook created.
+
+**Production Evidence (2026-08-12):**
+- Tenant kind remediation: 13 rows committed; backfill dry-run shows 0 MANUAL_REVIEW.
+- Historical audit attestation: `action=historical_assignment_attested` for odin-financial-group (b50ea02a) and the-wick-network (4921106c, c672771d).
+- G1-G9 proof on `fg-provisioning-proof-20260812-001`:
+  - G1 CREATE TENANT: 201
+  - G2 ISSUE CREDENTIAL: 201 (b921c411)
+  - G3 ASSIGN ROLE: 201 (tenant_admin, event_id=21bdaf4f)
+  - G4 AUDIT LOG: 200 (assign_role event present)
+  - G5 RBAC ASSIGNMENTS: 200 (tenant_admin visible)
+  - G6 CROSS-TENANT DENY: 403
+  - G7 ADMIN LIST: 200
+  - G8 ISOLATION: 422 (cross-tenant role assign rejected)
+  - G9 DECOMMISSION: 200/200 (revoked + suspended)
+
+**Next:** Merge `ops/rbac-remediation-proof-2026-08-12` to main → L14 design-partner scheduling → pre-engagement `pg_dump` → customer one.
+
+---
 
 ### 2026-08-10 - Daily Execution Review - H0 COMPLETE - R4.11 MERGED - RELEASE GATE YELLOW
 
