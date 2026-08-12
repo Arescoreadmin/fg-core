@@ -7,13 +7,30 @@ Context:
   initial role at issuance time.  All credentials issued before this fix have a valid
   entry in tenant_credentials but zero rows in tenant_credential_roles.
 
-Classification logic:
-  - tenant_kind = 'customer' AND credential status = 'active'  → tenant_admin
-  - All other tenant_kind values (internal_platform, validation, demo)            → SKIP
-    Rationale: internal/test credentials do not need portal access; over-privileging
-    them with tenant_admin would violate least-privilege.  If a demo tenant genuinely
-    needs RBAC access, it should be assigned manually after review.
-  - Credentials with status != 'active' (rotated, revoked, expired)               → SKIP
+Classification — three outcomes:
+
+  ASSIGN   tenant_admin
+    tenant_kind = 'customer' AND credential status = 'active'
+    AND tenant_id in KNOWN_COMMERCIAL_TENANTS (explicit safelist — see below)
+
+  SKIP
+    credential status != 'active' (rotated, revoked, expired)
+    OR tenant_kind != 'customer' (internal_platform, validation, demo, …)
+
+  MANUAL_REVIEW
+    tenant_kind = 'customer' AND credential status = 'active'
+    BUT tenant_id NOT in KNOWN_COMMERCIAL_TENANTS
+    → excluded from live writes; operator must explicitly dispose of each row
+
+KNOWN_COMMERCIAL_TENANTS is the authoritative safelist of tenants confirmed as
+paying commercial clients.  It is NOT a name-pattern heuristic — every entry
+must be verified before addition.  Tenants whose commercial status is uncertain
+land in MANUAL_REVIEW until confirmed and added here.
+
+Exit codes:
+  0 — all candidates are ASSIGN or SKIP; no MANUAL_REVIEW rows
+  2 — one or more MANUAL_REVIEW rows exist (writes may still have succeeded for
+      ASSIGN rows); operator must resolve the flagged rows before re-running
 
 Usage:
   python scripts/backfill_credential_roles.py [--dry-run]
@@ -27,7 +44,7 @@ Environment:
   FG_DB_URL=postgresql://... python scripts/backfill_credential_roles.py
   FG_SQLITE_PATH=/path/to/fg.db python scripts/backfill_credential_roles.py --dry-run
 
-This script is idempotent: INSERT ... ON CONFLICT DO NOTHING means running it
+This script is idempotent: guard-SELECT before every INSERT means running it
 twice produces no duplicate active rows.
 """
 
@@ -44,6 +61,17 @@ from datetime import datetime, timezone
 
 GRANTED_BY = "operator:backfill-20260811"
 ROLE_FOR_CUSTOMER = "tenant_admin"
+MANUAL_REVIEW = "__MANUAL_REVIEW__"
+
+# Explicit safelist of confirmed paying commercial tenants.
+# NOT a name-pattern heuristic — every entry must be verified before addition.
+# Tenants whose commercial status is uncertain land in MANUAL_REVIEW.
+KNOWN_COMMERCIAL_TENANTS: frozenset[str] = frozenset(
+    {
+        "odin-financial-group",
+        "the-wick-network",
+    }
+)
 
 
 def _utc_now_iso() -> str:
@@ -60,7 +88,10 @@ def _get_engine():
     try:
         from sqlalchemy import create_engine
     except ImportError:
-        print("ERROR: sqlalchemy is not installed.  Run: pip install sqlalchemy", file=sys.stderr)
+        print(
+            "ERROR: sqlalchemy is not installed.  Run: pip install sqlalchemy",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     db_url = (os.getenv("FG_DB_URL") or "").strip()
@@ -74,6 +105,7 @@ def _get_engine():
     # Last resort: try the api.db path resolution (works when run inside the repo).
     try:
         from api.db import get_engine as _api_get_engine
+
         return _api_get_engine()
     except Exception:
         pass
@@ -99,9 +131,10 @@ def _fetch_all_credentials(conn) -> list[dict]:
     """
     from sqlalchemy import text
 
-    rows = conn.execute(
-        text(
-            """
+    rows = (
+        conn.execute(
+            text(
+                """
             SELECT
                 tc.credential_id,
                 tc.tenant_id,
@@ -118,8 +151,11 @@ def _fetch_all_credentials(conn) -> list[dict]:
                 AND tcr.revoked_at IS NULL
             ORDER BY tc.tenant_id, tc.issued_at
             """
+            )
         )
-    ).mappings().fetchall()
+        .mappings()
+        .fetchall()
+    )
     return [dict(r) for r in rows]
 
 
@@ -127,9 +163,10 @@ def _fetch_candidates(conn) -> list[dict]:
     """Return credentials with no active role — the backfill targets."""
     from sqlalchemy import text
 
-    rows = conn.execute(
-        text(
-            """
+    rows = (
+        conn.execute(
+            text(
+                """
             SELECT
                 tc.credential_id,
                 tc.tenant_id,
@@ -146,25 +183,48 @@ def _fetch_candidates(conn) -> list[dict]:
             WHERE tcr.id IS NULL
             ORDER BY tc.tenant_id, tc.issued_at
             """
+            )
         )
-    ).mappings().fetchall()
+        .mappings()
+        .fetchall()
+    )
     # Alias cred_status for backward compatibility with _classify().
     return [{**dict(r), "cred_status": r["credential_status"]} for r in rows]
 
 
 def _classify(row: dict) -> tuple[str | None, str]:
-    """Return (role_or_None, reason_string) for a candidate row."""
+    """Return (outcome, reason_string) for a candidate row.
+
+    Outcomes:
+      ROLE_FOR_CUSTOMER   → ASSIGN (tenant in KNOWN_COMMERCIAL_TENANTS)
+      MANUAL_REVIEW       → excluded from writes; operator must dispose
+      None                → SKIP
+    """
     cred_status = (row.get("cred_status") or row.get("credential_status") or "").strip()
     tenant_kind = (row.get("tenant_kind") or "").strip()
+    tenant_id = (row.get("tenant_id") or "").strip()
 
     if cred_status != "active":
         return None, f"credential_status={cred_status!r} is not active"
 
-    if tenant_kind == "customer":
-        return ROLE_FOR_CUSTOMER, f"tenant_kind={tenant_kind!r} → assign {ROLE_FOR_CUSTOMER}"
+    if tenant_kind != "customer":
+        # internal_platform, validation, demo, disposable — do not over-privilege.
+        return (
+            None,
+            f"tenant_kind={tenant_kind!r} is not customer (least-privilege skip)",
+        )
 
-    # internal_platform, validation, demo, disposable — do not over-privilege.
-    return None, f"tenant_kind={tenant_kind!r} is not customer (least-privilege skip)"
+    # tenant_kind == 'customer' AND active: require explicit safelist confirmation.
+    if tenant_id in KNOWN_COMMERCIAL_TENANTS:
+        return (
+            ROLE_FOR_CUSTOMER,
+            f"tenant_id={tenant_id!r} in KNOWN_COMMERCIAL_TENANTS → assign {ROLE_FOR_CUSTOMER}",
+        )
+
+    return MANUAL_REVIEW, (
+        f"tenant_kind={tenant_kind!r} + active but tenant_id={tenant_id!r} "
+        "not in KNOWN_COMMERCIAL_TENANTS — operator must confirm commercial status"
+    )
 
 
 def _print_candidate_table(all_rows: list[dict]) -> None:
@@ -176,10 +236,18 @@ def _print_candidate_table(all_rows: list[dict]) -> None:
     """
     col_w = {
         "tenant_id": max(9, max((len(r["tenant_id"]) for r in all_rows), default=9)),
-        "tenant_kind": max(11, max((len(r.get("tenant_kind") or "") for r in all_rows), default=11)),
-        "credential_id": max(13, max((len(r["credential_id"]) for r in all_rows), default=13)),
-        "credential_type": max(15, max((len(r.get("credential_type") or "") for r in all_rows), default=15)),
-        "credential_slot": max(15, max((len(r.get("credential_slot") or "") for r in all_rows), default=15)),
+        "tenant_kind": max(
+            11, max((len(r.get("tenant_kind") or "") for r in all_rows), default=11)
+        ),
+        "credential_id": max(
+            13, max((len(str(r["credential_id"])) for r in all_rows), default=13)
+        ),
+        "credential_type": max(
+            15, max((len(r.get("credential_type") or "") for r in all_rows), default=15)
+        ),
+        "credential_slot": max(
+            15, max((len(r.get("credential_slot") or "") for r in all_rows), default=15)
+        ),
         "credential_status": 18,
         "existing_active_role": 20,
         "proposed_role": 13,
@@ -203,7 +271,9 @@ def _print_candidate_table(all_rows: list[dict]) -> None:
 
     for row in all_rows:
         existing = row.get("existing_active_role") or "(none)"
-        cred_status = (row.get("credential_status") or row.get("cred_status") or "").strip()
+        cred_status = (
+            row.get("credential_status") or row.get("cred_status") or ""
+        ).strip()
         tenant_kind = (row.get("tenant_kind") or "").strip()
 
         if existing != "(none)":
@@ -211,24 +281,21 @@ def _print_candidate_table(all_rows: list[dict]) -> None:
             action = "KEEP"
             reason = "already has active role"
         else:
-            # Use _classify logic.
-            if cred_status != "active":
+            outcome, reason = _classify(row)
+            if outcome is None:
                 proposed = "(none)"
                 action = "SKIP"
-                reason = f"credential_status={cred_status!r} is not active"
-            elif tenant_kind == "customer":
-                proposed = ROLE_FOR_CUSTOMER
-                action = "ASSIGN"
-                reason = f"tenant_kind={tenant_kind!r} → assign {ROLE_FOR_CUSTOMER}"
+            elif outcome == MANUAL_REVIEW:
+                proposed = "(pending)"
+                action = "MANUAL_REVIEW"
             else:
-                proposed = "(none)"
-                action = "SKIP"
-                reason = f"tenant_kind={tenant_kind!r} is not customer (least-privilege skip)"
+                proposed = outcome
+                action = "ASSIGN"
 
         print(
             f"{row['tenant_id']:<{col_w['tenant_id']}}  "
             f"{tenant_kind:<{col_w['tenant_kind']}}  "
-            f"{row['credential_id']:<{col_w['credential_id']}}  "
+            f"{str(row['credential_id']):<{col_w['credential_id']}}  "
             f"{(row.get('credential_type') or ''):<{col_w['credential_type']}}  "
             f"{(row.get('credential_slot') or ''):<{col_w['credential_slot']}}  "
             f"{cred_status:<{col_w['credential_status']}}  "
@@ -268,37 +335,67 @@ def run(dry_run: bool) -> None:
         "total": len(candidates),
         "backfilled": 0,
         "skipped": 0,
+        "manual_review": 0,
         "already_had_role": len(all_rows) - len(candidates),
     }
     skip_reasons: dict[str, int] = {}
+    manual_review_rows: list[dict] = []
 
     rows_to_insert: list[dict] = []
     for row in candidates:
-        role, reason = _classify(row)
-        if role is None:
+        outcome, reason = _classify(row)
+        if outcome is None:
             stats["skipped"] += 1
             skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+        elif outcome == MANUAL_REVIEW:
+            stats["manual_review"] += 1
+            manual_review_rows.append({**row, "_reason": reason})
         else:
             rows_to_insert.append(
                 {
                     "tenant_id": row["tenant_id"],
                     "credential_id": row["credential_id"],
-                    "role_name": role,
+                    "role_name": outcome,
                 }
             )
             stats["backfilled"] += 1
 
-    print(f"[backfill] plan: {stats['backfilled']} to assign, {stats['skipped']} to skip, "
-          f"{stats['already_had_role']} already correct")
+    print(
+        f"[backfill] plan: {stats['backfilled']} to assign, {stats['skipped']} to skip, "
+        f"{stats['manual_review']} MANUAL_REVIEW, {stats['already_had_role']} already correct"
+    )
+
+    if manual_review_rows:
+        print()
+        print("=" * 60)
+        print("MANUAL REVIEW REQUIRED — the following rows are excluded from writes.")
+        print(
+            "Confirm commercial status and add tenant_id to KNOWN_COMMERCIAL_TENANTS,"
+        )
+        print("or explicitly decide to SKIP before re-running.")
+        print("=" * 60)
+        for mr in manual_review_rows:
+            print(
+                f"  tenant_id={mr['tenant_id']!r}  credential_id={mr['credential_id']}  "
+                f"reason: {mr['_reason']}"
+            )
+        print("=" * 60)
+        print()
 
     if dry_run:
         print("[backfill] DRY-RUN: no writes performed.")
         _print_summary(stats, skip_reasons)
+        if manual_review_rows:
+            sys.exit(2)
         return
 
     if not rows_to_insert:
-        print("[backfill] nothing to insert — all candidates classified as skip.")
+        print(
+            "[backfill] nothing to insert — all candidates classified as skip or manual_review."
+        )
         _print_summary(stats, skip_reasons)
+        if manual_review_rows:
+            sys.exit(2)
         return
 
     with engine.begin() as conn:
@@ -370,6 +467,8 @@ def run(dry_run: bool) -> None:
 
     print()
     _print_summary(stats, skip_reasons)
+    if manual_review_rows:
+        sys.exit(2)
 
 
 def _print_summary(stats: dict, skip_reasons: dict) -> None:
@@ -378,6 +477,8 @@ def _print_summary(stats: dict, skip_reasons: dict) -> None:
     print(f"  Total candidates (no active role): {stats['total']}")
     print(f"  Backfilled (inserted):             {stats['backfilled']}")
     print(f"  Skipped:                           {stats['skipped']}")
+    if stats.get("manual_review"):
+        print(f"  MANUAL_REVIEW (excluded):          {stats['manual_review']}")
     if stats.get("already_had_role"):
         print(f"  Already had role (race/rerun):     {stats['already_had_role']}")
     if skip_reasons:

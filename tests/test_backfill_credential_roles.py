@@ -2,7 +2,7 @@
 
 Coverage:
   B-series: Backfill script correctness
-    B01 — customer tenant with active credential and no role gets backfilled with tenant_admin
+    B01 — known commercial tenant with active credential and no role gets tenant_admin
     B02 — internal_platform tenant is skipped (not over-privileged)
     B03 — validation tenant is skipped
     B04 — demo tenant is skipped
@@ -12,6 +12,7 @@ Coverage:
     B08 — dry-run produces no writes
     B09 — second live run produces 0 insertions (idempotency)
     B10 — granted_by is set to operator:backfill-20260811
+    B11 — customer + active but NOT in KNOWN_COMMERCIAL_TENANTS → MANUAL_REVIEW (not written)
 
   N-series: New provisioning regression
     N01 — admin role-assign endpoint: assigns role to existing active credential
@@ -115,7 +116,9 @@ def _setup(engine: Engine) -> None:
                 conn.execute(text(stmt))
 
 
-def _insert_tenant(engine: Engine, tenant_id: str, tenant_kind: str = "customer") -> None:
+def _insert_tenant(
+    engine: Engine, tenant_id: str, tenant_kind: str = "customer"
+) -> None:
     with engine.begin() as conn:
         conn.execute(
             text(
@@ -199,7 +202,13 @@ def _run_backfill(engine: Engine, *, dry_run: bool = False) -> dict:
     bf._get_engine = lambda: engine  # type: ignore[assignment]
     try:
         # Capture stdout output by running the logic directly.
-        stats: dict = {"total": 0, "backfilled": 0, "skipped": 0, "already_had_role": 0}
+        stats: dict = {
+            "total": 0,
+            "backfilled": 0,
+            "skipped": 0,
+            "manual_review": 0,
+            "already_had_role": 0,
+        }
         skip_reasons: dict = {}
 
         from sqlalchemy import text as _text
@@ -212,16 +221,18 @@ def _run_backfill(engine: Engine, *, dry_run: bool = False) -> dict:
 
         rows_to_insert = []
         for row in candidates:
-            role, reason = bf._classify(row)
-            if role is None:
+            outcome, reason = bf._classify(row)
+            if outcome is None:
                 stats["skipped"] += 1
                 skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+            elif outcome == bf.MANUAL_REVIEW:
+                stats["manual_review"] += 1
             else:
                 rows_to_insert.append(
                     {
                         "tenant_id": row["tenant_id"],
                         "credential_id": row["credential_id"],
-                        "role_name": role,
+                        "role_name": outcome,
                     }
                 )
                 stats["backfilled"] += 1
@@ -266,14 +277,14 @@ def _run_backfill(engine: Engine, *, dry_run: bool = False) -> dict:
 
 
 class TestBackfillScript:
-    def test_B01_customer_active_credential_gets_tenant_admin(self, engine):
-        """B01: customer tenant with active credential and no role gets tenant_admin."""
-        _insert_tenant(engine, "cust-1", tenant_kind="customer")
-        cid = _insert_credential(engine, "cust-1", status="active")
+    def test_B01_known_commercial_tenant_gets_tenant_admin(self, engine):
+        """B01: known commercial tenant with active credential and no role gets tenant_admin."""
+        _insert_tenant(engine, "odin-financial-group", tenant_kind="customer")
+        cid = _insert_credential(engine, "odin-financial-group", status="active")
 
         stats = _run_backfill(engine, dry_run=False)
 
-        assert _get_role(engine, "cust-1", cid) == "tenant_admin"
+        assert _get_role(engine, "odin-financial-group", cid) == "tenant_admin"
         assert stats["backfilled"] >= 1
 
     def test_B02_internal_platform_tenant_is_skipped(self, engine):
@@ -291,7 +302,7 @@ class TestBackfillScript:
         _insert_tenant(engine, "val-1", tenant_kind="validation")
         cid = _insert_credential(engine, "val-1", status="active")
 
-        stats = _run_backfill(engine, dry_run=False)
+        _run_backfill(engine, dry_run=False)
 
         assert _get_role(engine, "val-1", cid) is None
 
@@ -300,7 +311,7 @@ class TestBackfillScript:
         _insert_tenant(engine, "demo-1", tenant_kind="demo")
         cid = _insert_credential(engine, "demo-1", status="active")
 
-        stats = _run_backfill(engine, dry_run=False)
+        _run_backfill(engine, dry_run=False)
 
         assert _get_role(engine, "demo-1", cid) is None
 
@@ -309,7 +320,7 @@ class TestBackfillScript:
         _insert_tenant(engine, "cust-rot", tenant_kind="customer")
         cid = _insert_credential(engine, "cust-rot", status="rotated")
 
-        stats = _run_backfill(engine, dry_run=False)
+        _run_backfill(engine, dry_run=False)
 
         assert _get_role(engine, "cust-rot", cid) is None
 
@@ -318,7 +329,7 @@ class TestBackfillScript:
         _insert_tenant(engine, "cust-rev", tenant_kind="customer")
         cid = _insert_credential(engine, "cust-rev", status="revoked")
 
-        stats = _run_backfill(engine, dry_run=False)
+        _run_backfill(engine, dry_run=False)
 
         assert _get_role(engine, "cust-rev", cid) is None
 
@@ -340,22 +351,26 @@ class TestBackfillScript:
 
         _run_backfill(engine, dry_run=False)
 
-        assert _count_active_roles(engine, cid) == 1, "duplicate active role rows detected"
+        assert _count_active_roles(engine, cid) == 1, (
+            "duplicate active role rows detected"
+        )
 
     def test_B08_dry_run_produces_no_writes(self, engine):
         """B08: dry-run does not write anything."""
-        _insert_tenant(engine, "cust-dry", tenant_kind="customer")
-        cid = _insert_credential(engine, "cust-dry", status="active")
+        _insert_tenant(engine, "odin-financial-group", tenant_kind="customer")
+        cid = _insert_credential(engine, "odin-financial-group", status="active")
 
         stats = _run_backfill(engine, dry_run=True)
 
-        assert _get_role(engine, "cust-dry", cid) is None, "dry-run wrote rows unexpectedly"
+        assert _get_role(engine, "odin-financial-group", cid) is None, (
+            "dry-run wrote rows unexpectedly"
+        )
         assert stats["backfilled"] >= 1, "dry-run should still plan to insert"
 
     def test_B09_second_run_is_idempotent(self, engine):
         """B09: running the backfill twice produces 0 new insertions on the second run."""
-        _insert_tenant(engine, "cust-idem", tenant_kind="customer")
-        _insert_credential(engine, "cust-idem", status="active")
+        _insert_tenant(engine, "odin-financial-group", tenant_kind="customer")
+        _insert_credential(engine, "odin-financial-group", status="active")
 
         stats_first = _run_backfill(engine, dry_run=False)
         stats_second = _run_backfill(engine, dry_run=False)
@@ -367,8 +382,8 @@ class TestBackfillScript:
         """B10: granted_by is set to the canonical operator:backfill constant."""
         import scripts.backfill_credential_roles as bf
 
-        _insert_tenant(engine, "cust-actor", tenant_kind="customer")
-        cid = _insert_credential(engine, "cust-actor", status="active")
+        _insert_tenant(engine, "odin-financial-group", tenant_kind="customer")
+        cid = _insert_credential(engine, "odin-financial-group", status="active")
 
         _run_backfill(engine, dry_run=False)
 
@@ -376,13 +391,26 @@ class TestBackfillScript:
             row = conn.execute(
                 text(
                     "SELECT granted_by FROM tenant_credential_roles "
-                    "WHERE tenant_id = 'cust-actor' AND credential_id = :cid AND revoked_at IS NULL"
+                    "WHERE tenant_id = 'odin-financial-group' AND credential_id = :cid AND revoked_at IS NULL"
                 ),
                 {"cid": cid},
             ).fetchone()
 
         assert row is not None
         assert row[0] == bf.GRANTED_BY
+
+    def test_B11_unknown_customer_tenant_lands_in_manual_review(self, engine):
+        """B11: customer + active but NOT in KNOWN_COMMERCIAL_TENANTS → MANUAL_REVIEW, not written."""
+        _insert_tenant(engine, "lace-money-group", tenant_kind="customer")
+        cid = _insert_credential(engine, "lace-money-group", status="active")
+
+        stats = _run_backfill(engine, dry_run=False)
+
+        assert _get_role(engine, "lace-money-group", cid) is None, (
+            "MANUAL_REVIEW rows must not be written"
+        )
+        assert stats["manual_review"] >= 1
+        assert stats["backfilled"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +463,9 @@ class TestAdminCredentialRoleEndpoint:
         assert result["credential_id"] == cid
         assert _get_role(db_engine, "tenant-prov", cid) == "tenant_admin"
 
-    def test_N02_assign_role_endpoint_unknown_role_raises_422(self, db_engine, monkeypatch):
+    def test_N02_assign_role_endpoint_unknown_role_raises_422(
+        self, db_engine, monkeypatch
+    ):
         """N02: assigning an unknown role returns 422."""
         import asyncio
         from fastapi import HTTPException
@@ -460,7 +490,9 @@ class TestAdminCredentialRoleEndpoint:
             )
         assert exc_info.value.status_code == 422
 
-    def test_N03_assign_role_endpoint_wrong_tenant_raises_422(self, db_engine, monkeypatch):
+    def test_N03_assign_role_endpoint_wrong_tenant_raises_422(
+        self, db_engine, monkeypatch
+    ):
         """N03: assigning a role to a credential from wrong tenant raises 422."""
         import asyncio
         from fastapi import HTTPException
@@ -554,6 +586,7 @@ class TestAdminCredentialRoleEndpoint:
 
         # cid_b has no role: require_role must deny.
         from api.tenant_rbac import require_role
+
         with Session(db_engine) as session:
             dep = require_role("read_only")
             scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
@@ -565,21 +598,16 @@ class TestAdminCredentialRoleEndpoint:
                 dep(request=req, conn=session)
             assert exc_info.value.status_code == 403
 
-    def test_N06_endpoint_requires_platform_admin_permission(self, db_engine, monkeypatch):
+    def test_N06_endpoint_requires_platform_admin_permission(
+        self, db_engine, monkeypatch
+    ):
         """N06: endpoint denies caller whose ActorContext lacks platform.admin permission.
 
         require_permission("platform.admin") is a FastAPI Depends that fires before
         the handler body. We test it directly: an actor with no permissions must
         trigger a 403 at the permission check, not reach the DB layer.
         """
-        import asyncio
-        from fastapi import HTTPException
-        from api.admin import AssignCredentialRoleRequest, assign_tenant_credential_role
         from api.actor_context import ActorContext
-
-        cid = _insert_credential(db_engine, "tenant-prov")
-        monkeypatch.setattr("api.admin.get_engine", lambda: db_engine)
-        monkeypatch.setattr("api.admin.bind_tenant_id", lambda *a, **kw: None)
 
         # Actor with empty permissions — does not hold platform.admin.
         unprivileged_actor = ActorContext(
@@ -592,21 +620,11 @@ class TestAdminCredentialRoleEndpoint:
             tenant_id=None,
         )
 
-        body = AssignCredentialRoleRequest(role="tenant_admin")
-
-        # Simulate what require_permission does: check permissions before calling handler.
-        from api.auth_dispatch import require_permission
-        perm_dep = require_permission("platform.admin")
-
-        # _dep is the inner callable returned by require_permission.
-        inner = perm_dep.__wrapped__ if hasattr(perm_dep, "__wrapped__") else perm_dep
-
-        # Build a minimal ActorContext and verify the permission gate fires.
         missing = frozenset(["platform.admin"]) - unprivileged_actor.permissions
-        assert "platform.admin" in missing, "test setup error: actor should lack platform.admin"
+        assert "platform.admin" in missing, (
+            "test setup error: actor should lack platform.admin"
+        )
 
-        # The handler should not be reached if permission is absent.
-        # Verify that an actor without platform.admin would have been blocked.
         assert not unprivileged_actor.permissions.issuperset({"platform.admin"}), (
             "actor must not hold platform.admin for this test to be meaningful"
         )
