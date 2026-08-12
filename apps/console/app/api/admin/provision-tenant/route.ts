@@ -568,12 +568,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         credential_id: keyData.credential_id,
         error: fetchErr instanceof Error ? fetchErr.message : 'unknown',
       });
-      // Revoke the dangling credential so Postgres does not accumulate unroled credentials.
-      await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      // On fresh issuance: revoke the dangling credential so we don't accumulate roleless credentials.
+      // On rotation: the predecessor is already revoked; revoking the replacement would leave
+      // the tenant with no usable credential at all. Leave it in place and let the operator retry.
+      if (!wasRotated) {
+        await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      }
       return NextResponse.json(
         {
           error: 'ROLE_ASSIGN_UNAVAILABLE',
-          detail: 'Backend unreachable during RBAC role assignment. Credential has been revoked.',
+          detail: wasRotated
+            ? 'Backend unreachable during RBAC role assignment. Credential left active — retry role assignment manually.'
+            : 'Backend unreachable during RBAC role assignment. Credential has been revoked.',
           request_id: requestId,
         },
         { status: 503, headers: { 'x-request-id': requestId } },
@@ -585,12 +591,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         request_id: requestId, tenant_id: tenantId, credential_id: keyData.credential_id,
         status: roleRes.status, detail: roleErr.detail ?? 'unknown',
       });
-      // Revoke the dangling credential — do not leave a credential with no role.
-      await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      // Same rotation guard: only revoke on fresh issuance failure.
+      if (!wasRotated) {
+        await revokeKey(keyData.credential_id as string, tenantId, requestId);
+      }
       return NextResponse.json(
         {
           error: 'ROLE_ASSIGN_FAILED',
-          detail: `RBAC role assignment failed (HTTP ${roleRes.status}). Credential has been revoked. ${roleErr.detail ?? ''}`.trim(),
+          detail: wasRotated
+            ? `RBAC role assignment failed (HTTP ${roleRes.status}). Credential left active — retry role assignment manually. ${roleErr.detail ?? ''}`.trim()
+            : `RBAC role assignment failed (HTTP ${roleRes.status}). Credential has been revoked. ${roleErr.detail ?? ''}`.trim(),
           request_id: requestId,
         },
         { status: 500, headers: { 'x-request-id': requestId } },

@@ -55,7 +55,7 @@ from api.credential_authority import (
 )
 from api.tenant_rbac import VALID_ROLE_NAMES, assign_role as rbac_assign_role
 from api.error_contracts import api_error
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from api.internal_platform_authority import (
     OPERATOR_CREDENTIAL_SLOT,
     OPERATOR_CREDENTIAL_TYPE,
@@ -1196,6 +1196,7 @@ async def assign_tenant_credential_role(
     engine = get_engine()
     try:
         with Session(engine) as session:
+            set_tenant_context(session, tenant_id)
             result = rbac_assign_role(
                 session,
                 tenant_id=tenant_id,
