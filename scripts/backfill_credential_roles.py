@@ -38,10 +38,17 @@ Usage:
   --dry-run   Print what would be written without actually writing anything.
 
 Environment:
-  Set FG_DB_URL (or FG_SQLITE_PATH for local dev) before running.
-  The script reads from the same database used by the API.
+  FG_DB_OPERATOR_URL (required for Postgres) — superuser or pg_read_all_data URL.
+    The cross-tenant SELECT in _fetch_all_credentials() is filtered by RLS when
+    using the restricted runtime role (FG_DB_URL).  Use DATABASE_PUBLIC_URL from
+    the Railway postgres service, or any superuser URL.
 
-  FG_DB_URL=postgresql://... python scripts/backfill_credential_roles.py
+  FG_SQLITE_PATH — SQLite path for local dev.  RLS does not apply to SQLite.
+
+  FG_DB_URL — restricted runtime role.  Will work if RLS is disabled or the user
+    has superuser rights, but will silently return zero rows under normal RLS.
+
+  FG_DB_OPERATOR_URL=postgresql://postgres:...@host/railway python scripts/backfill_credential_roles.py --dry-run
   FG_SQLITE_PATH=/path/to/fg.db python scripts/backfill_credential_roles.py --dry-run
 
 This script is idempotent: guard-SELECT before every INSERT means running it
@@ -84,7 +91,17 @@ def _utc_now_iso() -> str:
 
 
 def _get_engine():
-    """Build a SQLAlchemy engine from environment variables."""
+    """Build a SQLAlchemy engine from environment variables.
+
+    On PostgreSQL the cross-tenant SELECT in _fetch_all_credentials() requires a
+    connection that is not filtered by RLS.  The restricted runtime role (FG_DB_URL)
+    uses app.tenant_id-scoped policies and will return zero rows unless tenant
+    context is set — which is meaningless for a cross-tenant inspection query.
+
+    Preferred env var: FG_DB_OPERATOR_URL — a superuser or pg_read_all_data URL
+    that bypasses RLS.  Falls back to FG_DB_URL with a loud warning so the
+    operator knows they may be running against a restricted connection.
+    """
     try:
         from sqlalchemy import create_engine
     except ImportError:
@@ -94,13 +111,24 @@ def _get_engine():
         )
         sys.exit(1)
 
-    db_url = (os.getenv("FG_DB_URL") or "").strip()
-    if db_url:
-        return create_engine(db_url, future=True)
+    # Preferred: operator-level URL that bypasses RLS for cross-tenant reads.
+    operator_url = (os.getenv("FG_DB_OPERATOR_URL") or "").strip()
+    if operator_url:
+        return create_engine(operator_url, future=True)
 
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if sqlite_path:
         return create_engine(f"sqlite:///{sqlite_path}", future=True)
+
+    db_url = (os.getenv("FG_DB_URL") or "").strip()
+    if db_url:
+        print(
+            "WARNING: Using FG_DB_URL (restricted runtime role). On PostgreSQL this "
+            "connection is subject to RLS and _fetch_all_credentials() may return zero rows.\n"
+            "Set FG_DB_OPERATOR_URL to a superuser or pg_read_all_data URL for cross-tenant reads.",
+            file=sys.stderr,
+        )
+        return create_engine(db_url, future=True)
 
     # Last resort: try the api.db path resolution (works when run inside the repo).
     try:
@@ -112,7 +140,7 @@ def _get_engine():
 
     print(
         "ERROR: Could not determine database URL.\n"
-        "Set FG_DB_URL (Postgres) or FG_SQLITE_PATH (SQLite) before running.",
+        "Set FG_DB_OPERATOR_URL (Postgres superuser) or FG_SQLITE_PATH (SQLite) before running.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -398,50 +426,51 @@ def run(dry_run: bool) -> None:
             sys.exit(2)
         return
 
-    with engine.begin() as conn:
-        # Detect SQL dialect for the upsert statement.
-        dialect = engine.dialect.name  # 'postgresql' or 'sqlite'
+    # Use assign_role() from the API layer so that:
+    #   1. app.tenant_id GUC is set before each write (RLS compliance on Postgres).
+    #   2. An immutable tenant_role_audit record is written for every grant.
+    # Each row gets its own committed session so failures are per-row, not all-or-nothing.
+    try:
+        from sqlalchemy.orm import Session as OrmSession
+        from api.db import set_tenant_context as _set_ctx
+        from api.tenant_rbac import assign_role as _assign_role
 
-        for r in rows_to_insert:
-            if dialect == "postgresql":
-                # PostgreSQL: use ON CONFLICT DO NOTHING with the partial unique index.
-                # The partial index uidx_tcr_active_role covers (tenant_id, credential_id)
-                # WHERE revoked_at IS NULL, so a plain ON CONFLICT (tenant_id, credential_id)
-                # won't match it.  We use a DO NOTHING on the role_name + combination instead
-                # by doing a guard SELECT first (idempotency).
-                existing = conn.execute(
-                    text(
-                        "SELECT 1 FROM tenant_credential_roles "
-                        "WHERE tenant_id = :tid AND credential_id = :cid AND revoked_at IS NULL"
-                    ),
-                    {"tid": r["tenant_id"], "cid": r["credential_id"]},
-                ).fetchone()
-                if existing:
+        _use_api = True
+    except ImportError:
+        _use_api = False
+
+    for r in rows_to_insert:
+        tid = r["tenant_id"]
+        cid = r["credential_id"]
+        role = r["role_name"]
+        if _use_api:
+            with OrmSession(engine) as session:
+                _set_ctx(session, tid)
+                try:
+                    _assign_role(
+                        session,
+                        tenant_id=tid,
+                        actor_key_prefix=GRANTED_BY,
+                        credential_id=cid,
+                        role_name=role,
+                    )
+                    session.commit()
+                except ValueError as exc:
+                    # Credential no longer owned by tenant (race) — treat as already handled.
+                    print(f"  [skip-race] {tid} credential={cid} — {exc}")
                     stats["already_had_role"] += 1
                     stats["backfilled"] -= 1
                     continue
-                conn.execute(
-                    text(
-                        "INSERT INTO tenant_credential_roles "
-                        "(tenant_id, credential_id, role_name, granted_at, granted_by) "
-                        "VALUES (:tid, :cid, :role, :now, :actor)"
-                    ),
-                    {
-                        "tid": r["tenant_id"],
-                        "cid": r["credential_id"],
-                        "role": r["role_name"],
-                        "now": now,
-                        "actor": GRANTED_BY,
-                    },
-                )
-            else:
-                # SQLite: INSERT OR IGNORE (no partial-index ON CONFLICT support in older SQLite).
+        else:
+            # Fallback for environments where api.* is not importable (rare).
+            # Does not write tenant_role_audit — documented limitation.
+            with engine.begin() as conn:
                 existing = conn.execute(
                     text(
                         "SELECT 1 FROM tenant_credential_roles "
                         "WHERE tenant_id = :tid AND credential_id = :cid AND revoked_at IS NULL"
                     ),
-                    {"tid": r["tenant_id"], "cid": r["credential_id"]},
+                    {"tid": tid, "cid": cid},
                 ).fetchone()
                 if existing:
                     stats["already_had_role"] += 1
@@ -454,16 +483,14 @@ def run(dry_run: bool) -> None:
                         "VALUES (:tid, :cid, :role, :now, :actor)"
                     ),
                     {
-                        "tid": r["tenant_id"],
-                        "cid": r["credential_id"],
-                        "role": r["role_name"],
+                        "tid": tid,
+                        "cid": cid,
+                        "role": role,
                         "now": now,
                         "actor": GRANTED_BY,
                     },
                 )
-            print(
-                f"  [inserted] {r['tenant_id']} credential={r['credential_id']} role={r['role_name']}"
-            )
+        print(f"  [inserted] {tid} credential={cid} role={role}")
 
     print()
     _print_summary(stats, skip_reasons)
