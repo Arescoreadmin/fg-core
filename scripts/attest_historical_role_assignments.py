@@ -102,18 +102,38 @@ def _check_existing(conn, tenant_id: str, credential_id: str) -> bool:
     return row is not None
 
 
-def _get_active_role(conn, tenant_id: str, credential_id: str) -> str:
-    """Return the active role_name, or '<no active role>' if none exists."""
+def _get_active_role_and_granted_at(
+    conn, tenant_id: str, credential_id: str
+) -> tuple[str, str | None]:
+    """Return (role_name, granted_at ISO string) for the active grant, or ('<no active role>', None)."""
     from sqlalchemy import text
 
     row = conn.execute(
         text(
-            "SELECT role_name FROM tenant_credential_roles "
+            "SELECT role_name, granted_at FROM tenant_credential_roles "
             "WHERE tenant_id = :tid AND credential_id = :cid AND revoked_at IS NULL LIMIT 1"
         ),
         {"tid": tenant_id, "cid": credential_id},
     ).fetchone()
-    return str(row[0]) if row else "<no active role>"
+    if row is None:
+        return "<no active role>", None
+    granted_at = row[1]
+    if hasattr(granted_at, "isoformat"):
+        granted_at = granted_at.isoformat()
+    return str(row[0]), str(granted_at) if granted_at is not None else None
+
+
+def _timestamps_match(supplied: str, actual: str | None) -> bool:
+    """Return True if the two ISO-8601 timestamps represent the same second (±1s tolerance)."""
+    if actual is None:
+        return False
+    try:
+        def _parse(s: str) -> datetime:
+            s = s.replace("Z", "+00:00")
+            return datetime.fromisoformat(s).astimezone(timezone.utc)
+        return abs((_parse(supplied) - _parse(actual)).total_seconds()) <= 1.0
+    except ValueError:
+        return False
 
 
 def run(credentials: list[dict], dry_run: bool) -> int:
@@ -127,13 +147,28 @@ def run(credentials: list[dict], dry_run: bool) -> int:
         for entry in credentials:
             tid = entry["tenant_id"]
             cid = entry["credential_id"]
-            original_granted_at = entry.get("original_granted_at", "unknown")
+            original_granted_at = entry.get("original_granted_at")
+            if not original_granted_at:
+                print(
+                    f"ERROR: {tid}/{cid[:8]}... — original_granted_at is required.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
-            actual = _get_active_role(conn, tid, cid)
+            actual, actual_granted_at = _get_active_role_and_granted_at(conn, tid, cid)
             if actual != "tenant_admin":
                 print(
                     f"ERROR: {tid}/{cid[:8]}... — active role is {actual!r}, "
                     "expected 'tenant_admin'. Refusing to attest a mismatched assignment.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+            if not _timestamps_match(original_granted_at, actual_granted_at):
+                print(
+                    f"ERROR: {tid}/{cid[:8]}... — supplied original_granted_at "
+                    f"{original_granted_at!r} does not match DB granted_at "
+                    f"{actual_granted_at!r}. Refusing to attest.",
                     file=sys.stderr,
                 )
                 sys.exit(1)
@@ -159,7 +194,6 @@ def run(credentials: list[dict], dry_run: bool) -> int:
         for entry in credentials:
             tid = entry["tenant_id"]
             cid = entry["credential_id"]
-            original_granted_at = entry.get("original_granted_at", "unknown")
 
             if _check_existing(conn, tid, cid):
                 continue

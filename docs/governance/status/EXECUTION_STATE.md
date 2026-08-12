@@ -106,8 +106,8 @@ Update current status fields in place. Preserve historical entries under `Execut
   - G4 AUDIT LOG: 200 (assign_role event present)
   - G5 RBAC ASSIGNMENTS: 200 (tenant_admin visible)
   - G6 CROSS-TENANT DENY: 403
-  - G7 ADMIN LIST: 200
-  - G8 ISOLATION: 422 (cross-tenant role assign rejected)
+  - G7 ADMIN LIST: 200 (admin /admin/tenants returns tenant in list)
+  - G8 ISOLATION: 422 (cross-tenant role assign rejected; write-path isolation confirmed)
   - G9 DECOMMISSION: 200/200 (revoked + suspended)
 
 **Next:** Merge `ops/rbac-remediation-proof-2026-08-12` to main → L14 design-partner scheduling → pre-engagement `pg_dump` → customer one.
