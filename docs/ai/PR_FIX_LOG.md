@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-70 — chore(format): restore Ruff baseline for high-risk RBAC files — PR #634
+
+- **PR/Branch:** `agent/ruff-baseline-format` (#634)
+- **Date:** 2026-08-12
+- **Files changed:** `api/tenant_rbac.py`, `scripts/attest_historical_role_assignments.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Clean `main` failed the Ruff format check on `api/tenant_rbac.py` and `scripts/attest_historical_role_assignments.py`. The Console BFF auth repair did not modify those files; the failure was baseline formatting drift.
+- **Fix:** Applied Ruff formatting only to the two drifted files and recorded this entry because `api/tenant_rbac.py` is classified as high-risk by the PR_FIX_LOG guard.
+- **Behavioral impact:** None. Formatting only.
+- **Security impact:** None. No RBAC logic, auth behavior, role assignment, or data-access contract changed.
+- **Schema/API impact:** None.
+- **Tests added:** None.
+- **Validation:** `.venv/bin/ruff format --check api/tenant_rbac.py scripts/attest_historical_role_assignments.py` — PASS. `.venv/bin/python -m pytest -q tests/tools/test_mcim_docs.py::test_full_mcim_check_passes` — PASS. `pr-fix-log-guard` — PASS after PR-body override; `make fg-fast` initially failed because its local guard cannot read PR metadata, requiring this ledger entry.
+- **Result:** PASS locally.
+
+---
+
 ## P-69 — fix(rbac): address PR #631 review findings (RLS, audit, rotation guard) — PR #632
 
 - **PR/Branch:** `fix/rbac-pr631-followups` (#632)
