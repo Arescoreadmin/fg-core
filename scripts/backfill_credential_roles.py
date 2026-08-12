@@ -38,10 +38,10 @@ Usage:
   --dry-run   Print what would be written without actually writing anything.
 
 Environment:
-  FG_DB_OPERATOR_URL (required for Postgres) — superuser or pg_read_all_data URL.
-    The cross-tenant SELECT in _fetch_all_credentials() is filtered by RLS when
-    using the restricted runtime role (FG_DB_URL).  Use DATABASE_PUBLIC_URL from
-    the Railway postgres service, or any superuser URL.
+  FG_DB_OPERATOR_URL (required for Postgres) — URL for a role with SUPERUSER or
+    BYPASSRLS attribute.  pg_read_all_data does NOT carry BYPASSRLS and will still
+    be filtered by RLS — do not use it here.  Use DATABASE_PUBLIC_URL from the
+    Railway postgres service (connects as the postgres superuser).
 
   FG_SQLITE_PATH — SQLite path for local dev.  RLS does not apply to SQLite.
 
@@ -98,9 +98,11 @@ def _get_engine():
     uses app.tenant_id-scoped policies and will return zero rows unless tenant
     context is set — which is meaningless for a cross-tenant inspection query.
 
-    Preferred env var: FG_DB_OPERATOR_URL — a superuser or pg_read_all_data URL
-    that bypasses RLS.  Falls back to FG_DB_URL with a loud warning so the
-    operator knows they may be running against a restricted connection.
+    Preferred env var: FG_DB_OPERATOR_URL — a superuser or BYPASSRLS-attributed
+    role URL.  pg_read_all_data does NOT have BYPASSRLS, so RLS policies still
+    apply and the cross-tenant query returns zero rows.  Falls back to FG_DB_URL
+    with a loud warning so the operator knows they may be running against a
+    restricted connection.
     """
     try:
         from sqlalchemy import create_engine
@@ -125,7 +127,7 @@ def _get_engine():
         print(
             "WARNING: Using FG_DB_URL (restricted runtime role). On PostgreSQL this "
             "connection is subject to RLS and _fetch_all_credentials() may return zero rows.\n"
-            "Set FG_DB_OPERATOR_URL to a superuser or pg_read_all_data URL for cross-tenant reads.",
+            "Set FG_DB_OPERATOR_URL to a superuser or BYPASSRLS-attributed role URL.",
             file=sys.stderr,
         )
         return create_engine(db_url, future=True)
@@ -345,6 +347,31 @@ def run(dry_run: bool) -> None:
     print(f"[backfill] granted_by: {GRANTED_BY}")
     print()
 
+    # On PostgreSQL, verify the connected role is a superuser or has BYPASSRLS.
+    # pg_read_all_data does NOT carry BYPASSRLS, so RLS still applies and
+    # _fetch_all_credentials() returns zero rows without this check.
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT EXISTS ("
+                    "  SELECT 1 FROM pg_roles"
+                    "  WHERE rolname = current_user AND (rolsuper OR rolbypassrls)"
+                    ")"
+                )
+            ).scalar()
+        if not row:
+            print(
+                "ERROR: Connected PostgreSQL role does not have SUPERUSER or BYPASSRLS.\n"
+                "The cross-tenant query in _fetch_all_credentials() will be filtered by RLS\n"
+                "and return zero rows. Re-run with FG_DB_OPERATOR_URL pointing to a\n"
+                "superuser or BYPASSRLS-attributed role.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print("[backfill] RLS check: connected role has SUPERUSER or BYPASSRLS — OK")
+        print()
+
     with engine.begin() as conn:
         all_rows = _fetch_all_credentials(conn)
         candidates = [
@@ -464,6 +491,8 @@ def run(dry_run: bool) -> None:
         else:
             # Fallback for environments where api.* is not importable (rare).
             # Does not write tenant_role_audit — documented limitation.
+            # Guard SELECT + plain INSERT works on both dialects; INSERT OR IGNORE
+            # is SQLite-only and would fail on PostgreSQL.
             with engine.begin() as conn:
                 existing = conn.execute(
                     text(
@@ -478,7 +507,7 @@ def run(dry_run: bool) -> None:
                     continue
                 conn.execute(
                     text(
-                        "INSERT OR IGNORE INTO tenant_credential_roles "
+                        "INSERT INTO tenant_credential_roles "
                         "(tenant_id, credential_id, role_name, granted_at, granted_by) "
                         "VALUES (:tid, :cid, :role, :now, :actor)"
                     ),
