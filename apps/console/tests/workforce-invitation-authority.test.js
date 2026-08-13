@@ -1,30 +1,13 @@
 'use strict';
-// @version 1
+// @version 2
 
 /**
- * workforce-invitation-authority.test.js
+ * Tenant-admin Core authority regression tests.
  *
- * Regression tests for H0-PR1: BFF credential routing for workforce user mutations.
- *
- * POST and PATCH /workforce/users require admin:write + identity.scim at Core.
- * Tenant portal API keys lack these scopes. The BFF must use admin gateway
- * credentials for these routes, not the tenant portal key.
- *
- * Tests:
- *   WF-1  isWorkforceAdminMutation returns true for POST workforce/users
- *   WF-2  isWorkforceAdminMutation returns true for PATCH workforce/users/{id}
- *   WF-3  isWorkforceAdminMutation returns false for GET workforce/users (read stays tenant-key)
- *   WF-4  isWorkforceAdminMutation returns false for HEAD workforce/users
- *   WF-5  isWorkforceAdminMutation returns false for unrelated POST paths
- *   WF-6  isWorkforceAdminMutation returns false for POST portal/grants (separate admin path)
- *   WF-7  Workforce mutation branch sets X-Admin-Gateway-Internal: true
- *   WF-8  Workforce mutation branch sets X-FG-Internal-Token (admin gateway token)
- *   WF-9  Workforce mutation branch sets X-Tenant-ID to the authorized tenant
- *   WF-10 Workforce mutation branch does NOT use tenant portal API key
- *   WF-11 Workforce mutation branch is distinct from isCrossTenantAdminPath (tenant still resolved)
- *   WF-12 Missing ADMIN_GATEWAY_TOKEN returns 503 for workforce mutation
- *   WF-13 Source: route.ts contains isWorkforceAdminMutation function definition
- *   WF-14 Source: isWorkforceAdminMutation is referenced in proxyToCore
+ * Workforce users, Portal Grants, Engagement lookup, and Identity Governance
+ * must share one Console BFF -> Core authority path: admin gateway identity plus
+ * explicit, session-authorized X-Tenant-ID. No tab may construct its own auth
+ * headers or skip tenant resolution in the shared proxy.
  */
 
 const assert = require('node:assert/strict');
@@ -36,10 +19,11 @@ const ROUTE_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'app/api/core/[...path]/route.ts'),
   'utf8',
 );
+const IDENTITY_API_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'lib/identityApi.ts'),
+  'utf8',
+);
 
-// ─── Extract and evaluate isWorkforceAdminMutation from source ────────────────
-
-// Parse the function body from the TypeScript source (it has no TS-specific syntax)
 function extractFunction(src, name) {
   const start = src.indexOf(`function ${name}(`);
   if (start === -1) throw new Error(`function ${name} not found in source`);
@@ -56,166 +40,106 @@ function extractFunction(src, name) {
   throw new Error(`Unterminated function ${name}`);
 }
 
-// Inline JS-compatible version of isWorkforceAdminPath for runtime testing
-// (mirrors the TS source exactly — only strips TypeScript type annotations)
-// All methods on workforce/users use admin gateway: GET requires admin:read,
-// POST/PATCH require admin:write + identity.scim. Portal keys carry neither.
-function isWorkforceAdminPath(path) {
-  return path.length >= 2 && path[0] === 'workforce' && path[1] === 'users';
+function isTenantAdminCorePath(pathParts) {
+  const joined = pathParts.join('/');
+  return (
+    joined.startsWith('workforce/users') ||
+    joined === 'portal/grants' ||
+    joined.startsWith('portal/grants/') ||
+    joined.startsWith('admin/identity/tenants/') ||
+    joined === 'admin/identity/invitations' ||
+    joined.startsWith('admin/identity/invitations/')
+  );
 }
 
-// ─── Source-level guards ──────────────────────────────────────────────────────
+test('tenant-admin Core helper is the only special auth predicate', () => {
+  assert.match(ROUTE_SRC, /function isTenantAdminCorePath\(/);
+  assert.doesNotMatch(ROUTE_SRC, /function isCrossTenantAdminPath\(/);
+  assert.doesNotMatch(ROUTE_SRC, /function isWorkforceAdminPath\(/);
+});
 
-test('WF-13 source: isWorkforceAdminPath function is defined in route.ts', () => {
+test('tenant-admin helper covers every affected Console surface', () => {
+  assert.equal(isTenantAdminCorePath(['workforce', 'users']), true, 'Console Users list/invite');
+  assert.equal(isTenantAdminCorePath(['workforce', 'users', 'user-1']), true, 'Console User update');
+  assert.equal(isTenantAdminCorePath(['portal', 'grants']), true, 'Portal Grants list/create');
+  assert.equal(isTenantAdminCorePath(['portal', 'grants', 'grant-1']), true, 'Portal Grant revoke');
+  assert.equal(isTenantAdminCorePath(['admin', 'identity', 'tenants', 'odin-financial-group', 'engagements']), true, 'Portal engagement lookup');
+  assert.equal(isTenantAdminCorePath(['admin', 'identity', 'tenants', 'odin-financial-group', 'governance-actions']), true, 'Identity Governance tenant operation');
+  assert.equal(isTenantAdminCorePath(['admin', 'identity', 'invitations', 'inv-1', 'revoke']), true, 'Identity invitation operation');
+  assert.equal(isTenantAdminCorePath(['decisions']), false, 'unrelated tenant key path');
+});
+
+test('tenant-admin helper source includes all protected prefixes', () => {
+  const helper = extractFunction(ROUTE_SRC, 'isTenantAdminCorePath');
+  for (const expected of [
+    'workforce/users',
+    'portal/grants',
+    'admin/identity/tenants',
+    'admin/identity/invitations',
+  ]) {
+    assert.match(helper, new RegExp(expected.replaceAll('/', '\\/')));
+  }
+});
+
+test('workforce dashboard internal fallback is scoped to workforce user routes', () => {
+  const helper = extractFunction(ROUTE_SRC, 'isOperatorDefaultTenantAdminCorePath');
+  assert.match(helper, /workforce\/users/);
+  assert.doesNotMatch(helper, /portal\/grants/);
+  assert.doesNotMatch(helper, /admin\/identity/);
+
+  const resolverStart = ROUTE_SRC.indexOf('function resolveAuthorizedTenant(');
+  const resolverEnd = ROUTE_SRC.indexOf('const tenantId = raw.trim();', resolverStart);
+  const rawNullBranch = ROUTE_SRC.slice(resolverStart, resolverEnd);
+  assert.match(rawNullBranch, /isOperatorDefaultTenantAdminCorePath\(path\)/);
+  assert.match(rawNullBranch, /claims\.experienceClass === 'internal_console'/);
+  assert.match(rawNullBranch, /claims\.experienceClass === 'legacy_internal'/);
+  assert.match(rawNullBranch, /return resolveConfiguredOperatorTenant\(requestId\)/);
   assert.ok(
-    ROUTE_SRC.includes('function isWorkforceAdminPath('),
-    'isWorkforceAdminPath function definition not found in route.ts',
+    rawNullBranch.indexOf('return resolveConfiguredOperatorTenant(requestId)') <
+      rawNullBranch.indexOf("return jsonError('tenant_id is required for tenant-admin Core routes'"),
   );
 });
 
-test('WF-14 source: isWorkforceAdminPath is referenced inside proxyToCore', () => {
-  const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
-  assert.ok(proxStart !== -1, 'proxyToCore function not found');
-  const proxBody = ROUTE_SRC.slice(proxStart);
-  assert.ok(
-    proxBody.includes('isWorkforceAdminPath('),
-    'isWorkforceAdminPath is not referenced inside proxyToCore',
-  );
+test('tenant resolution runs before every tenant-admin proxy call', () => {
+  const handleStart = ROUTE_SRC.indexOf('async function handle');
+  const handleEnd = ROUTE_SRC.indexOf('\nexport async function', handleStart);
+  const handleBody = ROUTE_SRC.slice(handleStart, handleEnd);
+
+  assert.ok(handleBody.includes('resolveAuthorizedTenant(request, path, session, requestId)'));
+  assert.ok(handleBody.indexOf('resolveAuthorizedTenant(request, path, session, requestId)') < handleBody.indexOf('proxyToCore(request, path, requestId, tenantId)'));
+  assert.doesNotMatch(handleBody, /isAdminPath/);
+  assert.doesNotMatch(handleBody, /return proxyToCore\(request, path, requestId, ''\)/);
 });
 
-test('WF-14b source: workforce admin branch sets X-Admin-Gateway-Internal', () => {
-  const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
-  const proxBody = ROUTE_SRC.slice(proxStart);
-  const branchMarker = '} else if (isWorkforceAdmin)';
-  const branchIdx = proxBody.indexOf(branchMarker);
-  assert.ok(branchIdx !== -1, 'isWorkforceAdmin else-if branch not found in proxyToCore');
-  const branchBody = proxBody.slice(branchIdx, branchIdx + 600);
-  assert.ok(
-    branchBody.includes('X-Admin-Gateway-Internal'),
-    'workforce admin branch does not set X-Admin-Gateway-Internal',
-  );
-  assert.ok(
-    branchBody.includes('X-FG-Internal-Token'),
-    'workforce admin branch does not set X-FG-Internal-Token',
-  );
-  assert.ok(
-    branchBody.includes('X-Tenant-ID'),
-    'workforce admin branch does not set X-Tenant-ID',
-  );
+test('tenant-admin branch uses admin gateway authority with explicit tenant binding', () => {
+  const proxyStart = ROUTE_SRC.indexOf('async function proxyToCore');
+  const proxyEnd = ROUTE_SRC.indexOf('\nasync function getAlignmentArtifact', proxyStart);
+  const proxyBody = ROUTE_SRC.slice(proxyStart, proxyEnd);
+  const branchStart = proxyBody.indexOf('if (isTenantAdminPath)');
+  const elseStart = proxyBody.indexOf('} else {', branchStart);
+  const branch = proxyBody.slice(branchStart, elseStart);
+
+  assert.match(branch, /ADMIN_GATEWAY_TOKEN/);
+  assert.match(branch, /headers\.set\('X-API-Key', ADMIN_GATEWAY_TOKEN\)/);
+  assert.match(branch, /headers\.set\('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN\)/);
+  assert.match(branch, /headers\.set\('X-Admin-Gateway-Internal', 'true'\)/);
+  assert.match(branch, /headers\.set\('X-Tenant-ID', tenantId\)/);
+  assert.doesNotMatch(branch, /resolveCoreAuth\(/);
 });
 
-test('WF-14c source: workforce admin branch does not call resolveCoreAuth (no tenant portal key)', () => {
-  const proxStart = ROUTE_SRC.indexOf('async function proxyToCore(');
-  const proxBody = ROUTE_SRC.slice(proxStart);
-  assert.ok(
-    proxBody.includes('} else if (isWorkforceAdmin)'),
-    'workforce admin is not an else-if branch (structural requirement)',
-  );
-  const workforceBranchStart = proxBody.indexOf('} else if (isWorkforceAdmin)');
-  const resolveCoreAuthInBranch = proxBody.slice(workforceBranchStart, workforceBranchStart + 300).indexOf('resolveCoreAuth(');
-  assert.equal(
-    resolveCoreAuthInBranch,
-    -1,
-    'resolveCoreAuth is called inside the workforce admin branch — it must not be (no tenant portal key)',
-  );
+test('tenant-admin denials are normalized and diagnostically logged', () => {
+  assert.match(ROUTE_SRC, /normalized_error=CORE_AUTH_REJECTED/);
+  assert.match(ROUTE_SRC, /normalized_error=CORE_ACCESS_DENIED/);
+  assert.match(ROUTE_SRC, /authority=\$\{isTenantAdminPath \? 'admin_gateway' : 'tenant_credential'\}/);
+  assert.match(ROUTE_SRC, /surface=\$\{path\.join\('\/'\)\}/);
 });
 
-// ─── Predicate logic tests ────────────────────────────────────────────────────
-
-test('WF-1 POST workforce/users returns true', () => {
-  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
-});
-
-test('WF-2 PATCH workforce/users/{id} returns true', () => {
-  assert.equal(isWorkforceAdminPath(['workforce', 'users', 'some-user-id']), true);
-});
-
-test('WF-3 GET workforce/users returns true (admin:read required — portal key lacks it)', () => {
-  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
-});
-
-test('WF-4 HEAD workforce/users returns true (all methods use admin path)', () => {
-  assert.equal(isWorkforceAdminPath(['workforce', 'users']), true);
-});
-
-test('WF-5 POST decisions returns false (unrelated path)', () => {
-  assert.equal(isWorkforceAdminPath(['decisions']), false);
-});
-
-test('WF-6 POST portal/grants returns false (separate isCrossTenantAdminPath)', () => {
-  assert.equal(isWorkforceAdminPath(['portal', 'grants']), false);
-});
-
-test('WF-6b DELETE portal/grants returns false', () => {
-  assert.equal(isWorkforceAdminPath(['portal', 'grants']), false);
-});
-
-test('WF-6c POST workforce/risk-profiles returns false (different sub-path)', () => {
-  assert.equal(isWorkforceAdminPath(['workforce', 'risk-profiles']), false);
-});
-
-// ─── Credential header simulation ────────────────────────────────────────────
-
-const ADMIN_GATEWAY_TOKEN = 'fgi.test-admin-gateway-secret';
-const TENANT_ID = 'odin-financial-group';
-
-function simulateWorkforceAdminHeaders(tenantId, gatewayToken) {  // covers GET, POST, PATCH
-  const headers = new Map();
-  if (!gatewayToken) return { error: 'Admin gateway token is not configured', status: 503 };
-  headers.set('X-API-Key', gatewayToken);
-  headers.set('X-FG-Internal-Token', gatewayToken);
-  headers.set('X-Admin-Gateway-Internal', 'true');
-  if (tenantId) headers.set('X-Tenant-ID', tenantId);
-  return { headers, status: null };
-}
-
-function simulateTenantKeyHeaders(tenantApiKey, tenantId) {
-  const headers = new Map();
-  if (!tenantApiKey) return { error: 'CORE_AUTH_MISSING', status: 401 };
-  headers.set('X-API-Key', tenantApiKey);
-  headers.set('X-Tenant-ID', tenantId);
-  return { headers, status: null };
-}
-
-test('WF-7 workforce admin branch sets X-Admin-Gateway-Internal: true', () => {
-  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
-  assert.equal(headers.get('X-Admin-Gateway-Internal'), 'true');
-});
-
-test('WF-8 workforce admin branch sets X-FG-Internal-Token to admin gateway token', () => {
-  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
-  assert.equal(headers.get('X-FG-Internal-Token'), ADMIN_GATEWAY_TOKEN);
-  assert.equal(headers.get('X-API-Key'), ADMIN_GATEWAY_TOKEN);
-});
-
-test('WF-9 workforce admin branch sets X-Tenant-ID to authorized tenant', () => {
-  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
-  assert.equal(headers.get('X-Tenant-ID'), TENANT_ID);
-});
-
-test('WF-10 workforce admin branch does not use tenant portal API key', () => {
-  const TENANT_PORTAL_KEY = 'fgk.abc.portal-key-for-tenant';
-  const { headers } = simulateWorkforceAdminHeaders(TENANT_ID, ADMIN_GATEWAY_TOKEN);
-  const apiKey = headers.get('X-API-Key');
-  assert.notEqual(apiKey, TENANT_PORTAL_KEY);
-  assert.equal(apiKey, ADMIN_GATEWAY_TOKEN);
-});
-
-test('WF-11 isCrossTenantAdminPath does not include workforce/users (tenant still resolved)', () => {
-  // workforce/users must NOT be in isCrossTenantAdminPath — if it were,
-  // resolveAuthorizedTenant would be skipped and the tenant would not be validated.
-  const crossTenantStart = ROUTE_SRC.indexOf('function isCrossTenantAdminPath(');
-  assert.ok(crossTenantStart !== -1, 'isCrossTenantAdminPath function not found in source');
-  const crossTenantEnd = ROUTE_SRC.indexOf('\n}', crossTenantStart) + 2;
-  const crossTenantBody = ROUTE_SRC.slice(crossTenantStart, crossTenantEnd);
-  assert.ok(
-    !crossTenantBody.includes('workforce'),
-    'isCrossTenantAdminPath must not include workforce paths',
-  );
-});
-
-test('WF-12 missing ADMIN_GATEWAY_TOKEN returns 503 for workforce admin path', () => {
-  const result = simulateWorkforceAdminHeaders(TENANT_ID, null);
-  assert.equal(result.status, 503);
-  assert.ok(result.error.includes('not configured'));
+test('identity client appends tenant context, including invitation-id operations', () => {
+  assert.match(IDENTITY_API_SRC, /function withTenantContext\(/);
+  assert.match(IDENTITY_API_SRC, /function tenantPath\(/);
+  assert.match(IDENTITY_API_SRC, /params\.set\('tenant_id', tenantId\)/);
+  assert.match(IDENTITY_API_SRC, /revokeInvitation\(tenantId: string, invitationId: string\)/);
+  assert.match(IDENTITY_API_SRC, /resendInvitation\(tenantId: string, invitationId: string\)/);
+  assert.match(IDENTITY_API_SRC, /approveInvitation\(\n  tenantId: string,/);
+  assert.match(IDENTITY_API_SRC, /rejectApproval\(\n  tenantId: string,/);
 });

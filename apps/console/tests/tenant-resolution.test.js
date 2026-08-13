@@ -16,8 +16,8 @@
  *   4. missing_tenant_id_uses_operator_fallback
  *   5. malformed_tenant_id_returns_422
  *   6. empty_tenant_id_returns_422
- *   7. workforce_route_uses_tenant_scoped_resolution
- *   8. cross_tenant_admin_routes_continue_using_gateway_authority
+ *   7. tenant_admin_routes_use_tenant_scoped_resolution
+ *   8. tenant_admin_routes_use_gateway_authority_after_resolution
  *   9. tenant_resolution_runs_before_proxy_call
  *  10. rate_limit_key_uses_resolved_tenant_not_env_constant
  */
@@ -222,33 +222,34 @@ test('empty_tenant_id_returns_422', () => {
 
 // ─── Test 7: workforce_route_uses_tenant_scoped_resolution ───────────────────
 
-test('workforce_route_uses_tenant_scoped_resolution', () => {
+test('tenant_admin_routes_use_tenant_scoped_resolution', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
 
-  // workforce/users must NOT appear in isCrossTenantAdminPath
-  const adminFn = routeSrc.match(/function isCrossTenantAdminPath[\s\S]*?\n\}/)?.[0] ?? '';
-  assert.ok(adminFn, 'isCrossTenantAdminPath must exist');
-  assert.doesNotMatch(adminFn, /workforce/, 'workforce/users must not be in isCrossTenantAdminPath');
-
-  // workforce/users must remain in PROXY_RULES (still proxied, just not as admin)
-  assert.match(routeSrc, /prefix: 'workforce\/users'/, 'workforce/users must stay in PROXY_RULES');
-});
-
-// ─── Test 8: cross_tenant_admin_routes_continue_using_gateway_authority ──────
-
-test('cross_tenant_admin_routes_continue_using_gateway_authority', () => {
-  const routeSrc = read('app/api/core/[...path]/route.ts');
-
-  const adminFn = routeSrc.match(/function isCrossTenantAdminPath[\s\S]*?\n\}/)?.[0] ?? '';
-
-  // These routes must still use gateway authority
+  const adminFn = routeSrc.match(/function isTenantAdminCorePath[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.ok(adminFn, 'isTenantAdminCorePath must exist');
+  assert.match(adminFn, /workforce\/users/);
+  assert.match(adminFn, /portal\/grants/);
   assert.match(adminFn, /admin\/identity\/tenants/);
   assert.match(adminFn, /admin\/identity\/invitations/);
-  assert.match(adminFn, /portal\/grants/);
+  assert.doesNotMatch(routeSrc, /function isCrossTenantAdminPath\(/);
 
-  // The proxy branch for admin paths must set X-Admin-Gateway-Internal
-  assert.match(routeSrc, /X-Admin-Gateway-Internal/);
-  assert.match(routeSrc, /ADMIN_GATEWAY_TOKEN/);
+  for (const prefix of ['workforce/users', 'portal/grants', 'admin/identity/tenants', 'admin/identity/invitations']) {
+    assert.match(routeSrc, new RegExp(`prefix: '${prefix.replaceAll('/', '\\/')}'`));
+  }
+});
+
+// ─── Test 8: tenant_admin_routes_use_gateway_authority_after_resolution ──────
+
+test('tenant_admin_routes_use_gateway_authority_after_resolution', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  const proxyFn = routeSrc.match(/async function proxyToCore[\s\S]*?\nasync function getAlignmentArtifact/)?.[0] ?? '';
+  assert.ok(proxyFn, 'proxyToCore must exist');
+
+  assert.match(proxyFn, /if \(isTenantAdminPath\)/);
+  assert.match(proxyFn, /X-Admin-Gateway-Internal/);
+  assert.match(proxyFn, /X-FG-Internal-Token/);
+  assert.match(proxyFn, /X-Tenant-ID/);
+  assert.match(proxyFn, /ADMIN_GATEWAY_TOKEN/);
 });
 
 // ─── Test 9: tenant_resolution_runs_before_proxy_call ────────────────────────
@@ -305,21 +306,19 @@ test('production_core_tenant_id_default_is_rejected_before_core_fetch', () => {
   );
 });
 
-test('tenant_independent_admin_and_artifact_paths_skip_operator_tenant_validation', () => {
+test('only_alignment_artifact_skips_tenant_resolution', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
   const handleFn = routeSrc.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
   assert.ok(handleFn, 'handle() must exist');
 
   const alignmentPos = handleFn.indexOf('isAlignmentArtifact(path)');
-  const adminPos = handleFn.indexOf('if (isAdminPath)');
   const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
   assert.ok(alignmentPos > -1, 'alignment artifact branch must exist');
-  assert.ok(adminPos > -1, 'admin gateway branch must exist');
   assert.ok(resolvePos > -1, 'tenant-scoped resolution branch must exist');
-  assert.ok(alignmentPos < resolvePos, 'alignment artifact must be handled before operator tenant validation');
-  assert.ok(adminPos < resolvePos, 'admin gateway paths must be handled before operator tenant validation');
+  assert.ok(alignmentPos < resolvePos, 'alignment artifact must be handled before tenant validation');
+  assert.doesNotMatch(handleFn, /if \(isAdminPath\)/);
+  assert.doesNotMatch(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
   assert.match(handleFn, /return getAlignmentArtifact\(requestId\);/);
-  assert.match(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
   assert.match(routeSrc, /tenantIndependentRateLimitTenant/);
 });
 

@@ -170,10 +170,12 @@ test('alignment artifact bypasses operator tenant validation', () => {
   assert.ok(handleFn.indexOf('return getAlignmentArtifact(requestId);') < handleFn.indexOf('resolveAuthorizedTenant'));
 });
 
-test('admin gateway paths bypass operator tenant validation but not access policy', () => {
+test('tenant-admin gateway paths require tenant validation after access policy', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
   const handleFn = proxy.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
-  assert.ok(handleFn.indexOf('canAccessCoreApiPath') < handleFn.indexOf('if (isAdminPath)'));
-  assert.ok(handleFn.indexOf('if (isAdminPath)') < handleFn.indexOf('resolveAuthorizedTenant'));
-  assert.match(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
+  assert.ok(handleFn.indexOf('canAccessCoreApiPath') < handleFn.indexOf('resolveAuthorizedTenant'));
+  assert.ok(handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)'));
+  assert.doesNotMatch(handleFn, /if \(isAdminPath\)/);
+  assert.doesNotMatch(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
+  assert.match(proxy, /function isTenantAdminCorePath\(/);
 });

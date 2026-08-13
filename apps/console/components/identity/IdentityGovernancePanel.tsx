@@ -551,13 +551,13 @@ function InvitationsPanel({ tenantId }: { tenantId: string }) {
   useEffect(() => { load(); }, [load]);
 
   const handleRevoke = async (id: string) => {
-    const r = await revokeInvitation(id);
+    const r = await revokeInvitation(tenantId, id);
     if (r.ok) { setActionMsg('Invitation revoked.'); load(); }
     else setActionMsg(`Error: ${r.error}`);
   };
 
   const handleResend = async (id: string) => {
-    const r = await resendInvitation(id);
+    const r = await resendInvitation(tenantId, id);
     if (r.ok) { setActionMsg('Invitation resent.'); load(); }
     else setActionMsg(`Error: ${r.error}`);
   };
@@ -998,13 +998,13 @@ function ApprovalQueuePanel({ tenantId }: { tenantId: string }) {
   useEffect(() => { load(); }, [load]);
 
   const handleApprove = async (id: string) => {
-    const r = await approveInvitation(id, {});
+    const r = await approveInvitation(tenantId, id, {});
     if (r.ok) { setActionMsg('Approved.'); load(); } else setActionMsg(`Error: ${r.error}`);
   };
 
   const handleReject = async (id: string) => {
     const reason = window.prompt('Rejection reason (optional):') ?? undefined;
-    const r = await rejectApproval(id, { reason });
+    const r = await rejectApproval(tenantId, id, { reason });
     if (r.ok) { setActionMsg('Rejected.'); load(); } else setActionMsg(`Error: ${r.error}`);
   };
 

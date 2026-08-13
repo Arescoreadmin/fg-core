@@ -94,6 +94,18 @@ test('tenant_admin can only mutate tenant-scoped resources', () => {
   assert.equal(fieldAssessments?.tenantScoped, true);
   assert.equal(canAccessCoreApiPath('field-assessment/engagements', 'POST', principal), true);
 
+  for (const tenantAdminPath of [
+    'workforce/users',
+    'portal/grants',
+    'admin/identity/tenants/acme/config',
+    'admin/identity/invitations/inv-1/revoke',
+  ]) {
+    const policy = getCoreApiPolicy(tenantAdminPath);
+    assert.equal(policy?.tenantScoped, true, `${tenantAdminPath} must be tenant scoped`);
+    assert.equal(canAccessCoreApiPath(tenantAdminPath, 'GET', principal), true);
+    assert.equal(canAccessCoreApiPath(tenantAdminPath, 'POST', principal), true);
+  }
+
   const adminConnectors = getCoreApiPolicy('admin/connectors');
   assert.equal(adminConnectors?.tenantScoped, false);
   assert.equal(canAccessCoreApiPath('admin/connectors', 'POST', principal), false);
