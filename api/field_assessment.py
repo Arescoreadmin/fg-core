@@ -8538,7 +8538,7 @@ def create_engagement_report_route(
     now = report_json.get("generated_at", "")
 
     # acquire_next_version holds a per-(tenant, engagement) mutex across the
-    # SELECT and the flush, so two concurrent requests in the same process can
+    # SELECT and commit, so two concurrent requests in the same process can
     # never read the same max and claim the same version slot.
     with acquire_next_version(
         db, tenant_id=tenant_id, engagement_id=engagement_id
@@ -8601,30 +8601,30 @@ def create_engagement_report_route(
             input_evidence_ids=scan_result_ids,
         )
 
-    # Emit audit BEFORE commit so report row and audit event commit atomically.
-    # (Previously: commit happened first; audit was in a new transaction that was
-    # never committed and silently discarded on session close — H13 fix.)
-    audit_atomicity_svc.emit(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        event_type="engagement_report_created",
-        actor=actor,
-        actor_type="human_operator",
-        reason_code="ENGAGEMENT_REPORT_CREATED",
-        entity_type="report",
-        entity_id=record.id,
-        payload={
-            "report_id": record.id,
-            "version": version,
-            "report_type": body.report_type,
-            "manifest_hash": manifest_hash,
-            "report_link_count": report_link_count,
-        },
-    )
-    # Capture record.id before commit to avoid post-commit expiry (D-T6-006).
-    _record_id = record.id
-    db.commit()
+        # Emit audit BEFORE commit so report row and audit event commit atomically.
+        # (Previously: commit happened first; audit was in a new transaction that was
+        # never committed and silently discarded on session close — H13 fix.)
+        audit_atomicity_svc.emit(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="engagement_report_created",
+            actor=actor,
+            actor_type="human_operator",
+            reason_code="ENGAGEMENT_REPORT_CREATED",
+            entity_type="report",
+            entity_id=record.id,
+            payload={
+                "report_id": record.id,
+                "version": version,
+                "report_type": body.report_type,
+                "manifest_hash": manifest_hash,
+                "report_link_count": report_link_count,
+            },
+        )
+        # Capture record.id before commit to avoid post-commit expiry (D-T6-006).
+        _record_id = record.id
+        db.commit()
 
     return {
         "report_id": _record_id,
