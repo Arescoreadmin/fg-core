@@ -228,7 +228,8 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
  * tenant, or a NextResponse error when authorization fails.
  *
  * Authorization rules:
- *   - No ?tenant_id param → operator default (CORE_TENANT_ID)
+ *   - No ?tenant_id param -> operator default (CORE_TENANT_ID) for non-tenant-admin paths
+ *   - Workforce dashboard user routes retain operator default for internal sessions
  *   - internal_console / legacy_internal → may act on any tenant
  *   - console_enabled_client → may only act on their own session tenant
  *   - All others → 403
@@ -252,6 +253,10 @@ function isTenantAdminCorePath(path: string[]): boolean {
   );
 }
 
+function isOperatorDefaultTenantAdminCorePath(path: string[]): boolean {
+  return path.join('/').startsWith('workforce/users');
+}
+
 function resolveAuthorizedTenant(
   request: NextRequest,
   path: string[],
@@ -268,6 +273,13 @@ function resolveAuthorizedTenant(
   }
 
   if (raw === null && isTenantAdminCorePath(path)) {
+    const claims = getSessionClaims(session);
+    if (
+      isOperatorDefaultTenantAdminCorePath(path) &&
+      (claims.experienceClass === 'internal_console' || claims.experienceClass === 'legacy_internal')
+    ) {
+      return resolveConfiguredOperatorTenant(requestId);
+    }
     return jsonError('tenant_id is required for tenant-admin Core routes', 422, requestId);
   }
 

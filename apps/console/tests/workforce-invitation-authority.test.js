@@ -81,6 +81,25 @@ test('tenant-admin helper source includes all protected prefixes', () => {
   }
 });
 
+test('workforce dashboard internal fallback is scoped to workforce user routes', () => {
+  const helper = extractFunction(ROUTE_SRC, 'isOperatorDefaultTenantAdminCorePath');
+  assert.match(helper, /workforce\/users/);
+  assert.doesNotMatch(helper, /portal\/grants/);
+  assert.doesNotMatch(helper, /admin\/identity/);
+
+  const resolverStart = ROUTE_SRC.indexOf('function resolveAuthorizedTenant(');
+  const resolverEnd = ROUTE_SRC.indexOf('const tenantId = raw.trim();', resolverStart);
+  const rawNullBranch = ROUTE_SRC.slice(resolverStart, resolverEnd);
+  assert.match(rawNullBranch, /isOperatorDefaultTenantAdminCorePath\(path\)/);
+  assert.match(rawNullBranch, /claims\.experienceClass === 'internal_console'/);
+  assert.match(rawNullBranch, /claims\.experienceClass === 'legacy_internal'/);
+  assert.match(rawNullBranch, /return resolveConfiguredOperatorTenant\(requestId\)/);
+  assert.ok(
+    rawNullBranch.indexOf('return resolveConfiguredOperatorTenant(requestId)') <
+      rawNullBranch.indexOf("return jsonError('tenant_id is required for tenant-admin Core routes'"),
+  );
+});
+
 test('tenant resolution runs before every tenant-admin proxy call', () => {
   const handleStart = ROUTE_SRC.indexOf('async function handle');
   const handleEnd = ROUTE_SRC.indexOf('\nexport async function', handleStart);
