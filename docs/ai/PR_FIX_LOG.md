@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-71 — fix(reports): hold report version allocation lock through commit — PR TBD
+
+- **PR/Branch:** `fix/report-version-concurrency` (TBD)
+- **Date:** 2026-08-12
+- **Files changed:** `api/field_assessment.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** `create_engagement_report_route()` used `acquire_next_version()` to serialize version allocation, but released the per-(tenant, engagement) lock immediately after `db.flush()`. The first request row was still uncommitted when a second concurrent request acquired the lock, so the second transaction could read the old max version and also assign version `1`.
+- **Fix:** Kept the existing per-(tenant, engagement) allocation lock held through the audit emit and `db.commit()`, making the allocated version durable before another in-process allocator can read `max(version)`. No schema, auth, or API contract changes.
+- **Behavioral impact:** Concurrent report generation for the same tenant+engagement now returns distinct report versions instead of duplicate version numbers.
+- **Security impact:** None. Tenant resolution, report permissions, signing, and audit semantics are unchanged.
+- **Schema/API impact:** None.
+- **Tests added:** None; existing concurrency regression now passes.
+- **Validation:** concurrency regression 50/50 PASS; `tests/test_field_assessment_reports.py` 28/28 PASS.
+- **Result:** PASS locally.
+
+---
+
 ## P-70 — chore(format): restore Ruff baseline for high-risk RBAC files — PR #634
 
 - **PR/Branch:** `agent/ruff-baseline-format` (#634)
