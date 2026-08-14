@@ -1,3 +1,17 @@
+## 2026-08-14 - SOC-P1-003 - fix/identity-setup-workflow: Tenant identity administration lifecycle closure
+
+**Reviewer:** Codex | **Classification:** SOC-P1-003 (identity policy and tenant administration workflow change; no new route; no schema change)
+
+**Scope:** Closes the production workflow gap where a newly provisioned customer tenant had provider binding and tenant-admin authority but lacked the canonical identity policy root. Console Users reached Core correctly and then failed with 422 `IDENTITY_CONFIGURATION_REQUIRED`. This PR keeps provisioning explicit: tenant active plus identity setup required is a valid state, and the operator must configure policy through Identity Governance before invitations are enabled.
+
+**Security posture:** The canonical invitation-readiness predicate is `require_identity_configured()` over `tenant_identity_configs`; it requires a row and `provisioning_status == ready`. Both `/workforce/users` and `/admin/identity/tenants/{tenant_id}/invitations` use it. No config, non-ready config, wrong tenant, stale/no gateway auth, and tenant API credentials fail closed. The Console only changes presentation and routing to the existing config API; it does not accept browser-supplied authority or create guessed policy defaults. Audit events cover setup-required invite blocks, config create/update/ready, and invitation creation.
+
+**Critical-path files changed:** `api/workforce.py`; `api/admin_identity.py`; `apps/console/app/admin/tenants/[tenantId]/page.tsx`; `apps/console/components/identity/IdentityGovernancePanel.tsx`; `apps/console/lib/errors.ts`; `apps/console/lib/identityApi.ts`; `tests/test_tenant_identity_administration_golden_path.py`; targeted identity tests; architecture/operator docs.
+
+**SOC review outcome:** approved locally pending full gate completion and live production proof. No fallback, observe-mode, shadow tenant authority, RLS bypass, role inference, or production data mutation was added.
+
+---
+
 ## 2026-08-11 — SOC-P1-002 — fix/rbac-role-backfill-and-provisioning: Credential role bootstrap endpoint + provisioning fix
 
 **Reviewer:** jcosat | **Classification:** SOC-P1-002 (route inventory change: new `POST /admin/tenants/{tenant_id}/credentials/{credential_id}/role` endpoint; tools/ci generated artifacts updated)

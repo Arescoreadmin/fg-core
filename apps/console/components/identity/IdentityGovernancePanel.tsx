@@ -619,20 +619,64 @@ function ConfigPanel({ tenantId }: { tenantId: string }) {
   const [data, setData] = useState<IdentityConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [identityMode, setIdentityMode] = useState('managed');
+  const [provider, setProvider] = useState('auth0');
+  const [allowedDomains, setAllowedDomains] = useState('');
+  const [ssoEnforced, setSsoEnforced] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     getIdentityConfig(tenantId).then(r => {
-      if (r.ok) setData(r.data); else setError(r.error);
+      if (r.ok) {
+        setData(r.data);
+        if (r.data.configured) {
+          setIdentityMode(r.data.identity_mode ?? 'managed');
+          setProvider(r.data.provider ?? 'auth0');
+          setAllowedDomains((r.data.allowed_email_domains ?? []).join(', '));
+          setSsoEnforced(Boolean(r.data.sso_enforced));
+        }
+      } else setError(r.error);
       setLoading(false);
     });
   }, [tenantId]);
 
+  useEffect(() => { load(); }, [load]);
+
+  const setupRequired = !data?.configured || data.provisioning_status !== 'ready';
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    const domains = allowedDomains
+      .split(',')
+      .map(d => d.trim().toLowerCase())
+      .filter(Boolean);
+    const r = await upsertIdentityConfig(tenantId, {
+      identity_mode: identityMode,
+      provider,
+      allowed_email_domains: domains,
+      sso_enforced: ssoEnforced,
+      provisioning_status: 'ready',
+      maturity_level: data?.maturity_level ?? 'level_1',
+      capability_flags: data?.capability_flags ?? { managed_identities: identityMode === 'managed' },
+    });
+    setSaving(false);
+    if (r.ok) {
+      setData(r.data);
+      setMessage('Identity policy is ready.');
+      load();
+    } else setError(r.error);
+  };
+
   if (loading) return <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>Loading…</span>;
   if (error) return <div style={s.errorBanner}>{error}</div>;
-  if (!data || !data.configured) return <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>No identity configuration has been provisioned for this tenant.</p>;
+  if (!data) return null;
 
-  const fields: Array<[string, string | boolean | null | undefined]> = [
+  const fields: Array<[string, string | boolean | null | undefined]> = data.configured ? [
     ['Identity mode', data.identity_mode ?? null],
     ['Provider', data.provider ?? null],
     ['Provisioning status', data.provisioning_status ?? null],
@@ -643,64 +687,111 @@ function ConfigPanel({ tenantId }: { tenantId: string }) {
     ['Auth0 connection ID', data.auth0_connection_id ?? null],
     ['Configured at', fmt(data.configured_at)],
     ['Updated at', fmt(data.updated_at)],
-  ];
+  ] : [];
 
   return (
     <div>
-      <div style={s.kvGrid}>
-        {fields.map(([label, value]) => (
-          <div key={label} style={s.kvCard}>
-            <div style={s.kvLabel}>{label}</div>
-            <div style={s.kvValue}>{value ?? '—'}</div>
+      {setupRequired && (
+        <div style={{ ...s.driftItem, borderLeftColor: '#ca8a04', borderLeftWidth: 3 }} data-testid="identity-config-setup">
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>Identity setup required</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+              Configure this tenant's identity policy before creating console user invitations.
+            </div>
           </div>
-        ))}
-      </div>
-      {data.allowed_email_domains && data.allowed_email_domains.length > 0 && (
-        <div style={{ marginTop: '1rem' }}>
-          <div style={s.sectionTitle}>Allowed domains</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-            {data.allowed_email_domains.map(d => (
-              <span key={d} style={{ padding: '2px 10px', border: '1px solid var(--border)', borderRadius: '9999px', fontSize: '0.78rem' }}>{d}</span>
+          <span style={statusBadgeStyle(data.provisioning_status ?? 'not_configured')}>{data.provisioning_status ?? 'not_configured'}</span>
+        </div>
+      )}
+
+      {message && <div style={{ ...s.errorBanner, backgroundColor: 'rgba(34,197,94,0.08)', color: '#16a34a' }}>{message}</div>}
+
+      {setupRequired && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <label style={s.field}>Identity mode
+            <select style={s.input} value={identityMode} onChange={e => setIdentityMode(e.target.value)}>
+              <option value="managed">Managed</option>
+              <option value="sso">SSO</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </label>
+          <label style={s.field}>Provider
+            <select style={s.input} value={provider} onChange={e => setProvider(e.target.value)}>
+              <option value="auth0">Auth0</option>
+            </select>
+          </label>
+          <label style={s.field}>Allowed email domains
+            <input style={s.input} value={allowedDomains} onChange={e => setAllowedDomains(e.target.value)} placeholder="client.com, subsidiary.com" />
+          </label>
+          <label style={{ ...s.field, justifyContent: 'flex-end' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 36 }}>
+              <input type="checkbox" checked={ssoEnforced} onChange={e => setSsoEnforced(e.target.checked)} />
+              SSO enforced
+            </span>
+          </label>
+          <div style={{ ...s.btnRow, alignSelf: 'end' }}>
+            <button style={s.btn} onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Mark identity ready'}</button>
+          </div>
+        </div>
+      )}
+
+      {data.configured && (
+        <>
+          <div style={s.kvGrid}>
+            {fields.map(([label, value]) => (
+              <div key={label} style={s.kvCard}>
+                <div style={s.kvLabel}>{label}</div>
+                <div style={s.kvValue}>{value ?? '—'}</div>
+              </div>
             ))}
           </div>
-        </div>
-      )}
-      {data.providers && data.providers.length > 0 && (
-        <div style={{ marginTop: '1rem' }}>
-          <div style={s.sectionTitle}>Providers ({data.providers.length})</div>
-          <table style={s.table}>
-            <thead><tr>{['Provider', 'Issuer', 'Connection', 'Status', 'Primary'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {data.providers.map(p => (
-                <tr key={p.id}>
-                  <td style={s.td}>{p.provider}</td>
-                  <td style={s.td}>{p.oidc_issuer ?? '—'}</td>
-                  <td style={s.td}>{p.connection_id ?? '—'}</td>
-                  <td style={s.td}><span style={statusBadgeStyle(p.status)}>{p.status}</span></td>
-                  <td style={s.td}>{p.is_primary ? '✓' : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {data.domains && data.domains.length > 0 && (
-        <div style={{ marginTop: '1rem' }}>
-          <div style={s.sectionTitle}>Domains ({data.domains.length})</div>
-          <table style={s.table}>
-            <thead><tr>{['Domain', 'Type', 'Verification', 'Verified at'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {data.domains.map(d => (
-                <tr key={d.id}>
-                  <td style={s.td}>{d.domain}</td>
-                  <td style={s.td}>{d.domain_type}</td>
-                  <td style={s.td}><span style={statusBadgeStyle(d.verification_status)}>{d.verification_status}</span></td>
-                  <td style={s.td}>{fmtShort(d.verified_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {data.allowed_email_domains && data.allowed_email_domains.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={s.sectionTitle}>Allowed domains</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {data.allowed_email_domains.map(d => (
+                  <span key={d} style={{ padding: '2px 10px', border: '1px solid var(--border)', borderRadius: '9999px', fontSize: '0.78rem' }}>{d}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.providers && data.providers.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={s.sectionTitle}>Providers ({data.providers.length})</div>
+              <table style={s.table}>
+                <thead><tr>{['Provider', 'Issuer', 'Connection', 'Status', 'Primary'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {data.providers.map(p => (
+                    <tr key={p.id}>
+                      <td style={s.td}>{p.provider}</td>
+                      <td style={s.td}>{p.oidc_issuer ?? '—'}</td>
+                      <td style={s.td}>{p.connection_id ?? '—'}</td>
+                      <td style={s.td}><span style={statusBadgeStyle(p.status)}>{p.status}</span></td>
+                      <td style={s.td}>{p.is_primary ? '✓' : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {data.domains && data.domains.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={s.sectionTitle}>Domains ({data.domains.length})</div>
+              <table style={s.table}>
+                <thead><tr>{['Domain', 'Type', 'Verification', 'Verified at'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {data.domains.map(d => (
+                    <tr key={d.id}>
+                      <td style={s.td}>{d.domain}</td>
+                      <td style={s.td}>{d.domain_type}</td>
+                      <td style={s.td}><span style={statusBadgeStyle(d.verification_status)}>{d.verification_status}</span></td>
+                      <td style={s.td}>{fmtShort(d.verified_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

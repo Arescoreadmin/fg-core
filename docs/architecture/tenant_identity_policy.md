@@ -19,6 +19,21 @@ Admin Gateway remains the only human authentication boundary. Core stores tenant
 
 The table contains no client secrets, private keys, refresh tokens, invite tokens, or authorization headers. A missing or non-ready policy fails closed in `require_identity_configured()`.
 
+
+## Tenant Identity Administration Lifecycle
+
+A successfully provisioned customer tenant is not automatically invitation-ready. Tenant provisioning establishes the tenant, provider binding, console credential, and tenant admin role; identity administration becomes active only after an explicit policy is stored in `tenant_identity_configs` and its `provisioning_status` is `ready`.
+
+Canonical lifecycle:
+
+```text
+PROVISIONED -> IDENTITY_SETUP_REQUIRED -> IDENTITY_READY -> INVITATIONS_ALLOWED
+```
+
+`tenant_identity_bindings` and provider organization records prove provider linkage. They are not a substitute for tenant identity policy. Console Users and admin identity invitation creation both call the shared `require_identity_configured()` predicate, so no-config, `not_configured`, `pending`, `failed`, and `disabled` states deny invitation creation with a structured setup-required/not-ready error.
+
+The Console must surface `IDENTITY_SETUP_REQUIRED` as an operator action, not as an access-control failure: configure identity policy through Identity Governance, persist it through the canonical admin identity config route, then enable invitations only after the status is `ready`. Existing tenants without ready policy are rendered in their actual state and are not silently promoted.
+
 ## Provider And Domain Governance
 
 `tenant_identity_providers` normalizes provider/issuer/organization/connection records under the tenant governance root. This avoids assuming one tenant has one provider or one provider has one connection. The PR does not implement federation; it only prevents future federation from requiring a replacement schema.

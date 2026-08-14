@@ -27,6 +27,10 @@ from api.db_models_identity import TenantIdentityConfig
 from api.deps import tenant_db_required
 from api.error_contracts import api_error
 from api.identity.store import TenantIdentityStore, emit_identity_audit_event
+from api.identity.tenant_identity_policy import (
+    IdentityPolicyError,
+    require_identity_configured,
+)
 from services.identity_resolver import membership_version_svc
 
 _log = logging.getLogger(__name__)
@@ -178,28 +182,43 @@ def invite_user(
             ),
         )
 
-    # Fail closed: identity config must exist before invitations can be issued
+    try:
+        policy = require_identity_configured(db, tenant_id)
+    except IdentityPolicyError as exc:
+        code = (
+            "IDENTITY_CONFIGURATION_REQUIRED"
+            if exc.code == "TENANT_IDENTITY_NOT_CONFIGURED"
+            else "IDENTITY_CONFIGURATION_NOT_READY"
+        )
+        message = (
+            "Identity configuration is required before invitations can be created."
+            if code == "IDENTITY_CONFIGURATION_REQUIRED"
+            else "Identity configuration must be ready before invitations can be created."
+        )
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.identity_config.invitation_blocked",
+            affected_email=payload.email.lower(),
+            reason_code=code,
+            details={
+                "invitation_status": "pending",
+                "provisioning_status": exc.code,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(code, message),
+        ) from exc
+
     config = (
         db.query(TenantIdentityConfig)
         .filter(TenantIdentityConfig.tenant_id == tenant_id)
         .first()
     )
     if config is None:
-        emit_identity_audit_event(
-            db,
-            tenant_id=tenant_id,
-            event_type="tenant.identity_config.invitation_blocked",
-            affected_email=payload.email.lower(),
-            details={"invitation_status": "pending"},
-        )
-        db.commit()
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                "IDENTITY_CONFIGURATION_REQUIRED",
-                "Identity configuration is required before invitations can be created.",
-            ),
-        )
+        raise RuntimeError("identity config disappeared after readiness check")
 
     user_id = str(uuid.uuid4())
     now = _now()
@@ -231,7 +250,7 @@ def invite_user(
         required_provider=None,
         created_by_user_id=None,
         expires_at=expires_at,
-        identity_mode_at_invite=config.identity_mode,
+        identity_mode_at_invite=policy.identity_mode,
         identity_policy_config_id=config.id,
     )
     inv.identity_type = "human"

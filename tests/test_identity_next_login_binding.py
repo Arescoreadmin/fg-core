@@ -34,7 +34,11 @@ def _setup_config(c: TestClient, headers: dict, tenant: str) -> None:
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
         headers=headers,
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
     )
 
 
@@ -120,7 +124,11 @@ def test_non_human_invite_via_admin_identity_requires_governance(build_app) -> N
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
         headers=headers,
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
     )
 
     r = c.post(
@@ -147,7 +155,11 @@ def test_admin_identity_rejects_invalid_identity_type(build_app) -> None:
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
         headers=headers,
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
     )
 
     r = c.post(

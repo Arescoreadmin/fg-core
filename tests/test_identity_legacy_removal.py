@@ -84,11 +84,58 @@ def test_invite_user_requires_identity_config(client) -> None:
     assert code == "IDENTITY_CONFIGURATION_REQUIRED"
 
 
-def _setup_config(c: TestClient, headers: dict, tenant: str) -> None:
+def test_invite_user_requires_ready_identity_config(build_app) -> None:
+    """A config row alone is insufficient; invitations require ready policy."""
+    tenant = "pr5-config-not-ready"
+    app = build_app(auth_enabled=True, api_key="")
+    key = mint_key("admin:read", "admin:write", tenant_id=tenant, ttl_seconds=3600)
+    headers = {"x-api-key": key}
+    c = TestClient(app)
+    _setup_config(c, headers, tenant, status="not_configured")
+    r = c.post(
+        "/workforce/users",
+        headers=headers,
+        json={"email": "blocked@example.com", "display_name": "Blocked User"},
+    )
+    assert r.status_code == 422
+    body = r.json()
+    detail = body.get("detail", {})
+    code = detail.get("code") if isinstance(detail, dict) else None
+    assert code == "IDENTITY_CONFIGURATION_NOT_READY"
+
+
+def test_cross_tenant_identity_config_does_not_satisfy_invite(build_app) -> None:
+    tenant_a = "pr5-ready-tenant-a"
+    tenant_b = "pr5-unconfigured-tenant-b"
+    app = build_app(auth_enabled=True, api_key="")
+    key_a = mint_key("admin:read", "admin:write", tenant_id=tenant_a, ttl_seconds=3600)
+    c = TestClient(app)
+    _setup_config(c, {"x-api-key": key_a}, tenant_a)
+
+    key_b = mint_key("admin:read", "admin:write", tenant_id=tenant_b, ttl_seconds=3600)
+    r = c.post(
+        "/workforce/users",
+        headers={"x-api-key": key_b},
+        json={"email": "blocked@example.com", "display_name": "Blocked User"},
+    )
+    assert r.status_code == 422
+    body = r.json()
+    detail = body.get("detail", {})
+    code = detail.get("code") if isinstance(detail, dict) else None
+    assert code == "IDENTITY_CONFIGURATION_REQUIRED"
+
+
+def _setup_config(
+    c: TestClient, headers: dict, tenant: str, *, status: str = "ready"
+) -> None:
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
         headers=headers,
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": status,
+        },
     )
 
 

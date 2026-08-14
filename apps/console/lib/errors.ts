@@ -19,8 +19,19 @@ function textFromPayload(payload: unknown): string {
   if (!payload) return '';
   if (typeof payload === 'string') return payload;
   if (typeof payload === 'object') {
-    const msg = (payload as { detail?: unknown }).detail;
-    if (typeof msg === 'string') return msg;
+    const obj = payload as { detail?: unknown; error?: unknown; message?: unknown };
+    const detail = obj.detail;
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object') {
+      const structured = detail as { code?: unknown; message?: unknown };
+      if (typeof structured.message === 'string' && typeof structured.code === 'string') {
+        return `${structured.code}: ${structured.message}`;
+      }
+      if (typeof structured.message === 'string') return structured.message;
+      if (typeof structured.code === 'string') return structured.code;
+    }
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.error === 'string') return obj.error;
     return JSON.stringify(payload);
   }
   return '';
@@ -34,8 +45,14 @@ export function mapHttpError(status: number, payload?: unknown, options: { mask4
     error.code = code;
     error.status = status;
     error.details = payload;
-    if (payload && typeof payload === 'object' && typeof (payload as { request_id?: unknown }).request_id === 'string') {
-      error.requestId = (payload as { request_id: string }).request_id;
+    if (payload && typeof payload === 'object') {
+      const obj = payload as { request_id?: unknown; detail?: unknown };
+      if (typeof obj.request_id === 'string') {
+        error.requestId = obj.request_id;
+      } else if (obj.detail && typeof obj.detail === 'object') {
+        const detail = obj.detail as { request_id?: unknown };
+        if (typeof detail.request_id === 'string') error.requestId = detail.request_id;
+      }
     }
     return error;
   };

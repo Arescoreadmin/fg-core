@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-74 - fix(identity): close tenant identity setup workflow - PR TBD
+
+- **PR/Branch:** `fix/identity-setup-workflow` (TBD)
+- **Date:** 2026-08-14
+- **Files changed:** `api/workforce.py`, `api/admin_identity.py`, `apps/console/app/admin/tenants/[tenantId]/page.tsx`, `apps/console/components/identity/IdentityGovernancePanel.tsx`, `apps/console/lib/errors.ts`, `apps/console/lib/identityApi.ts`, `tests/test_identity_legacy_removal.py`, `tests/test_admin_identity_routes.py`, `tests/test_tenant_identity_administration_golden_path.py`, `apps/console/tests/identity-setup-workflow.test.js`, identity architecture/SOC/operator docs.
+- **Root cause:** Production tenant provisioning creates tenant authority and Auth0/provider bindings but does not create the canonical identity policy root in `tenant_identity_configs`. Console Users still displayed an enabled invite action, while Core correctly returned 422 `IDENTITY_CONFIGURATION_REQUIRED`. Runtime invitation logic also accepted any config row, even `not_configured`, conflicting with the policy contract.
+- **Fix:** Made invitation readiness explicit and canonical: both `/workforce/users` and `/admin/identity/tenants/{tenant_id}/invitations` use `require_identity_configured()` and require `tenant_identity_configs.provisioning_status == ready`. Identity Governance now uses the existing config upsert API to create/update policy and mark setup ready. Console Users shows setup-required/continue-setup instead of an enabled invite path until ready. Structured Core errors are normalized into safe text instead of `[object Object]`.
+- **Behavioral impact:** New tenants enter `TENANT_ACTIVE + IDENTITY_SETUP_REQUIRED` after provisioning. Operators configure identity policy through Console, then invitations become available and persist through the canonical `tenant_invitations` path. Existing no-config and non-ready tenants are not auto-promoted.
+- **Security impact:** Fail-closed posture preserved. No production data mutation, backfill, guessed policy defaults, API-key fallback, role fallback, wildcard tenant authority, BFF tenant-resolution weakening, RLS bypass, or browser-controlled Core authority was introduced.
+- **Schema/API impact:** No schema change. Existing config upsert accepts explicit `provisioning_status`; invalid values are rejected.
+- **Tests added:** Backend Customer N+1 golden path covering absent config, fail-closed invite, canonical setup, ready readback, invite persistence, audit, cross-tenant denial, stale/no-auth denial, and tenant-key denial. Console source tests cover setup-required rendering, configure action, canonical upsert, provisioning status payload, structured error normalization, and no guessed provisioning config. Existing admin identity tests updated so invitation fixtures explicitly create ready policies.
+- **Validation:** Targeted backend identity suite PASS (`126 passed`). Console identity workflow source test PASS (`6 passed`). Broader Console/Core/security/contract/release gates remain pending.
+- **Result:** CODE/CI pending until full required gates pass; production proof pending.
+
+---
+
 ## P-73 — fix(authz): align Console tenant-admin entitlement gate — PR TBD
 
 - **PR/Branch:** `fix/console-users-tenant-admin-authorization` (TBD)

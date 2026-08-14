@@ -55,6 +55,32 @@ def test_upsert_config_creates_new(build_app) -> None:
     assert body["tenant_id"] == tenant
 
 
+def test_upsert_config_can_mark_policy_ready(build_app) -> None:
+    tenant = "tenant-upsert-ready-01"
+    app = build_app(auth_enabled=True, api_key="")
+    key = mint_key("admin:read", "admin:write", tenant_id=tenant, ttl_seconds=3600)
+    headers = {"x-api-key": key}
+    c = TestClient(app)
+    r = c.put(
+        f"/admin/identity/tenants/{tenant}/config",
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+            "maturity_level": "level_1",
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["provisioning_status"] == "ready"
+    assert body["configured_by_user_id"] is not None
+
+    readiness = c.get(f"/admin/identity/tenants/{tenant}/readiness", headers=headers)
+    assert readiness.status_code == 200
+    assert readiness.json()["ready"] is True
+
+
 def test_upsert_config_updates_existing(build_app) -> None:
     tenant = "tenant-upsert-update-02"
     app = build_app(auth_enabled=True, api_key="")
@@ -201,7 +227,8 @@ def test_create_invitation_requires_config(build_app) -> None:
         json={"email": "user@example.com", "role": "user"},
         headers={"x-api-key": key},
     )
-    assert r.status_code == 404
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "IDENTITY_CONFIGURATION_REQUIRED"
 
 
 def test_create_and_list_invitation(build_app) -> None:
@@ -212,7 +239,11 @@ def test_create_and_list_invitation(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.post(
@@ -242,7 +273,11 @@ def test_invitation_identity_type_persisted(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     for itype in ("service", "agent", "workload"):
@@ -270,7 +305,11 @@ def test_create_invitation_invalid_identity_type_422(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.post(
@@ -289,7 +328,11 @@ def test_revoke_invitation(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     inv_r = c.post(
@@ -323,7 +366,11 @@ def test_resend_invitation_from_pending(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     inv_r = c.post(
@@ -348,7 +395,11 @@ def test_resend_refreshes_expires_at(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     inv_r = c.post(
@@ -400,7 +451,11 @@ def test_governance_score_with_config(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.get(f"/admin/identity/tenants/{tenant}/governance-score", headers=headers)
@@ -432,7 +487,11 @@ def test_drift_clean_config(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.get(f"/admin/identity/tenants/{tenant}/drift", headers=headers)
@@ -463,7 +522,11 @@ def test_audit_summary_after_config_create(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.get(f"/admin/identity/tenants/{tenant}/audit-summary", headers=headers)
@@ -519,7 +582,11 @@ def test_readiness_history_after_config(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers=headers,
     )
     r = c.get(f"/admin/identity/tenants/{tenant}/readiness-history", headers=headers)
@@ -549,7 +616,12 @@ def test_risk_with_config(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0", "sso_enforced": False},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+            "sso_enforced": False,
+        },
         headers=headers,
     )
     r = c.get(f"/admin/identity/tenants/{tenant}/risk", headers=headers)
@@ -583,7 +655,11 @@ def test_tenant_a_cannot_read_tenant_b_config(build_app) -> None:
     # Set up tenant-B with config
     c.put(
         "/admin/identity/tenants/iso-tenant-b/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key_b},
     )
 
@@ -640,7 +716,11 @@ def test_tenant_a_cannot_revoke_tenant_b_invitation(build_app) -> None:
     # Create invitation owned by tenant-B
     c.put(
         "/admin/identity/tenants/iso-rev-b/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key_b},
     )
     inv_r = c.post(
@@ -667,7 +747,11 @@ def test_tenant_a_cannot_resend_tenant_b_invitation(build_app) -> None:
 
     c.put(
         "/admin/identity/tenants/iso-res-b/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key_b},
     )
     inv_r = c.post(
@@ -709,6 +793,7 @@ def _setup_tenant(c, tenant, key):
         json={
             "identity_mode": "managed",
             "provider": "auth0",
+            "provisioning_status": "ready",
             "capability_flags": {"require_approval_non_human": True},
         },
         headers={"x-api-key": key},
@@ -1052,7 +1137,11 @@ def test_governance_snapshot_creates_row(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1076,7 +1165,11 @@ def test_governance_snapshot_immutability(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1106,7 +1199,11 @@ def test_governance_snapshot_score_preserved(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1134,7 +1231,11 @@ def test_governance_snapshots_empty_before_any_capture(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1155,7 +1256,11 @@ def test_recommendations_returns_valid_shape(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1179,7 +1284,11 @@ def test_recommendations_score_gain_matches_weight(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1202,7 +1311,11 @@ def test_recommendations_only_for_failing_dimensions(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1227,7 +1340,11 @@ def test_recommendations_projected_percent_is_plausible(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
 
@@ -1249,7 +1366,11 @@ def test_policy_violations_no_violations_on_clean_tenant(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1275,7 +1396,11 @@ def test_policy_violations_detects_non_human_admin(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1303,6 +1428,7 @@ def test_policy_violations_detects_unauthorized_domain(build_app) -> None:
         json={
             "identity_mode": "managed",
             "provider": "auth0",
+            "provisioning_status": "ready",
             "allowed_email_domains": ["corp.com"],
         },
         headers={"x-api-key": key},
@@ -1385,7 +1511,11 @@ def test_governance_trend_no_snapshots(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1402,7 +1532,11 @@ def test_governance_trend_with_two_snapshots(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1449,7 +1583,11 @@ def test_governance_forecast_no_snapshots(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1467,7 +1605,11 @@ def test_governance_forecast_with_snapshots(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1513,7 +1655,11 @@ def test_governance_sla_clean_tenant(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1567,6 +1713,7 @@ def test_governance_sla_policy_violation_surfaced(build_app) -> None:
         json={
             "identity_mode": "managed",
             "provider": "auth0",
+            "provisioning_status": "ready",
             "allowed_email_domains": ["corp.com"],
         },
         headers={"x-api-key": key},
@@ -1603,7 +1750,11 @@ def test_governance_benchmark_no_snapshots(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1620,7 +1771,11 @@ def test_governance_benchmark_with_snapshot(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1648,7 +1803,11 @@ def test_governance_benchmark_no_other_tenant_data_exposed(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1694,6 +1853,7 @@ def test_governance_findings_clean_tenant(build_app) -> None:
         json={
             "identity_mode": "managed",
             "provider": "auth0",
+            "provisioning_status": "ready",
             "sso_enforced": True,
             "maturity_level": "level_1",
         },
@@ -1717,7 +1877,11 @@ def test_governance_findings_violation_aggregated(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(
@@ -1742,7 +1906,11 @@ def test_governance_findings_drift_aggregated(build_app) -> None:
     # Minimal config → many dimensions will fail
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1760,7 +1928,11 @@ def test_governance_findings_no_duplicate_ids(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1778,7 +1950,11 @@ def test_governance_findings_each_has_evidence_key(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     r = c.get(
@@ -1800,7 +1976,11 @@ def test_governance_findings_sorted_critical_first(build_app) -> None:
     c = TestClient(app)
     c.put(
         f"/admin/identity/tenants/{tenant}/config",
-        json={"identity_mode": "managed", "provider": "auth0"},
+        json={
+            "identity_mode": "managed",
+            "provider": "auth0",
+            "provisioning_status": "ready",
+        },
         headers={"x-api-key": key},
     )
     c.post(

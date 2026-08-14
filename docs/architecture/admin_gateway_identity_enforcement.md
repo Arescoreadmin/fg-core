@@ -48,6 +48,15 @@ The admin-gateway tenant-admin authority satisfies the baseline tenant-admin ide
 
 No tenant-admin tab may resolve credentials or construct auth headers independently. The BFF does not expose raw credentials to the browser, does not accept `tenant_id` from request bodies, does not fall back to legacy `api_keys`, and normalizes Core 401/403/5xx denials with request IDs and safe diagnostics. Non-tenant-admin tenant-key routes continue to use canonical tenant credential resolution; the configured operator tenant fallback is limited to internal/legacy operator sessions on `workforce/users*` for the workforce dashboard.
 
+
+## Console Identity Setup Contract
+
+The Console BFF uses the same tenant-admin Core authority for identity setup and invitation operations: session-authorized tenant context plus the internal admin gateway token and explicit `X-Tenant-ID`. Browser-supplied API keys, Authorization headers, tenant claims, or role claims are never Core authority.
+
+Identity setup is explicit. New customer provisioning may create provider bindings and tenant-admin authority, but it does not guess identity policy. The Identity Governance tab is the canonical Console surface for `PUT /admin/identity/tenants/{tenant_id}/config`; the persisted `tenant_identity_configs.provisioning_status` is the invitation-readiness gate. Console Users uses that state to replace the invite action with a setup action until the policy is ready.
+
+Every invitation-producing Core path must use `require_identity_configured()`. Missing policy returns `IDENTITY_CONFIGURATION_REQUIRED`; non-ready policy returns `IDENTITY_CONFIGURATION_NOT_READY`; stale/no auth and tenant mismatch continue to fail before business logic. Structured Core errors are rendered as safe text with request IDs where available.
+
 ## Auth0 Adapter (PR 3)
 
 PR 3 added Auth0 as a provider behind the provider-neutral adapter seam. See `docs/architecture/auth0_adapter.md` for the complete Auth0 adapter specification.

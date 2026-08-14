@@ -41,6 +41,7 @@ from api.identity.tenant_identity_policy import (
     IDENTITY_MODES,
     IdentityPolicyError,
     normalized_domains,
+    require_identity_configured,
 )
 
 router = APIRouter(prefix="/admin/identity", tags=["admin-identity"])
@@ -49,6 +50,9 @@ _store = TenantIdentityStore()
 
 # ── Identity types supported ─────────────────────────────────────────────────
 IDENTITY_TYPES = frozenset({"human", "service", "agent", "system", "workload"})
+IDENTITY_PROVISIONING_STATUSES = frozenset(
+    {"not_configured", "pending", "ready", "failed", "disabled"}
+)
 
 # ── Governance scoring weights (100 pts total) ────────────────────────────────
 _SCORE_WEIGHTS = {
@@ -341,6 +345,7 @@ class ConfigUpsertBody(BaseModel):
     auth0_connection_id: str | None = None
     allowed_email_domains: list[str] = Field(default_factory=list)
     sso_enforced: bool = False
+    provisioning_status: str | None = None
     maturity_level: str = "level_0"
     capability_flags: dict[str, bool] = Field(default_factory=dict)
 
@@ -552,6 +557,18 @@ def upsert_config(
                 "message": f"mode must be one of {sorted(IDENTITY_MODES)}",
             },
         )
+    if (
+        body.provisioning_status is not None
+        and body.provisioning_status not in IDENTITY_PROVISIONING_STATUSES
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "IDENTITY_PROVISIONING_STATUS_INVALID",
+                "message": "status must be one of "
+                f"{sorted(IDENTITY_PROVISIONING_STATUSES)}",
+            },
+        )
     resolve_authoritative_tenant(request, actor_ctx, tenant_id)
     db = _admin_db(tenant_id)
     try:
@@ -562,19 +579,28 @@ def upsert_config(
                     db,
                     tenant_id=tenant_id,
                     identity_mode=body.identity_mode,
-                    configured_by_user_id=None,
+                    configured_by_user_id=actor_ctx.subject,
                     provider=body.provider,
                     oidc_issuer=body.oidc_issuer,
                     auth0_organization_id=body.auth0_organization_id,
                     auth0_connection_id=body.auth0_connection_id,
                     allowed_email_domains=body.allowed_email_domains,
                     sso_enforced=body.sso_enforced,
+                    provisioning_status=body.provisioning_status or "not_configured",
                     maturity_level=body.maturity_level,
                     capability_flags=body.capability_flags,
                 )
+                if config.provisioning_status == "ready":
+                    _store.set_provisioning_status(
+                        db,
+                        config,
+                        provisioning_status="ready",
+                        actor_user_id=actor_ctx.subject,
+                    )
             except IdentityPolicyError as exc:
                 raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
         else:
+            previous_status = config.provisioning_status
             config.identity_mode = body.identity_mode
             config.provider = body.provider
             config.oidc_issuer = body.oidc_issuer
@@ -582,6 +608,10 @@ def upsert_config(
             config.auth0_connection_id = body.auth0_connection_id
             config.allowed_email_domains = body.allowed_email_domains
             config.sso_enforced = body.sso_enforced
+            if body.provisioning_status is not None:
+                config.provisioning_status = body.provisioning_status
+                config.provisioning_error_code = None
+                config.provisioning_error_message = None
             config.maturity_level = body.maturity_level
             config.capability_flags = body.capability_flags
             config.updated_at = _now()
@@ -599,7 +629,9 @@ def upsert_config(
                 oidc_issuer=body.oidc_issuer,
                 organization_id=body.auth0_organization_id,
                 connection_id=body.auth0_connection_id,
-                status="configured",
+                status="ready"
+                if config.provisioning_status == "ready"
+                else "configured",
                 is_primary=True,
                 created_at=now,
                 updated_at=now,
@@ -626,6 +658,7 @@ def upsert_config(
                 db,
                 tenant_id=tenant_id,
                 event_type="tenant.identity_config.updated",
+                actor_user_id=actor_ctx.subject,
                 identity_mode=body.identity_mode,
                 provider=body.provider,
                 policy_config_id=config.id,
@@ -634,6 +667,16 @@ def upsert_config(
                     "sso_enforced": body.sso_enforced,
                 },
             )
+            if (
+                body.provisioning_status == "ready"
+                and previous_status != body.provisioning_status
+            ):
+                _store.set_provisioning_status(
+                    db,
+                    config,
+                    provisioning_status="ready",
+                    actor_user_id=actor_ctx.subject,
+                )
         db.commit()
         return _serialize_config(config)
     finally:
@@ -862,6 +905,36 @@ def create_invitation(
     resolve_authoritative_tenant(request, actor_ctx, tenant_id)
     db = _admin_db(tenant_id)
     try:
+        try:
+            policy = require_identity_configured(db, tenant_id)
+        except IdentityPolicyError as exc:
+            code = (
+                "IDENTITY_CONFIGURATION_REQUIRED"
+                if exc.code == "TENANT_IDENTITY_NOT_CONFIGURED"
+                else "IDENTITY_CONFIGURATION_NOT_READY"
+            )
+            message = (
+                "Identity configuration is required before invitations can be created."
+                if code == "IDENTITY_CONFIGURATION_REQUIRED"
+                else "Identity configuration must be ready before invitations can be created."
+            )
+            emit_identity_audit_event(
+                db,
+                tenant_id=tenant_id,
+                event_type="tenant.identity_config.invitation_blocked",
+                actor_user_id=actor_ctx.subject,
+                affected_email=body.email,
+                reason_code=code,
+                details={
+                    "invitation_status": "pending",
+                    "provisioning_status": exc.code,
+                },
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=422,
+                detail={"code": code, "message": message},
+            ) from exc
         config = _require_config(db, tenant_id)
         try:
             inv = _store.create_invitation(
@@ -873,7 +946,7 @@ def create_invitation(
                 required_connection_id=body.required_connection_id,
                 created_by_user_id=body.configured_by_user_id,
                 expires_at=_now() + timedelta(hours=72),
-                identity_mode_at_invite=config.identity_mode,
+                identity_mode_at_invite=policy.identity_mode,
                 identity_policy_config_id=config.id,
             )
         except IdentityPolicyError as exc:
