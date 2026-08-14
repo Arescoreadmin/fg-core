@@ -248,6 +248,74 @@ class TestINV001_NoUnauthenticatedAccess:
                     f"admin:write missing from scopes for {path}"
                 )
 
+    def test_console_tenant_admin_routes_accept_admin_internal_token(self):
+        """Console tenant-admin BFF surfaces must share Core's admin token path.
+
+        PR #636 made the Console BFF send one canonical internal gateway
+        authority for tenant-admin surfaces. Core must classify the same route
+        set as internal-admin, otherwise those calls fall through as ordinary
+        API keys and fail in production with "Invalid or missing API key".
+        """
+        from api.auth_scopes import verify_api_key_detailed
+
+        paths = [
+            "/workforce/users",
+            "/workforce/users/some-user-id",
+            "/portal/grants",
+            "/portal/grants/some-grant-id",
+            "/admin/identity/tenants/customer-a/engagements",
+            "/admin/identity/tenants/customer-a/config",
+            "/admin/identity/invitations/some-invitation-id/revoke",
+        ]
+
+        for path in paths:
+            mock_request = MagicMock()
+            mock_request.url.path = path
+            mock_request.headers = {"X-Admin-Gateway-Internal": "true"}
+            mock_request.client = None
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FG_ENV": "production",
+                    "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "test-admin-gateway-token",
+                },
+            ):
+                result = verify_api_key_detailed(
+                    raw="test-admin-gateway-token",
+                    required_scopes=None,
+                    request=mock_request,
+                )
+                assert result.valid, f"admin token rejected for {path}: {result.reason}"
+                assert result.reason == "admin_internal_token", (
+                    f"expected admin_internal_token for {path}, got {result.reason}"
+                )
+
+    def test_console_tenant_admin_routes_reject_stale_admin_internal_token(self):
+        """A stale Console->Core internal authority must fail closed."""
+        from api.auth_scopes import verify_api_key_detailed
+
+        for path in ["/portal/grants", "/workforce/users"]:
+            mock_request = MagicMock()
+            mock_request.url.path = path
+            mock_request.headers = {"X-Admin-Gateway-Internal": "true"}
+            mock_request.client = None
+
+            with patch.dict(
+                os.environ,
+                {
+                    "FG_ENV": "production",
+                    "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "current-admin-gateway-token",
+                },
+            ):
+                result = verify_api_key_detailed(
+                    raw="stale-admin-gateway-token",
+                    required_scopes=None,
+                    request=mock_request,
+                )
+                assert not result.valid
+                assert result.reason == "invalid_internal_token"
+
     def test_protected_routes_list_is_comprehensive(self):
         """All non-health routes must require authentication."""
         from api.middleware.auth_gate import AuthGateConfig

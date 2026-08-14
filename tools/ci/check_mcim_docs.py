@@ -246,6 +246,10 @@ ALLOWED_CHANGED_PATHS = {
     "services/plane_registry/registry.py",
     "tools/ci/check_plane_registry.py",
     "migrations/postgres/0167_internal_platform_authority_bootstrap.sql",
+    # PR 637 — Console tenant-admin gateway authority alignment
+    "api/auth_scopes/resolution.py",
+    "docs/architecture/admin_gateway_identity_enforcement.md",
+    "tests/test_core_invariants.py",
     "tests/test_internal_platform_authority.py",
     "docs/ai/PR_FIX_LOG.md",
     "tools/ci/topology.sha256",
