@@ -1,3 +1,26 @@
+## 2026-08-14 — fix/console-users-tenant-admin-authorization: align Console tenant-admin entitlement gate
+
+**Critical files changed:** `api/entitlements.py`, `tools/ci/check_mcim_docs.py`
+
+**Change scope:** Defect fix — Console BFF tenant-admin requests authenticate to Core through the internal admin gateway after PR #636/#637, but workforce user mutations still required the customer commercial `identity.scim` entitlement. Newly provisioned tenants without that product entitlement could authenticate and pass `admin:write`, then receive `CAPABILITY_DENIED`; the BFF normalized the Core 403 as `CORE_ACCESS_DENIED`.
+
+**Change to `api/entitlements.py`:**
+
+- Added a narrow admin-gateway tenant-admin capability satisfaction check.
+- Registered the new regression test path in the strict MCIM changed-path allowlist.
+- The check requires `request.state.auth.reason == "admin_internal_token"` and a non-empty tenant context.
+- It is limited to `identity.scim` on `/workforce/users*` and `identity.sso` on `/admin/identity/tenants/*`.
+- Successful decisions are audited as `source=admin_gateway`, `reason=admin_gateway_tenant_admin`.
+
+**Security invariants confirmed:**
+
+- Tenant API keys still require real commercial entitlements; the regression suite proves tenant-key workforce invite without `identity.scim` remains 403 `CAPABILITY_DENIED`.
+- Stale or missing internal gateway tokens fail closed before entitlement evaluation.
+- The change does not grant wildcard capabilities, does not touch portal grants, does not bypass `require_scopes`, `require_permission`, RBAC, RLS, tenant binding, or route business validation.
+- No browser-controlled credential, header, role claim, tenant-name heuristic, legacy `api_keys` fallback, or production data mutation was introduced.
+
+**SOC review outcome:** approved locally pending production proof. The change aligns a tenant-admin commercial capability gate with the already-reviewed Console BFF admin-gateway authority model without weakening customer credential entitlement enforcement.
+
 ## 2026-08-13 — fix/core-tenant-admin-gateway-authority: align Core tenant-admin gateway routes
 
 **Critical files changed:** `api/auth_scopes/resolution.py`

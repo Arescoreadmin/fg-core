@@ -54,6 +54,32 @@ from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 
 log = logging.getLogger("frostgate.entitlements")
 
+# Console tenant-admin requests reach Core through the server-side BFF admin
+# gateway identity. Browser/session role checks and tenant authorization have
+# already happened in apps/console/app/api/core/[...path]/route.ts before the
+# internal token is forwarded. Keep this set narrow: tenant API keys still need
+# real commercial entitlements, and non-tenant-admin Core routes are unchanged.
+_ADMIN_GATEWAY_TENANT_ADMIN_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "identity.scim": ("/workforce/users", "/workforce/users/"),
+    "identity.sso": ("/admin/identity/tenants/",),
+}
+
+
+def _admin_gateway_tenant_admin_satisfies_capability(
+    request: Request, tenant_id: str | None, capability: str
+) -> bool:
+    if not tenant_id:
+        return False
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    if getattr(auth, "reason", "") != "admin_internal_token":
+        return False
+    path = getattr(getattr(request, "url", None), "path", "") or ""
+    prefixes = _ADMIN_GATEWAY_TENANT_ADMIN_CAPABILITIES.get(capability)
+    return bool(
+        prefixes and any(path == p.rstrip("/") or path.startswith(p) for p in prefixes)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
@@ -292,7 +318,7 @@ class EntitlementResult:
     allowed: bool
     capability: str
     tenant_id: str
-    source: str  # "explicit" | "tier" | "tier_default" | "registry_miss" | "no_tenant" | "error"
+    source: str  # "explicit" | "bundle" | "tier" | "tier_default" | "admin_gateway" | "registry_miss" | "no_tenant" | "error"
     tier: str
     reason: str  # human-readable; included in audit details and 403 body
 
@@ -525,6 +551,20 @@ def require_capability(capability: str):
         if not tenant_id:
             auth = getattr(getattr(request, "state", None), "auth", None)
             tenant_id = getattr(auth, "tenant_id", None)
+
+        if _admin_gateway_tenant_admin_satisfies_capability(
+            request, tenant_id, capability
+        ):
+            result = EntitlementResult(
+                allowed=True,
+                capability=capability,
+                tenant_id=str(tenant_id),
+                source="admin_gateway",
+                tier="tenant_admin",
+                reason="admin_gateway_tenant_admin",
+            )
+            _audit_entitlement_decision(request, result)
+            return
 
         engine = get_engine()
         with Session(engine) as db:

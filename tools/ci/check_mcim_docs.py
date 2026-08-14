@@ -250,6 +250,7 @@ ALLOWED_CHANGED_PATHS = {
     "api/auth_scopes/resolution.py",
     "docs/architecture/admin_gateway_identity_enforcement.md",
     "tests/test_core_invariants.py",
+    "tests/test_console_tenant_admin_authorization.py",
     "tests/test_internal_platform_authority.py",
     "docs/ai/PR_FIX_LOG.md",
     "tools/ci/topology.sha256",

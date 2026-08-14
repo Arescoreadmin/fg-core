@@ -44,6 +44,8 @@ Tenant-admin Console surfaces use one BFF-to-Core authority contract. The browse
 
 For tenant-admin Core routes (`workforce/users`, `portal/grants`, `admin/identity/tenants/*`, and `admin/identity/invitations/*`), the BFF forwards the internal admin gateway authority with `X-API-Key`, `X-FG-Internal-Token`, `X-Admin-Gateway-Internal: true`, `X-Request-ID`, and the session-authorized `X-Tenant-ID`. Core classifies the same route set as admin-gateway traffic, authenticates the internal gateway token, injects the explicit tenant context, and enforces the route's `require_scopes`, `require_permission`, and tenant-binding checks.
 
+The admin-gateway tenant-admin authority satisfies the baseline tenant-admin identity-management capability gates only on the reviewed tenant-admin route set: `identity.scim` for `workforce/users*` and `identity.sso` for `admin/identity/tenants/*`. This is not a tenant credential entitlement grant. Tenant API keys and non-tenant-admin routes still require explicit, bundle, or tier entitlements and still fail closed when `identity.scim`/`identity.sso` is absent.
+
 No tenant-admin tab may resolve credentials or construct auth headers independently. The BFF does not expose raw credentials to the browser, does not accept `tenant_id` from request bodies, does not fall back to legacy `api_keys`, and normalizes Core 401/403/5xx denials with request IDs and safe diagnostics. Non-tenant-admin tenant-key routes continue to use canonical tenant credential resolution; the configured operator tenant fallback is limited to internal/legacy operator sessions on `workforce/users*` for the workforce dashboard.
 
 ## Auth0 Adapter (PR 3)
