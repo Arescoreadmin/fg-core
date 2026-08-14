@@ -28,21 +28,30 @@ log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
 
 
-def _is_admin_route_path(request_path: Optional[str]) -> bool:
-    if not request_path:
-        return False
-    if request_path == "/admin" or request_path.startswith("/admin/"):
-        return True
-    # Portal invitation and workforce user writes are operator-issued actions
-    # that must be reachable via the internal admin gateway.
-    # /workforce/users requires admin:write + identity.scim — only the admin
-    # gateway token carries those scopes; tenant portal keys do not.
-    _OPERATOR_PORTAL_PATHS = {
+_ADMIN_GATEWAY_EXACT_PATHS = frozenset(
+    {
+        "/admin",
+        "/portal/grants",
         "/portal/invitations",
         "/workforce/users",
     }
-    return request_path in _OPERATOR_PORTAL_PATHS or request_path.startswith(
-        "/workforce/users/"
+)
+_ADMIN_GATEWAY_PREFIX_PATHS = (
+    "/admin/",
+    "/portal/grants/",
+    "/workforce/users/",
+)
+
+
+def _is_admin_route_path(request_path: Optional[str]) -> bool:
+    if not request_path:
+        return False
+    # Console tenant-admin operations are mediated by the Console BFF's
+    # internal gateway identity plus explicit X-Tenant-ID. Keep this list in
+    # lockstep with apps/console/app/api/core/[...path]/route.ts tenant-admin
+    # surfaces so no tab falls back to ordinary tenant-credential auth.
+    return request_path in _ADMIN_GATEWAY_EXACT_PATHS or request_path.startswith(
+        _ADMIN_GATEWAY_PREFIX_PATHS
     )
 
 

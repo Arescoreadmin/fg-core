@@ -1,3 +1,25 @@
+## 2026-08-13 — fix/core-tenant-admin-gateway-authority: align Core tenant-admin gateway routes
+
+**Critical files changed:** `api/auth_scopes/resolution.py`
+
+**Change scope:** Defect fix — the Console BFF now sends one internal admin gateway authority for tenant-admin surfaces (`workforce/users`, `portal/grants`, `admin/identity/tenants/*`, and `admin/identity/invitations/*`), but Core still classified only `/admin/*`, `/portal/invitations`, and `/workforce/users*` as internal-admin routes. As a result, `/portal/grants` requests carrying the correct BFF gateway headers fell through to ordinary API-key validation and were rejected as `key_not_found` / `Invalid or missing API key` in production.
+
+**Change to `api/auth_scopes/resolution.py`:**
+
+- Replaced the inline workforce-only operator path check with `_ADMIN_GATEWAY_EXACT_PATHS` and `_ADMIN_GATEWAY_PREFIX_PATHS`.
+- Added `/portal/grants` and `/portal/grants/` to the internal admin gateway classifier.
+- Preserved existing `/admin`, `/admin/`, `/portal/invitations`, `/workforce/users`, and `/workforce/users/` coverage.
+
+**Security invariants confirmed:**
+
+- The internal gateway branch still requires `X-Admin-Gateway-Internal: true` and a constant-time match against the configured internal gateway secret.
+- Invalid or stale gateway tokens now fail closed as `invalid_internal_token` on `/portal/grants*`, instead of falling through to unrelated key lookup.
+- No wildcard `/portal/*` authority was introduced; only the operator-facing portal grant management paths were added.
+- Tenant context still comes from BFF-authorized `X-Tenant-ID` and is bound by `AuthGateMiddleware` / `bind_tenant_id`; browser-controlled credentials or role claims are not accepted as Core authority.
+- `FG_API_KEY` global bypass remains disabled in production, and no legacy `api_keys` fallback, RLS bypass, RBAC fallback, or production data mutation was added.
+
+**SOC review outcome:** approved. This aligns Core's internal gateway classifier with the already-reviewed Console BFF tenant-admin contract and removes an inconsistent authentication fall-through without broadening unauthenticated access.
+
 ## 2026-08-03 — fix/portal-invitation-gateway-auth: inject X-Tenant-Id for internal admin gateway requests
 
 **Critical files changed:** `api/middleware/auth_gate.py`

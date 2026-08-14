@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-72 — fix(core): align tenant-admin admin-gateway route authority — PR TBD
+
+- **PR/Branch:** `fix/core-tenant-admin-gateway-authority` (TBD)
+- **Date:** 2026-08-13
+- **Files changed:** `api/auth_scopes/resolution.py`, `tests/test_core_invariants.py`, `docs/architecture/admin_gateway_identity_enforcement.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** PR #636 correctly canonicalized the Console BFF tenant-admin proxy, but Core still had its own narrower internal-admin route classifier. The BFF sent the internal admin gateway authority for `portal/grants`, while Core did not classify `/portal/grants` or `/portal/grants/{id}` as internal-admin routes. In production those requests fell through the canonical tenant-credential path and were rejected as `key_not_found`, surfaced as `Invalid or missing API key`. Workforce routes were classified as internal-admin, so their denials happened after authentication and were normalized by the BFF as `CORE_ACCESS_DENIED`.
+- **Fix:** Replaced Core's ad hoc workforce-only operator route check with one explicit admin-gateway route set: `/admin/*`, `/workforce/users*`, and `/portal/grants*` plus the existing `/portal/invitations` exact route. This makes Core accept the same canonical Console BFF internal authority for Console Users, Portal Grants, engagement lookup, and Identity Governance while preserving explicit `X-Tenant-ID` binding.
+- **Behavioral impact:** Tenant-admin Console calls no longer split between `admin_internal_token` and ordinary API-key authentication based on the Core route. Portal grant list/create/revoke now authenticate through the same internal gateway mechanism as workforce and identity governance.
+- **Security impact:** Fail-closed posture preserved. Invalid or stale internal tokens still return `invalid_internal_token`; no browser API keys, legacy `api_keys` fallback, RBAC bypass, RLS bypass, role fallback, wildcard tenant authority, or production data mutation was introduced.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_core_invariants.py` now asserts every Console tenant-admin Core route accepts the configured admin internal token and rejects a stale token, reproducing the production `portal/grants` fall-through before the fix.
+- **Validation:** Targeted regression initially failed with `/portal/grants: key_not_found`; after the fix it passed. `tests/test_core_invariants.py` PASS (36 passed, 2 skipped). Broader gates and live production/synthetic tenant proof remain pending.
+- **Result:** PASS locally; production proof pending.
+
+---
+
 ## P-71 — fix(reports): hold report version allocation lock through commit — PR TBD
 
 - **PR/Branch:** `fix/report-version-concurrency` (TBD)
