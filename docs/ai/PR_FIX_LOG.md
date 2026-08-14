@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-73 — fix(authz): align Console tenant-admin entitlement gate — PR TBD
+
+- **PR/Branch:** `fix/console-users-tenant-admin-authorization` (TBD)
+- **Date:** 2026-08-14
+- **Files changed:** `api/entitlements.py`, `tests/test_console_tenant_admin_authorization.py`, `docs/architecture/admin_gateway_identity_enforcement.md`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`, `tools/ci/check_mcim_docs.py`
+- **Root cause:** PR #636 unified the Console BFF tenant-admin proxy and PR #637 aligned Core's admin-gateway route classifier, but Core workforce mutations still carried `require_capability("identity.scim")`. A valid Console BFF admin-gateway request therefore authenticated successfully, passed `admin:write`, then failed the tenant commercial entitlement check before workforce invite/update logic ran. The BFF normalized that Core 403 as `CORE_ACCESS_DENIED`, which left Console Users mutations blocked for newly provisioned tenants without `identity.scim` entitlements.
+- **Fix:** Added a narrow Core entitlement-path allowance for authenticated `admin_internal_token` tenant-admin requests on `/workforce/users*` (`identity.scim`) and `/admin/identity/tenants/*` (`identity.sso`). Tenant API keys, stale/missing gateway tokens, non-tenant-admin routes, RBAC, RLS, and route permission checks remain unchanged.
+- **Behavioral impact:** Console BFF tenant-admin operations can now reach the intended route authorization/business logic using the single server-side admin-gateway authority. Ordinary tenant credentials still require explicit/bundle/tier commercial entitlements.
+- **Security impact:** Fail-closed posture preserved. The allowance requires a valid internal gateway token plus explicit tenant context and is restricted by both capability name and route prefix. No browser API keys, role fallback, wildcard capability, legacy `api_keys` fallback, RLS bypass, or production data mutation was introduced.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_console_tenant_admin_authorization.py` proves admin-gateway workforce invite/update and identity tenant routes bypass the commercial entitlement blocker but still hit route/resource validation, tenant API keys still receive `CAPABILITY_DENIED` without `identity.scim`, and stale gateway tokens fail closed before entitlement evaluation.
+- **Validation:** Targeted Console tenant-admin authorization suite PASS (5 passed). Adjacent Core suites PASS: `tests/test_core_invariants.py` (36 passed, 2 skipped), `tests/security/test_enterprise_capability_enforcement.py` (44 passed), `tests/test_admin_identity_routes.py` (102 passed). Console targeted tests PASS (53 passed), Console typecheck/lint/build PASS. Broader `fg-security`/`fg-contract` and live production proof remain pending.
+- **Result:** PASS locally; production proof pending.
+
+---
+
 ## P-72 — fix(core): align tenant-admin admin-gateway route authority — PR TBD
 
 - **PR/Branch:** `fix/core-tenant-admin-gateway-authority` (TBD)
