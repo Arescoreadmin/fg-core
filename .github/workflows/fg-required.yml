@@ -17,7 +17,7 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
 
     env:
       PYTHONUNBUFFERED: "1"
