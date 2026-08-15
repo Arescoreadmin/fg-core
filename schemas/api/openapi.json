@@ -7746,6 +7746,17 @@
             "title": "Provider",
             "type": "string"
           },
+          "provisioning_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioning Status"
+          },
           "sso_enforced": {
             "default": false,
             "title": "Sso Enforced",

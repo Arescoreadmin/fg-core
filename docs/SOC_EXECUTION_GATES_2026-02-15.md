@@ -1,3 +1,17 @@
+## 2026-08-14 - fix/identity-setup-workflow: tenant identity administration lifecycle closure
+
+**Change scope:** Defect fix - newly provisioned tenants could have a valid Auth0 binding, valid console-bff-key, and active tenant_admin role, but no `tenant_identity_configs` row. Console Users still presented Invite User, and Core returned 422 `IDENTITY_CONFIGURATION_REQUIRED`. This PR makes identity setup an explicit Console lifecycle instead of silently guessing policy at provisioning time.
+
+**Security posture:** Invitation creation now depends on the canonical `require_identity_configured()` predicate: no config and non-ready config fail closed; only `tenant_identity_configs.provisioning_status == ready` allows invitation creation. The same predicate is used by `/workforce/users` and `/admin/identity/tenants/{tenant_id}/invitations`. No tenant API key receives admin gateway privilege, no browser credential becomes Core authority, no RBAC/RLS/capability bypass is introduced, and no customer identity configs are auto-created or backfilled.
+
+**Critical-path files changed:** `api/workforce.py`, `api/admin_identity.py`, `api/identity/tenant_identity_policy.py` contract usage, Console tenant detail and Identity Governance components, Console error normalization, identity API types, targeted backend/Console tests, and identity architecture/operator docs.
+
+**Required invariant:** A fresh customer can move from `IDENTITY_SETUP_REQUIRED` to `IDENTITY_READY` through the canonical Identity Governance config route, then create a governed Console user invitation; cross-tenant, stale-auth, no-auth, and tenant-key attempts remain denied. Owned by `tests/test_tenant_identity_administration_golden_path.py` plus Console identity workflow tests.
+
+**SOC review outcome:** pending final gates and production proof. Code path is fail-closed and auditable; production proof must still validate existing tenant and Customer N+1 through the deployed Console.
+
+---
+
 ## 2026-08-14 — fix/console-users-tenant-admin-authorization: align Console tenant-admin entitlement gate
 
 **Critical files changed:** `api/entitlements.py`, `tools/ci/check_mcim_docs.py`

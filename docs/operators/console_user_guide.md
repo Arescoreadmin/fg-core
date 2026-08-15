@@ -675,13 +675,15 @@ Table of all tenant users (invited or active). Columns: User (name + email), Rol
 - **Deactivate** — Disables an active user. They can no longer authenticate.
 - **Reactivate** — Re-enables an inactive user.
 
-**Invite User** button (top right) — Opens a modal to invite a new user:
+**Identity setup required** appears instead of **Invite User** until the tenant has an explicit ready identity policy. Use **Configure Identity** to open Identity Governance, set the provider-neutral policy, and mark the policy ready.
+
+**Invite User** button (top right) appears only after identity policy is ready. It opens a modal to invite a new user:
 
 - **Email** — Required.
 - **Display Name** — Required.
 - **Role** — `user`, `auditor`, or `admin`.
 
-On success, a one-use invite link is shown (72-hour expiry). Copy it and send it to the user out of band. The link format is: `{portal_host}/accept-invite?token={token}`.
+On success, a governed invitation record is created and the invite link is shown. Copy it and send it to the user out of band.
 
 #### Keywords tab
 

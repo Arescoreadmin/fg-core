@@ -118,6 +118,7 @@ export interface ConfigUpsertPayload {
   auth0_connection_id?: string | null;
   allowed_email_domains?: string[];
   sso_enforced?: boolean;
+  provisioning_status?: string;
   maturity_level?: string;
   capability_flags?: Record<string, boolean>;
 }

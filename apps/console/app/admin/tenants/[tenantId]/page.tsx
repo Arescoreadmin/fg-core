@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { IdentityGovernancePanel } from '@/components/identity';
+import { getIdentityReadiness, type IdentityReadiness } from '@/lib/identityApi';
+import { mapHttpError } from '@/lib/errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,16 +78,18 @@ async function coreApi<T>(path: string, tenantId: string, options?: RequestInit)
     ...options,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  const text = await res.text();
+  let body: unknown = null;
+  if (text) {
+    try { body = JSON.parse(text); } catch { body = text; }
   }
-  return res.json() as Promise<T>;
+  if (!res.ok) throw mapHttpError(res.status, body, {});
+  return body as T;
 }
 
 // ─── Console Users tab ────────────────────────────────────────────────────────
 
-function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
+function ConsoleUsersTab({ tenantId, onConfigureIdentity }: { tenantId: string; onConfigureIdentity: () => void }) {
   const [users, setUsers] = useState<ConsoleUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,10 +100,22 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
   const [inviteResult, setInviteResult] = useState<{ invitation_id: string; invitation_url: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [identityReadiness, setIdentityReadiness] = useState<IdentityReadiness | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setUsers((await coreApi<{ items: ConsoleUser[] }>('workforce/users', tenantId)).items ?? []); }
+    try {
+      const [usersResponse, readinessResponse] = await Promise.all([
+        coreApi<{ items: ConsoleUser[] }>('workforce/users', tenantId),
+        getIdentityReadiness(tenantId),
+      ]);
+      setUsers(usersResponse.items ?? []);
+      if (readinessResponse.ok) setIdentityReadiness(readinessResponse.data);
+      else {
+        setIdentityReadiness(null);
+        setError(readinessResponse.error);
+      }
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     finally { setLoading(false); }
   }, [tenantId]);
@@ -134,6 +150,9 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
     catch (e) { setError(e instanceof Error ? e.message : 'Update failed'); }
   }
 
+  const identityStatus = identityReadiness?.status ?? 'not_configured';
+  const identityReady = identityStatus === 'ready';
+
   return (
     <div>
       <div style={s.sectionHeader}>
@@ -141,10 +160,21 @@ function ConsoleUsersTab({ tenantId }: { tenantId: string }) {
           <p style={s.sectionTitle}>Console users</p>
           <p style={s.sectionDesc}>Staff with direct console access. <strong>admin</strong> = full access, <strong>auditor</strong> = read-only audit, <strong>user</strong> = standard.</p>
         </div>
-        <button style={s.primaryBtn} onClick={() => { setShowInvite(true); setInviteResult(null); }}>Invite user</button>
+        {identityReady ? (
+          <button style={s.primaryBtn} onClick={() => { setShowInvite(true); setInviteResult(null); }}>Invite user</button>
+        ) : (
+          <button style={s.secondaryBtn} onClick={onConfigureIdentity}>Configure identity</button>
+        )}
       </div>
 
       {error && <div style={s.errorBanner}>{error}</div>}
+      {!identityReady && (
+        <div style={s.warningBanner} data-testid="identity-setup-required">
+          <strong>Identity setup required</strong>
+          <span> Configure this tenant's identity policy before inviting console users. Current state: <code>{identityStatus}</code>.</span>
+          <button style={{ ...s.secondaryBtn, marginLeft: '0.75rem' }} onClick={onConfigureIdentity}>Configure identity</button>
+        </div>
+      )}
       {inviteResult && (
         <div style={s.successBanner}>
           <strong>Invite created{emailStatus === 'sent' ? ' — email sent ✓' : emailStatus === 'failed' ? ' — email failed (copy link below)' : emailStatus === 'sending' ? ' — sending email…' : ''}.</strong>
@@ -440,7 +470,7 @@ export default function TenantDetailPage() {
       </div>
 
       <div style={s.card}>
-        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} />}
+        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} onConfigureIdentity={() => setTab('identity')} />}
         {tab === 'portal' && <PortalAccessTab tenantId={tenantId} />}
         {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} />}
       </div>
@@ -469,6 +499,7 @@ const s: Record<string, React.CSSProperties> = {
   td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.875rem' },
   muted: { color: 'var(--muted)', fontSize: '0.875rem' },
   errorBanner: { padding: '0.75rem 1rem', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', marginBottom: '1rem', fontSize: '0.875rem' },
+  warningBanner: { padding: '0.75rem 1rem', borderRadius: '6px', backgroundColor: 'rgba(202,138,4,0.1)', color: '#92400e', marginBottom: '1rem', fontSize: '0.875rem' },
   successBanner: { padding: '1rem', borderRadius: '6px', backgroundColor: 'rgba(34,197,94,0.08)', marginBottom: '1rem', fontSize: '0.875rem' },
   code: { display: 'block', marginTop: 6, padding: '0.5rem 0.75rem', background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.8rem', overflowX: 'auto', wordBreak: 'break-all' },
   primaryBtn: { padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', backgroundColor: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' },

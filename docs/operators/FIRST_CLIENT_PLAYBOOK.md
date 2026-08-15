@@ -32,6 +32,7 @@ Before first contact → signed paper → technical setup, in order:
 - [ ] Data-handling notice delivered (letter #3) + DPA signed
 - [ ] CG v0 one-pager included in the packet (planted early; pitched at delivery)
 - [ ] Tenant provisioned in console (`/admin/tenants`) — verify portal key persisted (no `PERSISTENCE_UNAVAILABLE`)
+- [ ] Identity setup completed in Identity Governance if Console Users access is needed; tenant may be active while identity remains setup-required
 - [ ] Engagement created; assessment type selected; client domain recorded
 - [ ] Azure AD app setup scheduled with their IT (per `azure_ad_app_setup.md`) — this is the long-lead item; start it the day paper is signed
 - [ ] Client contact invited to portal; **confirm they received the email** (check spam folder together on a call if needed)
