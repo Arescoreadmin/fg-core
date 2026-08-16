@@ -448,6 +448,7 @@ type Tab = 'users' | 'portal' | 'identity';
 export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const [tab, setTab] = useState<Tab>('users');
+  const [identityInitialTab, setIdentityInitialTab] = useState<'scorecard' | 'config'>('scorecard');
 
   const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
@@ -463,16 +464,16 @@ export default function TenantDetailPage() {
 
       <div style={s.tabs}>
         {(['users', 'portal', 'identity'] as const).map(t => (
-          <button key={t} style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }} onClick={() => setTab(t)}>
+          <button key={t} style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }} onClick={() => { if (t === 'identity') setIdentityInitialTab('scorecard'); setTab(t); }}>
             {t === 'users' ? 'Console users' : t === 'portal' ? 'Portal access' : 'Identity governance'}
           </button>
         ))}
       </div>
 
       <div style={s.card}>
-        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} onConfigureIdentity={() => setTab('identity')} />}
+        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} onConfigureIdentity={() => { setIdentityInitialTab('config'); setTab('identity'); }} />}
         {tab === 'portal' && <PortalAccessTab tenantId={tenantId} />}
-        {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} />}
+        {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} initialTab={identityInitialTab} />}
       </div>
     </main>
   );
