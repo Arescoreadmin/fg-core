@@ -43,6 +43,13 @@ export function validateProductionConfig(): void {
     );
   }
 
+  const legacyFallback = (process.env.FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK || '').trim().toLowerCase();
+  if (legacyFallback !== 'false') {
+    errors.push(
+      `  FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK must be explicitly set to "false" in production (got: ${legacyFallback || '(not set)'}).`,
+    );
+  }
+
   if (errors.length > 0) {
     throw new Error(
       'Production configuration invalid:\n' + errors.join('\n') + '\nConsole startup aborted.',

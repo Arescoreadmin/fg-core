@@ -76,7 +76,7 @@ function resolveAuthorizedTenant(rawTenantIdParam, claims, env = {}) {
     );
   }
 
-  if (claims.experienceClass === 'internal_console' || claims.experienceClass === 'legacy_internal') {
+  if (claims.experienceClass === 'internal_console') {
     return { tenantId };
   }
 
@@ -114,9 +114,13 @@ test('authorized_internal_operator_resolves_any_tenant', () => {
   const result2 = resolveAuthorizedTenant('other-client', internalClaims());
   assert.equal(result2.tenantId, 'other-client');
 
-  // legacy_internal also gets full access
-  const result3 = resolveAuthorizedTenant('any-tenant', legacyClaims());
-  assert.equal(result3.tenantId, 'any-tenant');
+});
+
+test('legacy_internal_is_denied_any_tenant_authority', () => {
+  // legacy_internal must not receive any-tenant authority after PR-SEC-001
+  const result = resolveAuthorizedTenant('any-tenant', legacyClaims());
+  assert.ok(result.__error, 'legacy_internal must not resolve any tenant');
+  assert.equal(result.status, 403);
 });
 
 // ─── Test 2: authorized_client_resolves_own_tenant ───────────────────────────
