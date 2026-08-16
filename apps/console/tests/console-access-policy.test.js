@@ -11,6 +11,7 @@ const {
   canAccessCoreApiPath,
   getConsoleRouteAudit,
   getCoreApiPolicy,
+  resolveConsolePrincipal,
 } = require('../lib/consoleAccess.js');
 
 function read(relPath) {
@@ -152,4 +153,83 @@ test('middleware, sidebar, and core proxy all use the shared access policy', () 
   assert.match(read('middleware.ts'), /canAccessConsoleRoute/);
   assert.match(read('components/layout/Sidebar.tsx'), /getNavigationItemsForPrincipal/);
   assert.match(read('app/api/core/[...path]/route.ts'), /canAccessCoreApiPath/);
+});
+
+// ─── PR-SEC-003: middleware edge enforcement ──────────────────────────────────
+
+test('middleware imports resolveConsolePrincipal and enforces unsupported at edge', () => {
+  const src = read('middleware.ts');
+  assert.match(src, /resolveConsolePrincipal/);
+  assert.match(src, /experienceClass === 'unsupported'/);
+  assert.match(src, /SESSION_UNSUPPORTED/);
+  assert.match(src, /status: 401/);
+  // Guard must fire before canAccessConsoleRoute (API paths bypass that check)
+  const unsupportedPos = src.indexOf("experienceClass === 'unsupported'");
+  const routeCheckPos = src.indexOf('canAccessConsoleRoute(pathname');
+  assert.ok(unsupportedPos < routeCheckPos, 'unsupported guard must precede canAccessConsoleRoute');
+});
+
+// Inline mirror of the middleware unsupported-session decision.
+// Mirrors the logic added in PR-SEC-003 so behavior is verifiable without a Next.js runtime.
+function middlewareUnsupportedDecision(session, pathname) {
+  const principal = resolveConsolePrincipal(session);
+  if (principal.experienceClass !== 'unsupported') return null;
+  return pathname.startsWith('/api/') ? 401 : 'redirect:/unauthorized';
+}
+
+test('unsupported session on API path is denied 401 at middleware', () => {
+  const noRole = { user: {} };
+  const unknownRole = sessionWithRoles(['legacy_console_user']);
+  const arbitraryRole = sessionWithRoles(['mystery_role']);
+
+  for (const session of [noRole, unknownRole, arbitraryRole]) {
+    assert.equal(middlewareUnsupportedDecision(session, '/api/field-assessment/audio-url'), 401);
+    assert.equal(middlewareUnsupportedDecision(session, '/api/field-assessment/transcribe'), 401);
+    assert.equal(middlewareUnsupportedDecision(session, '/api/core/admin/connectors'), 401);
+  }
+});
+
+test('unsupported session on page path is redirected at middleware', () => {
+  const noRole = { user: {} };
+  assert.equal(middlewareUnsupportedDecision(noRole, '/dashboard'), 'redirect:/unauthorized');
+  assert.equal(middlewareUnsupportedDecision(noRole, '/workspace'), 'redirect:/unauthorized');
+  assert.equal(middlewareUnsupportedDecision(sessionWithRoles(['mystery_role']), '/dashboard/executive'), 'redirect:/unauthorized');
+});
+
+test('recognized sessions pass through the unsupported middleware guard', () => {
+  const operator = sessionWithRoles(['Operator']);
+  const client = sessionWithRoles(['tenant_admin']);
+  const portal = sessionWithRoles(['Customer']);
+
+  for (const session of [operator, client, portal]) {
+    assert.equal(middlewareUnsupportedDecision(session, '/api/core/anything'), null);
+    assert.equal(middlewareUnsupportedDecision(session, '/dashboard'), null);
+  }
+});
+
+test('proof 3: recognized client role passes guard and reaches allowed client-console routes', () => {
+  const client = sessionWithRoles(['client_executive']);
+  assert.equal(middlewareUnsupportedDecision(client, '/dashboard/executive'), null);
+  assert.equal(middlewareUnsupportedDecision(client, '/api/core/field-assessment/engagements'), null);
+  assert.equal(canAccessConsoleRoute('/dashboard/executive', client), true);
+  assert.equal(canAccessConsoleRoute('/dashboard/readiness', client), true);
+});
+
+test('proof 4: recognized internal operator passes guard and reaches operator routes', () => {
+  const operator = sessionWithRoles(['Operator']);
+  assert.equal(middlewareUnsupportedDecision(operator, '/dashboard'), null);
+  assert.equal(middlewareUnsupportedDecision(operator, '/api/core/admin/connectors'), null);
+  assert.equal(canAccessConsoleRoute('/dashboard', operator), true);
+  assert.equal(canAccessConsoleRoute('/workspace', operator), true);
+});
+
+test('source regression: field-assessment handlers rely on middleware guard for role enforcement', () => {
+  // These handlers only check session?.user — no role classification of their own.
+  // The middleware unsupported guard is what blocks no-role sessions.
+  // If the guard is ever removed, these handlers must add their own role checks.
+  const audioUrl = read('app/api/field-assessment/audio-url/route.ts');
+  const transcribe = read('app/api/field-assessment/transcribe/route.ts');
+  assert.doesNotMatch(audioUrl, /canAccessConsoleRoute|canAccessCoreApiPath|resolveConsolePrincipal/);
+  assert.doesNotMatch(transcribe, /canAccessConsoleRoute|canAccessCoreApiPath|resolveConsolePrincipal/);
+  assert.match(read('middleware.ts'), /experienceClass === 'unsupported'/);
 });

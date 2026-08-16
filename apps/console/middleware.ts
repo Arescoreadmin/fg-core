@@ -2,7 +2,7 @@ import NextAuth from 'next-auth';
 import { authConfig } from './auth.config';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { canAccessConsoleRoute } from '@/lib/consoleAccess';
+import { canAccessConsoleRoute, resolveConsolePrincipal } from '@/lib/consoleAccess';
 
 const { auth } = NextAuth(authConfig);
 
@@ -30,6 +30,15 @@ export default auth(function middleware(req: NextRequest & { auth: unknown }) {
       loginUrl.searchParams.set('callbackUrl', pathname);
     }
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Hard-deny unsupported sessions at the edge before any route handler runs.
+  // Covers API routes whose handlers only check session?.user with no role classification.
+  const principal = resolveConsolePrincipal(session);
+  if (principal.experienceClass === 'unsupported') {
+    return pathname.startsWith('/api/')
+      ? NextResponse.json({ error: 'Unauthorized', code: 'SESSION_UNSUPPORTED' }, { status: 401 })
+      : NextResponse.redirect(new URL('/unauthorized', req.url));
   }
 
   if (!pathname.startsWith('/api/') && !canAccessConsoleRoute(pathname, session)) {
