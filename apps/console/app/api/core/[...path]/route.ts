@@ -230,7 +230,7 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
  * Authorization rules:
  *   - No ?tenant_id param -> operator default (CORE_TENANT_ID) for non-tenant-admin paths
  *   - Workforce dashboard user routes retain operator default for internal sessions
- *   - internal_console / legacy_internal → may act on any tenant
+ *   - internal_console → may act on any tenant
  *   - console_enabled_client → may only act on their own session tenant
  *   - All others → 403
  */
@@ -276,7 +276,7 @@ function resolveAuthorizedTenant(
     const claims = getSessionClaims(session);
     if (
       isOperatorDefaultTenantAdminCorePath(path) &&
-      (claims.experienceClass === 'internal_console' || claims.experienceClass === 'legacy_internal')
+      claims.experienceClass === 'internal_console'
     ) {
       return resolveConfiguredOperatorTenant(requestId);
     }
@@ -298,7 +298,7 @@ function resolveAuthorizedTenant(
 
   const claims = getSessionClaims(session);
 
-  if (claims.experienceClass === 'internal_console' || claims.experienceClass === 'legacy_internal') {
+  if (claims.experienceClass === 'internal_console') {
     return { tenantId };
   }
 
