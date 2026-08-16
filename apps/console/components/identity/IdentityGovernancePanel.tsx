@@ -1992,8 +1992,8 @@ const INNER_TABS: Array<{ id: InnerTab; label: string }> = [
   { id: 'audit', label: 'Audit' },
 ];
 
-export function IdentityGovernancePanel({ tenantId }: { tenantId: string }) {
-  const [tab, setTab] = useState<InnerTab>('scorecard');
+export function IdentityGovernancePanel({ tenantId, initialTab }: { tenantId: string; initialTab?: InnerTab }) {
+  const [tab, setTab] = useState<InnerTab>(initialTab ?? 'scorecard');
 
   return (
     <div style={s.root}>

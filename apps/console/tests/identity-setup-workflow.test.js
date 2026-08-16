@@ -18,6 +18,35 @@ test('Console Users gates invite on canonical identity readiness', () => {
   assert.match(src, /onClick=\{onConfigureIdentity\}/);
 });
 
+test('Configure identity CTA routes to Identity Governance with config tab selected', () => {
+  const src = read('app/admin/tenants/[tenantId]/page.tsx');
+  // State variable exists for controlling initial tab
+  assert.match(src, /identityInitialTab/);
+  // CTA sets config entry before switching tab — both must appear together in the callback
+  assert.match(src, /setIdentityInitialTab\('config'\)/);
+  assert.match(src, /onConfigureIdentity.*setIdentityInitialTab\('config'\).*setTab\('identity'\)/s);
+  // Panel receives the state as initialTab prop
+  assert.match(src, /IdentityGovernancePanel[^>]*initialTab=\{identityInitialTab\}/);
+});
+
+test('direct Identity Governance tab navigation resets to scorecard default', () => {
+  const src = read('app/admin/tenants/[tenantId]/page.tsx');
+  // Tab click handler resets initialTab to scorecard when navigating directly
+  assert.match(src, /if \(t === 'identity'\) setIdentityInitialTab\('scorecard'\)/);
+  // Default state is scorecard, not config
+  assert.match(src, /useState<'scorecard' \| 'config'>\('scorecard'\)/);
+});
+
+test('IdentityGovernancePanel initialTab prop controls inner tab selection without changing global default', () => {
+  const src = read('components/identity/IdentityGovernancePanel.tsx');
+  // Prop is optional — callers that omit it get scorecard
+  assert.match(src, /initialTab\?\s*:\s*InnerTab/);
+  // useState uses initialTab with scorecard as fallback — default is NOT hardcoded to config
+  assert.match(src, /useState<InnerTab>\(initialTab \?\? 'scorecard'\)/);
+  // The function signature accepts the prop
+  assert.match(src, /IdentityGovernancePanel\(\{[^}]*initialTab[^}]*\}/);
+});
+
 test('tenant detail coreApi maps structured Core errors instead of stringifying objects', () => {
   const src = read('app/admin/tenants/[tenantId]/page.tsx');
   assert.match(src, /mapHttpError\(res\.status, body, \{\}\)/);
