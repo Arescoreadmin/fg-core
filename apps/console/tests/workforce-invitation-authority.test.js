@@ -92,7 +92,7 @@ test('workforce dashboard internal fallback is scoped to workforce user routes',
   const rawNullBranch = ROUTE_SRC.slice(resolverStart, resolverEnd);
   assert.match(rawNullBranch, /isOperatorDefaultTenantAdminCorePath\(path\)/);
   assert.match(rawNullBranch, /claims\.experienceClass === 'internal_console'/);
-  assert.match(rawNullBranch, /claims\.experienceClass === 'legacy_internal'/);
+  assert.doesNotMatch(rawNullBranch, /claims\.experienceClass === 'legacy_internal'/);
   assert.match(rawNullBranch, /return resolveConfiguredOperatorTenant\(requestId\)/);
   assert.ok(
     rawNullBranch.indexOf('return resolveConfiguredOperatorTenant(requestId)') <

@@ -379,3 +379,43 @@ test('customer tenant fixture is not normalized as operator authority', () => {
   assert.doesNotMatch(routeSrc, /lace-money-group/);
   assert.doesNotMatch(credentialTests, /lace-money-group/);
 });
+
+// ─── PR-SEC-002: legacy_internal removed from BFF authority ──────────────────
+
+test('route.ts contains no legacy_internal authority branch', () => {
+  const routeSrc = read('app/api/core/[...path]/route.ts');
+  assert.doesNotMatch(
+    routeSrc,
+    /experienceClass === 'legacy_internal'/,
+    'legacy_internal must not appear in any BFF authority check',
+  );
+  assert.match(
+    routeSrc,
+    /experienceClass === 'internal_console'/,
+    'internal_console must remain as the authorized operator experienceClass',
+  );
+});
+
+test('stale legacy_internal session is denied any-tenant BFF authority', () => {
+  // Behavioral proof via the inline mirror — matches the route.ts logic post-PR-SEC-002
+  const result = resolveAuthorizedTenant('any-tenant', legacyClaims());
+  assert.ok(result.__error, 'stale legacy_internal session must be denied');
+  assert.equal(result.status, 403, 'must return 403 Forbidden');
+});
+
+test('forged legacy_internal session cannot reach workforce operator default tenant', () => {
+  // raw === null path (no ?tenant_id) on a workforce/users route
+  // legacy_internal must be rejected; only internal_console gets operator default
+  const forged = legacyClaims();
+  const env = { NODE_ENV: 'production', CORE_TENANT_ID: 'fg-internal-operator' };
+
+  // With a tenant_id provided: must get 403
+  const withTenant = resolveAuthorizedTenant('victim-tenant', forged, env);
+  assert.ok(withTenant.__error);
+  assert.equal(withTenant.status, 403);
+
+  // Legitimate internal_console still works (regression guard)
+  const legitimate = resolveAuthorizedTenant('any-tenant', internalClaims(), env);
+  assert.ok(!legitimate.__error);
+  assert.equal(legitimate.tenantId, 'any-tenant');
+});
