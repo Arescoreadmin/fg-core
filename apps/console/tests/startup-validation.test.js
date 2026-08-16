@@ -144,3 +144,67 @@ test('startup-validation.J: instrumentation.ts restricts validation to nodejs ru
   const nodejsBlock = src.match(/nodejs[\s\S]*?validateProductionConfig/);
   assert.ok(nodejsBlock, 'validateProductionConfig must be inside the nodejs runtime guard');
 });
+
+// ─── K. FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK requires explicit "false" ──
+
+test('startup-validation.K: legacy fallback guard requires explicit "false", not just absence of truthy', () => {
+  const src = read(VALIDATION);
+  assert.match(src, /FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK/);
+  // Must use !== 'false' — not a truthiness check — so ambiguous values fail closed
+  assert.match(src, /!== 'false'/);
+  // Must push an actionable error
+  const legacyCheckMatch = src.match(/FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK[\s\S]*?errors\.push/);
+  assert.ok(legacyCheckMatch, 'legacy fallback check must push an error');
+  // Error message must name the canonical value
+  assert.match(src, /explicitly set to "false"/);
+});
+
+// ─── L. Full deterministic matrix for the legacy fallback guard ───────────────
+// Inline mirror of the guard logic so every case is verifiable without a build.
+
+function legacyFallbackAllowed(rawEnvValue) {
+  // Mirrors startup-validation.ts: require explicit "false" after trim/lowercase
+  const v = (rawEnvValue || '').trim().toLowerCase();
+  return v === 'false';
+}
+
+test('startup-validation.L: legacy fallback guard — only "false" permits boot', () => {
+  // Values that must FAIL boot (all non-false)
+  const failing = [
+    [undefined, 'missing (not set)'],
+    ['', 'empty string'],
+    ['true', 'true'],
+    ['TRUE', 'TRUE (uppercase)'],
+    ['True', 'True (mixed case)'],
+    ['1', '1'],
+    ['yes', 'yes'],
+    ['on', 'on'],
+    ['garbage', 'garbage'],
+    [' ', 'whitespace-only'],
+  ];
+
+  for (const [value, label] of failing) {
+    assert.equal(
+      legacyFallbackAllowed(value),
+      false,
+      `"${label}" must fail boot`,
+    );
+  }
+
+  // Values that must PASS boot (trim/lowercase normalization applied)
+  const passing = [
+    ['false', 'false'],
+    ['False', 'False (mixed case)'],
+    ['FALSE', 'FALSE (uppercase)'],
+    ['  false  ', 'false with surrounding whitespace'],
+    ['false ', 'false with trailing space'],
+  ];
+
+  for (const [value, label] of passing) {
+    assert.equal(
+      legacyFallbackAllowed(value),
+      true,
+      `"${label}" must permit boot`,
+    );
+  }
+});

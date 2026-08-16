@@ -111,8 +111,28 @@ test('tenant_admin can only mutate tenant-scoped resources', () => {
   assert.equal(canAccessCoreApiPath('admin/connectors', 'POST', principal), false);
 });
 
-test('legacy internal fallback stays internally routable when enabled', () => {
-  assert.equal(canAccessConsoleRoute('/dashboard', { user: {} }), true);
+test('authenticated user with no recognized role is denied by default', () => {
+  assert.equal(canAccessConsoleRoute('/dashboard', { user: {} }), false);
+  assert.equal(canAccessConsoleRoute('/dashboard/executive', { user: {} }), false);
+  assert.equal(canAccessConsoleRoute('/workspace', { user: {} }), false);
+});
+
+test('security invariant: no-role session cannot reach any operator or client-console route', () => {
+  const noRole = { user: {} };
+  const guardedRoutes = ['/dashboard', '/dashboard/control-tower', '/workspace', '/field-assessment', '/dashboard/executive'];
+  for (const route of guardedRoutes) {
+    assert.equal(
+      canAccessConsoleRoute(route, noRole),
+      false,
+      `no-role session must be denied ${route}`,
+    );
+  }
+});
+
+test('security invariant: unrecognized role fails closed', () => {
+  const unknown = sessionWithRoles(['legacy_console_user']);
+  assert.equal(canAccessConsoleRoute('/dashboard', unknown), false);
+  assert.equal(canAccessCoreApiPath(['admin', 'connectors'], 'GET', unknown), false);
 });
 
 test('portal-only client cannot enter console routes', () => {

@@ -1,6 +1,7 @@
 'use strict';
 
 const LEGACY_INTERNAL_ROLE = 'legacy_console_user';
+const ALLOW_LEGACY_INTERNAL = ((typeof process !== 'undefined' && process.env?.FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK) || 'false') !== 'false';
 
 const PORTAL_ONLY_ROLE_MARKERS = ['portal_only', 'Customer', 'MSP'];
 const CLIENT_CONSOLE_ROLES = [
@@ -25,7 +26,6 @@ const INTERNAL_CONSOLE_ROLES = [
   'AssessmentEngineer',
   'FieldAssessor',
   'Consultant',
-  LEGACY_INTERNAL_ROLE,
 ];
 const RECOGNIZED_ROLES = new Set([
   ...PORTAL_ONLY_ROLE_MARKERS,
@@ -50,7 +50,7 @@ const TENANT_CLAIM_KEYS = [
 
 const CLIENT_CONSOLE_ALLOWED_ROLES = [...CLIENT_CONSOLE_ROLES, ...INTERNAL_CONSOLE_ROLES];
 const INTERNAL_ONLY_ROLES = [...INTERNAL_CONSOLE_ROLES];
-const SUPPORT_LIMITED_ROLES = ['Support', 'Administrator', LEGACY_INTERNAL_ROLE];
+const SUPPORT_LIMITED_ROLES = ['Support', 'Administrator'];
 const TENANT_ADMIN_CONSOLE_ROLES = ['tenant_admin', 'client_remediation_owner', ...INTERNAL_CONSOLE_ROLES];
 
 function routeAudit({
@@ -759,8 +759,7 @@ function resolveConsolePrincipal(source) {
   const tenantId = resolveTenantId(source);
 
   if (recognizedRoles.length === 0) {
-    const allowLegacy = ((typeof process !== 'undefined' && process.env && process.env.FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK) || 'true') !== 'false';
-    if (!allowLegacy || explicitRoles.length > 0 || unrecognizedRoles.length > 0) {
+    if (!ALLOW_LEGACY_INTERNAL || explicitRoles.length > 0 || unrecognizedRoles.length > 0) {
       return {
         experienceClass: 'unsupported',
         isAuthenticated: true,
