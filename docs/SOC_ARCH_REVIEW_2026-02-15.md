@@ -3958,3 +3958,41 @@ Critical-path files changed:
 - `api/auth_scopes/__init__.py`, `api/auth_scopes/mapping.py`, `api/auth_scopes/resolution.py`, `api/auth_scopes/validation.py`: dead code removal only.
 
 SOC review outcome: approved. Dead code removal. No new auth paths, no credential escalation, no schema changes to production tables.
+
+---
+
+## 2026-08-17 — SOC-HIGH-002 — PR-CORE-002 #645: Admin gateway delegation proof + active tenant binding
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth subsystem changes: `api/auth_scopes/resolution.py`; BFF gateway changes).
+
+Scope: Closes the P0 cross-tenant authority gap where `ADMIN_GATEWAY_TOKEN` + a caller-controlled `X-Tenant-ID` header + an active tenant was sufficient to establish Core tenant context. The PR establishes a three-layer invariant: (1) service authentication via `ADMIN_GATEWAY_TOKEN`, (2) a short-lived HMAC delegation proof that cryptographically binds the request to a specific tenant, HTTP method, and canonical Core path, (3) tenant existence and lifecycle verification. All three must pass before `request.state.tenant_id` is mutated.
+
+Changes to `api/auth_scopes/resolution.py`:
+- `_resolve_delegation_secrets()`: reads `FG_GATEWAY_DELEGATION_SECRET_CURRENT` and `FG_GATEWAY_DELEGATION_SECRET_PREVIOUS` from environment; returns non-empty list or empty if unconfigured.
+- `validate_delegation_secret_config()`: called at startup; raises `RuntimeError` in production/strict environments if no delegation secret is configured. Fail-closed.
+- `_verify_delegation_proof(request, tenant_id)`: verifies the `X-FG-Delegation-{Version,Issued-At,Expires-At,Proof}` headers against an independently reconstructed canonical envelope (`v1\n{request_id}\n{tenant_id}\n{METHOD}\n{path}\n{iat}\n{exp}`) using HMAC-SHA256 with `hmac.compare_digest` (constant-time). Rejects: missing proof (403), unknown version (403), expired (403), future-dated beyond 5s tolerance (403), lifetime > 120s (403), HMAC mismatch (403). Non-prod dev bypass when no secret is configured; 503 in production with no secret. Rotation: tries CURRENT first, then PREVIOUS.
+- `bind_tenant_id()` `admin_internal_token` branch updated: call order is now format validation → `_verify_delegation_proof` → `_verify_admin_gateway_tenant` → `request.state.tenant_id` mutation. No state mutation occurs unless all three pass.
+- `_DELEGATION_CLOCK_TOLERANCE = 5`, `_DELEGATION_MAX_LIFETIME = 120` constants added.
+- `import hmac` added.
+
+Changes to `api/main.py`:
+- Startup validation block calls `validate_delegation_secret_config()`. Raises in production/strict if `FG_GATEWAY_DELEGATION_SECRET_CURRENT` is absent. Logged as `delegation_secret_config.ok` on success.
+
+Changes to `apps/console/app/api/core/[...path]/route.ts` (Console BFF):
+- `createDelegationProof()`: signs the canonical envelope using `HMAC-SHA256(FG_GATEWAY_DELEGATION_SECRET_CURRENT, canonical_string)` via Node.js `crypto.createHmac`. Lifetime 60 seconds.
+- Called in `proxyToCore()` on tenant-admin paths after `resolveAuthorizedTenant()` has validated the session and authorized the tenant. Ordering: session auth → console authorization → tenant resolution → proof creation → Core request. Fails 503 in prod-like environments if `FG_GATEWAY_DELEGATION_SECRET_CURRENT` is absent.
+- `FG_GATEWAY_DELEGATION_SECRET_CURRENT` is a server-side env var; never `NEXT_PUBLIC_*`, never returned to browser, never logged.
+
+Test evidence:
+- `tests/test_core_002_admin_gateway_tenant_binding.py`: 40 tests — 9 source assertions (both verify functions present, delegation proof precedes lifecycle check and state mutation, HMAC primitives), 28 delegation proof behavioral tests (golden vector, cross-tenant escalation, method replay, path replay, expiry, future-dating, wrong secret, rotation, dev bypass, frostgate-internal negative/positive), 7 tenant lifecycle tests.
+- `apps/console/tests/delegation-proof-contract.test.js`: 11 Node.js tests — golden vector pinned at `3a46a692...`, per-field sensitivity, source assertions.
+- Golden vector cross-language contract: both Python and Node.js produce `3a46a692f025f3a8a968c59ea1dc45f90eb155e916235b651260c1c26e0b3b33` for the same input. Interoperability drift fails immediately.
+
+Security posture: The delegation secret is distinct from `FG_INTERNAL_GATEWAY_SECRET` / `ADMIN_GATEWAY_TOKEN`. Possession of either secret alone is insufficient: the gateway token authenticates the service; the delegation secret authorizes the specific tenant+operation. A captured `ADMIN_GATEWAY_TOKEN` without `FG_GATEWAY_DELEGATION_SECRET_CURRENT` cannot forge a valid delegation proof. A captured `FG_GATEWAY_DELEGATION_SECRET_CURRENT` without `ADMIN_GATEWAY_TOKEN` cannot authenticate as `admin_internal_token`. Proofs are single-use by design (60s lifetime, request_id bound) and operation-bound (method + canonical path in envelope). Rotation is supported with no deployment coordination required (CURRENT + PREVIOUS window).
+
+Critical-path files changed:
+- `api/auth_scopes/resolution.py`: new delegation proof verification before `request.state.tenant_id` mutation.
+- `api/main.py`: startup fail-closed guard for delegation secret.
+- `apps/console/app/api/core/[...path]/route.ts`: delegation proof creation after session-authorized tenant resolution.
+
+SOC review outcome: approved. Strictly additive security enforcement. No existing auth path weakened. No credential issuance or revocation. No schema changes. The change closes a documented P0 cross-tenant authority gap and establishes a cryptographic binding between the BFF session authorization layer and Core tenant context establishment.
