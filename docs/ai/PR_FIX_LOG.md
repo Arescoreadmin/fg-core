@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-75 — sec(core): remove wildcard operator scope — PR #644
+
+- **PR/Branch:** `PR-CORE-001-remove-wildcard-operator-scope` (#644)
+- **Date:** 2026-08-17
+- **Files changed:** `api/identity_providers/api_key.py`, `api/internal_platform_authority.py`, `tests/test_core_001_wildcard_scope_containment.py`
+- **Root cause:** `OPERATOR_CREDENTIAL_SCOPES = ("*",)` caused the bootstrapped `console-bff-key` to carry the `"*"` wildcard scope. In `_permissions_from_legacy_scopes`, any key with `"*"` triggered an early return granting `roles_to_permissions(["platform_admin"])` — every permission in the system — regardless of what the credential was actually intended to hold. This is the Core layer of the P0 wildcard authority chain (Console layers closed in #641–#643).
+- **Fix:** Two targeted removals: (1) `OPERATOR_CREDENTIAL_SCOPES = ("*",)` replaced with explicit named operator scopes (`admin:read`, `admin:write`, `audit:read`, `audit:export`, `keys:admin`, `keys:read`, `keys:write`); (2) the `if "*" in scopes: return roles_to_permissions(["platform_admin"])` early return removed from `_permissions_from_legacy_scopes`. A key with only `"*"` and no admin scopes now resolves to zero permissions (fail closed). The intentional admin-scope block (admin:read/write, keys:*, audit:* → platform_admin) is preserved for backward compat.
+- **Behavioral impact:** Any credential that held only `"*"` scope and no named admin scopes will now resolve to zero permissions. The bootstrapped `console-bff-key` retains platform_admin through its explicit admin scopes. **Operational action required before prod merge:** rotate `console-bff-key` so stored `"*"` is replaced by the new named scopes.
+- **Security impact:** Positive. Closes the P0 path where `"*"` → `platform_admin` in the legacy scope fallback. No production RBAC data, RLS policy, migration DDL, named-scope mappings, or Console files changed.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_core_001_wildcard_scope_containment.py` — 20 tests covering: static source assertions (no wildcard in constant, no wildcard platform_admin path, admin block preserved), behavioral fail-closed invariants (`"*"` alone → empty, `"*"` + governance:read → viewer only, not platform_admin), forward-compat proof (OPERATOR_CREDENTIAL_SCOPES resolves platform_admin via named block), and parametrized named-scope → role assertions.
+- **Validation:** `python -m pytest tests/test_core_001_wildcard_scope_containment.py -v` — 20/20 PASS. `python -m pytest tests/test_ci_security_guards.py tests/test_security_regression_gates.py -v` — all PASS. Policy validation PASS.
+- **Result:** PASS locally; prod credential rotation required before merge.
+
+---
+
 ## P-74 - fix(identity): close tenant identity setup workflow - PR TBD
 
 - **PR/Branch:** `fix/identity-setup-workflow` (TBD)

@@ -164,8 +164,6 @@ def _permissions_from_legacy_scopes(scopes: set[str]) -> frozenset[str]:
     This fallback is skipped once a key has an explicit DB role.
     """
     result: set[str] = set()
-    if "*" in scopes:
-        return roles_to_permissions(["platform_admin"])
     if "governance:write" in scopes:
         # Pre-RBAC write keys had full write access across FA mutations (assessor)
         # and governance decision routes (compliance_reviewer). Both are needed so
