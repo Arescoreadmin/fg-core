@@ -573,6 +573,63 @@ def _auth_tenant_from_request(request: Request) -> Optional[str]:
     return str(tenant).strip() or None
 
 
+def _verify_admin_gateway_tenant(tenant_id: str) -> None:
+    """Verify tenant exists and is active before binding admin-gateway authority.
+
+    Called in the admin_internal_token branch of bind_tenant_id, after format
+    validation and before request.state mutation. Fail closed: any DB error or
+    non-active lifecycle state is treated as a denial.
+
+    Without this check, a valid ADMIN_GATEWAY_TOKEN combined with a
+    caller-controlled X-Tenant-ID could manufacture authority over any
+    syntactically valid tenant string (PR-CORE-002).
+    """
+    try:
+        from api.db import get_engine as _get_engine  # noqa: PLC0415
+        from api.tenant_repository import TenantRepository  # noqa: PLC0415
+
+        engine = _get_engine()
+        repo = TenantRepository(engine)
+        record = repo.get(tenant_id)
+    except HTTPException:
+        raise
+    except Exception:
+        log.warning(
+            "admin_gateway_tenant_verify.db_error",
+            extra={"tenant_id": tenant_id},
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=redact_detail(
+                "tenant verification unavailable", generic="service unavailable"
+            ),
+        )
+
+    if record is None:
+        log.warning(
+            "admin_gateway_tenant_verify.not_found",
+            extra={"tenant_id": tenant_id},
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=redact_detail(f"tenant not found: {tenant_id}", generic="not found"),
+        )
+
+    if record.lifecycle_state != "active":
+        log.warning(
+            "admin_gateway_tenant_verify.lifecycle_denied",
+            extra={"tenant_id": tenant_id, "lifecycle_state": record.lifecycle_state},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail(
+                f"tenant {tenant_id} lifecycle={record.lifecycle_state}",
+                generic="forbidden",
+            ),
+        )
+
+
 def bind_tenant_id(
     request: Request,
     requested_tenant: Optional[str],
@@ -652,6 +709,7 @@ def bind_tenant_id(
                 status_code=400,
                 detail=redact_detail("invalid tenant_id", generic="invalid request"),
             )
+        _verify_admin_gateway_tenant(requested)
         request.state.tenant_id = requested
         request.state.tenant_is_key_bound = True
         _apply_tenant_context(request, requested)
