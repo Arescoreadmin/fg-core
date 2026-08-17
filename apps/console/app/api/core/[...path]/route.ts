@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import type { Session } from 'next-auth';
+import { createHmac } from 'crypto';
 import { canAccessCoreApiPath, getSessionClaims } from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
@@ -14,6 +15,7 @@ const CORE_TENANT_ID = (process.env.CORE_TENANT_ID || '').trim();
 const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ADMIN_GATEWAY_TOKEN = internalGatewaySecret();
+const DELEGATION_SECRET_CURRENT = process.env.FG_GATEWAY_DELEGATION_SECRET_CURRENT;
 const PROD_LIKE_FG_ENVS = new Set(['prod', 'production', 'staging']);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
@@ -481,6 +483,27 @@ function isPrivateHost(hostname: string): boolean {
   return false;
 }
 
+type DelegationProof = {
+  version: 'v1';
+  issuedAt: number;
+  expiresAt: number;
+  proof: string;
+};
+
+function createDelegationProof(
+  secret: string,
+  requestId: string,
+  tenantId: string,
+  method: string,
+  canonicalPath: string,
+): DelegationProof {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = issuedAt + 60;
+  const canonical = `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
+  const proof = createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
+  return { version: 'v1', issuedAt, expiresAt, proof };
+}
+
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
   const isTenantAdminPath = isTenantAdminCorePath(path);
 
@@ -497,6 +520,26 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
     if (tenantId) headers.set('X-Tenant-ID', tenantId);
+    if (DELEGATION_SECRET_CURRENT) {
+      const canonicalPath = '/' + path.join('/');
+      const delegation = createDelegationProof(
+        DELEGATION_SECRET_CURRENT,
+        requestId,
+        tenantId,
+        request.method,
+        canonicalPath,
+      );
+      headers.set('X-FG-Delegation-Version', delegation.version);
+      headers.set('X-FG-Delegation-Issued-At', String(delegation.issuedAt));
+      headers.set('X-FG-Delegation-Expires-At', String(delegation.expiresAt));
+      headers.set('X-FG-Delegation-Proof', delegation.proof);
+    } else if (isProdLikeEnv()) {
+      console.error(
+        `[STARTUP_FATAL] FG_GATEWAY_DELEGATION_SECRET_CURRENT is not configured — ` +
+        `admin-gateway delegation proof cannot be created request_id=${requestId}`,
+      );
+      return jsonError('Admin gateway delegation secret not configured', 503, requestId);
+    }
   } else {
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 import re
@@ -27,6 +28,8 @@ from .validation import (
 log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
 
+_DELEGATION_CLOCK_TOLERANCE = 5  # seconds of future-dating tolerance
+_DELEGATION_MAX_LIFETIME = 120  # reject proofs longer than 2 minutes
 
 _ADMIN_GATEWAY_EXACT_PATHS = frozenset(
     {
@@ -573,6 +576,148 @@ def _auth_tenant_from_request(request: Request) -> Optional[str]:
     return str(tenant).strip() or None
 
 
+def _resolve_delegation_secrets() -> list[str]:
+    current = (os.getenv("FG_GATEWAY_DELEGATION_SECRET_CURRENT") or "").strip()
+    previous = (os.getenv("FG_GATEWAY_DELEGATION_SECRET_PREVIOUS") or "").strip()
+    return [s for s in (current, previous) if s]
+
+
+def validate_delegation_secret_config() -> None:
+    """Called at startup. Raises RuntimeError in prod/strict if secret missing."""
+    if (
+        not _is_production_env()
+        and (os.getenv("FG_STRICT_ENV") or "").strip().lower() != "true"
+    ):
+        return
+    if not _resolve_delegation_secrets():
+        raise RuntimeError(
+            "FG_GATEWAY_DELEGATION_SECRET_CURRENT is required in production. "
+            "Admin-gateway delegation proofs cannot be verified without it."
+        )
+
+
+def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
+    """Verify the short-lived HMAC delegation proof from the admin gateway BFF.
+
+    Binds: version, request_id, tenant_id, HTTP method, canonical path,
+    issued_at, expires_at. All six fields must match what Core independently
+    derives from the live request.
+
+    Non-prod bypass: if FG_GATEWAY_DELEGATION_SECRET_CURRENT is not configured,
+    the check is skipped in non-prod/non-strict environments so local dev works.
+    Fail-closed in production.
+    """
+    secrets = _resolve_delegation_secrets()
+    if not secrets:
+        if (
+            _is_production_env()
+            or (os.getenv("FG_STRICT_ENV") or "").strip().lower() == "true"
+        ):
+            log.error("delegation_proof.no_secret_configured")
+            raise HTTPException(
+                status_code=503,
+                detail=redact_detail(
+                    "delegation verification unavailable", generic="service unavailable"
+                ),
+            )
+        log.debug("delegation_proof.dev_bypass_no_secret_configured")
+        return
+
+    version = (request.headers.get("x-fg-delegation-version") or "").strip()
+    issued_at_str = (request.headers.get("x-fg-delegation-issued-at") or "").strip()
+    expires_at_str = (request.headers.get("x-fg-delegation-expires-at") or "").strip()
+    proof = (request.headers.get("x-fg-delegation-proof") or "").strip().lower()
+
+    if not version or not issued_at_str or not expires_at_str or not proof:
+        log.warning(
+            "delegation_proof.missing",
+            extra={"tenant_id": tenant_id, "has_version": bool(version)},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("delegation proof required", generic="forbidden"),
+        )
+
+    if version != "v1":
+        log.warning("delegation_proof.unknown_version", extra={"version": version})
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("unknown delegation version", generic="forbidden"),
+        )
+
+    try:
+        issued_at = int(issued_at_str)
+        expires_at = int(expires_at_str)
+    except ValueError:
+        log.warning("delegation_proof.malformed_timestamps")
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail(
+                "malformed delegation timestamps", generic="forbidden"
+            ),
+        )
+
+    now = int(time.time())
+
+    if expires_at <= now:
+        log.warning(
+            "delegation_proof.expired",
+            extra={"tenant_id": tenant_id, "expires_at": expires_at, "now": now},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("delegation proof expired", generic="forbidden"),
+        )
+
+    if issued_at > now + _DELEGATION_CLOCK_TOLERANCE:
+        log.warning(
+            "delegation_proof.future_dated",
+            extra={"tenant_id": tenant_id, "issued_at": issued_at, "now": now},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail(
+                "delegation proof issued in future", generic="forbidden"
+            ),
+        )
+
+    if expires_at - issued_at > _DELEGATION_MAX_LIFETIME:
+        log.warning(
+            "delegation_proof.lifetime_exceeded",
+            extra={"tenant_id": tenant_id, "lifetime": expires_at - issued_at},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail(
+                "delegation proof lifetime too long", generic="forbidden"
+            ),
+        )
+
+    req_id = _request_id(request) or ""
+    method = (request.method or "").upper()
+    path = str(request.url.path) if request.url else ""
+
+    canonical = (
+        f"v1\n{req_id}\n{tenant_id}\n{method}\n{path}\n{issued_at}\n{expires_at}"
+    )
+
+    for secret in secrets:
+        expected = hmac.new(
+            secret.encode(), canonical.encode(), hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(expected, proof):
+            return
+
+    log.warning(
+        "delegation_proof.invalid",
+        extra={"tenant_id": tenant_id, "method": method, "path": path},
+    )
+    raise HTTPException(
+        status_code=403,
+        detail=redact_detail("delegation proof invalid", generic="forbidden"),
+    )
+
+
 def _verify_admin_gateway_tenant(tenant_id: str) -> None:
     """Verify tenant exists and is active before binding admin-gateway authority.
 
@@ -709,6 +854,7 @@ def bind_tenant_id(
                 status_code=400,
                 detail=redact_detail("invalid tenant_id", generic="invalid request"),
             )
+        _verify_delegation_proof(request, requested)
         _verify_admin_gateway_tenant(requested)
         request.state.tenant_id = requested
         request.state.tenant_is_key_bound = True
