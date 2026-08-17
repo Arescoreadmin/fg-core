@@ -34,7 +34,15 @@ INTERNAL_AUTHORITY_SERVICE = "frostgate-core"
 INTERNAL_AUTHORITY_ACTOR = "system:internal-platform-authority"
 OPERATOR_CREDENTIAL_TYPE = "tenant_api_key"
 OPERATOR_CREDENTIAL_SLOT = "console-bff-key"
-OPERATOR_CREDENTIAL_SCOPES: tuple[str, ...] = ("*",)
+OPERATOR_CREDENTIAL_SCOPES: tuple[str, ...] = (
+    "admin:read",
+    "admin:write",
+    "audit:read",
+    "audit:export",
+    "keys:admin",
+    "keys:read",
+    "keys:write",
+)
 OPERATOR_CREDENTIAL_IDEMPOTENCY_KEY = "internal-platform-authority:console-bff-key:v1"
 TENANT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
