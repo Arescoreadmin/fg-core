@@ -27,20 +27,23 @@ _IPA_SRC = Path("api/internal_platform_authority.py").read_text(encoding="utf-8"
 
 # The explicit operator scopes from OPERATOR_CREDENTIAL_SCOPES (inlined to avoid
 # the fastapi transitive import from internal_platform_authority.py).
-_OPERATOR_CREDENTIAL_SCOPES = frozenset({
-    "admin:read",
-    "admin:write",
-    "audit:read",
-    "audit:export",
-    "keys:admin",
-    "keys:read",
-    "keys:write",
-})
+_OPERATOR_CREDENTIAL_SCOPES = frozenset(
+    {
+        "admin:read",
+        "admin:write",
+        "audit:read",
+        "audit:export",
+        "keys:admin",
+        "keys:read",
+        "keys:write",
+    }
+)
 
 
 # ── Inline mirror of _permissions_from_legacy_scopes (PR-CORE-001 version) ──
 # Mirrors the function as it exists AFTER this PR's change.
 # The source regression tests (below) verify the mirror matches production.
+
 
 def _mirror(scopes: set[str]) -> frozenset[str]:
     result: set[str] = set()
@@ -82,7 +85,9 @@ def test_operator_credential_scopes_has_explicit_admin_scopes() -> None:
     assert '"admin:write"' in const_block
 
 
-def test_permissions_from_legacy_scopes_source_has_no_wildcard_platform_admin_path() -> None:
+def test_permissions_from_legacy_scopes_source_has_no_wildcard_platform_admin_path() -> (
+    None
+):
     """The removed line: if "*" in scopes: return roles_to_permissions(["platform_admin"])"""
     fn_start = _API_KEY_SRC.index("def _permissions_from_legacy_scopes(")
     fn_end = _API_KEY_SRC.index("\ndef ", fn_start + 1)
