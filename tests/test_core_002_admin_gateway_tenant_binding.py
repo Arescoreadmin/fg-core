@@ -603,3 +603,133 @@ def test_header_tenant_cannot_differ_from_proof_tenant() -> None:
                 f"Proof for {legitimate_tenant!r} must not authorize {forged_tenant!r}"
             )
             assert result.status_code == 403
+
+
+# ── Cross-language canonicalization contract ───────────────────────────────────
+# Pinned golden vector. Python Core and Node.js BFF must produce the exact same
+# digest for the same input. If this test diverges from the Node.js test in
+# apps/console/tests/delegation-proof-contract.test.js, the two sides will fail
+# to interoperate in production.
+
+_GOLDEN_SECRET = "test-cross-language-vector-secret"
+_GOLDEN_REQUEST_ID = "req-123"
+_GOLDEN_TENANT_ID = "tenant-a"
+_GOLDEN_METHOD = "POST"
+_GOLDEN_PATH = "/admin/identity/tenants/tenant-a/config"
+_GOLDEN_IAT = 1786992000
+_GOLDEN_EXP = 1786992060
+_GOLDEN_DIGEST = "3a46a692f025f3a8a968c59ea1dc45f90eb155e916235b651260c1c26e0b3b33"
+
+
+def _compute_proof_raw(
+    secret: str,
+    request_id: str,
+    tenant_id: str,
+    method: str,
+    path: str,
+    issued_at: int,
+    expires_at: int,
+) -> str:
+    canonical = f"v1\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}\n{issued_at}\n{expires_at}"
+    return _hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+
+
+def test_delegation_proof_canonical_golden_vector() -> None:
+    digest = _compute_proof_raw(
+        _GOLDEN_SECRET,
+        _GOLDEN_REQUEST_ID,
+        _GOLDEN_TENANT_ID,
+        _GOLDEN_METHOD,
+        _GOLDEN_PATH,
+        _GOLDEN_IAT,
+        _GOLDEN_EXP,
+    )
+    assert digest == _GOLDEN_DIGEST, (
+        f"Python digest {digest!r} must match the cross-language golden vector. "
+        "If the canonical format changed, update BOTH implementations and the pinned digest."
+    )
+
+
+def test_golden_vector_method_case_insensitive() -> None:
+    lower = _compute_proof_raw(_GOLDEN_SECRET, "r", "t", "post", "/p", 1000, 1060)
+    upper = _compute_proof_raw(_GOLDEN_SECRET, "r", "t", "POST", "/p", 1000, 1060)
+    assert lower == upper, "method casing must not affect the digest"
+
+
+def test_golden_vector_each_field_independently_affects_digest() -> None:
+    base = _compute_proof_raw(
+        _GOLDEN_SECRET,
+        _GOLDEN_REQUEST_ID,
+        _GOLDEN_TENANT_ID,
+        _GOLDEN_METHOD,
+        _GOLDEN_PATH,
+        _GOLDEN_IAT,
+        _GOLDEN_EXP,
+    )
+    variants = [
+        _compute_proof_raw(
+            "other-secret",
+            _GOLDEN_REQUEST_ID,
+            _GOLDEN_TENANT_ID,
+            _GOLDEN_METHOD,
+            _GOLDEN_PATH,
+            _GOLDEN_IAT,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            "req-999",
+            _GOLDEN_TENANT_ID,
+            _GOLDEN_METHOD,
+            _GOLDEN_PATH,
+            _GOLDEN_IAT,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            _GOLDEN_REQUEST_ID,
+            "tenant-b",
+            _GOLDEN_METHOD,
+            _GOLDEN_PATH,
+            _GOLDEN_IAT,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            _GOLDEN_REQUEST_ID,
+            _GOLDEN_TENANT_ID,
+            "GET",
+            _GOLDEN_PATH,
+            _GOLDEN_IAT,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            _GOLDEN_REQUEST_ID,
+            _GOLDEN_TENANT_ID,
+            _GOLDEN_METHOD,
+            "/admin/other/path",
+            _GOLDEN_IAT,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            _GOLDEN_REQUEST_ID,
+            _GOLDEN_TENANT_ID,
+            _GOLDEN_METHOD,
+            _GOLDEN_PATH,
+            _GOLDEN_IAT + 1,
+            _GOLDEN_EXP,
+        ),
+        _compute_proof_raw(
+            _GOLDEN_SECRET,
+            _GOLDEN_REQUEST_ID,
+            _GOLDEN_TENANT_ID,
+            _GOLDEN_METHOD,
+            _GOLDEN_PATH,
+            _GOLDEN_IAT,
+            _GOLDEN_EXP + 1,
+        ),
+    ]
+    for variant in variants:
+        assert variant != base, "every field must independently change the digest"
