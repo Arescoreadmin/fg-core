@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-76 — sec(core): verify tenant existence and lifecycle before binding admin-gateway authority — PR #645
+
+- **PR/Branch:** `PR-CORE-002-admin-gateway-tenant-binding` (#645)
+- **Date:** 2026-08-17
+- **Files changed:** `api/auth_scopes/resolution.py`, `tests/test_core_002_admin_gateway_tenant_binding.py`
+- **Root cause:** The `admin_internal_token` branch of `bind_tenant_id()` accepted any syntactically valid tenant ID from the caller-controlled `X-Tenant-ID` header after only a regex format check. A valid `ADMIN_GATEWAY_TOKEN` combined with an arbitrary `X-Tenant-ID` could bind admin-gateway authority to any tenant string — including non-existent tenants, suspended tenants, and tenants of incorrect kind. This is the Core layer of the P0 admin-gateway authority chain: the BFF validates the tenant against its own session, but Core had no independent verification.
+- **Fix:** Added `_verify_admin_gateway_tenant(tenant_id)` — called immediately after the format check in the `admin_internal_token` branch, before `request.state.tenant_id` is mutated. The function: (1) loads the tenant record via `TenantRepository(get_engine()).get(tenant_id)`; (2) returns 404 if the tenant does not exist; (3) returns 403 if `lifecycle_state != "active"`; (4) fails closed with 503 on any DB error. The call is ordered before all state mutation so no partial tenant binding can occur if verification fails.
+- **Behavioral impact:** Admin-gateway-authenticated requests that supply a non-existent tenant ID now receive 404 instead of silently succeeding. Requests supplying a suspended/archived/deleted tenant receive 403. Active tenants are unaffected. DB unavailability returns 503 (previously: would proceed to operate on unverified tenant).
+- **Security impact:** Closes the vector where `ADMIN_GATEWAY_TOKEN + forged X-Tenant-ID` manufactured arbitrary tenant authority. No existing production RBAC, RLS, scoped-key paths, global-key path, or named-scope mappings changed. This is Core-only; Console files unchanged.
+- **Schema/API impact:** None. New 404/403/503 responses are visible only on requests that would previously have operated on unverified tenants.
+- **Tests added:** `tests/test_core_002_admin_gateway_tenant_binding.py` — 16 tests: 6 static source assertions (function exists, called in branch, called before state mutation, checks None→404, checks lifecycle→403, has DB error guard→503) + 10 behavioral tests via inline mirror + in-memory SQLite (non-existent→404, 4 lifecycle states→403, active→passes, disposed engine→503 fail-closed, multiple fake IDs→404, suspended→403, frostgate-internal active→passes).
+- **Validation:** `python -m pytest tests/test_core_002_admin_gateway_tenant_binding.py -v` — 16/16 PASS. `python -m pytest tests/test_ci_security_guards.py tests/test_security_regression_gates.py -q` — PASS. `ruff format --check api/auth_scopes/resolution.py tests/test_core_002_admin_gateway_tenant_binding.py` — PASS.
+- **Result:** PASS locally; CI pending.
+
+---
+
 ## P-75 — sec(core): remove wildcard operator scope — PR #644
 
 - **PR/Branch:** `PR-CORE-001-remove-wildcard-operator-scope` (#644)

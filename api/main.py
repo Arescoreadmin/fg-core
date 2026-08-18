@@ -472,6 +472,16 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 raise
 
         try:
+            from api.auth_scopes.resolution import validate_delegation_secret_config
+
+            validate_delegation_secret_config()
+            log.info("delegation_secret_config.ok")
+        except Exception as exc:
+            log.warning("Delegation secret startup validation failed: %s", exc)
+            if is_production or is_strict_env_required():
+                raise
+
+        try:
             self_heal_watchdog = SelfHealWatchdog()
             self_heal_watchdog.start()
             app.state.self_heal_watchdog = self_heal_watchdog

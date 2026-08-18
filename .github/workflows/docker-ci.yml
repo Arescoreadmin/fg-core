@@ -267,6 +267,7 @@ jobs:
 
           FG_SIGNING_SECRET=ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET=ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT=ci-gateway-delegation-secret-32-bytes
           FG_KEY_PEPPER=${FG_KEY_PEPPER}
           FG_EVIDENCE_SIGNING_KEY_B64=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=
           FG_REPORT_SIGNING_KEY=0000000000000000000000000000000000000000000000000000000000000001
@@ -359,6 +360,7 @@ jobs:
           FG_REPORT_SIGNING_KEY=0000000000000000000000000000000000000000000000000000000000000001
           FG_BILLING_EVIDENCE_HMAC_KEY=ci-billing-hmac-evidence-key-32-bytes
           MINISIGN_SECRET_KEY=ci-minisign-secret-key-for-testing-only-not-real
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT=ci-gateway-delegation-secret-32-bytes
           EOF
 
           printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
@@ -369,6 +371,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci config > /tmp/fg.compose.rendered.yml
@@ -380,6 +383,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci config >/dev/null
@@ -390,6 +394,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci build --pull
@@ -400,6 +405,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate opa-bundles
@@ -421,6 +427,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d postgres
@@ -483,6 +490,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate
@@ -581,6 +589,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+          FG_GATEWAY_DELEGATION_SECRET_CURRENT: ci-gateway-delegation-secret-32-bytes
         run: |
           set +e
           docker compose --env-file .env.ci down -v --remove-orphans
