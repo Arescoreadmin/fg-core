@@ -157,8 +157,10 @@ class TestINV001_NoUnauthenticatedAccess:
         mock_request.state.tenant_is_key_bound = False
         mock_request.state.db_session = None
 
-        with patch("api.auth_scopes.resolution._verify_delegation_proof"), \
-             patch("api.auth_scopes.resolution._verify_admin_gateway_tenant"):
+        with (
+            patch("api.auth_scopes.resolution._verify_delegation_proof"),
+            patch("api.auth_scopes.resolution._verify_admin_gateway_tenant"),
+        ):
             result = bind_tenant_id(mock_request, "tenant-a")
         assert result == "tenant-a"
         assert mock_request.state.tenant_id == "tenant-a"
