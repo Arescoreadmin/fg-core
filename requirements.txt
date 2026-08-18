@@ -5,7 +5,7 @@ msal==1.37.0
 loguru==0.7.2
 python-dotenv==1.2.2
 redis==7.1.0
-sqlparse==0.5.4
+sqlparse==0.6.0
 argon2-cffi==23.1.0
 packaging>=21.3
 stripe>=10.0.0
