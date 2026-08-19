@@ -48,8 +48,8 @@ runs:
           done
         }
 
-        retry sudo apt-get update
-        retry sudo apt-get install -y --no-install-recommends \
+        retry timeout 120 sudo apt-get update
+        retry timeout 120 sudo apt-get install -y --no-install-recommends \
           sqlite3 curl zip minisign ripgrep
 
     - name: Set up Python (cached)
