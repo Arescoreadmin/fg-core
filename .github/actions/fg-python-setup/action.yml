@@ -94,6 +94,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+
+        # If a cached venv was restored but its binaries are not executable on
+        # this runner (stale shebang or wrong arch), delete it so make venv
+        # rebuilds from scratch rather than skipping via the stamp file.
+        if [ -f ".venv/bin/pytest" ] && ! ".venv/bin/pytest" --version &>/dev/null; then
+          echo "⚠️ Cached venv has broken binaries — forcing rebuild"
+          rm -rf .venv
+        fi
+
         make venv
 
         if [ -d ".venv/bin" ]; then
