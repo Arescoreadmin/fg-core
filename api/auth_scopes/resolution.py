@@ -798,7 +798,22 @@ def bind_tenant_id(
 
     if cached_tenant and key_bound_flag:
         _pre_auth = getattr(getattr(request, "state", None), "auth", None)
-        if getattr(_pre_auth, "reason", "") == "admin_internal_token":
+        # PR-CORE-002C: for admin_internal_token, only trust the cached bind
+        # when THIS request has already passed delegation proof + tenant
+        # lifecycle verification (flagged via _admin_gateway_delegation_verified).
+        # Without that flag we must fall through to the delegation branch
+        # (defense-in-depth from PR-CORE-002B).
+        _verified_flag = bool(
+            getattr(
+                getattr(request, "state", None),
+                "_admin_gateway_delegation_verified",
+                False,
+            )
+        )
+        if (
+            getattr(_pre_auth, "reason", "") == "admin_internal_token"
+            and not _verified_flag
+        ):
             # Defense-in-depth (PR-CORE-002B): admin_internal_token must always pass
             # delegation verification. Clear pre-bound state so the branch below runs.
             request.state.tenant_is_key_bound = False
@@ -847,6 +862,15 @@ def bind_tenant_id(
 
     if getattr(auth, "reason", "") == "admin_internal_token":
         if not requested:
+            # PR-CORE-002C: fall back to X-Tenant-ID header when caller did not
+            # forward the id explicitly. This is required for the second-hop
+            # dependency (tenant_db_required) that runs after require_capability
+            # has already verified the tenant against delegation + lifecycle.
+            header_tenant = (
+                request.headers.get("X-Tenant-Id") if request.headers else None
+            )
+            requested = (str(header_tenant).strip() if header_tenant else "") or None
+        if not requested:
             raise HTTPException(
                 status_code=400,
                 detail=redact_detail(
@@ -863,6 +887,11 @@ def bind_tenant_id(
         _verify_admin_gateway_tenant(requested)
         request.state.tenant_id = requested
         request.state.tenant_is_key_bound = True
+        # PR-CORE-002C: mark this request as delegation-verified so subsequent
+        # bind_tenant_id() calls (e.g. from tenant_db_required in the route
+        # body) can trust the cached state and skip re-verification. Delegation
+        # proof MUST have run at least once before this flag is set.
+        request.state._admin_gateway_delegation_verified = True
         _apply_tenant_context(request, requested)
         return requested
 

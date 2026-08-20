@@ -80,6 +80,67 @@ def _admin_gateway_tenant_admin_satisfies_capability(
     )
 
 
+def _ensure_admin_gateway_tenant_bound(request: Request) -> str | None:
+    """Establish verified tenant context before capability enforcement.
+
+    Runs at the front of ``require_capability`` for ``admin_internal_token``
+    requests. Prior to PR-CORE-002B, ``AuthGateMiddleware`` pre-bound
+    ``request.state.tenant_id`` for admin_internal_token requests, which meant
+    ``require_capability`` observed a tenant. After PR-CORE-002B the middleware
+    stopped pre-binding admin_internal_token (that pre-binding was the very
+    bypass that PR-CORE-002 closed), and tenant authority now must be
+    established by ``bind_tenant_id()`` — which enforces delegation proof
+    verification + tenant lifecycle verification.
+
+    Because ``require_capability`` is invoked as a FastAPI ``Depends()`` inside
+    the ``dependencies=[...]`` list, it fires *before* the route body calls
+    ``bind_tenant_id()``. Without this helper, capability enforcement sees an
+    empty tenant context and denies with ``no_tenant_context``.
+
+    Fix: invoke ``bind_tenant_id()`` here — for ``admin_internal_token`` this
+    forces delegation proof verification and tenant lifecycle verification to
+    run *before* capability enforcement. The authority order becomes:
+
+      authenticate gateway
+        -> verify delegation proof
+        -> verify requested tenant exists + active
+        -> establish authoritative tenant context
+        -> capability / entitlement enforcement
+        -> route business logic
+
+    For non-admin_internal_token requests (tenant API keys, canonical
+    ``fgk.*`` keys) this function is a no-op — those paths already bind their
+    tenant in ``AuthGateMiddleware`` and this helper never invokes
+    ``bind_tenant_id()`` for them, preserving existing behavior.
+
+    Returns the verified tenant id when admin_internal_token binding succeeded,
+    else ``None``. Any HTTPException from ``bind_tenant_id`` (403 for invalid
+    proof, 404 for missing tenant, 403 for suspended tenant, etc.) is
+    intentionally propagated — capability enforcement must not proceed when
+    tenant authority cannot be established.
+    """
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    if getattr(auth, "reason", "") != "admin_internal_token":
+        return None
+
+    cached = getattr(getattr(request, "state", None), "tenant_id", None)
+    key_bound = bool(
+        getattr(getattr(request, "state", None), "tenant_is_key_bound", False)
+    )
+    if cached and key_bound:
+        # bind_tenant_id defense-in-depth (PR-CORE-002B) still forces the
+        # admin_internal_token branch through delegation verification even when
+        # cached state is present, so calling it here is safe and correct.
+        pass
+
+    header_tenant = (request.headers.get("X-Tenant-Id") or "").strip() or None
+    # bind_tenant_id enforces delegation proof + tenant lifecycle verification
+    # for admin_internal_token. Raises HTTPException on any failure, which we
+    # let propagate so capability enforcement does not run on an unverified
+    # tenant context.
+    return bind_tenant_id(request, header_tenant)
+
+
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
@@ -547,6 +608,14 @@ def require_capability(capability: str):
     """
 
     def _dep(request: Request) -> None:
+        # PR-CORE-002C: for admin_internal_token requests, establish verified
+        # tenant context (delegation proof + tenant lifecycle) BEFORE capability
+        # enforcement. Without this, require_capability runs before the route
+        # body's bind_tenant_id() call and denies with no_tenant_context.
+        # Any HTTPException from bind_tenant_id (403 invalid proof, 404 missing
+        # tenant, 403 suspended lifecycle) intentionally propagates.
+        _ensure_admin_gateway_tenant_bound(request)
+
         tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
         if not tenant_id:
             auth = getattr(getattr(request, "state", None), "auth", None)

@@ -30,6 +30,29 @@ def _configure_app(tmp_path, monkeypatch):
     return TestClient(build_app(auth_enabled=True), raise_server_exceptions=False)
 
 
+def _seed_tenant(tenant_id: str, *, lifecycle_state: str = "active") -> None:
+    """Seed an active tenant row so PR-CORE-002 tenant verification succeeds.
+
+    Every admin-gateway call for X-Tenant-ID must correspond to an existing
+    active tenant row (verified by bind_tenant_id -> _verify_admin_gateway_tenant).
+    Tests exercising the admin-gateway path must seed the tenant explicitly;
+    Core does not auto-create tenants on first admin-gateway contact.
+    """
+    from sqlalchemy import text
+
+    from api.db import get_engine
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)"
+                " VALUES (:tid, :name, :state)"
+            ),
+            {"tid": tenant_id, "name": tenant_id, "state": lifecycle_state},
+        )
+
+
 def _admin_gateway_headers(
     tenant_id: str, token: str = "test-admin-gateway-token"
 ) -> dict[str, str]:
@@ -62,6 +85,7 @@ def test_admin_gateway_users_invite_reaches_business_validation_without_identity
 ):
     client = _configure_app(tmp_path, monkeypatch)
     tenant_id = "tenant-console-users-invite"
+    _seed_tenant(tenant_id)
 
     response = client.post(
         "/workforce/users",
@@ -79,6 +103,7 @@ def test_admin_gateway_users_update_reaches_resource_gate_without_identity_entit
 ):
     client = _configure_app(tmp_path, monkeypatch)
     tenant_id = "tenant-console-users-update"
+    _seed_tenant(tenant_id)
 
     response = client.patch(
         "/workforce/users/missing-user",
@@ -96,6 +121,7 @@ def test_admin_gateway_identity_routes_reach_tenant_admin_logic_without_sso_enti
 ):
     client = _configure_app(tmp_path, monkeypatch)
     tenant_id = "tenant-console-identity"
+    _seed_tenant(tenant_id)
     headers = _admin_gateway_headers(tenant_id)
 
     config = client.get(f"/admin/identity/tenants/{tenant_id}/config", headers=headers)
@@ -117,6 +143,7 @@ def test_admin_gateway_identity_routes_reach_tenant_admin_logic_without_sso_enti
 def test_tenant_api_key_still_requires_identity_scim_entitlement(tmp_path, monkeypatch):
     client = _configure_app(tmp_path, monkeypatch)
     tenant_id = "tenant-console-users-tenant-key-denied"
+    _seed_tenant(tenant_id)
 
     response = client.post(
         "/workforce/users",
