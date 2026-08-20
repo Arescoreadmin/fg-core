@@ -797,30 +797,35 @@ def bind_tenant_id(
         request.state.tenant_is_key_bound = False
 
     if cached_tenant and key_bound_flag:
-        cached = cached_tenant
-        if requested and requested != cached:
-            auth = getattr(getattr(request, "state", None), "auth", None)
-            _tenant_denial_log(
-                request=request,
-                event="tenant_mismatch_denied",
-                reason="cached_tenant_mismatch",
-                tenant_from_key=cached,
-                tenant_supplied=requested,
-                key_prefix=getattr(auth, "key_prefix", None),
-                scopes=getattr(auth, "scopes", set()),
-            )
-            raise HTTPException(
-                status_code=403,
-                detail=redact_detail("tenant mismatch", generic="forbidden"),
-            )
-        return cached
+        _pre_auth = getattr(getattr(request, "state", None), "auth", None)
+        if getattr(_pre_auth, "reason", "") == "admin_internal_token":
+            # Defense-in-depth (PR-CORE-002B): admin_internal_token must always pass
+            # delegation verification. Clear pre-bound state so the branch below runs.
+            request.state.tenant_is_key_bound = False
+        else:
+            cached = cached_tenant
+            if requested and requested != cached:
+                _tenant_denial_log(
+                    request=request,
+                    event="tenant_mismatch_denied",
+                    reason="cached_tenant_mismatch",
+                    tenant_from_key=cached,
+                    tenant_supplied=requested,
+                    key_prefix=getattr(_pre_auth, "key_prefix", None),
+                    scopes=getattr(_pre_auth, "scopes", set()),
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail=redact_detail("tenant mismatch", generic="forbidden"),
+                )
+            return cached
 
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = _auth_tenant_from_request(request)
     key_prefix = getattr(auth, "key_prefix", None)
     scopes: set[str] = getattr(auth, "scopes", set())
 
-    if auth_tenant:
+    if auth_tenant and getattr(auth, "reason", "") != "admin_internal_token":
         if requested and requested != auth_tenant:
             _tenant_denial_log(
                 request=request,

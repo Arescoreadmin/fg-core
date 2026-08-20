@@ -3996,3 +3996,33 @@ Critical-path files changed:
 - `apps/console/app/api/core/[...path]/route.ts`: delegation proof creation after session-authorized tenant resolution.
 
 SOC review outcome: approved. Strictly additive security enforcement. No existing auth path weakened. No credential issuance or revocation. No schema changes. The change closes a documented P0 cross-tenant authority gap and establishes a cryptographic binding between the BFF session authorization layer and Core tenant context establishment.
+
+---
+
+## 2026-08-17 — SOC-HIGH-002 — PR-CORE-002B: Admin gateway middleware pre-binding bypass
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth subsystem changes: `api/middleware/auth_gate.py`, `api/auth_scopes/resolution.py`).
+
+Scope: Closes a production-confirmed bypass of the PR-CORE-002 delegation proof requirement. Production proof on 2026-08-17 yielded G5 (missing proof → 200) and G6 (suspended tenant → 200), proving the three-layer invariant was not enforced. Root cause: `AuthGateMiddleware` included `"admin_internal_token"` in the `_tenant_injectable` set, causing it to inject the caller-supplied `X-Tenant-ID` into `result.tenant_id` before the request reached any handler. `bind_tenant_id()` observed `request.state.tenant_is_key_bound = True` and `request.state.tenant_id` already set, and exited the key_bound fast-path without ever calling `_verify_delegation_proof` or `_verify_admin_gateway_tenant`.
+
+Changes to `api/middleware/auth_gate.py`:
+- `_tenant_injectable`: removed `"admin_internal_token"` from the set. The expression now evaluates to `result.reason == "global_key"` only. For `admin_internal_token` requests, `result.tenant_id` remains `None` after middleware, `request.state.tenant_id = None`, and `request.state.tenant_is_key_bound = False`. This forces `bind_tenant_id()` to enter the `admin_internal_token` delegation-proof branch rather than the key_bound fast-path.
+- Comment updated to explain why `admin_internal_token` is excluded (PR-CORE-002B reference).
+
+Changes to `api/auth_scopes/resolution.py` — `bind_tenant_id()` defense-in-depth:
+- **key_bound fast-path guard**: When `cached_tenant and key_bound_flag`, the function now reads `auth.reason`. If `reason == "admin_internal_token"`, it clears `request.state.tenant_is_key_bound = False` and falls through to the delegation branch, rather than returning the cached tenant. This prevents a future regression in the middleware from re-enabling the bypass.
+- **auth_tenant fast-path guard**: The `if auth_tenant:` fast-path condition now reads `if auth_tenant and getattr(auth, "reason", "") != "admin_internal_token":`, ensuring the fast-path cannot be entered by an admin_internal_token result even if `auth.tenant_id` is somehow populated. Both guards operate at the same structural level as the existing `if key_bound_flag and not cached_tenant: request.state.tenant_is_key_bound = False` defense.
+
+Test evidence:
+- `tests/test_core_002b_middleware_prebinding.py`: 8 tests — A: source assertion that `_tenant_injectable` excludes `admin_internal_token`; B: source assertion that key_bound fast-path guards admin_internal_token; C: source assertion that auth_tenant fast-path guards admin_internal_token; D: ordering invariant (delegation before state mutation still holds); E: behavioral — pre-bound state + no proof → 403; F: behavioral — pre-bound state + wrong method in proof → 403; G: behavioral — pre-bound state + wrong path in proof → 403; H: behavioral — valid proof + correct method/path → 200 (regression gate: valid path must still work).
+- `tests/test_core_002_admin_gateway_tenant_binding.py`: 40/40 PASS (no regression to existing delegation proof suite).
+
+Security posture: The primary fix removes the opportunity for pre-binding; the defense-in-depth in `bind_tenant_id()` ensures the bypass cannot be re-enabled by a future middleware change. No delegation proof verification logic was weakened. No auth path was added. The fix is purely restrictive: for `admin_internal_token`, the pre-commit path is eliminated at the middleware layer, and even if state were pre-committed by a hostile actor or future regression, `bind_tenant_id()` would still route through delegation verification.
+
+Production proof (2026-08-17): G1 PASS, G2 PASS, G3 PASS, G4 PASS, G5 PASS, G6 PASS after deployment.
+
+Critical-path files changed:
+- `api/middleware/auth_gate.py`: removed admin_internal_token from tenant pre-binding.
+- `api/auth_scopes/resolution.py`: defense-in-depth guards in `bind_tenant_id()`.
+
+SOC review outcome: approved. Strictly corrective enforcement. Closes production-confirmed delegation bypass. No credential issuance, no schema changes, no new auth paths. All delegation proof verification logic from PR-CORE-002 is preserved and now unconditionally enforced for admin_internal_token.

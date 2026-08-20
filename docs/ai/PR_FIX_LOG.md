@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## P-77 — sec(core): close admin-gateway middleware pre-binding bypass — branch fix/pr-core-002b-admin-gateway-prebinding
+
+- **PR/Branch:** `fix/pr-core-002b-admin-gateway-prebinding`
+- **Date:** 2026-08-17
+- **Files changed:** `api/middleware/auth_gate.py`, `api/auth_scopes/resolution.py`, `tests/test_core_002b_middleware_prebinding.py`, `tools/testing/security/prod_proof_645.py`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Production proof on 2026-08-17 confirmed G5 (missing delegation proof → 200) and G6 (suspended tenant → 200), proving the PR-CORE-002 three-layer invariant was not actually enforced. `AuthGateMiddleware.dispatch()` had `"admin_internal_token"` in `_tenant_injectable`, causing it to inject the caller-supplied `X-Tenant-ID` into `result.tenant_id`, then set `request.state.tenant_id = result.tenant_id` and `request.state.tenant_is_key_bound = True` before any handler ran. When `bind_tenant_id()` executed, it observed `tenant_is_key_bound=True` and `tenant_id` already set, took the key_bound fast-path at lines 799–816, and returned without ever calling `_verify_delegation_proof` or `_verify_admin_gateway_tenant`. The delegation requirement added by PR-CORE-002 was completely bypassed.
+- **Fix — layer 1 (`api/middleware/auth_gate.py`):** Removed `"admin_internal_token"` from `_tenant_injectable`. The expression now reads `result.reason == "global_key"` only. For `admin_internal_token` requests, `result.tenant_id` stays `None` after middleware, `request.state.tenant_id = None`, and `request.state.tenant_is_key_bound = False`. `bind_tenant_id()` then finds `cached_tenant = None`, `key_bound_flag = False`, `auth_tenant = None`, and falls through to the `admin_internal_token` delegation branch.
+- **Fix — layer 2 (`api/auth_scopes/resolution.py`, defense-in-depth):** Added admin_internal_token guard at the key_bound fast-path: if `cached_tenant and key_bound_flag` and `auth.reason == "admin_internal_token"`, clears `request.state.tenant_is_key_bound = False` and falls through rather than returning. Added the same guard at the auth_tenant fast-path: `if auth_tenant and getattr(auth, "reason", "") != "admin_internal_token"`. Both guards ensure that even if a future middleware change re-introduces pre-binding, `bind_tenant_id()` cannot be bypassed.
+- **Proof harness repairs (`tools/testing/security/prod_proof_645.py`):** G3 method-replay changed from POST (unregistered → 405) to PUT (registered on `/config` → delegation rejects → 403). G4 path-replay changed from `/users` (404 from routing) to `/readiness` (registered GET route → delegation rejects → 403). Added BFF envelope comment documenting why `X-API-Key` is required (its absence produces 401, not the 403 expected). Preserved user's `X-API-Key: GATEWAY_TOKEN` addition.
+- **Behavioral impact:** Delegation proof is now unconditionally enforced for admin_internal_token requests. Requests without a valid proof return 403. Requests for suspended/archived tenants return 403. Previously-passing requests with valid proofs are unaffected.
+- **Security impact:** Closes production-confirmed bypass. The middleware pre-binding path no longer exists; the defense-in-depth in bind_tenant_id() prevents future regression.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_core_002b_middleware_prebinding.py` — 8 tests (A: source — _tenant_injectable excludes admin_internal_token; B: source — key_bound fast-path guard present; C: source — auth_tenant fast-path guard present; D: ordering invariant; E: pre-bound + no proof → 403; F: pre-bound + wrong method → 403; G: pre-bound + wrong path → 403; H: valid proof → 200 regression gate).
+- **Validation:** `pytest tests/test_core_002b_middleware_prebinding.py` 8/8 PASS; `pytest tests/test_core_002_admin_gateway_tenant_binding.py` 40/40 PASS; `make fg-fast` PASS.
+- **Result:** PASS locally; production proof pending deployment.
+
+---
+
 ## P-76 — sec(core): verify tenant existence and lifecycle before binding admin-gateway authority — PR #645
 
 - **PR/Branch:** `PR-CORE-002-admin-gateway-tenant-binding` (#645)

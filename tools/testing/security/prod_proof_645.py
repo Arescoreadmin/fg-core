@@ -36,7 +36,14 @@ TENANT = os.environ["PROOF_TENANT"]
 INACTIVE = os.environ.get("INACTIVE_TENANT", "")
 
 PROBE_PATH = f"/admin/identity/tenants/{TENANT}/config"
+# BFF envelope contract — must match apps/console/app/api/core/[...path]/route.ts:
+#   X-API-Key          → CORE_API_KEY (required for AuthGateMiddleware key check)
+#   X-FG-Internal-Token → ADMIN_GATEWAY_TOKEN (admin_internal_token resolution)
+#   X-Admin-Gateway-Internal → "true" (marks request as internal admin gateway)
+#   X-Tenant-ID        → resolved tenant (forwarded by BFF)
+# Do not remove X-API-Key — its absence produces 401, not the 403 these gates expect.
 ADMIN_HEADERS = {
+    "X-API-Key": GATEWAY_TOKEN,
     "X-FG-Internal-Token": GATEWAY_TOKEN,
     "X-Admin-Gateway-Internal": "true",
     "X-Tenant-ID": TENANT,
@@ -106,21 +113,25 @@ def main() -> None:
          PROBE_PATH,
          subst_headers)
 
-    # G3: method replay — proof signed for GET, request is POST
+    # G3: method replay — proof signed for GET, request is PUT (both registered on /config)
+    # PUT /admin/identity/tenants/{id}/config is a registered route so routing passes;
+    # delegation rejects because the canonical method in the proof is GET.
     method_replay = _proof(SECRET, str(uuid.uuid4()), TENANT, "GET", PROBE_PATH)
     gate("G3 method-replay",
          403,
-         "POST",
+         "PUT",
          PROBE_PATH,
          method_replay)
 
-    # G4: path replay — proof signed for /config, request goes to /users
-    wrong_path = f"/admin/identity/tenants/{TENANT}/users"
+    # G4: path replay — proof signed for /config, request goes to /readiness (registered GET)
+    # GET /admin/identity/tenants/{id}/readiness is a registered route so routing passes;
+    # delegation rejects because the canonical path in the proof is /config.
+    readiness_path = f"/admin/identity/tenants/{TENANT}/readiness"
     path_replay = _proof(SECRET, str(uuid.uuid4()), TENANT, "GET", PROBE_PATH)
     gate("G4 path-replay",
          403,
          "GET",
-         wrong_path,
+         readiness_path,
          path_replay)
 
     # G5: missing delegation proof — all delegation headers absent

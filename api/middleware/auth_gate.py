@@ -186,10 +186,11 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                 "denied_tenant",
             )
 
-        # For global-key + BFF-supplied tenant header, and for the internal
-        # admin gateway (which carries no bound tenant): inject the header
-        # tenant into result so the assignment below remains result.tenant_id.
-        _tenant_injectable = result.reason in ("global_key", "admin_internal_token")
+        # For global-key + BFF-supplied tenant header: inject the header tenant.
+        # admin_internal_token is intentionally excluded — its tenant binding must
+        # go through _verify_delegation_proof and _verify_admin_gateway_tenant in
+        # bind_tenant_id(), not be pre-committed here (PR-CORE-002B).
+        _tenant_injectable = result.reason == "global_key"
         if _tenant_injectable and not result.tenant_id and requested_tenant:
             result.tenant_id = requested_tenant
         request.state.auth = result
