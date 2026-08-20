@@ -1,3 +1,37 @@
+## 2026-08-20 — SOC-P0-002C — fix/security-core-002c-verified-tenant-before-capability: Verified tenant precedes capability enforcement
+
+**Reviewer:** Codex | **Classification:** SOC-P0-002C (auth authority ordering fix; no new route; no schema mutation beyond defaulted column addition; capability enforcement still runs fail-closed)
+
+**Scope:** Closes the residual `admin_internal_token` hazard exposed by PR-CORE-002B: after the middleware stopped pre-committing `request.state.tenant_id` for admin-gateway requests, tenant-scoped `require_capability` FastAPI dependencies ran before `bind_tenant_id()` executed in the route body and denied every request with `CAPABILITY_DENIED / reason=no_tenant_context`. Five integration tests in `test_console_tenant_admin_authorization.py` and `test_tenant_identity_administration_golden_path.py` were 403-failing on `main` as a result.
+
+**Security posture:** The authority order enforced after this change is:
+  1. gateway authentication (`AuthGateMiddleware` → `admin_internal_token`)
+  2. delegation proof verification (`_verify_delegation_proof`)
+  3. tenant existence + `active` lifecycle verification (`_verify_admin_gateway_tenant`)
+  4. authoritative `request.state.tenant_id` bind
+  5. capability / entitlement enforcement (`require_capability`)
+  6. route business logic
+
+`require_capability()` now calls `_ensure_admin_gateway_tenant_bound()` at the top of its inner dependency for `admin_internal_token` requests. The helper delegates to `bind_tenant_id()` (single canonical authority path) using the X-Tenant-ID header. Any HTTPException raised by delegation proof or tenant verification propagates and prevents capability enforcement from ever seeing an unverified tenant. For tenant API-key / canonical `fgk.*` requests the helper is a no-op — existing middleware-bound tenants continue to work unchanged.
+
+The PR-CORE-002B defense-in-depth guard remains intact but now consults a request-scoped `_admin_gateway_delegation_verified` flag so the second-hop `bind_tenant_id()` (invoked from `tenant_db_required` in the route body) trusts the already-completed delegation instead of falling through to "tenant_id required" 400. The flag is set only after both `_verify_delegation_proof` and `_verify_admin_gateway_tenant` succeed; the first bind still runs full verification.
+
+Additive `X-Tenant-ID` header fallback in `bind_tenant_id`'s admin_internal_token branch resolves the tenant when `tenant_db_required` invokes `bind_tenant_id(request, None)` (query-string tenant is not supplied); delegation proof still runs against the effective tenant so the fallback is not an authority shortcut.
+
+No new bypasses: the `_ADMIN_GATEWAY_TENANT_ADMIN_CAPABILITIES` registry is unchanged and narrow (`identity.sso` on `/admin/identity/tenants/*`; `identity.scim` on `/workforce/users*`). No wildcards. No shadow delegation implementation in `api/entitlements.py`. Missing tenant → 404 before capability. Suspended tenant → 403 before capability. Wrong-proof-tenant, method replay, path replay → 403 before capability. Stale gateway token → 401 at middleware.
+
+**Critical-path files changed:**
+- `api/entitlements.py`: adds `_ensure_admin_gateway_tenant_bound()` helper; `require_capability()._dep()` invokes it first for admin_internal_token requests.
+- `api/auth_scopes/resolution.py`: `bind_tenant_id()` sets `_admin_gateway_delegation_verified` after successful delegation + lifecycle verification; key_bound fast-path admin_internal_token guard consults the flag so idempotent second-hop binds do not re-fall-through. Admin_internal_token branch falls back to X-Tenant-ID header when `requested_tenant` is None.
+- `api/db.py`: SQLite `tenants` schema now includes `tenant_kind` column with `customer` default (mirrors Postgres migration 0166) so `TenantRepository.get()` succeeds in test databases. Defensive `ALTER TABLE ... ADD COLUMN` for pre-existing test DBs.
+- `tests/test_core_002c_capability_before_tenant_binding.py`: 20 new regression tests (source invariants + behavioral).
+- `tests/test_console_tenant_admin_authorization.py`, `tests/test_tenant_identity_administration_golden_path.py`: seed active tenant rows so `_verify_admin_gateway_tenant` succeeds (previously implicit; now required by PR-CORE-002).
+- `docs/ai/PR_FIX_LOG.md`: entry appended.
+
+**SOC review outcome:** approved. Change is authority-ordering-only. Capability enforcement remains fail-closed. Delegation proof + tenant lifecycle verification still run before any admin-gateway tenant authority is granted. PR-CORE-002 (48) and PR-CORE-002B (8) source + behavioral invariants remain green. All 5 previously failing integration tests pass. No new routes, no schema mutation beyond adding a defaulted column, no CI/deploy config change, no credential/secret change.
+
+---
+
 ## 2026-08-14 - SOC-P1-003 - fix/identity-setup-workflow: Tenant identity administration lifecycle closure
 
 **Reviewer:** Codex | **Classification:** SOC-P1-003 (identity policy and tenant administration workflow change; no new route; no schema change)

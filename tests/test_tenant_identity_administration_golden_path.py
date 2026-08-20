@@ -30,6 +30,29 @@ def _configure_app(tmp_path, monkeypatch) -> TestClient:
     return TestClient(build_app(auth_enabled=True), raise_server_exceptions=False)
 
 
+def _seed_tenant(tenant_id: str, *, lifecycle_state: str = "active") -> None:
+    """Seed an active tenant row so PR-CORE-002 tenant verification succeeds.
+
+    Every admin-gateway call for X-Tenant-ID must correspond to an existing
+    active tenant row (verified by bind_tenant_id -> _verify_admin_gateway_tenant).
+    Tests exercising the admin-gateway path must seed the tenant explicitly;
+    Core does not auto-create tenants on first admin-gateway contact.
+    """
+    from sqlalchemy import text
+
+    from api.db import get_engine
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)"
+                " VALUES (:tid, :name, :state)"
+            ),
+            {"tid": tenant_id, "name": tenant_id, "state": lifecycle_state},
+        )
+
+
 def _admin_gateway_headers(
     tenant_id: str, token: str = "test-admin-gateway-token"
 ) -> dict[str, str]:
@@ -61,6 +84,8 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     client = _configure_app(tmp_path, monkeypatch)
     tenant = "tenant-golden-n-plus-one"
     other_tenant = "tenant-golden-other"
+    _seed_tenant(tenant)
+    _seed_tenant(other_tenant)
     headers = _admin_gateway_headers(tenant)
 
     initial_config = client.get(
@@ -185,6 +210,9 @@ def test_existing_customer_identity_states_gate_invites(tmp_path, monkeypatch) -
     no_config = "tenant-existing-no-config"
     not_configured = "tenant-existing-not-configured"
     ready = "tenant-existing-ready"
+    _seed_tenant(no_config)
+    _seed_tenant(not_configured)
+    _seed_tenant(ready)
 
     blocked_missing = client.post(
         "/workforce/users",

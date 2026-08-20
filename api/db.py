@@ -1676,6 +1676,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 tenant_id           VARCHAR(128) PRIMARY KEY,
                 display_name        TEXT         NOT NULL DEFAULT '',
                 lifecycle_state     VARCHAR(32)  NOT NULL DEFAULT 'active',
+                tenant_kind         VARCHAR(32)  NOT NULL DEFAULT 'customer',
                 created_at          TEXT,
                 updated_at          TEXT,
                 created_by          TEXT,
@@ -1687,6 +1688,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 migration_version   TEXT
             )
             """
+        )
+        # Legacy sqlite test DBs may already have the tenants table without
+        # tenant_kind; add it defensively so TenantRepository.get() succeeds
+        # (mirrors Postgres migration 0166).
+        _sqlite_add_column_if_missing(
+            conn, "tenants", "tenant_kind", "VARCHAR(32) NOT NULL DEFAULT 'customer'"
         )
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS ix_tenants_lifecycle_state "
@@ -1834,6 +1841,7 @@ def ensure_tenant_canonical_row(sqlite_path: str, tenant_id: str) -> None:
                 tenant_id         VARCHAR(128) PRIMARY KEY,
                 display_name      TEXT         NOT NULL DEFAULT '',
                 lifecycle_state   VARCHAR(32)  NOT NULL DEFAULT 'active',
+                tenant_kind       VARCHAR(32)  NOT NULL DEFAULT 'customer',
                 created_at        TEXT,
                 updated_at        TEXT,
                 created_by        TEXT,
@@ -1846,6 +1854,15 @@ def ensure_tenant_canonical_row(sqlite_path: str, tenant_id: str) -> None:
             )
             """
         )
+        # Legacy sqlite databases may pre-exist without tenant_kind; add the
+        # column defensively so this path can be reused with older DBs.
+        try:
+            con.execute(
+                "ALTER TABLE tenants ADD COLUMN tenant_kind VARCHAR(32) NOT NULL DEFAULT 'customer'"
+            )
+        except _sqlite3.OperationalError:
+            # Column already exists — expected when the CREATE above ran fresh.
+            pass
         con.execute(
             """
             INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)
