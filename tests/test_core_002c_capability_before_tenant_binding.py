@@ -51,6 +51,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.admin_gateway_delegation import configure_delegation_env, delegation_headers
+
 _ENTITLEMENTS_SRC = Path("api/entitlements.py").read_text(encoding="utf-8")
 _RESOLUTION_SRC = Path("api/auth_scopes/resolution.py").read_text(encoding="utf-8")
 
@@ -292,6 +294,7 @@ def _configure_app(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-admin-gateway-token")
     monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "true")
     monkeypatch.setenv("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
+    configure_delegation_env(monkeypatch)
 
     import api.entitlements as entitlements
     from api.db import init_db, reset_engine_cache
@@ -310,6 +313,22 @@ def _admin_gateway_headers(tenant_id: str) -> dict[str, str]:
         "X-Admin-Gateway-Internal": "true",
         "X-Tenant-ID": tenant_id,
         "X-Request-ID": f"002c-{tenant_id}",
+    }
+
+
+def _delegated_admin_gateway_headers(
+    tenant_id: str, *, method: str, path: str
+) -> dict[str, str]:
+    """Admin gateway headers with a valid delegation proof for tests M, N, O, Q."""
+    request_id = f"002c-{tenant_id}"
+    return {
+        **_admin_gateway_headers(tenant_id),
+        **delegation_headers(
+            tenant_id=tenant_id,
+            method=method,
+            path=path,
+            request_id=request_id,
+        ),
     }
 
 
@@ -358,7 +377,9 @@ def test_M_admin_gateway_route_passes_capability_after_tenant_bind(
     _seed_tenant(tenant)
     resp = client.get(
         f"/admin/identity/tenants/{tenant}/config",
-        headers=_admin_gateway_headers(tenant),
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=f"/admin/identity/tenants/{tenant}/config"
+        ),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -375,7 +396,9 @@ def test_N_missing_tenant_returns_404_before_capability(tmp_path, monkeypatch) -
     tenant = "tenant-002c-ghost"  # never seeded
     resp = client.get(
         f"/admin/identity/tenants/{tenant}/config",
-        headers=_admin_gateway_headers(tenant),
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=f"/admin/identity/tenants/{tenant}/config"
+        ),
     )
     assert resp.status_code == 404, resp.text
     assert "CAPABILITY_DENIED" not in resp.text
@@ -391,7 +414,9 @@ def test_O_suspended_tenant_returns_403_before_capability(
     _seed_suspended_tenant(tenant)
     resp = client.get(
         f"/admin/identity/tenants/{tenant}/config",
-        headers=_admin_gateway_headers(tenant),
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=f"/admin/identity/tenants/{tenant}/config"
+        ),
     )
     assert resp.status_code == 403, resp.text
     assert "CAPABILITY_DENIED" not in resp.text
@@ -427,7 +452,9 @@ def test_Q_workforce_users_reaches_business_validation_after_002c(
     _seed_tenant(tenant)
     resp = client.post(
         "/workforce/users",
-        headers=_admin_gateway_headers(tenant),
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="POST", path="/workforce/users"
+        ),
         json={"email": "q@example.com", "display_name": "Q", "role": "admin"},
     )
     assert resp.status_code == 422, resp.text
