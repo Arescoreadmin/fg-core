@@ -143,7 +143,9 @@ def _simulate_bind_with_prebind(
 
     # auth_tenant fast-path guard (second layer):
     # admin_internal_token is also excluded from the auth_tenant fast-path.
-    _auth_tenant = prebind_tenant  # old bug: middleware injected this into auth result
+    _auth_tenant: str | None = (
+        prebind_tenant  # old bug: middleware injected this into auth result
+    )
     if _auth_tenant and _auth_reason == "admin_internal_token":
         _auth_tenant = None  # excluded — must go through delegation
 

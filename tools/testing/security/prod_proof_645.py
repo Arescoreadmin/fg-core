@@ -66,7 +66,9 @@ def _proof(secret: str, req_id: str, tenant: str, method: str, path: str) -> dic
     }
 
 
-def _req(method: str, path: str, extra_headers: dict | None = None) -> requests.Response:
+def _req(
+    method: str, path: str, extra_headers: dict | None = None
+) -> requests.Response:
     url = f"{GATEWAY_URL}{path}"
     headers = {**ADMIN_HEADERS, "Content-Type": "application/json"}
     if extra_headers:
@@ -74,7 +76,9 @@ def _req(method: str, path: str, extra_headers: dict | None = None) -> requests.
     return requests.request(method, url, headers=headers, timeout=15)
 
 
-def gate(name: str, expect: int, method: str, path: str, extra: dict | None = None) -> None:
+def gate(
+    name: str, expect: int, method: str, path: str, extra: dict | None = None
+) -> None:
     try:
         r = _req(method, path, extra)
         ok = r.status_code == expect
@@ -95,11 +99,7 @@ def main() -> None:
 
     # G1: valid own-tenant request
     proof_headers = _proof(SECRET, req_id, TENANT, "GET", PROBE_PATH)
-    gate("G1 valid-own-tenant",
-         200,
-         "GET",
-         PROBE_PATH,
-         proof_headers)
+    gate("G1 valid-own-tenant", 200, "GET", PROBE_PATH, proof_headers)
 
     # G2: tenant substitution — proof signed for TENANT, header claims a different tenant
     other = "attacker-tenant"
@@ -107,60 +107,50 @@ def main() -> None:
         **_proof(SECRET, str(uuid.uuid4()), TENANT, "GET", PROBE_PATH),
         "X-Tenant-ID": other,
     }
-    gate("G2 tenant-substitution",
-         403,
-         "GET",
-         PROBE_PATH,
-         subst_headers)
+    gate("G2 tenant-substitution", 403, "GET", PROBE_PATH, subst_headers)
 
     # G3: method replay — proof signed for GET, request is PUT (both registered on /config)
     # PUT /admin/identity/tenants/{id}/config is a registered route so routing passes;
     # delegation rejects because the canonical method in the proof is GET.
     method_replay = _proof(SECRET, str(uuid.uuid4()), TENANT, "GET", PROBE_PATH)
-    gate("G3 method-replay",
-         403,
-         "PUT",
-         PROBE_PATH,
-         method_replay)
+    gate("G3 method-replay", 403, "PUT", PROBE_PATH, method_replay)
 
     # G4: path replay — proof signed for /config, request goes to /readiness (registered GET)
     # GET /admin/identity/tenants/{id}/readiness is a registered route so routing passes;
     # delegation rejects because the canonical path in the proof is /config.
     readiness_path = f"/admin/identity/tenants/{TENANT}/readiness"
     path_replay = _proof(SECRET, str(uuid.uuid4()), TENANT, "GET", PROBE_PATH)
-    gate("G4 path-replay",
-         403,
-         "GET",
-         readiness_path,
-         path_replay)
+    gate("G4 path-replay", 403, "GET", readiness_path, path_replay)
 
     # G5: missing delegation proof — all delegation headers absent
-    gate("G5 missing-delegation-proof",
-         403,
-         "GET",
-         PROBE_PATH,
-         {"X-Request-ID": str(uuid.uuid4())})
+    gate(
+        "G5 missing-delegation-proof",
+        403,
+        "GET",
+        PROBE_PATH,
+        {"X-Request-ID": str(uuid.uuid4())},
+    )
 
     # G6: inactive tenant
     if INACTIVE:
         inactive_path = f"/admin/identity/tenants/{INACTIVE}/config"
-        inactive_headers = _proof(SECRET, str(uuid.uuid4()), INACTIVE, "GET", inactive_path)
+        inactive_headers = _proof(
+            SECRET, str(uuid.uuid4()), INACTIVE, "GET", inactive_path
+        )
         inactive_headers["X-Tenant-ID"] = INACTIVE
         base = {**ADMIN_HEADERS, **inactive_headers}
         base["X-Tenant-ID"] = INACTIVE
-        gate("G6 inactive-tenant",
-             403,
-             "GET",
-             inactive_path,
-             inactive_headers)
+        gate("G6 inactive-tenant", 403, "GET", inactive_path, inactive_headers)
     else:
-        RESULTS.append(("G6 inactive-tenant", False, "SKIPPED — set INACTIVE_TENANT env var"))
+        RESULTS.append(
+            ("G6 inactive-tenant", False, "SKIPPED — set INACTIVE_TENANT env var")
+        )
         print("  [SKIP] G6 inactive-tenant: set INACTIVE_TENANT env var")
 
     # Summary
     total = len(RESULTS)
     passed = sum(1 for _, ok, _ in RESULTS if ok)
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"Result: {passed}/{total} PASS")
     if passed < total:
         print("\nFailing gates:")
