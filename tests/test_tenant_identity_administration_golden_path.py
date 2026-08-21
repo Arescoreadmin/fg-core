@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from tests.admin_gateway_delegation import (
+    configure_delegation_env,
+    delegation_headers,
+)
+
 
 def _configure_app(tmp_path, monkeypatch) -> TestClient:
     db_path = tmp_path / "tenant_identity_admin_golden.db"
@@ -19,6 +24,9 @@ def _configure_app(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-admin-gateway-token")
     monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "true")
     monkeypatch.setenv("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
+    # PR-CORE-002: admin-gateway requests must present a delegation proof.
+    # Pin the secret so this test and Core agree regardless of ambient env.
+    configure_delegation_env(monkeypatch)
 
     import api.entitlements as entitlements
     from api.db import init_db, reset_engine_cache
@@ -65,6 +73,23 @@ def _admin_gateway_headers(
     }
 
 
+def _delegated_admin_gateway_headers(
+    tenant_id: str,
+    *,
+    method: str,
+    path: str,
+    token: str = "test-admin-gateway-token",
+) -> dict[str, str]:
+    base = _admin_gateway_headers(tenant_id, token=token)
+    proof = delegation_headers(
+        tenant_id=tenant_id,
+        method=method,
+        path=path,
+        request_id=base["X-Request-ID"],
+    )
+    return {**base, **proof}
+
+
 def _tenant_key_headers(tenant_id: str) -> dict[str, str]:
     from api.auth_scopes import mint_key
 
@@ -86,17 +111,26 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     other_tenant = "tenant-golden-other"
     _seed_tenant(tenant)
     _seed_tenant(other_tenant)
-    headers = _admin_gateway_headers(tenant)
+
+    config_path = f"/admin/identity/tenants/{tenant}/config"
+    audit_path = f"/admin/identity/tenants/{tenant}/audit-summary"
+    readiness_path = f"/admin/identity/tenants/{tenant}/readiness"
+    invitations_path = f"/admin/identity/tenants/{tenant}/invitations"
 
     initial_config = client.get(
-        f"/admin/identity/tenants/{tenant}/config", headers=headers
+        config_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=config_path
+        ),
     )
     assert initial_config.status_code == 200, initial_config.text
     assert initial_config.json()["configured"] is False
 
     blocked_invite = client.post(
         "/workforce/users",
-        headers=headers,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="POST", path="/workforce/users"
+        ),
         json={
             "email": "new.admin@example.com",
             "display_name": "New Admin",
@@ -107,7 +141,8 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     assert _detail_code(blocked_invite) == "IDENTITY_CONFIGURATION_REQUIRED"
 
     audit_after_block = client.get(
-        f"/admin/identity/tenants/{tenant}/audit-summary", headers=headers
+        audit_path,
+        headers=_delegated_admin_gateway_headers(tenant, method="GET", path=audit_path),
     )
     assert audit_after_block.status_code == 200, audit_after_block.text
     assert (
@@ -118,8 +153,10 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     )
 
     configured = client.put(
-        f"/admin/identity/tenants/{tenant}/config",
-        headers=headers,
+        config_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="PUT", path=config_path
+        ),
         json={
             "identity_mode": "managed",
             "provider": "auth0",
@@ -132,14 +169,19 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     assert configured.json()["provisioning_status"] == "ready"
 
     readiness = client.get(
-        f"/admin/identity/tenants/{tenant}/readiness", headers=headers
+        readiness_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=readiness_path
+        ),
     )
     assert readiness.status_code == 200, readiness.text
     assert readiness.json()["status"] == "ready"
 
     invite = client.post(
         "/workforce/users",
-        headers=headers,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="POST", path="/workforce/users"
+        ),
         json={
             "email": "new.admin@example.com",
             "display_name": "New Admin",
@@ -150,13 +192,17 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     invitation_id = invite.json()["invitation_id"]
 
     invitations = client.get(
-        f"/admin/identity/tenants/{tenant}/invitations", headers=headers
+        invitations_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant, method="GET", path=invitations_path
+        ),
     )
     assert invitations.status_code == 200, invitations.text
     assert invitation_id in {item["id"] for item in invitations.json()["invitations"]}
 
     audit = client.get(
-        f"/admin/identity/tenants/{tenant}/audit-summary", headers=headers
+        audit_path,
+        headers=_delegated_admin_gateway_headers(tenant, method="GET", path=audit_path),
     )
     assert audit.status_code == 200, audit.text
     by_type = audit.json()["by_type"]
@@ -175,6 +221,8 @@ def test_customer_n_plus_one_identity_admin_golden_path(tmp_path, monkeypatch) -
     )
     assert cross_tenant.status_code == 403, cross_tenant.text
 
+    # Stale admin-gateway token must fail closed at auth *before* delegation
+    # verification; do not attach a proof to preserve the original 401 shape.
     stale_auth = client.post(
         "/workforce/users",
         headers=_admin_gateway_headers(tenant, token="stale-admin-gateway-token"),
@@ -216,7 +264,9 @@ def test_existing_customer_identity_states_gate_invites(tmp_path, monkeypatch) -
 
     blocked_missing = client.post(
         "/workforce/users",
-        headers=_admin_gateway_headers(no_config),
+        headers=_delegated_admin_gateway_headers(
+            no_config, method="POST", path="/workforce/users"
+        ),
         json={
             "email": "missing@example.com",
             "display_name": "Missing",
@@ -226,16 +276,20 @@ def test_existing_customer_identity_states_gate_invites(tmp_path, monkeypatch) -
     assert blocked_missing.status_code == 422, blocked_missing.text
     assert _detail_code(blocked_missing) == "IDENTITY_CONFIGURATION_REQUIRED"
 
-    not_ready_headers = _admin_gateway_headers(not_configured)
+    not_configured_config_path = f"/admin/identity/tenants/{not_configured}/config"
     config = client.put(
-        f"/admin/identity/tenants/{not_configured}/config",
-        headers=not_ready_headers,
+        not_configured_config_path,
+        headers=_delegated_admin_gateway_headers(
+            not_configured, method="PUT", path=not_configured_config_path
+        ),
         json={"identity_mode": "managed", "provider": "auth0"},
     )
     assert config.status_code == 200, config.text
     blocked_not_ready = client.post(
         "/workforce/users",
-        headers=not_ready_headers,
+        headers=_delegated_admin_gateway_headers(
+            not_configured, method="POST", path="/workforce/users"
+        ),
         json={
             "email": "not-ready@example.com",
             "display_name": "Not Ready",
@@ -245,10 +299,12 @@ def test_existing_customer_identity_states_gate_invites(tmp_path, monkeypatch) -
     assert blocked_not_ready.status_code == 422, blocked_not_ready.text
     assert _detail_code(blocked_not_ready) == "IDENTITY_CONFIGURATION_NOT_READY"
 
-    ready_headers = _admin_gateway_headers(ready)
+    ready_config_path = f"/admin/identity/tenants/{ready}/config"
     ready_config = client.put(
-        f"/admin/identity/tenants/{ready}/config",
-        headers=ready_headers,
+        ready_config_path,
+        headers=_delegated_admin_gateway_headers(
+            ready, method="PUT", path=ready_config_path
+        ),
         json={
             "identity_mode": "managed",
             "provider": "auth0",
@@ -258,7 +314,9 @@ def test_existing_customer_identity_states_gate_invites(tmp_path, monkeypatch) -
     assert ready_config.status_code == 200, ready_config.text
     allowed = client.post(
         "/workforce/users",
-        headers=ready_headers,
+        headers=_delegated_admin_gateway_headers(
+            ready, method="POST", path="/workforce/users"
+        ),
         json={"email": "ready@example.com", "display_name": "Ready", "role": "admin"},
     )
     assert allowed.status_code == 200, allowed.text

@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from tests.admin_gateway_delegation import (
+    configure_delegation_env,
+    delegation_headers,
+)
+
 
 def _configure_app(tmp_path, monkeypatch):
     db_path = tmp_path / "console_tenant_admin_authz.db"
@@ -19,6 +24,9 @@ def _configure_app(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-admin-gateway-token")
     monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "true")
     monkeypatch.setenv("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
+    # PR-CORE-002: admin-gateway requests must present a delegation proof.
+    # Pin the secret so this test and Core agree regardless of ambient env.
+    configure_delegation_env(monkeypatch)
 
     import api.entitlements as entitlements
     from api.db import init_db, reset_engine_cache
@@ -80,6 +88,19 @@ def _capability_code(response) -> str | None:
     return None
 
 
+def _delegated_admin_gateway_headers(
+    tenant_id: str, *, method: str, path: str
+) -> dict[str, str]:
+    base = _admin_gateway_headers(tenant_id)
+    proof = delegation_headers(
+        tenant_id=tenant_id,
+        method=method,
+        path=path,
+        request_id=base["X-Request-ID"],
+    )
+    return {**base, **proof}
+
+
 def test_admin_gateway_users_invite_reaches_business_validation_without_identity_entitlement(
     tmp_path, monkeypatch
 ):
@@ -89,7 +110,9 @@ def test_admin_gateway_users_invite_reaches_business_validation_without_identity
 
     response = client.post(
         "/workforce/users",
-        headers=_admin_gateway_headers(tenant_id),
+        headers=_delegated_admin_gateway_headers(
+            tenant_id, method="POST", path="/workforce/users"
+        ),
         json={"email": "probe@example.com", "display_name": "Probe", "role": "admin"},
     )
 
@@ -107,7 +130,9 @@ def test_admin_gateway_users_update_reaches_resource_gate_without_identity_entit
 
     response = client.patch(
         "/workforce/users/missing-user",
-        headers=_admin_gateway_headers(tenant_id),
+        headers=_delegated_admin_gateway_headers(
+            tenant_id, method="PATCH", path="/workforce/users/missing-user"
+        ),
         json={"active": False},
     )
 
@@ -122,15 +147,27 @@ def test_admin_gateway_identity_routes_reach_tenant_admin_logic_without_sso_enti
     client = _configure_app(tmp_path, monkeypatch)
     tenant_id = "tenant-console-identity"
     _seed_tenant(tenant_id)
-    headers = _admin_gateway_headers(tenant_id)
 
-    config = client.get(f"/admin/identity/tenants/{tenant_id}/config", headers=headers)
+    config_path = f"/admin/identity/tenants/{tenant_id}/config"
+    readiness_path = f"/admin/identity/tenants/{tenant_id}/readiness"
+
+    config = client.get(
+        config_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant_id, method="GET", path=config_path
+        ),
+    )
     readiness = client.get(
-        f"/admin/identity/tenants/{tenant_id}/readiness", headers=headers
+        readiness_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant_id, method="GET", path=readiness_path
+        ),
     )
     upsert = client.put(
-        f"/admin/identity/tenants/{tenant_id}/config",
-        headers=headers,
+        config_path,
+        headers=_delegated_admin_gateway_headers(
+            tenant_id, method="PUT", path=config_path
+        ),
         json={"identity_mode": "managed", "provider": "auth0"},
     )
 

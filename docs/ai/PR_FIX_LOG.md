@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## P-79 — test(security): align admin-gateway fixtures with delegation enforcement — branch fix/core-002-postmerge-test-contracts
+
+- **PR/Branch:** `fix/core-002-postmerge-test-contracts`
+- **Date:** 2026-08-19
+- **Files changed:** `tests/test_core_002b_middleware_prebinding.py`, `tests/test_console_tenant_admin_authorization.py`, `tests/test_tenant_identity_administration_golden_path.py`, `tests/admin_gateway_delegation.py` (new), `tools/testing/security/prod_proof_645.py` (formatting only), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** After PR-CORE-002 (#645), PR-CORE-002B (#646), and PR-CORE-002C (#647), admin-gateway requests must carry a valid HMAC delegation proof whenever `FG_GATEWAY_DELEGATION_SECRET_CURRENT` is configured. Five legacy fixtures called admin-gateway routes with only `X-FG-Internal-Token` / `X-Admin-Gateway-Internal` / `X-Tenant-ID` and produced `403 {"detail":"delegation proof required"}` under any environment that pins the delegation secret. In parallel, `tests/test_core_002b_middleware_prebinding.py:148` failed mypy — `_auth_tenant` was inferred as `str` at first assignment, so re-assigning `None` at the second-layer guard tripped `[assignment]`.
+- **Fix — shared helper (`tests/admin_gateway_delegation.py`):** New module exposing `delegation_headers(*, tenant_id, method, path, request_id, secret=None, lifetime=60, offset_seconds=0)` (builds the four `X-FG-Delegation-*` headers using the canonical `v1\\n{req}\\n{tenant}\\n{METHOD}\\n{path}\\n{iat}\\n{exp}` string) and `configure_delegation_env(monkeypatch)` (pins `FG_GATEWAY_DELEGATION_SECRET_CURRENT` to the resolved env secret or the deterministic test secret). Uses only stdlib. Matches the pattern already in `tests/test_core_002_admin_gateway_tenant_binding.py::_make_proof`.
+- **Fix — legacy fixtures:** `tests/test_console_tenant_admin_authorization.py` and `tests/test_tenant_identity_administration_golden_path.py` now call `configure_delegation_env` in `_configure_app`, and every admin-gateway request in the 5 previously-failing tests is issued through a `_delegated_admin_gateway_headers(tenant, method=..., path=...)` wrapper that emits per-request proofs. The stale-token 401 negative retains bare `_admin_gateway_headers()` (comment explains: auth is denied before delegation) so it continues to prove fail-closed behaviour at the auth stage.
+- **Fix — mypy (`tests/test_core_002b_middleware_prebinding.py:148`):** Annotated `_auth_tenant: str | None = prebind_tenant` so the guard can reassign `None` type-correctly. No `# type: ignore`, no logic change, no ordering change.
+- **Fix — proof harness (`tools/testing/security/prod_proof_645.py`):** Retained the pre-existing local `ruff format` reflow (line breaks compressed by the formatter). No semantic change; verified via `git diff` inspection.
+- **Behavioural impact:** The 5 previously-failing tests now generate valid delegation proofs and reach the expected business/capability assertions. Negative assertions (missing proof → 403, wrong secret → 403, stale token → 401, tenant API-key path → 403) are unchanged. Existing PR-CORE-002B source and behavioural invariants still pass.
+- **Security impact:** None to production code. Enforcement was NOT weakened: no delegation validation disabled, no middleware pre-binding restored, no capability check relaxed, no fail-closed behaviour softened, no production secrets touched. Tests now exercise the delegation path instead of implicitly depending on the dev bypass (missing secret).
+- **Schema/API impact:** None.
+- **Validation:** `mypy tests/test_core_002b_middleware_prebinding.py` PASS (0 errors). `pytest tests/test_core_002c_capability_before_tenant_binding.py` 20/20 PASS. `pytest tests/test_core_002_admin_gateway_tenant_binding.py tests/test_core_002b_middleware_prebinding.py tests/test_core_invariants.py tests/security/test_gateway_only_admin_access.py tests/test_console_tenant_admin_authorization.py tests/test_tenant_identity_administration_golden_path.py` 135 passed + 2 skipped. `make fg-fast` PASS (496 passed, 2 skipped). `make fg-security` PASS (1234 passed, 1 skipped). `make fg-contract` PASS. `bash codex_gates.sh` rc=0. Also re-run with `FG_GATEWAY_DELEGATION_SECRET_CURRENT` externally set to a different value — 7/7 still PASS, confirming tests pin the same secret Core reads.
+- **Result:** PASS locally; no production deploy needed (test-only change).
+
+---
+
 ## P-78 — sec(core): verified tenant precedes capability enforcement — branch fix/security-core-002c-verified-tenant-before-capability
 
 - **PR/Branch:** `fix/security-core-002c-verified-tenant-before-capability`
