@@ -58,10 +58,15 @@ def resolve_external_identity(
     provider_issuer: str,
     provider_subject: str,
 ) -> Optional[tuple[ExternalIdentityRecord, PrincipalRecord]]:
-    """Look up an external identity and its principal by IdP claim triple.
+    """Look up an external identity and its active principal by IdP claim triple.
 
-    Returns (ExternalIdentityRecord, PrincipalRecord) if a bound, active
-    principal exists, or None if not found.
+    Returns (ExternalIdentityRecord, PrincipalRecord) if and only if the
+    external identity exists AND the bound principal is lifecycle_state='active'.
+    Returns None for unknown identities or principals in any other lifecycle state.
+
+    Per the canonical authority graph: an inactive node at any position → DENY.
+    Callers must not treat None as the only denial signal — they should also
+    verify the returned principal is appropriate for their context.
 
     Called at session issuance. Does not update last_seen_at — callers that
     need staleness tracking should call touch_external_identity_seen() separately.
@@ -94,6 +99,7 @@ def resolve_external_identity(
             WHERE ei.provider         = :provider
               AND ei.provider_issuer  = :issuer
               AND ei.provider_subject = :subject
+              AND p.lifecycle_state   = 'active'
             """
         ),
         {
@@ -151,7 +157,7 @@ def create_principal(
                  created_at, updated_at)
             VALUES
                 (:id, :display_name, :primary_email, :principal_type,
-                 'active', 0, 1, :now, :now)
+                 'active', :mfa_verified, 1, :now, :now)
             """
         ),
         {
@@ -159,6 +165,7 @@ def create_principal(
             "display_name": display_name,
             "primary_email": primary_email,
             "principal_type": principal_type,
+            "mfa_verified": False,
             "now": now.isoformat(),
         },
     )

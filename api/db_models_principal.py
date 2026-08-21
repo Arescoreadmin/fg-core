@@ -29,6 +29,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
     text,
 )
@@ -57,7 +58,7 @@ class FgPrincipal(Base):
     )
 
     id: Mapped[Any] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+        Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     display_name: Mapped[Any] = mapped_column(Text, nullable=True)
     primary_email: Mapped[Any] = mapped_column(Text, nullable=True)
@@ -117,10 +118,10 @@ class FgExternalIdentity(Base):
     )
 
     id: Mapped[Any] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+        Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     principal_id: Mapped[Any] = mapped_column(
-        String(36),
+        Uuid(as_uuid=False),
         ForeignKey("fg_principals.id", ondelete="RESTRICT"),
         nullable=False,
     )

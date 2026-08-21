@@ -321,10 +321,8 @@ def test_D2_resolve_returns_none_for_unknown_identity(engine: Engine) -> None:
     assert result is None
 
 
-def test_D3_resolve_returns_record_even_for_suspended_principal(
-    engine: Engine,
-) -> None:
-    """resolve_external_identity does not filter by lifecycle_state — callers decide."""
+def test_D3_suspended_principal_returns_none(engine: Engine) -> None:
+    """Inactive principal at any lifecycle state → DENY (authority graph invariant)."""
     with engine.begin() as conn:
         p = create_principal(conn)
         bind_external_identity(
@@ -347,9 +345,7 @@ def test_D3_resolve_returns_record_even_for_suspended_principal(
             provider_issuer="https://example.auth0.com/",
             provider_subject="auth0|suspended",
         )
-    assert result is not None
-    _, principal = result
-    assert principal.lifecycle_state == "suspended"
+    assert result is None
 
 
 def test_D4_resolve_rejects_invalid_provider(engine: Engine) -> None:
