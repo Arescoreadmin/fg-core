@@ -362,6 +362,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_identity_assurance"
     )  # PR feat/identity-assurance-trust-engine
+    importlib.import_module(
+        "api.db_models_principal"
+    )  # PR-AUTH-001: fg_principals + fg_external_identities
 
 
 def _get_base():
