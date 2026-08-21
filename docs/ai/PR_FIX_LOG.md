@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-80 — test(core-002c): supply delegation proof in behavioral fixture tests — PR #649
+
+- **PR/Branch:** `test/core-002c-delegation-fixture-closure` (#649)
+- **Date:** 2026-08-21
+- **Files changed:** `tests/test_core_002c_capability_before_tenant_binding.py`
+- **Root cause:** Tests M, N, O, Q in `test_core_002c_capability_before_tenant_binding.py` exercised behavior AFTER verified tenant binding (active-tenant 200, ghost-tenant 404, suspended-tenant lifecycle 403, business-logic 422) but were missing the four `X-FG-Delegation-*` headers required by `_verify_delegation_proof`. `_configure_app()` also never called `configure_delegation_env(monkeypatch)`, so when `FG_GATEWAY_DELEGATION_SECRET_CURRENT` is configured in the environment (as it is when the full test suite runs), Core enforced delegation and every admin-gateway request returned `403 {"detail":"delegation proof required"}` before reaching the intended assertion.
+- **Fix:** Added `from tests.admin_gateway_delegation import configure_delegation_env, delegation_headers` import; called `configure_delegation_env(monkeypatch)` in `_configure_app()` to pin the shared test secret; added `_delegated_admin_gateway_headers(tenant_id, *, method, path)` helper that merges `_admin_gateway_headers()` with `delegation_headers()`; updated tests M, N, O, Q to use the delegated helper. Class-A negative tests R (stale token → 401) and S (no `X-Tenant-ID` → 400) intentionally retain the bare `_admin_gateway_headers()` — they are denied before delegation runs and must prove fail-closed auth behavior, not delegation behavior.
+- **Behavioral impact:** Tests M, N, O, Q now generate valid per-request delegation proofs and reach the business/lifecycle/capability assertions they were written to cover. Negative tests R and S are unchanged.
+- **Security impact:** None to production code. No authentication, delegation verification, tenant lifecycle, capability, or authorization behavior was modified. No enforcement weakened. No production secrets touched.
+- **Schema/API impact:** None.
+- **Tests added:** None (existing tests corrected to exercise the path they claimed to cover).
+- **Validation:** `ruff check + format` PASS. `mypy tests/test_core_002c_capability_before_tenant_binding.py` PASS (0 errors). `pytest tests/test_core_002c_capability_before_tenant_binding.py` 20/20 PASS. `pytest tests/test_core_002_admin_gateway_tenant_binding.py tests/test_core_002b_middleware_prebinding.py tests/test_core_002c_capability_before_tenant_binding.py` 68/68 PASS.
+- **Result:** PASS locally; no production deploy needed (test-only change).
+
+---
+
 ## P-79 — test(security): align admin-gateway fixtures with delegation enforcement — branch fix/core-002-postmerge-test-contracts
 
 - **PR/Branch:** `fix/core-002-postmerge-test-contracts`
