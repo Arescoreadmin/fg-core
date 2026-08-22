@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-81 — feat(auth): Principal + ExternalIdentity foundation — branch feat/pr-auth-001-principal-external-identity
+
+- **PR/Branch:** `feat/pr-auth-001-principal-external-identity` (PR TBD)
+- **Date:** 2026-08-21
+- **Files changed:** `migrations/postgres/0179_fg_principals.sql` (new), `migrations/postgres/0180_fg_external_identities.sql` (new), `api/db_models_principal.py` (new), `api/principal_authority.py` (new), `api/db.py`, `tests/test_pr_auth_001_principal_foundation.py` (new), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** PR-CORE-002 chain closed. The next canonical step per `docs/architecture/IDENTITY_AUTHORITY_DATA_MODEL.md` (frozen architecture doc) is PR-AUTH-001: introduce the `fg_principals` and `fg_external_identities` tables to separate identity (who you are) from authorization (what you may do within a tenant). Currently `tenant_users` is a Principal-Membership hybrid; the global uniqueness constraint `uq_tenant_users_bound_identity` on `(identity_provider, identity_issuer, identity_subject)` blocks multi-tenant users.
+- **Fix:** Migrations 0179 and 0180 create the two new tables (additive, no data movement). `api/db_models_principal.py` adds `FgPrincipal` and `FgExternalIdentity` ORM classes. `api/principal_authority.py` is the sole write authority: `create_principal()`, `bind_external_identity()`, `resolve_external_identity()`, `touch_external_identity_seen()`. `api/db.py` imports `db_models_principal` so Base.metadata is populated on startup. PR-AUTH-002 will add the `principal_id` FK column to `tenant_users`; PR-AUTH-003 will backfill.
+- **Behavioral impact:** Purely additive. Two new empty tables exist in the DB after 0179/0180 run. No existing code path reads or writes them yet. No session, auth, or RBAC behavior is changed.
+- **Security impact:** Positive — lays the foundation for eliminating `tenant_users.identity_*` as an authorization source and moving the global identity uniqueness constraint out of the per-tenant `tenant_users` table. Both tables have no RLS (cross-tenant by design); access is gated at the application layer.
+- **Schema/API impact:** Two new tables (`fg_principals`, `fg_external_identities`), one new Postgres unique constraint (`uq_fg_external_identities_binding`). No API contract changes. No existing table modified.
+- **Tests added:** `tests/test_pr_auth_001_principal_foundation.py` — 22 tests covering schema invariants (A), create_principal (B), bind_external_identity (C), resolve_external_identity (D), touch_external_identity_seen (E), FK enforcement (F).
+- **Validation:** `ruff check + format` PASS. `mypy api/principal_authority.py api/db_models_principal.py` PASS (0 errors). `pytest tests/test_pr_auth_001_principal_foundation.py` 22/22 PASS.
+- **Result:** PASS locally; PR pending.
+
+---
+
 ## P-80 — test(core-002c): supply delegation proof in behavioral fixture tests — PR #649
 
 - **PR/Branch:** `test/core-002c-delegation-fixture-closure` (#649)
