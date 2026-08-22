@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     event,
     func,
     text,
@@ -3495,6 +3496,11 @@ class TenantUser(Base):
         Index("ix_tenant_users_tenant_id", "tenant_id"),
         Index("ix_tenant_users_invite_token", "invite_token"),
         Index("ix_tenant_users_identity_subject", "tenant_id", "identity_subject"),
+        Index(
+            "ix_tenant_users_principal_id",
+            "principal_id",
+            postgresql_where=text("principal_id IS NOT NULL"),
+        ),
         CheckConstraint(
             "identity_binding_status IN ('unbound','pending','bound','disabled','failed')",
             name="chk_tenant_users_identity_binding_status",
@@ -3553,6 +3559,11 @@ class TenantUser(Base):
     )
     identity_revoked_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    principal_id: Mapped[Any] = mapped_column(
+        Uuid(as_uuid=False),
+        ForeignKey("fg_principals.id"),
+        nullable=True,
     )
     last_identity_login_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=True
