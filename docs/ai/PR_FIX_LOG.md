@@ -1,6 +1,6 @@
 # PR Fix Log (Strict)
 
-## P-83 — feat(auth): tenant_users.principal_id FK column — PR-AUTH-002
+## P-83 — feat(auth): tenant_users.principal_id FK column — PR-AUTH-002 (includes P1 FK registration fix)
 
 - **PR/Branch:** `feat/pr-auth-002-tenant-user-principal-fk` (PR TBD)
 - **Date:** 2026-08-22
@@ -11,7 +11,8 @@
 - **Security impact:** Neutral. Column is nullable; FK enforces referential integrity once populated. No existing access control path is affected.
 - **Schema/API impact:** One new nullable column (`tenant_users.principal_id UUID`), one new partial index (`ix_tenant_users_principal_id`). No API contract changes. No existing column modified.
 - **Tests added:** `tests/test_pr_auth_002_tenant_user_principal_fk.py` — 18 tests covering schema invariants (A), nullability (B), FK integrity (C), legacy column preservation (D), ORM attribute checks (E).
-- **Validation:** `ruff check + format` PASS. `pytest tests/test_pr_auth_002_tenant_user_principal_fk.py` 18/18 PASS.
+- **P1 fix (review finding):** `api.db_models_principal` was only loaded via `api.db._ensure_models_imported`. Any fixture that imports `Base` from `api.db_models` and calls `Base.metadata.create_all()` directly (e.g. `tests/test_connectors_idempotency.py`, `tests/test_migrations_postgres_replay.py`) would raise `NoReferencedTableError` on the new `ForeignKey("fg_principals.id")`. Fixed by adding `import api.db_models_principal  # noqa: F401,E402` at the bottom of `api/db_models.py`, following the existing pattern for `db_models_external_ai_risk`, `db_models_subscriptions`, and `db_models_billing`. Verified: `Base.metadata.create_all(sqlite:///:memory:)` resolves `fg_principals` FK without error.
+- **Validation:** `ruff check + format` PASS. `pytest tests/test_pr_auth_002_tenant_user_principal_fk.py` 18/18 PASS. `Base.metadata.create_all()` OK.
 - **Result:** Schema bridge in place. AUTH-003 (backfill) can proceed.
 
 ---

@@ -3922,3 +3922,7 @@ import api.db_models_external_ai_risk  # noqa: F401,E402
 # included in Base.metadata for standalone init_db() paths (e.g. Makefile reset).
 import api.db_models_subscriptions  # noqa: F401,E402
 import api.db_models_billing  # noqa: F401,E402
+
+# PR-AUTH-001: register fg_principals so the ForeignKey("fg_principals.id") on
+# TenantUser.principal_id resolves in any create_all() path that imports this module.
+import api.db_models_principal  # noqa: F401,E402
