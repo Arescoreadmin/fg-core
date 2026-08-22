@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-82 — test(auth): narrow optional rows in principal foundation tests — PR #651
+
+- **PR/Branch:** `fix/pr-auth-001-mypy-row-narrowing` (PR #651)
+- **Date:** 2026-08-22
+- **Files changed:** `tests/test_pr_auth_001_principal_foundation.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Strict mypy (`--strict`) flags union-attr errors on two `fetchone()` results used as row objects without an explicit `is not None` guard. The rows are always present given the test setup, but mypy cannot prove it.
+- **Fix:** Added explicit `assert row is not None` narrowing before attribute access in the two affected test helpers (tests B2 and C2). No production code changed.
+- **Behavioral impact:** None — test-only change. 22/22 AUTH-001 tests pass.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Validation:** `ruff check + format` PASS. `pytest tests/test_pr_auth_001_principal_foundation.py` 22/22 PASS.
+- **Result:** Fixes strict mypy union-attr warnings post-merge of PR #650.
+
+---
+
 ## P-81 — feat(auth): Principal + ExternalIdentity foundation — branch feat/pr-auth-001-principal-external-identity
 
 - **PR/Branch:** `feat/pr-auth-001-principal-external-identity` (PR TBD)
