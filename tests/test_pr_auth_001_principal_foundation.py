@@ -221,6 +221,7 @@ def test_C2_bind_external_identity_persists(engine: Engine) -> None:
             text("SELECT principal_id FROM fg_external_identities WHERE id = :id"),
             {"id": ei.id},
         ).fetchone()
+    assert row is not None
     assert row.principal_id == p.id
 
 
@@ -388,6 +389,7 @@ def test_E1_touch_updates_last_seen_at(engine: Engine) -> None:
                 " WHERE provider_subject = 'auth0|touch-me'"
             )
         ).fetchone()
+    assert row is not None
     assert row.last_seen_at is not None
 
 
