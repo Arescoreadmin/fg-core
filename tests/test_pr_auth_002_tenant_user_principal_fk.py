@@ -180,9 +180,7 @@ def test_A7_no_backfill_in_migration() -> None:
 
 def test_B1_principal_id_column_exists_in_schema(engine: Engine) -> None:
     with engine.connect() as conn:
-        row = conn.execute(
-            text("PRAGMA table_info(tenant_users)")
-        ).fetchall()
+        row = conn.execute(text("PRAGMA table_info(tenant_users)")).fetchall()
     col_names = [r[1] for r in row]
     assert "principal_id" in col_names
 
@@ -263,9 +261,7 @@ def test_C3_principal_cannot_be_deleted_while_tenant_user_linked(
         _insert_tenant_user(conn, uid=uid, tenant_id="tenant-x", principal_id=pid)
     with engine.begin() as conn:
         with pytest.raises(Exception):
-            conn.execute(
-                text("DELETE FROM fg_principals WHERE id = :id"), {"id": pid}
-            )
+            conn.execute(text("DELETE FROM fg_principals WHERE id = :id"), {"id": pid})
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +301,9 @@ def test_D2_tenant_user_with_legacy_identity_and_no_principal_id(
         )
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT principal_id, identity_provider FROM tenant_users WHERE id = :id"),
+            text(
+                "SELECT principal_id, identity_provider FROM tenant_users WHERE id = :id"
+            ),
             {"id": uid},
         ).fetchone()
     assert row is not None
