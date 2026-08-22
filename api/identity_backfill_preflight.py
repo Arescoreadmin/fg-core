@@ -72,7 +72,7 @@ class ClassifiedRow:
     classification: str
     blocking: bool
     reason: str
-    canonical_key: _CanonicalKey | None = field(default=None)
+    canonical_key: _CanonicalKey | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ class PrincipalGroup:
     group_index: int
     member_ids: tuple[str, ...]  # tenant_user_ids, sorted for determinism
     distinct_tenant_ids: tuple[str, ...]  # tenants this principal spans
-    canonical_key: _CanonicalKey  # never log raw
+    canonical_key: _CanonicalKey = field(repr=False)  # never log raw
 
 
 @dataclass
@@ -121,12 +121,50 @@ class PreflightReport:
 
 
 # ---------------------------------------------------------------------------
+# Connection guard
+# ---------------------------------------------------------------------------
+
+
+def _assert_global_scan_connection(conn: Connection) -> None:
+    """Require a connection that bypasses RLS for the full tenant_users scan.
+
+    tenant_users has RLS enforced (migration 0099). An app-role connection
+    scoped to a single app.tenant_id will silently return a partial population,
+    potentially making ready_for_backfill=True while blocking rows in other
+    tenants go undetected.
+
+    Requires: superuser OR rolbypassrls.
+    Use FG_DB_MIGRATION_URL or an equivalent elevated credential.
+
+    SQLite (tests): skipped — no RLS.
+    """
+    if conn.dialect.name != "postgresql":
+        return
+    row = conn.execute(
+        text(
+            "SELECT rolsuper, rolbypassrls  FROM pg_roles WHERE rolname = current_user"
+        )
+    ).fetchone()
+    if row is None or (not row.rolsuper and not row.rolbypassrls):
+        raise RuntimeError(
+            "run_preflight requires a global (superuser or BYPASSRLS) connection. "
+            "The standard app role is RLS-restricted to a single tenant and will "
+            "silently omit blocking rows from other tenants, producing a false "
+            "ready_for_backfill=True. Use FG_DB_MIGRATION_URL or an equivalent "
+            "elevated credential."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Preflight analysis
 # ---------------------------------------------------------------------------
 
 
 def run_preflight(conn: Connection) -> PreflightReport:
     """Classify the full legacy tenant_users identity population. Zero writes.
+
+    Requires a global (BYPASSRLS or superuser) connection — see
+    _assert_global_scan_connection. Fails closed on PostgreSQL app roles.
 
     Principal grouping algorithm: all READY rows sharing the same
     (provider, issuer, subject) triple belong to the same canonical principal.
@@ -136,6 +174,7 @@ def run_preflight(conn: Connection) -> PreflightReport:
     Groups are assigned stable indices by sorted canonical key order,
     making the output deterministic across repeated runs.
     """
+    _assert_global_scan_connection(conn)
     # Load existing canonical bindings to detect CONFLICT_GLOBAL_BINDING.
     existing_bindings: set[_CanonicalKey] = {
         (row.provider, row.provider_issuer, row.provider_subject)

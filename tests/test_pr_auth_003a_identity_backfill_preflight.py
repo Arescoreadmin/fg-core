@@ -8,6 +8,8 @@ Coverage groups:
   A — Module constants and normalization authority reuse
   B — UNBOUND classification (non-blocking)
   C — INCOMPLETE_TRIPLE classification (blocking)
+  ...
+  M — Connection guard and repr redaction
   D — UNKNOWN_PROVIDER classification (blocking)
   E — CONFLICT_GLOBAL_BINDING classification (blocking)
   F — ALREADY_LINKED classification (non-blocking)
@@ -741,3 +743,84 @@ def test_L4_run_preflight_with_readonly_connection(engine: Engine) -> None:
         report = run_preflight(conn)
     assert report.total_rows == 1
     assert report.ready == 1
+
+
+# ---------------------------------------------------------------------------
+# M — Connection guard and repr redaction
+# ---------------------------------------------------------------------------
+
+
+def test_M1_sqlite_skips_rls_guard(engine: Engine) -> None:
+    """SQLite connections pass _assert_global_scan_connection without error."""
+    with engine.connect() as conn:
+        ibp._assert_global_scan_connection(conn)  # must not raise
+
+
+def test_M2_postgresql_app_role_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PostgreSQL app role (no BYPASSRLS, not superuser) → RuntimeError."""
+    from unittest.mock import MagicMock
+
+    mock_conn = MagicMock()
+    mock_conn.dialect.name = "postgresql"
+    mock_row = MagicMock()
+    mock_row.rolsuper = False
+    mock_row.rolbypassrls = False
+    mock_conn.execute.return_value.fetchone.return_value = mock_row
+    with pytest.raises(RuntimeError, match="BYPASSRLS"):
+        ibp._assert_global_scan_connection(mock_conn)
+
+
+def test_M3_postgresql_superuser_passes() -> None:
+    from unittest.mock import MagicMock
+
+    mock_conn = MagicMock()
+    mock_conn.dialect.name = "postgresql"
+    mock_row = MagicMock()
+    mock_row.rolsuper = True
+    mock_row.rolbypassrls = False
+    mock_conn.execute.return_value.fetchone.return_value = mock_row
+    ibp._assert_global_scan_connection(mock_conn)  # must not raise
+
+
+def test_M4_postgresql_bypassrls_role_passes() -> None:
+    from unittest.mock import MagicMock
+
+    mock_conn = MagicMock()
+    mock_conn.dialect.name = "postgresql"
+    mock_row = MagicMock()
+    mock_row.rolsuper = False
+    mock_row.rolbypassrls = True
+    mock_conn.execute.return_value.fetchone.return_value = mock_row
+    ibp._assert_global_scan_connection(mock_conn)  # must not raise
+
+
+def test_M5_classified_row_repr_excludes_canonical_key(engine: Engine) -> None:
+    with engine.begin() as conn:
+        tu_id = _tu(conn, subject="auth0|repr-test")
+    report = _report(engine)
+    row = next(r for r in report.classified if r.tenant_user_id == tu_id)
+    assert row.canonical_key is not None  # field is set
+    assert "auth0|repr-test" not in repr(row)  # but not in repr
+
+
+def test_M6_principal_group_repr_excludes_canonical_key(engine: Engine) -> None:
+    with engine.begin() as conn:
+        _tu(conn, subject="auth0|group-repr-test")
+    report = _report(engine)
+    group = report.principal_groups[0]
+    assert group.canonical_key is not None
+    assert "auth0|group-repr-test" not in repr(group)
+
+
+def test_M7_error_message_names_migration_url() -> None:
+    """Error message should direct callers to FG_DB_MIGRATION_URL."""
+    from unittest.mock import MagicMock
+
+    mock_conn = MagicMock()
+    mock_conn.dialect.name = "postgresql"
+    mock_row = MagicMock()
+    mock_row.rolsuper = False
+    mock_row.rolbypassrls = False
+    mock_conn.execute.return_value.fetchone.return_value = mock_row
+    with pytest.raises(RuntimeError, match="FG_DB_MIGRATION_URL"):
+        ibp._assert_global_scan_connection(mock_conn)
