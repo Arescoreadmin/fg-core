@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS tenant_users (
     tenant_id               TEXT    NOT NULL,
     email                   TEXT    NOT NULL DEFAULT 'x@example.com',
     display_name            TEXT    NOT NULL DEFAULT 'Test User',
+    active                  INTEGER NOT NULL DEFAULT 1,
     identity_binding_status TEXT    NOT NULL DEFAULT 'unbound',
     identity_type           TEXT    NOT NULL DEFAULT 'human',
     identity_provider       TEXT,
@@ -117,6 +118,7 @@ def _tu(
     display_name: str = "Test User",
     email: str = "test@example.com",
     identity_email: str | None = "idp@example.com",
+    active: bool = True,
     principal_id: str | None = None,
 ) -> str:
     tu_id = str(uuid.uuid4())
@@ -124,10 +126,10 @@ def _tu(
     conn.execute(
         text(
             "INSERT INTO tenant_users"
-            " (id, tenant_id, email, display_name, identity_binding_status,"
+            " (id, tenant_id, email, display_name, active, identity_binding_status,"
             "  identity_provider, identity_issuer, identity_subject,"
             "  identity_email, principal_id)"
-            " VALUES (:id, :tid, :email, :dn, :status,"
+            " VALUES (:id, :tid, :email, :dn, :active, :status,"
             "  :provider, :issuer, :subject, :iemail, :pid)"
         ),
         {
@@ -135,6 +137,7 @@ def _tu(
             "tid": tenant_id,
             "email": email,
             "dn": display_name,
+            "active": 1 if active else 0,
             "status": status,
             "provider": provider,
             "issuer": issuer,
@@ -552,26 +555,28 @@ def test_G4_success_is_false_on_dry_run(engine: Engine) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_H1_principal_primary_email_from_identity_email(engine: Engine) -> None:
+def test_H1_principal_primary_email_from_membership_email(engine: Engine) -> None:
     with engine.begin() as conn:
         _tu(conn, identity_email="idp-user@corp.com", email="member@corp.com")
     _run(engine)
     with engine.connect() as conn:
         row = conn.execute(text("SELECT primary_email FROM fg_principals")).fetchone()
     assert row is not None
-    assert row.primary_email == "idp-user@corp.com"
+    assert row.primary_email == "member@corp.com"
 
 
-def test_H2_primary_email_falls_back_to_email_when_identity_email_null(
+def test_H2_provider_email_is_null_when_identity_email_null(
     engine: Engine,
 ) -> None:
     with engine.begin() as conn:
-        _tu(conn, identity_email=None, email="fallback@corp.com")
+        _tu(conn, identity_email=None, email="member@corp.com")
     _run(engine)
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT primary_email FROM fg_principals")).fetchone()
-    assert row is not None
-    assert row.primary_email == "fallback@corp.com"
+        ei = conn.execute(
+            text("SELECT provider_email FROM fg_external_identities")
+        ).fetchone()
+    assert ei is not None
+    assert ei.provider_email is None
 
 
 def test_H3_display_name_sourced_from_tenant_user(engine: Engine) -> None:
@@ -584,18 +589,21 @@ def test_H3_display_name_sourced_from_tenant_user(engine: Engine) -> None:
     assert row.display_name == "Alice Backfill"
 
 
-def test_H4_external_identity_provider_email_matches_primary_email(
+def test_H4_provider_email_uses_identity_email_not_membership_email(
     engine: Engine,
 ) -> None:
     with engine.begin() as conn:
-        _tu(conn, identity_email="idp@example.com")
+        _tu(conn, identity_email="idp@corp.com", email="member@corp.com")
     _run(engine)
     with engine.connect() as conn:
+        row = conn.execute(text("SELECT primary_email FROM fg_principals")).fetchone()
         ei = conn.execute(
             text("SELECT provider_email FROM fg_external_identities")
         ).fetchone()
-    assert ei is not None
-    assert ei.provider_email == "idp@example.com"
+    assert row is not None and ei is not None
+    assert row.primary_email == "member@corp.com"
+    assert ei.provider_email == "idp@corp.com"
+    assert row.primary_email != ei.provider_email
 
 
 # ---------------------------------------------------------------------------
@@ -729,3 +737,54 @@ def test_K3_preflight_shows_all_rows_already_linked_after_backfill(
     assert report.already_linked == 1
     assert report.ready == 0
     assert report.ready_for_backfill is True
+
+
+# ---------------------------------------------------------------------------
+# L — Lifecycle state derivation from tenant_users.active
+# ---------------------------------------------------------------------------
+
+
+def test_L1_principal_is_active_when_member_is_active(engine: Engine) -> None:
+    with engine.begin() as conn:
+        _tu(conn, active=True)
+    _run(engine)
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT lifecycle_state FROM fg_principals")).fetchone()
+    assert row is not None
+    assert row.lifecycle_state == "active"
+
+
+def test_L2_principal_is_suspended_when_all_members_inactive(engine: Engine) -> None:
+    with engine.begin() as conn:
+        _tu(conn, active=False)
+    _run(engine)
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT lifecycle_state FROM fg_principals")).fetchone()
+    assert row is not None
+    assert row.lifecycle_state == "suspended"
+
+
+def test_L3_any_active_member_makes_principal_active(engine: Engine) -> None:
+    shared_subject = "auth0|shared-triple"
+    with engine.begin() as conn:
+        _tu(conn, subject=shared_subject, tenant_id="tenant-a", active=False)
+        _tu(conn, subject=shared_subject, tenant_id="tenant-b", active=True)
+    _run(engine)
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT lifecycle_state FROM fg_principals")).fetchone()
+    assert row is not None
+    assert row.lifecycle_state == "active"
+
+
+def test_L4_all_inactive_members_across_tenants_yields_suspended(
+    engine: Engine,
+) -> None:
+    shared_subject = "auth0|all-inactive"
+    with engine.begin() as conn:
+        _tu(conn, subject=shared_subject, tenant_id="tenant-a", active=False)
+        _tu(conn, subject=shared_subject, tenant_id="tenant-b", active=False)
+    _run(engine)
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT lifecycle_state FROM fg_principals")).fetchone()
+    assert row is not None
+    assert row.lifecycle_state == "suspended"

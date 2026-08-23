@@ -135,8 +135,25 @@ def run_backfill(conn: Connection, *, dry_run: bool = False) -> BackfillReport:
             {"id": first_member_id},
         ).fetchone()
         display_name: str | None = src.display_name if src else None
-        # Prefer IdP-provided email; fall back to membership email.
-        primary_email: str | None = (src.identity_email or src.email) if src else None
+        # primary_email uses the membership email (tenant_users.email) per spec §8.
+        # provider_email uses the IdP-provided email (identity_email); may be NULL.
+        primary_email: str | None = src.email if src else None
+        provider_email: str | None = src.identity_email if src else None
+
+        # lifecycle_state: 'active' if any membership is active, else 'suspended'.
+        placeholders = ", ".join(f":m{i}" for i in range(len(group.member_ids)))
+        active_params = {f"m{i}": mid for i, mid in enumerate(group.member_ids)}
+        any_active = (
+            conn.execute(
+                text(
+                    f"SELECT COUNT(*) FROM tenant_users"
+                    f" WHERE id IN ({placeholders}) AND active"
+                ),
+                active_params,
+            ).scalar()
+            or 0
+        )
+        lifecycle_state = "active" if any_active > 0 else "suspended"
 
         principal_id = str(uuid.uuid4())
 
@@ -148,12 +165,13 @@ def run_backfill(conn: Connection, *, dry_run: bool = False) -> BackfillReport:
                 "     created_at, updated_at)"
                 " VALUES"
                 "    (:id, :display_name, :primary_email, 'human',"
-                "     'active', :mfa_verified, 1, :now, :now)"
+                "     :lifecycle_state, :mfa_verified, 1, :now, :now)"
             ),
             {
                 "id": principal_id,
                 "display_name": display_name,
                 "primary_email": primary_email,
+                "lifecycle_state": lifecycle_state,
                 "mfa_verified": False,
                 "now": now,
             },
@@ -175,7 +193,7 @@ def run_backfill(conn: Connection, *, dry_run: bool = False) -> BackfillReport:
                 "provider": provider,
                 "provider_issuer": issuer,
                 "provider_subject": subject,
-                "provider_email": primary_email,
+                "provider_email": provider_email,
                 "now": now,
             },
         )
