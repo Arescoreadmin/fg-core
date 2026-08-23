@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-85 — feat(auth): deterministic principal + ExternalIdentity backfill writer — PR-AUTH-003B
+
+- **PR/Branch:** `feat/pr-auth-003b-principal-backfill-writer` (PR TBD)
+- **Date:** 2026-08-21
+- **Files changed:** `api/identity_backfill_writer.py` (new), `tests/test_pr_auth_003b_principal_backfill_writer.py` (new), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** AUTH-003A (#653) established the deterministic preflight analysis and the `PreflightReport.ready_for_backfill` gate. AUTH-003B is the write phase: consuming the preflight plan and materializing one `fg_principals` + one `fg_external_identities` row per canonical triple, then back-linking each `tenant_users` member via `principal_id`.
+- **Fix:** New module `api/identity_backfill_writer.py` exposes `run_backfill(conn, *, dry_run=False) → BackfillReport`. Calls `run_preflight` internally as the guard — raises `RuntimeError` if `ready_for_backfill=False`. For each `PrincipalGroup`: queries first sorted member for `display_name` and `identity_email`/`email` (source attribution); INSERTs one `fg_principals` row (`principal_type='human'`, `lifecycle_state='active'`, `mfa_verified=False`, `authority_version=1`); INSERTs one `fg_external_identities` row binding the canonical triple; UPDATEs all group members in `tenant_users SET principal_id = <new>`. `dry_run=True` counts without executing DML. Idempotent: a re-run on a fully migrated population produces all-zero counts. Caller owns the transaction.
+- **Behavioral impact:** None in normal runtime paths — this module is not called by any existing API or auth path. It is a migration operator tool, invoked manually under a superuser/BYPASSRLS connection inside `engine.begin()`.
+- **Security impact:** Requires same elevated connection as AUTH-003A (`rolsuper` or `rolbypassrls`). Raw identity triples (`canonical_key`) are read from `PrincipalGroup` but never logged. `mfa_verified=False` default — no privilege escalation. Legacy `identity_*` columns on `tenant_users` are not modified.
+- **Schema/API impact:** None new. Writes only to `fg_principals`, `fg_external_identities`, and `tenant_users.principal_id` (column added in AUTH-002 / migration 0181). No NOT NULL constraints. No legacy column removal.
+- **Tests added:** `tests/test_pr_auth_003b_principal_backfill_writer.py` — 43 tests across 11 groups: A (module structure, BackfillReport type), B (blocking gate), C (dry run correctness), D (happy path single READY row), E (multi-tenant grouping), F (multiple distinct groups), G (report correctness), H (source attribution), I (empty + already-migrated populations), J (post-backfill state verification), K (preflight integration).
+- **Validation:** `ruff check + format` PASS. `mypy api/identity_backfill_writer.py` 0 errors. `pytest tests/test_pr_auth_003b_*` 43/43 PASS. Regression AUTH-001+002+003A+003B: 138/138 PASS.
+- **Result:** AUTH-003B is the write phase of the identity backfill. AUTH-003C (constraints + post-backfill proof) is next.
+
+---
+
 ## P-84 — feat(auth): identity backfill preflight analysis — PR-AUTH-003A
 
 - **PR/Branch:** `feat/pr-auth-003a-identity-backfill-preflight` (PR TBD)
