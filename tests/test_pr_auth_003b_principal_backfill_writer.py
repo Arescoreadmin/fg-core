@@ -192,14 +192,18 @@ def _run(engine: Engine, *, dry_run: bool = False) -> BackfillReport:
 
 def _count(engine: Engine, table: str) -> int:
     with engine.connect() as conn:
-        return conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+        value = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+    assert value is not None
+    return int(value)
 
 
 def _linked_count(engine: Engine) -> int:
     with engine.connect() as conn:
-        return conn.execute(
+        value = conn.execute(
             text("SELECT COUNT(*) FROM tenant_users WHERE principal_id IS NOT NULL")
         ).scalar()
+    assert value is not None
+    return int(value)
 
 
 # ---------------------------------------------------------------------------
