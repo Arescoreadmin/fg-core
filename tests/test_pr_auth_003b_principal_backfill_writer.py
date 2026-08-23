@@ -16,6 +16,8 @@ Coverage groups:
   I — Empty and already-migrated populations
   J — Post-backfill state verification
   K — Preflight integration
+  L — Lifecycle state derivation from tenant_users.active
+  M — Transaction safety: atomicity and rollback proof
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from api.identity_backfill_writer import BackfillReport, run_backfill
@@ -788,3 +790,98 @@ def test_L4_all_inactive_members_across_tenants_yields_suspended(
         row = conn.execute(text("SELECT lifecycle_state FROM fg_principals")).fetchone()
     assert row is not None
     assert row.lifecycle_state == "suspended"
+
+
+# ---------------------------------------------------------------------------
+# M — Transaction safety: atomicity and rollback proof
+# ---------------------------------------------------------------------------
+
+
+def test_M1_writes_rolled_back_without_explicit_commit(engine: Engine) -> None:
+    """Primary atomicity: run_backfill never self-commits; writes belong to caller's tx."""
+    with engine.begin() as conn:
+        _tu(conn)
+    with engine.connect() as conn:
+        run_backfill(conn)
+        # deliberate: no conn.commit() — SQLAlchemy 2.x rolls back on context exit
+    assert _count(engine, "fg_principals") == 0
+    assert _count(engine, "fg_external_identities") == 0
+    assert _linked_count(engine) == 0
+
+
+def test_M2_rollback_after_principal_insert_failure(engine: Engine) -> None:
+    """engine.begin() rolls back everything when failure occurs after fg_principals INSERT."""
+    with engine.begin() as conn:
+        _tu(conn)
+
+    fired = [False]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _inject(conn, cursor, stmt, params, ctx, executemany):
+        if "INSERT INTO fg_external_identities" in stmt and not fired[0]:
+            fired[0] = True
+            raise RuntimeError("injected: principal written, external identity not yet")
+
+    try:
+        with pytest.raises(RuntimeError, match="injected"), engine.begin() as conn:
+            run_backfill(conn)
+    finally:
+        event.remove(engine, "before_cursor_execute", _inject)
+
+    assert fired[0], "injection never triggered — test is invalid"
+    assert _count(engine, "fg_principals") == 0
+    assert _count(engine, "fg_external_identities") == 0
+    assert _linked_count(engine) == 0
+
+
+def test_M3_rollback_after_external_identity_insert_failure(engine: Engine) -> None:
+    """engine.begin() rolls back both INSERTs when failure occurs before tenant_users UPDATE."""
+    with engine.begin() as conn:
+        _tu(conn)
+
+    fired = [False]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _inject(conn, cursor, stmt, params, ctx, executemany):
+        if "SET principal_id" in stmt and not fired[0]:
+            fired[0] = True
+            raise RuntimeError("injected: both INSERTs written, UPDATE not yet")
+
+    try:
+        with pytest.raises(RuntimeError, match="injected"), engine.begin() as conn:
+            run_backfill(conn)
+    finally:
+        event.remove(engine, "before_cursor_execute", _inject)
+
+    assert fired[0], "injection never triggered — test is invalid"
+    assert _count(engine, "fg_principals") == 0
+    assert _count(engine, "fg_external_identities") == 0
+    assert _linked_count(engine) == 0
+
+
+def test_M4_rollback_after_partial_tenant_user_linkage(engine: Engine) -> None:
+    """engine.begin() rolls back partial UPDATE batch; first member linked → still zero after rollback."""
+    shared_subject = "auth0|rollback-multi"
+    with engine.begin() as conn:
+        _tu(conn, subject=shared_subject, tenant_id="tenant-a")
+        _tu(conn, subject=shared_subject, tenant_id="tenant-b")
+
+    update_count = [0]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _inject(conn, cursor, stmt, params, ctx, executemany):
+        if "SET principal_id" in stmt:
+            update_count[0] += 1
+            if update_count[0] == 2:
+                raise RuntimeError("injected: first UPDATE done, second not yet")
+
+    try:
+        with pytest.raises(RuntimeError, match="injected"), engine.begin() as conn:
+            run_backfill(conn)
+    finally:
+        event.remove(engine, "before_cursor_execute", _inject)
+
+    assert update_count[0] == 2, "injection never fired on second UPDATE"
+    assert _count(engine, "fg_principals") == 0
+    assert _count(engine, "fg_external_identities") == 0
+    assert _linked_count(engine) == 0
