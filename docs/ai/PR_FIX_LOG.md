@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-84 — feat(auth): identity backfill preflight analysis — PR-AUTH-003A
+
+- **PR/Branch:** `feat/pr-auth-003a-identity-backfill-preflight` (PR TBD)
+- **Date:** 2026-08-22
+- **Files changed:** `api/identity_backfill_preflight.py` (new), `tests/test_pr_auth_003a_identity_backfill_preflight.py` (new), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** AUTH-002 (#652) established the FK bridge between `tenant_users` and `fg_principals`. Before AUTH-003B can write a single row, FrostGate must prove deterministically that every legacy `tenant_users` identity row can be classified, that no blocking collisions exist, and that the grouping algorithm is stable. AUTH-003A is that proof — zero migration writes, pure analysis.
+- **Fix:** New module `api/identity_backfill_preflight.py` exposes `run_preflight(conn) → PreflightReport`. Reads `tenant_users` and `fg_external_identities` (read-only). Classifies each row: `ALREADY_LINKED` (non-blocking), `UNBOUND` (non-blocking), `INCOMPLETE_TRIPLE` (blocking), `UNKNOWN_PROVIDER` (blocking), `CONFLICT_GLOBAL_BINDING` (blocking), `READY` (non-blocking). Groups READY rows by `(provider, issuer, subject)` canonical key — the multi-tenant invariant. Groups sorted by key for stable indices. `PreflightReport.ready_for_backfill` is `True` iff `blocking_count == 0`. Reuses `_VALID_PROVIDERS` from `api.principal_authority` — no duplication.
+- **Behavioral impact:** None — new read-only analysis module. No runtime path calls it. No existing table modified. No row written.
+- **Security impact:** `canonical_key` (raw identity triple) is stored in `PrincipalGroup` but documented as credential-adjacent and must not be logged. No raw identity values are emitted by default.
+- **Schema/API impact:** None. No migration. No API contract change.
+- **Tests added:** `tests/test_pr_auth_003a_identity_backfill_preflight.py` — 48 tests across 12 groups: A (constants + normalization authority reuse), B (UNBOUND), C (INCOMPLETE_TRIPLE), D (UNKNOWN_PROVIDER), E (CONFLICT_GLOBAL_BINDING), F (ALREADY_LINKED), G (READY), H (principal grouping algorithm), I (PreflightReport properties), J (determinism), K (ready_for_backfill semantics), L (zero mutation guarantee).
+- **Validation:** `ruff check + format` PASS. `mypy api/identity_backfill_preflight.py` 0 errors. `pytest tests/test_pr_auth_003a_*` 48/48 PASS. Regression AUTH-001+002+003A: 88/88 PASS.
+- **Result:** AUTH-003A DOES NOT MOVE IDENTITY DATA. AUTH-003B gate established: AUTH-003B is safe to begin only when `PreflightReport.ready_for_backfill is True`.
+
+---
+
 ## P-83 — feat(auth): tenant_users.principal_id FK column — PR-AUTH-002 (includes P1 FK registration fix)
 
 - **PR/Branch:** `feat/pr-auth-002-tenant-user-principal-fk` (PR TBD)
