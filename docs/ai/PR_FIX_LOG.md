@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-86 — test(auth): narrow scalar counts in backfill writer tests — PR-AUTH-003B-A
+
+- **PR/Branch:** `fix/pr-auth-003b-mypy-scalar-narrowing` (PR #655)
+- **Date:** 2026-08-23
+- **Files changed:** `tests/test_pr_auth_003b_principal_backfill_writer.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** `_count()` and `_linked_count()` helpers returned `scalar()` directly as `int`, but SQLAlchemy `scalar()` returns `Any | None`. Strict mypy flagged the unnarrowed return as an incompatible type for the `-> int` annotation.
+- **Fix:** Both helpers now assign scalar to a local variable, assert it is not None, then return `int(value)`. No production code changed.
+- **Behavioral impact:** None — test-only change. All 51 AUTH-003B tests pass. 146/146 regression green.
+- **Schema/API impact:** None.
+- **Result:** Mypy strict return-value errors resolved. Guard lane PR_FIX_LOG enforcement satisfied.
+
+---
+
 ## P-85 — feat(auth): deterministic principal + ExternalIdentity backfill writer — PR-AUTH-003B
 
 - **PR/Branch:** `feat/pr-auth-003b-principal-backfill-writer` (PR TBD)
