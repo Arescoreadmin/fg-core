@@ -3509,6 +3509,13 @@ class TenantUser(Base):
             "identity_type IN ('human','service','agent','system')",
             name="chk_tenant_users_identity_type",
         ),
+        # HARD-001 (migration 0182): BOUND memberships require principal_id.
+        # UNBOUND rows (pending/unbound/disabled/failed) legitimately have
+        # NULL principal_id. See docs/architecture/HARD_001_IDENTITY_AUTHORITY_HARDENING.md.
+        CheckConstraint(
+            "identity_binding_status <> 'bound' OR principal_id IS NOT NULL",
+            name="chk_bound_requires_principal_id",
+        ),
     )
 
     id: Mapped[Any] = mapped_column(

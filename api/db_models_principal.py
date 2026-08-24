@@ -85,6 +85,13 @@ class FgPrincipal(Base):
         nullable=False,
         default=1,
         server_default=text("1"),
+        doc=(
+            "Canonical principal authority version. Increment contract enforced "
+            "at the DB layer by trigger fg_principals_authority_version_bump "
+            "(migration 0182 / HARD-001) on meaningful column change "
+            "(display_name, primary_email, lifecycle_state, mfa_verified). "
+            "Monotonic upward; no-op updates do not advance."
+        ),
     )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),

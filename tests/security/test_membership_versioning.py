@@ -43,6 +43,7 @@ from fastapi.testclient import TestClient
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
 from api.db_models import TenantUser
+from api.db_models_principal import FgPrincipal
 from api.main import build_app
 from services.identity_resolver import (
     IdentityPrincipal,
@@ -77,7 +78,26 @@ def _user(
     issuer: str = "https://example.auth0.com/",
     subject: str = "auth0|user-1",
     membership_version: int = 1,
+    principal_id: str | None = None,
 ) -> TenantUser:
+    # HARD-001 (chk_bound_requires_principal_id + fg_principals FK):
+    # BOUND rows require principal_id referencing an existing fg_principals
+    # row. Synthesize one for tests that do not care about the principal
+    # record itself. UNBOUND scenarios keep principal_id NULL.
+    if principal_id is None and binding_status == "bound":
+        principal_id = str(uuid.uuid4())
+        db.add(
+            FgPrincipal(
+                id=principal_id,
+                display_name=email,
+                primary_email=email,
+                principal_type="human",
+                lifecycle_state="active",
+                mfa_verified=False,
+                authority_version=1,
+            )
+        )
+        db.flush()
     user = TenantUser(
         id=str(uuid.uuid4()),
         tenant_id=tenant_id,
@@ -93,6 +113,7 @@ def _user(
         identity_email_verified=True,
         identity_binding_status=binding_status,
         membership_version=membership_version,
+        principal_id=principal_id,
     )
     db.add(user)
     db.commit()
