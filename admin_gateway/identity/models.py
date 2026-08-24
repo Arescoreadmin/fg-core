@@ -149,6 +149,11 @@ class TenantUser(IdentityBase):
     identity_email_verified: Mapped[bool] = mapped_column(Boolean)
     identity_bound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     identity_binding_status: Mapped[str] = mapped_column(String(32))
+    # PR-AUTH-004: canonical FK to fg_principals.id. Set atomically with
+    # identity_binding_status='bound' via the canonical resolver in
+    # api.principal_authority. Nullable — UNBOUND memberships legitimately
+    # have NULL principal_id (see PR_AUTH_003_RECONCILIATION.md).
+    principal_id: Mapped[str | None] = mapped_column(String(36))
     last_identity_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

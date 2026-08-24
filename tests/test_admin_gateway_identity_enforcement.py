@@ -39,7 +39,11 @@ from admin_gateway.identity.session_service import (
 
 TENANT = "tenant-a"
 ISSUER = "https://idp.example/"
-PROVIDER = "oidc"
+# PR-AUTH-004: providers must be in the canonical set defined by
+# docs/architecture/IDENTITY_AUTHORITY_DATA_MODEL.md
+# (auth0, entra, okta, saml, oidc_generic). Using an ad-hoc string like
+# "oidc" would fail the canonical resolver validation.
+PROVIDER = "oidc_generic"
 CONNECTION = "enterprise-a"
 ORGANIZATION = "org-a"
 EMAIL = "person@example.com"
