@@ -491,6 +491,61 @@ def bind_identity(
             db, invitation, "tenant.invite.binding_rejected", "IDENTITY_ALREADY_BOUND"
         )
         raise IdentityFlowError("IDENTITY_ALREADY_BOUND", 409)
+    # PR-AUTH-004 — Canonical principal authority cutover.
+    #
+    # Order matters (atomicity requirement):
+    #   1. Validate canonical triple (in resolver).
+    #   2. Resolve or create the canonical fg_principals row + bind the
+    #      external identity via fg_external_identities.
+    #   3. Set membership.principal_id to the resolved value.
+    #   4. Set legacy identity_* columns (kept for backward-compat / rollback
+    #      evidence during the migration window; frozen data model §8).
+    #   5. Set identity_binding_status='bound'.
+    #   6. flush — all three invariants (principal_id populated, legacy
+    #      columns populated, binding_status='bound') are satisfied atomically.
+    #
+    # If any step (2) fails, the row remains UNBOUND — no partial cutover.
+    from api.principal_authority import (
+        PrincipalResolutionError,
+        resolve_or_create_principal_for_external_identity,
+    )
+
+    # `authority` fields are Optional at the ORM level but validate_callback()
+    # only reaches `validated` status when all three are populated. Narrow for
+    # mypy and fail closed if this assumption ever regresses.
+    canonical_provider = authority[0]
+    canonical_issuer = authority[1]
+    canonical_subject = authority[2]
+    if not (canonical_provider and canonical_issuer and canonical_subject):
+        _audit_rejection(
+            db, invitation, "tenant.invite.binding_rejected", "CANONICAL_TRIPLE_MISSING"
+        )
+        raise IdentityFlowError("CANONICAL_TRIPLE_MISSING", 500)
+
+    try:
+        resolution = resolve_or_create_principal_for_external_identity(
+            db,
+            provider=canonical_provider,
+            issuer=canonical_issuer,
+            subject=canonical_subject,
+            display_name=getattr(membership, "display_name", None) or membership.email,
+            primary_email=membership.email,
+            provider_email=auth_state.validated_email,
+        )
+    except PrincipalResolutionError as exc:
+        db.rollback()
+        _audit_rejection(
+            db,
+            invitation,
+            "tenant.invite.binding_rejected",
+            exc.code,
+        )
+        # Preserve explicit resolver error codes rather than remapping to
+        # IDENTITY_ALREADY_BOUND (misleading; would hide non-binding faults).
+        raise IdentityFlowError(
+            exc.code, 409 if exc.code == "PRINCIPAL_INACTIVE" else 400
+        ) from exc
+    membership.principal_id = resolution.principal_id
     (
         membership.identity_provider,
         membership.identity_issuer,
@@ -514,7 +569,19 @@ def bind_identity(
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise IdentityFlowError("IDENTITY_ALREADY_BOUND", 409) from exc
+        # The one legitimate IntegrityError shape here is a cross-tenant
+        # binding collision on the shadow index uq_tenant_users_bound_identity
+        # (predicate identity_binding_status='bound' AND identity_subject IS
+        # NOT NULL) — that is genuinely IDENTITY_ALREADY_BOUND. Any other
+        # IntegrityError (FK on principal_id, principal_id CHECK if
+        # HARD-002 ever ships) is a distinct fault; surface with an explicit
+        # code rather than hide behind the legacy label.
+        detail = str(exc.orig) if exc.orig is not None else str(exc)
+        if "uq_tenant_users_bound_identity" in detail or "identity_subject" in detail:
+            raise IdentityFlowError("IDENTITY_ALREADY_BOUND", 409) from exc
+        if "principal_id" in detail or "fg_principals" in detail:
+            raise IdentityFlowError("PRINCIPAL_LINKAGE_INVALID", 500) from exc
+        raise IdentityFlowError("IDENTITY_BINDING_FAILED", 500) from exc
     if invitation.status == "accepted_identity_pending_binding":
         transition_invitation(
             db, invitation, to_status="bound", actor_user_id=membership.id
