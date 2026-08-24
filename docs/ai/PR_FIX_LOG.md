@@ -1,5 +1,17 @@
 # PR Fix Log (Strict)
 
+## P-91 — fix(auth): wrap race-path INSERTs in savepoint to keep transaction valid on IntegrityError (PR-AUTH-004-A)
+
+- **PR/Branch:** PR #658 (amendment, same branch)
+- **Date:** 2026-08-24
+- **Files changed:** `api/principal_authority.py`, `tests/test_pr_auth_004_runtime_principal_authority_cutover.py`
+- **Root cause (Codex P1):** In `resolve_or_create_principal_for_external_identity`, the two `INSERT` statements for `fg_principals` and `fg_external_identities` were issued directly on the caller's transaction with no savepoint. On PostgreSQL, when `fg_external_identities`'s INSERT raises `IntegrityError` (unique-constraint race), the driver marks the entire transaction aborted. The subsequent `_lookup_external_identity(conn, ...)` in the `except IntegrityError` block then fails with `"current transaction is aborted, commands ignored until end of transaction block"`. That exception was swallowed by `except Exception: existing = None`, so the resolver always raised `RESOLVER_RACE_UNRESOLVED` instead of returning the winner. The race path was effectively broken on every PostgreSQL concurrent bind.
+- **Fix:** Wrapped both INSERTs in `conn.begin_nested()` (a SAVEPOINT). On `IntegrityError` the savepoint is automatically rolled back, leaving the outer transaction valid. The re-lookup in the `except IntegrityError` block can now execute normally. Added test `test_G2_race_savepoint_leaves_transaction_valid` which pre-seeds the winner directly, patches `_lookup_external_identity` to return `None` on the first call (simulating the race window), calls the resolver, and asserts (a) it returns the winner's `principal_id`, (b) `created=False`, (c) the lookup was called exactly twice (miss + re-lookup).
+- **Tests:** 40/40 PASS (was 39/39; G2 is new). No other tests affected.
+- **Result:** Concurrent invitation bindings for the same IdP identity now correctly converge to a single `fg_principals` row on PostgreSQL.
+
+---
+
 ## P-90 — feat(auth): cut over runtime human identity to canonical principal authority (PR-AUTH-004)
 
 - **PR/Branch:** `feat/pr-auth-004-runtime-principal-authority-cutover` (PR TBD)

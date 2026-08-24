@@ -434,49 +434,50 @@ def resolve_or_create_principal_for_external_identity(
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        conn.execute(
-            text(
-                """
-                INSERT INTO fg_principals
-                    (id, display_name, primary_email, principal_type,
-                     lifecycle_state, mfa_verified, authority_version,
-                     created_at, updated_at)
-                VALUES
-                    (:id, :display_name, :primary_email, 'human',
-                     'active', :mfa_verified, 1, :now, :now)
-                """
-            ),
-            {
-                "id": new_principal_id,
-                "display_name": display_name,
-                "primary_email": primary_email,
-                "mfa_verified": False,
-                "now": now,
-            },
-        )
-        conn.execute(
-            text(
-                """
-                INSERT INTO fg_external_identities
-                    (id, principal_id, provider, provider_issuer,
-                     provider_subject, provider_email, created_at)
-                VALUES
-                    (:id, :principal_id, :provider, :provider_issuer,
-                     :provider_subject, :provider_email, :now)
-                """
-            ),
-            {
-                "id": new_ei_id,
-                "principal_id": new_principal_id,
-                "provider": provider,
-                "provider_issuer": issuer,
-                "provider_subject": subject,
-                "provider_email": provider_email,
-                "now": now,
-            },
-        )
+        with conn.begin_nested():
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO fg_principals
+                        (id, display_name, primary_email, principal_type,
+                         lifecycle_state, mfa_verified, authority_version,
+                         created_at, updated_at)
+                    VALUES
+                        (:id, :display_name, :primary_email, 'human',
+                         'active', :mfa_verified, 1, :now, :now)
+                    """
+                ),
+                {
+                    "id": new_principal_id,
+                    "display_name": display_name,
+                    "primary_email": primary_email,
+                    "mfa_verified": False,
+                    "now": now,
+                },
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO fg_external_identities
+                        (id, principal_id, provider, provider_issuer,
+                         provider_subject, provider_email, created_at)
+                    VALUES
+                        (:id, :principal_id, :provider, :provider_issuer,
+                         :provider_subject, :provider_email, :now)
+                    """
+                ),
+                {
+                    "id": new_ei_id,
+                    "principal_id": new_principal_id,
+                    "provider": provider,
+                    "provider_issuer": issuer,
+                    "provider_subject": subject,
+                    "provider_email": provider_email,
+                    "now": now,
+                },
+            )
     except IntegrityError:
-        # Race: a concurrent binder inserted first. Resolve the winner.
+        # Race: savepoint rolled back; outer transaction still valid. Resolve the winner.
         log.info("principal_authority.resolve.race_resolved")
         try:
             existing = _lookup_external_identity(

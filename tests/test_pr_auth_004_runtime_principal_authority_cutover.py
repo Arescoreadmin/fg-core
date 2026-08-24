@@ -588,6 +588,66 @@ def test_G1_concurrent_new_binding_race_resolves_to_single_principal(
     assert n_ei == 1
 
 
+def test_G2_race_savepoint_leaves_transaction_valid(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The race handler must query the winner on the same still-valid
+    transaction. Without the savepoint, Postgres aborts the transaction on
+    IntegrityError; every subsequent query raises 'current transaction is
+    aborted'. Simulate the race window by pre-seeding the winner directly and
+    patching the initial lookup to return None, forcing the INSERT path."""
+    import api.principal_authority as _pa
+
+    winner_principal_id = str(uuid.uuid4())
+    winner_ei_id = str(uuid.uuid4())
+    now = "2026-08-24T00:00:00+00:00"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO fg_principals (id, display_name, primary_email,"
+                " principal_type, lifecycle_state, mfa_verified,"
+                " authority_version, created_at, updated_at)"
+                " VALUES (:id, NULL, NULL, 'human', 'active', 0, 1, :now, :now)"
+            ),
+            {"id": winner_principal_id, "now": now},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO fg_external_identities (id, principal_id, provider,"
+                " provider_issuer, provider_subject, provider_email, created_at)"
+                " VALUES (:id, :pid, 'auth0', :issuer, :subject, NULL, :now)"
+            ),
+            {
+                "id": winner_ei_id,
+                "pid": winner_principal_id,
+                "issuer": _ISSUER,
+                "subject": _SUBJECT,
+                "now": now,
+            },
+        )
+
+    original_lookup = _pa._lookup_external_identity
+    call_count = 0
+
+    def _patched_lookup(*args: Any, **kwargs: Any) -> Any:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return None  # simulate race window: loser sees nothing on first lookup
+        return original_lookup(*args, **kwargs)
+
+    monkeypatch.setattr(_pa, "_lookup_external_identity", _patched_lookup)
+
+    with engine.begin() as conn:
+        result = resolve_or_create_principal_for_external_identity(
+            conn, provider="auth0", issuer=_ISSUER, subject=_SUBJECT
+        )
+
+    assert result.principal_id == winner_principal_id
+    assert result.created is False
+    assert call_count == 2
+
+
 # ---------------------------------------------------------------------------
 # H — Lifecycle enforcement
 # ---------------------------------------------------------------------------
