@@ -816,14 +816,45 @@ def test_N2_unbound_row_has_null_principal_id_post_reconciliation(
     assert row.principal_id is None
 
 
-def test_N3_no_migration_0182_file_exists() -> None:
+def test_N3_migration_0182_if_present_is_hardening_only() -> None:
+    """Any migration 0182 must be the HARD-001 hardening PR, not a bare NOT NULL.
+
+    Per docs/architecture/PR_AUTH_003_RECONCILIATION.md:
+        "any PR that flips principal_id to NOT NULL (global or partial) must
+         be titled HARD-* (constraint hardening) ..."
+
+    AUTH-003C itself must not add migration 0182. HARD-001 is the sanctioned
+    downstream PR — it adds the authority_version trigger. The BOUND→principal_id
+    CHECK constraint (chk_bound_requires_principal_id) is deferred to the
+    runtime authority cutover PR, because the invitation binding flow must set
+    principal_id before the constraint can be enforced (see Codex P1, PR #657).
+    """
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     migrations_dir = repo_root / "migrations" / "postgres"
-    # Any file starting with 0182 (regardless of suffix) would be a violation.
     matches = list(migrations_dir.glob("0182*"))
-    assert matches == [], (
-        f"migration 0182 must NOT be added by AUTH-003C — principal_id must"
-        f" remain nullable for UNBOUND rows. Found: {matches}"
+    if not matches:
+        return  # AUTH-003C invariant: no 0182 forced by this PR alone.
+    # If 0182 exists, it must be HARD-001 and must NOT add a global NOT NULL
+    # on tenant_users.principal_id.
+    assert len(matches) == 1
+    src = matches[0].read_text(encoding="utf-8")
+    upper = src.upper()
+    assert "identity_authority_hardening" in matches[0].name.lower(), (
+        f"any 0182 must be the HARD-001 hardening migration; got {matches[0].name!r}"
+    )
+    # No unconditional NOT NULL on principal_id.
+    assert "ALTER COLUMN PRINCIPAL_ID SET NOT NULL" not in upper, (
+        "HARD-001 must not add global NOT NULL on tenant_users.principal_id "
+        "— UNBOUND rows legitimately have NULL principal_id."
+    )
+    # The CHECK constraint is deferred; the migration must document this.
+    assert "deferred" in src.lower() or "Deferred" in src, (
+        "Migration 0182 must document that chk_bound_requires_principal_id "
+        "is deferred to the runtime cutover PR."
+    )
+    # The migration must include the authority_version trigger.
+    assert "fg_principals_authority_version_bump" in src, (
+        "HARD-001 migration 0182 must define the authority_version trigger."
     )
 
 
