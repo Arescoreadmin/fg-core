@@ -15,16 +15,20 @@
 -- DOES NOT: run any identity backfill (AUTH-003B already ran; see PR #654).
 -- DOES NOT: mutate any row (zero DML in this migration).
 --
--- This migration adds three defense-in-depth artifacts:
---   A. CHECK constraint on tenant_users: bound rows must have principal_id
---   B. Trigger on fg_principals: authority_version must advance monotonically
+-- This migration adds one defense-in-depth artifact:
+--   A. Trigger on fg_principals: authority_version must advance monotonically
 --      when a meaningful column changes; no-op updates do not bump the version
---   C. Nothing on fg_external_identities (no version field in frozen arch)
---   D. Nothing on tenant_users authority (membership_version rename is
---      scheduled as migration 0186 per data model roadmap; not owned here)
+--
+-- NOTE: The partial NOT NULL invariant (BOUND rows require principal_id) was
+-- originally planned for this migration. It has been deferred to the runtime
+-- authority cutover PR that also updates admin_gateway/identity/invitation_flow.py
+-- to set principal_id when transitioning a membership to 'bound'. Deploying the
+-- CHECK before that binding-flow update causes every invitation acceptance to
+-- violate the constraint (IntegrityError swallowed as IDENTITY_ALREADY_BOUND).
+-- See: admin_gateway/identity/invitation_flow.py:504 — sets identity_binding_status
+-- = 'bound' without setting principal_id.
 --
 -- Rollback:
---   ALTER TABLE tenant_users DROP CONSTRAINT chk_bound_requires_principal_id;
 --   DROP TRIGGER  IF EXISTS fg_principals_authority_version_bump ON fg_principals;
 --   DROP FUNCTION IF EXISTS fg_principal_authority_version_enforce();
 --
@@ -37,51 +41,7 @@
 --   - The migration is safe to run online. No table rewrite. No data movement.
 
 -- ---------------------------------------------------------------------------
--- A. CHECK constraint: BOUND memberships require principal_id
--- ---------------------------------------------------------------------------
---
--- Canonical BOUND predicate: identity_binding_status = 'bound'
--- Rationale: see IDENTITY_AUTHORITY_DATA_MODEL.md sections 2, 8 and the
--- pre-existing uq_tenant_users_bound_identity partial index, which uses the
--- same predicate. AUTH-003B populates tenant_users.principal_id for every
--- READY row, where READY is a superset of BOUND with a complete triple.
--- AUTH-003C proves migration_closed only when every BOUND row is linked.
--- This constraint enforces that invariant at the DB layer as defense-in-depth.
---
--- UNBOUND rows (identity_binding_status IN ('unbound','pending','disabled',
--- 'failed')) legitimately have NULL principal_id and are NOT constrained.
---
--- NOT VALID first, then VALIDATE — allows CI/prod deployment against a
--- populated table without a hard AccessExclusive lock during the row scan.
-
-DO $do$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-          FROM pg_constraint
-         WHERE conname = 'chk_bound_requires_principal_id'
-           AND conrelid = 'tenant_users'::regclass
-    ) THEN
-        ALTER TABLE tenant_users
-            ADD CONSTRAINT chk_bound_requires_principal_id
-            CHECK (
-                identity_binding_status <> 'bound'
-                OR principal_id IS NOT NULL
-            ) NOT VALID;
-    END IF;
-END
-$do$;
-
--- Validate the constraint. If any legacy BOUND row lacks a principal_id, this
--- statement fails and the deployment aborts — which is the correct behavior:
--- HARD-001 must not silently create an invariant that the existing data
--- violates. The AUTH-003C reconciliation (migration_closed=True) is the
--- operator's pre-deployment gate.
-ALTER TABLE tenant_users
-    VALIDATE CONSTRAINT chk_bound_requires_principal_id;
-
--- ---------------------------------------------------------------------------
--- B. fg_principals.authority_version enforcement trigger
+-- A. fg_principals.authority_version enforcement trigger
 -- ---------------------------------------------------------------------------
 --
 -- Contract (from IDENTITY_AUTHORITY_DATA_MODEL.md §"Target Schema"):
@@ -171,26 +131,32 @@ $do$;
 -- Notes on what is INTENTIONALLY NOT here
 -- ---------------------------------------------------------------------------
 --
--- 1. No global `principal_id NOT NULL` on tenant_users. UNBOUND memberships
---    legitimately have NULL principal_id (see PR_AUTH_003_RECONCILIATION.md).
---    The partial constraint above is the correct scoping.
+-- 1. No CHECK constraint on tenant_users (deferred). The partial NOT NULL
+--    invariant (BOUND rows require principal_id) cannot safely be added until
+--    admin_gateway/identity/invitation_flow.py sets principal_id before
+--    transitioning to identity_binding_status='bound'. That change is part of
+--    the runtime authority cutover PR. Adding the CHECK here would break every
+--    invitation acceptance flow with an IntegrityError.
 --
--- 2. No trigger on fg_external_identities. The frozen data model does not
+-- 2. No global `principal_id NOT NULL` on tenant_users. UNBOUND memberships
+--    legitimately have NULL principal_id (see PR_AUTH_003_RECONCILIATION.md).
+--
+-- 3. No trigger on fg_external_identities. The frozen data model does not
 --    define an authority_version on that table. Introducing one here would
 --    extend the frozen contract without an architectural decision.
 --
--- 3. No trigger on tenant_users.membership_version / authority_version. The
+-- 4. No trigger on tenant_users.membership_version / authority_version. The
 --    data model roadmap schedules that rename + trigger as migration 0186 in
 --    a separate PR — outside HARD-001 scope.
 --
--- 4. No trigger on tenants.canonical_version. That is scheduled as migration
+-- 5. No trigger on tenants.canonical_version. That is scheduled as migration
 --    0185 in a separate PR — outside HARD-001 scope.
 --
--- 5. No changes to api/principal_authority.py behavior. The DB trigger is a
+-- 6. No changes to api/principal_authority.py behavior. The DB trigger is a
 --    defense-in-depth mirror; application-layer version management is
 --    unchanged. Any explicit bump the app performs is respected (monotonic
 --    upward).
 --
--- 6. No auth path change. Session issuance, token verification, RBAC, and
+-- 7. No auth path change. Session issuance, token verification, RBAC, and
 --    identity resolution are untouched. This migration is invisible to the
 --    runtime auth path.

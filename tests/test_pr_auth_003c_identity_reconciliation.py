@@ -824,9 +824,10 @@ def test_N3_migration_0182_if_present_is_hardening_only() -> None:
          be titled HARD-* (constraint hardening) ..."
 
     AUTH-003C itself must not add migration 0182. HARD-001 is the sanctioned
-    downstream PR that may add it — and it does so as a scoped CHECK
-    constraint (chk_bound_requires_principal_id), never a global NOT NULL on
-    principal_id.
+    downstream PR — it adds the authority_version trigger. The BOUND→principal_id
+    CHECK constraint (chk_bound_requires_principal_id) is deferred to the
+    runtime authority cutover PR, because the invitation binding flow must set
+    principal_id before the constraint can be enforced (see Codex P1, PR #657).
     """
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     migrations_dir = repo_root / "migrations" / "postgres"
@@ -841,15 +842,19 @@ def test_N3_migration_0182_if_present_is_hardening_only() -> None:
     assert "identity_authority_hardening" in matches[0].name.lower(), (
         f"any 0182 must be the HARD-001 hardening migration; got {matches[0].name!r}"
     )
-    # No unconditional NOT NULL on principal_id — HARD-001 uses a partial
-    # CHECK gated on identity_binding_status.
+    # No unconditional NOT NULL on principal_id.
     assert "ALTER COLUMN PRINCIPAL_ID SET NOT NULL" not in upper, (
         "HARD-001 must not add global NOT NULL on tenant_users.principal_id "
         "— UNBOUND rows legitimately have NULL principal_id."
     )
-    assert "chk_bound_requires_principal_id" in src, (
-        "HARD-001 must enforce the bound-state invariant via the named CHECK "
-        "constraint chk_bound_requires_principal_id."
+    # The CHECK constraint is deferred; the migration must document this.
+    assert "deferred" in src.lower() or "Deferred" in src, (
+        "Migration 0182 must document that chk_bound_requires_principal_id "
+        "is deferred to the runtime cutover PR."
+    )
+    # The migration must include the authority_version trigger.
+    assert "fg_principals_authority_version_bump" in src, (
+        "HARD-001 migration 0182 must define the authority_version trigger."
     )
 
 

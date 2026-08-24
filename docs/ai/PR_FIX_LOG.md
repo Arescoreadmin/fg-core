@@ -1,5 +1,19 @@
 # PR Fix Log (Strict)
 
+## P-89 — fix(auth): defer BOUND→principal_id CHECK to runtime cutover PR (HARD-001-A)
+
+- **PR/Branch:** `feat/hard-001-identity-authority-hardening` (PR #657)
+- **Date:** 2026-08-24
+- **Files changed:** `migrations/postgres/0182_identity_authority_hardening.sql`, `api/db_models.py`, `tests/test_hard_001_identity_authority_hardening.py`, `tests/test_pr_auth_003c_identity_reconciliation.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Codex P1 review finding on PR #657: `admin_gateway/identity/invitation_flow.py:504` sets `identity_binding_status = 'bound'` without setting `principal_id`. The `CHECK (identity_binding_status <> 'bound' OR principal_id IS NOT NULL)` constraint added by migration 0182 would immediately fail every invitation acceptance with an `IntegrityError`, which is silently swallowed at `invitation_flow.py:515-517` and surfaced as the misleading `IDENTITY_ALREADY_BOUND (409)` error.
+- **Fix:** Remove `chk_bound_requires_principal_id` CHECK constraint from migration 0182 and the ORM mirror in `TenantUser.__table_args__`. The constraint is deferred to the runtime authority cutover PR, which will also update the binding flow to set `principal_id` before transitioning `identity_binding_status` to `'bound'`. Migration 0182 retains only the `fg_principals.authority_version` BEFORE UPDATE trigger (safe to deploy independently). Tests B5, B7, B8, G1, K2, K3 removed (tested the absent constraint); A6 updated to assert the migration documents the deferral; A8 updated to remove `pg_constraint` check; J3 updated to assert the constraint is NOT in `db_models.py`; L2 updated to remove the DROP CONSTRAINT rollback assertion. Test in AUTH-003C `test_N3` updated to assert deferral is documented and trigger is present rather than asserting the CHECK is present. 41/41 HARD-001 tests pass; 229/229 full identity chain pass.
+- **Behavioral impact:** No runtime behavior change. The binding flow continues to work. The CHECK invariant will be enforced when the runtime cutover PR updates the binding flow to set `principal_id` atomically with `identity_binding_status = 'bound'`.
+- **Security impact:** None — the trigger (authority_version monotonicity) is unaffected and ships unchanged. The deferral is correctness, not a security regression.
+- **Schema/API impact:** No schema changes ship in this fix. Migration 0182 now contains only the trigger. The ORM `TenantUser.__table_args__` no longer contains `chk_bound_requires_principal_id`.
+- **Result:** PR #657 is safe to deploy. The `chk_bound_requires_principal_id` invariant is deferred and documented.
+
+---
+
 ## P-88 — feat(auth): harden canonical identity state invariants — HARD-001
 
 - **PR/Branch:** `feat/hard-001-identity-authority-hardening` (PR TBD)

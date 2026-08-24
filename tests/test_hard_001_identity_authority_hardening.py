@@ -3,18 +3,20 @@
 Defense-in-depth hardening on top of the frozen identity authority data model.
 Migration 0182 adds:
 
-    A. CHECK constraint chk_bound_requires_principal_id on tenant_users
-       BOUND rows must have principal_id; UNBOUND rows are unconstrained.
-       Testable in SQLite (CHECK is dialect-portable).
-
-    B. Trigger fg_principals_authority_version_bump on fg_principals
+    A. Trigger fg_principals_authority_version_bump on fg_principals
        Monotonic authority_version enforcement on meaningful column change.
        Postgres-only (plpgsql). SQLite tests cover source-level structure
        and skip runtime execution.
 
+NOTE: The BOUND→principal_id CHECK constraint originally planned for 0182
+has been deferred to the runtime authority cutover PR. It cannot safely be
+added until admin_gateway/identity/invitation_flow.py sets principal_id
+before transitioning identity_binding_status to 'bound'. See Codex P1 review
+finding on PR #657.
+
 Coverage groups:
     A — Migration structure (file exists, safe SQL shape, no destructive DML)
-    B — BOUND state constraint (CHECK)
+    B — BOUND state compatibility (UNBOUND rows remain valid; positive BOUND cases)
     C — Principal version trigger (Postgres-only where runtime is required)
     D — External identity versioning (documented negative — no field in arch)
     E — Membership linkage versioning (documented negative — deferred to 0186)
@@ -55,7 +57,8 @@ _NOW = "2026-08-22T00:00:00+00:00"
 _ISSUER = "https://example.auth0.com/"
 
 # ---------------------------------------------------------------------------
-# SQLite schema (mirrors 0179 + 0180 + 0181 + the CHECK part of 0182).
+# SQLite schema (mirrors 0179 + 0180 + 0181).
+# The BOUND→principal_id CHECK is deferred to the runtime cutover PR.
 # Triggers are Postgres-only and not modelled here.
 # ---------------------------------------------------------------------------
 
@@ -98,10 +101,7 @@ CREATE TABLE IF NOT EXISTS tenant_users (
     identity_email          TEXT,
     principal_id            TEXT    REFERENCES fg_principals(id),
     created_at              TEXT    NOT NULL DEFAULT '2026-08-22T00:00:00+00:00',
-    updated_at              TEXT    NOT NULL DEFAULT '2026-08-22T00:00:00+00:00',
-    -- HARD-001 (migration 0182): BOUND memberships require principal_id.
-    CONSTRAINT chk_bound_requires_principal_id
-        CHECK (identity_binding_status <> 'bound' OR principal_id IS NOT NULL)
+    updated_at              TEXT    NOT NULL DEFAULT '2026-08-22T00:00:00+00:00'
 );
 """
 
@@ -260,14 +260,11 @@ def test_A5_migration_does_not_drop_legacy_columns() -> None:
     )
 
 
-def test_A6_migration_defines_bound_check_constraint() -> None:
+def test_A6_migration_documents_deferred_check_constraint() -> None:
+    """The migration source must document WHY the CHECK is deferred."""
     src = _MIGRATION_0182.read_text(encoding="utf-8")
-    assert "chk_bound_requires_principal_id" in src
-    assert "identity_binding_status" in src
-    assert "principal_id IS NOT NULL" in src
-    # Must use NOT VALID / VALIDATE CONSTRAINT for safe online deployment.
-    assert "NOT VALID" in src
-    assert "VALIDATE CONSTRAINT chk_bound_requires_principal_id" in src
+    assert "deferred" in src.lower() or "Deferred" in src
+    assert "invitation_flow" in src
 
 
 def test_A7_migration_defines_authority_version_trigger() -> None:
@@ -280,14 +277,16 @@ def test_A7_migration_defines_authority_version_trigger() -> None:
 def test_A8_migration_is_idempotent() -> None:
     """DO blocks should guard CREATE against pre-existing objects."""
     src = _MIGRATION_0182.read_text(encoding="utf-8")
-    # Constraint creation guarded via pg_constraint lookup.
-    assert "pg_constraint" in src
     # Trigger creation guarded via pg_trigger lookup.
     assert "pg_trigger" in src
+    # CREATE OR REPLACE makes the function idempotent.
+    assert "CREATE OR REPLACE FUNCTION" in src
 
 
 # ---------------------------------------------------------------------------
-# B — BOUND state constraint (dialect-portable — testable in SQLite)
+# B — BOUND state compatibility
+# CHECK constraint is deferred to runtime cutover PR.
+# These tests confirm UNBOUND rows stay valid and positive BOUND cases work.
 # ---------------------------------------------------------------------------
 
 
@@ -315,17 +314,6 @@ def test_B4_failed_row_allows_null_principal_id(engine: Engine) -> None:
         _tu(conn, status="failed", principal_id=None)
 
 
-def test_B5_bound_row_rejects_null_principal_id(engine: Engine) -> None:
-    with engine.begin() as conn:
-        with pytest.raises(sqlalchemy.exc.IntegrityError):
-            _tu(
-                conn,
-                status="bound",
-                principal_id=None,
-                subject="auth0|b5",
-            )
-
-
 def test_B6_bound_row_accepts_valid_principal_id(engine: Engine) -> None:
     with engine.begin() as conn:
         pid = _principal(conn)
@@ -342,39 +330,6 @@ def test_B6_bound_row_accepts_valid_principal_id(engine: Engine) -> None:
     assert row is not None
     assert row.principal_id == pid
     assert row.identity_binding_status == "bound"
-
-
-def test_B7_update_from_unbound_to_bound_requires_principal_id(engine: Engine) -> None:
-    """Cannot transition to bound without simultaneously supplying principal_id."""
-    with engine.begin() as conn:
-        tu_id = _tu(conn, status="unbound", principal_id=None)
-    with engine.begin() as conn:
-        with pytest.raises(sqlalchemy.exc.IntegrityError):
-            conn.execute(
-                text(
-                    "UPDATE tenant_users SET identity_binding_status = 'bound'"
-                    " WHERE id = :id"
-                ),
-                {"id": tu_id},
-            )
-
-
-def test_B8_update_bound_row_to_null_principal_id_rejected(engine: Engine) -> None:
-    """Cannot null out principal_id while remaining bound."""
-    with engine.begin() as conn:
-        pid = _principal(conn)
-        tu_id = _tu(
-            conn,
-            status="bound",
-            principal_id=pid,
-            subject="auth0|b8",
-        )
-    with engine.begin() as conn:
-        with pytest.raises(sqlalchemy.exc.IntegrityError):
-            conn.execute(
-                text("UPDATE tenant_users SET principal_id = NULL WHERE id = :id"),
-                {"id": tu_id},
-            )
 
 
 def test_B9_transition_bound_to_disabled_permits_null_principal(engine: Engine) -> None:
@@ -579,18 +534,6 @@ def test_F2_caller_may_provide_higher_version_bulk_skip() -> None:
 # ---------------------------------------------------------------------------
 # G — Bulk / transaction behavior
 # ---------------------------------------------------------------------------
-
-
-def test_G1_check_constraint_holds_across_txn_boundary(engine: Engine) -> None:
-    """The CHECK is evaluated at statement time, not deferred."""
-    with engine.begin() as conn:
-        pid = _principal(conn)
-        _tu(conn, status="bound", principal_id=pid, subject="auth0|g1")
-    with engine.begin() as conn:
-        # An UPDATE that attempts to null principal_id while remaining bound
-        # must fail immediately.
-        with pytest.raises(sqlalchemy.exc.IntegrityError):
-            conn.execute(text("UPDATE tenant_users SET principal_id = NULL"))
 
 
 def test_G2_bulk_insert_of_unbound_rows_is_unaffected(engine: Engine) -> None:
@@ -843,11 +786,13 @@ def test_J2_principal_authority_module_untouched_by_hard_001() -> None:
     )
 
 
-def test_J3_hard_001_models_change_is_check_only() -> None:
-    """The only ORM change is adding the CHECK to TenantUser.__table_args__."""
+def test_J3_hard_001_models_change_is_docstring_only() -> None:
+    """HARD-001 ORM change is limited to the authority_version docstring.
+    The deferred CHECK constraint is NOT in db_models.py."""
     models_src = _MODELS_PATH.read_text(encoding="utf-8")
-    assert "chk_bound_requires_principal_id" in models_src
-    # And no new column was added to TenantUser.
+    # Confirm the deferred CHECK is absent — no accidental merge of the old version.
+    assert "chk_bound_requires_principal_id" not in models_src
+    # No new column was added to TenantUser.
     assert "principal_id: Mapped[Any] = mapped_column(" in models_src
     # No new imports for HARD-001.
     assert "from api.hard_001" not in models_src
@@ -873,55 +818,6 @@ def test_K1_trigger_body_contains_no_raw_subject_reference() -> None:
         )
 
 
-def test_K2_constraint_check_body_contains_no_pii(engine: Engine) -> None:
-    """The CHECK expression itself lists only column names, not values."""
-    # SQLite exposes the CHECK expression in sqlite_master.
-    with engine.connect() as conn:
-        row = conn.execute(
-            text(
-                "SELECT sql FROM sqlite_master"
-                " WHERE type = 'table' AND name = 'tenant_users'"
-            )
-        ).fetchone()
-    assert row is not None
-    assert "chk_bound_requires_principal_id" in row.sql
-    # Body references only column names.
-    assert "identity_binding_status" in row.sql
-    assert "principal_id" in row.sql
-
-
-def test_K3_check_violation_error_names_constraint(engine: Engine) -> None:
-    """A CHECK violation must be attributable to the named constraint.
-
-    The DBAPI error (SQLite / psycopg) reports the constraint name, which is
-    the only privacy-safe channel to the caller. The SQLAlchemy Python-layer
-    wrapper may echo bound parameters in its formatted message (SQLite lane
-    only) — that surface is developer-facing, not user-facing, and is not
-    the channel HARD-001 is defending. In Postgres, `orig` carries only
-    `new row for relation ... violates check constraint
-    "chk_bound_requires_principal_id"` — no row values.
-    """
-    with engine.begin() as conn:
-        with pytest.raises(sqlalchemy.exc.IntegrityError) as exc:
-            _tu(
-                conn,
-                status="bound",
-                principal_id=None,
-                subject="SECRET-DO-NOT-LEAK",
-                email="secret@example.com",
-            )
-    # The underlying DBAPI error text (via .orig) is the message that would
-    # be surfaced to any structured error handler / audit log. SQLite prefixes
-    # its message with "CHECK constraint failed: <name>".
-    orig_msg = str(exc.value.orig) if exc.value.orig is not None else ""
-    assert "chk_bound_requires_principal_id" in orig_msg, (
-        f"expected DBAPI error to name the constraint; got: {orig_msg!r}"
-    )
-    # And the DBAPI-level message must not embed the subject or email.
-    assert "SECRET-DO-NOT-LEAK" not in orig_msg
-    assert "secret@example.com" not in orig_msg
-
-
 # ---------------------------------------------------------------------------
 # L — Postgres semantics documentation
 # ---------------------------------------------------------------------------
@@ -937,7 +833,6 @@ def test_L1_migration_documents_lock_behavior() -> None:
 def test_L2_migration_documents_rollback() -> None:
     src = _MIGRATION_0182.read_text(encoding="utf-8")
     assert "Rollback:" in src or "ROLLBACK" in src.upper()
-    assert "DROP CONSTRAINT chk_bound_requires_principal_id" in src
     assert "DROP TRIGGER" in src
     assert "DROP FUNCTION" in src
 
