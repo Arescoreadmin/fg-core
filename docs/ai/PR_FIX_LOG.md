@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-95 — fix(ci): pass GITHUB_PR_BASE_SHA through fg_required harness _safe_env allowlist
+
+- **PR/Branch:** `fix/pr-base-mainline-immutable-base`
+- **Date:** 2026-08-25
+- **Files changed:** `tools/testing/harness/fg_required.py`
+- **Root cause:** P-94 added `GITHUB_PR_BASE_SHA` to the workflow env for the `fg-required` job, so it was visible to the Python process running `fg_required.py`. However, `fg_required.py` spawns all lane commands (including `make fg-fast`) via `_run_one_command`, which calls `_safe_env()`. `_safe_env()` enforces an explicit allowlist of env vars to pass to subprocesses for determinism and security. `GITHUB_PR_BASE_SHA` and `GITHUB_EVENT_NAME` were absent from that allowlist, so both were stripped before the subprocess env was constructed. When `make fg-fast` ran `pr-base-mainline-check`, the checker found `CI=true` and `GITHUB_BASE_REF` set (both in the allowlist), entered the PR CI branch, and then failed because `GITHUB_PR_BASE_SHA` was unset — exactly the error message from P-93/P-94.
+- **Fix:** Added `GITHUB_PR_BASE_SHA` and `GITHUB_EVENT_NAME` to the `allow_exact` set in `_safe_env()` in `tools/testing/harness/fg_required.py`. These are not secrets (no redaction concern) and are required for correct PR CI behavior of `pr-base-mainline-check`. `GITHUB_EVENT_NAME` is needed for the push-event skip path in the checker (without it, a push-triggered run with `GITHUB_BASE_REF` absent would erroneously fail rather than skip).
+- **Behavioral impact:** `pr-base-mainline-check` now receives `GITHUB_PR_BASE_SHA` when invoked from within the fg-required harness. No other check behavior changes.
+- **Security impact:** None. `GITHUB_PR_BASE_SHA` is a commit SHA (public), and `GITHUB_EVENT_NAME` is an event type string (public). Neither is a secret.
+- **Schema/API impact:** None.
+- **Tests added:** None. The existing test suite for `check_pr_base_is_mainline.py` covers the checker logic; this fix is a harness env-propagation change.
+- **Validation:** Two-line addition to a set literal; no logic changes.
+- **Result:** The `fg-fast` lane within `fg_required.py` now correctly receives `GITHUB_PR_BASE_SHA`, allowing `pr-base-mainline-check` to pass in the fg-required harness.
+
+---
+
 ## P-94 — fix(ci): propagate GITHUB_PR_BASE_SHA to Unit (ci) and fg-required jobs
 
 - **PR/Branch:** `fix/pr-base-mainline-immutable-base`
