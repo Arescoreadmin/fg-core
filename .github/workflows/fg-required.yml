@@ -24,6 +24,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PIP_NO_PYTHON_VERSION_WARNING: "1"
       FG_KEY_PEPPER: "ci-test-pepper"
+      GITHUB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
     steps:
       - name: Checkout

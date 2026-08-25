@@ -4060,3 +4060,23 @@ Critical-path files changed:
 - `api/auth_scopes/resolution.py`: defense-in-depth guards in `bind_tenant_id()`.
 
 SOC review outcome: approved. Strictly corrective enforcement. Closes production-confirmed delegation bypass. No credential issuance, no schema changes, no new auth paths. All delegation proof verification logic from PR-CORE-002 is preserved and now unconditionally enforced for admin_internal_token.
+
+---
+
+## fix/pr-base-mainline-immutable-base — CI Governance Gate Correctness (2026-08-25)
+
+Change class: CI correctness fix. No runtime behavior changed.
+
+Root cause: `tools/ci/check_pr_base_is_mainline.py` used `origin/<base_ref>` as the diff base. GitHub Actions checks out a synthetic merge commit (merge of PR HEAD into origin/main tip at creation time). When origin/main advances after the synthetic merge commit is created, `git diff --name-status origin/main...HEAD` has no merge base — the checkout is not shallow and origin/main exists, but the merge topology is broken — causing the governance gate to fail with `fatal: origin/main...HEAD: no merge base`.
+
+Fix: In PR CI, the checker now requires `GITHUB_PR_BASE_SHA` (sourced from `github.event.pull_request.base.sha`), which is frozen at PR creation time and never moves regardless of origin/main advancing. The diff and SOC probe use this immutable SHA. `git fetch origin <sha>` is attempted if the commit is not locally present. Fails closed if `GITHUB_PR_BASE_SHA` is absent or unresolvable.
+
+Workflow change: `.github/workflows/ci.yml` — `fg_guard` job env gains `GITHUB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}`. Empty for push events (correct: the gate skips SHA validation when `GITHUB_BASE_REF` is absent). Scoped to the single job that invokes the checker.
+
+Critical-path files changed:
+- `tools/ci/check_pr_base_is_mainline.py`: replaced mutable `origin/<base_ref>` diff base with immutable `GITHUB_PR_BASE_SHA` in PR CI.
+- `.github/workflows/ci.yml`: expose `github.event.pull_request.base.sha` as `GITHUB_PR_BASE_SHA` to the `fg_guard` job.
+
+Test evidence: `tests/test_check_pr_base_is_mainline.py` — 17 tests across groups A–J using real temporary git repositories: A (valid immutable base SHA passes), B (immutable SHA used, not mutable origin/main), C (origin/main advancing does not corrupt validation), D (missing SHA fails closed), E (unresolvable SHA fails closed), F (SOC re-addition detected), G (first-time SOC addition accepted), H (push/non-PR compatible), I (no HEAD~1 fallback), J (synthetic merge commit topology correct).
+
+SOC review outcome: approved. This change makes the governance gate MORE deterministic and strictly fail-closed. It removes the race condition against a mutable remote ref. No weakening of any check. No new bypass. No runtime application code modified. The SOC re-addition detection semantic is preserved.
