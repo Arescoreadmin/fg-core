@@ -786,15 +786,12 @@ def test_J2_principal_authority_module_untouched_by_hard_001() -> None:
     )
 
 
-def test_J3_hard_001_models_change_is_docstring_only() -> None:
-    """HARD-001 ORM change is limited to the authority_version docstring.
-    The deferred CHECK constraint is NOT in db_models.py."""
+def test_J3_tenant_user_model_preserves_principal_id_shape() -> None:
+    """HARD-001 did not add a column; HARD-002 may mirror the CHECK.
+    The principal_id column remains nullable for legitimate UNBOUND rows."""
     models_src = _MODELS_PATH.read_text(encoding="utf-8")
-    # Confirm the deferred CHECK is absent — no accidental merge of the old version.
-    assert "chk_bound_requires_principal_id" not in models_src
-    # No new column was added to TenantUser.
     assert "principal_id: Mapped[Any] = mapped_column(" in models_src
-    # No new imports for HARD-001.
+    assert "nullable=True" in models_src
     assert "from api.hard_001" not in models_src
 
 

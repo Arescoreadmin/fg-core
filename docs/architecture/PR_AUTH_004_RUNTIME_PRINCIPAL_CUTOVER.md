@@ -153,10 +153,10 @@ HARD-001 as pending this PR is **not** included here. Rationale:
   1. **PR-AUTH-004** (this PR) — ship the runtime cutover.
   2. Prove in production: every newly-bound row has a populated
      `principal_id`. Rerun AUTH-003C reconciliation → `migration_closed=True`.
-  3. **HARD-002** (follow-up) — add migration 0183 with the CHECK
+  3. **HARD-002** — add migration 0183 with the CHECK
      constraint using `NOT VALID + VALIDATE CONSTRAINT`. Deployment is
      safe because every replica is now running the resolver.
-  4. **AUTH cleanup** (follow-up) — drop the shadow index
+  4. **AUTH cleanup** (future follow-up) — drop the shadow index
      `uq_tenant_users_bound_identity` and the legacy `identity_*` columns.
 
 This is the same split pattern used by HARD-001 (which itself was split
@@ -299,7 +299,7 @@ across 14 groups (see module docstring). Highlights:
 - Group L (regression): AUTH-003C reconciliation and HARD-001 trigger
   intact.
 - Group M (privacy): raw subject never appears in error text or repr.
-- Group N (deployment order): migration 0183 intentionally absent.
+- Group N (deployment order): migration 0183 intentionally belongs to HARD-002.
 - Group P (error semantics): explicit codes preserved; no remap to
   IDENTITY_ALREADY_BOUND for resolver errors.
 

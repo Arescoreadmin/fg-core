@@ -3509,6 +3509,10 @@ class TenantUser(Base):
             "identity_type IN ('human','service','agent','system')",
             name="chk_tenant_users_identity_type",
         ),
+        CheckConstraint(
+            "identity_binding_status <> 'bound' OR principal_id IS NOT NULL",
+            name="chk_bound_requires_principal_id",
+        ),
     )
 
     id: Mapped[Any] = mapped_column(

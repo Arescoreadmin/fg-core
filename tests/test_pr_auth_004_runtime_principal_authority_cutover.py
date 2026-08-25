@@ -7,12 +7,10 @@ onward, every transition of ``tenant_users.identity_binding_status`` from
 ``tenant_users.principal_id`` (via the canonical resolver in
 ``api.principal_authority``).
 
-Deferred deliverable (SPLIT — documented in the module docstring below):
-    Migration 0183 (partial NOT NULL / CHECK constraint on tenant_users)
-    is *not* included in PR-AUTH-004. The runtime cutover must ship, prove
-    itself in production, and reconciliation must confirm every newly-bound
-    row has a populated ``principal_id`` before the CHECK can safely be
-    enforced. See test N1 for the assertion.
+Deferred deliverable consumed by HARD-002:
+    Migration 0183 (CHECK constraint on tenant_users) is intentionally owned
+    by HARD-002, after PR-AUTH-004 shipped the runtime ordering that sets
+    ``principal_id`` before ``identity_binding_status`` becomes ``bound``.
 
 Coverage groups:
     A — Canonical resolver structure and contract (function signature,
@@ -43,7 +41,7 @@ Coverage groups:
     M — Privacy (raw provider_subject never appears in error messages,
         logs, or exception reprs).
     N — Deployment / migration ordering decision documented as tests
-        (migration 0183 absent; module docstring documents split reason).
+        (migration 0183 belongs to HARD-002; module docstring documents split reason).
     O — Direct SQL: skipped (no CHECK constraint shipped in this PR).
     P — Error semantics (explicit resolver error codes are preserved,
         not remapped to IDENTITY_ALREADY_BOUND).
@@ -93,7 +91,7 @@ _SUBJECT = "auth0|abc-123"
 
 
 # ---------------------------------------------------------------------------
-# In-memory SQLite schema. Mirrors 0179 + 0180 + 0181 (no CHECK from 0183).
+# In-memory SQLite schema. Mirrors 0179 + 0180 + 0181; PR-AUTH-004 tests runtime order, while HARD-002 tests the CHECK.
 # ---------------------------------------------------------------------------
 
 _SCHEMA = """
@@ -397,7 +395,7 @@ def test_C4_source_preserves_legacy_identity_columns_write() -> None:
 
 
 # ---------------------------------------------------------------------------
-# D — BOUND invariant enforced by application code (constraint deferred)
+# D — BOUND invariant enforced by application code (DB constraint tested in HARD-002)
 # ---------------------------------------------------------------------------
 
 
@@ -830,19 +828,16 @@ def test_M2_resolver_error_omits_subject_for_inactive_principal(engine: Engine) 
 # ---------------------------------------------------------------------------
 
 
-def test_N1_migration_0183_intentionally_split_out_of_this_pr() -> None:
-    """The BOUND→principal_id CHECK constraint is deferred to a follow-up
-    hardening PR. Rationale: deploy order in this repo is not guaranteed to
-    place new application code strictly before migrations. A CHECK deployed
-    before all replicas of the app are running the resolver would break
-    concurrent invitation acceptance. The runtime cutover ships first; the
-    constraint follows once reconciliation proves all new BOUND rows carry
-    principal_id.
+def test_N1_migration_0183_is_hard_002_follow_up() -> None:
+    """PR-AUTH-004 split the CHECK constraint out. HARD-002 now owns
+    migration 0183 after the runtime resolver has shipped and production
+    reconciliation has been proven.
     """
-    assert not _MIGRATION_0183.exists(), (
-        "PR-AUTH-004 splits the CHECK constraint out; see module docstring "
-        "under 'Deferred deliverable'. Ship HARD-002 for the constraint."
-    )
+    assert _MIGRATION_0183.exists()
+    src = _MIGRATION_0183.read_text(encoding="utf-8")
+    assert "chk_bound_requires_principal_id" in src
+    assert "identity_binding_status <> 'bound'" in src
+    assert "principal_id IS NOT NULL" in src
 
 
 def test_N2_module_docstring_documents_split() -> None:

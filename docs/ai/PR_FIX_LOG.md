@@ -1,5 +1,16 @@
 # PR Fix Log (Strict)
 
+## P-92 — feat(auth): enforce BOUND membership principal integrity (HARD-002)
+
+- **PR/Branch:** `feat/hard-002-bound-principal-integrity` (PR TBD)
+- **Date:** 2026-08-24
+- **Files changed:** `migrations/postgres/0183_bound_membership_principal_integrity.sql`, `api/db_models.py`, `tests/test_hard_002_bound_membership_principal_integrity.py`, architecture docs, and targeted stale split assertions.
+- **Fix:** Added `chk_bound_requires_principal_id` on `tenant_users` with `CHECK (identity_binding_status <> 'bound' OR principal_id IS NOT NULL)`, deployed as `ADD CONSTRAINT ... NOT VALID` guarded by `pg_constraint`, followed by `VALIDATE CONSTRAINT`. The migration performs no data repair and fails closed if any existing BOUND row lacks `principal_id`.
+- **Scope:** Database enforcement only. No login, session, token, RBAC, resolver, invitation-flow application logic, lifecycle, legacy cleanup, backfill, or production data changes.
+- **Result:** HARD-002 ENFORCES THAT BOUND MEMBERSHIPS MUST HAVE A CANONICAL PRINCIPAL. HARD-002 PRESERVES LEGITIMATE UNBOUND MEMBERSHIPS WITH NULL `principal_id`. HARD-002 DOES NOT CHANGE RUNTIME IDENTITY AUTHORITY. HARD-002 DOES NOT REMOVE LEGACY IDENTITY COLUMNS.
+
+---
+
 ## P-91 — fix(auth): wrap race-path INSERTs in savepoint to keep transaction valid on IntegrityError (PR-AUTH-004-A)
 
 - **PR/Branch:** PR #658 (amendment, same branch)
