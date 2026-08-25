@@ -1,5 +1,18 @@
 # PR Fix Log (Strict)
 
+## P-93 — fix(ci): pin PR mainline gate to immutable base SHA
+
+- **PR/Branch:** `fix/pr-base-mainline-immutable-base`
+- **Date:** 2026-08-25
+- **Files changed:** `tools/ci/check_pr_base_is_mainline.py`, `.github/workflows/ci.yml`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `tests/test_check_pr_base_is_mainline.py` (new)
+- **Root cause:** `check_pr_base_is_mainline.py` diffed against `origin/<base_ref>` (fetched live). GitHub Actions checks out a synthetic merge commit (merge of PR HEAD into the origin/main tip at checkout time). When origin/main advances after that synthetic merge commit is created, `git diff --name-status origin/main...HEAD` has no merge base (`fatal: origin/main...HEAD: no merge base`), causing the governance gate to fail. The checkout is not shallow and origin/main exists — the defect is the mutable remote ref racing against concurrent main commits.
+- **Fix:** In PR CI, the checker now requires `GITHUB_PR_BASE_SHA` (sourced from `github.event.pull_request.base.sha` via a new `fg_guard` job env var in `ci.yml`). This SHA is frozen at PR creation and never moves. The diff (`git diff --name-status <sha>...HEAD`) and SOC probe (`git cat-file -e <sha>:docs/SOC_ARCH_REVIEW_...`) both use this immutable SHA. The checker verifies the SHA resolves to a commit object (fetching from origin if absent locally) and fails closed if `GITHUB_PR_BASE_SHA` is absent or unresolvable. Local/non-CI dev path continues to use `origin/<base_ref>` as before.
+- **Tests added:** `tests/test_check_pr_base_is_mainline.py` — 17 tests using real temporary git repositories (not mocked git semantics): A (valid SHA passes), B (immutable SHA used, not mutable origin/main), C (origin/main advancing does not corrupt validation), D (missing SHA fails closed), E (unresolvable SHA fails closed), F (SOC re-addition detected), G (first-time SOC addition accepted), H (push/non-PR compatible), I (no HEAD~1 fallback), J (synthetic merge commit topology correct, no spurious failure).
+- **Validation:** `ruff check + format` PASS. `mypy` PASS. `pytest tests/test_check_pr_base_is_mainline.py` 17/17 PASS. `make fg-fast` all gates PASS. Scope audit: no migrations, no identity runtime, no invitation flow, no session/RBAC code.
+- **Result:** PR mainline governance gate is now deterministic. Cannot race against origin/main. Fails closed on missing or invalid base SHA.
+
+---
+
 ## P-92 — feat(auth): enforce BOUND membership principal integrity (HARD-002)
 
 - **PR/Branch:** `feat/hard-002-bound-principal-integrity` (PR TBD)
