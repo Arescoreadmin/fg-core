@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.db import get_sessionmaker, init_db, reset_engine_cache
 from api.db_models import TenantUser
+from api.db_models_principal import FgPrincipal
 from api.db_models_identity import (
     TenantIdentityAuditEvent,
     TenantIdentityConfig,
@@ -206,6 +208,19 @@ def test_existing_membership_remains_unbound_not_rebound(db) -> None:
 
 def test_bound_identity_subject_is_globally_unique(db) -> None:
     for tenant in ("tenant-a", "tenant-b"):
+        principal_id = str(uuid.uuid4())
+        db.add(
+            FgPrincipal(
+                id=principal_id,
+                display_name=tenant,
+                primary_email=f"{tenant}@example.com",
+                principal_type="human",
+                lifecycle_state="active",
+                mfa_verified=False,
+                authority_version=1,
+            )
+        )
+        db.flush()
         db.add(
             TenantUser(
                 tenant_id=tenant,
@@ -217,6 +232,7 @@ def test_bound_identity_subject_is_globally_unique(db) -> None:
                 identity_issuer="https://issuer.example/",
                 identity_subject="auth0|same",
                 identity_binding_status="bound",
+                principal_id=principal_id,
             )
         )
         if tenant == "tenant-a":

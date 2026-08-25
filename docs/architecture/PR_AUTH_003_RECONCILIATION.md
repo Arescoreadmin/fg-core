@@ -65,7 +65,7 @@ intentional and load-bearing:
   requiring every membership to point at a principal — which is a category
   error for the AUTH model established in `IDENTITY_AUTHORITY_DATA_MODEL.md`.
 - A partial constraint (`NOT NULL WHERE identity_binding_status = 'bound'`)
-  is possible but belongs to a **separate hardening PR** (HARD-001). AUTH-003C
+  is possible but belongs to a **separate hardening PR** (HARD-002). AUTH-003C
   proves the closure with the current schema; the constraint is a downstream
   hardening step.
 
@@ -141,18 +141,9 @@ fingerprint from each environment (dev → staging → production).
 
 ## What comes after AUTH-003C
 
-1. **HARD-001** (separate PR) — optionally add a partial `NOT NULL` constraint
-   scoped to `identity_binding_status = 'bound'` rows via a `CHECK` constraint
-   or triggered validation. Requires its own preflight to prove zero violating
-   rows.
-2. **AUTH cutover** (separate PR) — auth path stops reading
-   `tenant_users.identity_*` and starts reading `principal_id` →
-   `fg_external_identities` → `fg_principals`. This PR is where session
-   issuance changes and where legacy columns become truly shadow.
-3. **Legacy column removal** (separate PR) — drop
-   `tenant_users.identity_provider`, `identity_issuer`, `identity_subject`,
-   `identity_binding_status`, `identity_email`, `identity_type` and the
-   `uq_tenant_users_bound_identity` partial index. Only after AUTH cutover has
-   been proven in production.
+1. **HARD-001** (separate PR) — add the `fg_principals` authority_version trigger.
+2. **AUTH cutover** (separate PR) — update invitation binding to set `principal_id` before `identity_binding_status = 'bound'`.
+3. **HARD-002** (separate PR) — enforce `identity_binding_status <> 'bound' OR principal_id IS NOT NULL` with a CHECK constraint after production proof.
+4. **Legacy column removal** (separate PR) — drop `tenant_users.identity_provider`, `identity_issuer`, `identity_subject`, `identity_binding_status`, `identity_email`, `identity_type` and the `uq_tenant_users_bound_identity` partial index. Only after AUTH cutover has been proven in production.
 
 Each of these steps is a distinct, independently reviewable PR.
