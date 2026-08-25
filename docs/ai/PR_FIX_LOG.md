@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-94 — fix(ci): propagate GITHUB_PR_BASE_SHA to Unit (ci) and fg-required jobs
+
+- **PR/Branch:** `fix/pr-base-mainline-immutable-base`
+- **Date:** 2026-08-25
+- **Files changed:** `.github/workflows/ci.yml`, `.github/workflows/fg-required.yml`
+- **Root cause:** P-93 added `GITHUB_PR_BASE_SHA` to the `fg_guard` job env in `ci.yml`, but two other jobs that invoke targets containing `pr-base-mainline-check` were not updated: (1) the `unit` job runs `make ci` which includes `pr-base-mainline-check`; (2) the `fg-required` job runs `make fg-fast` (via the harness) which also includes `pr-base-mainline-check`. Both jobs ran in CI with `CI=true` and `GITHUB_BASE_REF` set (PR context), so the checker entered the PR branch and required `GITHUB_PR_BASE_SHA` — but it was absent, causing `pr-base-mainline: FAILED` in both jobs.
+- **Fix:** Added `GITHUB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}` to the `unit` job env in `ci.yml` and to the `fg-required` job env in `fg-required.yml`. The expression evaluates to empty string on push events (non-PR), where `GITHUB_BASE_REF` is also absent, so the checker skips SHA validation correctly.
+- **Behavioral impact:** `pr-base-mainline-check` now resolves correctly in all three CI jobs that invoke it. No test behavior changes.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** None. The existing 17-test suite in `tests/test_check_pr_base_is_mainline.py` covers the checker behavior; the fix is purely workflow propagation.
+- **Validation:** Diff is 2-line addition only; no logic changes to the checker itself.
+- **Result:** All three CI jobs that call `pr-base-mainline-check` now receive the immutable base SHA.
+
+---
+
 ## P-93 — fix(ci): pin PR mainline gate to immutable base SHA
 
 - **PR/Branch:** `fix/pr-base-mainline-immutable-base`

@@ -168,6 +168,7 @@ jobs:
       FG_AUTH_ENABLED: "1"
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci.db
+      GITHUB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
     steps:
       - name: Checkout
