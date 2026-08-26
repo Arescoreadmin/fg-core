@@ -41,6 +41,7 @@ export const authConfig = {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+      let bootstrapped = false;
       if (bootstrapSubjects.length > 0) {
         // token.sub may be unset on the initial sign-in call; fall back to profile/user
         const subject =
@@ -49,12 +50,13 @@ export const authConfig = {
           (user as Record<string, unknown> | undefined)?.['id'] as string | undefined;
         if (typeof subject === 'string' && bootstrapSubjects.includes(subject)) {
           token['https://frostgate.ai/roles'] = ['Administrator'];
+          bootstrapped = true;
         }
       }
       const claims = getSessionClaims({ token, user, profile });
-      token.roles = claims.roles;
+      token.roles = bootstrapped ? ['Administrator'] : claims.roles;
       token.tenantId = claims.tenantId;
-      token.experienceClass = claims.experienceClass;
+      token.experienceClass = bootstrapped ? 'internal_console' : claims.experienceClass;
       return token;
     },
     session({ session, token }) {
