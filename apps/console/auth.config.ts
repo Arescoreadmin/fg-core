@@ -41,12 +41,15 @@ export const authConfig = {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-      if (
-        bootstrapSubjects.length > 0 &&
-        typeof token.sub === 'string' &&
-        bootstrapSubjects.includes(token.sub)
-      ) {
-        token['https://frostgate.ai/roles'] = ['Administrator'];
+      if (bootstrapSubjects.length > 0) {
+        // token.sub may be unset on the initial sign-in call; fall back to profile/user
+        const subject =
+          (typeof token.sub === 'string' ? token.sub : undefined) ??
+          (profile as Record<string, unknown> | undefined)?.['sub'] as string | undefined ??
+          (user as Record<string, unknown> | undefined)?.['id'] as string | undefined;
+        if (typeof subject === 'string' && bootstrapSubjects.includes(subject)) {
+          token['https://frostgate.ai/roles'] = ['Administrator'];
+        }
       }
       const claims = getSessionClaims({ token, user, profile });
       token.roles = claims.roles;
