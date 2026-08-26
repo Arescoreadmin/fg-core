@@ -35,6 +35,19 @@ export const authConfig = {
   },
   callbacks: {
     jwt({ token, user, profile }) {
+      // Allow env-configured subjects to receive a bootstrap role when no
+      // Auth0 Post-Login Action is injecting claims (e.g. during setup).
+      const bootstrapSubjects = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (
+        bootstrapSubjects.length > 0 &&
+        typeof token.sub === 'string' &&
+        bootstrapSubjects.includes(token.sub)
+      ) {
+        token['https://frostgate.ai/roles'] = ['Administrator'];
+      }
       const claims = getSessionClaims({ token, user, profile });
       token.roles = claims.roles;
       token.tenantId = claims.tenantId;
