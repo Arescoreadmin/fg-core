@@ -35,20 +35,30 @@ export const authConfig = {
   },
   callbacks: {
     jwt({ token, user, profile }) {
-      // Allow env-configured subjects to receive a bootstrap role when no
+      // Allow env-configured subjects or emails to receive a bootstrap role when no
       // Auth0 Post-Login Action is injecting claims (e.g. during setup).
       const bootstrapSubjects = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+      const bootstrapEmails = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS ?? '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
       let bootstrapped = false;
-      if (bootstrapSubjects.length > 0) {
-        // token.sub may be unset on the initial sign-in call; fall back to profile/user
+      if (bootstrapSubjects.length > 0 || bootstrapEmails.length > 0) {
+        // token.sub may be unset; fall back to profile/user
         const subject =
           (typeof token.sub === 'string' ? token.sub : undefined) ??
           (profile as Record<string, unknown> | undefined)?.['sub'] as string | undefined ??
           (user as Record<string, unknown> | undefined)?.['id'] as string | undefined;
-        if (typeof subject === 'string' && bootstrapSubjects.includes(subject)) {
+        const email =
+          (typeof token.email === 'string' ? token.email : undefined) ??
+          (profile as Record<string, unknown> | undefined)?.['email'] as string | undefined ??
+          (user as Record<string, unknown> | undefined)?.['email'] as string | undefined;
+        const subjectMatch = typeof subject === 'string' && bootstrapSubjects.includes(subject);
+        const emailMatch = typeof email === 'string' && bootstrapEmails.includes(email.toLowerCase());
+        if (subjectMatch || emailMatch) {
           token['https://frostgate.ai/roles'] = ['Administrator'];
           bootstrapped = true;
         }
