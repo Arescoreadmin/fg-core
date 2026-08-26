@@ -147,12 +147,24 @@ def identity_provider_callback(
     if not code or not state_val:
         return params
 
+    # State is prefixed with tenant_id (set by start_invitation_auth) so we can
+    # establish RLS context before querying — without this the query returns nothing.
+    tenant_id_prefix, _, _ = state_val.partition(":")
+    if not tenant_id_prefix or not _:
+        return {"error": "STATE_FORMAT_INVALID", "state": state_val}
+
     state_digest = hashlib.sha256(state_val.encode()).hexdigest()
     db = get_identity_sessionmaker()()
     try:
+        set_tenant_context(db, tenant_id_prefix)
+        db.info["tenant_id"] = tenant_id_prefix
+
         auth_state_row = (
             db.query(TenantIdentityAuthState)
-            .filter(TenantIdentityAuthState.state_digest == state_digest)
+            .filter(
+                TenantIdentityAuthState.state_digest == state_digest,
+                TenantIdentityAuthState.tenant_id == tenant_id_prefix,
+            )
             .one_or_none()
         )
         if auth_state_row is None:
@@ -160,8 +172,6 @@ def identity_provider_callback(
 
         tenant_id = str(auth_state_row.tenant_id)
         invitation_id = str(auth_state_row.invitation_id)
-        set_tenant_context(db, tenant_id)
-        db.info["tenant_id"] = tenant_id
 
         payload: dict[str, Any] = {
             "code": code,

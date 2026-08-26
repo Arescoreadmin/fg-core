@@ -206,7 +206,9 @@ def start_invitation_auth(
         transition_invitation(db, invitation, to_status="auth_started")
     elif invitation.status != "auth_started":
         raise IdentityFlowError("INVITE_STATE_INVALID", 409)
-    raw_state = secrets.token_urlsafe(32)
+    # Prefix state with tenant_id so the GET /identity/provider/callback
+    # receiver can set RLS context before querying (state digest covers the full string).
+    raw_state = f"{tenant_id}:{secrets.token_urlsafe(32)}"
     correlation_id = str(uuid.uuid4())
     expiry = min(
         _utc(invitation.expires_at)
