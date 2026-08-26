@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, BigInteger, DateTime, String
+from sqlalchemy import JSON, Boolean, BigInteger, DateTime, String, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -153,7 +153,7 @@ class TenantUser(IdentityBase):
     # identity_binding_status='bound' via the canonical resolver in
     # api.principal_authority. Nullable — UNBOUND memberships legitimately
     # have NULL principal_id (see PR_AUTH_003_RECONCILIATION.md).
-    principal_id: Mapped[str | None] = mapped_column(String(36))
+    principal_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     last_identity_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

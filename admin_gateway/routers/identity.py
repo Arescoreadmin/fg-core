@@ -192,6 +192,7 @@ def identity_provider_callback(
                 state=state_val,
                 identity=identity,
             )
+            correlation_id = auth_state.correlation_id
             db.commit()
         except IdentityFlowError as exc:
             db.commit()
@@ -201,7 +202,7 @@ def identity_provider_callback(
             "status": "callback_validated",
             "invitation_id": invitation_id,
             "tenant_id": tenant_id,
-            "correlation_id": auth_state.correlation_id,
+            "correlation_id": correlation_id,
             "state": state_val,
         }
     finally:
