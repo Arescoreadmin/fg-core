@@ -49,5 +49,8 @@ export default auth(function middleware(req: NextRequest & { auth: unknown }) {
 });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\.ico).*)'],
+  // Exclude /api/auth/* so NextAuth callback/session routes are handled by the
+  // Node.js route handler (auth.ts) where process.env is dynamic, not statically
+  // bundled into the Edge bundle at build time.
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|api/auth).*)'],
 };
