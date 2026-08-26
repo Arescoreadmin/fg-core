@@ -1,0 +1,164 @@
+{
+  "schema_version": "1",
+  "proof_name": "HARD-002 canonical identity binding constraint enforcement",
+  "environment": "production",
+  "deployed_commit": "796f2c21",
+  "timestamp": "2026-08-26T15:34:50+00:00",
+  "api_health": {
+    "status": "ok",
+    "service": "frostgate-core",
+    "version": "0.8.0",
+    "api_version": "v1",
+    "env": "prod",
+    "auth_enabled": true,
+    "url": "https://api-production-6d47.up.railway.app/health"
+  },
+
+  "phase_1_migration": {
+    "migration_0183_applied": true,
+    "migration_0183_applied_at": "2026-08-25T13:44:10.555350+00:00",
+    "constraint_name": "chk_bound_requires_principal_id",
+    "constraint_validated": true,
+    "constraint_definition": "CHECK (((identity_binding_status::text <> 'bound'::text) OR (principal_id IS NOT NULL)))",
+    "fk_tenant_users_to_principals": "tenant_users_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES fg_principals(id)",
+    "fk_external_identities_to_principals": "fg_external_identities_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES fg_principals(id) ON DELETE RESTRICT",
+    "uq_binding_constraint": "uq_fg_external_identities_binding UNIQUE (provider, provider_issuer, provider_subject)"
+  },
+
+  "phase_2_pre_proof_counts": {
+    "total_tenant_users": 8,
+    "bound_count_before": 0,
+    "unbound_count_before": 8,
+    "bound_without_principal_before": 0,
+    "tenant_users_with_principal_id_before": 0,
+    "principal_count_before": 0,
+    "external_identity_count_before": 0
+  },
+
+  "phase_3_constraint_enforcement_proof": {
+    "negative_test": {
+      "description": "Attempted INSERT of tenant_users row with identity_binding_status='bound' AND principal_id=NULL inside BEGIN/ROLLBACK",
+      "result": "REJECTED",
+      "error": "new row for relation 'tenant_users' violates check constraint 'chk_bound_requires_principal_id'",
+      "conclusion": "Constraint enforced: BOUND + NULL principal_id is blocked by chk_bound_requires_principal_id"
+    },
+    "positive_test": {
+      "description": "Attempted INSERT of tenant_users row with identity_binding_status='bound' AND valid principal_id inside BEGIN/ROLLBACK",
+      "result": "ACCEPTED",
+      "conclusion": "Constraint satisfied: BOUND + non-NULL principal_id is permitted",
+      "state_change": "ROLLED BACK - no permanent mutation to production data"
+    }
+  },
+
+  "phase_4_full_oidc_runtime_proof": {
+    "status": "COMPLETE",
+    "timestamp": "2026-08-26T15:34:50+00:00",
+    "admin_gateway_service": "admin-gateway-production-d937.up.railway.app",
+    "invitation": {
+      "id": "legacy-af241401cb49c5a9db30abd44642f174",
+      "tenant_id": "demo-bank",
+      "membership_id": "80ae3c22-2c97-4269-9e72-f1fdae4325eb"
+    },
+    "flow": [
+      {
+        "step": "start_auth",
+        "result": "ok",
+        "state": "demo-bank:UPahi3QB2sIa9iPZZNDD3JYMpmAyv2hFQ1KMBuRTrfU",
+        "adapter": "auth0",
+        "auth0_client_id": "GJwnbLbEnFns2xRkfLgbRfDTlyg73tic"
+      },
+      {
+        "step": "oidc_browser_auth",
+        "provider": "auth0",
+        "identity_provider": "Google / Auth0 database connection",
+        "result": "ok",
+        "callback_http_status": 200,
+        "token_exchange_status": 200
+      },
+      {
+        "step": "validate_callback",
+        "result": "ok",
+        "invitation_status_after": "accepted_identity_pending_binding",
+        "validated_email": "cosatjason@gmail.com",
+        "identity_subject": "auth0|6a1a0e50c88714c3166670c3"
+      },
+      {
+        "step": "bind_identity",
+        "result": "ok",
+        "membership_id": "80ae3c22-2c97-4269-9e72-f1fdae4325eb",
+        "identity_binding_status": "bound",
+        "principal_id": "09feab2d-30d3-434b-9304-ed0a5f202366"
+      }
+    ],
+    "bugs_found_and_fixed": [
+      {
+        "location": "routers/identity.py identity_provider_callback",
+        "bug": "post-commit lazy-load of auth_state.correlation_id failed: RLS context is transaction-local and lost after db.commit()",
+        "fix": "extract correlation_id before db.commit()",
+        "commit": "796f2c21"
+      },
+      {
+        "location": "identity/models.py TenantUser.principal_id",
+        "bug": "column mapped as String(36) but DB type is uuid; psycopg3 sends ::VARCHAR cast which PostgreSQL rejects",
+        "fix": "changed to Uuid(as_uuid=False)",
+        "commit": "796f2c21"
+      }
+    ]
+  },
+
+  "phase_5_db_verification": {
+    "tenant_users": {
+      "id": "80ae3c22-2c97-4269-9e72-f1fdae4325eb",
+      "identity_binding_status": "bound",
+      "principal_id": "09feab2d-30d3-434b-9304-ed0a5f202366",
+      "principal_id_is_not_null": true,
+      "identity_email": "cosatjason@gmail.com",
+      "identity_provider": "auth0",
+      "identity_subject": "auth0|6a1a0e50c88714c3166670c3"
+    },
+    "fg_principals": {
+      "id": "09feab2d-30d3-434b-9304-ed0a5f202366",
+      "principal_type": "human",
+      "lifecycle_state": "active",
+      "primary_email": "jcosat0211@gmail.com"
+    },
+    "fg_external_identities": {
+      "id": "207b2f2d-3ccd-4851-b9d0-50e37e883693",
+      "principal_id": "09feab2d-30d3-434b-9304-ed0a5f202366",
+      "provider": "auth0",
+      "provider_subject": "auth0|6a1a0e50c88714c3166670c3",
+      "provider_email": "cosatjason@gmail.com"
+    },
+    "constraint_check": {
+      "identity_binding_status": "bound",
+      "has_principal": true,
+      "chk_bound_requires_principal_id_satisfied": true
+    }
+  },
+
+  "proof_flags": {
+    "constraint_exists": true,
+    "constraint_validated": true,
+    "constraint_definition_correct": true,
+    "negative_test_rejected": true,
+    "positive_test_accepted": true,
+    "bound_null_count_before": 0,
+    "oidc_flow_completed": true,
+    "validate_callback_succeeded": true,
+    "bind_identity_succeeded": true,
+    "principal_created": true,
+    "external_identity_created": true,
+    "principal_id_not_null_after_bind": true,
+    "chk_bound_requires_principal_id_satisfied": true,
+    "no_cross_tenant_mutation": true,
+    "runtime_binding_attempted": true,
+    "runtime_binding_succeeded": true
+  },
+
+  "hard_002_constraint_proof_result": "PROVEN",
+  "full_invitation_lifecycle_proof_result": "PROVEN",
+
+  "privacy_statement": "No raw bearer tokens, passwords, or sensitive credentials included. Email addresses recorded as necessary identity proof. DB credentials from Railway CLI are not stored in this artifact.",
+
+  "report_version": "2"
+}
