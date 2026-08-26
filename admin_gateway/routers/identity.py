@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Iterator
 from typing import Any, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -124,6 +124,16 @@ def _fail(db: DBSession, exc: IdentityFlowError) -> NoReturn:
         status_code=exc.status_code,
         detail={"code": exc.code, "message": "Identity request rejected"},
     )
+
+
+@router.get("/provider/callback")
+async def identity_provider_callback(request: Request) -> dict:
+    """Auth0 redirect receiver for the invitation identity flow.
+
+    Auth0 calls this with ?code=...&state=... after the user authenticates.
+    Returns the params as JSON so the caller can drive POST /identity/invitations/{id}/callback.
+    """
+    return dict(request.query_params)
 
 
 @router.get("/invitations/{invitation_id}/requirements")
