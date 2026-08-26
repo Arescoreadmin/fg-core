@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import uuid
+
+log = logging.getLogger("admin-gateway.invitation_flow")
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
@@ -322,7 +325,11 @@ def validate_callback(
         (
             validate_invite_email_matches_identity(
                 invitation.normalized_email, identity.email
-            ).allowed,
+            ).allowed
+            or log.warning(  # type: ignore[func-returns-value]
+                "email_mismatch invite=%r auth=%r", invitation.normalized_email, identity.email
+            )
+            or False,
             "INVITE_EMAIL_MISMATCH",
         ),
         (provider_error is None, provider_error or "PROVIDER_NOT_ALLOWED"),
