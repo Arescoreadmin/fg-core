@@ -125,8 +125,14 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
-        await init_db()
-        log.info("Database initialized")
+        # In production, tables are created via Alembic migrations (not create_all).
+        # create_all() requires DDL privileges that the runtime user (fg_app) lacks.
+        from admin_gateway.auth.config import get_auth_config as _get_auth_cfg
+        if not _get_auth_cfg().is_prod_like:
+            await init_db()
+            log.info("Database initialized (dev: create_all)")
+        else:
+            log.info("Database initialized (prod: tables pre-created via Alembic)")
 
         if getattr(app.state, "audit_logger", None) is None:
             app.state.audit_logger = AuditLogger(
