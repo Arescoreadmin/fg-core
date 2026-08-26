@@ -127,13 +127,75 @@ def _fail(db: DBSession, exc: IdentityFlowError) -> NoReturn:
 
 
 @router.get("/provider/callback")
-async def identity_provider_callback(request: Request) -> dict:
-    """Auth0 redirect receiver for the invitation identity flow.
+def identity_provider_callback(
+    request: Request,
+    adapter: ProviderAdapter = Depends(get_provider_adapter),
+) -> dict:
+    """Auth0 redirect receiver: completes the identity callback inline on redirect.
 
-    Auth0 calls this with ?code=...&state=... after the user authenticates.
-    Returns the params as JSON so the caller can drive POST /identity/invitations/{id}/callback.
+    Receives ?code=&state= from Auth0, exchanges the code server-side, and
+    runs validate_callback immediately — no manual relay needed. Returns
+    {status, invitation_id, state} ready for the caller to POST /bind.
     """
-    return dict(request.query_params)
+    params = dict(request.query_params)
+    code = params.get("code")
+    state_val = params.get("state")
+    error = params.get("error")
+
+    if error:
+        return {"error": error, "error_description": params.get("error_description")}
+    if not code or not state_val:
+        return params
+
+    state_digest = hashlib.sha256(state_val.encode()).hexdigest()
+    db = get_identity_sessionmaker()()
+    try:
+        auth_state_row = (
+            db.query(TenantIdentityAuthState)
+            .filter(TenantIdentityAuthState.state_digest == state_digest)
+            .one_or_none()
+        )
+        if auth_state_row is None:
+            return {"error": "STATE_NOT_FOUND", "state": state_val}
+
+        tenant_id = str(auth_state_row.tenant_id)
+        invitation_id = str(auth_state_row.invitation_id)
+        set_tenant_context(db, tenant_id)
+        db.info["tenant_id"] = tenant_id
+
+        payload: dict[str, Any] = {
+            "code": code,
+            "identity_type": "human",
+            "server_requested_connection_id": auth_state_row.requested_connection_id,
+        }
+        try:
+            identity = adapter.validate_callback(payload)
+        except ProviderAdapterError as exc:
+            db.commit()
+            return {"error": exc.code, "state": state_val}
+
+        try:
+            auth_state = validate_callback(
+                db,
+                tenant_id=tenant_id,
+                invitation_id=invitation_id,
+                state=state_val,
+                identity=identity,
+            )
+            db.commit()
+        except IdentityFlowError as exc:
+            db.commit()
+            return {"error": exc.code, "state": state_val}
+
+        return {
+            "status": "callback_validated",
+            "invitation_id": invitation_id,
+            "tenant_id": tenant_id,
+            "correlation_id": auth_state.correlation_id,
+            "state": state_val,
+        }
+    finally:
+        db.close()
 
 
 @router.get("/invitations/{invitation_id}/requirements")
