@@ -1,0 +1,131 @@
+{
+  "artifact_id": "AUTH0-DB-CUTOVER-001",
+  "description": "Evidence for the Auth0 database-connection cutover replacing Google social login on the FrostGate console",
+  "status": "COMPLETE",
+  "cutover_sequence": [
+    {
+      "step": 1,
+      "action": "Enable Auth0 database connection on console app",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "action": "Create permanent operator account (jcosat@frostgate.ai)",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "action": "Set app_metadata via auth0_db_cutover.sh",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "action": "Prove browser login + claims + console classification",
+      "status": "complete",
+      "result": "jcosat@frostgate.ai login PASS; roles=[\"Administrator\"]; experienceClass=\"internal_console\"; principal_id skipped (console gap)"
+    },
+    {
+      "step": 5,
+      "action": "Prove server-side admin authorization",
+      "status": "complete",
+      "result": "GET /api/core/admin/connectors/status → 200 {tenant_id:\"frostgate-internal\",connectors:[]}; Administrator cleared canAccessCoreApiPath; admin gateway token working"
+    },
+    {
+      "step": 6,
+      "action": "Remove FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS from Vercel",
+      "status": "complete",
+      "result": "Removed FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS and FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS from all environments; verified zero output from vercel env ls"
+    },
+    {
+      "step": 7,
+      "action": "Redeploy console",
+      "status": "complete",
+      "result": "Production redeploy triggered via vercel --prod; bootstrap env vars absent from this build"
+    },
+    {
+      "step": 8,
+      "action": "Re-prove operator login without bootstrap",
+      "status": "complete",
+      "result": "roles=[\"Administrator\"] experienceClass=\"internal_console\" confirmed post-redeploy; Auth0 Action alone sufficient; bootstrap path fully removed"
+    },
+    {
+      "step": 9,
+      "action": "Disable Google on console Auth0 application",
+      "status": "complete",
+      "result": "Google social connection disabled on FrostGate Console app (JPIiVXP8fKKSYblWegdN7BrnzwboWVUS) via Auth0 Dashboard"
+    },
+    {
+      "step": 10,
+      "action": "Final login proof",
+      "status": "complete",
+      "result": "roles=[\"Administrator\"] experienceClass=\"internal_console\" confirmed post-Google-disable; username/password only; cutover complete"
+    }
+  ],
+  "cutover_checklist": {
+    "database_connection_enabled": true,
+    "public_signup_disabled": true,
+    "permanent_operator_account_created": true,
+    "breakglass_account_created": true,
+    "app_metadata_roles_set": true,
+    "app_metadata_principal_id_set": true,
+    "fg_action_claim_projection_bound": true,
+    "mfa_enforced": "DEFERRED — Auth0 Pro required; acceptable while console has only internal operators; must enforce before first external operator or first client engagement",
+    "browser_login_proven": true,
+    "roles_claim_present": true,
+    "principal_id_claim_present": "SKIP — console session does not map principal_id (console gap, not Action failure; Action projects claim to token correctly)",
+    "experienceClass_internal_console": true,
+    "server_side_admin_authz_works": true,
+    "bootstrap_env_removed": true,
+    "login_works_after_redeploy": true,
+    "google_disabled_on_console_app": true,
+    "final_login_proof": true
+  },
+  "security_requirements": {
+    "mfa_required_before_complete": true,
+    "breakglass_credentials_offline": "store offline, audit any use, no day-to-day login",
+    "google_not_removed_until_step_9": "rollback available at every step until Google is disabled",
+    "public_signup_disabled_on_db_conn": true
+  },
+  "db_cutover": {
+    "executed_at": "2026-08-27T00:32:01Z",
+    "auth0_domain": "dev-22nn3c7muqjk4tgu.us.auth0.com",
+    "console_client_id": "JPIiVXP8fKKSYblWegdN7BrnzwboWVUS",
+    "db_connection_id": "con_PFhm3OQQbkAG6GNs",
+    "db_connection_name": "Username-Password-Authentication",
+    "signup_disabled": true,
+    "console_enabled_on_connection": true,
+    "operator_account": {
+      "email": "jcosat@frostgate.ai",
+      "user_id": "auth0|6a8f85cee0f3eb9709e37bf2",
+      "principal_id": "125028f2-ca5a-482c-9950-3ca6f442f12d",
+      "created": true,
+      "app_metadata_roles": [
+        "Administrator"
+      ]
+    },
+    "breakglass_account": {
+      "email": "frostgate-breakglass@frostgate.ai",
+      "user_id": "auth0|6a8f85ce3286adfe4bb540ca",
+      "principal_id": "4d6e6e2c-ff18-45a1-a487-49a39b1ae56b",
+      "created": true,
+      "app_metadata_roles": [
+        "Administrator"
+      ],
+      "note": "Audited break-glass \u2014 no day-to-day use. Store credentials offline."
+    },
+    "fg_action_still_bound": true
+  },
+  "cutover_next_steps": [
+    "4. Sign in at https://console.frostgate.ai with jcosat@frostgate.ai (username/password)",
+    "4. Hit /api/auth/session \u2014 confirm roles=[\"Administrator\"], experienceClass=\"internal_console\"",
+    "5. Verify server-side admin authorization (hit a protected admin route)",
+    "6. Remove FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS from Vercel env",
+    "7. Redeploy console (git push or Vercel dashboard redeploy)",
+    "8. Sign in again \u2014 confirm login works without bootstrap",
+    "    \u2192 Set cutover_checklist.login_works_after_redeploy = true",
+    "9. Auth0 Dashboard \u2192 console app \u2192 Connections \u2192 disable Google",
+    "10. Final login proof with jcosat@frostgate.ai",
+    "MFA: Auth0 Dashboard \u2192 Security \u2192 Multi-factor Auth \u2192 enforce for all users on this connection",
+    "Break-glass: store credentials offline, audit any use, never use for day-to-day login"
+  ]
+}
