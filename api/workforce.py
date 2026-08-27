@@ -364,7 +364,7 @@ def update_user(
             member_row = db.execute(
                 text(
                     """
-                    SELECT principal_id, identity_provider, identity_subject, role
+                    SELECT principal_id, identity_provider, identity_subject, role, active
                     FROM tenant_users
                     WHERE tenant_id = :tenant_id AND id = :user_id
                     """
@@ -388,7 +388,9 @@ def update_user(
                     tenant_id=tenant_id,
                     provider=member_row.identity_provider,
                     provider_subject=member_row.identity_subject,
-                    roles=[member_row.role] if member_row.role else [],
+                    roles=[]
+                    if not member_row.active
+                    else ([member_row.role] if member_row.role else []),
                     projection_revision=new_version,
                 )
         except ValueError:

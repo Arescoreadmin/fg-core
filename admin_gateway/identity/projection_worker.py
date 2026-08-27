@@ -95,6 +95,18 @@ _MARK_FAILED_SQL = text(
     """
 )
 
+# Reset a row to pending without changing attempt_count or next_attempt_at.
+# Used when subject-level advisory lock is not acquired — the row is released
+# back to pending so another pass can pick it up after the contending worker
+# has finished and released the subject lock.
+_MARK_PENDING_RESET_SQL = text(
+    """
+    UPDATE identity_projection_outbox
+    SET status = 'pending'
+    WHERE id = :id
+    """
+)
+
 
 def _backoff_dt(attempt_count: int) -> datetime:
     idx = min(attempt_count, len(_BACKOFF_SECONDS) - 1)
@@ -105,6 +117,8 @@ def _process_one(
     db: Session,
     row: object,
     auth0_client: Auth0ManagementClient,
+    *,
+    _sqlite_mode: bool = False,
 ) -> None:
     """Process a single outbox row.  Caller owns the open transaction."""
     row_id = row.id  # type: ignore[attr-defined]
@@ -113,6 +127,28 @@ def _process_one(
     attempt_count = int(row.attempt_count)  # type: ignore[attr-defined]
 
     db.execute(_MARK_PROCESSING_SQL, {"id": row_id})
+
+    # Acquire a per-subject advisory lock so two concurrent workers processing
+    # different revision rows for the same Auth0 subject cannot interleave their
+    # GET/PATCH sequences and regress the revision.  SKIP LOCKED prevents two
+    # workers from locking the *same* row; it does not prevent them from locking
+    # *different* rows for the *same* subject.  The advisory lock closes that gap.
+    # Lock is transaction-scoped and released automatically on commit/rollback.
+    if not _sqlite_mode:
+        lock_acquired = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"iproj:{subject}"},
+        ).scalar()
+        if not lock_acquired:
+            # Another worker holds the subject lock; reset this row to pending
+            # so it is retried after the contending worker releases the lock.
+            db.execute(_MARK_PENDING_RESET_SQL, {"id": row_id})
+            log.debug(
+                "projection_worker.subject_locked outbox_id=%s subject_hash=%s",
+                row_id,
+                Auth0ManagementClient.hash_subject(subject),
+            )
+            return
 
     try:
         # ------------------------------------------------------------------
@@ -237,7 +273,7 @@ def run_projection_pass(
     for row in rows:
         sp = db.begin_nested()  # savepoint
         try:
-            _process_one(db, row, auth0_client)
+            _process_one(db, row, auth0_client, _sqlite_mode=_sqlite_mode)
             sp.commit()
         except Exception:
             sp.rollback()

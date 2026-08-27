@@ -1,5 +1,22 @@
 # PR Fix Log (Strict)
 
+## P-96 — fix(identity): deactivation role projection + per-subject advisory lock (PR #662 / AUTH-ROLE-001B)
+
+- **PR/Branch:** `feat/auth-role-001b`
+- **Date:** 2026-08-27
+- **Files changed:** `api/workforce.py`, `admin_gateway/identity/projection_worker.py`
+- **Root cause (bug 1 — deactivation):** `workforce.py` `update_user` fetched `role` from `tenant_users` after the UPDATE but did not include `active` in the SELECT. When `active=false` was set without a role change, the enqueue passed the member's existing role to `identity_projection_outbox`, so Auth0 `app_metadata.roles` was not cleared. Subsequent Auth0 logins would still receive the role claim and console routes would remain authorized.
+- **Fix (bug 1):** Added `active` to the SELECT query. Enqueue now passes `roles=[]` when `member_row.active` is falsy; the original role list only when the member is active.
+- **Root cause (bug 2 — concurrent worker revision regression):** `SELECT FOR UPDATE SKIP LOCKED` prevents two workers from locking the *same* outbox row, but does not prevent them from locking *different* revision rows for the *same* Auth0 subject. Two workers could concurrently execute GET + PATCH on the same user with revisions N and N+1, interleave their sequences (both read the same old `projection_revision` from Auth0), and whichever PATCH executes last wins — potentially writing N after N+1 and permanently regressing Auth0 state.
+- **Fix (bug 2):** Added per-subject PostgreSQL advisory lock (`pg_try_advisory_xact_lock(hashtext('iproj:' || provider_subject))`) acquired after marking the row as `processing`. If not acquired, the row is reset to `pending` (no attempt_count increment, no backoff penalty) and the worker skips it; the contending worker completes first and releases the lock. Next pass picks up the skipped row under a clean lock. Lock is transaction-scoped, auto-released on commit/rollback. Bypassed in `_sqlite_mode=True` (test only).
+- **Behavioral impact:** Deactivated members now project `roles=[]` to Auth0, removing their role claim on next login. Concurrent worker instances on the same subject are serialized at the subject level, not just the row level.
+- **Security impact:** Deactivation fix closes a privilege-persistence window where a deactivated console user could continue authenticating with a valid role claim until their Auth0 token expired.
+- **Schema/API impact:** None. No new columns or endpoints.
+- **Tests added:** None beyond existing 26 tests. Advisory lock path is only exercisable against real Postgres (same constraint as other RLS/advisory-lock tests); deactivation path integration requires workforce endpoint test infrastructure not in scope for this fix.
+- **Validation:** `make fg-fast` all checks passed; `pytest tests/test_auth_role_001b_projection.py` 26/26.
+
+---
+
 ## P-95 — fix(ci): pass GITHUB_PR_BASE_SHA through fg_required harness _safe_env allowlist
 
 - **PR/Branch:** `fix/pr-base-mainline-immutable-base`
