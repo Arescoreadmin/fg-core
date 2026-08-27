@@ -236,6 +236,8 @@ if [[ -n "$EXISTING_ACTION_ID" ]]; then
       --arg code "$ACTION_CODE" \
       '{name: $name, code: $code, runtime: "node22",
         supported_triggers: [{id: "post-login", version: "v3"}]}')")
+  [[ -z "$(echo "$ACTION_RESPONSE" | jq -r '.statusCode // .error // empty')" ]] \
+    || err "Action PATCH rejected by Auth0: $(echo "$ACTION_RESPONSE" | jq -c .)"
   ACTION_ID="$EXISTING_ACTION_ID"
 else
   info "Creating new Action..."

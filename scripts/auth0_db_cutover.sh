@@ -192,18 +192,24 @@ fi
 # ── Step 4: Create operator account ──────────────────────────────────────────
 
 echo "==> [4/7] Creating operator account: $OPERATOR_EMAIL..."
-OPERATOR_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
-
 ENCODED_OP=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$OPERATOR_EMAIL")
-EXISTING_OP=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_OP}" \
-  --header "$MGMT_AUTH" | jq 'length')
+EXISTING_OP_DATA=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_OP}" \
+  --header "$MGMT_AUTH")
 
-if [[ "$EXISTING_OP" -gt 0 ]]; then
-  warn "Operator account already exists — skipping create, updating app_metadata only."
-  OPERATOR_USER_ID=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_OP}" \
-    --header "$MGMT_AUTH" | jq -r '.[0].user_id // .[0].id')
+if [[ $(echo "$EXISTING_OP_DATA" | jq 'length') -gt 0 ]]; then
+  warn "Operator account already exists — skipping create, preserving principal_id."
+  OPERATOR_USER_ID=$(echo "$EXISTING_OP_DATA" | jq -r '.[0].user_id // .[0].id')
+  EXISTING_OP_PID=$(echo "$EXISTING_OP_DATA" | jq -r '.[0].app_metadata.principal_id // empty')
+  if [[ "$EXISTING_OP_PID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+    OPERATOR_PRINCIPAL_ID="$EXISTING_OP_PID"
+    info "Preserving existing principal_id: $OPERATOR_PRINCIPAL_ID"
+  else
+    OPERATOR_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
+    warn "No valid principal_id found on existing account — assigning new: $OPERATOR_PRINCIPAL_ID"
+  fi
   OPERATOR_CREATED=false
 else
+  OPERATOR_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
   CREATE_OP=$(curl -s --request POST "${MGMT_BASE}/users" \
     --header "$MGMT_AUTH" \
     --header "content-type: application/json" \
@@ -239,18 +245,24 @@ unset OPERATOR_PASSWORD OPERATOR_PASSWORD_CONFIRM
 # ── Step 5: Create break-glass account ───────────────────────────────────────
 
 echo "==> [5/7] Creating break-glass account: $BREAKGLASS_EMAIL..."
-BG_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
-
 ENCODED_BG=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$BREAKGLASS_EMAIL")
-EXISTING_BG=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_BG}" \
-  --header "$MGMT_AUTH" | jq 'length')
+EXISTING_BG_DATA=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_BG}" \
+  --header "$MGMT_AUTH")
 
-if [[ "$EXISTING_BG" -gt 0 ]]; then
-  warn "Break-glass account already exists — updating app_metadata only."
-  BG_USER_ID=$(curl -s --request GET "${MGMT_BASE}/users-by-email?email=${ENCODED_BG}" \
-    --header "$MGMT_AUTH" | jq -r '.[0].user_id // .[0].id')
+if [[ $(echo "$EXISTING_BG_DATA" | jq 'length') -gt 0 ]]; then
+  warn "Break-glass account already exists — preserving principal_id."
+  BG_USER_ID=$(echo "$EXISTING_BG_DATA" | jq -r '.[0].user_id // .[0].id')
+  EXISTING_BG_PID=$(echo "$EXISTING_BG_DATA" | jq -r '.[0].app_metadata.principal_id // empty')
+  if [[ "$EXISTING_BG_PID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+    BG_PRINCIPAL_ID="$EXISTING_BG_PID"
+    info "Preserving existing principal_id: $BG_PRINCIPAL_ID"
+  else
+    BG_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
+    warn "No valid principal_id found on existing account — assigning new: $BG_PRINCIPAL_ID"
+  fi
   BG_CREATED=false
 else
+  BG_PRINCIPAL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
   CREATE_BG=$(curl -s --request POST "${MGMT_BASE}/users" \
     --header "$MGMT_AUTH" \
     --header "content-type: application/json" \
@@ -318,7 +330,7 @@ data['db_cutover'] = {
     'db_connection_id': '${DB_CONN_ID}',
     'db_connection_name': '${DB_CONNECTION_NAME}',
     'signup_disabled': '${SIGNUP_DISABLED}' == 'true',
-    'console_enabled_on_connection': True,
+    'console_enabled_on_connection': '${CONSOLE_ENABLED}' == 'true',
     'operator_account': {
         'email': '${OPERATOR_EMAIL}',
         'user_id': '${OPERATOR_USER_ID}',

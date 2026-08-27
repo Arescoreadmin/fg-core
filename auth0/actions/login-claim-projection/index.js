@@ -8,7 +8,7 @@
  *   4.  Each role value is string-matched against the strict ALLOWED_ROLES allowlist.
  *   5.  Unknown roles are silently dropped; they cannot propagate to the token.
  *   6.  If the normalized roles array is empty after filtering → no claims set.
- *   7.  principal_id is projected only when present and passes UUID v4 regex.
+ *   7.  principal_id is projected only when present and passes strict UUID v4 regex (version nibble = 4, variant bits = [89ab]).
  *   8.  Both id_token and access_token receive the same claims (symmetric projection).
  *   9.  Claims use the https://frostgate.ai/ namespace; no bare claim names.
  *  10.  tenant_id is never projected by Auth0 — FrostGate resolves it from principal_id.
@@ -40,7 +40,7 @@ const ALLOWED_ROLES = new Set([
 ]);
 
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 exports.onExecutePostLogin = async (event, api) => {
   try {
