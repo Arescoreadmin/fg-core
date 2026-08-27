@@ -274,6 +274,68 @@ class Auth0ManagementClient:
         )
 
     # ------------------------------------------------------------------
+    # User app_metadata projection (AUTH-ROLE-001B)
+    # ------------------------------------------------------------------
+
+    def _patch(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        """PATCH helper with retry-on-401.  Token/secret fields are never logged."""
+        resp = httpx.patch(
+            f"{self._config.mgmt_base_url}{path}",
+            headers=self._token_headers(),
+            json=body,
+            timeout=10.0,
+        )
+        if resp.status_code == 401:
+            self._token = None
+            resp = httpx.patch(
+                f"{self._config.mgmt_base_url}{path}",
+                headers=self._token_headers(),
+                json=body,
+                timeout=10.0,
+            )
+        if resp.status_code not in (200,):
+            raise Auth0ManagementError(
+                f"MGMT_PATCH_FAILED:{resp.status_code}", resp.status_code
+            )
+        return resp.json() if resp.content else {}
+
+    def get_user_app_metadata(self, subject: str) -> dict[str, Any]:
+        """Return app_metadata dict for an Auth0 user, or {} if user not found."""
+        result = self._get(f"/users/{subject}", fields="app_metadata")
+        if result is None:
+            return {}
+        return result.get("app_metadata") or {}
+
+    def update_user_app_metadata(
+        self,
+        subject: str,
+        *,
+        principal_id: str,
+        roles: list[str],
+        projection_revision: int,
+    ) -> None:
+        """Patch FrostGate identity state into Auth0 app_metadata.
+
+        Only patches ``principal_id``, ``roles``, and ``projection_revision``.
+        Does not touch any other app_metadata field.  Auth0 tokens and secrets
+        are never stored or logged.
+        """
+        body = {
+            "app_metadata": {
+                "principal_id": principal_id,
+                "roles": roles,
+                "projection_revision": projection_revision,
+            }
+        }
+        log.info(
+            "auth0.management.update_user_app_metadata subject_hash=%s revision=%d roles=%s",
+            self.hash_subject(subject),
+            projection_revision,
+            roles,
+        )
+        self._patch(f"/users/{subject}", body)
+
+    # ------------------------------------------------------------------
     # JWKS retrieval for callback token verification
     # ------------------------------------------------------------------
 

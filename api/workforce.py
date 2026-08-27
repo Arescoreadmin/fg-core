@@ -353,12 +353,44 @@ def update_user(
     )
     if payload.active is not None or payload.role is not None:
         try:
-            membership_version_svc.bump_version(
+            new_version = membership_version_svc.bump_version(
                 db,
                 membership_id=user_id,
                 tenant_id=tenant_id,
                 reason="workforce_update",
             )
+            # AUTH-ROLE-001B: enqueue projection for Auth0-backed memberships so
+            # role/active changes converge into app_metadata within the same tx.
+            member_row = db.execute(
+                text(
+                    """
+                    SELECT principal_id, identity_provider, identity_subject, role
+                    FROM tenant_users
+                    WHERE tenant_id = :tenant_id AND id = :user_id
+                    """
+                ),
+                {"tenant_id": tenant_id, "user_id": user_id},
+            ).fetchone()
+            if (
+                member_row is not None
+                and member_row.identity_provider == "auth0"
+                and member_row.identity_subject
+                and member_row.principal_id
+            ):
+                from admin_gateway.identity.projection_outbox import (
+                    enqueue_projection,
+                )
+
+                enqueue_projection(
+                    db,
+                    membership_id=user_id,
+                    principal_id=str(member_row.principal_id),
+                    tenant_id=tenant_id,
+                    provider=member_row.identity_provider,
+                    provider_subject=member_row.identity_subject,
+                    roles=[member_row.role] if member_row.role else [],
+                    projection_revision=new_version,
+                )
         except ValueError:
             pass  # row deleted between SELECT and UPDATE; safe to ignore
     db.commit()
