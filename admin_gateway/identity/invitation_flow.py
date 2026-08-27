@@ -570,6 +570,23 @@ def bind_identity(
     membership.membership_version = membership_version_svc.bump_version(
         db, membership_id=membership.id, tenant_id=tenant_id, reason="identity_bound"
     )
+    # AUTH-ROLE-001B: enqueue projection within the same transaction so the
+    # outbox row is committed atomically with the authoritative bind mutation.
+    # Only enqueue for Auth0-backed providers; other providers do not project
+    # into Auth0 app_metadata.
+    if canonical_provider == "auth0" and canonical_subject:
+        from admin_gateway.identity.projection_outbox import enqueue_projection
+
+        enqueue_projection(
+            db,
+            membership_id=membership.id,
+            principal_id=str(resolution.principal_id),
+            tenant_id=tenant_id,
+            provider=canonical_provider,
+            provider_subject=canonical_subject,
+            roles=[membership.role] if membership.role else [],
+            projection_revision=membership.membership_version,
+        )
     try:
         db.flush()
     except IntegrityError as exc:

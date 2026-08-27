@@ -197,6 +197,7 @@ def assert_tenant_rls(engine: Engine) -> None:
         "tenant_invitations",
         "tenant_identity_audit_events",
         "tenant_identity_auth_states",
+        "identity_projection_outbox",
     }
     with engine.begin() as conn:
         rows = conn.execute(
