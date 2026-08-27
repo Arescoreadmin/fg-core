@@ -58,7 +58,6 @@ export const authConfig = {
           (user as Record<string, unknown> | undefined)?.['email'] as string | undefined;
         const subjectMatch = typeof subject === 'string' && bootstrapSubjects.includes(subject);
         const emailMatch = typeof email === 'string' && bootstrapEmails.includes(email.toLowerCase());
-        console.log('[fg-bootstrap]', JSON.stringify({ subjectsLen: bootstrapSubjects.length, emailsLen: bootstrapEmails.length, email, subject, subjectMatch, emailMatch }));
         if (subjectMatch || emailMatch) {
           token['https://frostgate.ai/roles'] = ['Administrator'];
           bootstrapped = true;

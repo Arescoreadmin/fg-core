@@ -2729,6 +2729,29 @@
         ]
       }
     },
+    "/identity/provider/callback": {
+      "get": {
+        "description": "Auth0 redirect receiver: completes the identity callback inline on redirect.\n\nReceives ?code=&state= from Auth0, exchanges the code server-side, and\nruns validate_callback immediately \u2014 no manual relay needed. Returns\n{status, invitation_id, state} ready for the caller to POST /bind.",
+        "operationId": "identity_provider_callback_identity_provider_callback_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Identity Provider Callback Identity Provider Callback Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Identity Provider Callback",
+        "tags": [
+          "identity-enforcement"
+        ]
+      }
+    },
     "/identity/session/current": {
       "get": {
         "operationId": "current_session_identity_session_current_get",

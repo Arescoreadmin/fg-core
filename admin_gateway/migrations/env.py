@@ -31,7 +31,11 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Get database URL from environment or config."""
     # Priority: env vars > alembic.ini
-    url = os.getenv("AG_MIGRATION_DB_URL") or os.getenv("AG_DB_URL") or os.getenv("FG_DB_URL")
+    url = (
+        os.getenv("AG_MIGRATION_DB_URL")
+        or os.getenv("AG_DB_URL")
+        or os.getenv("FG_DB_URL")
+    )
     if url:
         # Ensure async driver for PostgreSQL
         if url.startswith("postgresql://"):

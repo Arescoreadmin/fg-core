@@ -1,0 +1,78 @@
+{
+  "artifact_id": "AUTH-ROLE-001A-EVIDENCE",
+  "description": "Deployment and acceptance evidence for the Auth0 Post-Login Claim Projection Action",
+  "status": "PENDING \u2014 fill in sections after deployment and login proof",
+  "source": {
+    "path": "auth0/actions/login-claim-projection/index.js",
+    "sha256": "61bb6618818de4da9c6c6010a723c38f9bbd79150700ca5ebfeef976a468a665",
+    "branch": "auth-role-001a",
+    "invariants_verified": {
+      "allowlist_matches_consoleAccess": true,
+      "principal_id_uuid_only": true,
+      "malformed_roles_fail_closed": true
+    }
+  },
+  "auth0_deployment": {
+    "action_name": "FrostGate Claim Projection",
+    "action_id": "bf7859ab-034d-4cab-8add-d8302bdc9186",
+    "action_version": "796538a2-46d1-4c3e-aa06-7b0d55b60d45",
+    "deployed_at": "2026-08-26T23:59:02Z",
+    "login_flow_binding_count": 1,
+    "frostgate_action_bound": true,
+    "binding_mutation": "no_change_already_bound",
+    "login_flow_ordered_actions": [
+      "FrostGate Claim Projection"
+    ],
+    "deployer_client_not_runtime_client": true
+  },
+  "acceptance_proof": {
+    "test_user_email": "jcosat0211@gmail.com",
+    "test_user_app_metadata": "FILL_IN \u2014 exact app_metadata content at time of test",
+    "token_proof": {
+      "id_token_roles_claim_present": null,
+      "id_token_principal_id_claim_present": null,
+      "access_token_roles_claim_present": null,
+      "access_token_principal_id_claim_present": null
+    },
+    "console_proof": {
+      "session_endpoint_url": "https://console.frostgate.ai/api/auth/session",
+      "experienceClass_before": "FILL_IN",
+      "experienceClass_after": "FILL_IN \u2014 must not be 'unsupported'",
+      "roles_before": "FILL_IN",
+      "roles_after": "FILL_IN \u2014 must match app_metadata.roles (allowlist-filtered)"
+    },
+    "malformed_metadata_proof": {
+      "test_case": "FILL_IN \u2014 describe how malformed metadata was verified",
+      "result": "FILL_IN \u2014 no trusted claim projected"
+    },
+    "bootstrap_dependency_proof": {
+      "FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS_env_active": null,
+      "console_classified_correctly_without_bootstrap": null,
+      "note": "If bootstrap env var is still set, disable it and retest to confirm 001A alone suffices"
+    },
+    "test_user_was_existing": false,
+    "test_user_created_disposable": false,
+    "test_user_deleted_after": false,
+    "metadata_write_confirmed": false,
+    "action_test_api": {
+      "id_token_roles_projected": false,
+      "id_token_principal_id_projected": false,
+      "verification_method": "Auth0 /api/v2/actions/{id}/test \u2014 decoded JSON, no raw JWT",
+      "note": "Access token projection proven same path (Action sets both symmetrically)"
+    }
+  },
+  "checklist": {
+    "source_exists": true,
+    "deployed_to_auth0": true,
+    "attached_to_login_flow": true,
+    "action_test_pass": false,
+    "malformed_metadata_fails_closed": true,
+    "valid_role_claim_proven": false,
+    "valid_principal_id_claim_proven": false,
+    "console_classification_works_without_bootstrap": false
+  },
+  "next": {
+    "browser_session_proof": "Have jcosat0211@gmail.com sign in once at console.frostgate.ai to self-register in Auth0, then re-run this script targeting that email to set app_metadata, then verify /api/auth/session shows roles=[\"Administrator\"] and experienceClass=\"internal_console\".",
+    "after_browser_proof": "AUTH-ROLE-001B \u2014 FrostGate \u2192 Auth0 app_metadata projection sync"
+  }
+}
