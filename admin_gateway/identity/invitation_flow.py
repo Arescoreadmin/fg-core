@@ -8,8 +8,6 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-log = logging.getLogger("admin-gateway.invitation_flow")
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,6 +28,8 @@ from admin_gateway.identity.policy import (
 )
 from admin_gateway.identity.identity_context import AuthenticatedIdentity
 from admin_gateway.identity.provider_adapter import ProviderAdapter
+
+log = logging.getLogger("admin-gateway.invitation_flow")
 
 
 class IdentityFlowError(ValueError):
