@@ -1810,6 +1810,42 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             conn, "tenant_role_audit", "target_credential_id", "TEXT"
         )
 
+        # AUTH-ROLE-001B — identity projection outbox.
+        # Defined only in Postgres migration 0184 and consumed via raw SQL in
+        # admin_gateway/identity/projection_outbox.py; no ORM model exists, so
+        # Base.metadata.create_all() does NOT create it for SQLite test databases.
+        # Adding it here ensures every SQLite DB initialised by init_db() has
+        # the table required by enqueue_projection() and bind_identity().
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS identity_projection_outbox (
+                id                  TEXT    PRIMARY KEY,
+                principal_id        TEXT    NOT NULL,
+                membership_id       TEXT    NOT NULL,
+                tenant_id           TEXT    NOT NULL,
+                provider            TEXT    NOT NULL,
+                provider_subject    TEXT    NOT NULL,
+                roles               TEXT    NOT NULL,
+                projection_revision INTEGER NOT NULL,
+                status              TEXT    NOT NULL DEFAULT 'pending',
+                attempt_count       INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                last_error_code     TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+                processed_at        TEXT
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_identity_projection_outbox_pending "
+            "ON identity_projection_outbox (next_attempt_at) "
+            "WHERE status IN ('pending', 'processing')"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_identity_projection_outbox_tenant "
+            "ON identity_projection_outbox (tenant_id)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API

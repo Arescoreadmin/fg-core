@@ -416,6 +416,44 @@ def test_C8_empty_outbox_returns_zero(db: SASession) -> None:
     assert result == 0
 
 
+def test_C9_iso_format_next_attempt_at_is_eligible(db: SASession) -> None:
+    # Regression: _MARK_FAILED_SQL stores next_attempt_at as Python isoformat
+    # (e.g. "2026-08-28T13:46:30+00:00") while _SELECT_PENDING_SQLITE_SQL
+    # previously compared against datetime('now') ("2026-08-28 13:47:00").
+    # Because 'T' > ' ' lexicographically, ISO timestamps never compared as <=
+    # datetime('now'), so retries were never eligible.  julianday() parses
+    # both formats and performs a true temporal comparison.
+    enqueue_projection(
+        db,
+        membership_id=MEMBERSHIP_ID,
+        principal_id=PRINCIPAL_ID,
+        tenant_id=TENANT,
+        provider=PROVIDER,
+        provider_subject=SUBJECT,
+        roles=["admin"],
+        projection_revision=1,
+    )
+    db.flush()
+
+    # Manually set next_attempt_at to an ISO-format timestamp in the past.
+    db.execute(
+        text(
+            "UPDATE identity_projection_outbox "
+            "SET next_attempt_at = '2000-01-01T00:00:00+00:00' "
+            "WHERE tenant_id = :t"
+        ),
+        {"t": TENANT},
+    )
+    db.flush()
+
+    client = _make_mock_client()
+    processed = run_projection_pass(db, client, batch_size=10, _sqlite_mode=True)
+    assert processed == 1, (
+        "Row with ISO-format next_attempt_at in the past was not picked up — "
+        "julianday() comparison regression"
+    )
+
+
 # ---------------------------------------------------------------------------
 # D — Auth0ManagementClient.update_user_app_metadata
 # ---------------------------------------------------------------------------

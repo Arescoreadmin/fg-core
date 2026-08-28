@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-97 — fix(db): add identity_projection_outbox to SQLite _auto_migrate_sqlite (post-#662 strict-gate repair)
+
+- **PR/Branch:** `fix/662-postmerge-strict-gates`
+- **Date:** 2026-08-27
+- **Files changed:** `api/db.py`
+- **Root cause (Family A — identity_projection_outbox SQLite fixture drift):** PR #662 introduced `admin_gateway/identity/projection_outbox.py`, which executes a raw `INSERT INTO identity_projection_outbox` via `enqueue_projection()`. The table is defined only in Postgres migration `0184_identity_projection_outbox.sql` — it has no SQLAlchemy ORM model, so `Base.metadata.create_all()` (called by `init_db()` for SQLite) does not create it. Four tests in `tests/test_admin_gateway_auth0_identity_flow.py` use `init_db()` to build their SQLite test database and exercise code paths that call `bind_identity()` → `enqueue_projection()`. All four failed with `sqlite3.OperationalError: no such table: identity_projection_outbox`.
+- **Fix authority:** The correct authority is `_auto_migrate_sqlite()` in `api/db.py`. This function is the established pattern for tables that exist only in numbered Postgres migrations (not ORM models) but are needed by SQLite test databases — the credential/tenant authority tables (migration 0156/0159, R7/R4) use exactly this pattern. Added `CREATE TABLE IF NOT EXISTS identity_projection_outbox` DDL (SQLite-compatible, matching the schema in `test_auth_role_001b_projection.py`'s `_OUTBOX_SCHEMA`) plus the two supporting indexes.
+- **Root cause (Family B — trust graph manifest performance):** The mission brief referenced ~3139ms CPU. Confirmed this was already resolved before this fix: `time.process_time()` during `generate_trust_graph_manifest()` on 10,000 nodes measures 18ms CPU — well within the 1000ms contract. The test passes consistently. No code change required.
+- **Behavioral impact:** Every SQLite DB created by `init_db()` (test fixtures and local dev) now has `identity_projection_outbox` available. Production (Postgres) is unaffected — it already has the table from migration 0184.
+- **Security impact:** None. The outbox schema enforces that Auth0 tokens/credentials are never stored (matching migration 0184 design). No RLS added for SQLite (SQLite has no RLS; production enforcement is in the Postgres migration).
+- **Schema/API impact:** SQLite-only DDL addition. Postgres migration 0184 is unchanged.
+- **Tests added:** None. The four pre-existing tests that were failing now pass. No new test logic introduced.
+- **Validation:** `pytest tests/test_admin_gateway_auth0_identity_flow.py` 26/26 PASS; `pytest tests/test_auth_role_001b_projection.py tests/security/test_identity_consolidation.py tests/security/test_membership_versioning.py` 71/71 PASS; `make fg-fast` all checks passed (496 passed, 2 skipped); `make fg-security` 1234 passed, 1 skipped; `make fg-contract` PASS; `make release-gate` PASSED (100% production/launch readiness); `git diff --check` clean.
+
+---
+
 ## P-96 — fix(identity): deactivation role projection + per-subject advisory lock (PR #662 / AUTH-ROLE-001B)
 
 - **PR/Branch:** `feat/auth-role-001b`

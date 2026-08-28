@@ -61,7 +61,7 @@ _SELECT_PENDING_SQLITE_SQL = text(
            attempt_count
     FROM identity_projection_outbox
     WHERE status IN ('pending', 'processing')
-      AND next_attempt_at <= datetime('now')
+      AND julianday(next_attempt_at) <= julianday('now')
     ORDER BY next_attempt_at
     LIMIT :limit
     """
