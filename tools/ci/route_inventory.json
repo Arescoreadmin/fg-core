@@ -1974,6 +1974,23 @@
     {
       "dependency_categories": [
         "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/bootstrap-admin",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -2278,6 +2295,57 @@
     {
       "dependency_categories": [
         "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/portal-access",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/portal-access/invite",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "DELETE",
+      "path": "/admin/tenants/{tenant_id}/portal-access/{grant_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -2400,6 +2468,58 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}/users",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "POST",
+      "path": "/admin/tenants/{tenant_id}/users/invite",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/tenant_admin.py",
+      "method": "PATCH",
+      "path": "/admin/tenants/{tenant_id}/users/{user_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -20595,7 +20715,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-08-11T20:45:34.786708+00:00",
+  "generated_at": "2026-08-28T20:49:46.907881+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
