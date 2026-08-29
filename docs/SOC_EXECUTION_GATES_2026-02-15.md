@@ -6700,3 +6700,28 @@ Validation evidence:
 - `git diff --check`: PASS.
 
 SOC review outcome: approved. The workflow change strengthens release determinism and preserves fail-closed release behavior. No runtime security gate is weakened.
+
+---
+
+## 2026-08-29 — SOC-HIGH-002 — PR #665 TENANT-ACCESS-001 security hardening
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (auth dispatch: `api/auth_dispatch.py`).
+
+Scope: Three P1 security fixes surfaced by bot review on PR #665.
+
+Critical files changed:
+- `api/auth_dispatch.py`: (1) `_bind_membership()` now rebuilds `permissions` from the DB-canonical role via `roles_to_permissions(principal.roles)` and propagates `principal.roles` instead of stale JWT-derived values. A valid JWT after a DB role downgrade can no longer retain write capabilities beyond the session TTL. (2) The `except Exception` catch block in `_bind_membership()` now raises `HTTPException(503)` instead of returning the unaugmented actor — membership lookup failures are fail-closed, not fail-open.
+
+Security posture:
+- Permissions are now derived from the single authoritative source (DB `tenant_users.role`) at JWT-to-actor resolution time. Stale JWT role claims are demoted to advisory only, consistent with the stated AUTH-ROLE-001 invariant.
+- Fail-closed on resolver error prevents a degraded resolver from silently escalating actors to their pre-downgrade capability level.
+- No RLS policies, OPA rules, API scopes, cryptographic material, or CI gates modified.
+- The BFF `isTenantAdminCorePath()` in `apps/console/app/api/core/[...path]/route.ts` is narrowed from `admin/tenants/*` (broad) to the three delegated subroute families only (`bootstrap-admin`, `users`, `portal-access`). Platform lifecycle paths can no longer receive `ADMIN_GATEWAY_TOKEN` substitution for `tenant_admin` callers.
+
+Validation evidence:
+- `pytest tests/test_tenant_access_001.py`: 94 passed, 2 skipped.
+- `node --test apps/console/tests/console-access-policy.test.js`: 32/32 pass.
+- New test `test_k4` verifies `_bind_membership` propagates DB-canonical role and rebuilt permissions.
+- New JS source regression test verifies `isTenantAdminCorePath` narrowing is present in route.ts.
+
+SOC review outcome: approved. All three changes strengthen the authorization boundary. No existing capability is removed; only stale-JWT privilege retention and fail-open resolver behavior are eliminated.

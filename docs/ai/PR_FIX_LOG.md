@@ -1,5 +1,65 @@
 # PR Fix Log (Strict)
 
+## P-101 — feat(identity): TENANT-ACCESS-001 unified tenant console + portal access enforcement
+
+- **PR/Branch:** `feat/tenant-access-001-unified-access-enforcement`
+- **Date:** 2026-08-28
+- **Files changed:** `tests/test_tenant_access_001.py` (new), `docs/architecture/tenant-access-001.md` (new), `apps/console/tests/console-access-policy.test.js` (TENANT-ACCESS-001 section), `ROADMAP.md`.
+- **Motivation:** TENANT-ADMIN-001 (PR #664) delivered the delegated administration surface and DB-canonical authority check. Before CLIENT-E2E-001 can run the full client onboarding proof, the complete authorization stack must be audited, documented, and regression-tested as a unified system. No prior test covered the full cross-surface access boundary — the interaction between principal resolution, membership enforcement, console BFF authorization, portal scope middleware, tenant-context enforcement, and RLS.
+- **Scope:** Audit-only — no new routes, no DB migrations, no behavior changes. Deliverables are tests, architecture doc, and roadmap entries.
+- **Authority chain audited (7 layers):**
+  - **Layer 1 — Authentication:** `api/auth_dispatch.py` — dev bypass ��� Bearer JWT (RS256 JWKS) → API key → anonymous. `_bind_membership()` enforces `active=TRUE` and `identity_binding_status='bound'` for OIDC actors.
+  - **Layer 2 — Principal:** `api/principal_authority.py` — `resolve_or_create_principal_for_external_identity()` enforces `lifecycle_state='active'`; raises `PRINCIPAL_INACTIVE` on suspended/deactivated principals.
+  - **Layer 3 — Membership:** `services/identity_resolver/service.py` — `IdentityResolver.resolve_or_deny()` enforces `identity_binding_status='bound'` AND `active=TRUE`; raises typed `MEMBERSHIP_NOT_FOUND` / `MEMBERSHIP_INACTIVE`.
+  - **Layer 4 — Tenant context:** `api/auth_scopes/resolution.py` — `resolve_authoritative_tenant()` enforces key-bound tenant == route tenant AND actor session tenant == route tenant; emits `STALE_TENANT_SESSION` audit event on mismatch.
+  - **Layer 5 — DB-canonical admin:** `api/tenant_admin_authority.py` — `check_tenant_admin_authority()` fresh SELECT against `tenant_users`; uniform 403 `TENANT_ADMIN_DENIED`; no JWT role input.
+  - **Layer 6 — Console BFF:** `apps/console/lib/consoleAccess.js` + `apps/console/app/api/core/[...path]/route.ts` — experience classification (internal_console / console_enabled_client / portal_only / unsupported / anonymous); `resolveAuthorizedTenant()` enforces client sessions to own `claims.tenantId` only; `canAccessConsoleRoute()` + `canAccessCoreApiPath()` route guards; 403 normalized to `CORE_ACCESS_DENIED`.
+  - **Layer 7 — Portal:** `api/middleware/portal_scope.py` + `api/portal_user_authority.py` — `PortalClientScopeMiddleware` validates `pnu1.` sessions; `membership_version` checked against DB on every portal request (stale detection); engagement binding enforced.
+- **Security invariants confirmed:**
+  - JWT role claims are never used as authorization inputs at any Core API layer.
+  - Revocation (deactivate / downgrade / unbind / version bump / grant revoke) is effective on the next request — no token invalidation or sweep jobs required.
+  - Cross-tenant access is denied by at least three independent layers before any DB query runs.
+  - RLS enforces tenant isolation at the Postgres layer independent of application logic.
+  - Console `portal_only` sessions cannot reach any console route; `clientSafe: false` flag on all admin paths blocks portal sessions at the BFF.
+  - Portal named-user sessions carry a `membership_version` that is validated against the live DB; a bumped version (from any role/active/binding change) immediately revokes the session.
+  - The delegation ceiling (`DELEGATABLE_ROLES` / `FORBIDDEN_DELEGATION_ROLES`) is enforced by `assert_role_delegatable()` on every role assignment; internal roles cannot be delegated.
+- **Findings fixed:** None. No behavioral gaps found. Prior work (TENANT-ADMIN-001, AUTH-ROLE-001B, H0-PR2) correctly implements all authority layers. The audit confirms the stack is correct as documented.
+- **Known non-goals (frozen):**
+  - No new invitation authority paths (P1-01 H2).
+  - No redesign of the portal grant system (CLIENT-E2E-001).
+  - No `client_*` role permission refinement (CLIENT-E2E-001 baseline).
+  - No "switch tenant" UX feature.
+  - No new DB tables or migrations.
+- **Tests added:** `tests/test_tenant_access_001.py` — 80+ tests across 23 groups A–W:
+  - A: Canonical principal resolution (5 tests) — active/inactive/not-found/created/idempotent.
+  - B: Tenant membership (5 tests) — bound/unbound/inactive/not-found/wrong-tenant.
+  - C: Console access (9 tests) — internal/client/portal-only/anonymous/unsupported/route-guards/mutation-roles.
+  - D: Portal access (3 tests) — valid pnu1 session/stale version/revoked grant.
+  - E: Console/portal separation (4 tests) — tenant_admin not portal grantee, portal_only blocked from console.
+  - F: Tenant-admin integration (5 tests) — active/inactive/wrong-tenant/missing/unbound.
+  - G: Ordinary-user restrictions (3 tests) — no admin routes, no cross-tenant.
+  - H: Portal-only restrictions (2 tests) — console blocked, portal allowed.
+  - I: Cross-tenant denial (3 tests) — uniform 403, no oracle.
+  - J: Object-level IDOR (2 tests) — wrong-tenant resource returns 404.
+  - K: Stale JWT (3 tests) — DB override; console still enforces; portal version check.
+  - L: Revoked membership (2 tests) — immediate denial, no blocklist.
+  - M: Disabled membership (1 test) — `active=FALSE` denial.
+  - N: Unbound identity (2 tests) — `identity_binding_status='unbound'` denial.
+  - O: Tenant parameter tampering (3 tests) — path/query/body tenant mismatch all denied.
+  - P: Invitation lifecycle (3 tests) — unbound invite created, binding, first access.
+  - Q: Portal grant lifecycle (1 test) — valid grant session, revoked denies.
+  - R: Identity governance boundary (4 tests) — admin routes don't require identity_config; workforce routes do.
+  - S: Audit/privacy (2 tests) — events emitted, no secrets in details_json.
+  - T: RLS pattern (3 tests) — `set_tenant_context` called, cross-tenant query returns 0 rows.
+  - U: Frontend/API contract (4 tests) — consoleAccess.js classification, BFF policy coverage.
+  - V: AUTH-ROLE compatibility (3 tests) — membership_version bump, projection enqueue, stale session revoke.
+  - W: TENANT-ADMIN-001 compatibility (5 tests) — delegation ceiling, self-escalation denial, bootstrap platform-only, portal separation, audit chain.
+  - Authorization matrix: parameterized tests for all principal × surface combinations.
+- **Architecture doc:** `docs/architecture/tenant-access-001.md` — 18 sections covering all authority layers, Auth0 projection boundary, revocation semantics, stale-token behavior, tenant switching, RLS defense, audit behavior, failure modes, threat model, non-goals, and CLIENT-E2E-001 boundary. Includes access-decision diagram.
+- **Validation:** `pytest tests/test_tenant_access_001.py` → 93 passed, 2 skipped. `node --test tests/console-access-policy.test.js` → 31 passed (10 TENANT-ACCESS-001 additions).
+
+---
+
 ## P-100 — fix(tenant-admin): Console BFF routing for /admin/tenants/{tenant_id} paths
 
 - **PR/Branch:** `feat/tenant-admin-001-delegated-administration`
