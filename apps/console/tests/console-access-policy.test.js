@@ -223,6 +223,82 @@ test('proof 4: recognized internal operator passes guard and reaches operator ro
   assert.equal(canAccessConsoleRoute('/workspace', operator), true);
 });
 
+// ─── TENANT-ACCESS-001: delegated admin path coverage ────────────────────────
+
+const {
+  CLIENT_CONSOLE_ROLES,
+  INTERNAL_CONSOLE_ROLES,
+} = require('../lib/consoleAccess.js');
+
+test('TENANT-ACCESS-001: admin/tenants path is accessible to tenant_admin', () => {
+  const tenantAdmin = sessionWithRoles(['tenant_admin']);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'GET', tenantAdmin), true);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'POST', tenantAdmin), true);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants', 'acme', 'users', 'invite'], 'POST', tenantAdmin), true);
+});
+
+test('TENANT-ACCESS-001: admin/tenants path is accessible to internal operators', () => {
+  const operator = sessionWithRoles(['Operator']);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'GET', operator), true);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants', 'acme', 'bootstrap-admin'], 'POST', operator), true);
+});
+
+test('TENANT-ACCESS-001: portal_only is denied admin/tenants', () => {
+  for (const role of ['portal_only', 'Customer', 'MSP']) {
+    const session = sessionWithRoles([role]);
+    assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'GET', session), false,
+      `${role} must be denied admin/tenants`);
+  }
+});
+
+test('TENANT-ACCESS-001: client_read_only is denied admin/tenants (clientSafe: false)', () => {
+  const readOnly = sessionWithRoles(['client_read_only']);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'GET', readOnly), false);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants', 'acme', 'users', 'invite'], 'POST', readOnly), false);
+});
+
+test('TENANT-ACCESS-001: Administrator role is in INTERNAL_CONSOLE_ROLES (internal_console classification)', () => {
+  assert.ok(INTERNAL_CONSOLE_ROLES.includes('Administrator'));
+  assert.ok(!CLIENT_CONSOLE_ROLES.includes('Administrator'));
+  const principal = resolveConsolePrincipal(sessionWithRoles(['Administrator']));
+  assert.equal(principal.experienceClass, 'internal_console');
+  assert.equal(principal.isAuthenticated, true);
+});
+
+test('TENANT-ACCESS-001: tenant_admin is in CLIENT_CONSOLE_ROLES (console_enabled_client classification)', () => {
+  assert.ok(CLIENT_CONSOLE_ROLES.includes('tenant_admin'));
+  assert.ok(!INTERNAL_CONSOLE_ROLES.includes('tenant_admin'));
+  const principal = resolveConsolePrincipal(sessionWithRoles(['tenant_admin']));
+  assert.equal(principal.experienceClass, 'console_enabled_client');
+});
+
+test('TENANT-ACCESS-001: portal_only classifies as portal_only and is denied console API', () => {
+  const principal = resolveConsolePrincipal(sessionWithRoles(['portal_only']));
+  assert.equal(principal.experienceClass, 'portal_only');
+  assert.equal(canAccessCoreApiPath(['decisions'], 'GET', sessionWithRoles(['portal_only'])), false);
+  assert.equal(canAccessCoreApiPath(['workforce', 'users'], 'GET', sessionWithRoles(['portal_only'])), false);
+});
+
+test('TENANT-ACCESS-001: client_read_only denied internal-only API paths', () => {
+  const session = sessionWithRoles(['client_read_only']);
+  assert.equal(canAccessCoreApiPath(['keys'], 'GET', session), false);
+  assert.equal(canAccessCoreApiPath(['forensics', 'snapshot'], 'GET', session), false);
+  assert.equal(canAccessCoreApiPath(['rag', 'corpora'], 'GET', session), false);
+});
+
+test('TENANT-ACCESS-001: mutation on workforce/users requires tenant_admin or internal', () => {
+  assert.equal(canAccessCoreApiPath(['workforce', 'users'], 'POST', sessionWithRoles(['client_read_only'])), false);
+  assert.equal(canAccessCoreApiPath(['workforce', 'users'], 'POST', sessionWithRoles(['tenant_admin'])), true);
+  assert.equal(canAccessCoreApiPath(['workforce', 'users'], 'POST', sessionWithRoles(['Operator'])), true);
+});
+
+test('TENANT-ACCESS-001: CLIENT_CONSOLE_ROLES and portal markers are disjoint', () => {
+  const portalMarkers = new Set(['portal_only', 'Customer', 'MSP']);
+  for (const role of CLIENT_CONSOLE_ROLES) {
+    assert.ok(!portalMarkers.has(role), `CLIENT_CONSOLE_ROLES must not include portal marker ${role}`);
+  }
+});
+
 test('source regression: field-assessment handlers rely on middleware guard for role enforcement', () => {
   // These handlers only check session?.user — no role classification of their own.
   // The middleware unsupported guard is what blocks no-role sessions.
