@@ -41,7 +41,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from api.actor_context import ActorContext, ALL_PERMISSIONS
+from api.actor_context import ActorContext, ALL_PERMISSIONS, roles_to_permissions
 from api.deps import auth_ctx_db_session
 
 log = logging.getLogger("frostgate.auth_dispatch")
@@ -203,8 +203,8 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
             subject=actor.subject,
             email=actor.email,
             name=actor.name,
-            permissions=actor.permissions,
-            roles=actor.roles,
+            permissions=roles_to_permissions(principal.roles),
+            roles=principal.roles,
             auth_source=actor.auth_source,
             tenant_id=principal.tenant_id,
             membership_id=principal.membership_id,
@@ -212,11 +212,17 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
     except HTTPException:
         raise
     except Exception as exc:
-        log.warning(
+        log.error(
             "auth_dispatch.membership_lookup_error",
             extra={"exc": str(exc)},
         )
-        return actor
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "MEMBERSHIP_LOOKUP_ERROR",
+                "reason": "membership lookup unavailable",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

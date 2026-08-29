@@ -251,6 +251,14 @@ function tenantIdFromCorePath(path: string[]): string | null {
 
 function isTenantAdminCorePath(path: string[]): boolean {
   const joined = path.join('/');
+  // admin/tenants is narrowed to the 3 delegated subroute families only;
+  // platform lifecycle paths (suspend/activate/delete) must not receive
+  // ADMIN_GATEWAY_TOKEN substitution for tenant_admin callers.
+  const isTenantAdminSubroute =
+    path.length >= 4 &&
+    path[0] === 'admin' &&
+    path[1] === 'tenants' &&
+    (path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access');
   return (
     joined.startsWith('workforce/users') ||
     joined === 'portal/grants' ||
@@ -258,7 +266,7 @@ function isTenantAdminCorePath(path: string[]): boolean {
     joined.startsWith('admin/identity/tenants/') ||
     joined === 'admin/identity/invitations' ||
     joined.startsWith('admin/identity/invitations/') ||
-    joined.startsWith('admin/tenants/')
+    isTenantAdminSubroute
   );
 }
 

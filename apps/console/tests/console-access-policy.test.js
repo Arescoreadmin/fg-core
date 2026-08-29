@@ -299,6 +299,21 @@ test('TENANT-ACCESS-001: CLIENT_CONSOLE_ROLES and portal markers are disjoint', 
   }
 });
 
+test('PR-SEC-003: isTenantAdminCorePath is narrowed to delegated subroutes only', () => {
+  // Platform lifecycle paths (suspend/activate/delete) must NOT receive
+  // ADMIN_GATEWAY_TOKEN substitution for tenant_admin callers.
+  // This verifies the BFF route handler has the narrowed path[3] guard.
+  const src = read('app/api/core/[...path]/route.ts');
+  // Must NOT use the broad startsWith guard alone
+  assert.doesNotMatch(src, /joined\.startsWith\('admin\/tenants\/'\)/);
+  // Must use the narrowed path[3] discriminator
+  assert.match(src, /path\[3\]\s*===\s*'bootstrap-admin'/);
+  assert.match(src, /path\[3\]\s*===\s*'users'/);
+  assert.match(src, /path\[3\]\s*===\s*'portal-access'/);
+  // Must require minimum path depth
+  assert.match(src, /path\.length\s*>=\s*4/);
+});
+
 test('source regression: field-assessment handlers rely on middleware guard for role enforcement', () => {
   // These handlers only check session?.user — no role classification of their own.
   // The middleware unsupported guard is what blocks no-role sessions.

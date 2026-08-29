@@ -1241,8 +1241,13 @@ class TestObjectLevelIddorDenial:
             },
             headers={"x-api-key": key_a},
         )
+        assert eng_r.status_code not in {401, 500}, (
+            f"Engagement creation auth/server error: {eng_r.status_code} {eng_r.text}"
+        )
         if eng_r.status_code != 201:
-            pytest.skip("engagement creation not supported in this env")
+            pytest.skip(
+                f"engagement creation not supported in this env ({eng_r.status_code})"
+            )
 
         eng_id = eng_r.json().get("id")
 
@@ -1252,8 +1257,13 @@ class TestObjectLevelIddorDenial:
             json={"engagement_id": eng_id, "portal_role": "general", "ttl_days": 30},
             headers={"x-api-key": key_a},
         )
+        assert grant_r.status_code not in {401, 500}, (
+            f"Portal grant creation auth/server error: {grant_r.status_code} {grant_r.text}"
+        )
         if grant_r.status_code != 201:
-            pytest.skip("portal grant creation not supported in this env")
+            pytest.skip(
+                f"portal grant creation not supported in this env ({grant_r.status_code})"
+            )
 
         grant_id = grant_r.json().get("grant_id") or grant_r.json().get("credential_id")
 
@@ -1296,8 +1306,13 @@ class TestObjectLevelIddorDenial:
             },
             headers={"x-api-key": key_a},
         )
+        assert eng_r.status_code not in {401, 500}, (
+            f"Engagement creation auth/server error: {eng_r.status_code} {eng_r.text}"
+        )
         if eng_r.status_code != 201:
-            pytest.skip("engagement creation not supported in this env")
+            pytest.skip(
+                f"engagement creation not supported in this env ({eng_r.status_code})"
+            )
 
         eng_id = eng_r.json().get("id")
 
@@ -1404,6 +1419,69 @@ class TestStaleJwtRoleDenial:
         with pytest.raises(HTTPException) as exc_info:
             resolve_authoritative_tenant(mock_request, stale_actor, "live-tenant-a")
         assert exc_info.value.status_code == 403
+
+    def test_k4_bind_membership_uses_db_role_not_jwt(self, engine):
+        """After _bind_membership, permissions come from DB-canonical role, not stale JWT.
+
+        A JWT that claims tenant_admin (with write permissions) for a user whose
+        DB role is 'client_read_only' must NOT retain write capabilities after
+        _bind_membership() resolves the DB row.
+        """
+        import unittest.mock
+
+        tid = f"{_TENANT_A}-k4"
+        uid = str(uuid.uuid4())
+        pid = str(uuid.uuid4())
+        _seed_tenant(engine, tid)
+        _seed_tenant_user(
+            engine,
+            tenant_id=tid,
+            user_id=uid,
+            email="stale-k4@test.example",
+            role="client_read_only",  # DB says read-only
+            active=True,
+            identity_subject="auth0|k4-stale",
+            identity_provider="auth0",
+            identity_issuer="https://fg-test.auth0.com/",
+            principal_id=pid,
+            identity_binding_status="bound",
+        )
+
+        from api.auth_dispatch import _bind_membership
+        from sqlalchemy.orm import Session
+
+        # JWT claims tenant_admin with write permissions — stale
+        stale_actor = ActorContext(
+            subject="auth0|k4-stale",
+            email="stale-k4@test.example",
+            name="Stale",
+            permissions=ROLE_PERMISSIONS["tenant_admin"],
+            roles=["tenant_admin"],
+            auth_source="oidc_auth0",
+            tenant_id=tid,
+            membership_id=None,
+        )
+
+        # Patch FG_AUTH0_DOMAIN so _bind_membership doesn't early-return
+        with unittest.mock.patch.dict(
+            os.environ, {"FG_AUTH0_DOMAIN": "fg-test.auth0.com"}
+        ):
+            with Session(engine) as db:
+                bound = _bind_membership(stale_actor, db)
+
+        # After binding, roles must reflect DB-canonical role
+        assert bound.roles == ["client_read_only"], (
+            f"Expected ['client_read_only'] from DB, got {bound.roles}"
+        )
+        # Permissions must be rebuilt from DB role — tenant_admin write perms must be gone
+        read_only_perms = ROLE_PERMISSIONS.get("client_read_only", frozenset())
+        write_perms = (
+            ROLE_PERMISSIONS.get("tenant_admin", frozenset()) - read_only_perms
+        )
+        for perm in write_perms:
+            assert perm not in bound.permissions, (
+                f"Stale JWT write permission '{perm}' must not survive _bind_membership"
+            )
 
 
 # ===========================================================================
@@ -1759,8 +1837,13 @@ class TestPortalGrantLifecycle:
 
         # Get Tenant B's grants — should not contain any Tenant A data
         r_b = client.get("/portal/grants", headers={"x-api-key": key_b})
+        assert r_b.status_code not in {401, 500}, (
+            f"Portal grants list auth/server error: {r_b.status_code} {r_b.text}"
+        )
         if r_b.status_code != 200:
-            pytest.skip("portal grants endpoint not available in this config")
+            pytest.skip(
+                f"portal grants endpoint not available in this config ({r_b.status_code})"
+            )
 
         items_b = r_b.json().get("items", [])
 
@@ -1969,11 +2052,34 @@ class TestFrontendApiContract:
 
     def test_u4_core_api_policies_have_no_unknown_routes(self):
         """All CORE_API_POLICIES prefixes are also in the proxy PROXY_RULES."""
+        import re as _re
+        from pathlib import Path as _P
+
+        route_ts = (
+            _P(__file__).parents[1] / "apps/console/app/api/core/[...path]/route.ts"
+        )
+        src = route_ts.read_text()
+        proxy_prefixes = set(_re.findall(r"prefix:\s*'([^']+)'", src))
+
         assert len(CORE_API_POLICIES) > 0
+        assert len(proxy_prefixes) > 0, "PROXY_RULES could not be parsed from route.ts"
+
+        phantom = []
         for policy in CORE_API_POLICIES:
-            assert isinstance(policy, dict)
-            assert "prefix" in policy
+            assert isinstance(policy, dict), f"Policy must be a dict: {policy!r}"
+            assert "prefix" in policy, f"Policy missing 'prefix': {policy!r}"
             assert isinstance(policy.get("allowedRoles", []), list)
+            pfx = policy["prefix"]
+            # Every BFF policy must be reachable via a proxied path
+            if not any(
+                pfx == p or pfx.startswith(p + "/") or p.startswith(pfx + "/")
+                for p in proxy_prefixes
+            ):
+                phantom.append(pfx)
+
+        assert phantom == [], (
+            f"CORE_API_POLICIES prefixes not covered by any PROXY_RULES entry: {phantom}"
+        )
 
 
 # ===========================================================================
