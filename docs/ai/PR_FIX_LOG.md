@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-100 — fix(tenant-admin): Console BFF routing for /admin/tenants/{tenant_id} paths
+
+- **PR/Branch:** `feat/tenant-admin-001-delegated-administration`
+- **Date:** 2026-08-29
+- **Files changed:** `apps/console/lib/consoleAccess.js`, `apps/console/app/api/core/[...path]/route.ts`, `docs/ai/PR_FIX_LOG.md`.
+- **Motivation:** PR bot P1: the 7 new `/admin/tenants/{tenant_id}/...` endpoints were unreachable through the Console BFF. `canAccessCoreApiPath` returned false (no `admin/tenants` prefix in `CORE_API_POLICIES`), `isProxyPathAllowed` returned false (no entry in `PROXY_RULES`), `isTenantAdminCorePath` returned false (prefix absent), and `tenantIdFromCorePath` did not extract the tenant_id from the path. Requests would have received 403 from the BFF before hitting the Core API.
+- **Fix 1 — CORE_API_POLICIES:** Added `{ prefix: 'admin/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: false, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] }` to `consoleAccess.js`. `tenant_admin` sessions can reach all delegated ops; bootstrap-admin further requires `platform.admin` enforced by Core API.
+- **Fix 2 — PROXY_RULES:** Added `{ prefix: 'admin/tenants', methods: new Set(['GET', 'POST', 'PATCH', 'DELETE', 'HEAD']) }` to `route.ts` so the proxy allows all methods required by the route table.
+- **Fix 3 — isTenantAdminCorePath:** Added `joined.startsWith('admin/tenants/')` so these paths use admin-gateway token (with delegation proof) instead of per-tenant API key routing.
+- **Fix 4 — tenantIdFromCorePath:** Added extraction for `admin/tenants/{tenant_id}/...` — `path[2]` when `path[0]==='admin' && path[1]==='tenants'`. This lets `resolveAuthorizedTenant` scope the request to the correct tenant and enforce that a `console_enabled_client` can only act on their own tenant.
+- **Security impact:** No authority weakening — the BFF gate uses `TENANT_ADMIN_CONSOLE_ROLES` for allowedRoles and admin-gateway token for auth; Core API enforces the actual platform.admin / tenant_admin authority. The `clientSafe: false` flag prevents portal-only sessions from reaching these paths.
+- **Validation:** Local smoke: `canAccessCoreApiPath(['admin', 'tenants', 'abc', 'users'], 'GET', session)` returns true for tenant_admin session, false for portal_only. `tenantIdFromCorePath(['admin', 'tenants', 'abc', 'bootstrap-admin'])` returns 'abc'.
+
+---
+
 ## P-99 — fix(tenant-admin): P1/P2 bot findings — plane registry, RLS, JWT pre-check, client roles
 
 - **PR/Branch:** `feat/tenant-admin-001-delegated-administration`

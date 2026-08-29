@@ -641,6 +641,10 @@ const CORE_API_POLICIES = [
   { prefix: 'portal/grants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'admin/identity/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'admin/identity/invitations', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
+  // TENANT-ADMIN-001 delegated administration — /admin/tenants/{tenant_id}/...
+  // tenant_admin uses their own-tenant path; bootstrap-admin is internal-only
+  // (Core API enforces platform.admin; BFF allows TENANT_ADMIN_CONSOLE_ROLES through).
+  { prefix: 'admin/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: false, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'api/executive', allowedRoles: CLIENT_CONSOLE_ALLOWED_ROLES, tenantScoped: true, clientSafe: true, readOnly: true },
 ];
 
