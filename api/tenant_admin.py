@@ -47,6 +47,7 @@ from sqlalchemy.orm import Session
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
 from api.auth_scopes import require_scopes, resolve_authoritative_tenant
+from api.db import set_tenant_context
 from api.deps import auth_ctx_db_session
 from api.identity.store import emit_identity_audit_event
 from api.tenant_admin_authority import (
@@ -129,10 +130,25 @@ class UpdateUserBody(BaseModel):
     display_name: Optional[str] = None
 
 
+_PORTAL_ROLES: frozenset[str] = frozenset(
+    {"general", "executive", "remediation", "technical", "compliance"}
+)
+
+
 class PortalAccessInviteBody(BaseModel):
     engagement_id: str = Field(..., min_length=1)
     portal_role: str = "general"
     ttl_days: int = Field(default=30, ge=1, le=365)
+
+    @field_validator("portal_role")
+    @classmethod
+    def _v_portal_role(cls, v: str) -> str:
+        normalized = v.lower().strip()
+        if normalized not in _PORTAL_ROLES:
+            raise ValueError(
+                f"portal_role must be one of: {', '.join(sorted(_PORTAL_ROLES))}"
+            )
+        return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +271,7 @@ def bootstrap_tenant_admin(
     call the platform admin still has platform.admin, but the tenant_admin
     row it created is subject to the same authority checks as any other.
     """
+    set_tenant_context(db, tenant_id)
     # Preserve tenant-context binding — the bootstrap endpoint operates
     # cross-tenant by design (platform authority). We do NOT call
     # resolve_authoritative_tenant here because the platform actor's
@@ -437,6 +454,8 @@ def invite_tenant_user(
     accepted; tenant_admin, platform_admin, and FrostGate internal roles are
     rejected with ``ROLE_NOT_DELEGATABLE``.
     """
+    from sqlalchemy.exc import IntegrityError as _IntegrityError
+
     assert_role_delegatable(body.role)
 
     existing = _fetch_tenant_user_by_email(db, authority.tenant_id, body.email)
@@ -452,25 +471,38 @@ def invite_tenant_user(
 
     user_id = str(uuid.uuid4())
     now_iso = _now().isoformat()
-    db.execute(
-        text(
-            """
-            INSERT INTO tenant_users
-                (id, tenant_id, email, display_name, role, active,
-                 identity_binding_status, created_at, updated_at)
-            VALUES
-                (:id, :t, :e, :dn, :role, TRUE, 'unbound', :now, :now)
-            """
-        ),
-        {
-            "id": user_id,
-            "t": authority.tenant_id,
-            "e": body.email,
-            "dn": body.display_name,
-            "role": body.role,
-            "now": now_iso,
-        },
-    )
+    try:
+        db.execute(
+            text(
+                """
+                INSERT INTO tenant_users
+                    (id, tenant_id, email, display_name, role, active,
+                     identity_binding_status, created_at, updated_at)
+                VALUES
+                    (:id, :t, :e, :dn, :role, TRUE, 'unbound', :now, :now)
+                """
+            ),
+            {
+                "id": user_id,
+                "t": authority.tenant_id,
+                "e": body.email,
+                "dn": body.display_name,
+                "role": body.role,
+                "now": now_iso,
+            },
+        )
+    except _IntegrityError:
+        db.rollback()
+        existing = _fetch_tenant_user_by_email(db, authority.tenant_id, body.email)
+        if existing is not None:
+            return {
+                "tenant_id": authority.tenant_id,
+                "user_id": str(existing.id),
+                "email": existing.email,
+                "role": existing.role,
+                "invited": False,
+            }
+        raise
     emit_identity_audit_event(
         db,
         tenant_id=authority.tenant_id,

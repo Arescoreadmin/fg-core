@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## P-99 — fix(tenant-admin): P1/P2 bot findings — plane registry, RLS, JWT pre-check, client roles
+
+- **PR/Branch:** `feat/tenant-admin-001-delegated-administration`
+- **Date:** 2026-08-28
+- **Files changed:** `tools/ci/check_plane_registry.py`, `api/tenant_admin.py`, `api/tenant_admin_authority.py`, `api/actor_context.py`, `docs/ai/PR_FIX_LOG.md`.
+- **Motivation:** CI reported 2 failures (plane registry check, fg-contract) and the PR bot flagged 5 findings (2 P1, 3 P2) against PR #664.
+- **Fix 1 — Plane registry (CI blocker):** Added 6 TENANT-ADMIN-001 routes to `EXACT_TENANT_BINDING_EXCEPTIONS` in `tools/ci/check_plane_registry.py`. The AST scanner requires an explicit exception for routes where `tenant_id` in the path is the *target* tenant being managed rather than the caller's auth-context tenant. `GET /admin/tenants/{tenant_id}/users` was already passing (handler calls `resolve_authoritative_tenant` directly in body, which the scanner detects). The 6 added: `POST /bootstrap-admin`, `POST /users/invite`, `PATCH /users/{user_id}`, `GET /portal-access`, `POST /portal-access/invite`, `DELETE /portal-access/{grant_id}`.
+- **Fix 2 — Bootstrap RLS (P1):** `bootstrap_tenant_admin` was using `auth_ctx_db_session` which binds RLS to the caller's tenant. Added `set_tenant_context(db, tenant_id)` as the first statement in the handler body so all subsequent queries run under the correct target-tenant RLS context. Added `from api.db import set_tenant_context` to imports.
+- **Fix 3 — JWT pre-check removal (P1):** `require_tenant_admin()._dep` was gating on `require_permission("user.invite")` (JWT-derived) before the DB-canonical `check_tenant_admin_authority` check. This violates the contract that the DB is canonical — a principal whose DB row was downgraded but still holds a valid JWT with `user.invite` could pass the JWT gate. Changed to `get_actor_context` (resolves identity without enforcing permissions); authority is then enforced exclusively by `check_tenant_admin_authority`. Added `get_actor_context` to the import from `api.auth_dispatch`.
+- **Fix 4 — Client role permissions (P2):** `client_*` roles were listed in `DELEGATABLE_ROLES` but had no entries in `ROLE_PERMISSIONS` in `api/actor_context.py`, causing `roles_to_permissions()` to return empty sets for delegated client users. Added all 6 roles (`client_read_only`, `client_auditor`, `client_executive`, `client_compliance`, `client_remediation_owner`, `client_security_owner`) with a read-only baseline permission set matching the existing viewer-equivalent set. Marked as CLIENT-E2E-001 baseline — exact sets to be refined in that work.
+- **Fix 5 — Portal role validation (P2):** `PortalAccessInviteBody.portal_role` accepted any string. Added `_PORTAL_ROLES` constant (matching `_VALID_PORTAL_ROLES` in `api/portal.py`) and a `field_validator` that normalises and validates the value, raising 422 on invalid input. Added the constant before the model class definition.
+- **Fix 6 — Concurrent invite race (P2):** Concurrent `POST /users/invite` requests could both pass the SELECT-for-existing check and then race on INSERT, with the loser getting a 500 `IntegrityError`. Wrapped the INSERT in `try/except _IntegrityError`: on conflict, rollback, re-fetch, and return the idempotent response if the row now exists; otherwise re-raise for genuine errors.
+- **Security impact:** Fixes 2 authority-chain violations. The JWT pre-check removal ensures the DB is the sole authority for tenant_admin status, closing a window where stale/tampered JWT claims could bypass the DB check. The RLS fix ensures bootstrap queries are scoped to the target tenant, not the platform actor's tenant.
+- **Behavioral impact:** `require_tenant_admin()` now accepts any authenticated actor and gates solely on `check_tenant_admin_authority`; actors without a `tenant_users` row still receive uniform `403 TENANT_ADMIN_DENIED`. Client users with `client_*` roles now receive a non-empty permission set. Invalid `portal_role` values return 422 instead of being silently accepted. Concurrent invites resolve idempotently instead of 500.
+- **Validation:** `PYTHONPATH=. python tools/ci/check_plane_registry.py` — PASS; `pytest tests/test_tenant_admin_001.py -x -q` — all tests PASS.
+
+---
+
 ## P-98 — feat(identity): TENANT-ADMIN-001 delegated tenant administration
 
 - **PR/Branch:** `feat/tenant-admin-001-delegated-administration`

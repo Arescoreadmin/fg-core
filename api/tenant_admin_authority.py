@@ -42,7 +42,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext
-from api.auth_dispatch import require_permission
+from api.auth_dispatch import get_actor_context, require_permission
 from api.auth_scopes import resolve_authoritative_tenant
 from api.deps import auth_ctx_db_session
 
@@ -368,10 +368,9 @@ def require_tenant_admin(tenant_id_arg: str = "tenant_id"):
     def _dep(
         request: Request,
         tenant_id: str,
-        actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+        actor_ctx: ActorContext = Depends(get_actor_context),
         db: Session = Depends(auth_ctx_db_session),
     ) -> TenantAdminAuthority:
-        # bind_tenant_id + cross-check on actor session tenant.
         resolved = resolve_authoritative_tenant(request, actor_ctx, tenant_id)
         return check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=resolved)
 
