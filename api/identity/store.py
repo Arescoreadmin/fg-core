@@ -62,6 +62,12 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.invite.approval_rejected",
         "tenant.identity_governance.violation_detected",
         "tenant.identity_governance.action_recorded",
+        # TENANT-ADMIN-001 delegated administration events
+        "tenant.admin.bootstrap",
+        "tenant.member.invited",
+        "tenant.member.updated",
+        "tenant.portal_access.invited",
+        "tenant.portal_access.revoked",
     }
 )
 INVITATION_TRANSITIONS = {

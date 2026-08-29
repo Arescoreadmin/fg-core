@@ -5477,6 +5477,41 @@
         "title": "Body_upload_document_rag_upload_post",
         "type": "object"
       },
+      "BootstrapAdminBody": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "principal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Principal Id"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "BootstrapAdminBody",
+        "type": "object"
+      },
       "BootstrapTokenRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24045,6 +24080,29 @@
         "title": "InviteCreateBody",
         "type": "object"
       },
+      "InviteUserBody": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "default": "user",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "display_name"
+        ],
+        "title": "InviteUserBody",
+        "type": "object"
+      },
       "InviteUserPayload": {
         "properties": {
           "display_name": {
@@ -28667,6 +28725,32 @@
           "engagement_id"
         ],
         "title": "PortalAcceptInvitationResponse",
+        "type": "object"
+      },
+      "PortalAccessInviteBody": {
+        "properties": {
+          "engagement_id": {
+            "minLength": 1,
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "portal_role": {
+            "default": "general",
+            "title": "Portal Role",
+            "type": "string"
+          },
+          "ttl_days": {
+            "default": 30,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Ttl Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engagement_id"
+        ],
+        "title": "PortalAccessInviteBody",
         "type": "object"
       },
       "PortalApprovalSummary": {
@@ -42841,6 +42925,45 @@
           }
         },
         "title": "UpdateUsageMeterRequest",
+        "type": "object"
+      },
+      "UpdateUserBody": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "UpdateUserBody",
         "type": "object"
       },
       "UpdateUserPayload": {

@@ -1,3 +1,64 @@
+## 2026-08-28 — TENANT-ADMIN-001 P1/P2 bot fixes — feat/tenant-admin-001-delegated-administration
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI gate update: `tools/ci/check_plane_registry.py`; authority chain fixes: `api/tenant_admin_authority.py`, `api/tenant_admin.py`, `api/actor_context.py`).
+
+**Scope:** Follow-up fix pass for PR #664. Addresses 2 CI failures (plane registry, fg-contract) and 5 bot findings (2 P1, 3 P2). Changes:
+1. `tools/ci/check_plane_registry.py` — Added 6 TENANT-ADMIN-001 routes to `EXACT_TENANT_BINDING_EXCEPTIONS`. These are correctly exempted: `tenant_id` in the path identifies the *target* tenant being managed, not the caller's auth-context tenant. Each route has a justified comment. The scanner already passes `GET /users` (it calls `resolve_authoritative_tenant` in the handler body directly). This is an enforcement *addition*, not a weakening.
+2. `api/tenant_admin.py` — Added `set_tenant_context(db, tenant_id)` at the start of `bootstrap_tenant_admin` to bind RLS to the target tenant before any queries execute. Without this, the platform actor's own tenant context was used, creating a cross-tenant data exposure risk on DB queries within the handler.
+3. `api/tenant_admin_authority.py` — Removed `require_permission("user.invite")` JWT pre-check from `require_tenant_admin()._dep`. The JWT gate ran BEFORE the DB-canonical `check_tenant_admin_authority` check, violating the contract that the DB is the sole authority. A principal with a stale/promoted JWT but a downgraded DB row could pass the JWT gate. Now only `get_actor_context` (identity resolution, no permission enforcement) precedes the DB check.
+4. `api/actor_context.py` — Added `client_*` roles (6 total) to `ROLE_PERMISSIONS` with a read-only baseline permission set. Without this, `roles_to_permissions()` returned empty for delegated client users, meaning all permission checks silently failed. No new permissions granted beyond the existing viewer-equivalent read set.
+5. `api/tenant_admin.py` — Added `field_validator` to `PortalAccessInviteBody.portal_role` validating against `_PORTAL_ROLES = {"general","executive","remediation","technical","compliance"}`. Rejects invalid role strings at parse time with 422.
+6. `api/tenant_admin.py` — Wrapped `INSERT INTO tenant_users` in `try/except IntegrityError` with re-fetch-on-conflict idempotent response. Prevents concurrent invite requests from producing a 500.
+
+**Security posture:**
+- The RLS fix (2) closes a cross-tenant data exposure path in bootstrap. Platform actors issuing bootstrap calls previously operated under their own RLS context; post-fix they operate under the target tenant's RLS context as intended.
+- The JWT pre-check removal (3) closes a stale-JWT authority bypass: the DB check is now the only authority gate, matching the stated design principle. No permission is granted; the change is purely restrictive.
+- The plane registry update (1) is an exemption addition with documented justification. The exempted routes are already protected by `check_tenant_admin_authority` (DB-canonical) and `resolve_authoritative_tenant` (cross-tenant denial). The exemption does not weaken any auth check.
+- Client role entries (4) add read-only permissions to previously empty roles; they do not expand the permission surface beyond existing viewer-equivalent rights.
+- No new auth paths. No new credentials. No schema changes. No migration changes.
+
+**SOC review outcome:** approved. Two authority-chain violations closed (RLS context, JWT pre-check). CI gate update is additive. All changes are strictly corrective or defensive.
+
+---
+
+## 2026-08-27 — TENANT-ADMIN-001 — feat/tenant-admin-001-delegated-administration: Delegated Tenant Administration Authority
+
+**Reviewer:** Codex | **Classification:** TENANT-ADMIN-001 (new delegated administration surface; no new DB tables; no new migration; existing RLS unchanged; no bypass introduced).
+
+**Scope:** Adds seven routes under `/admin/tenants/{tenant_id}/...` for a DB-canonical delegated administration surface: `POST /bootstrap-admin` (platform.admin only), `GET|POST|PATCH /users*`, `GET|POST|DELETE /portal-access*`. Introduces `api/tenant_admin_authority.py` with `check_tenant_admin_authority()` — the canonical "is P a tenant_admin for T" check that reads from `tenant_users` and ignores JWT role claims. Introduces the delegation ceiling (`DELEGATABLE_ROLES` allowlist, `FORBIDDEN_DELEGATION_ROLES` explicit deny) enforced by `assert_role_delegatable()`.
+
+**Security posture:** The authority order for every tenant-admin mutation is:
+  1. `require_scopes(admin:write)` — coarse scope
+  2. `require_permission(user.invite)` — permission map from JWT/API-key roles
+  3. `resolve_authoritative_tenant()` — key-bound / actor-session / route tenant agreement
+  4. `check_tenant_admin_authority()` — DB-canonical `tenant_users` row (role='tenant_admin', active, bound principal, tenant match)
+  5. `assert_role_delegatable(payload.role)` — delegation ceiling on any role field
+  6. route body — self-escalation denial, membership_version bump, projection outbox enqueue, audit event, single commit
+
+Cross-tenant denial is uniform `403 TENANT_ADMIN_DENIED`; no oracle differentiation between wrong-tenant and not-admin.
+
+The bootstrap endpoint requires `platform.admin` permission only; it does not use `require_tenant_admin()` because seating the first admin is by definition pre-canonical. Bootstrap is idempotent (repeat calls return `bootstrapped=false`), audit-emitted (`tenant.admin.bootstrap` reason_code `TENANT_ADMIN_BOOTSTRAPPED`|`ALREADY_TENANT_ADMIN`), and creates no durable backdoor — the created row is subject to the same authority checks as any other tenant_admin.
+
+Self-escalation is denied server-side: a tenant_admin cannot `PATCH` their own `role` or `active` flag (403 `SELF_ESCALATION_DENIED`). Cosmetic edits (`display_name`) remain permitted.
+
+Console and portal remain distinct authorization surfaces. `/portal-access/*` routes gate on the same tenant-admin authority but delegate creation/revocation to `services/portal_grant_service.py` (credential authority R4.9); portal roles (`general|executive|remediation|technical|compliance`) are NOT delegatable console roles. Being a console tenant_admin does not create any portal grant for the admin.
+
+AUTH-ROLE-001B is preserved: role/active mutations bump `membership_version` and enqueue `identity_projection_outbox` in the same transaction as the authoritative write. Auth0 remains read-only.
+
+**Critical-path files changed:**
+- `api/tenant_admin_authority.py` (new): canonical DB authority check, delegation ceiling, uniform-denial error contract, `TenantAdminAuthority` proof dataclass, `require_tenant_admin()` FastAPI dependency factory.
+- `api/tenant_admin.py` (new): 7-route router under `/admin/tenants/{tenant_id}`.
+- `api/identity/store.py`: 5 new event types added to `IDENTITY_AUDIT_EVENTS` (`tenant.admin.bootstrap`, `tenant.member.invited`, `tenant.member.updated`, `tenant.portal_access.invited`, `tenant.portal_access.revoked`). Hash-chained via existing `_identity_audit_hash_payload` machinery — no change to chain construction.
+- `api/main.py`: `tenant_admin_router` registered in both dev and prod app builders alongside existing `workforce_router` and `admin_identity_router`.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: auto-regenerated by `make route-inventory-generate` after the new routes were added.
+- `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`: auto-refreshed by `make contract-authority-refresh` to include the seven new endpoints.
+
+**Non-goals (explicit, frozen in `docs/architecture/tenant-admin-001.md`):** not a JWT-canonical RBAC; not a platform-authority grant; not a bypass of `resolve_authoritative_tenant` or RLS; not a merge of console+portal surfaces; not the final client revenue gate (that is TENANT-ACCESS-001 → CLIENT-E2E-001).
+
+**Tests:** `tests/test_tenant_admin_001.py` — 63 tests across 14 groups A–N. Existing security regression (`tests/test_auth_role_001b_projection.py`, `tests/test_admin_gateway_auth0_identity_flow.py`, `tests/security/test_identity_consolidation.py`, `tests/security/test_cross_tenant_regression.py`, `tests/security/test_membership_versioning.py`, `tests/test_admin_identity_routes.py`, `tests/test_console_tenant_admin_authorization.py`, `tests/security/test_identity_administration_isolation.py`, `tests/security/test_admin_tenant_scope.py`) all green.
+
+---
+
 ## 2026-08-20 — SOC-P0-002C — fix/security-core-002c-verified-tenant-before-capability: Verified tenant precedes capability enforcement
 
 **Reviewer:** Codex | **Classification:** SOC-P0-002C (auth authority ordering fix; no new route; no schema mutation beyond defaulted column addition; capability enforcement still runs fail-closed)

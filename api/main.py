@@ -77,6 +77,7 @@ from api.agents_credential_authority import (
 )
 from api.workforce import router as workforce_router
 from api.admin_identity import router as admin_identity_router
+from api.tenant_admin import router as tenant_admin_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
 from api.rag_corpus_console import router as rag_corpus_console_router
@@ -783,6 +784,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(evidence_index_router)
     app.include_router(workforce_router)
     app.include_router(admin_identity_router)
+    app.include_router(tenant_admin_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -1261,6 +1263,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(evidence_index_router)
     app.include_router(workforce_router)
     app.include_router(admin_identity_router)
+    app.include_router(tenant_admin_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)

@@ -84,6 +84,8 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Identity Governance Control Plane — identity:read/write gated; console admin panel (PR4)
   { prefix: 'admin/identity/tenants', methods: new Set(['GET', 'POST', 'PUT', 'HEAD']) },
   { prefix: 'admin/identity/invitations', methods: new Set(['GET', 'POST', 'HEAD']) },
+  // TENANT-ADMIN-001 delegated administration — admin gateway token, own-tenant scoped
+  { prefix: 'admin/tenants', methods: new Set(['GET', 'POST', 'PATCH', 'DELETE', 'HEAD']) },
   // Executive Intelligence — governance:read gated; read-only surface (PR 18.6.7)
   { prefix: 'api/executive', methods: new Set(['GET', 'HEAD']) },
 ];
@@ -240,6 +242,10 @@ function tenantIdFromCorePath(path: string[]): string | null {
   if (path.length >= 4 && path[0] === 'admin' && path[1] === 'identity' && path[2] === 'tenants') {
     return path[3] || null;
   }
+  // TENANT-ADMIN-001: /admin/tenants/{tenant_id}/...
+  if (path.length >= 3 && path[0] === 'admin' && path[1] === 'tenants') {
+    return path[2] || null;
+  }
   return null;
 }
 
@@ -251,7 +257,8 @@ function isTenantAdminCorePath(path: string[]): boolean {
     joined.startsWith('portal/grants/') ||
     joined.startsWith('admin/identity/tenants/') ||
     joined === 'admin/identity/invitations' ||
-    joined.startsWith('admin/identity/invitations/')
+    joined.startsWith('admin/identity/invitations/') ||
+    joined.startsWith('admin/tenants/')
   );
 }
 

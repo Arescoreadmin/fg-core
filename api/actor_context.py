@@ -386,6 +386,75 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "assurance.read",
         }
     ),
+    # Client-facing delegation roles (CLIENT-E2E-001) — read-only baseline.
+    # Exact permission sets will be refined in CLIENT-E2E-001; this ensures
+    # roles_to_permissions() does not return empty for delegated client users.
+    "client_read_only": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
+    "client_auditor": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
+    "client_executive": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
+    "client_compliance": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
+    "client_remediation_owner": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
+    "client_security_owner": frozenset(
+        {
+            "assessment.read",
+            "finding.read",
+            "evidence.read",
+            "scan.read",
+            "report.read",
+            "bundle.read",
+            "governance.read",
+        }
+    ),
     # platform_admin gets every permission — expanded explicitly, not via wildcard
     "platform_admin": ALL_PERMISSIONS,
     # Future roles — add entries here without touching any route files

@@ -82,6 +82,17 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # performs no tenant-scoped queries. Tenant binding is irrelevant — the
     # handler unconditionally rejects every request before touching any data.
     ("POST", "/admin/keys"),
+    # TENANT-ADMIN-001 delegated admin routes: tenant_id in path identifies the
+    # target tenant being managed, not the caller's auth-context tenant.
+    # Bootstrap uses platform.admin + set_tenant_context(db, tenant_id).
+    # Delegated routes use DB-canonical check_tenant_admin_authority which
+    # enforces same-tenant via resolve_authoritative_tenant inside _dep.
+    ("POST", "/admin/tenants/{tenant_id}/bootstrap-admin"),
+    ("POST", "/admin/tenants/{tenant_id}/users/invite"),
+    ("PATCH", "/admin/tenants/{tenant_id}/users/{user_id}"),
+    ("GET", "/admin/tenants/{tenant_id}/portal-access"),
+    ("POST", "/admin/tenants/{tenant_id}/portal-access/invite"),
+    ("DELETE", "/admin/tenants/{tenant_id}/portal-access/{grant_id}"),
 }
 
 
