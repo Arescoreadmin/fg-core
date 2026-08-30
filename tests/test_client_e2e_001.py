@@ -1342,7 +1342,7 @@ def _write_evidence_artifact() -> None:
             f"Evidence artifact must not contain {forbidden!r}"
         )
 
-    if not os.environ.get("FG_WRITE_EVIDENCE"):
+    if os.environ.get("FG_WRITE_EVIDENCE", "").strip() != "1":
         return
 
     artifact_dir = _REPO / "contracts" / "artifacts" / "identity"
