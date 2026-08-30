@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-103 — fix(identity): gate CLIENT-E2E-001 evidence artifact write behind FG_WRITE_EVIDENCE=1
+
+- **PR/Branch:** `fix/client-e2e-001-mcim-artifact-write` — PR #667
+- **Date:** 2026-08-30
+- **Files changed:** `tests/test_client_e2e_001.py` — `_write_evidence_artifact()` guard only.
+- **Root cause:** `_write_evidence_artifact()` wrote `contracts/artifacts/identity/client-e2e-001-evidence.json` unconditionally on every `pytest` run, including `codex_gates.sh` (which invokes `pytest -q` with no marker filter). The fresh `timestamp` field made the committed artifact dirty in the working tree after every execution. `test_full_mcim_check_passes` detected the modification via `git status --porcelain` and failed with `"unexpected changed path ... with status ' M'"`. The test suite itself was clean (22,094 passed / 60 skipped / 0 test failures); the only gate failure was the MCIM clean-worktree invariant.
+- **Fix:** Evidence artifact writes are now gated behind `FG_WRITE_EVIDENCE=1`. The gate logic, revenue gate calculation, and secret-scan assertion all execute unconditionally. Only the file write is skipped in ordinary test execution, leaving the repository unchanged. To regenerate the committed artifact explicitly: `FG_WRITE_EVIDENCE=1 pytest tests/test_client_e2e_001.py`.
+- **Behavioral impact:** Test infrastructure only. No production behavior change.
+- **Security impact:** None. No authorization behavior change, no tenant-isolation change, no RLS change, no CLIENT-E2E semantic weakening. Evidence generation remains explicitly available when requested.
+- **Schema/API impact:** None.
+- **Validation:** CLIENT-E2E 5 passed; working tree clean after run. Final strict suite (pre-ledger): 22,094 passed / 60 skipped / 0 test failures. `test_full_mcim_check_passes` passes against the frozen branch.
+- **Result:** LEDGER FIX — no functional change. Satisfies repository governance requirement that source file changes be documented.
+
+---
+
 ## P-102 — feat(identity): CLIENT-E2E-001 client onboarding, access, isolation, revocation, and revenue gate proof
 
 - **PR/Branch:** `feat/client-e2e-001-client-readiness-proof`
