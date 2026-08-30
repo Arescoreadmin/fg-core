@@ -1,8 +1,8 @@
 {
   "schema_version": "1",
   "proof_name": "CLIENT-E2E-001 client readiness proof",
-  "timestamp": "2026-08-30T00:45:26.925058+00:00",
-  "starting_sha": "6e5b5bdef0d8dc92b992cc7e4aa7d30218ca2337",
+  "timestamp": "2026-08-30T12:30:17.694556+00:00",
+  "starting_sha": "84964c5ae72f17e33035310137095462a364878c",
   "scenarios": {
     "1_golden_path": {
       "status": "PASS",
@@ -11,14 +11,16 @@
         "alice_seeded_as_tenant_admin_bound": true,
         "alice_tenant_admin_authority_verified": true,
         "alice_invited_carol": true,
-        "carol_bound_as_client_executive": true,
+        "carol_bound_as_client_read_only": true,
+        "carol_upgraded_to_client_executive": true,
         "projection_outbox_created": true,
-        "projection_outbox_count": 0,
+        "projection_outbox_count": 1,
         "carol_client_executive_is_console_role": true,
         "engagement_creation": "PASS",
-        "engagement_id": "f670d2ec7746487e486a0ec99dbe5cb1",
+        "engagement_id": "6f4b9014d6334096da9ddac5534e141e",
         "portal_delegation_via_tenant_admin": "PASS",
         "dave_portal_grant_created": true,
+        "dave_console_denied_status": 403,
         "dave_cannot_enter_console": true
       }
     },
@@ -30,7 +32,7 @@
         "bob_cannot_patch_alice_membership": 403,
         "bob_cannot_list_tenant_a_portal_access": 403,
         "alice_cannot_list_tenant_b_users": 403,
-        "idor_tenant_a_key_denied_tenant_b_object_id": 404
+        "idor_tenant_a_key_denied_tenant_b_engagement": 404
       },
       "denial_codes_are_uniform": true
     },
@@ -142,17 +144,18 @@
     }
   },
   "postgres_rls": {
-    "status": "INFRASTRUCTURE_UNAVAILABLE",
+    "status": "PASS",
     "exit_code": 0,
-    "stdout_tail": "Postgres is ready (via docker compose).\nDO\nCREATE EXTENSION\nALTER DATABASE\nGRANT\n rolname | rolsuper | rolbypassrls \n---------+----------+--------------\n fg_app  | f        | f\n(1 row)\n\nNo pending migrations.\nMigration assertions: OK\nNo pending migrations.\nMigration assertions: OK\n\u2705 venv ready: .venv/bin/python\nsssssssssss                                                              [100%]\n=========================== short test summary info ============================\nSKIPPED [1] tests/postgres/test_append_only_postgres.py:61: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:32: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:68: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:127: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:165: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:190: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_governance_rls_postgres.py:9: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_pg_bootstrap_governance_schema.py:10: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_context_postgres.py:11: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_isolation_postgres.py:138: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_isolation_postgres.py:164: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\n11 skipped in 3.69s\n",
-    "stderr_tail": " Container fg-core-postgres-1 Running \nNOTICE:  extension \"vector\" already exists, skipping\n Container fg-core-frostgate-migrate-run-f875637fe1c6 Creating \n Container fg-core-frostgate-migrate-run-f875637fe1c6 Created \n+ python -m api.db_migrations --backend postgres --apply\n+ python -m api.db_migrations --backend postgres --assert\n Container fg-core-frostgate-migrate-run-562eb24a87e1 Creating \n Container fg-core-frostgate-migrate-run-562eb24a87e1 Created \n+ python -m api.db_migrations --backend postgres --apply\n+ python -m api.db_migrations --backend postgres --assert\n",
-    "reason": "All postgres tests were skipped (FG_POSTGRES_TESTS not set). Set FG_POSTGRES_TESTS=1 and re-run to obtain a valid RLS proof."
+    "dsn_host": "172.18.0.7:5432/frostgate",
+    "stdout_tail": "...........                                                              [100%]\n11 passed in 4.71s\n",
+    "stderr_tail": "",
+    "passed_count": 11
   },
-  "CLIENT_REVENUE_GATE": "CONDITIONAL",
-  "CONTROLLED_PAID_PILOT": "CONDITIONAL",
-  "UNRESTRICTED_SELF_SERVICE": "BLOCKED",
+  "CLIENT_REVENUE_GATE": "PASS",
+  "CONTROLLED_PAID_PILOT": "AUTHORIZED",
+  "UNRESTRICTED_SELF_SERVICE": "CONDITIONAL",
   "conditions": [
-    "PostgreSQL RLS verification was not run (infrastructure unavailable). All other controls are proven. RLS must be verified before CONTROLLED_PAID_PILOT can be AUTHORIZED."
+    "Auth0 Management API delivery is unverified in production. Controlled pilot with operator monitoring is authorized; unrestricted self-service requires durable projection delivery proof."
   ],
   "risks": [
     "AUTH0_PROJECTION_DELIVERY_UNVERIFIED: Auth0 app_metadata delivery has no durable production artifact. Auth0 is not canonical \u2014 FrostGate authority is unaffected \u2014 but stale app_metadata may cause console UX delay until next token refresh. Mitigate: operator monitoring of identity_projection_outbox.status during pilot."

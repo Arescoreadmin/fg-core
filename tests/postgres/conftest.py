@@ -86,7 +86,6 @@ def _pg_clean_state(pg_engine: Engine):
                 TRUNCATE TABLE
                     decision_evidence_artifacts,
                     decisions,
-                    api_keys,
                     security_audit_log,
                     policy_change_requests
                 RESTART IDENTITY CASCADE

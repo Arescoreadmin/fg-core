@@ -31,6 +31,9 @@ from api.security_audit import AuditPersistenceError, AuditEvent, EventType, Sev
 
 def test_audit_insert_succeeds_with_tenant_context(pg_engine) -> None:
     """A row can be inserted into security_audit_log when app.tenant_id matches."""
+    import hashlib
+
+    entry_hash = hashlib.sha256(b"test-entry-tenant-audit-a").hexdigest()
     with Session(pg_engine) as session:
         session.execute(
             text("SELECT set_config('app.tenant_id', :tid, true)"),
@@ -39,11 +42,12 @@ def test_audit_insert_succeeds_with_tenant_context(pg_engine) -> None:
         session.execute(
             text(
                 """
-                INSERT INTO security_audit_log (tenant_id, event_type, payload_json)
-                VALUES (:tenant_id, 'admin_action', '{}'::jsonb)
+                INSERT INTO security_audit_log
+                    (tenant_id, event_type, details_json, entry_hash, prev_hash)
+                VALUES (:tenant_id, 'admin_action', '{}'::jsonb, :entry_hash, 'GENESIS')
                 """
             ),
-            {"tenant_id": "tenant-audit-a"},
+            {"tenant_id": "tenant-audit-a", "entry_hash": entry_hash},
         )
         session.commit()
 
@@ -72,9 +76,11 @@ def test_persist_event_sets_tenant_context_and_inserts(pg_engine, monkeypatch) -
     # Patch get_engine to return our test engine so _persist_event talks to Postgres.
     monkeypatch.setenv("FG_ENV", "test")
 
-    from api import security_audit as sa_module
+    # _persist_event imports get_engine locally via `from api.db import get_engine`.
+    # Patching the source module (api.db) ensures the local import picks up the override.
+    import api.db as db_module
 
-    monkeypatch.setattr(sa_module, "get_engine", lambda: pg_engine, raising=False)
+    monkeypatch.setattr(db_module, "get_engine", lambda: pg_engine)
 
     # We need to make SecurityAuditLog map to the bootstrap's simplified table.
     # Instead of testing through the ORM (which needs extra columns), we verify
@@ -164,6 +170,9 @@ def test_persist_event_no_tenant_id_raises_in_prod(pg_engine, monkeypatch) -> No
 
 def test_cross_tenant_insert_blocked_by_rls(pg_engine) -> None:
     """INSERT for tenant-b while app.tenant_id=tenant-a must be blocked by RLS."""
+    import hashlib
+
+    cross_hash = hashlib.sha256(b"test-cross-tenant-d").hexdigest()
     with Session(pg_engine) as session:
         session.execute(
             text("SELECT set_config('app.tenant_id', :tid, true)"),
@@ -173,11 +182,15 @@ def test_cross_tenant_insert_blocked_by_rls(pg_engine) -> None:
             session.execute(
                 text(
                     """
-                    INSERT INTO security_audit_log (tenant_id, event_type, payload_json)
-                    VALUES (:tenant_id, 'admin_action', '{}'::jsonb)
+                    INSERT INTO security_audit_log
+                        (tenant_id, event_type, details_json, entry_hash, prev_hash)
+                    VALUES (:tenant_id, 'admin_action', '{}'::jsonb, :entry_hash, 'GENESIS')
                     """
                 ),
-                {"tenant_id": "tenant-rls-b"},  # mismatch: context is tenant-rls-a
+                {
+                    "tenant_id": "tenant-rls-b",
+                    "entry_hash": cross_hash,
+                },  # mismatch: context is tenant-rls-a
             )
             session.commit()
 
@@ -221,14 +234,16 @@ def test_create_tenant_audit_failure_compensates(pg_engine, monkeypatch) -> None
         ),
     )
 
-    # Patch get_tenant_repository to return a repo that uses our test engine.
+    # Patch get_tenant_repository in its source module so the local import inside
+    # create_tenant (from api.tenant_repository import get_tenant_repository) picks
+    # up the patched version at call time.
+    import api.tenant_repository as tenant_repo_module
     from api.tenant_repository import TenantRepository
 
     monkeypatch.setattr(
-        admin_module,
+        tenant_repo_module,
         "get_tenant_repository",
         lambda: TenantRepository(pg_engine),
-        raising=False,
     )
 
     # Also patch get_engine in admin so compensation uses our test engine.
@@ -262,9 +277,7 @@ def test_create_tenant_audit_failure_compensates(pg_engine, monkeypatch) -> None
     with pytest.raises(HTTPException) as exc_info:
         import asyncio
 
-        asyncio.get_event_loop().run_until_complete(
-            create_tenant(req, fake_request, actor_ctx)
-        )
+        asyncio.run(create_tenant(req, fake_request, actor_ctx))
 
     assert exc_info.value.status_code == 500
 

@@ -315,12 +315,14 @@ def test_scenario_1_golden_client_lifecycle(build_app):
             )
             alice_key = _admin_key(_TENANT_A)
 
-            # Invite Carol via TENANT-ADMIN-001 route
+            # Invite Carol via TENANT-ADMIN-001 route.
+            # Start Carol at client_read_only so the upgrade PATCH below is a real
+            # mutation, ensuring at least one projection outbox entry is enqueued.
             invite_r = client.post(
                 f"/admin/tenants/{_TENANT_A}/users/invite",
                 json={
                     "email": "carol@e2e.test",
-                    "role": "client_executive",
+                    "role": "client_read_only",
                     "display_name": "Carol",
                 },
                 headers={"x-api-key": alice_key},
@@ -339,15 +341,17 @@ def test_scenario_1_golden_client_lifecycle(build_app):
                 conn.execute(
                     text(
                         "UPDATE tenant_users SET identity_binding_status = 'bound', "
-                        "identity_subject = :sub, principal_id = :pid "
+                        "identity_subject = :sub, principal_id = :pid, "
+                        "identity_provider = 'auth0' "
                         "WHERE id = :uid"
                     ),
                     {"sub": _CAROL_SUBJECT, "pid": _CAROL_PID, "uid": carol_uid},
                 )
-            result["steps"]["carol_bound_as_client_executive"] = True
+            result["steps"]["carol_bound_as_client_read_only"] = True
 
-            # ── Projection outbox: Alice updates Carol's role → enqueue ──
-            # This proves AUTH-ROLE-001B outbox enqueue in the E2E context
+            # ── Projection outbox: Alice upgrades Carol to client_executive ─
+            # This is a genuine role mutation (client_read_only → client_executive)
+            # which must enqueue an entry in identity_projection_outbox.
             _install_actor_override(
                 app,
                 subject=_ALICE_SUBJECT,
@@ -360,11 +364,11 @@ def test_scenario_1_golden_client_lifecycle(build_app):
                 json={"role": "client_executive"},
                 headers={"x-api-key": alice_key},
             )
-            # 200 = updated, 400 = same value (idempotent) — both acceptable
-            assert patch_r.status_code in {200, 400}, (
-                f"Unexpected role patch response: {patch_r.status_code} {patch_r.text}"
+            assert patch_r.status_code == 200, (
+                f"Role upgrade failed: {patch_r.status_code} {patch_r.text}"
             )
-            # Verify projection outbox received an entry
+            result["steps"]["carol_upgraded_to_client_executive"] = True
+            # Verify projection outbox received at least one entry for this mutation
             with engine.connect() as conn:
                 row = conn.execute(
                     text(
@@ -373,8 +377,10 @@ def test_scenario_1_golden_client_lifecycle(build_app):
                     ),
                     {"tid": _TENANT_A},
                 ).scalar()
-            outbox_populated = row is not None and row >= 0
-            result["steps"]["projection_outbox_created"] = outbox_populated
+            assert row is not None and row > 0, (
+                f"identity_projection_outbox must have at least 1 entry after role mutation, got {row}"
+            )
+            result["steps"]["projection_outbox_created"] = True
             result["steps"]["projection_outbox_count"] = row
 
             # ── Carol's console access ────────────────────────────────────
@@ -410,52 +416,65 @@ def test_scenario_1_golden_client_lifecycle(build_app):
                 },
                 headers={"x-api-key": gov_key},
             )
-            if eng_r.status_code == 404:
-                result["steps"]["engagement_creation"] = "SKIPPED_ROUTE_NOT_MOUNTED"
-                result["steps"]["portal_delegation_via_tenant_admin"] = "SKIPPED"
-            else:
-                assert eng_r.status_code == 201, (
-                    f"Engagement creation failed: {eng_r.status_code} {eng_r.text}"
-                )
-                eng_id = eng_r.json()["id"]
-                result["steps"]["engagement_creation"] = "PASS"
-                result["steps"]["engagement_id"] = eng_id
+            assert eng_r.status_code == 201, (
+                f"Engagement creation failed: {eng_r.status_code} {eng_r.text}. "
+                f"Portal delegation proof requires a real engagement."
+            )
+            eng_id = eng_r.json()["id"]
+            result["steps"]["engagement_creation"] = "PASS"
+            result["steps"]["engagement_id"] = eng_id
 
-                # ── Dave: Alice provisions portal access via TENANT-ADMIN-001 ─
-                # This is the canonical tenant-admin portal delegation path.
-                # NOT /portal/grants (raw portal API) — that requires admin:write
-                # directly and is not the delegated-admin workflow.
-                _install_actor_override(
-                    app,
-                    subject=_ALICE_SUBJECT,
-                    tenant_id=_TENANT_A,
-                    membership_id=_ALICE_UID,
-                    role="tenant_admin",
-                )
-                portal_r = client.post(
-                    f"/admin/tenants/{_TENANT_A}/portal-access/invite",
-                    json={
-                        "engagement_id": eng_id,
-                        "portal_role": "general",
-                        "ttl_days": 14,
-                    },
-                    headers={"x-api-key": alice_key},
-                )
-                assert portal_r.status_code in {200, 201}, (
-                    f"Alice could not create portal access for Dave: "
-                    f"{portal_r.status_code} {portal_r.text}"
-                )
-                result["steps"]["portal_delegation_via_tenant_admin"] = "PASS"
-                result["steps"]["dave_portal_grant_created"] = True
+            # ── Dave: Alice provisions portal access via TENANT-ADMIN-001 ─
+            # This is the canonical tenant-admin portal delegation path.
+            # NOT /portal/grants (raw portal API) — that requires admin:write
+            # directly and is not the delegated-admin workflow.
+            _install_actor_override(
+                app,
+                subject=_ALICE_SUBJECT,
+                tenant_id=_TENANT_A,
+                membership_id=_ALICE_UID,
+                role="tenant_admin",
+            )
+            portal_r = client.post(
+                f"/admin/tenants/{_TENANT_A}/portal-access/invite",
+                json={
+                    "engagement_id": eng_id,
+                    "portal_role": "general",
+                    "ttl_days": 14,
+                },
+                headers={"x-api-key": alice_key},
+            )
+            assert portal_r.status_code in {200, 201}, (
+                f"Alice could not create portal access for Dave: "
+                f"{portal_r.status_code} {portal_r.text}"
+            )
+            result["steps"]["portal_delegation_via_tenant_admin"] = "PASS"
+            result["steps"]["dave_portal_grant_created"] = True
 
-                # ── Dave: portal access grants; console access denied ─────
-                # Dave has no console role; verify console routes deny him.
-                # (Portal authentication is a runtime grant-secret check not
-                # reproducible without the secret; we verify the grant EXISTS
-                # and that Dave has no console role classification.)
-                _clear_actor_override(app)
-                dave_has_console_role = False  # Dave has no role in tenant_users
-                result["steps"]["dave_cannot_enter_console"] = not dave_has_console_role
+            # ── Dave: portal access grants; console access denied ─────────
+            # Dave is a portal-only user: he has no tenant_admin role and no
+            # tenant_users row for console operations.  Verify that a console
+            # admin route (list users) denies him even when the API key scope
+            # would otherwise allow it.
+            _dave_subject = "auth0|e2e-001-dave-portal"
+            _dave_uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, "dave.e2e001.portal"))
+            _install_actor_override(
+                app,
+                subject=_dave_subject,
+                tenant_id=_TENANT_A,
+                membership_id=_dave_uid,
+                role="client_read_only",  # portal-only; no admin permission
+            )
+            dave_console_r = client.get(
+                f"/admin/tenants/{_TENANT_A}/users",
+                headers={"x-api-key": alice_key},  # same scope; different role
+            )
+            assert dave_console_r.status_code in {403, 404}, (
+                f"Dave (portal-only, client_read_only role) must be denied console "
+                f"admin access, got {dave_console_r.status_code}"
+            )
+            result["steps"]["dave_console_denied_status"] = dave_console_r.status_code
+            result["steps"]["dave_cannot_enter_console"] = True
 
             _clear_actor_override(app)
             result["status"] = "PASS"
@@ -578,26 +597,48 @@ def test_scenario_2_cross_tenant_adversarial(build_app):
             )
             result["denials"]["alice_cannot_list_tenant_b_users"] = r.status_code
 
-            # ── IDOR: Alice's key cannot fetch Bob's membership by UUID ───
-            # Bob's membership ID is valid in Tenant B but must be denied for
-            # Tenant A's key.
+            # ── IDOR: Alice's governance key cannot read a Tenant B engagement ─
+            # Create a real engagement owned by Tenant B, then prove Tenant A's
+            # governance key is denied when it tries to fetch that object.
             gov_key_a = _governance_key(_TENANT_A)
+            gov_key_b = _governance_key(_TENANT_B)
             _clear_actor_override(app)
-            r = client.get(
-                f"/field-assessment/engagements/{_BOB_UID}",
-                headers={"x-api-key": gov_key_a},
-            )
-            assert r.status_code in {403, 404}, (
-                f"Tenant A key should be denied Tenant B engagement ID, got {r.status_code}"
-            )
-            result["denials"]["idor_tenant_a_key_denied_tenant_b_object_id"] = (
-                r.status_code
-            )
 
-            # ── No oracle: verify error codes are uniform ─────────────────
+            eng_b_r = client.post(
+                "/field-assessment/engagements",
+                json={
+                    "client_name": "Tenant B IDOR Probe",
+                    "assessor_id": "e2e-idor-probe",
+                    "assessment_type": "ai_governance",
+                },
+                headers={"x-api-key": gov_key_b},
+            )
+            if eng_b_r.status_code == 404:
+                # Route not mounted; IDOR engagement test is inconclusive.
+                result["denials"]["idor_tenant_a_key_denied_tenant_b_engagement"] = (
+                    "SKIPPED_ROUTE_NOT_MOUNTED"
+                )
+            else:
+                assert eng_b_r.status_code == 201, (
+                    f"Tenant B engagement creation failed: {eng_b_r.status_code} {eng_b_r.text}"
+                )
+                eng_b_id = eng_b_r.json()["id"]
+                r = client.get(
+                    f"/field-assessment/engagements/{eng_b_id}",
+                    headers={"x-api-key": gov_key_a},
+                )
+                assert r.status_code in {403, 404}, (
+                    f"Tenant A key must be denied Tenant B engagement, got {r.status_code}"
+                )
+                result["denials"]["idor_tenant_a_key_denied_tenant_b_engagement"] = (
+                    r.status_code
+                )
+
+            # ── No oracle: verify HTTP error codes are uniform ────────────
             # Wrong-tenant and not-admin errors must return the same HTTP status
-            # (no oracle differentiation that reveals tenant existence)
-            codes = set(result["denials"].values())
+            # (no oracle differentiation that reveals tenant existence).
+            # Filter non-integer sentinels (SKIPPED_*) before the uniformity check.
+            codes = {v for v in result["denials"].values() if isinstance(v, int)}
             assert codes.issubset({403, 404}), (
                 f"Cross-tenant denials produced unexpected status codes: {codes}"
             )
@@ -1080,26 +1121,91 @@ def test_scenario_5_evidence_and_revenue_gate():
 # ---------------------------------------------------------------------------
 
 
+def _resolve_postgres_dsn() -> str | None:
+    """Return a usable Postgres DSN, or None if infrastructure is unavailable.
+
+    Priority:
+    1. FG_POSTGRES_DSN env var (explicit override)
+    2. FG_DB_URL env var (Makefile lane)
+    3. Docker container IP lookup (local dev)
+    """
+    dsn = os.environ.get("FG_POSTGRES_DSN", "").strip()
+    if dsn:
+        return dsn
+    dsn = os.environ.get("FG_DB_URL", "").strip()
+    if dsn:
+        return dsn
+    try:
+        cid_proc = subprocess.run(
+            ["docker", "compose", "ps", "-q", "postgres"],
+            cwd=_REPO,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        container_id = cid_proc.stdout.strip()
+        if not container_id:
+            return None
+        ip_proc = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "-f",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                container_id,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        container_ip = ip_proc.stdout.strip()
+        if container_ip:
+            return (
+                f"postgresql+psycopg://fg_app:fg_password@{container_ip}:5432/frostgate"
+            )
+    except Exception:
+        pass
+    return None
+
+
 def _run_postgres_verify() -> dict:
-    """Run make db-postgres-verify and return structured result."""
+    """Run the postgres RLS test suite and return a structured result.
+
+    Runs pytest directly (not via make) so FG_POSTGRES_TESTS=1 can be injected
+    without relying on the Compose network hostname.
+    """
+    import re as _re
+
     result: dict[str, Any] = {"status": "UNKNOWN"}
     try:
+        dsn = _resolve_postgres_dsn()
+        if not dsn:
+            result["status"] = "INFRASTRUCTURE_UNAVAILABLE"
+            result["reason"] = (
+                "No Postgres DSN found (FG_POSTGRES_DSN / FG_DB_URL not set, "
+                "Docker container IP lookup returned nothing)."
+            )
+            return result
+
+        pytest_bin = str(_REPO / ".venv" / "bin" / "pytest")
         proc = subprocess.run(
-            ["make", "db-postgres-verify"],
+            [pytest_bin, "-q", "tests/postgres/"],
             cwd=_REPO,
             capture_output=True,
             text=True,
             timeout=300,
+            env={
+                **os.environ,
+                "FG_POSTGRES_TESTS": "1",
+                "FG_POSTGRES_DSN": dsn,
+                "FG_ENV": "test",
+            },
         )
         result["exit_code"] = proc.returncode
+        result["dsn_host"] = dsn.split("@")[-1] if "@" in dsn else "redacted"
         result["stdout_tail"] = proc.stdout[-2000:] if proc.stdout else ""
         result["stderr_tail"] = proc.stderr[-1000:] if proc.stderr else ""
         if proc.returncode == 0:
-            # Distinguish "all skipped" from "tests actually ran and passed".
-            # If FG_POSTGRES_TESTS is not set, every test skips and exit is 0 — but
-            # that is not a valid RLS proof. Require at least one passing test.
-            import re as _re
-
             passed_count_m = _re.search(r"(\d+) passed", proc.stdout or "")
             all_skipped = " passed" not in (proc.stdout or "") and "skipped" in (
                 proc.stdout or ""
@@ -1107,29 +1213,36 @@ def _run_postgres_verify() -> dict:
             if all_skipped:
                 result["status"] = "INFRASTRUCTURE_UNAVAILABLE"
                 result["reason"] = (
-                    "All postgres tests were skipped (FG_POSTGRES_TESTS not set). "
-                    "Set FG_POSTGRES_TESTS=1 and re-run to obtain a valid RLS proof."
+                    "All postgres tests were skipped (Postgres not reachable)"
                 )
             else:
                 result["status"] = "PASS"
                 result["passed_count"] = (
                     int(passed_count_m.group(1)) if passed_count_m else 0
                 )
-        elif "Cannot connect" in proc.stderr or "docker" in proc.stderr.lower():
-            result["status"] = "INFRASTRUCTURE_UNAVAILABLE"
-            result["reason"] = (
-                "Docker/Postgres infrastructure not available in this environment"
-            )
         else:
             result["status"] = "FAIL"
-            result["reason"] = "db-postgres-verify returned non-zero exit code"
+            result["reason"] = "postgres tests returned non-zero exit code"
     except subprocess.TimeoutExpired:
         result["status"] = "TIMEOUT"
-        result["reason"] = "db-postgres-verify exceeded 300s timeout"
+        result["reason"] = "postgres verify exceeded 300s timeout"
     except FileNotFoundError:
         result["status"] = "INFRASTRUCTURE_UNAVAILABLE"
-        result["reason"] = "make not found or Makefile not reachable"
+        result["reason"] = "pytest not found in .venv"
+    except Exception as exc:
+        result["status"] = "INFRASTRUCTURE_UNAVAILABLE"
+        result["reason"] = f"postgres verify error: {exc}"
     return result
+
+
+_REQUIRED_SCENARIOS = frozenset(
+    {
+        "1_golden_path",
+        "2_cross_tenant_adversarial",
+        "3_authority_lifecycle",
+        "4_delegation_ceiling",
+    }
+)
 
 
 def _calculate_revenue_gate(postgres_result: dict) -> None:
@@ -1137,11 +1250,22 @@ def _calculate_revenue_gate(postgres_result: dict) -> None:
     conditions: list[str] = []
     risks: list[str] = []
 
-    # Evaluate scenario results
+    # Require all four scenarios to have run — a missing key means the test
+    # that populates it did not execute, which is a gate failure.
+    missing_scenarios = _REQUIRED_SCENARIOS - set(_EVIDENCE["scenarios"].keys())
+    if missing_scenarios:
+        _EVIDENCE["CLIENT_REVENUE_GATE"] = "FAIL"
+        _EVIDENCE["CONTROLLED_PAID_PILOT"] = "BLOCKED"
+        _EVIDENCE["UNRESTRICTED_SELF_SERVICE"] = "BLOCKED"
+        _EVIDENCE["failure_reason"] = (
+            f"Required scenarios did not run: {sorted(missing_scenarios)}"
+        )
+        return
+
     scenario_failures = [
         name
-        for name, s in _EVIDENCE["scenarios"].items()
-        if s.get("status") not in {"PASS"}
+        for name in _REQUIRED_SCENARIOS
+        if _EVIDENCE["scenarios"][name].get("status") not in {"PASS"}
     ]
     all_scenarios_pass = len(scenario_failures) == 0
 
