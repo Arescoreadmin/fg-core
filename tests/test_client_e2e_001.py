@@ -1329,16 +1329,23 @@ def _calculate_revenue_gate(postgres_result: dict) -> None:
 
 
 def _write_evidence_artifact() -> None:
-    """Write the sanitized evidence artifact to contracts/artifacts/identity/."""
-    artifact_dir = _REPO / "contracts" / "artifacts" / "identity"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path = artifact_dir / "client-e2e-001-evidence.json"
+    """Write the sanitized evidence artifact to contracts/artifacts/identity/.
 
-    # Safety check: ensure no secrets are included
+    Only writes when FG_WRITE_EVIDENCE=1 is set.  During normal pytest runs
+    (codex_gates, fg-fast) the gate logic and assertions still execute but the
+    file is not touched, keeping the working tree clean for MCIM.
+    """
+    # Safety check: ensure no secrets are included regardless of write mode
     raw = json.dumps(_EVIDENCE)
     for forbidden in ("password", "bearer ", "client_secret", "x-api-key: "):
         assert forbidden.lower() not in raw.lower(), (
             f"Evidence artifact must not contain {forbidden!r}"
         )
 
+    if os.environ.get("FG_WRITE_EVIDENCE", "").strip() != "1":
+        return
+
+    artifact_dir = _REPO / "contracts" / "artifacts" / "identity"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / "client-e2e-001-evidence.json"
     artifact_path.write_text(json.dumps(_EVIDENCE, indent=2, default=str))
