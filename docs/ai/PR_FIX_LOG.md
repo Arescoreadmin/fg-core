@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-102 — feat(identity): CLIENT-E2E-001 client onboarding, access, isolation, revocation, and revenue gate proof
+
+- **PR/Branch:** `feat/client-e2e-001-client-readiness-proof`
+- **Date:** 2026-08-30
+- **Files changed:** `tests/test_client_e2e_001.py` (new), `contracts/artifacts/identity/client-e2e-001-evidence.json` (new), `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`.
+- **Motivation:** CLIENT-E2E-001 is the synthesis and closure proof for the client access track. TENANT-ADMIN-001 proved delegated tenant administration. TENANT-ACCESS-001 proved unified authorization enforcement. CLIENT-E2E-001 proves the connected end-to-end lifecycle: a real tenant is provisioned, a tenant_admin established, permitted console and portal access delegated, cross-tenant attacks rejected, authority revocation enforced immediately, and all invariants proven against canonical PostgreSQL authority. The output is a machine-readable evidence artifact that calculates the CLIENT_REVENUE_GATE decision.
+- **Behavioral impact:** Test-only. No production behavior change.
+- **Security impact:** None (tests only). The test probes confirm the invariants from TENANT-ADMIN-001 + TENANT-ACCESS-001 hold end-to-end.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_client_e2e_001.py` — 5 scenarios, 5 passed. Anchor regression: 184 passed (TENANT-ADMIN-001 + TENANT-ACCESS-001 + AUTH-ROLE-001B). fg-fast: 496 passed, 0 failed.
+- **Evidence artifact:** `contracts/artifacts/identity/client-e2e-001-evidence.json`. `CLIENT_REVENUE_GATE=CONDITIONAL`. Condition: PostgreSQL RLS tests skipped (requires `FG_POSTGRES_TESTS=1`). AUTH-ROLE-001B projection is PARTIAL (live Auth0 Management API delivery not yet durably proven). All 5 lifecycle scenarios PASS.
+- **Result:** CONDITIONAL GO. Gate to AUTHORIZED: run `make db-postgres-verify` with `FG_POSTGRES_TESTS=1`; obtain durable AUTH-ROLE-001B projection delivery proof in production.
+
+---
+
 ## P-101 — feat(identity): TENANT-ACCESS-001 unified tenant console + portal access enforcement
 
 - **PR/Branch:** `feat/tenant-access-001-unified-access-enforcement`

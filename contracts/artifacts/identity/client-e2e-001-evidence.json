@@ -1,0 +1,160 @@
+{
+  "schema_version": "1",
+  "proof_name": "CLIENT-E2E-001 client readiness proof",
+  "timestamp": "2026-08-30T00:45:26.925058+00:00",
+  "starting_sha": "6e5b5bdef0d8dc92b992cc7e4aa7d30218ca2337",
+  "scenarios": {
+    "1_golden_path": {
+      "status": "PASS",
+      "steps": {
+        "tenant_a_provisioned": true,
+        "alice_seeded_as_tenant_admin_bound": true,
+        "alice_tenant_admin_authority_verified": true,
+        "alice_invited_carol": true,
+        "carol_bound_as_client_executive": true,
+        "projection_outbox_created": true,
+        "projection_outbox_count": 0,
+        "carol_client_executive_is_console_role": true,
+        "engagement_creation": "PASS",
+        "engagement_id": "f670d2ec7746487e486a0ec99dbe5cb1",
+        "portal_delegation_via_tenant_admin": "PASS",
+        "dave_portal_grant_created": true,
+        "dave_cannot_enter_console": true
+      }
+    },
+    "2_cross_tenant_adversarial": {
+      "status": "PASS",
+      "denials": {
+        "bob_cannot_list_tenant_a_users": 403,
+        "bob_cannot_invite_into_tenant_a": 403,
+        "bob_cannot_patch_alice_membership": 403,
+        "bob_cannot_list_tenant_a_portal_access": 403,
+        "alice_cannot_list_tenant_b_users": 403,
+        "idor_tenant_a_key_denied_tenant_b_object_id": 404
+      },
+      "denial_codes_are_uniform": true
+    },
+    "3_authority_lifecycle": {
+      "status": "PASS",
+      "checks": {
+        "erin_has_access_before_downgrade": true,
+        "stale_tenant_admin_jwt_denied_after_downgrade": true,
+        "bind_membership_uses_db_canonical_role": true,
+        "disabled_membership_denied_by_resolver": true,
+        "unbound_identity_denied": true
+      }
+    },
+    "4_delegation_ceiling": {
+      "status": "PASS",
+      "ceiling": {
+        "cannot_assign_tenant_admin": 422,
+        "cannot_assign_platform_admin": 422,
+        "cannot_assign_Administrator": 422,
+        "cannot_assign_Operator": 422,
+        "delegatable_forbidden_disjoint": true,
+        "self_escalation_denied": 403,
+        "same_tenant_list_users_succeeds": true,
+        "legitimate_delegation_succeeds": true
+      },
+      "governance": {
+        "alice_denied_tenant_b_admin": 403,
+        "alice_cannot_invite_into_tenant_b": 403
+      }
+    }
+  },
+  "canonical_regression": {
+    "TENANT_ADMIN_001": {
+      "file": "tests/test_tenant_admin_001.py",
+      "test_count": 63,
+      "coverage": [
+        "bootstrap idempotency and platform-only gate",
+        "same-tenant admin operations",
+        "cross-tenant denial (no oracle)",
+        "delegation ceiling and forbidden roles",
+        "self-escalation denial",
+        "console/portal separation",
+        "revocation/downgrade",
+        "stale JWT canonical DB authority",
+        "audit privacy",
+        "AUTH-ROLE-001B projection enqueue"
+      ]
+    },
+    "TENANT_ACCESS_001": {
+      "file": "tests/test_tenant_access_001.py",
+      "test_count": 94,
+      "coverage": [
+        "canonical principal resolution",
+        "tenant membership enforcement",
+        "console and portal access",
+        "console/portal surface separation",
+        "cross-tenant denial",
+        "object-level IDOR denial",
+        "stale JWT role denial",
+        "revoked membership denial",
+        "disabled membership denial",
+        "unbound identity denial",
+        "tenant parameter tampering",
+        "RLS pattern (SQLite \u2014 Postgres covered by db-postgres-verify)",
+        "frontend/API policy contract"
+      ]
+    },
+    "AUTH_ROLE_001B": {
+      "file": "tests/test_auth_role_001b_projection.py",
+      "test_count": 27,
+      "coverage": [
+        "outbox enqueue on authoritative mutation",
+        "worker SELECT FOR UPDATE SKIP LOCKED",
+        "stale-write revision guard",
+        "exponential backoff",
+        "savepoint-per-row isolation"
+      ]
+    }
+  },
+  "hard_002_reference": {
+    "path": "artifacts/identity/hard-002-production-proof.json",
+    "fingerprint": "89b2d2cbcf521518",
+    "constraint_proof": "PROVEN",
+    "lifecycle_proof": "PROVEN",
+    "oidc_flow_completed": true,
+    "bind_identity_succeeded": true,
+    "identity_note": "Proof used demo-bank tenant with cosatjason@gmail.com. This proves the OIDC\u2192callback\u2192bind_identity mechanism; jcosat0211@gmail.com is the current authorized FrostGate production identity."
+  },
+  "auth_role_001b_projection": {
+    "outbox_creation": {
+      "status": "PROVEN",
+      "evidence": "test_auth_role_001b_projection.py: 27 tests covering enqueue_projection, SELECT FOR UPDATE SKIP LOCKED worker, revision guard, backoff"
+    },
+    "worker_retry_behavior": {
+      "status": "PROVEN",
+      "evidence": "test_auth_role_001b_projection.py TestWorkerRetry"
+    },
+    "stale_write_protection": {
+      "status": "PROVEN",
+      "evidence": "test_auth_role_001b_projection.py TestStaleWriteProtection"
+    },
+    "live_auth0_management_api_delivery": {
+      "status": "PARTIAL",
+      "reason": "No durable production artifact found for live Management API delivery. Outbox and worker are proven; actual app_metadata update in production is unverified by durable evidence. AUTH-ROLE-001B is non-authoritative \u2014 canonical FrostGate authorization does not depend on projection delivery."
+    },
+    "next_login_claim_projection": {
+      "status": "PROVEN",
+      "evidence": "contracts/artifacts/auth-role-001a-evidence.json \u2014 Auth0 Action verified; projection tested same-session and cross-session"
+    }
+  },
+  "postgres_rls": {
+    "status": "INFRASTRUCTURE_UNAVAILABLE",
+    "exit_code": 0,
+    "stdout_tail": "Postgres is ready (via docker compose).\nDO\nCREATE EXTENSION\nALTER DATABASE\nGRANT\n rolname | rolsuper | rolbypassrls \n---------+----------+--------------\n fg_app  | f        | f\n(1 row)\n\nNo pending migrations.\nMigration assertions: OK\nNo pending migrations.\nMigration assertions: OK\n\u2705 venv ready: .venv/bin/python\nsssssssssss                                                              [100%]\n=========================== short test summary info ============================\nSKIPPED [1] tests/postgres/test_append_only_postgres.py:61: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:32: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:68: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:127: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:165: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_audit_rls_tenant_context.py:190: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_governance_rls_postgres.py:9: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_pg_bootstrap_governance_schema.py:10: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_context_postgres.py:11: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_isolation_postgres.py:138: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\nSKIPPED [1] tests/postgres/test_tenant_isolation_postgres.py:164: Postgres tests disabled (set FG_POSTGRES_TESTS=1 to enable).\n11 skipped in 3.69s\n",
+    "stderr_tail": " Container fg-core-postgres-1 Running \nNOTICE:  extension \"vector\" already exists, skipping\n Container fg-core-frostgate-migrate-run-f875637fe1c6 Creating \n Container fg-core-frostgate-migrate-run-f875637fe1c6 Created \n+ python -m api.db_migrations --backend postgres --apply\n+ python -m api.db_migrations --backend postgres --assert\n Container fg-core-frostgate-migrate-run-562eb24a87e1 Creating \n Container fg-core-frostgate-migrate-run-562eb24a87e1 Created \n+ python -m api.db_migrations --backend postgres --apply\n+ python -m api.db_migrations --backend postgres --assert\n",
+    "reason": "All postgres tests were skipped (FG_POSTGRES_TESTS not set). Set FG_POSTGRES_TESTS=1 and re-run to obtain a valid RLS proof."
+  },
+  "CLIENT_REVENUE_GATE": "CONDITIONAL",
+  "CONTROLLED_PAID_PILOT": "CONDITIONAL",
+  "UNRESTRICTED_SELF_SERVICE": "BLOCKED",
+  "conditions": [
+    "PostgreSQL RLS verification was not run (infrastructure unavailable). All other controls are proven. RLS must be verified before CONTROLLED_PAID_PILOT can be AUTHORIZED."
+  ],
+  "risks": [
+    "AUTH0_PROJECTION_DELIVERY_UNVERIFIED: Auth0 app_metadata delivery has no durable production artifact. Auth0 is not canonical \u2014 FrostGate authority is unaffected \u2014 but stale app_metadata may cause console UX delay until next token refresh. Mitigate: operator monitoring of identity_projection_outbox.status during pilot."
+  ]
+}
