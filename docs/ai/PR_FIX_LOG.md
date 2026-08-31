@@ -1,5 +1,24 @@
 # PR Fix Log (Strict)
 
+## P-105 — feat(identity): AUTH-ROLE-001C production projection delivery proof
+
+- **PR/Branch:** `feat/auth-role-001c-production-projection-proof` — PR open 2026-08-30
+- **Date:** 2026-08-30
+- **Files changed:** `tests/test_auth_role_001c_live_proof.py` (new), `contracts/artifacts/identity/auth-role-001c-evidence.json` (new), `ROADMAP.md` (001C-WORKER-DEPLOYMENT → COMPLETE, 001C row added), `docs/ai/PR_FIX_LOG.md` (P-105).
+- **Motivation:** AUTH-ROLE-001C-WORKER-DEPLOYMENT (PR #668) proved the worker entrypoint exists and the Railway service is deployed. This PR delivers the surgical production proof: does the live Railway worker actually consume an outbox row enqueued by a real authoritative FrostGate mutation and push the correct `app_metadata` into Auth0? Does canonical revocation take effect immediately in FrostGate before Auth0 convergence (the critical CANONICAL_AUTHZ_INDEPENDENT invariant)?
+- **Test design:** `tests/test_auth_role_001c_live_proof.py` — 4 pytest functions comprising 7 logical phases. All production interaction is gated behind `FG_LIVE_PROOF=1`; artifact write is gated behind `FG_WRITE_EVIDENCE=1`. Normal CI runs with neither flag; the entire file is marked `skipif(not FG_LIVE_PROOF)`.
+- **Phase structure:** (1) Pre-flight — Railway worker health via outbox backlog probe, controlled principal (`jcosat0211@gmail.com`) resolved from `fg_external_identities`, Auth0 BEFORE `app_metadata` captured, starting `projection_revision` recorded. (2) Authoritative mutation — `PATCH /admin/tenants/{tenant_id}/users/{membership_id}` assigns `auditor` role, canonical DB confirms, outbox row verified. (3) Worker delivery poll — max 90s / 5s intervals (covers 3 × 30s poll cycles), asserts `status=done`, `processed_at != null`, revision matches; attempt_count recorded (retries not a failure). (4) Auth0 verification — Management API reads `app_metadata`; asserts `principal_id`, `roles`, `projection_revision` all match. (5) Canonical revocation — removes role, immediately reads canonical DB; asserts revocation visible at DB layer before Auth0 convergence; `CANONICAL_AUTHZ_INDEPENDENT=PROVEN` recorded. (6) Revocation convergence — polls revocation outbox to done (max 90s); reads Auth0 `app_metadata`, asserts proof role absent and revision incremented. (7) Manual boundary — exact token-convergence verification steps emitted as log message; does not block phases 1–6.
+- **Security invariants:** No secrets, tokens, Authorization headers, raw JWTs, passwords, or cookies in `_EVIDENCE` or the artifact. Auth0 user identifiers hashed (SHA-256 prefix, 16 chars). `_runtime` sub-dict (contains raw `auth0_subject`) popped before artifact write. Secret scan (`for forbidden in [...]`) runs before every artifact write with `FG_WRITE_EVIDENCE=1`. All identifiers resolved at runtime from env/DB — none hard-coded in source.
+- **Cleanup semantics:** Phase 2 role assignment is wrapped in try/finally. If any phase after assignment fails before phase 5 (revocation), the `except` block restores the controlled principal to its original role and verifies the restore. Phase 6 verifies final canonical state matches original. `ORIGINAL_STATE_RESTORED=PROVEN` recorded in evidence.
+- **Unconditional invariants:** `AUTH0_PROJECTION_RECONCILIATION=ABSENT` and `UNRESTRICTED_SELF_SERVICE=CONDITIONAL` recorded regardless of proof outcome. A successful delivery proof does not make reconciliation exist.
+- **Evidence artifact:** `contracts/artifacts/identity/auth-role-001c-evidence.json` — placeholder committed with `PENDING_LIVE_RUN` values; populated by `FG_LIVE_PROOF=1 FG_WRITE_EVIDENCE=1 pytest -v tests/test_auth_role_001c_live_proof.py`.
+- **Behavioral impact:** Test infrastructure only. No production behavior change. No new routes. No DB changes. No new migrations.
+- **Security impact:** None weakening. No authorization behavior change. No tenant-isolation change. No RLS change.
+- **Schema/API impact:** None.
+- **CI behavior:** `make fg-fast`, `make fg-security`, `make fg-contract`, `make release-gate`, `bash scripts/ci/codex_gates.sh` all pass without `FG_LIVE_PROOF`. Live phases skip cleanly.
+
+---
+
 ## P-104 — feat(identity): AUTH-ROLE-001C worker deployment prerequisite
 
 - **PR/Branch:** `feat/auth-role-001c-worker-deployment` — PR open 2026-08-30
