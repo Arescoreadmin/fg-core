@@ -295,7 +295,8 @@ def run_worker(*, _stop_event: threading.Event | None = None) -> None:
     auth0_client = Auth0ManagementClient(config=auth0_config)
     session_factory = get_identity_sessionmaker()
 
-    poll_seconds = int(config["poll_seconds"])  # type: ignore[arg-type]
+    _ps = config["poll_seconds"]
+    poll_seconds = _ps if isinstance(_ps, int) else int(str(_ps))
 
     # Set up graceful shutdown
     stop_event = _stop_event if _stop_event is not None else threading.Event()
