@@ -45,6 +45,52 @@ class Auth0ManagementError(RuntimeError):
         self.status = status
 
 
+class Auth0RateLimitError(Auth0ManagementError):
+    """Raised when Auth0 returns HTTP 429 Too Many Requests.
+
+    ``retry_after`` is the number of seconds to wait before retrying,
+    parsed from the ``Retry-After`` response header (integer seconds or
+    HTTP-date).  Defaults to 60 if the header is absent or unparseable.
+    """
+
+    def __init__(self, retry_after: int = 60) -> None:
+        super().__init__("AUTH0_RATE_LIMITED", 429)
+        self.retry_after = retry_after
+
+
+def _parse_retry_after(header_value: str | None) -> int:
+    """Parse the Retry-After header into an integer number of seconds.
+
+    Supports:
+    - Integer string: ``"30"``
+    - HTTP-date: ``"Mon, 01 Jan 2026 00:00:00 GMT"``
+
+    Returns 60 on any parse failure.
+    """
+    if not header_value:
+        return 60
+    # Try integer first
+    try:
+        return max(1, int(header_value.strip()))
+    except ValueError:
+        pass
+    # Try HTTP-date
+    import email.utils
+    import calendar
+    import time as _time
+
+    try:
+        parsed = email.utils.parsedate(header_value.strip())
+        if parsed:
+            retry_epoch = calendar.timegm(parsed)
+            now_epoch = _time.time()
+            wait = int(retry_epoch - now_epoch)
+            return max(1, wait)
+    except Exception:
+        pass
+    return 60
+
+
 class Auth0ManagementClient:
     """Synchronous wrapper around the Auth0 Management API v2.
 
@@ -278,7 +324,12 @@ class Auth0ManagementClient:
     # ------------------------------------------------------------------
 
     def _patch(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        """PATCH helper with retry-on-401.  Token/secret fields are never logged."""
+        """PATCH helper with retry-on-401 and distinct 429 handling.
+
+        Token/Authorization headers and secret fields are never logged.
+        On HTTP 429, raises ``Auth0RateLimitError`` with the parsed
+        ``Retry-After`` value so callers can back off appropriately.
+        """
         resp = httpx.patch(
             f"{self._config.mgmt_base_url}{path}",
             headers=self._token_headers(),
@@ -293,7 +344,20 @@ class Auth0ManagementClient:
                 json=body,
                 timeout=10.0,
             )
+        if resp.status_code == 429:
+            retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
+            log.warning(
+                "auth0.management.rate_limited path=%s retry_after=%ds",
+                path,
+                retry_after,
+            )
+            raise Auth0RateLimitError(retry_after=retry_after)
         if resp.status_code not in (200,):
+            log.warning(
+                "auth0.management.patch_failed path=%s status=%d",
+                path,
+                resp.status_code,
+            )
             raise Auth0ManagementError(
                 f"MGMT_PATCH_FAILED:{resp.status_code}", resp.status_code
             )
