@@ -148,7 +148,7 @@ function ConsoleUsersTab({ tenantId, onConfigureIdentity, onRefreshLifecycle }: 
 
   async function patch(userId: string, active: boolean) {
     setError(null);
-    try { await coreApi(`workforce/users/${userId}`, tenantId, { method: 'PATCH', body: JSON.stringify({ active }) }); await load(); }
+    try { await coreApi(`workforce/users/${userId}`, tenantId, { method: 'PATCH', body: JSON.stringify({ active }) }); await load(); void onRefreshLifecycle(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Update failed'); }
   }
 
@@ -250,9 +250,30 @@ function LifecycleBanner({
 }: {
   lifecycle: ClientLifecycle | null;
   lifecycleError: string | null;
-  onBootstrapAdmin: () => Promise<void>;
+  onBootstrapAdmin: (email: string, displayName: string) => Promise<void>;
   onConfigureIdentity: () => void;
 }) {
+  const [showBootstrapForm, setShowBootstrapForm] = useState(false);
+  const [bootstrapEmail, setBootstrapEmail] = useState('');
+  const [bootstrapName, setBootstrapName] = useState('');
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+
+  async function handleBootstrap() {
+    setBootstrapping(true);
+    setBootstrapError(null);
+    try {
+      await onBootstrapAdmin(bootstrapEmail, bootstrapName);
+      setShowBootstrapForm(false);
+      setBootstrapEmail('');
+      setBootstrapName('');
+    } catch (e) {
+      setBootstrapError(e instanceof Error ? e.message : 'Bootstrap failed');
+    } finally {
+      setBootstrapping(false);
+    }
+  }
+
   // No banner when fully healthy (operational with no warnings)
   if (lifecycle?.operational && lifecycle.warnings.length === 0) return null;
 
@@ -290,15 +311,61 @@ function LifecycleBanner({
           </div>
         )}
         {lifecycle.next_actions.length > 0 && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && (
-              <button
-                style={s.primaryBtn}
-                onClick={() => { void onBootstrapAdmin(); }}
-                data-testid="lifecycle-cta-bootstrap-admin"
-              >
-                Bootstrap admin
-              </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && !showBootstrapForm && (
+              <div>
+                <button
+                  style={s.primaryBtn}
+                  onClick={() => setShowBootstrapForm(true)}
+                  data-testid="lifecycle-cta-bootstrap-admin"
+                >
+                  Bootstrap admin
+                </button>
+              </div>
+            )}
+            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && showBootstrapForm && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={s.field}>
+                  Admin email (required)
+                  <input
+                    style={s.input}
+                    type="email"
+                    value={bootstrapEmail}
+                    onChange={e => setBootstrapEmail(e.target.value)}
+                    placeholder="admin@client.com"
+                    autoFocus
+                  />
+                </label>
+                <label style={s.field}>
+                  Display name (optional)
+                  <input
+                    style={s.input}
+                    value={bootstrapName}
+                    onChange={e => setBootstrapName(e.target.value)}
+                    placeholder="Jane Smith"
+                  />
+                </label>
+                {bootstrapError && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--danger, #dc2626)' }}>{bootstrapError}</div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    style={s.secondaryBtn}
+                    onClick={() => { setShowBootstrapForm(false); setBootstrapEmail(''); setBootstrapName(''); setBootstrapError(null); }}
+                    disabled={bootstrapping}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={s.primaryBtn}
+                    onClick={() => { void handleBootstrap(); }}
+                    disabled={bootstrapping || !bootstrapEmail}
+                    data-testid="lifecycle-cta-bootstrap-admin-submit"
+                  >
+                    {bootstrapping ? 'Bootstrapping…' : 'Bootstrap admin'}
+                  </button>
+                </div>
+              </div>
             )}
             {lifecycle.next_actions.includes('BIND_ADMIN_IDENTITY') && (
               <button
@@ -571,11 +638,19 @@ export default function TenantDetailPage() {
       <LifecycleBanner
         lifecycle={lifecycle}
         lifecycleError={lifecycleError}
-        onBootstrapAdmin={async () => {
-          await fetch(`/api/core/admin/tenants/${encodeURIComponent(tenantId)}/bootstrap-admin?tenant_id=${encodeURIComponent(tenantId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
+        onBootstrapAdmin={async (email: string, displayName: string) => {
+          const res = await fetch(
+            `/api/core/admin/tenants/${encodeURIComponent(tenantId)}/bootstrap-admin?tenant_id=${encodeURIComponent(tenantId)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, display_name: displayName || undefined }),
+            },
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error((body as { detail?: { message?: string } } | null)?.detail?.message ?? `Bootstrap failed: HTTP ${res.status}`);
+          }
           await refreshLifecycle();
         }}
         onConfigureIdentity={() => { setIdentityInitialTab('config'); setTab('identity'); }}

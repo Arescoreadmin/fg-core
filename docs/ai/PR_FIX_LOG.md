@@ -1,5 +1,26 @@
 # PR Fix Log (Strict)
 
+## P-109 — fix(console): lifecycle refresh after user activation/deactivation
+
+- **PR/Branch:** `feat/client-lifecycle-002-console-integration`
+- **Date:** 2026-08-31
+- **Files changed:** `apps/console/app/admin/tenants/[tenantId]/page.tsx`
+- **Motivation:** Bot finding P2. `patch()` in `ConsoleUsersTab` called only `load()` after a successful PATCH, leaving the lifecycle banner stale. Deactivating the last active non-admin changes `NO_ACTIVE_MEMBERS`, and deactivating or reactivating an admin can change `lifecycle_state` itself (e.g., `operational` → `admin_unset`).
+- **Fix:** Added `void onRefreshLifecycle()` call in `patch()` after `await load()`, so lifecycle is re-evaluated from canonical state after every activation change.
+- **Behavioral impact:** Lifecycle banner updates immediately after deactivate/reactivate without requiring a full page reload.
+
+---
+
+## P-108 — fix(console): bootstrap-admin CTA requires email body
+
+- **PR/Branch:** `feat/client-lifecycle-002-console-integration`
+- **Date:** 2026-08-31
+- **Files changed:** `apps/console/app/admin/tenants/[tenantId]/page.tsx`
+- **Motivation:** Bot finding P1. `onBootstrapAdmin` posted `Content-Type: application/json` with no body. `POST /admin/tenants/{tenant_id}/bootstrap-admin` requires `BootstrapAdminBody.email` (required field). The empty body causes a 422 validation error, making the recovery CTA non-functional. Non-2xx responses were also silently swallowed.
+- **Fix:** `LifecycleBanner` now maintains inline form state (`showBootstrapForm`, `bootstrapEmail`, `bootstrapName`, `bootstrapping`, `bootstrapError`). Clicking "Bootstrap admin" reveals an email input (required) and display name (optional). The `handleBootstrap()` function calls `onBootstrapAdmin(email, displayName)` and surfaces errors inline. `onBootstrapAdmin` prop type updated from `() => Promise<void>` to `(email: string, displayName: string) => Promise<void>`. `TenantDetailPage`'s handler sends the body and throws on non-2xx so `LifecycleBanner` can display the error; `refreshLifecycle()` is called only on success.
+
+---
+
 ## P-107 — feat(console): CLIENT-LIFECYCLE-002 Console lifecycle integration + recovery
 
 - **PR/Branch:** `feat/client-lifecycle-002-console-integration`
