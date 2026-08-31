@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { IdentityGovernancePanel } from '@/components/identity';
 import { getIdentityReadiness, type IdentityReadiness } from '@/lib/identityApi';
+import { getClientLifecycle, type ClientLifecycle } from '@/lib/lifecycleApi';
 import { mapHttpError } from '@/lib/errors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ async function coreApi<T>(path: string, tenantId: string, options?: RequestInit)
 
 // ─── Console Users tab ────────────────────────────────────────────────────────
 
-function ConsoleUsersTab({ tenantId, onConfigureIdentity }: { tenantId: string; onConfigureIdentity: () => void }) {
+function ConsoleUsersTab({ tenantId, onConfigureIdentity, onRefreshLifecycle }: { tenantId: string; onConfigureIdentity: () => void; onRefreshLifecycle: () => Promise<void> }) {
   const [users, setUsers] = useState<ConsoleUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +132,7 @@ function ConsoleUsersTab({ tenantId, onConfigureIdentity }: { tenantId: string; 
       });
       setInviteResult(r); setShowInvite(false); setInviteEmail(''); setInviteName('');
       await load();
+      void onRefreshLifecycle();
       // Auto-send invite email
       setEmailStatus('sending');
       const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -232,6 +234,87 @@ function ConsoleUsersTab({ tenantId, onConfigureIdentity }: { tenantId: string; 
                 ))}
             </tbody>
           </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Lifecycle Banner ─────────────────────────────────────────────────────────
+
+function LifecycleBanner({
+  lifecycle,
+  lifecycleError,
+  onBootstrapAdmin,
+  onConfigureIdentity,
+}: {
+  lifecycle: ClientLifecycle | null;
+  lifecycleError: string | null;
+  onBootstrapAdmin: () => Promise<void>;
+  onConfigureIdentity: () => void;
+}) {
+  // No banner when fully healthy (operational with no warnings)
+  if (lifecycle?.operational && lifecycle.warnings.length === 0) return null;
+
+  if (lifecycleError !== null) {
+    return (
+      <div style={{ ...s.errorBanner, marginBottom: '1rem' }} data-testid="lifecycle-error-banner">
+        <strong>Lifecycle state unknown</strong>
+        <span> — tenant is not confirmed operational. Error: {lifecycleError}</span>
+      </div>
+    );
+  }
+
+  if (!lifecycle) return null;
+
+  const isWarningOnly = lifecycle.operational && lifecycle.warnings.length > 0;
+
+  return (
+    <div
+      style={isWarningOnly ? { ...s.warningBanner, marginBottom: '1rem' } : { ...s.errorBanner, marginBottom: '1rem' }}
+      data-testid="lifecycle-banner"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div>
+          <strong>Lifecycle: </strong>
+          <code style={{ fontSize: '0.8rem' }}>{lifecycle.lifecycle_state}</code>
+        </div>
+        {lifecycle.blockers.length > 0 && (
+          <div style={{ fontSize: '0.8rem' }}>
+            <strong>Blockers: </strong>{lifecycle.blockers.join(', ')}
+          </div>
+        )}
+        {lifecycle.warnings.length > 0 && (
+          <div style={{ fontSize: '0.8rem' }}>
+            <strong>Warnings: </strong>{lifecycle.warnings.join(', ')}
+          </div>
+        )}
+        {lifecycle.next_actions.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && (
+              <button
+                style={s.primaryBtn}
+                onClick={() => { void onBootstrapAdmin(); }}
+                data-testid="lifecycle-cta-bootstrap-admin"
+              >
+                Bootstrap admin
+              </button>
+            )}
+            {lifecycle.next_actions.includes('BIND_ADMIN_IDENTITY') && (
+              <button
+                style={s.secondaryBtn}
+                onClick={onConfigureIdentity}
+                data-testid="lifecycle-cta-bind-identity"
+              >
+                Configure identity
+              </button>
+            )}
+            {lifecycle.next_actions.includes('INVITE_MEMBERS') && (
+              <span style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
+                Invite members to activate the tenant for users.
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -449,6 +532,21 @@ export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const [tab, setTab] = useState<Tab>('users');
   const [identityInitialTab, setIdentityInitialTab] = useState<'scorecard' | 'config'>('scorecard');
+  const [lifecycle, setLifecycle] = useState<ClientLifecycle | null>(null);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+
+  const refreshLifecycle = useCallback(async () => {
+    const r = await getClientLifecycle(tenantId);
+    if (r.ok) {
+      setLifecycle(r.data);
+      setLifecycleError(null);
+    } else {
+      setLifecycle(null);
+      setLifecycleError(r.error);
+    }
+  }, [tenantId]);
+
+  useEffect(() => { void refreshLifecycle(); }, [refreshLifecycle]);
 
   const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
@@ -470,8 +568,27 @@ export default function TenantDetailPage() {
         ))}
       </div>
 
+      <LifecycleBanner
+        lifecycle={lifecycle}
+        lifecycleError={lifecycleError}
+        onBootstrapAdmin={async () => {
+          await fetch(`/api/core/admin/tenants/${encodeURIComponent(tenantId)}/bootstrap-admin?tenant_id=${encodeURIComponent(tenantId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          await refreshLifecycle();
+        }}
+        onConfigureIdentity={() => { setIdentityInitialTab('config'); setTab('identity'); }}
+      />
+
       <div style={s.card}>
-        {tab === 'users' && <ConsoleUsersTab tenantId={tenantId} onConfigureIdentity={() => { setIdentityInitialTab('config'); setTab('identity'); }} />}
+        {tab === 'users' && (
+          <ConsoleUsersTab
+            tenantId={tenantId}
+            onConfigureIdentity={() => { setIdentityInitialTab('config'); setTab('identity'); }}
+            onRefreshLifecycle={refreshLifecycle}
+          />
+        )}
         {tab === 'portal' && <PortalAccessTab tenantId={tenantId} />}
         {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} initialTab={identityInitialTab} />}
       </div>

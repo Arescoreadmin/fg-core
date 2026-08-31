@@ -1,5 +1,22 @@
 # PR Fix Log (Strict)
 
+## P-107 — feat(console): CLIENT-LIFECYCLE-002 Console lifecycle integration + recovery
+
+- **PR/Branch:** `feat/client-lifecycle-002-console-integration`
+- **Date:** 2026-08-31
+- **Files changed:** `apps/console/lib/lifecycleApi.ts` (new), `apps/console/app/api/core/[...path]/route.ts` (1 line: add `lifecycle` to `isTenantAdminCorePath`), `apps/console/app/admin/tenants/[tenantId]/page.tsx` (lifecycle state + `LifecycleBanner` component + `ConsoleUsersTab` refresh hook), `tests/test_client_lifecycle_002.py` (new, 20 tests), `docs/ai/PR_FIX_LOG.md`, `ROADMAP.md`.
+- **Motivation:** CLIENT-LIFECYCLE-001 (PR #670) delivered the canonical lifecycle evaluator and `GET /admin/tenants/{tenant_id}/lifecycle` endpoint. This PR integrates that endpoint into the Console client detail page so operators see real-time operational readiness and can trigger repair actions (BOOTSTRAP_ADMIN, BIND_ADMIN_IDENTITY) directly from the UI.
+- **Design:** `lifecycleApi.ts` — parallel pattern to `identityApi.ts`. Fail-closed: non-2xx → `ok:false`; `lifecycle_version !== 1` → `ok:false` with `'Unsupported lifecycle_version: N'` error (L2-13 proof); network/parse error → `ok:false`. Only `{ ok: true, data }` when all guards pass. `LifecycleBanner` inline component — returns null when fully healthy (`operational && warnings.length === 0`); shows error banner when `lifecycleError !== null` (state unknown — explicitly NOT operational); shows state/blockers/next_actions; CTA routing: `BOOTSTRAP_ADMIN` → button → `POST /api/core/admin/tenants/{id}/bootstrap-admin` then `refreshLifecycle()`; `BIND_ADMIN_IDENTITY` → button → switches to identity tab; `INVITE_MEMBERS` → advisory text only. CRITICAL invariant: no optimistic state updates — all lifecycle state changes come from `refreshLifecycle()` → `getClientLifecycle()` → canonical API response.
+- **BFF routing:** `isTenantAdminCorePath` extended with `path[3] === 'lifecycle'` so the lifecycle endpoint receives `ADMIN_GATEWAY_TOKEN` substitution for tenant_admin callers — same pattern as `bootstrap-admin`, `users`, `portal-access`.
+- **Console integration:** `TenantDetailPage` gains `lifecycle` + `lifecycleError` state, `refreshLifecycle` callback (memoized, triggered on mount and after mutations). `LifecycleBanner` rendered above the tabs. `ConsoleUsersTab` now accepts `onRefreshLifecycle` and calls it after successful invite (clears `NO_ACTIVE_MEMBERS` warning).
+- **Behavioral impact:** New read path on page mount. No existing routes or behaviors changed. No new backend routes. No new DB changes. No new migrations.
+- **Security impact:** None weakening. `lifecycleApi.ts` calls `/api/core` only — no direct backend access. BFF inherits existing auth enforcement. No mutation path added (BOOTSTRAP_ADMIN CTA reuses existing canonical authority). No optimistic state.
+- **Schema/API impact:** None. Route inventory unchanged (no new backend routes).
+- **Tests added:** `tests/test_client_lifecycle_002.py` — 20 tests across groups D (BFF routing+auth: 4), E (next-action codes+shape: 5), F (bootstrap repair round-trip: 3), G (security invariants: 8). Covers L2-01 through L2-20. All 20 passed. Full fg-fast suite: 21,521+ passed, rc=0.
+- **Test classification corrections:** L2-13 through L2-20 reclassified from REACT_RUNTIME_ONLY to TESTABLE_NOW (static contract + BFF + backend proofs).
+
+---
+
 ## P-106 — feat(identity): CLIENT-LIFECYCLE-001 canonical client readiness evaluator
 
 - **PR/Branch:** `feat/client-lifecycle-001-canonical-foundation`
