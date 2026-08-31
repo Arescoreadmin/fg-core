@@ -160,9 +160,9 @@ def _acquire_mgmt_token() -> str:
         },
         timeout=15.0,
     )
-    assert (
-        resp.status_code == 200
-    ), f"Auth0 token acquire failed: {resp.status_code} — check AUTH0_MGMT_CLIENT_ID/SECRET/AUDIENCE"
+    assert resp.status_code == 200, (
+        f"Auth0 token acquire failed: {resp.status_code} — check AUTH0_MGMT_CLIENT_ID/SECRET/AUDIENCE"
+    )
     return resp.json()["access_token"]
 
 
@@ -420,9 +420,9 @@ def _read_tenant_user(tenant_id: str, membership_id: str) -> dict[str, Any]:
         headers=_bearer_headers(tenant_id),
         timeout=10.0,
     )
-    assert (
-        resp.status_code == 200
-    ), f"GET /admin/tenants/{tenant_id}/users failed: {resp.status_code}"
+    assert resp.status_code == 200, (
+        f"GET /admin/tenants/{tenant_id}/users failed: {resp.status_code}"
+    )
     data = resp.json()
     for item in data.get("items", []):
         if item.get("user_id") == membership_id:
@@ -487,9 +487,9 @@ def test_phase1_preflight() -> None:
     )
 
     # Confirm identity binding is complete
-    assert (
-        principal_info["binding_status"] == "bound"
-    ), f"STOP: principal binding_status={principal_info['binding_status']} — must be 'bound'"
+    assert principal_info["binding_status"] == "bound", (
+        f"STOP: principal binding_status={principal_info['binding_status']} — must be 'bound'"
+    )
 
     # --- 1c. Auth0 BEFORE state --- #
     mgmt_token = _acquire_mgmt_token()
@@ -584,20 +584,22 @@ def test_phases2_through_6_projection_and_revocation() -> None:
         assert assign_resp["status_code"] in (
             200,
             204,
-        ), f"Phase 2 role assign failed: {assign_resp['status_code']} {assign_resp['body']}"
+        ), (
+            f"Phase 2 role assign failed: {assign_resp['status_code']} {assign_resp['body']}"
+        )
         assigned = True
 
         # Read back canonical state to confirm
         canonical_row = _read_tenant_user(tenant_id, membership_id)
-        assert (
-            canonical_row.get("role") == proof_role
-        ), f"Phase 2 canonical role mismatch: expected={proof_role} got={canonical_row.get('role')}"
+        assert canonical_row.get("role") == proof_role, (
+            f"Phase 2 canonical role mismatch: expected={proof_role} got={canonical_row.get('role')}"
+        )
 
         # Get new membership_version
         new_version = _get_membership_version(tenant_id, membership_id)
-        assert (
-            new_version > starting_version
-        ), f"Phase 2 version not bumped: {new_version} <= {starting_version}"
+        assert new_version > starting_version, (
+            f"Phase 2 version not bumped: {new_version} <= {starting_version}"
+        )
 
         # Verify outbox row exists (worker may be fast; allow pending or done)
         outbox_row = _outbox_row_for_principal(principal_id, new_version, tenant_id)
@@ -680,9 +682,9 @@ def test_phases2_through_6_projection_and_revocation() -> None:
             f"expected={new_version} "
             f"got={_EVIDENCE['phase3'].get('projection_revision')}"
         )
-        assert (
-            delivery_attempts is not None and delivery_attempts <= 10
-        ), f"Phase 3: attempt_count={delivery_attempts} exceeds _MAX_PERMANENT_ATTEMPTS=10"
+        assert delivery_attempts is not None and delivery_attempts <= 10, (
+            f"Phase 3: attempt_count={delivery_attempts} exceeds _MAX_PERMANENT_ATTEMPTS=10"
+        )
         log.info(
             "phase3.complete delivery_done=True attempts=%d revision=%d",
             delivery_attempts,
@@ -702,9 +704,9 @@ def test_phases2_through_6_projection_and_revocation() -> None:
             f"Phase 4 FAIL: app_metadata.principal_id mismatch: "
             f"expected={principal_id} got={after_meta.get('principal_id')}"
         )
-        assert proof_role in (
-            after_meta.get("roles") or []
-        ), f"Phase 4 FAIL: {proof_role} not in app_metadata.roles={after_meta.get('roles')}"
+        assert proof_role in (after_meta.get("roles") or []), (
+            f"Phase 4 FAIL: {proof_role} not in app_metadata.roles={after_meta.get('roles')}"
+        )
         after_revision = after_meta.get("projection_revision")
         assert after_revision == new_version, (
             f"Phase 4 FAIL: projection_revision in app_metadata={after_revision} "
@@ -1072,9 +1074,9 @@ def test_write_evidence_artifact() -> None:
     # Always assert secret scan passes (even without write)
     raw_check = json.dumps(_EVIDENCE)
     for forbidden in ["password", "bearer ", "client_secret", "access_token"]:
-        assert (
-            forbidden.lower() not in raw_check.lower()
-        ), f"SECRET SCAN: '{forbidden}' detected in evidence dict"
+        assert forbidden.lower() not in raw_check.lower(), (
+            f"SECRET SCAN: '{forbidden}' detected in evidence dict"
+        )
 
     log.info(
         "test_write_evidence_artifact.complete "
