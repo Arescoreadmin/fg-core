@@ -1,5 +1,20 @@
 # PR Fix Log (Strict)
 
+## P-106 — feat(identity): CLIENT-LIFECYCLE-001 canonical client readiness evaluator
+
+- **PR/Branch:** `feat/client-lifecycle-001-canonical-foundation`
+- **Date:** 2026-08-31
+- **Files changed:** `api/client_lifecycle.py` (new), `api/tenant_admin.py` (new route), `tests/test_client_lifecycle_001.py` (new), `docs/architecture/client-lifecycle-001.md` (new), `docs/architecture/client-lifecycle-legacy-inventory.md` (new), `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` (regenerated), `docs/SOC_ARCH_REVIEW_2026-02-15.md` (SOC-P1-004 entry), `ROADMAP.md`.
+- **Motivation:** CLIENT-E2E-001 proved FrostGate can safely onboard a paying tenant and enforce authorization end-to-end. The next milestone is surfacing tenant operational readiness as a stable machine-readable contract so Console, AI Workspace, and operator tooling can determine whether a client is onboarded and ready to use the platform — without each consumer re-implementing the same derivation logic from the same canonical facts.
+- **Design:** Pure evaluator `evaluate_client_lifecycle(db, tenant_id) → ClientLifecycleResult` in `api/client_lifecycle.py`. Derives readiness from durable canonical facts only (`tenants.lifecycle_state`, `tenant_users` active+bound admin rows). No stored state, no external calls, no side effects. Deterministic state precedence: `tenant_not_found > tenant_suspended > admin_unset > admin_unbound > operational`. Fail-closed: unknown or unreadable state → `operational=False`.
+- **Route:** `GET /admin/tenants/{tenant_id}/lifecycle` added to `api/tenant_admin.py`. Dual-path auth: `platform.admin` (cross-tenant read, same pattern as `POST /bootstrap-admin`) OR DB-canonical `tenant_admin` (own tenant only via `check_tenant_admin_authority`). Tenant-not-found → 404 (distinct from degraded states). RLS context set explicitly via `set_tenant_context(db, resolved)` before evaluating.
+- **Behavioral impact:** New read-only endpoint. No existing routes or behaviors changed.
+- **Security impact:** None weakening. No mutation path. No credential issuance. Dual-path auth reuses existing canonical checks unchanged. Fail-closed on unknown state.
+- **Schema/API impact:** No new migration. No schema change. New route registered in route inventory.
+- **Tests added:** `tests/test_client_lifecycle_001.py` — 24 tests across groups A (evaluator unit: 9), B (precedence determinism: 5), C (API route: 10). Covers all lifecycle states, inactive admin/member exclusion, mixed bound/unbound, cross-tenant denial, unauthenticated denial, response schema, HTTP 404, platform admin cross-tenant read.
+
+---
+
 ## P-105 — feat(identity): AUTH-ROLE-001C production projection delivery proof
 
 - **PR/Branch:** `feat/auth-role-001c-production-projection-proof` — PR open 2026-08-30

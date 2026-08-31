@@ -4141,3 +4141,25 @@ Critical-path files changed:
 Test evidence: `tests/test_check_pr_base_is_mainline.py` — 17 tests across groups A–J using real temporary git repositories: A (valid immutable base SHA passes), B (immutable SHA used, not mutable origin/main), C (origin/main advancing does not corrupt validation), D (missing SHA fails closed), E (unresolvable SHA fails closed), F (SOC re-addition detected), G (first-time SOC addition accepted), H (push/non-PR compatible), I (no HEAD~1 fallback), J (synthetic merge commit topology correct).
 
 SOC review outcome: approved. This change makes the governance gate MORE deterministic and strictly fail-closed. It removes the race condition against a mutable remote ref. No weakening of any check. No new bypass. No runtime application code modified. The SOC re-addition detection semantic is preserved.
+
+---
+
+## 2026-08-31 — SOC-P1-004 — feat/client-lifecycle-001-canonical-foundation: Read-only client readiness endpoint
+
+Reviewer: Codex. Classification: SOC-P1-004 (new read route in tenant-admin router; route inventory regenerated; no auth mechanism changes).
+
+Scope: Adds `GET /admin/tenants/{tenant_id}/lifecycle` — a read-only endpoint that derives a client tenant's operational readiness from existing canonical facts (`tenants.lifecycle_state`, `tenant_users` active+bound admin rows). No side effects, no writes, no credential issuance.
+
+Auth: Dual-path. Platform admin (`platform.admin` permission): cross-tenant read, bypasses `resolve_authoritative_tenant` per the same pattern as the existing `POST /bootstrap-admin` route (which also skips resolution for cross-tenant platform operations). DB-canonical tenant_admin: own-tenant only, enforced via `check_tenant_admin_authority()`. An unauthenticated actor has neither `platform.admin` nor a bound `tenant_admin` row and receives 403.
+
+Fail-closed invariants: (1) `operational=true` is returned ONLY when tenant is `active`, at least one admin row with `identity_binding_status='bound'` and non-null `principal_id` exists — any unreadable or unknown state yields `operational=false`; (2) state precedence is deterministic — `tenant_not_found > tenant_suspended > admin_unset > admin_unbound > operational`; (3) `tenant_not_found` → HTTP 404 (not 200) so provisioning gaps are distinguishable from degraded-but-existing tenants.
+
+No existing auth paths weakened. `check_tenant_admin_authority`, `require_permission`, `resolve_authoritative_tenant`, and `set_tenant_context` are all reused unchanged. The route is additive — no mutation logic, no credential handling, no schema change.
+
+Critical-path files changed:
+- `api/tenant_admin.py`: new `GET /{tenant_id}/lifecycle` route added at end of file; no existing route modified.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate` to register the new route.
+
+Test evidence: `tests/test_client_lifecycle_001.py` — 24 tests across groups A (evaluator unit: 9 tests), B (precedence determinism: 5 tests), C (API route: 10 tests). Covers tenant_not_found, tenant_suspended, admin_unset, admin_unbound, operational with/without members, inactive admin/member exclusion, mixed bound/unbound admins, cross-tenant denial, unauthenticated denial, response schema, HTTP 404 on tenant_not_found, platform-admin cross-tenant read, determinism on repeated calls.
+
+SOC review outcome: approved. Strictly additive read-only endpoint. No auth mechanisms changed. No credential issuance, no schema change, no mutation path. The dual-path auth pattern is consistent with the existing `bootstrap-admin` cross-tenant platform access pattern. Fail-closed invariants verified by 24 tests.

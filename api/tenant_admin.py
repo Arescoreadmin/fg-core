@@ -887,6 +887,77 @@ def revoke_tenant_portal_access(
     }
 
 
+# ---------------------------------------------------------------------------
+# CLIENT-LIFECYCLE-001: Canonical readiness evaluator endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{tenant_id}/lifecycle",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def get_client_lifecycle(
+    tenant_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("user.invite")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Return the canonical operational readiness snapshot for a tenant.
+
+    Auth:
+      - ``platform.admin`` — cross-tenant access; may read any tenant.
+      - ``tenant_admin`` (DB-canonical) — own-tenant access only.
+
+    The response is derived entirely from durable canonical facts —
+    ``tenants.lifecycle_state``, active bound ``tenant_users`` rows —
+    and never reflects unchecked JWT claims.
+
+    On tenant_not_found the route returns 404 (not 200 with a state field)
+    so callers can distinguish provisioning gaps from readiness degradation.
+    """
+    from api.client_lifecycle import (
+        STATE_TENANT_NOT_FOUND,
+        evaluate_client_lifecycle,
+    )
+
+    if "platform.admin" in actor_ctx.permissions:
+        # Platform admin: cross-tenant read; skip resolve_authoritative_tenant
+        # (which would 403 if actor's tenant != path tenant). Pattern follows
+        # bootstrap_tenant_admin which explicitly avoids that check.
+        resolved = tenant_id
+    else:
+        resolved = resolve_authoritative_tenant(request, actor_ctx, tenant_id)
+        check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=resolved)
+
+    set_tenant_context(db, resolved)
+    result = evaluate_client_lifecycle(db, resolved)
+
+    if result.lifecycle_state == STATE_TENANT_NOT_FOUND:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "TENANT_NOT_FOUND",
+                "message": "Tenant not found.",
+            },
+        )
+
+    return {
+        "lifecycle_version": result.lifecycle_version,
+        "tenant_id": result.tenant_id,
+        "lifecycle_state": result.lifecycle_state,
+        "operational": result.operational,
+        "repairable": result.repairable,
+        "blockers": list(result.blockers),
+        "warnings": list(result.warnings),
+        "next_actions": list(result.next_actions),
+        "diagnostics": {
+            "tenant_canonical_state": result.tenant_canonical_state,
+            "has_bound_admin": result.has_bound_admin,
+            "active_member_count": result.active_member_count,
+        },
+    }
+
+
 __all__ = [
     "router",
     "TENANT_ADMIN_DENIED",
