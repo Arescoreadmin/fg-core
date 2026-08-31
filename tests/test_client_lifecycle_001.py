@@ -454,6 +454,47 @@ class TestEvaluatorUnit:
         assert result.active_member_count == 0
         assert WARN_NO_ACTIVE_MEMBERS in result.warnings
 
+    def test_a10_inactive_principal_not_counted_as_bound(self, engine, app):
+        # A bound admin whose fg_principals row is suspended must NOT make
+        # the evaluator report operational=True. Canonical identity resolution
+        # rejects inactive principals; the evaluator must agree.
+        _seed_tenant(engine, "cl001-inactive-principal")
+        pid = str(uuid.uuid4())
+        # Seed the principal as active first (FK requirement)
+        _seed_principal(engine, pid)
+        uid = str(uuid.uuid4())
+        _seed_tenant_user(
+            engine,
+            tenant_id="cl001-inactive-principal",
+            user_id=uid,
+            email="admin@example.com",
+            role="tenant_admin",
+            active=True,
+            identity_binding_status="bound",
+            principal_id=pid,
+            identity_subject="auth0|inactive-principal",
+            identity_provider="auth0",
+        )
+        # Deactivate the principal after seeding the tenant_user FK
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE fg_principals SET lifecycle_state = 'suspended' "
+                    "WHERE id = :pid"
+                ),
+                {"pid": pid},
+            )
+        db = _get_db_session(app)
+        try:
+            result = evaluate_client_lifecycle(db, "cl001-inactive-principal")
+        finally:
+            db.close()
+
+        # Suspended principal → admin not counted as bound → admin_unbound
+        assert result.lifecycle_state == STATE_ADMIN_UNBOUND
+        assert result.operational is False
+        assert result.has_bound_admin is False
+
 
 # ---------------------------------------------------------------------------
 # B. Precedence determinism

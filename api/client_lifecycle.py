@@ -148,13 +148,19 @@ def evaluate_client_lifecycle(
 
     # --- 3. Admin rows — fetch all, filter in Python for cross-DB safety ---
     # Postgres boolean and SQLite integer (0/1) both coerce via bool().
+    # LEFT JOIN fg_principals so a bound admin whose principal is suspended or
+    # deactivated is NOT counted as a valid bound admin (canonical identity
+    # resolution rejects inactive principals; evaluator must agree).
     admin_rows = db.execute(
         text(
             """
-            SELECT id, role, active, identity_binding_status, principal_id
-            FROM tenant_users
-            WHERE tenant_id = :tid AND role = 'tenant_admin'
-            ORDER BY created_at ASC
+            SELECT tu.id, tu.role, tu.active, tu.identity_binding_status,
+                   tu.principal_id,
+                   COALESCE(fp.lifecycle_state, 'inactive') AS principal_lifecycle_state
+            FROM tenant_users tu
+            LEFT JOIN fg_principals fp ON fp.id = tu.principal_id
+            WHERE tu.tenant_id = :tid AND tu.role = 'tenant_admin'
+            ORDER BY tu.created_at ASC
             """
         ),
         {"tid": tenant_id},
@@ -162,7 +168,9 @@ def evaluate_client_lifecycle(
 
     active_admin_rows = [r for r in admin_rows if bool(r[2])]
     bound_admin_count = sum(
-        1 for r in active_admin_rows if str(r[3]) == "bound" and r[4] is not None
+        1
+        for r in active_admin_rows
+        if str(r[3]) == "bound" and r[4] is not None and str(r[5]) == "active"
     )
     has_bound_admin = bound_admin_count > 0
     has_any_active_admin = len(active_admin_rows) > 0
