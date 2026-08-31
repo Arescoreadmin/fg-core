@@ -1,0 +1,35 @@
+{
+  "schema_version": "1",
+  "proof_name": "AUTH-ROLE-001C production projection delivery proof",
+  "timestamp": "PENDING_LIVE_RUN",
+  "AUTH0_LIVE_PROJECTION": "PENDING_LIVE_RUN",
+  "AUTH0_REVOCATION_PROJECTION": "PENDING_LIVE_RUN",
+  "AUTH0_STALE_WRITE_PROTECTION": "INHERITED_FROM_001B",
+  "AUTH0_PROJECTION_RECONCILIATION": "ABSENT",
+  "CANONICAL_AUTHZ_INDEPENDENT": "PENDING_LIVE_RUN",
+  "UNRESTRICTED_SELF_SERVICE": "CONDITIONAL",
+  "ORIGINAL_STATE_RESTORED": "PENDING_LIVE_RUN",
+  "LIVE_PROOF_SIDE_EFFECTS": "NONE — controlled principal restored to original role; outbox rows are normal operational records",
+  "EVIDENCE_SECRET_SCAN": "PENDING_LIVE_RUN",
+  "before": null,
+  "phase2": null,
+  "phase3": null,
+  "after": null,
+  "phase5": null,
+  "phase6": null,
+  "phase7": {
+    "CLAIM_CONVERGENCE": "MANUAL_PROOF",
+    "automation_boundary": "Browser-based OIDC login cannot be automated in this proof. Phases 1-6 prove the complete FrostGate -> Auth0 projection loop.",
+    "manual_steps": [
+      "1. Log out of admin-gateway at https://admin-gateway-production-d937.up.railway.app",
+      "2. Log in fresh as jcosat0211@gmail.com (Auth0 OIDC)",
+      "3. Call GET /identity/session/current or /admin/me",
+      "4. Verify roles reflect Phase 6 revocation state (proof_role absent)",
+      "5. Verify projection_revision in token matches final Auth0 app_metadata revision"
+    ]
+  },
+  "actual_delivery_attempts": null,
+  "projection_convergence_seconds": null,
+  "revocation_denial_latency_ms": null,
+  "note": "Run: FG_LIVE_PROOF=1 FG_WRITE_EVIDENCE=1 pytest -v tests/test_auth_role_001c_live_proof.py to populate this artifact with live proof data."
+}
