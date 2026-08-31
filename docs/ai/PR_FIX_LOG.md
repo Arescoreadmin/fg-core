@@ -1,5 +1,24 @@
 # PR Fix Log (Strict)
 
+## P-104 — feat(identity): AUTH-ROLE-001C worker deployment prerequisite
+
+- **PR/Branch:** `feat/auth-role-001c-worker-deployment` — PR open 2026-08-30
+- **Date:** 2026-08-30
+- **Files changed:** `admin_gateway/identity/worker_main.py` (new), `admin_gateway/identity/auth0_management.py` (429 handling), `admin_gateway/identity/projection_worker.py` (import `Auth0RateLimitError`, permanent failure distinction), `docs/deployment/projection-worker-railway.md` (new), `tests/test_auth_role_001c_worker_deployment.py` (new), `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`.
+- **Motivation:** AUTH-ROLE-001B Phase A audit proved `run_projection_pass()` exists only as a library function with no production caller. Pending `identity_projection_outbox` rows had no consumer. This PR wires the worker into production.
+- **Worker entrypoint:** `admin_gateway/identity/worker_main.py` — bounded polling loop, SIGTERM/SIGINT graceful shutdown via `threading.Event`, configurable `PROJECTION_WORKER_POLL_SECONDS` (default 30s), fail-closed on missing required env vars, non-busy-loop (sleep between passes), structured key=value log lines (no secrets, no tokens, no customer data), per-pass observability: rows_claimed, rows_succeeded, pending_backlog, oldest_pending_age.
+- **429 rate-limit handling:** New `Auth0RateLimitError(Auth0ManagementError)` subclass in `auth0_management.py`; `_parse_retry_after()` function handles integer seconds and HTTP-date formats; `_patch()` detects 429 distinctly from other errors, extracts `Retry-After` header, raises `Auth0RateLimitError(retry_after=N)` so the worker can back off correctly. Projection worker logs `rate_limited` at warning level with `retry_after` seconds.
+- **Permanent failure handling:** Schema (`0184`) only supports `pending|processing|done|failed` — no terminal/dead status. Adding one requires a migration (deferred). Implemented via attempt_count ceiling: `_MAX_PERMANENT_ATTEMPTS = 10`. Rows exceeding threshold are logged at CRITICAL level with `action=skip_visible_for_ops`; left in table for ops inspection. Permanent 4xx (404, 400) logged at error level and given max backoff. Retryable errors (timeout, 5xx, 429) use existing exponential backoff schedule.
+- **Railway deployment guide:** `docs/deployment/projection-worker-railway.md` — Railway is dashboard-managed (no `railway.json` committed). Specifies service name `fg-identity-projection-worker`, root dir `admin_gateway/`, Dockerfile `admin_gateway/Dockerfile`, start command `python -m identity.worker_main`, all required env var names, health log signals, restart policy, and ops procedure for permanent failures.
+- **Auth0 M2M prerequisites documented:** Dedicated "FrostGate Identity Projection Worker" M2M app required (not reusing existing org-management client). Minimum scopes: `read:users` + `update:users_app_metadata` only. Rationale for dedicated app documented.
+- **Behavioral impact:** No production behavior change until worker is deployed. The existing `admin_gateway` web service is unaffected.
+- **Security impact:** None weakening. 429 handling adds Retry-After backoff. Permanent 4xx distinction prevents indefinite retry of dead rows. No secrets logged. No authorization behavior change.
+- **Schema/API impact:** No new migrations. No new routes. No existing route changes.
+- **Tests added:** `tests/test_auth_role_001c_worker_deployment.py` — 14 tests (W1–W14).
+- **Result:** Production worker entrypoint exists. AUTH-ROLE-001C live delivery proof MUST NOT start until: (1) this PR deployed to Railway; (2) dedicated M2M app created with verified scopes; (3) `worker_main.ready` observed in Railway logs.
+
+---
+
 ## P-103 — fix(identity): gate CLIENT-E2E-001 evidence artifact write behind FG_WRITE_EVIDENCE=1
 
 - **PR/Branch:** `fix/client-e2e-001-mcim-artifact-write` — PR #667
