@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from admin_gateway.identity.auth0_management import (
     Auth0ManagementClient,
     Auth0ManagementError,
+    Auth0RateLimitError,
 )
 
 log = logging.getLogger("admin-gateway.identity.projection_worker")
@@ -224,7 +225,49 @@ def _process_one(
             if isinstance(exc, Auth0ManagementError)
             else type(exc).__name__
         )
-        next_attempt = _backoff_dt(attempt_count)
+
+        # Determine backoff: 429 → honor Retry-After; permanent 4xx → max backoff.
+        # Permanent failures (404 user-not-found, 400 bad-request) are
+        # distinguished here so the worker can log them differently.  The schema
+        # does NOT have a terminal status (would require a migration), so we
+        # leave the row as 'pending' with max backoff and let worker_main.py
+        # detect rows that have exceeded _MAX_PERMANENT_ATTEMPTS and log CRITICAL.
+        is_rate_limit = isinstance(exc, Auth0RateLimitError)
+        is_permanent = isinstance(exc, Auth0ManagementError) and exc.status in (
+            400,
+            404,
+        )
+
+        if is_rate_limit:
+            retry_after_secs = exc.retry_after  # type: ignore[attr-defined]
+            next_attempt = datetime.now(timezone.utc) + timedelta(
+                seconds=retry_after_secs
+            )
+            log.warning(
+                "projection_worker.rate_limited outbox_id=%s retry_after=%ds",
+                row_id,
+                retry_after_secs,
+            )
+        elif is_permanent:
+            # Max backoff — will be flagged by _check_and_log_permanent_rows
+            next_attempt = _backoff_dt(len(_BACKOFF_SECONDS) - 1)
+            log.error(
+                "projection_worker.permanent_failure "
+                "outbox_id=%s error=%s status=%d "
+                "note=row_left_pending_for_ops_visibility",
+                row_id,
+                error_code,
+                exc.status,  # type: ignore[attr-defined]
+            )
+        else:
+            next_attempt = _backoff_dt(attempt_count)
+            log.warning(
+                "projection_worker.failed outbox_id=%s error=%s next_attempt=%s",
+                row_id,
+                error_code,
+                next_attempt.isoformat(),
+            )
+
         db.execute(
             _MARK_FAILED_SQL,
             {
@@ -232,12 +275,6 @@ def _process_one(
                 "next_attempt_at": next_attempt.isoformat(),
                 "last_error_code": str(error_code)[:128],
             },
-        )
-        log.warning(
-            "projection_worker.failed outbox_id=%s error=%s next_attempt=%s",
-            row_id,
-            error_code,
-            next_attempt.isoformat(),
         )
 
 
