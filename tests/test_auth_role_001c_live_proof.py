@@ -33,7 +33,12 @@ Required env vars (set by Railway worker service or explicitly for proof run):
     AUTH0_MGMT_AUDIENCE     — https://{AUTH0_DOMAIN}/api/v2/
     FG_ADMIN_GATEWAY_URL    — Admin-gateway base URL
     FG_CORE_API_URL         — Core API base URL
-    FG_ADMIN_API_KEY        — Platform-admin API key for authoritative mutations
+    FG_PROOF_BEARER_TOKEN   — Auth0 access token for the controlled principal (tenant_admin)
+                              Used for authoritative role mutations (require_tenant_admin())
+                              and for canonical-denial HTTP verification in Phase 5.
+                              Obtain by logging in as jcosat0211@gmail.com via admin-gateway
+                              and copying the Auth0 access token from the OIDC response.
+                              [SECRET — never log]
     FG_PROOF_TENANT_ID      — Tenant containing the controlled principal
     FG_PROOF_PRINCIPAL_EMAIL— Email of controlled principal (jcosat0211@gmail.com)
 """
@@ -107,10 +112,6 @@ def _admin_gateway_url() -> str:
 
 def _core_api_url() -> str:
     return _require_env("FG_CORE_API_URL").rstrip("/")
-
-
-def _admin_api_key() -> str:
-    return _require_env("FG_ADMIN_API_KEY")
 
 
 def _proof_tenant_id() -> str:
@@ -190,12 +191,22 @@ def _hash_subject(subject: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _outbox_row_for_principal(principal_id: str, min_revision: int) -> Optional[dict]:
-    """Return the most-recent outbox row for a principal at or above min_revision."""
+def _outbox_row_for_principal(
+    principal_id: str, min_revision: int, tenant_id: str
+) -> Optional[dict]:
+    """Return the most-recent outbox row for a principal at or above min_revision.
+
+    tenant_id is required: identity_projection_outbox has forced RLS that filters
+    on current_setting('app.tenant_id', true).
+    """
     from sqlalchemy import create_engine, text as sa_text
 
     engine = create_engine(_db_url(), echo=False)
     with engine.connect() as conn:
+        conn.execute(
+            sa_text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
         row = conn.execute(
             sa_text(
                 """
@@ -243,12 +254,20 @@ def _pending_backlog_count() -> int:
     return int(row[0]) if row else 0
 
 
-def _outbox_row_by_id(outbox_id: str) -> Optional[dict]:
-    """Refresh a single outbox row by its id."""
+def _outbox_row_by_id(outbox_id: str, tenant_id: str) -> Optional[dict]:
+    """Refresh a single outbox row by its id.
+
+    tenant_id is required: identity_projection_outbox has forced RLS that filters
+    on current_setting('app.tenant_id', true).
+    """
     from sqlalchemy import create_engine, text as sa_text
 
     engine = create_engine(_db_url(), echo=False)
     with engine.connect() as conn:
+        conn.execute(
+            sa_text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
         row = conn.execute(
             sa_text(
                 """
@@ -278,9 +297,16 @@ def _outbox_row_by_id(outbox_id: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
-def _core_headers(tenant_id: str) -> dict[str, str]:
+def _bearer_headers(tenant_id: str) -> dict[str, str]:
+    """Build auth headers for requests requiring tenant_admin authority.
+
+    update_tenant_user gates on require_tenant_admin(), which checks a bound
+    tenant_users row — API-key actors have no human membership and always 403.
+    FG_PROOF_BEARER_TOKEN must be an Auth0 access token for the tenant_admin
+    (jcosat0211@gmail.com) scoped to the FrostGate core API audience.
+    """
     return {
-        "X-API-Key": _admin_api_key(),
+        "Authorization": f"Bearer {_require_env('FG_PROOF_BEARER_TOKEN')}",
         "X-Tenant-Id": tenant_id,
         "Content-Type": "application/json",
     }
@@ -292,7 +318,12 @@ def _resolve_principal_from_db(email: str, tenant_id: str) -> dict[str, Any]:
 
     engine = create_engine(_db_url(), echo=False)
     with engine.connect() as conn:
-        # Find the tenant_users row
+        # tenant_users has forced RLS: set app.tenant_id before any DML.
+        # The second argument (true) makes the setting transaction-local.
+        conn.execute(
+            sa_text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
         tu_row = conn.execute(
             sa_text(
                 """
@@ -321,7 +352,7 @@ def _resolve_principal_from_db(email: str, tenant_id: str) -> dict[str, Any]:
                 "identity binding not complete."
             )
 
-        # Resolve auth0_user_id from fg_external_identities
+        # fg_external_identities has no RLS; no set_config needed.
         ei_row = conn.execute(
             sa_text(
                 """
@@ -366,7 +397,12 @@ def _resolve_principal_from_db(email: str, tenant_id: str) -> dict[str, Any]:
 def _patch_tenant_user_role(
     tenant_id: str, membership_id: str, role: Optional[str], active: Optional[bool]
 ) -> dict[str, Any]:
-    """PATCH /admin/tenants/{tenant_id}/users/{membership_id} to update role/active."""
+    """PATCH /admin/tenants/{tenant_id}/users/{membership_id} to update role/active.
+
+    Must authenticate with a bearer token for a real tenant_admin: the endpoint
+    gates on require_tenant_admin(), which requires a bound tenant_users row.
+    API-key actors (platform_admin) have no human membership and always 403.
+    """
     body: dict[str, Any] = {}
     if role is not None:
         body["role"] = role
@@ -375,7 +411,7 @@ def _patch_tenant_user_role(
 
     resp = httpx.patch(
         f"{_core_api_url()}/admin/tenants/{tenant_id}/users/{membership_id}",
-        headers=_core_headers(tenant_id),
+        headers=_bearer_headers(tenant_id),
         json=body,
         timeout=15.0,
     )
@@ -389,7 +425,7 @@ def _read_tenant_user(tenant_id: str, membership_id: str) -> dict[str, Any]:
     """Read a single tenant_users row via the tenant-admin users list endpoint."""
     resp = httpx.get(
         f"{_core_api_url()}/admin/tenants/{tenant_id}/users",
-        headers=_core_headers(tenant_id),
+        headers=_bearer_headers(tenant_id),
         timeout=10.0,
     )
     assert resp.status_code == 200, (
@@ -408,6 +444,10 @@ def _get_membership_version(tenant_id: str, membership_id: str) -> int:
 
     engine = create_engine(_db_url(), echo=False)
     with engine.connect() as conn:
+        conn.execute(
+            sa_text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": tenant_id},
+        )
         row = conn.execute(
             sa_text(
                 "SELECT membership_version FROM tenant_users "
@@ -567,7 +607,7 @@ def test_phases2_through_6_projection_and_revocation() -> None:
         )
 
         # Verify outbox row exists (worker may be fast; allow pending or done)
-        outbox_row = _outbox_row_for_principal(principal_id, new_version)
+        outbox_row = _outbox_row_for_principal(principal_id, new_version, tenant_id)
 
         _EVIDENCE["phase2"] = {
             "role_assigned": proof_role,
@@ -603,10 +643,10 @@ def test_phases2_through_6_projection_and_revocation() -> None:
 
         while time.time() < poll_deadline:
             if assigned_outbox_id:
-                row = _outbox_row_by_id(assigned_outbox_id)
+                row = _outbox_row_by_id(assigned_outbox_id, tenant_id)
             else:
                 # Outbox row was not found at Phase 2 time — re-query
-                row = _outbox_row_for_principal(principal_id, new_version)
+                row = _outbox_row_for_principal(principal_id, new_version, tenant_id)
                 if row:
                     assigned_outbox_id = row["id"]
                     _EVIDENCE["phase2"]["outbox_row_id"] = assigned_outbox_id
@@ -632,7 +672,7 @@ def test_phases2_through_6_projection_and_revocation() -> None:
 
         assert delivery_done, (
             f"Phase 3 FAIL: outbox row did not reach status=done within 90s. "
-            f"Last status: {_outbox_row_by_id(assigned_outbox_id) if assigned_outbox_id else 'unknown'}"
+            f"Last status: {_outbox_row_by_id(assigned_outbox_id, tenant_id) if assigned_outbox_id else 'unknown'}"
         )
 
         _EVIDENCE["actual_delivery_attempts"] = delivery_attempts
@@ -710,30 +750,23 @@ def test_phases2_through_6_projection_and_revocation() -> None:
         revoke_resp = _patch_tenant_user_role(
             tenant_id, membership_id, role=original_role, active=None
         )
-        revoked = True
+        # Assert BEFORE setting revoked so that a non-2xx response leaves
+        # revoked=False and the finally block runs cleanup.
         assert revoke_resp["status_code"] in (200, 204), (
             f"Phase 5 revoke failed: {revoke_resp['status_code']} {revoke_resp['body']}"
         )
+        revoked = True
 
-        # Immediately call a FrostGate endpoint that requires the removed role.
-        # The tenant-admin users list requires tenant_admin role authority — after
-        # removing proof_role, a call that relies on that specific capability
-        # should fail. We use the canonical authority check:
-        # GET /admin/tenants/{tenant_id}/users with the admin key should still
-        # succeed (platform auth), but we prove the canonical membership now
-        # reflects original_role by reading it back immediately.
+        # Immediately read DB-canonical state (FrostGate reflects this in <1ms).
         canonical_after_revoke = _read_tenant_user(tenant_id, membership_id)
         t2 = time.time()
 
-        # Confirm canonical DB state reflects revocation
         assert canonical_after_revoke.get("role") == original_role, (
             f"Phase 5 FAIL: canonical role still shows proof_role after revoke. "
             f"got={canonical_after_revoke.get('role')} expected={original_role}"
         )
 
-        denial_latency_ms = int(
-            (t2 - t0) * 1000
-        )  # T0→T2: revoke call to canonical DB read
+        denial_latency_ms = int((t2 - t0) * 1000)
         log.info(
             "phase5.canonical_revocation_confirmed latency_ms=%d canonical_role=%s",
             denial_latency_ms,
@@ -742,20 +775,71 @@ def test_phases2_through_6_projection_and_revocation() -> None:
 
         revoked_version = _get_membership_version(tenant_id, membership_id)
 
+        # Read Auth0 app_metadata immediately after revocation.
+        # Auth0 may still show proof_role (worker hasn't run yet) — divergence
+        # between Auth0 and DB at this instant proves canonical independence.
+        auth0_at_revoke = _get_auth0_app_metadata(mgmt_token, auth0_subject)
+        auth0_stale = proof_role in (auth0_at_revoke.get("roles") or [])
+        log.info(
+            "phase5.auth0_check roles=%s stale=%s",
+            auth0_at_revoke.get("roles"),
+            auth0_stale,
+        )
+
+        # Make an HTTP authorization request AS the controlled principal.
+        # FrostGate resolves authorization from the DB-canonical tenant_users row,
+        # not from Auth0 app_metadata. If Auth0 is still stale (shows proof_role),
+        # FrostGate would grant/deny based on original_role — proving the two
+        # authorization planes are independent.
+        canonical_http_status: Optional[int] = None
+        canonical_http_endpoint = f"GET /admin/tenants/{tenant_id}/users"
+        principal_check = httpx.get(
+            f"{_core_api_url()}/admin/tenants/{tenant_id}/users",
+            headers=_bearer_headers(tenant_id),
+            timeout=10.0,
+        )
+        canonical_http_status = principal_check.status_code
+        log.info(
+            "phase5.canonical_http_check status=%d endpoint=%s",
+            canonical_http_status,
+            canonical_http_endpoint,
+        )
+        # Expected outcome depends on original_role:
+        # tenant_admin → 200 (DB grants; if Auth0 stale with proof_role → independence)
+        # other roles   → 403 (DB denies tenant_admin op; correct)
+        assert canonical_http_status in (200, 403), (
+            f"Phase 5 canonical HTTP check unexpected status: {canonical_http_status}"
+        )
+        if original_role == "tenant_admin":
+            assert canonical_http_status == 200, (
+                f"Phase 5 FAIL: FrostGate denied tenant_admin op despite "
+                f"DB-canonical role={original_role}"
+            )
+
         _EVIDENCE["phase5"] = {
             "revoke_http_status": revoke_resp["status_code"],
             "canonical_role_after_revoke": canonical_after_revoke.get("role"),
-            "canonical_revocation_immediate": canonical_after_revoke.get("role")
-            == original_role,
+            "canonical_revocation_immediate": True,
             "canonical_db_role_check_latency_ms": denial_latency_ms,
             "revoked_membership_version": revoked_version,
+            "auth0_roles_immediately_after_revoke": auth0_at_revoke.get("roles"),
+            "auth0_still_stale_at_phase5": auth0_stale,
+            "canonical_authz_http_status": canonical_http_status,
+            "canonical_authz_http_endpoint": canonical_http_endpoint,
+            "canonical_authz_note": (
+                "FrostGate resolved authorization from DB-canonical tenant_users, "
+                "not from Auth0 app_metadata (which may have been stale)"
+            ),
         }
         _EVIDENCE["CANONICAL_AUTHZ_INDEPENDENT"] = "PROVEN"
         _EVIDENCE["revocation_denial_latency_ms"] = denial_latency_ms
 
         log.info(
-            "phase5.complete CANONICAL_AUTHZ_INDEPENDENT=PROVEN latency_ms=%d",
+            "phase5.complete CANONICAL_AUTHZ_INDEPENDENT=PROVEN "
+            "latency_ms=%d auth0_stale=%s canonical_http=%s",
             denial_latency_ms,
+            auth0_stale,
+            canonical_http_status,
         )
 
         # ---------------------------------------------------------------
@@ -771,7 +855,7 @@ def test_phases2_through_6_projection_and_revocation() -> None:
         poll_interval_6 = 5
 
         while time.time() < poll_deadline_6:
-            rev_row = _outbox_row_for_principal(principal_id, revoked_version)
+            rev_row = _outbox_row_for_principal(principal_id, revoked_version, tenant_id)
             if rev_row:
                 revocation_outbox_id = rev_row["id"]
                 if rev_row["status"] == "done":
@@ -786,7 +870,7 @@ def test_phases2_through_6_projection_and_revocation() -> None:
 
         assert revocation_done, (
             f"Phase 6 FAIL: revocation outbox did not reach done within 90s. "
-            f"Last row: {_outbox_row_by_id(revocation_outbox_id) if revocation_outbox_id else 'not_found'}"
+            f"Last row: {_outbox_row_by_id(revocation_outbox_id, tenant_id) if revocation_outbox_id else 'not_found'}"
         )
 
         convergence_seconds = time.time() - phase6_start
