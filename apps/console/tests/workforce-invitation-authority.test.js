@@ -106,7 +106,7 @@ test('tenant resolution runs before every tenant-admin proxy call', () => {
   const handleBody = ROUTE_SRC.slice(handleStart, handleEnd);
 
   assert.ok(handleBody.includes('resolveAuthorizedTenant(request, path, session, requestId)'));
-  assert.ok(handleBody.indexOf('resolveAuthorizedTenant(request, path, session, requestId)') < handleBody.indexOf('proxyToCore(request, path, requestId, tenantId)'));
+  assert.ok(handleBody.indexOf('resolveAuthorizedTenant(request, path, session, requestId)') < handleBody.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)'));
   assert.doesNotMatch(handleBody, /isAdminPath/);
   assert.doesNotMatch(handleBody, /return proxyToCore\(request, path, requestId, ''\)/);
 });
