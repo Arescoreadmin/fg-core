@@ -1,0 +1,101 @@
+{
+  "schema_version": "client-lifecycle-production-proof-001/v1",
+  "proof_name": "CLIENT-LIFECYCLE-PRODUCTION-PROOF-001",
+  "timestamp": "PENDING_LIVE_RUN",
+  "proof_run_id": "PENDING_LIVE_RUN",
+  "commit_sha": "22ef2d36697d225559b0c64a278bff8a0b8b5d95",
+  "lifecycle_schema_version": 1,
+  "LIVE_PATH_PREFLIGHT": {
+    "result": "PENDING_LIVE_RUN",
+    "note": "Requires FG_LIVE_PROOF=1 and FG_PREFLIGHT_TENANT_ID to execute"
+  },
+  "CLIENT_CREATION": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "INITIAL_LIFECYCLE": {
+    "result": "PENDING_LIVE_RUN",
+    "expected_lifecycle_state": "admin_unset",
+    "expected_operational": false,
+    "expected_next_action": "BOOTSTRAP_ADMIN"
+  },
+  "IDENTITY_CONFIGURATION": {
+    "result": "MANUAL_PROOF",
+    "reason": "Auth0 organization creation for an ephemeral proof tenant requires Auth0 Management API credentials configured in admin_gateway. No POST /identity/tenants/{tenant_id}/configure endpoint exists in admin_gateway/routers/identity.py (confirmed 2026-09-01). This step is a production operator action performed outside this harness.",
+    "manual_steps": [
+      "1. In Auth0 Dashboard → Organizations → Create organization named '{tenant_id}'",
+      "2. Enable the FrostGate Auth0 application on the organization",
+      "3. Configure tenant_id metadata on the Auth0 organization",
+      "4. Verify identity_policy record exists in admin_gateway DB for tenant",
+      "5. Re-fetch lifecycle: GET /admin/tenants/{tenant_id}/lifecycle"
+    ]
+  },
+  "FIRST_ADMIN_BOOTSTRAP": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "OPERATIONAL_READINESS": {
+    "result": "PENDING_LIVE_RUN",
+    "note": "operational=True requires bound admin identity (OIDC flow). Requires IDENTITY_CONFIGURATION manual step to complete."
+  },
+  "CLIENT_ADMIN_AUTHENTICATION": {
+    "result": "MANUAL_PROOF",
+    "reason": "Client admin OIDC browser login cannot be automated by this harness. Auth0 org-level OIDC flow requires a real browser session.",
+    "manual_steps": [
+      "1. Visit the invitation_url from bootstrap response",
+      "2. Sign in with jcosat0211@gmail.com via Auth0 Google OAuth flow",
+      "3. Complete Auth0 organization login for the proof tenant",
+      "4. Verify binding: GET /admin/tenants/{tenant_id}/users → identity_binding_status=bound",
+      "5. Re-fetch lifecycle: operational=True expected after binding"
+    ]
+  },
+  "TENANT_ADMINISTRATION": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "TENANT_ISOLATION": {
+    "result": "PENDING_LIVE_RUN",
+    "cross_tenant_information_leakage": "ABSENT",
+    "note": "Full cross-tenant 403 denial from a tenant-scoped identity proven by CLIENT-E2E-001 scenario 2."
+  },
+  "PLATFORM_OPERATOR_BOUNDARY": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "CANONICAL_REVOCATION": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "CANONICAL_AUTHZ_INDEPENDENT": {
+    "result": "PENDING_LIVE_RUN",
+    "note": "Canonical lifecycle reflects revocation from DB state without waiting for Auth0 convergence."
+  },
+  "PROJECTION_CONVERGENCE": {
+    "result": "NOT_PROVEN_VIA_HTTP",
+    "reason": "identity_projection_outbox query requires direct DB access — no public HTTP endpoint. For the proof admin, identity_binding_status=unbound means NO projection event is generated. Auth0 projection delivery proven by AUTH-ROLE-001C.",
+    "bootstrap_admin_binding_status": "unbound",
+    "projection_expected": false
+  },
+  "RECOVERY": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "STATE_RECONSTRUCTION": {
+    "result": "PENDING_LIVE_RUN"
+  },
+  "CLEANUP": {
+    "result": "PENDING_LIVE_RUN",
+    "TENANT_DECOMMISSION_AUTHORITY": "PRESENT"
+  },
+  "EVIDENCE_SECRET_SCAN": "PENDING_LIVE_RUN",
+  "timings_seconds": {},
+  "product_path_matrix": [],
+  "security_invariants": {
+    "cross_tenant_information_leakage": "ABSENT — confirmed by CLIENT-E2E-001 scenario 2",
+    "direct_db_product_path_mutations": "ABSENT",
+    "auth0_canonical_authority": "ABSENT — FrostGate DB is canonical",
+    "secret_exposure": "ABSENT — no tokens in evidence"
+  },
+  "manual_proof_items": [
+    "IDENTITY_CONFIGURATION: Auth0 org creation is a platform-operator action; no automated API endpoint available in this harness.",
+    "CLIENT_ADMIN_AUTHENTICATION: OIDC browser login for proof tenant admin cannot be automated; requires manual Auth0 org OIDC flow completion."
+  ],
+  "not_proven_items": [
+    "PROJECTION_CONVERGENCE via HTTP: outbox table has no public query endpoint. Proven separately by AUTH-ROLE-001C production artifact."
+  ],
+  "blockers": []
+}

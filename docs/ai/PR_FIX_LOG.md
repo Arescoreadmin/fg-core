@@ -1,5 +1,47 @@
 # PR Fix Log (Strict)
 
+## P-111 — fix(proof): correct Core API routes and platform.admin authority limits in proof harness
+
+- **PR/Branch:** `feat/client-lifecycle-production-proof-001`
+- **Date:** 2026-09-01
+- **Files changed:** `tests/test_client_lifecycle_production_proof_001.py`, `docs/ai/PR_FIX_LOG.md`
+- **Motivation:** Three P1 bot findings on PR #672 harness: (1) tenant creation used `/tenants` not `/admin/tenants`; (2) cleanup/prelive probe used `/tenants/{id}/suspend` not `/admin/tenants/{id}/suspend`; (3) Phase 6/10/12 called `GET/PATCH /admin/tenants/{id}/users/{user_id}` which requires `check_tenant_admin_authority()` — platform.admin gets 403 with no bypass. Fixes applied before any live run.
+- **What changed:**
+  - `POST /tenants` → `POST /admin/tenants` for Tenant A and Tenant B creation (Phase 1, Phase 7)
+  - `POST /tenants/{id}/suspend` → `POST /admin/tenants/{id}/suspend` everywhere (prelive probe, Phase 10, Cleanup)
+  - Auth header: `Authorization: Bearer` → `X-API-Key` throughout (confirmed: `api/main.py:611`, `api/token_useage.py:149`); env var renamed `FG_PLATFORM_ADMIN_TOKEN` → `FG_PLATFORM_ADMIN_KEY`
+  - Phase 0.5 preflight: BFF path replaced with direct Core API call (BFF requires browser/NextAuth session — platform key can't authenticate it); BFF documented as MANUAL_PROOF
+  - `PRELIVE_CHECKS` class added: cleanup path probe, projection worker health, manual checklist
+  - `MERGE_RECOMMENDATION = MERGE_HARNESS_ONLY` classification block added to docstring
+  - Removed dead `_lifecycle_bff()` function (used X-API-Key on BFF — wrong auth)
+  - Phase 6: removed `GET /admin/tenants/{id}/users` call (403 for platform.admin); replaced with lifecycle read + note
+  - Phase 7/8 isolation: removed `GET /admin/tenants/{tenant_b_id}/users` (403); proven via lifecycle `tenant_id` field; user-list isolation delegated to CLIENT-E2E-001
+  - Phase 9 boundary: removed heuristic `pa_in_a`/`pa_in_b` checks (required user list); replaced with explicit 403 assertion — proves `check_tenant_admin_authority()` correctly denies platform.admin
+  - Phase 10 revocation: `PATCH .../users/{user_id} active:false` → `POST /admin/tenants/{id}/suspend` (platform.admin-authorized); assert `tenant_suspended` immediately
+  - Phase 12 recovery: `PATCH .../users/{user_id} active:true` → `POST /admin/tenants/{id}/activate`; assert `admin_unbound` (bootstrap admin row persists through suspend/activate)
+- **Non-live test count:** 11 passed, 5 skipped (unchanged)
+- **Validation:** `pytest tests/test_client_lifecycle_production_proof_001.py -q` → 11 passed, 5 skipped. No bare `/tenants/` route references remain.
+- **Result:** Harness correct. Ready for CI → merge → live proof.
+
+---
+
+## P-110 — feat(proof): CLIENT-LIFECYCLE-PRODUCTION-PROOF-001 production lifecycle + isolation proof
+
+- **PR/Branch:** `feat/client-lifecycle-production-proof-001`
+- **Date:** 2026-09-01
+- **Files changed:** `tests/test_client_lifecycle_production_proof_001.py` (new), `contracts/artifacts/identity/client-lifecycle-production-proof-001-evidence.json` (new), `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`
+- **Motivation:** CLIENT-LIFECYCLE-001 and CLIENT-LIFECYCLE-002 shipped with code and CI proof but no production evidence artifact. This PR establishes the production proof harness (gated by `FG_LIVE_PROOF=1`) and the artifact skeleton for when the live run executes.
+- **What ships:** (1) `tests/test_client_lifecycle_production_proof_001.py` — 11 non-live tests + live proof classes (gated by `FG_LIVE_PROOF=1`). Non-live class tests: lifecycle version contract, state/blocker/action constant stability, secret scan correctness, evidence dict shape, gate logic. Live classes: Phase 0.5 preflight (Core API direct; BFF = MANUAL_PROOF), PRELIVE checks (cleanup path probe, projection worker health, manual checklist), Phase 1 tenant creation, Phase 1b initial lifecycle, Phase 2 identity config (MANUAL_PROOF), Phase 3 bootstrap-admin, Phase 4 operational readiness, Phase 5 client admin auth (MANUAL_PROOF), Phase 6 own-tenant lifecycle read, Phase 7/8 isolation, Phase 9 platform operator boundary (403 proof), Phase 10 revocation (suspend), Phase 11 projection outbox, Phase 12 recovery (activate), Phase 13 state reconstruction, Cleanup (both tenants suspended in try/finally). (2) Evidence artifact skeleton at `contracts/artifacts/identity/client-lifecycle-production-proof-001-evidence.json`. (3) ROADMAP.md updates: CLIENT-LIFECYCLE-001/002 marked COMPLETE (PRs #670/#671), PRODUCTION-PROOF-001 row added.
+- **Known MANUAL_PROOF boundaries:** IDENTITY_CONFIGURATION (no admin_gateway org create endpoint), CLIENT_ADMIN_AUTHENTICATION (browser OIDC flow), BFF_BROWSER_PATH (browser session required), PROJECTION_CONVERGENCE (no public HTTP endpoint for outbox — proven by AUTH-ROLE-001C).
+- **Security invariants:** No tokens, Authorization headers, or secrets in evidence. Cleanup suspends both proof tenants in try/finally regardless of outcome. Secret scan runs before artifact write. Tenant IDs follow `fg-lc-proof-{ts}-{a,b}` pattern for safe identification.
+- **Behavioral impact:** Non-live tests run in CI normally; live proof skipped without `FG_LIVE_PROOF=1`.
+- **Schema/API impact:** None — no new routes, migrations, or frontend code.
+- **Tests added:** `tests/test_client_lifecycle_production_proof_001.py` — 11 non-live, 5 skipped in CI.
+- **Validation:** `ruff check` CLEAN; `ruff format --check` CLEAN; `pytest tests/test_client_lifecycle_production_proof_001.py -q` → 11 passed, 5 skipped.
+- **Result:** CI PASS. Live proof pending operator execution with `FG_LIVE_PROOF=1`.
+
+---
+
 ## P-109 — fix(console): lifecycle refresh after user activation/deactivation
 
 - **PR/Branch:** `feat/client-lifecycle-002-console-integration`
