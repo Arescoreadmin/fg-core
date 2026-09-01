@@ -984,8 +984,7 @@ def _insert_credential(
     record_hash: str,
 ) -> None:
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO tenant_credentials (
                 credential_id, tenant_id, credential_type, credential_slot,
                 generation, lookup_fingerprint, lookup_key_version, secret_prefix,
@@ -999,8 +998,7 @@ def _insert_credential(
                 :issued, :issued, :actor, :reqid,
                 :ikey, :scopes, :meta, :sv, :rhash
             )
-            """
-        ),
+            """),
         {
             "cid": credential_id,
             "tid": tenant_id,
@@ -1590,11 +1588,13 @@ def rotate_credential(
         )
         scopes_csv = old_record.scopes_csv or CREDENTIAL_SCOPE
 
-        # Carry binding metadata into the new generation for types where the
-        # identity binding must persist across key rotation.
+        # Carry binding metadata into the new generation. For portal_access /
+        # connector / agent_device this preserves identity-binding fields. For
+        # tenant_api_key this preserves the user-visible name so it survives rotation.
         new_metadata = (
             old_record.metadata
-            if credential_type in ("portal_access", "connector", "agent_device")
+            if credential_type
+            in ("portal_access", "connector", "agent_device", "tenant_api_key")
             else None
         )
 

@@ -220,6 +220,24 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
             tenant_id=tenant_id or None,
         )
 
+    # Named-user delegation: BFF forwards the Auth0 subject via X-FG-Named-User-Sub
+    # when calling tenant-admin routes with ADMIN_GATEWAY_TOKEN. The ADMIN_GATEWAY_TOKEN
+    # + delegation proof establish machine-level authority; the forwarded sub resolves
+    # the named user's tenant_users row for require_tenant_admin() DB checks.
+    if getattr(auth, "reason", None) == "admin_internal_token":
+        named_sub = (request.headers.get("X-FG-Named-User-Sub") or "").strip()
+        if named_sub:
+            scopes: set[str] = getattr(auth, "scopes", set()) or set()
+            return ActorContext(
+                subject=named_sub,
+                email="",
+                name="",
+                permissions=_permissions_from_legacy_scopes(scopes),
+                roles=[],
+                auth_source="api_key",
+                tenant_id=None,
+            )
+
     # PSP attribution: if this credential belongs to the platform service
     # principal, resolve its identity and populate the ActorContext fields.
     # This makes PSP-authenticated requests distinguishable in the audit trail.

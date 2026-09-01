@@ -357,6 +357,9 @@ def test_c1_05_rotate(app, engine):
     assert data["credential_id"] != old_id
     assert data["rotated_from_credential_id"] == old_id
     assert data["status"] == "active"
+    # P2 regression: name must survive rotation (credential_authority now carries
+    # tenant_api_key metadata into the successor generation).
+    assert data["name"] == "rotate-test", f"name lost on rotation: {data.get('name')!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -694,3 +697,285 @@ def test_c1_19_self_service_roles_valid():
 
 def test_c1_20_platform_only_disjoint_from_self_service():
     assert SELF_SERVICE_CREDENTIAL_ROLES.isdisjoint(PLATFORM_ONLY_CREDENTIAL_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# C1-21 — ordinary non-admin user → 403 TENANT_ADMIN_DENIED
+# ---------------------------------------------------------------------------
+
+
+def test_c1_21_non_admin_denied(app, engine):
+    tid = _tid()
+    _ensure_tenant(engine, tid)
+    pid = str(uuid.uuid4())
+    uid = str(uuid.uuid4())
+    _seed_tenant_user(
+        engine,
+        tenant_id=tid,
+        user_id=uid,
+        email=f"user-{uid[:8]}@example.com",
+        role="analyst",
+        principal_id=pid,
+        identity_binding_status="bound",
+        identity_provider="auth0",
+        identity_subject=f"auth0|analyst-{uid[:8]}",
+    )
+    _install_actor_override(
+        app,
+        subject=f"auth0|analyst-{uid[:8]}",
+        tenant_id=tid,
+        membership_id=uid,
+        role="analyst",
+    )
+    try:
+        with TestClient(app) as c:
+            r = c.get(_path(tid) + _qs(tid), headers=_admin_hdrs(tid))
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "TENANT_ADMIN_DENIED"
+
+
+# ---------------------------------------------------------------------------
+# C1-22 — unbound tenant_admin → 403 TENANT_ADMIN_DENIED
+# ---------------------------------------------------------------------------
+
+
+def test_c1_22_unbound_admin_denied(app, engine):
+    tid = _tid()
+    _ensure_tenant(engine, tid)
+    uid = str(uuid.uuid4())
+    subject = f"auth0|unbound-{uid[:8]}"
+    _seed_tenant_user(
+        engine,
+        tenant_id=tid,
+        user_id=uid,
+        email=f"unbound-{uid[:8]}@example.com",
+        role="tenant_admin",
+        principal_id=None,
+        identity_binding_status="unbound",
+    )
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.get(_path(tid) + _qs(tid), headers=_admin_hdrs(tid))
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "TENANT_ADMIN_DENIED"
+
+
+# ---------------------------------------------------------------------------
+# C1-23 — inactive tenant_admin → 403 TENANT_ADMIN_DENIED
+# ---------------------------------------------------------------------------
+
+
+def test_c1_23_inactive_admin_denied(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE tenant_users SET active = 0 WHERE id = :id"),
+            {"id": uid},
+        )
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.get(_path(tid) + _qs(tid), headers=_admin_hdrs(tid))
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"]["code"] == "TENANT_ADMIN_DENIED"
+
+
+# ---------------------------------------------------------------------------
+# C1-24 — cross-tenant path attack: admin of A calls path for tenant B → 403
+# ---------------------------------------------------------------------------
+
+
+def test_c1_24_cross_tenant_path_denied(app, engine):
+    tid_a = _tid()
+    tid_b = _tid()
+    uid_a, _, subject_a = _seat_admin(engine, tid_a)
+    _seat_admin(engine, tid_b)
+
+    # Actor is bound admin of tid_a; path resolves against tid_b
+    _install_actor_override(
+        app, subject=subject_a, tenant_id=tid_a, membership_id=uid_a
+    )
+    try:
+        with TestClient(app) as c:
+            r = c.get(_path(tid_b) + _qs(tid_b), headers=_admin_hdrs(tid_b))
+    finally:
+        _clear_actor_override(app)
+    # Blocked at resolve_authoritative_tenant() (actor.tenant_id=A ≠ path tenant_id=B)
+    # before check_tenant_admin_authority even runs — two independent deny layers.
+    assert r.status_code == 403, r.text
+
+
+# ---------------------------------------------------------------------------
+# C1-25 — governance_admin role assignment → 200
+# ---------------------------------------------------------------------------
+
+
+def test_c1_25_governance_admin_role(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    cred_id = _direct_issue(engine, tid, "governance-admin-role-test")
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.put(
+                _path(tid, f"/{cred_id}/role") + _qs(tid),
+                json={"role": "governance_admin"},
+                headers=_admin_hdrs(tid),
+            )
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "governance_admin"
+
+
+# ---------------------------------------------------------------------------
+# C1-26 — read_only role assignment → 200
+# ---------------------------------------------------------------------------
+
+
+def test_c1_26_read_only_role(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    cred_id = _direct_issue(engine, tid, "read-only-role-test")
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.put(
+                _path(tid, f"/{cred_id}/role") + _qs(tid),
+                json={"role": "read_only"},
+                headers=_admin_hdrs(tid),
+            )
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "read_only"
+
+
+# ---------------------------------------------------------------------------
+# C1-27 — revoked credential fails validate_credential (canonical auth denied)
+# ---------------------------------------------------------------------------
+
+
+def test_c1_27_revoked_credential_fails_auth(app, engine):
+    from api.credential_authority import (
+        issue_credential,
+        revoke_credential,
+        validate_credential,
+    )
+
+    tid = _tid()
+    _ensure_tenant(engine, tid)
+    slot = str(uuid.uuid4())
+    result = issue_credential(
+        engine,
+        tenant_id=tid,
+        credential_type="tenant_api_key",
+        credential_slot=slot,
+        actor_id="test-setup",
+    )
+    raw_key = result.plaintext_secret
+    assert raw_key is not None
+
+    revoke_credential(
+        engine,
+        credential_id=result.record.credential_id,
+        tenant_id=tid,
+        actor_id="test-setup",
+        reason="test_revocation",
+    )
+
+    with pytest.raises(Exception):
+        validate_credential(engine, raw_key, credential_type="tenant_api_key")
+
+
+# ---------------------------------------------------------------------------
+# C1-28 — credential events endpoint returns events for the credential
+# ---------------------------------------------------------------------------
+
+
+def test_c1_28_credential_events(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    cred_id = _direct_issue(engine, tid, "events-test")
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.get(
+                _path(tid, f"/{cred_id}/events") + _qs(tid),
+                headers=_admin_hdrs(tid),
+            )
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["tenant_id"] == tid
+    assert data["credential_id"] == cred_id
+    assert isinstance(data["events"], list)
+    # At minimum the issue event should be present
+    assert len(data["events"]) >= 1
+    event_types = [e["event_type"] for e in data["events"]]
+    assert "issued" in event_types
+
+
+# ---------------------------------------------------------------------------
+# C1-29 — events response contains no plaintext_secret or raw secret material
+# ---------------------------------------------------------------------------
+
+
+def test_c1_29_events_no_plaintext(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    cred_id = _direct_issue(engine, tid, "events-secret-check")
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.get(
+                _path(tid, f"/{cred_id}/events") + _qs(tid),
+                headers=_admin_hdrs(tid),
+            )
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 200, r.text
+    for event in r.json()["events"]:
+        assert "plaintext_secret" not in event
+        assert "secret" not in event
+        assert "raw_key" not in event
+        assert "metadata" not in event
+
+
+# ---------------------------------------------------------------------------
+# C1-30 — events type guard: portal_access credential → 404
+# ---------------------------------------------------------------------------
+
+
+def test_c1_30_events_type_guard(app, engine):
+    tid = _tid()
+    uid, _, subject = _seat_admin(engine, tid)
+    from api.credential_authority import issue_credential
+
+    portal_result = issue_credential(
+        engine,
+        tenant_id=tid,
+        credential_type="portal_access",
+        credential_slot=str(uuid.uuid4()),
+        actor_id="test-setup",
+    )
+    portal_cred_id = portal_result.record.credential_id
+    _install_actor_override(app, subject=subject, tenant_id=tid, membership_id=uid)
+    try:
+        with TestClient(app) as c:
+            r = c.get(
+                _path(tid, f"/{portal_cred_id}/events") + _qs(tid),
+                headers=_admin_hdrs(tid),
+            )
+    finally:
+        _clear_actor_override(app)
+    assert r.status_code == 404, r.text
