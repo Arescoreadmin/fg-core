@@ -81,10 +81,21 @@ curl -i -H "Authorization: Bearer <plaintext-key>" \
 # Expected: 403
 
 # G7: admin list accessible (admin endpoint returns tenant in list)
+# Requires two distinct credentials — inject from production secret manager.
+# FG_PSP_CREDENTIAL: active PSP in fgk.<payload>.<secret> format
+#   Obtain from platform_service_principal record; do NOT rotate to retrieve.
+# FG_INTERNAL_GATEWAY_SECRET: internal gateway trust secret
+#   Obtain from production secret manager; rotation is an exceptional key-replacement event.
+# WARNING: avoid shell history — set in a non-logging shell or via secrets tooling.
+#
+# This is the direct PSP path (Path A). X-API-Key authenticates the PSP identity;
+# X-FG-Internal-Token satisfies require_internal_admin_gateway() on all /admin/* routes.
+# Do NOT use the same value for both headers — that activates the BFF path (Path B).
+export FG_PSP_CREDENTIAL="fgk.<from-secret-manager>"
+export FG_INTERNAL_GATEWAY_SECRET="<from-secret-manager>"
 curl -i \
-  -H "X-API-Key: $ADMIN_TOKEN" \
-  -H "X-FG-Internal-Token: $ADMIN_TOKEN" \
-  -H "X-Admin-Gateway-Internal: true" \
+  -H "X-API-Key: $FG_PSP_CREDENTIAL" \
+  -H "X-FG-Internal-Token: $FG_INTERNAL_GATEWAY_SECRET" \
   https://api.frostgate.ai/admin/tenants
 # Expected: 200
 

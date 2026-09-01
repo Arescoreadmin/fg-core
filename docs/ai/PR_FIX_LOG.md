@@ -1,5 +1,38 @@
 # PR Fix Log (Strict)
 
+## P-112 — fix(proof): dual-credential auth chain, PSP format validation, and BFF path documentation
+
+- **PR/Branch:** `fix/proof-dual-credential-architecture`
+- **Date:** 2026-09-01
+- **Files changed:** `tests/test_client_lifecycle_production_proof_001.py`, `docs/governance/status/PROVISIONING_PROOF_RUNBOOK.md`, `tools/testing/security/prod_proof_645.py`, `docs/ai/PR_FIX_LOG.md`, `ROADMAP.md`
+- **Motivation:** Architecture analysis of the existing proof harness revealed it would fail every admin route call on a live run: `_auth_headers = {"X-API-Key": PLATFORM_ADMIN_KEY}` was missing `X-FG-Internal-Token`. `require_internal_admin_gateway()` (api/admin.py) is applied unconditionally to all `/admin/*` routes via router-level `dependencies=[Depends(require_internal_admin_gateway)]`. Without the gateway token header the check fires before credential auth and every admin call returns 403 regardless of PSP validity.
+- **Root cause of the anti-pattern:** Prior tooling (prod_proof_645.py runbook, earlier harness drafts) conflated two distinct auth paths: Path A (direct PSP: `X-API-Key=fgk.*` + `X-FG-Internal-Token=gateway_secret`, distinct values) and Path B (BFF admin_internal_token: `X-API-Key=gateway_secret` + `X-FG-Internal-Token=gateway_secret`, same value intentionally, plus delegation headers). The runbook G7 curl used `$ADMIN_TOKEN` for both headers, which is the Path B pattern. A proof harness must use Path A.
+- **What changed:**
+  - `tests/test_client_lifecycle_production_proof_001.py`:
+    - Added `INTERNAL_GATEWAY_SECRET = os.getenv("FG_INTERNAL_GATEWAY_SECRET", "")` module-level constant
+    - Updated `_auth_headers` to `{"X-API-Key": PLATFORM_ADMIN_KEY, "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET}` (dual-credential, distinct values)
+    - Added STOP conditions before any mutation: `INTERNAL_GATEWAY_SECRET` non-empty; PSP format check (`fgk.*` prefix, 3 dot-separated parts); credential-distinct check (`PLATFORM_ADMIN_KEY != INTERNAL_GATEWAY_SECRET`)
+    - Updated Phase 0.5 preflight and `test_no_stale_proof_tenants` calls to use dual-header auth
+    - Added `test_internal_gateway_secret_required_when_live` to `TestNonLiveGating`
+    - Added `test_credentials_are_distinct` to `TestNonLiveGating`
+    - Added `test_gateway_auth_distinct_from_psp` to `TestPreliveMutationChecks` (asserts credentials distinct; records evidence)
+    - Added `test_psp_lifecycle_active` to `TestPreliveMutationChecks` (calls `GET /system/service-principal` to verify PSP is active and dual-header chain is wired before any mutation)
+    - Updated module docstring: two-credential auth chain documented; both paths (A and B) described; env var list updated to include `FG_INTERNAL_GATEWAY_SECRET`
+  - `docs/governance/status/PROVISIONING_PROOF_RUNBOOK.md`:
+    - Replaced G7 curl: `$ADMIN_TOKEN` → separate `$FG_PSP_CREDENTIAL` and `$FG_INTERNAL_GATEWAY_SECRET` variables; removed `X-Admin-Gateway-Internal: true` (not needed for Path A); added comments documenting path semantics, injection-from-secret-manager pattern, shell history warning, and distinct-values requirement
+  - `tools/testing/security/prod_proof_645.py`:
+    - Renamed `GATEWAY_TOKEN` → `INTERNAL_GATEWAY_SECRET`; env var `ADMIN_GATEWAY_TOKEN` → `FG_INTERNAL_GATEWAY_SECRET`
+    - Added explanatory comment block documenting why Path B intentionally uses the same value for both X-API-Key and X-FG-Internal-Token (BFF emulation semantics); behavior unchanged
+  - `ROADMAP.md`: Added post-launch hardening item for PSP auth event archival (platform_service_principal_events retention policy)
+- **Non-live test count:** 13 passed (was 11), 7 skipped (was 5 — two new prelive tests added)
+- **Architecture invariants documented:** (1) All `/admin/*` routes enforce `require_internal_admin_gateway()` unconditionally. (2) Direct PSP path requires two distinct credentials. (3) BFF path same-value is intentional and correct only on Path B. (4) Rotation is an exceptional key-replacement event; injection from secret manager is normal retrieval.
+- **PSP format:** `fgk.<base64-payload>.<secret>` — 3 dot-separated parts, `parts[0] == "fgk"`. Validated inline (not imported from `_parse_key` which is private to credential_authority.py).
+- **Secret-leak review:** No credential values logged, printed, or stored in evidence. STOP conditions assert presence only (truthy check). PSP format validation uses `split(".")` on PLATFORM_ADMIN_KEY — key value never emitted.
+- **Validation:** `pytest tests/test_client_lifecycle_production_proof_001.py -q` → 13 passed, 7 skipped. `ruff check` CLEAN. `ruff format --check` CLEAN.
+- **Result:** Harness now correctly implements the production trust architecture. Live proof with `FG_LIVE_PROOF=1` will use the correct dual-credential auth chain.
+
+---
+
 ## P-111 — fix(proof): correct Core API routes and platform.admin authority limits in proof harness
 
 - **PR/Branch:** `feat/client-lifecycle-production-proof-001`

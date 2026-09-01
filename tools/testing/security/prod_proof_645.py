@@ -5,7 +5,7 @@ PR-CORE-002 (#645) production proof matrix.
 Usage:
     FG_GATEWAY_DELEGATION_SECRET_CURRENT=<secret> \
     ADMIN_GATEWAY_URL=https://... \
-    ADMIN_GATEWAY_TOKEN=<token> \
+    FG_INTERNAL_GATEWAY_SECRET=<internal-gateway-secret> \
     PROOF_TENANT=<active-tenant-id> \
     INACTIVE_TENANT=<suspended-tenant-id> \
     python tools/testing/security/prod_proof_645.py
@@ -31,20 +31,28 @@ import requests
 
 SECRET = os.environ["FG_GATEWAY_DELEGATION_SECRET_CURRENT"]
 GATEWAY_URL = os.environ["ADMIN_GATEWAY_URL"].rstrip("/")
-GATEWAY_TOKEN = os.environ["ADMIN_GATEWAY_TOKEN"]
+# This proof exercises the BFF admin_internal_token path (Path B — Console→BFF→Core).
+# On Path B, both X-API-Key and X-FG-Internal-Token carry the same FG_INTERNAL_GATEWAY_SECRET
+# value. This is intentionally correct: the BFF emits the shared secret on both headers
+# because AuthGateMiddleware checks X-API-Key for presence and require_internal_admin_gateway
+# checks X-FG-Internal-Token for trust. The delegation proof then validates the X-FG-Delegation-*
+# headers that the BFF attaches. Do NOT confuse this with the direct PSP path (Path A), where
+# X-API-Key carries the fgk.* credential and X-FG-Internal-Token carries the gateway secret
+# as separate distinct values.
+INTERNAL_GATEWAY_SECRET = os.environ["FG_INTERNAL_GATEWAY_SECRET"]
 TENANT = os.environ["PROOF_TENANT"]
 INACTIVE = os.environ.get("INACTIVE_TENANT", "")
 
 PROBE_PATH = f"/admin/identity/tenants/{TENANT}/config"
 # BFF envelope contract — must match apps/console/app/api/core/[...path]/route.ts:
-#   X-API-Key          → CORE_API_KEY (required for AuthGateMiddleware key check)
-#   X-FG-Internal-Token → ADMIN_GATEWAY_TOKEN (admin_internal_token resolution)
+#   X-API-Key          → FG_INTERNAL_GATEWAY_SECRET (required for AuthGateMiddleware key check)
+#   X-FG-Internal-Token → FG_INTERNAL_GATEWAY_SECRET (admin_internal_token resolution)
 #   X-Admin-Gateway-Internal → "true" (marks request as internal admin gateway)
 #   X-Tenant-ID        → resolved tenant (forwarded by BFF)
-# Do not remove X-API-Key — its absence produces 401, not the 403 these gates expect.
+# Same value on both headers is correct for Path B (BFF emulation). See comment above.
 ADMIN_HEADERS = {
-    "X-API-Key": GATEWAY_TOKEN,
-    "X-FG-Internal-Token": GATEWAY_TOKEN,
+    "X-API-Key": INTERNAL_GATEWAY_SECRET,
+    "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET,
     "X-Admin-Gateway-Internal": "true",
     "X-Tenant-ID": TENANT,
 }
