@@ -280,7 +280,9 @@ class TestPhase0Preflight:
         import requests as _requests
 
         assert PREFLIGHT_TENANT_ID, "FG_PREFLIGHT_TENANT_ID must be set for preflight"
-        assert PLATFORM_ADMIN_KEY, "FG_PLATFORM_ADMIN_KEY must be set (sent as X-API-Key)"
+        assert PLATFORM_ADMIN_KEY, (
+            "FG_PLATFORM_ADMIN_KEY must be set (sent as X-API-Key)"
+        )
         assert CORE_API_URL, "FG_CORE_API_URL must be set"
 
         # Call Core API directly — X-API-Key is the correct auth header
@@ -386,7 +388,9 @@ class TestPreliveMutationChecks:
                 "result": "UNREACHABLE",
                 "error": str(e),
             }
-            pytest.fail(f"PRELIVE FAIL: admin_gateway unreachable at {ADMIN_GATEWAY_URL}: {e}")
+            pytest.fail(
+                f"PRELIVE FAIL: admin_gateway unreachable at {ADMIN_GATEWAY_URL}: {e}"
+            )
 
     def test_manual_prerequisite_checklist(self):
         """Document manual prerequisites that cannot be verified from the harness."""
@@ -726,7 +730,8 @@ class TestClientLifecycleProductionProof:
                 "result": "PASS",
                 "tenant_a_lifecycle_id": lc_a_after_b.get("tenant_id"),
                 "tenant_b_lifecycle_id": lc_b.get("tenant_id"),
-                "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id") != lc_b.get("tenant_id"),
+                "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id")
+                != lc_b.get("tenant_id"),
                 "cross_tenant_information_leakage": "NOT_DETECTABLE_VIA_HTTP",
                 "user_list_isolation": (
                     "MANUAL_PROOF — user list requires tenant_admin authority; "
@@ -746,7 +751,8 @@ class TestClientLifecycleProductionProof:
                     "result": "PASS",
                     "tenant_a_id": tenant_a_id,
                     "tenant_b_id": tenant_b_id,
-                    "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id") != lc_b.get("tenant_id"),
+                    "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id")
+                    != lc_b.get("tenant_id"),
                 }
             )
 
@@ -877,7 +883,9 @@ class TestClientLifecycleProductionProof:
             # Phase 12 — RECOVERY
             # Re-activate the deactivated admin → re-fetch lifecycle
             # ----------------------------------------------------------------
-            lc_before_recovery = lc_state_revoked  # already recorded ("tenant_suspended")
+            lc_before_recovery = (
+                lc_state_revoked  # already recorded ("tenant_suspended")
+            )
 
             restore_r = _requests.post(
                 f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/activate",
