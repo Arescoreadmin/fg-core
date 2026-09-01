@@ -11,12 +11,12 @@
   - `tests/test_client_lifecycle_production_proof_001.py`:
     - Added `INTERNAL_GATEWAY_SECRET = os.getenv("FG_INTERNAL_GATEWAY_SECRET", "")` module-level constant
     - Updated `_auth_headers` to `{"X-API-Key": PLATFORM_ADMIN_KEY, "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET}` (dual-credential, distinct values)
-    - Added STOP conditions before any mutation: `INTERNAL_GATEWAY_SECRET` non-empty; PSP format check (`fgk.*` prefix, 3 dot-separated parts); credential-distinct check (`PLATFORM_ADMIN_KEY != INTERNAL_GATEWAY_SECRET`)
+    - Added STOP conditions before any mutation: `INTERNAL_GATEWAY_SECRET` non-empty; credential-distinct check (`PLATFORM_ADMIN_KEY != INTERNAL_GATEWAY_SECRET`, with explicit note to not use PSP credential); live preflight to `GET /admin/system/service-principal` proves `platform.admin` is granted before any mutation (replaces the PSP format check that a P-112.1 bot finding correctly flagged as wrong)
     - Updated Phase 0.5 preflight and `test_no_stale_proof_tenants` calls to use dual-header auth
     - Added `test_internal_gateway_secret_required_when_live` to `TestNonLiveGating`
     - Added `test_credentials_are_distinct` to `TestNonLiveGating`
     - Added `test_gateway_auth_distinct_from_psp` to `TestPreliveMutationChecks` (asserts credentials distinct; records evidence)
-    - Added `test_psp_lifecycle_active` to `TestPreliveMutationChecks` (calls `GET /system/service-principal` to verify PSP is active and dual-header chain is wired before any mutation)
+    - Added `test_platform_admin_auth_chain` to `TestPreliveMutationChecks` (calls `GET /admin/system/service-principal` to prove `platform.admin` is granted before any mutation — replaces the wrong PSP format check caught by P-112.1 bot finding)
     - Updated module docstring: two-credential auth chain documented; both paths (A and B) described; env var list updated to include `FG_INTERNAL_GATEWAY_SECRET`
   - `docs/governance/status/PROVISIONING_PROOF_RUNBOOK.md`:
     - Replaced G7 curl: `$ADMIN_TOKEN` → separate `$FG_PSP_CREDENTIAL` and `$FG_INTERNAL_GATEWAY_SECRET` variables; removed `X-Admin-Gateway-Internal: true` (not needed for Path A); added comments documenting path semantics, injection-from-secret-manager pattern, shell history warning, and distinct-values requirement
@@ -26,7 +26,7 @@
   - `ROADMAP.md`: Added post-launch hardening item for PSP auth event archival (platform_service_principal_events retention policy)
 - **Non-live test count:** 13 passed (was 11), 7 skipped (was 5 — two new prelive tests added)
 - **Architecture invariants documented:** (1) All `/admin/*` routes enforce `require_internal_admin_gateway()` unconditionally. (2) Direct PSP path requires two distinct credentials. (3) BFF path same-value is intentional and correct only on Path B. (4) Rotation is an exceptional key-replacement event; injection from secret manager is normal retrieval.
-- **PSP format:** `fgk.<base64-payload>.<secret>` — 3 dot-separated parts, `parts[0] == "fgk"`. Validated inline (not imported from `_parse_key` which is private to credential_authority.py).
+- **Platform admin credential clarification:** `FG_PLATFORM_ADMIN_KEY` must be a credential with `platform_admin` role in `tenant_credential_roles` so `roles_to_permissions(['platform_admin'])` grants `ALL_PERMISSIONS` including `platform.admin`. It is NOT the PSP credential — `PSP_CREDENTIAL_SCOPES` (api/platform_service_principal.py:67-73) intentionally excludes `platform.admin`; the PSP is never a global superuser. P-112.1 follow-up bot finding caught this and the PSP format check was replaced with a live preflight call to `GET /admin/system/service-principal` which proves `platform.admin` is granted before any mutation.
 - **Secret-leak review:** No credential values logged, printed, or stored in evidence. STOP conditions assert presence only (truthy check). PSP format validation uses `split(".")` on PLATFORM_ADMIN_KEY — key value never emitted.
 - **Validation:** `pytest tests/test_client_lifecycle_production_proof_001.py -q` → 13 passed, 7 skipped. `ruff check` CLEAN. `ruff format --check` CLEAN.
 - **Result:** Harness now correctly implements the production trust architecture. Live proof with `FG_LIVE_PROOF=1` will use the correct dual-credential auth chain.

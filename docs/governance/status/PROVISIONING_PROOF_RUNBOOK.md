@@ -82,8 +82,9 @@ curl -i -H "Authorization: Bearer <plaintext-key>" \
 
 # G7: admin list accessible (admin endpoint returns tenant in list)
 # Requires two distinct credentials — inject from production secret manager.
-# FG_PSP_CREDENTIAL: active PSP in fgk.<payload>.<secret> format
-#   Obtain from platform_service_principal record; do NOT rotate to retrieve.
+# FG_PSP_CREDENTIAL: platform admin API key with platform_admin role in tenant_credential_roles.
+#   NOTE: NOT the PSP (platform-service-principal) credential — PSP lacks platform.admin.
+#   Obtain from the platform admin credential record; do NOT use the PSP credential here.
 # FG_INTERNAL_GATEWAY_SECRET: internal gateway trust secret
 #   Obtain from production secret manager; rotation is an exceptional key-replacement event.
 # WARNING: avoid shell history — set in a non-logging shell or via secrets tooling.
