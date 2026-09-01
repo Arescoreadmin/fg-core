@@ -746,7 +746,7 @@ class TestClientLifecycleProductionProof:
                     "result": "PASS",
                     "tenant_a_id": tenant_a_id,
                     "tenant_b_id": tenant_b_id,
-                    "a_admin_in_b": a_admin_in_b,
+                    "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id") != lc_b.get("tenant_id"),
                 }
             )
 
