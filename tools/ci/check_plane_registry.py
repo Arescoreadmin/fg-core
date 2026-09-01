@@ -93,6 +93,35 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     ("GET", "/admin/tenants/{tenant_id}/portal-access"),
     ("POST", "/admin/tenants/{tenant_id}/portal-access/invite"),
     ("DELETE", "/admin/tenants/{tenant_id}/portal-access/{grant_id}"),
+    # P-113.4 tenant service credential administration: same authority pattern as
+    # other TENANT-ADMIN-001 routes above. require_tenant_admin() enforces same-tenant
+    # isolation via resolve_authoritative_tenant + DB-canonical check_tenant_admin_authority.
+    # credential_id parameter scopes within the already-verified tenant.
+    ("GET", "/admin/tenants/{tenant_id}/credential-administration"),
+    ("POST", "/admin/tenants/{tenant_id}/credential-administration"),
+    ("GET", "/admin/tenants/{tenant_id}/credential-administration/rbac"),
+    ("GET", "/admin/tenants/{tenant_id}/credential-administration/{credential_id}"),
+    (
+        "GET",
+        "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/events",
+    ),
+    (
+        "POST",
+        "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/rotate",
+    ),
+    ("DELETE", "/admin/tenants/{tenant_id}/credential-administration/{credential_id}"),
+    (
+        "POST",
+        "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/suspend",
+    ),
+    (
+        "POST",
+        "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/resume",
+    ),
+    (
+        "PUT",
+        "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/role",
+    ),
 }
 
 
