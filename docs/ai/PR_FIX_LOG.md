@@ -1,5 +1,22 @@
 # PR Fix Log (Strict)
 
+## P-110 — feat(proof): CLIENT-LIFECYCLE-PRODUCTION-PROOF-001 production lifecycle + isolation proof
+
+- **PR/Branch:** `feat/client-lifecycle-production-proof-001`
+- **Date:** 2026-09-01
+- **Files changed:** `tests/test_client_lifecycle_production_proof_001.py` (new), `contracts/artifacts/identity/client-lifecycle-production-proof-001-evidence.json` (new), `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`
+- **Motivation:** CLIENT-LIFECYCLE-001 and CLIENT-LIFECYCLE-002 shipped with code and CI proof but no production evidence artifact. This PR establishes the production proof harness (gated by `FG_LIVE_PROOF=1`) and the artifact skeleton for when the live run executes.
+- **What ships:** (1) `tests/test_client_lifecycle_production_proof_001.py` — 11 non-live tests + 2 live proof classes (gated by `FG_LIVE_PROOF=1`). Non-live class tests: lifecycle version contract, state/blocker/action constant stability, secret scan correctness, evidence dict shape, gate logic. Live classes: Phase 0.5 preflight (Console→BFF→Core), Phase 1 tenant creation, Phase 1b initial lifecycle, Phase 2 identity config (MANUAL_PROOF), Phase 3 bootstrap-admin, Phase 4 operational readiness, Phase 5 client admin auth (MANUAL_PROOF), Phase 6 own-tenant admin, Phase 7/8 isolation, Phase 9 platform operator boundary, Phase 10 revocation, Phase 11 projection outbox, Phase 12 recovery, Phase 13 state reconstruction, Cleanup (both tenants suspended in try/finally). (2) Evidence artifact skeleton at `contracts/artifacts/identity/client-lifecycle-production-proof-001-evidence.json`. (3) ROADMAP.md updates: CLIENT-LIFECYCLE-001/002 marked COMPLETE (PRs #670/#671), PRODUCTION-PROOF-001 row added.
+- **Known MANUAL_PROOF boundaries:** IDENTITY_CONFIGURATION (no admin_gateway org create endpoint), CLIENT_ADMIN_AUTHENTICATION (browser OIDC flow), PROJECTION_CONVERGENCE (no public HTTP endpoint for outbox — proven by AUTH-ROLE-001C).
+- **Security invariants:** No tokens, Authorization headers, or secrets in evidence. Cleanup suspends both proof tenants in try/finally regardless of outcome. Secret scan runs before artifact write. Tenant IDs follow `fg-lc-proof-{ts}-{a,b}` pattern for safe identification.
+- **Behavioral impact:** Non-live tests run in CI normally; live proof skipped without `FG_LIVE_PROOF=1`.
+- **Schema/API impact:** None — no new routes, migrations, or frontend code.
+- **Tests added:** `tests/test_client_lifecycle_production_proof_001.py` — 11 non-live, 2 skipped in CI.
+- **Validation:** `ruff check` CLEAN; `ruff format --check` CLEAN; `pytest tests/test_client_lifecycle_production_proof_001.py -q` → 11 passed, 2 skipped; lifecycle_002 regression → 20 passed; lifecycle_001 regression → 25 passed; `make fg-fast` → PASS.
+- **Result:** CI PASS. Live proof pending operator execution with `FG_LIVE_PROOF=1`.
+
+---
+
 ## P-109 — fix(console): lifecycle refresh after user activation/deactivation
 
 - **PR/Branch:** `feat/client-lifecycle-002-console-integration`
