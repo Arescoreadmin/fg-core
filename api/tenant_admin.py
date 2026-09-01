@@ -47,7 +47,15 @@ from sqlalchemy.orm import Session
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
 from api.auth_scopes import require_scopes, resolve_authoritative_tenant
-from api.db import set_tenant_context
+import api.credential_authority as ca
+import api.tenant_rbac as tenant_rbac
+from api.credential_authority import (
+    CredentialNotFoundError,
+    CredentialStateError,
+    TenantLifecycleError,
+    TenantNotFoundError,
+)
+from api.db import get_engine, set_tenant_context
 from api.deps import auth_ctx_db_session
 from api.identity.store import emit_identity_audit_event
 from api.tenant_admin_authority import (
@@ -134,6 +142,21 @@ _PORTAL_ROLES: frozenset[str] = frozenset(
     {"general", "executive", "remediation", "technical", "compliance"}
 )
 
+SELF_SERVICE_CREDENTIAL_ROLES: frozenset[str] = frozenset(
+    {
+        "governance_admin",
+        "analyst",
+        "auditor",
+        "read_only",
+    }
+)
+PLATFORM_ONLY_CREDENTIAL_ROLES: frozenset[str] = frozenset(
+    {
+        "tenant_admin",
+        "platform_admin",
+    }
+)
+
 
 class PortalAccessInviteBody(BaseModel):
     engagement_id: str = Field(..., min_length=1)
@@ -149,6 +172,22 @@ class PortalAccessInviteBody(BaseModel):
                 f"portal_role must be one of: {', '.join(sorted(_PORTAL_ROLES))}"
             )
         return normalized
+
+
+class IssueServiceCredentialBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def _v_name(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("name must not be empty")
+        return v
+
+
+class AssignCredentialRoleBody(BaseModel):
+    role: str = Field(..., min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -168,28 +207,24 @@ def _bootstrap_denied(reason: str) -> HTTPException:
 
 def _fetch_tenant_user_by_email(db: Session, tenant_id: str, email: str) -> Any | None:
     return db.execute(
-        text(
-            """
+        text("""
             SELECT id, email, display_name, role, active, principal_id,
                    identity_binding_status
             FROM tenant_users
             WHERE tenant_id = :t AND email = :e
-            """
-        ),
+            """),
         {"t": tenant_id, "e": email},
     ).fetchone()
 
 
 def _fetch_tenant_user_by_id(db: Session, tenant_id: str, user_id: str) -> Any | None:
     return db.execute(
-        text(
-            """
+        text("""
             SELECT id, email, display_name, role, active, principal_id,
                    identity_binding_status, identity_provider, identity_subject
             FROM tenant_users
             WHERE tenant_id = :t AND id = :u
-            """
-        ),
+            """),
         {"t": tenant_id, "u": user_id},
     ).fetchone()
 
@@ -209,14 +244,12 @@ def _enqueue_projection_if_bound(
     """
     try:
         row = db.execute(
-            text(
-                """
+            text("""
                 SELECT principal_id, identity_provider, identity_subject,
                        role, active
                 FROM tenant_users
                 WHERE tenant_id = :tid AND id = :uid
-                """
-            ),
+                """),
             {"tid": tenant_id, "uid": user_id},
         ).fetchone()
         if row is None:
@@ -245,6 +278,38 @@ def _enqueue_projection_if_bound(
             tenant_id,
             user_id,
         )
+
+
+def _credential_to_dict(rec: "ca.CredentialRecord") -> dict[str, Any]:
+    meta = rec.metadata or {}
+    return {
+        "credential_id": rec.credential_id,
+        "name": meta.get("name"),
+        "status": rec.status,
+        "credential_slot": rec.credential_slot,
+        "generation": rec.generation,
+        "issued_at": rec.issued_at.isoformat() if rec.issued_at else None,
+        "expires_at": rec.expires_at.isoformat() if rec.expires_at else None,
+        "last_used_at": rec.last_used_at.isoformat() if rec.last_used_at else None,
+        "approximate_use_count": rec.approximate_use_count,
+    }
+
+
+def _cred_not_found(credential_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "CREDENTIAL_NOT_FOUND",
+            "message": f"Credential {credential_id!r} not found in this tenant.",
+        },
+    )
+
+
+def _cred_state_conflict(msg: str) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": "CREDENTIAL_STATE_CONFLICT", "message": msg},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -288,15 +353,13 @@ def bootstrap_tenant_admin(
         if not was_already_admin:
             # Promote the existing row to tenant_admin (idempotent path 1).
             db.execute(
-                text(
-                    """
+                text("""
                     UPDATE tenant_users
                     SET role = 'tenant_admin', active = TRUE,
                         display_name = COALESCE(display_name, :dn),
                         updated_at = :now
                     WHERE tenant_id = :t AND id = :u
-                    """
-                ),
+                    """),
                 {
                     "t": tenant_id,
                     "u": existing.id,
@@ -327,8 +390,7 @@ def bootstrap_tenant_admin(
         user_id = str(uuid.uuid4())
         now_iso = _now().isoformat()
         db.execute(
-            text(
-                """
+            text("""
                 INSERT INTO tenant_users
                     (id, tenant_id, email, display_name, role, active,
                      identity_binding_status, principal_id, created_at,
@@ -336,8 +398,7 @@ def bootstrap_tenant_admin(
                 VALUES
                     (:id, :t, :e, :dn, 'tenant_admin', TRUE,
                      'unbound', :pid, :now, :now)
-                """
-            ),
+                """),
             {
                 "id": user_id,
                 "t": tenant_id,
@@ -396,16 +457,14 @@ def list_tenant_users(
     check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=resolved)
 
     rows = db.execute(
-        text(
-            """
+        text("""
             SELECT id, email, display_name, role, active,
                    identity_binding_status, principal_id, last_active_at,
                    created_at
             FROM tenant_users
             WHERE tenant_id = :t
             ORDER BY created_at DESC
-            """
-        ),
+            """),
         {"t": resolved},
     ).fetchall()
 
@@ -473,15 +532,13 @@ def invite_tenant_user(
     now_iso = _now().isoformat()
     try:
         db.execute(
-            text(
-                """
+            text("""
                 INSERT INTO tenant_users
                     (id, tenant_id, email, display_name, role, active,
                      identity_binding_status, created_at, updated_at)
                 VALUES
                     (:id, :t, :e, :dn, :role, TRUE, 'unbound', :now, :now)
-                """
-            ),
+                """),
             {
                 "id": user_id,
                 "t": authority.tenant_id,
@@ -724,11 +781,9 @@ def list_tenant_portal_access(
         # Aggregate view — enumerate engagements for this tenant and count.
         try:
             rows = db.execute(
-                text(
-                    """
+                text("""
                     SELECT id FROM fa_engagements WHERE tenant_id = :t
-                    """
-                ),
+                    """),
                 {"t": authority.tenant_id},
             ).fetchall()
             for r in rows:
@@ -958,7 +1013,320 @@ def get_client_lifecycle(
     }
 
 
+# ---------------------------------------------------------------------------
+# 3F. Tenant service credential administration — tenant_admin (own tenant only)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{tenant_id}/credential-administration",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def list_service_credentials(
+    tenant_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """List all tenant_api_key credentials for the actor's own tenant."""
+    engine = get_engine()
+    records = ca.list_credentials(
+        engine,
+        authority.tenant_id,
+        credential_type="tenant_api_key",
+    )
+    items = []
+    for rec in records:
+        d = _credential_to_dict(rec)
+        d["role"] = tenant_rbac.get_credential_role(
+            db, tenant_id=authority.tenant_id, credential_id=rec.credential_id
+        )
+        items.append(d)
+    return {"tenant_id": authority.tenant_id, "items": items, "total": len(items)}
+
+
+@router.post(
+    "/{tenant_id}/credential-administration",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def issue_service_credential(
+    tenant_id: str,
+    body: IssueServiceCredentialBody,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Issue a new tenant_api_key credential. Plaintext secret returned exactly once."""
+    engine = get_engine()
+    credential_slot = str(uuid.uuid4())
+    try:
+        result = ca.issue_credential(
+            engine,
+            tenant_id=authority.tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=credential_slot,
+            metadata={"name": body.name},
+            actor_id=authority.subject,
+        )
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except TenantLifecycleError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "TENANT_LIFECYCLE_DENIED", "message": str(exc)},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    d = _credential_to_dict(result.record)
+    d["plaintext_secret"] = result.plaintext_secret
+    return {"tenant_id": authority.tenant_id, **d}
+
+
+@router.get(
+    "/{tenant_id}/credential-administration/rbac",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def list_service_credential_roles(
+    tenant_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """List all role assignments and the role change audit log for the actor's tenant."""
+    assignments = tenant_rbac.list_role_assignments(db, tenant_id=authority.tenant_id)
+    audit = tenant_rbac.get_role_audit_log(db, tenant_id=authority.tenant_id)
+    return {
+        "tenant_id": authority.tenant_id,
+        "assignments": assignments,
+        "audit": audit,
+    }
+
+
+@router.get(
+    "/{tenant_id}/credential-administration/{credential_id}",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def get_service_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Fetch a single service credential by ID."""
+    engine = get_engine()
+    try:
+        rec = ca.get_credential(engine, credential_id, authority.tenant_id)
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    if rec.credential_type != "tenant_api_key":
+        raise _cred_not_found(credential_id)
+    role = tenant_rbac.get_credential_role(
+        db, tenant_id=authority.tenant_id, credential_id=credential_id
+    )
+    d = _credential_to_dict(rec)
+    d["role"] = role
+    return {"tenant_id": authority.tenant_id, **d}
+
+
+@router.post(
+    "/{tenant_id}/credential-administration/{credential_id}/rotate",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def rotate_service_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Rotate a service credential. Old credential is marked rotated; plaintext returned once."""
+    engine = get_engine()
+    try:
+        existing = ca.get_credential(engine, credential_id, authority.tenant_id)
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    if existing.credential_type != "tenant_api_key":
+        raise _cred_not_found(credential_id)
+    try:
+        result = ca.rotate_credential(
+            engine,
+            tenant_id=authority.tenant_id,
+            credential_type="tenant_api_key",
+            credential_slot=existing.credential_slot,
+            actor_id=authority.subject,
+        )
+    except TenantLifecycleError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "TENANT_LIFECYCLE_DENIED", "message": str(exc)},
+        )
+    except Exception as exc:
+        raise _cred_state_conflict(str(exc))
+    d = _credential_to_dict(result.record)
+    d["plaintext_secret"] = result.plaintext_secret
+    d["rotated_from_credential_id"] = credential_id
+    return {"tenant_id": authority.tenant_id, **d}
+
+
+@router.delete(
+    "/{tenant_id}/credential-administration/{credential_id}",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def revoke_service_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Revoke a service credential. Idempotent."""
+    engine = get_engine()
+    try:
+        existing = ca.get_credential(engine, credential_id, authority.tenant_id)
+        if existing.credential_type != "tenant_api_key":
+            raise CredentialNotFoundError()
+        ca.revoke_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id=authority.tenant_id,
+            actor_id=authority.subject,
+            reason="tenant_admin_revocation",
+        )
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    except CredentialStateError as exc:
+        raise _cred_state_conflict(str(exc))
+    return {
+        "tenant_id": authority.tenant_id,
+        "credential_id": credential_id,
+        "revoked": True,
+    }
+
+
+@router.post(
+    "/{tenant_id}/credential-administration/{credential_id}/suspend",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def suspend_service_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Suspend a service credential. Reversible via resume."""
+    engine = get_engine()
+    try:
+        existing = ca.get_credential(engine, credential_id, authority.tenant_id)
+        if existing.credential_type != "tenant_api_key":
+            raise CredentialNotFoundError()
+        rec = ca.suspend_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id=authority.tenant_id,
+            actor_id=authority.subject,
+            reason="tenant_admin_suspension",
+        )
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    except CredentialStateError as exc:
+        raise _cred_state_conflict(str(exc))
+    return {"tenant_id": authority.tenant_id, **_credential_to_dict(rec)}
+
+
+@router.post(
+    "/{tenant_id}/credential-administration/{credential_id}/resume",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def resume_service_credential(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Resume a suspended service credential."""
+    engine = get_engine()
+    try:
+        existing = ca.get_credential(engine, credential_id, authority.tenant_id)
+        if existing.credential_type != "tenant_api_key":
+            raise CredentialNotFoundError()
+        rec = ca.resume_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id=authority.tenant_id,
+            actor_id=authority.subject,
+        )
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    except CredentialStateError as exc:
+        raise _cred_state_conflict(str(exc))
+    return {"tenant_id": authority.tenant_id, **_credential_to_dict(rec)}
+
+
+@router.put(
+    "/{tenant_id}/credential-administration/{credential_id}/role",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def assign_service_credential_role(
+    tenant_id: str,
+    credential_id: str,
+    body: AssignCredentialRoleBody,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Assign a role to a service credential. Self-service ceiling applies.
+
+    Unknown role → 422 INVALID_ROLE.
+    Platform-only role (tenant_admin, platform_admin) → 403 ROLE_NOT_DELEGATABLE.
+    Valid self-service role (governance_admin, analyst, auditor, read_only) → assigned.
+    """
+    if body.role in PLATFORM_ONLY_CREDENTIAL_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "ROLE_NOT_DELEGATABLE",
+                "message": (
+                    f"Role {body.role!r} can only be assigned by platform administrators."
+                ),
+            },
+        )
+    if body.role not in SELF_SERVICE_CREDENTIAL_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_ROLE",
+                "message": (
+                    f"Unknown role {body.role!r}. "
+                    f"Valid self-service roles: {sorted(SELF_SERVICE_CREDENTIAL_ROLES)}"
+                ),
+            },
+        )
+    engine = get_engine()
+    try:
+        existing = ca.get_credential(engine, credential_id, authority.tenant_id)
+        if existing.credential_type != "tenant_api_key":
+            raise CredentialNotFoundError()
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    try:
+        result = tenant_rbac.assign_role(
+            db,
+            tenant_id=authority.tenant_id,
+            actor_key_prefix=authority.subject,
+            credential_id=credential_id,
+            role_name=body.role,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return result
+
+
 __all__ = [
     "router",
     "TENANT_ADMIN_DENIED",
+    "SELF_SERVICE_CREDENTIAL_ROLES",
+    "PLATFORM_ONLY_CREDENTIAL_ROLES",
 ]

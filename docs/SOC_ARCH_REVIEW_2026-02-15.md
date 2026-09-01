@@ -4163,3 +4163,30 @@ Critical-path files changed:
 Test evidence: `tests/test_client_lifecycle_001.py` — 24 tests across groups A (evaluator unit: 9 tests), B (precedence determinism: 5 tests), C (API route: 10 tests). Covers tenant_not_found, tenant_suspended, admin_unset, admin_unbound, operational with/without members, inactive admin/member exclusion, mixed bound/unbound admins, cross-tenant denial, unauthenticated denial, response schema, HTTP 404 on tenant_not_found, platform-admin cross-tenant read, determinism on repeated calls.
 
 SOC review outcome: approved. Strictly additive read-only endpoint. No auth mechanisms changed. No credential issuance, no schema change, no mutation path. The dual-path auth pattern is consistent with the existing `bootstrap-admin` cross-tenant platform access pattern. Fail-closed invariants verified by 24 tests.
+
+---
+
+## P-113.4 Tenant Service Credential Administration — SOC Review (2026-09-01)
+
+**Change summary:** 9 new routes under `/admin/tenants/{tenant_id}/credential-administration/...` implementing delegated machine-credential lifecycle for tenant admins. All routes require `require_tenant_admin()` (DB-canonical authority check) plus `require_scopes("admin:read"/"admin:write")`.
+
+**Auth model:** Routes sit behind the existing `require_tenant_admin()` dependency which performs a DB-canonical check against `tenant_users` (role=tenant_admin, active=True, identity_binding_status=bound, principal_id non-null). No JWT claims are trusted without DB verification.
+
+**Role ceiling enforcement:** `SELF_SERVICE_CREDENTIAL_ROLES = {governance_admin, analyst, auditor, read_only}` is the only set tenant admins may assign to machine credentials. `PLATFORM_ONLY_CREDENTIAL_ROLES = {tenant_admin, platform_admin}` → 403 ROLE_NOT_DELEGATABLE. Unknown roles → 422 INVALID_ROLE. All enforcement is pre-call, before any DB write.
+
+**Secret invariant:** Plaintext credential secrets are returned exactly once (issuance and rotation responses only). `_credential_to_dict()` never includes secret material. List, get, suspend, resume, and revoke responses contain no plaintext. Enforced by `credential_authority.py` which never stores plaintext after issuance.
+
+**Cross-tenant isolation:** All data operations use `authority.tenant_id` (from the DB-canonical `TenantAdminAuthority` proof), never the raw path parameter. `credential_authority.get_credential(engine, cred_id, authority.tenant_id)` will raise `CredentialNotFoundError` for any cross-tenant lookup, converted to 404.
+
+**Type guard:** Routes only accept/return credentials of type `tenant_api_key`. Any other type (portal_access, connector, agent_device) → 404 CREDENTIAL_NOT_FOUND. This prevents credential-administration surface from being used as a cross-type escalation path.
+
+**No schema change:** Credential name stored in existing `metadata["name"]` field of `tenant_credentials`. No new tables, no migrations.
+
+**Critical-path files changed:**
+- `api/tenant_admin.py`: 9 additive routes; no existing route modified.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate`.
+- `contracts/core/openapi.json`: regenerated to include new routes; `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+**Test evidence:** `tests/test_tenant_credential_admin_001.py` — 20 tests (C1-01 through C1-20). Covers: list, issue, get, rotate, suspend, resume, revoke (idempotent + terminal conflict), self-service role assign, platform-only role denial (tenant_admin, platform_admin), unknown role rejection, RBAC list, cross-tenant isolation, no-plaintext guards (list + get), portal_access type guard, constants contract (subset/disjoint assertions).
+
+**SOC review outcome:** approved. Additive surface with existing auth machinery. Self-service role ceiling prevents privilege escalation. Plaintext never in non-issuance/rotation responses. Type guard prevents cross-type access. Cross-tenant isolation enforced at authority-proof level, not request parameter level.
