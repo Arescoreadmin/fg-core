@@ -15,10 +15,22 @@ Classification:
     until a live run produces evidence with FG_LIVE_PROOF=1. Do not interpret
     MERGE_HARNESS_ONLY as production-proven.
 
-Auth:
-    Core API authenticates via X-API-Key header (confirmed: api/main.py:611,
-    api/token_useage.py:149). NOT Authorization: Bearer.
-    Set FG_PLATFORM_ADMIN_KEY to the platform admin's API key value.
+Auth — two distinct credentials are required for Core API admin route calls:
+    1. FG_PLATFORM_ADMIN_KEY  — platform admin API key; must carry the platform_admin
+       role in tenant_credential_roles so that roles_to_permissions(['platform_admin'])
+       grants ALL_PERMISSIONS including platform.admin. Sent as X-API-Key.
+       NOTE: this is NOT the Platform Service Principal (PSP) credential.
+       PSP_CREDENTIAL_SCOPES intentionally excludes platform.admin
+       (api/platform_service_principal.py:67-73 — the PSP is never a global superuser).
+       A fgk.* PSP credential used here will 403 on every platform.admin-gated route.
+    2. FG_INTERNAL_GATEWAY_SECRET — Internal gateway trust secret.
+       Sent as X-FG-Internal-Token. Satisfies require_internal_admin_gateway()
+       (api/admin.py), which is applied unconditionally to all /admin/* routes.
+       Reason: gateway trust verification, independent of credential identity.
+
+    These two credentials must be DISTINCT values. The pre-mutation preflight call
+    to GET /admin/system/service-principal verifies both headers are correctly wired
+    before any tenant mutation is attempted.
 
 Phases:
     0.5 — Live path preflight (Core API direct; BFF path is MANUAL_PROOF)
@@ -43,12 +55,13 @@ Gated by: FG_LIVE_PROOF=1 (never set in CI)
 
 Required env vars for live run:
     FG_LIVE_PROOF=1
-    FG_WRITE_EVIDENCE=1          (to write evidence artifact)
-    FG_PLATFORM_ADMIN_KEY        (platform admin API key — sent as X-API-Key)
-    FG_CORE_API_URL              (Core API base URL, no trailing slash)
-    FG_CONSOLE_URL               (Console URL, default: https://console.frostgate.ai)
-    FG_PREFLIGHT_TENANT_ID       (known-safe existing tenant for Phase 0.5 preflight)
-    FG_ADMIN_GATEWAY_URL         (optional — admin_gateway base URL for health check)
+    FG_WRITE_EVIDENCE=1              (to write evidence artifact)
+    FG_PLATFORM_ADMIN_KEY            (platform admin API key with platform_admin role — NOT the PSP credential; sent as X-API-Key)
+    FG_INTERNAL_GATEWAY_SECRET       (internal gateway trust secret; sent as X-FG-Internal-Token)
+    FG_CORE_API_URL                  (Core API base URL, no trailing slash)
+    FG_CONSOLE_URL                   (Console URL, default: https://console.frostgate.ai)
+    FG_PREFLIGHT_TENANT_ID           (known-safe existing tenant for Phase 0.5 preflight)
+    FG_ADMIN_GATEWAY_URL             (optional — admin_gateway base URL for health check)
 """
 
 from __future__ import annotations
@@ -75,7 +88,12 @@ WRITE_EVIDENCE = os.getenv("FG_WRITE_EVIDENCE") == "1"
 # See api/main.py and api/token_useage.py for confirmation.
 CONSOLE_URL = os.getenv("FG_CONSOLE_URL", "https://console.frostgate.ai").rstrip("/")
 CORE_API_URL = os.getenv("FG_CORE_API_URL", "").rstrip("/")
-PLATFORM_ADMIN_KEY = os.getenv("FG_PLATFORM_ADMIN_KEY", "")  # sent as X-API-Key
+PLATFORM_ADMIN_KEY = os.getenv(
+    "FG_PLATFORM_ADMIN_KEY", ""
+)  # platform_admin role key — sent as X-API-Key
+INTERNAL_GATEWAY_SECRET = os.getenv(
+    "FG_INTERNAL_GATEWAY_SECRET", ""
+)  # sent as X-FG-Internal-Token
 PREFLIGHT_TENANT_ID = os.getenv("FG_PREFLIGHT_TENANT_ID", "")
 # Admin gateway URL for pre-live health check (optional)
 ADMIN_GATEWAY_URL = os.getenv("FG_ADMIN_GATEWAY_URL", "").rstrip("/")
@@ -197,6 +215,41 @@ class TestNonLiveGating:
                 "FG_PLATFORM_ADMIN_KEY required (sent as X-API-Key to Core API)"
             )
 
+    def test_internal_gateway_secret_required_when_live(self):
+        """FG_INTERNAL_GATEWAY_SECRET must be set for live run.
+
+        All /admin/* routes apply require_internal_admin_gateway() unconditionally
+        (api/admin.py). Without X-FG-Internal-Token the gateway check fires before
+        credential auth and every admin call returns 403.
+        """
+        if os.getenv("FG_LIVE_PROOF") == "1":
+            assert os.getenv("FG_INTERNAL_GATEWAY_SECRET"), (
+                "FG_INTERNAL_GATEWAY_SECRET required — "
+                "all /admin/* routes enforce X-FG-Internal-Token check. "
+                "Inject from production secret manager; do not rotate to obtain."
+            )
+
+    def test_credentials_are_distinct(self):
+        """Platform admin key and gateway secret must never be the same value.
+
+        FG_PLATFORM_ADMIN_KEY is a credential with platform_admin role in
+        tenant_credential_roles (grants platform.admin via roles_to_permissions).
+        FG_INTERNAL_GATEWAY_SECRET is the shared gateway trust secret.
+        Using the same value for both would mean either the admin key lacks
+        platform.admin (wrong path) or the gateway secret is exposed as a credential.
+        """
+        if os.getenv("FG_LIVE_PROOF") == "1":
+            admin_key = os.getenv("FG_PLATFORM_ADMIN_KEY", "")
+            gw = os.getenv("FG_INTERNAL_GATEWAY_SECRET", "")
+            if admin_key and gw:
+                assert admin_key != gw, (
+                    "STOP: FG_PLATFORM_ADMIN_KEY == FG_INTERNAL_GATEWAY_SECRET. "
+                    "These must be distinct credentials. "
+                    "FG_PLATFORM_ADMIN_KEY must have platform_admin role; "
+                    "FG_INTERNAL_GATEWAY_SECRET is the gateway trust secret. "
+                    "Also: do not use the PSP credential — it lacks platform.admin."
+                )
+
     def test_state_constants_are_stable(self):
         """Machine-contract lifecycle states must not be renamed."""
         from api.client_lifecycle import (
@@ -281,15 +334,23 @@ class TestPhase0Preflight:
 
         assert PREFLIGHT_TENANT_ID, "FG_PREFLIGHT_TENANT_ID must be set for preflight"
         assert PLATFORM_ADMIN_KEY, (
-            "FG_PLATFORM_ADMIN_KEY must be set (sent as X-API-Key)"
+            "FG_PLATFORM_ADMIN_KEY must be set (platform admin key with platform_admin role; sent as X-API-Key)"
+        )
+        assert INTERNAL_GATEWAY_SECRET, (
+            "FG_INTERNAL_GATEWAY_SECRET must be set (sent as X-FG-Internal-Token). "
+            "Inject from production secret manager."
         )
         assert CORE_API_URL, "FG_CORE_API_URL must be set"
 
-        # Call Core API directly — X-API-Key is the correct auth header
+        # Two-credential chain: platform_admin key as X-API-Key grants platform.admin;
+        # gateway secret as X-FG-Internal-Token satisfies require_internal_admin_gateway().
         url = f"{CORE_API_URL}/admin/tenants/{PREFLIGHT_TENANT_ID}/lifecycle"
         resp = _requests.get(
             url,
-            headers={"X-API-Key": PLATFORM_ADMIN_KEY},
+            headers={
+                "X-API-Key": PLATFORM_ADMIN_KEY,
+                "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET,
+            },
             timeout=15,
         )
 
@@ -316,7 +377,7 @@ class TestPhase0Preflight:
                 f"Open {CONSOLE_URL}/admin/tenants/{PREFLIGHT_TENANT_ID} "
                 "in an authenticated browser. Confirm lifecycle banner loads."
             ),
-            "auth_header_used": "X-API-Key (confirmed correct — api/main.py:611)",
+            "auth_path": "X-API-Key=platform_admin_key + X-FG-Internal-Token=gateway_secret (distinct values)",
         }
 
 
@@ -346,7 +407,10 @@ class TestPreliveMutationChecks:
         sentinel = "fg-lc-proof-prelive-sentinel-nonexistent"
         r = _requests.post(
             f"{CORE_API_URL}/admin/tenants/{sentinel}/suspend",
-            headers={"X-API-Key": PLATFORM_ADMIN_KEY},
+            headers={
+                "X-API-Key": PLATFORM_ADMIN_KEY,
+                "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET,
+            },
             timeout=10,
         )
         assert r.status_code in {404, 422}, (
@@ -392,6 +456,70 @@ class TestPreliveMutationChecks:
                 f"PRELIVE FAIL: admin_gateway unreachable at {ADMIN_GATEWAY_URL}: {e}"
             )
 
+    def test_gateway_auth_distinct_from_psp(self):
+        """PSP and gateway secret must be distinct — confirmed at proof time.
+
+        Enforces the two-credential invariant inside the live-gated class so it runs
+        after the non-live gating tests and before any mutation.
+        """
+        assert PLATFORM_ADMIN_KEY, "FG_PLATFORM_ADMIN_KEY must be set"
+        assert INTERNAL_GATEWAY_SECRET, (
+            "STOP: FG_INTERNAL_GATEWAY_SECRET is empty. "
+            "Inject currently active value from production secret manager. "
+            "Do not rotate to obtain — rotation is an exceptional key-replacement event."
+        )
+        assert PLATFORM_ADMIN_KEY != INTERNAL_GATEWAY_SECRET, (
+            "STOP: FG_PLATFORM_ADMIN_KEY == FG_INTERNAL_GATEWAY_SECRET. "
+            "These must be distinct credentials. "
+            "FG_PLATFORM_ADMIN_KEY = platform admin key with platform_admin role; "
+            "FG_INTERNAL_GATEWAY_SECRET = shared gateway trust secret. "
+            "Do not use the PSP credential — it lacks platform.admin permission."
+        )
+        _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["credential_separation"] = {
+            "result": "PASS",
+            "note": "platform admin key and gateway secret are distinct values",
+        }
+
+    def test_platform_admin_auth_chain(self):
+        """Verify the platform admin key grants platform.admin before any mutation.
+
+        GET /admin/system/service-principal requires require_internal_admin_gateway
+        (X-FG-Internal-Token) + require_permission("platform.admin") (X-API-Key with
+        platform_admin role). A 200 response proves both credentials are wired correctly
+        and the auth chain is valid before tenant creation begins.
+
+        NOTE: Do not use the PSP credential (slot platform-service-principal:v1) here.
+        PSP_CREDENTIAL_SCOPES intentionally excludes platform.admin
+        (api/platform_service_principal.py:67-73). A PSP key will return 403.
+        """
+        import requests as _requests
+
+        assert CORE_API_URL, "FG_CORE_API_URL must be set"
+        assert PLATFORM_ADMIN_KEY, "FG_PLATFORM_ADMIN_KEY must be set"
+        assert INTERNAL_GATEWAY_SECRET, "FG_INTERNAL_GATEWAY_SECRET must be set"
+
+        r = _requests.get(
+            f"{CORE_API_URL}/admin/system/service-principal",
+            headers={
+                "X-API-Key": PLATFORM_ADMIN_KEY,
+                "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET,
+            },
+            timeout=15,
+        )
+        assert r.status_code == 200, (
+            f"PRELIVE FAIL: platform admin auth chain rejected by "
+            f"/admin/system/service-principal: HTTP {r.status_code}. "
+            "Verify FG_PLATFORM_ADMIN_KEY has platform_admin role (NOT the PSP credential) "
+            "and FG_INTERNAL_GATEWAY_SECRET matches the current production value."
+        )
+        body = r.json()
+        _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["platform_admin_auth"] = {
+            "result": "PASS",
+            "http_status": r.status_code,
+            "psp_status": body.get("status"),
+            "note": "platform admin key grants platform.admin; dual-header auth chain verified",
+        }
+
     def test_manual_prerequisite_checklist(self):
         """Document manual prerequisites that cannot be verified from the harness."""
         _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["manual_prerequisites"] = {
@@ -422,6 +550,19 @@ class TestClientLifecycleProductionProof:
         assert PLATFORM_ADMIN_KEY, (
             "STOP: FG_PLATFORM_ADMIN_KEY is empty — cannot run live proof"
         )
+        assert INTERNAL_GATEWAY_SECRET, (
+            "STOP: FG_INTERNAL_GATEWAY_SECRET is empty — "
+            "all /admin/* routes enforce X-FG-Internal-Token check. "
+            "Inject from production secret manager."
+        )
+        assert PLATFORM_ADMIN_KEY != INTERNAL_GATEWAY_SECRET, (
+            "STOP: FG_PLATFORM_ADMIN_KEY == FG_INTERNAL_GATEWAY_SECRET. "
+            "These must be distinct credentials. "
+            "FG_PLATFORM_ADMIN_KEY must have platform_admin role; "
+            "FG_INTERNAL_GATEWAY_SECRET is the shared gateway trust secret. "
+            "NOTE: do not use the PSP credential here — "
+            "PSP_CREDENTIAL_SCOPES intentionally excludes platform.admin."
+        )
         assert CORE_API_URL, "STOP: FG_CORE_API_URL is empty — cannot run live proof"
         assert _EVIDENCE["LIVE_PATH_PREFLIGHT"].get("result") == "PASS", (
             "STOP: Preflight must PASS before tenant creation. "
@@ -441,8 +582,13 @@ class TestClientLifecycleProductionProof:
         tenant_a_id = f"fg-lc-proof-{ts}-a"
         tenant_b_id = f"fg-lc-proof-{ts}-b"
 
-        # X-API-Key is the correct Core API auth header (api/main.py:611)
-        _auth_headers = {"X-API-Key": PLATFORM_ADMIN_KEY}
+        # Two-credential chain: platform_admin key as X-API-Key grants platform.admin;
+        # gateway secret as X-FG-Internal-Token satisfies require_internal_admin_gateway().
+        # Both are checked independently on every /admin/* route.
+        _auth_headers = {
+            "X-API-Key": PLATFORM_ADMIN_KEY,
+            "X-FG-Internal-Token": INTERNAL_GATEWAY_SECRET,
+        }
         proof_tenants_created: list[str] = []
         bootstrapped_admin_id: str | None = None
 
