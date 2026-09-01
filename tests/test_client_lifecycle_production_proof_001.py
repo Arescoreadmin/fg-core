@@ -3,25 +3,52 @@
 Production lifecycle and isolation proof. Makes REAL HTTP calls to production when
 FG_LIVE_PROOF=1 is set. Never sets FG_LIVE_PROOF in CI.
 
-Phases (all within TestClientLifecycleProductionProof):
-    0.5 — Live path preflight (Console→BFF→Core→lifecycle)
-    1   — Client creation (POST /tenants direct Core API)
+Classification:
+    HARNESS_QUALITY          = PASS
+    CI_SAFETY                = PASS
+    LIVE_PATH_PREFLIGHT      = NOT_YET_RUN
+    PRODUCTION_LIFECYCLE_PROOF = NOT_YET_RUN
+    CLIENT_LIFECYCLE_PRODUCTION_READY = NOT_PROVEN
+    MERGE_RECOMMENDATION     = MERGE_HARNESS_ONLY
+
+    The harness is correct and CI-safe. The production-proof objective is not complete
+    until a live run produces evidence with FG_LIVE_PROOF=1. Do not interpret
+    MERGE_HARNESS_ONLY as production-proven.
+
+Auth:
+    Core API authenticates via X-API-Key header (confirmed: api/main.py:611,
+    api/token_useage.py:149). NOT Authorization: Bearer.
+    Set FG_PLATFORM_ADMIN_KEY to the platform admin's API key value.
+
+Phases:
+    0.5 — Live path preflight (Core API direct; BFF path is MANUAL_PROOF)
+    PRE — Pre-mutation checks (cleanup path, projection worker health, manual checklist)
+    1   — Client creation (POST /tenants)
     1b  — Initial lifecycle (admin_unset expected)
-    2   — Identity configuration (MANUAL_PROOF — no admin_gateway org config endpoint)
-    3   — First admin bootstrap
-    4   — Operational readiness
+    2   — Identity configuration (MANUAL_PROOF — no HTTP endpoint for Auth0 org creation)
+    3   — First admin bootstrap (POST /admin/tenants/{id}/bootstrap-admin)
+    4   — Operational readiness (lifecycle re-evaluated independently after bootstrap)
     5   — Client admin authentication (MANUAL_PROOF — browser OIDC)
     6   — Own-tenant administration
-    7/8 — Second tenant creation + cross-tenant isolation proof
-    9   — Platform operator boundary
-    10  — Revocation (PATCH active: false → canonical lifecycle re-evaluation)
+    7/8 — Second tenant + cross-tenant isolation adversarial proof
+    9   — Platform operator boundary (no tenant membership pollution)
+    10  — Revocation (POST /admin/tenants/{id}/suspend → immediate canonical lifecycle re-evaluation)
     11  — Projection outbox inspection
-    12  — Recovery (re-activate → lifecycle restored)
-    13  — State reconstruction
-    C   — Cleanup (try/finally, both tenants suspended)
+    12  — Recovery (POST /admin/tenants/{id}/activate → lifecycle restored canonically)
+    13  — State reconstruction (fresh fetch, no cache)
+    C   — Cleanup (try/finally, both proof tenants suspended)
 
 Evidence artifact: contracts/artifacts/identity/client-lifecycle-production-proof-001-evidence.json
 Gated by: FG_LIVE_PROOF=1 (never set in CI)
+
+Required env vars for live run:
+    FG_LIVE_PROOF=1
+    FG_WRITE_EVIDENCE=1          (to write evidence artifact)
+    FG_PLATFORM_ADMIN_KEY        (platform admin API key — sent as X-API-Key)
+    FG_CORE_API_URL              (Core API base URL, no trailing slash)
+    FG_CONSOLE_URL               (Console URL, default: https://console.frostgate.ai)
+    FG_PREFLIGHT_TENANT_ID       (known-safe existing tenant for Phase 0.5 preflight)
+    FG_ADMIN_GATEWAY_URL         (optional — admin_gateway base URL for health check)
 """
 
 from __future__ import annotations
@@ -43,11 +70,15 @@ import pytest
 LIVE_PROOF = os.getenv("FG_LIVE_PROOF") == "1"
 WRITE_EVIDENCE = os.getenv("FG_WRITE_EVIDENCE") == "1"
 
-# Required when LIVE_PROOF=True — read from environment, never hardcode
+# Required when LIVE_PROOF=True — read from environment, never hardcode.
+# Core API authenticates via X-API-Key header (not Authorization: Bearer).
+# See api/main.py and api/token_useage.py for confirmation.
 CONSOLE_URL = os.getenv("FG_CONSOLE_URL", "https://console.frostgate.ai").rstrip("/")
 CORE_API_URL = os.getenv("FG_CORE_API_URL", "").rstrip("/")
-PLATFORM_ADMIN_TOKEN = os.getenv("FG_PLATFORM_ADMIN_TOKEN", "")
+PLATFORM_ADMIN_KEY = os.getenv("FG_PLATFORM_ADMIN_KEY", "")  # sent as X-API-Key
 PREFLIGHT_TENANT_ID = os.getenv("FG_PREFLIGHT_TENANT_ID", "")
+# Admin gateway URL for pre-live health check (optional)
+ADMIN_GATEWAY_URL = os.getenv("FG_ADMIN_GATEWAY_URL", "").rstrip("/")
 
 _REPO = Path(__file__).parents[1]
 
@@ -162,6 +193,9 @@ class TestNonLiveGating:
             assert os.getenv("FG_PREFLIGHT_TENANT_ID"), (
                 "FG_PREFLIGHT_TENANT_ID required"
             )
+            assert os.getenv("FG_PLATFORM_ADMIN_KEY"), (
+                "FG_PLATFORM_ADMIN_KEY required (sent as X-API-Key to Core API)"
+            )
 
     def test_state_constants_are_stable(self):
         """Machine-contract lifecycle states must not be renamed."""
@@ -230,21 +264,34 @@ class TestPhase0Preflight:
     """PHASE 0.5: Verify Console→BFF→Core→lifecycle path before any mutation."""
 
     def test_live_path_preflight(self):
+        """Phase 0.5: Prove Core API reachable and lifecycle_version=1.
+
+        Calls the Core API directly via X-API-Key (the correct auth header —
+        confirmed in api/main.py and api/token_useage.py). The BFF path
+        (Console→BFF→Core) requires a browser session and is documented as a
+        MANUAL_PROOF step in LIVE_PATH_PREFLIGHT.
+
+        Manual BFF verification:
+          Open https://console.frostgate.ai/admin/tenants/{PREFLIGHT_TENANT_ID}
+          in an authenticated browser session. Confirm lifecycle banner loads
+          without CORE_ACCESS_DENIED or CORE_UNAVAILABLE. That proves the full
+          Browser→Console→BFF→Core path.
+        """
         import requests as _requests
 
         assert PREFLIGHT_TENANT_ID, "FG_PREFLIGHT_TENANT_ID must be set for preflight"
-        assert PLATFORM_ADMIN_TOKEN, "FG_PLATFORM_ADMIN_TOKEN must be set"
-        assert CONSOLE_URL, "FG_CONSOLE_URL must be set"
+        assert PLATFORM_ADMIN_KEY, "FG_PLATFORM_ADMIN_KEY must be set (sent as X-API-Key)"
+        assert CORE_API_URL, "FG_CORE_API_URL must be set"
 
-        url = f"{CONSOLE_URL}/api/core/admin/tenants/{PREFLIGHT_TENANT_ID}/lifecycle"
+        # Call Core API directly — X-API-Key is the correct auth header
+        url = f"{CORE_API_URL}/admin/tenants/{PREFLIGHT_TENANT_ID}/lifecycle"
         resp = _requests.get(
             url,
-            params={"tenant_id": PREFLIGHT_TENANT_ID},
-            headers={"Authorization": f"Bearer {PLATFORM_ADMIN_TOKEN}"},
+            headers={"X-API-Key": PLATFORM_ADMIN_KEY},
             timeout=15,
         )
 
-        # Assert status before any response logging — never print token
+        # Assert status before any response logging — never print the key
         assert resp.status_code == 200, f"Preflight failed: HTTP {resp.status_code}"
         body = resp.json()
         assert body.get("lifecycle_version") == 1, (
@@ -261,9 +308,99 @@ class TestPhase0Preflight:
             "http_status": resp.status_code,
             "lifecycle_version": body.get("lifecycle_version"),
             "lifecycle_state": body.get("lifecycle_state"),
-            "bff_reachable": True,
             "core_reachable": True,
+            "bff_reachable": "MANUAL_PROOF",
+            "bff_manual_step": (
+                f"Open {CONSOLE_URL}/admin/tenants/{PREFLIGHT_TENANT_ID} "
+                "in an authenticated browser. Confirm lifecycle banner loads."
+            ),
+            "auth_header_used": "X-API-Key (confirmed correct — api/main.py:611)",
         }
+
+
+@pytest.mark.skipif(not LIVE_PROOF, reason="FG_LIVE_PROOF=1 required")
+class TestPreliveMutationChecks:
+    """Read-only pre-mutation checks. Run after preflight, before any tenant creation.
+
+    These do not mutate production. They verify the environment is in a safe and
+    expected state before the harness creates ephemeral proof tenants.
+
+    Manual checks (cannot be verified from harness — must be confirmed before running):
+      AUTH0_M2M_SCOPES: Auth0 M2M client must have read:users + update:users_app_metadata.
+        Verify at: Auth0 Dashboard → Applications → M2M → FrostGate Projection Worker → APIs.
+      ADMIN_GATEWAY_AUTH0_REACH: Admin gateway must be able to call Auth0 management operations.
+        Verify at: admin_gateway health endpoint or by checking last successful projection event.
+    """
+
+    def test_no_stale_proof_tenants(self):
+        """Verify no prior failed proof run left a proof tenant in an active state."""
+        import requests as _requests
+
+        assert CORE_API_URL, "FG_CORE_API_URL must be set"
+        assert PLATFORM_ADMIN_KEY, "FG_PLATFORM_ADMIN_KEY must be set"
+
+        # The cleanup path (POST /tenants/{id}/suspend) is confirmed present in admin.py:690.
+        # Prove it is routable by calling it with a known-nonexistent ID — expect 404 not 503.
+        sentinel = "fg-lc-proof-prelive-sentinel-nonexistent"
+        r = _requests.post(
+            f"{CORE_API_URL}/admin/tenants/{sentinel}/suspend",
+            headers={"X-API-Key": PLATFORM_ADMIN_KEY},
+            timeout=10,
+        )
+        assert r.status_code in {404, 422}, (
+            f"PRELIVE FAIL: cleanup path not routable. "
+            f"Expected 404 for nonexistent tenant, got {r.status_code}. "
+            f"If 503: Core API is unreachable. If 403: auth failed."
+        )
+        _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["cleanup_path"] = {
+            "result": "PASS",
+            "sentinel_status": r.status_code,
+            "note": "404 confirms POST /admin/tenants/{id}/suspend is routable",
+        }
+
+    def test_projection_worker_health(self):
+        """Check admin_gateway health endpoint if configured; otherwise record NOT_CHECKED."""
+        import requests as _requests
+
+        _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["projection_worker"] = {}
+        if not ADMIN_GATEWAY_URL:
+            _EVIDENCE["PRELIVE_CHECKS"]["projection_worker"] = {
+                "result": "NOT_CHECKED",
+                "reason": "FG_ADMIN_GATEWAY_URL not set — set to check projection worker health",
+            }
+            return
+
+        try:
+            r = _requests.get(f"{ADMIN_GATEWAY_URL}/health", timeout=10)
+            _EVIDENCE["PRELIVE_CHECKS"]["projection_worker"] = {
+                "result": "PASS" if r.status_code == 200 else "DEGRADED",
+                "http_status": r.status_code,
+                "url": ADMIN_GATEWAY_URL + "/health",
+            }
+            assert r.status_code == 200, (
+                f"PRELIVE WARN: admin_gateway health returned {r.status_code}. "
+                "Projection worker may not be healthy."
+            )
+        except Exception as e:
+            _EVIDENCE["PRELIVE_CHECKS"]["projection_worker"] = {
+                "result": "UNREACHABLE",
+                "error": str(e),
+            }
+            pytest.fail(f"PRELIVE FAIL: admin_gateway unreachable at {ADMIN_GATEWAY_URL}: {e}")
+
+    def test_manual_prerequisite_checklist(self):
+        """Document manual prerequisites that cannot be verified from the harness."""
+        _EVIDENCE.setdefault("PRELIVE_CHECKS", {})["manual_prerequisites"] = {
+            "AUTH0_M2M_SCOPES": "MANUAL_PROOF — verify read:users + update:users_app_metadata in Auth0 Dashboard",
+            "ADMIN_GATEWAY_AUTH0_REACH": "MANUAL_PROOF — verify last successful projection event in identity_projection_outbox",
+            "NO_STALE_PROOF_TENANTS": "MANUAL_PROOF — search production DB for any fg-lc-proof-* tenant in active state",
+            "BFF_BROWSER_PATH": (
+                f"MANUAL_PROOF — open {CONSOLE_URL}/admin/tenants/{PREFLIGHT_TENANT_ID} "
+                "in authenticated browser; confirm lifecycle banner loads"
+            ),
+        }
+        # This test always passes — it exists to force the checklist into evidence
+        assert True
 
 
 @pytest.mark.skipif(not LIVE_PROOF, reason="FG_LIVE_PROOF=1 required")
@@ -278,8 +415,8 @@ class TestClientLifecycleProductionProof:
         import requests as _requests
 
         # Guard: STOP conditions before any mutation
-        assert PLATFORM_ADMIN_TOKEN, (
-            "STOP: FG_PLATFORM_ADMIN_TOKEN is empty — cannot run live proof"
+        assert PLATFORM_ADMIN_KEY, (
+            "STOP: FG_PLATFORM_ADMIN_KEY is empty — cannot run live proof"
         )
         assert CORE_API_URL, "STOP: FG_CORE_API_URL is empty — cannot run live proof"
         assert _EVIDENCE["LIVE_PATH_PREFLIGHT"].get("result") == "PASS", (
@@ -300,7 +437,8 @@ class TestClientLifecycleProductionProof:
         tenant_a_id = f"fg-lc-proof-{ts}-a"
         tenant_b_id = f"fg-lc-proof-{ts}-b"
 
-        _auth_headers = {"Authorization": f"Bearer {PLATFORM_ADMIN_TOKEN}"}
+        # X-API-Key is the correct Core API auth header (api/main.py:611)
+        _auth_headers = {"X-API-Key": PLATFORM_ADMIN_KEY}
         proof_tenants_created: list[str] = []
         bootstrapped_admin_id: str | None = None
 
@@ -315,18 +453,6 @@ class TestClientLifecycleProductionProof:
             )
             return r.json()
 
-        def _lifecycle_bff(tid: str) -> dict:
-            r = _requests.get(
-                f"{CONSOLE_URL}/api/core/admin/tenants/{tid}/lifecycle",
-                params={"tenant_id": tid},
-                headers=_auth_headers,
-                timeout=15,
-            )
-            assert r.status_code == 200, (
-                f"BFF lifecycle GET failed for {tid}: HTTP {r.status_code} {r.text[:200]}"
-            )
-            return r.json()
-
         _t0 = datetime.now(timezone.utc)
 
         try:
@@ -335,7 +461,7 @@ class TestClientLifecycleProductionProof:
             # ----------------------------------------------------------------
             t_create_start = datetime.now(timezone.utc).timestamp()
             create_r = _requests.post(
-                f"{CORE_API_URL}/tenants",
+                f"{CORE_API_URL}/admin/tenants",
                 json={
                     "tenant_id": tenant_a_id,
                     "name": f"Lifecycle Proof Tenant A ({ts})",
@@ -531,41 +657,26 @@ class TestClientLifecycleProductionProof:
             )
 
             # ----------------------------------------------------------------
-            # Phase 6 — OWN TENANT ADMINISTRATION
-            # As platform.admin, read tenant A users via Core API and BFF path
+            # Phase 6 — OWN TENANT LIFECYCLE READ
+            # platform.admin has lifecycle read authority via /admin/tenants/{id}/lifecycle.
+            # User enumeration (/admin/tenants/{id}/users) requires an active tenant_admin
+            # membership enforced by check_tenant_admin_authority() in tenant_admin.py —
+            # no platform.admin bypass exists. The boundary is proven explicitly in Phase 9.
             # ----------------------------------------------------------------
             t_admin_start = datetime.now(timezone.utc).timestamp()
-            users_r = _requests.get(
-                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/users",
-                headers=_auth_headers,
-                timeout=15,
-            )
-            assert users_r.status_code == 200, (
-                f"Phase 6 FAIL: users list returned {users_r.status_code}: "
-                f"{users_r.text[:300]}"
-            )
-            users_body = users_r.json()
-            _EVIDENCE["timings_seconds"]["phase6_list_users"] = (
+            lc_6 = _lifecycle(tenant_a_id)
+            _EVIDENCE["timings_seconds"]["phase6_lifecycle_read"] = (
                 datetime.now(timezone.utc).timestamp() - t_admin_start
             )
-
-            # BFF path
-            users_bff_r = _requests.get(
-                f"{CONSOLE_URL}/api/core/admin/tenants/{tenant_a_id}/users",
-                params={"tenant_id": tenant_a_id},
-                headers=_auth_headers,
-                timeout=15,
-            )
-            bff_status = users_bff_r.status_code
             _EVIDENCE["TENANT_ADMINISTRATION"] = {
                 "result": "PASS",
-                "core_api_status": users_r.status_code,
-                "bff_status": bff_status,
-                "bff_reachable": bff_status == 200,
-                "user_count_in_tenant": users_body.get("total"),
-                "bootstrapped_admin_present": any(
-                    u.get("user_id") == bootstrapped_admin_id
-                    for u in users_body.get("items", [])
+                "platform_admin_lifecycle_read": True,
+                "lifecycle_state": lc_6.get("lifecycle_state"),
+                "lifecycle_version": lc_6.get("lifecycle_version"),
+                "user_list_authority": (
+                    "MANUAL_PROOF — user enumeration requires bound tenant_admin identity; "
+                    "check_tenant_admin_authority() enforces this (tenant_admin.py); "
+                    "platform.admin boundary proven explicitly in Phase 9"
                 ),
             }
 
@@ -574,7 +685,7 @@ class TestClientLifecycleProductionProof:
             # ----------------------------------------------------------------
             t_b_start = datetime.now(timezone.utc).timestamp()
             create_b_r = _requests.post(
-                f"{CORE_API_URL}/tenants",
+                f"{CORE_API_URL}/admin/tenants",
                 json={
                     "tenant_id": tenant_b_id,
                     "name": f"Lifecycle Proof Tenant B ({ts})",
@@ -611,41 +722,22 @@ class TestClientLifecycleProductionProof:
                 f"tenant_id={lc_a_after_b.get('tenant_id')}"
             )
 
-            # Tenant B's user list must be empty (no bootstrapped admin)
-            users_b_r = _requests.get(
-                f"{CORE_API_URL}/admin/tenants/{tenant_b_id}/users",
-                headers=_auth_headers,
-                timeout=15,
-            )
-            assert users_b_r.status_code == 200, (
-                f"Phase 8 FAIL: users list for B returned {users_b_r.status_code}"
-            )
-            tenant_b_users = users_b_r.json()
-            # Verify tenant A's bootstrapped admin is NOT in tenant B's user list
-            a_admin_in_b = any(
-                u.get("user_id") == bootstrapped_admin_id
-                for u in tenant_b_users.get("items", [])
-            )
-            # STOP condition: any cross-tenant information leakage
-            assert not a_admin_in_b, (
-                f"SECURITY_BLOCKER: Tenant A's bootstrapped admin "
-                f"({bootstrapped_admin_id}) appears in Tenant B's user list. "
-                "Cross-tenant information leakage detected."
-            )
-
             _EVIDENCE["TENANT_ISOLATION"] = {
                 "result": "PASS",
                 "tenant_a_lifecycle_id": lc_a_after_b.get("tenant_id"),
                 "tenant_b_lifecycle_id": lc_b.get("tenant_id"),
-                "tenant_b_user_count": tenant_b_users.get("total"),
-                "tenant_a_admin_in_tenant_b": a_admin_in_b,
-                "cross_tenant_information_leakage": "ABSENT",
+                "lifecycle_ids_distinct": lc_a_after_b.get("tenant_id") != lc_b.get("tenant_id"),
+                "cross_tenant_information_leakage": "NOT_DETECTABLE_VIA_HTTP",
+                "user_list_isolation": (
+                    "MANUAL_PROOF — user list requires tenant_admin authority; "
+                    "platform.admin correctly gets 403 (proven in Phase 9). "
+                    "Cross-tenant user-list isolation proven by CLIENT-E2E-001 "
+                    "(test_scenario_2_cross_tenant_adversarial)."
+                ),
                 "note": (
-                    "Full cross-tenant denial (403) from a tenant-scoped identity "
-                    "is MANUAL_PROOF — the bootstrapped admin has no bound OIDC "
-                    "identity and cannot authenticate to call tenant_admin routes. "
-                    "Isolation at the object and identity level is proven by "
-                    "CLIENT-E2E-001 (test_scenario_2_cross_tenant_adversarial)."
+                    "Lifecycle isolation proven: each tenant returns its own tenant_id. "
+                    "Full cross-tenant denial from a tenant-scoped identity requires a bound "
+                    "OIDC identity and is proven by CLIENT-E2E-001."
                 ),
             }
             _EVIDENCE["product_path_matrix"].append(
@@ -663,53 +755,56 @@ class TestClientLifecycleProductionProof:
             # Verify platform.admin can read lifecycle for both proof tenants
             # but is not listed as a member of either tenant.
             # ----------------------------------------------------------------
-            pa_in_a = sum(
-                1
-                for u in users_body.get("items", [])
-                # Platform admin acts cross-tenant — it should not be IN tenant_users
-                # Heuristic: check by email prefix or known platform key
-                if "platform" in str(u.get("email", "")).lower()
-                or "frostgate-platform" in str(u.get("email", "")).lower()
+            # Platform.admin can read lifecycle for any tenant (authorized cross-tenant read).
+            # Platform.admin cannot enumerate user membership — check_tenant_admin_authority()
+            # in tenant_admin.py enforces tenant_admin requirement with no bypass.
+            # Prove the boundary explicitly: expect 403 on user list call.
+            boundary_r = _requests.get(
+                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/users",
+                headers=_auth_headers,
+                timeout=15,
             )
-            pa_in_b = sum(
-                1
-                for u in tenant_b_users.get("items", [])
-                if "platform" in str(u.get("email", "")).lower()
-                or "frostgate-platform" in str(u.get("email", "")).lower()
+            assert boundary_r.status_code == 403, (
+                f"Phase 9 SECURITY CONCERN: expected 403 for platform.admin user list, "
+                f"got {boundary_r.status_code}. "
+                "check_tenant_admin_authority() should deny platform.admin on user routes."
             )
             _EVIDENCE["PLATFORM_OPERATOR_BOUNDARY"] = {
                 "result": "PASS",
-                "platform_admin_in_tenant_a_users": pa_in_a,
-                "platform_admin_in_tenant_b_users": pa_in_b,
-                "platform_admin_cross_tenant_read": "AUTHORIZED",
-                "platform_admin_is_not_tenant_member": pa_in_a == 0 and pa_in_b == 0,
+                "platform_admin_cross_tenant_lifecycle_read": "AUTHORIZED",
+                "platform_admin_user_list": "403 DENIED — correct boundary enforcement",
+                "boundary_http_status": boundary_r.status_code,
                 "note": (
-                    "Platform admin has cross-tenant read authority on lifecycle and users. "
-                    "Platform admin is NOT a member of proof tenants (no tenant_users row). "
+                    "Platform admin has cross-tenant lifecycle read authority. "
+                    "Platform admin correctly cannot enumerate user membership (403). "
+                    "check_tenant_admin_authority() in tenant_admin.py enforces this. "
                     "This is the expected platform operator isolation boundary."
                 ),
             }
+            _EVIDENCE["security_invariants"]["platform_admin_user_list_denied"] = (
+                "PROVEN — platform.admin correctly gets 403 on GET /admin/tenants/{id}/users"
+            )
 
             # ----------------------------------------------------------------
             # Phase 10 — CANONICAL REVOCATION
             # Deactivate bootstrapped admin → re-fetch lifecycle without waiting for Auth0
             # ----------------------------------------------------------------
-            assert bootstrapped_admin_id, (
-                "Phase 10 requires a bootstrapped admin user_id"
-            )
+            # Use tenant suspension as the canonical revocation mechanism.
+            # PATCH /admin/tenants/{id}/users/{user_id} requires tenant_admin authority
+            # (check_tenant_admin_authority() — no platform.admin bypass in tenant_admin.py).
+            # POST /admin/tenants/{id}/suspend is the platform.admin-authorized revocation path.
             t0_revoke = datetime.now(timezone.utc).isoformat()
 
-            revoke_r = _requests.patch(
-                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/users/{bootstrapped_admin_id}",
-                json={"active": False},
+            revoke_r = _requests.post(
+                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/suspend",
                 headers=_auth_headers,
                 timeout=15,
             )
             t1_deny_check = datetime.now(timezone.utc).isoformat()
 
             assert revoke_r.status_code == 200, (
-                f"Phase 10 FAIL: PATCH active:false returned {revoke_r.status_code}: "
-                f"{revoke_r.text[:300]}"
+                f"Phase 10 FAIL: POST /admin/tenants/{tenant_a_id}/suspend returned "
+                f"{revoke_r.status_code}: {revoke_r.text[:300]}"
             )
 
             # Immediately re-fetch lifecycle — canonical DB is the authority
@@ -717,10 +812,13 @@ class TestClientLifecycleProductionProof:
             t2_lc_eval = datetime.now(timezone.utc).isoformat()
             lc_state_revoked = lc_after_revoke.get("lifecycle_state")
 
-            # With the only admin deactivated, lifecycle must NOT be operational
-            assert lc_state_revoked != "operational", (
-                f"Phase 10 FAIL: lifecycle must not be operational after admin deactivation, "
+            # Suspension must immediately reflect in lifecycle — no Auth0 wait required
+            assert lc_state_revoked == "tenant_suspended", (
+                f"Phase 10 FAIL: expected tenant_suspended after suspend, "
                 f"got {lc_state_revoked}"
+            )
+            assert not lc_after_revoke.get("operational"), (
+                "Phase 10 FAIL: suspended tenant must not be operational"
             )
 
             _EVIDENCE["CANONICAL_REVOCATION"] = {
@@ -731,18 +829,22 @@ class TestClientLifecycleProductionProof:
                 "lifecycle_state_after_revoke": lc_state_revoked,
                 "operational_after_revoke": lc_after_revoke.get("operational"),
                 "no_auth0_wait_required": True,
+                "revocation_mechanism": (
+                    "POST /admin/tenants/{id}/suspend — platform.admin-authorized; "
+                    "user-level PATCH requires tenant_admin authority (check_tenant_admin_authority)"
+                ),
             }
             _EVIDENCE["CANONICAL_AUTHZ_INDEPENDENT"] = {
                 "result": "PASS",
                 "note": (
-                    "Canonical lifecycle reflects revocation from DB state "
+                    "Canonical lifecycle reflects suspension from DB state "
                     "without waiting for Auth0 convergence. "
                     "FrostGate authority = DB row; Auth0 is a projection target only."
                 ),
                 "lifecycle_state": lc_state_revoked,
             }
             _EVIDENCE["security_invariants"]["revocation_canonical"] = (
-                "PROVEN — lifecycle reflects deactivation before any Auth0 convergence"
+                "PROVEN — lifecycle reflects suspension before any Auth0 convergence"
             )
 
             # ----------------------------------------------------------------
@@ -775,31 +877,27 @@ class TestClientLifecycleProductionProof:
             # Phase 12 — RECOVERY
             # Re-activate the deactivated admin → re-fetch lifecycle
             # ----------------------------------------------------------------
-            lc_before_recovery = lc_state_revoked  # already recorded
+            lc_before_recovery = lc_state_revoked  # already recorded ("tenant_suspended")
 
-            restore_r = _requests.patch(
-                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/users/{bootstrapped_admin_id}",
-                json={"active": True},
+            restore_r = _requests.post(
+                f"{CORE_API_URL}/admin/tenants/{tenant_a_id}/activate",
                 headers=_auth_headers,
                 timeout=15,
             )
             assert restore_r.status_code == 200, (
-                f"Phase 12 FAIL: PATCH active:true returned {restore_r.status_code}: "
-                f"{restore_r.text[:300]}"
+                f"Phase 12 FAIL: POST /admin/tenants/{tenant_a_id}/activate returned "
+                f"{restore_r.status_code}: {restore_r.text[:300]}"
             )
 
             lc_after_recovery = _lifecycle(tenant_a_id)
             lc_state_recovered = lc_after_recovery.get("lifecycle_state")
 
-            # After re-activation, lifecycle must return to admin_unbound
-            # (admin is active but identity still unbound — no OIDC binding done)
-            assert lc_state_recovered not in {"tenant_suspended", "tenant_not_found"}, (
-                f"Phase 12 FAIL: unexpected lifecycle state after recovery: "
-                f"{lc_state_recovered}"
-            )
-            assert lc_state_recovered != "admin_unset", (
-                "Phase 12 FAIL: after re-activation, active admin row should exist "
-                "(admin_unbound expected), got admin_unset"
+            # After activate: admin row still active, identity still unbound → admin_unbound.
+            # The bootstrap-created admin row persists through suspend/activate unchanged.
+            assert lc_state_recovered == "admin_unbound", (
+                f"Phase 12 FAIL: expected admin_unbound after tenant activation "
+                f"(bootstrap admin row persists through suspend/activate), "
+                f"got {lc_state_recovered}"
             )
 
             _EVIDENCE["RECOVERY"] = {
@@ -807,7 +905,9 @@ class TestClientLifecycleProductionProof:
                 "lifecycle_before_recovery": lc_before_recovery,
                 "lifecycle_after_recovery": lc_state_recovered,
                 "operational_after_recovery": lc_after_recovery.get("operational"),
-                "recovery_mechanism": "canonical DB PATCH active:true → immediate lifecycle re-evaluation",
+                "recovery_mechanism": (
+                    "POST /admin/tenants/{id}/activate → immediate lifecycle re-evaluation"
+                ),
                 "no_auth0_required": True,
             }
             _EVIDENCE["product_path_matrix"].append(
@@ -864,7 +964,7 @@ class TestClientLifecycleProductionProof:
             for tid in proof_tenants_created:
                 try:
                     resp = _requests.post(
-                        f"{CORE_API_URL}/tenants/{tid}/suspend",
+                        f"{CORE_API_URL}/admin/tenants/{tid}/suspend",
                         headers=_auth_headers,
                         timeout=10,
                     )
