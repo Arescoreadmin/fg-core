@@ -258,7 +258,7 @@ function isTenantAdminCorePath(path: string[]): boolean {
     path.length >= 4 &&
     path[0] === 'admin' &&
     path[1] === 'tenants' &&
-    (path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle');
+    (path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
   return (
     joined.startsWith('workforce/users') ||
     joined === 'portal/grants' ||
@@ -519,7 +519,7 @@ function createDelegationProof(
   return { version: 'v1', issuedAt, expiresAt, proof };
 }
 
-async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string): Promise<NextResponse> {
+async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string, namedUserSub?: string): Promise<NextResponse> {
   const isTenantAdminPath = isTenantAdminCorePath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
@@ -535,6 +535,10 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
     if (tenantId) headers.set('X-Tenant-ID', tenantId);
+    // Forward the named user's Auth0 subject so Core can satisfy require_tenant_admin().
+    // The ADMIN_GATEWAY_TOKEN + delegation proof establish machine-level authority;
+    // this header resolves which named user is acting for DB-canonical checks.
+    if (namedUserSub) headers.set('X-FG-Named-User-Sub', namedUserSub);
     if (DELEGATION_SECRET_CURRENT) {
       const canonicalPath = '/' + path.join('/');
       const delegation = createDelegationProof(
@@ -734,7 +738,8 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     );
   }
 
-  return proxyToCore(request, path, requestId, tenantId);
+  const namedUserSub = (session.user as { id?: string })?.id ?? undefined;
+  return proxyToCore(request, path, requestId, tenantId, namedUserSub);
 }
 
 export async function GET(request: NextRequest, context: { params: { path: string[] } }) {

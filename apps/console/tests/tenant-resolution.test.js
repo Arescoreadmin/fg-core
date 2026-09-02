@@ -266,7 +266,7 @@ test('tenant_resolution_runs_before_proxy_call', () => {
   assert.ok(handleFn, 'handle() must exist');
 
   const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
-  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)');
+  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)');
   assert.ok(resolvePos > -1, 'resolveAuthorizedTenant must be called in handle()');
   assert.ok(tenantScopedProxyPos > -1, 'tenant-scoped proxyToCore call must be in handle()');
   assert.ok(resolvePos < tenantScopedProxyPos, 'resolveAuthorizedTenant must precede tenant-scoped proxyToCore');
@@ -302,10 +302,10 @@ test('production_core_tenant_id_default_is_rejected_before_core_fetch', () => {
   assert.match(routeSrc, /TENANT_CONTEXT_INVALID/);
   assert.match(routeSrc, /CORE_TENANT_ID=default/);
 
-  const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId\);/)?.[0] ?? '';
+  const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId, namedUserSub\);/)?.[0] ?? '';
   assert.ok(handleFn, 'handle() must include tenant resolution and tenant-scoped proxy call');
   assert.ok(
-    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId)'),
+    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)'),
     'tenant context validation must happen before tenant-scoped Core proxying',
   );
 });

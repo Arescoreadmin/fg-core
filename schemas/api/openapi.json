@@ -4261,6 +4261,20 @@
         "title": "AssignBundleRequest",
         "type": "object"
       },
+      "AssignCredentialRoleBody": {
+        "properties": {
+          "role": {
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "AssignCredentialRoleBody",
+        "type": "object"
+      },
       "AssignEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -24330,6 +24344,21 @@
         ],
         "title": "IsolationLevel",
         "type": "string"
+      },
+      "IssueServiceCredentialBody": {
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "IssueServiceCredentialBody",
+        "type": "object"
       },
       "IssueValidationTokenRequest": {
         "additionalProperties": false,

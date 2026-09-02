@@ -8,6 +8,17 @@ import { IdentityGovernancePanel } from '@/components/identity';
 import { getIdentityReadiness, type IdentityReadiness } from '@/lib/identityApi';
 import { getClientLifecycle, type ClientLifecycle } from '@/lib/lifecycleApi';
 import { mapHttpError } from '@/lib/errors';
+import {
+  listServiceCredentials,
+  issueServiceCredential,
+  rotateServiceCredential,
+  revokeServiceCredential,
+  suspendServiceCredential,
+  resumeServiceCredential,
+  assignServiceCredentialRole,
+  type ServiceCredential,
+  type IssuedCredential,
+} from '@/lib/credentialAdminApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -591,9 +602,249 @@ function PortalAccessTab({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ─── Service Credentials tab ──────────────────────────────────────────────────
+
+const SELF_SERVICE_ROLES = ['governance_admin', 'analyst', 'auditor', 'read_only'] as const;
+
+function ServiceCredentialsTab({ tenantId }: { tenantId: string }) {
+  const [creds, setCreds] = useState<ServiceCredential[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showIssue, setShowIssue] = useState(false);
+  const [issueName, setIssueName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [issued, setIssued] = useState<IssuedCredential | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ credentialId: string; action: 'rotate' | 'revoke' } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    const r = await listServiceCredentials(tenantId);
+    if (r.ok) setCreds(r.data.items);
+    else setError(r.error);
+    setLoading(false);
+  }, [tenantId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function handleIssue() {
+    setSubmitting(true); setError(null);
+    const r = await issueServiceCredential(tenantId, issueName);
+    if (r.ok) {
+      setIssued(r.data);
+      setAcknowledged(false);
+      setShowIssue(false);
+      setIssueName('');
+      await load();
+    } else {
+      setError(r.error);
+    }
+    setSubmitting(false);
+  }
+
+  async function handleRotate(credentialId: string) {
+    setConfirmAction(null); setError(null);
+    const r = await rotateServiceCredential(tenantId, credentialId);
+    if (r.ok) {
+      setIssued(r.data as IssuedCredential);
+      setAcknowledged(false);
+      await load();
+    } else {
+      setError(r.error);
+    }
+  }
+
+  async function handleRevoke(credentialId: string) {
+    setConfirmAction(null); setError(null);
+    const r = await revokeServiceCredential(tenantId, credentialId);
+    if (!r.ok) setError(r.error);
+    else await load();
+  }
+
+  async function handleSuspend(credentialId: string) {
+    setError(null);
+    const r = await suspendServiceCredential(tenantId, credentialId);
+    if (!r.ok) setError(r.error);
+    else await load();
+  }
+
+  async function handleResume(credentialId: string) {
+    setError(null);
+    const r = await resumeServiceCredential(tenantId, credentialId);
+    if (!r.ok) setError(r.error);
+    else await load();
+  }
+
+  async function handleRoleChange(credentialId: string, role: string) {
+    setError(null);
+    const r = await assignServiceCredentialRole(tenantId, credentialId, role);
+    if (!r.ok) setError(r.error);
+    else await load();
+  }
+
+  return (
+    <div>
+      <div style={s.sectionHeader}>
+        <div>
+          <p style={s.sectionTitle}>Service credentials</p>
+          <p style={s.sectionDesc}>API keys for machine-to-machine access. Assign roles to control what each key can do. Secrets are shown once at issuance — store them securely.</p>
+        </div>
+        <button style={s.primaryBtn} onClick={() => { setShowIssue(true); setIssued(null); }}>Issue credential</button>
+      </div>
+
+      {error && <div style={s.errorBanner}>{error}</div>}
+
+      {issued && (
+        <div style={s.successBanner}>
+          <strong>
+            {(issued as unknown as { rotated_from_credential_id?: string }).rotated_from_credential_id
+              ? 'Credential rotated'
+              : 'Credential issued'}
+            {' '}— copy the secret now. It will not be shown again.
+          </strong>
+          <span style={{ fontSize: '0.78rem', color: 'var(--muted)', display: 'block', marginTop: 4 }}>
+            {issued.name ? `Name: ${issued.name}` : ''}
+          </span>
+          <code style={s.code}>{issued.plaintext_secret}</code>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+            <input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} />
+            I have copied this key and stored it securely
+          </label>
+          {acknowledged && (
+            <button
+              style={{ ...s.secondaryBtn, marginTop: '0.5rem' }}
+              onClick={() => { setIssued(null); setAcknowledged(false); }}
+            >
+              Dismiss
+            </button>
+          )}
+        </div>
+      )}
+
+      {showIssue && (
+        <div style={s.backdrop}>
+          <div style={s.modal}>
+            <h2 style={s.modalTitle}>Issue service credential</h2>
+            <label style={s.field}>
+              Credential name
+              <input
+                style={s.input}
+                value={issueName}
+                onChange={e => setIssueName(e.target.value)}
+                placeholder="e.g. CI pipeline key"
+                autoFocus
+              />
+            </label>
+            <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: 0 }}>
+              The plaintext secret is shown exactly once. Assign a role after issuance.
+            </p>
+            <div style={s.modalActions}>
+              <button style={s.secondaryBtn} onClick={() => setShowIssue(false)} disabled={submitting}>Cancel</button>
+              <button
+                style={s.primaryBtn}
+                onClick={() => { void handleIssue(); }}
+                disabled={submitting || !issueName.trim()}
+              >
+                {submitting ? 'Issuing…' : 'Issue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmAction && (
+        <div style={s.backdrop}>
+          <div style={s.modal}>
+            <h2 style={s.modalTitle}>
+              {confirmAction.action === 'rotate' ? 'Rotate credential?' : 'Revoke credential?'}
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: 'var(--muted)', margin: 0 }}>
+              {confirmAction.action === 'rotate'
+                ? 'Rotation issues a new secret and invalidates the current one. The new secret is shown once.'
+                : 'Revocation is permanent and cannot be undone. The credential will stop working immediately.'}
+            </p>
+            <div style={s.modalActions}>
+              <button style={s.secondaryBtn} onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button
+                style={s.dangerBtn}
+                onClick={() => {
+                  if (confirmAction.action === 'rotate') void handleRotate(confirmAction.credentialId);
+                  else void handleRevoke(confirmAction.credentialId);
+                }}
+              >
+                {confirmAction.action === 'rotate' ? 'Rotate' : 'Revoke'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={s.tableWrap}>
+        {loading ? <p style={s.muted}>Loading…</p> : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['Name', 'Status', 'Role', 'Issued', 'Expires', 'Last used', 'Actions'].map(h => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {creds.length === 0 ? (
+                <tr><td style={s.td} colSpan={7}>No service credentials yet.</td></tr>
+              ) : creds.map(c => (
+                <tr key={c.credential_id} style={{ opacity: c.status === 'revoked' ? 0.45 : 1 }}>
+                  <td style={{ ...s.td, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                    {c.name || <span style={{ color: 'var(--muted)' }}>—</span>}
+                  </td>
+                  <td style={s.td}>{statusDot(c.status)}</td>
+                  <td style={s.td}>
+                    {c.status === 'active' || c.status === 'suspended' ? (
+                      <select
+                        style={{ ...s.input, padding: '2px 6px', fontSize: '0.78rem' }}
+                        value={c.role ?? ''}
+                        onChange={e => { if (e.target.value) void handleRoleChange(c.credential_id, e.target.value); }}
+                      >
+                        <option value="">— no role —</option>
+                        {SELF_SERVICE_ROLES.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>{c.role ?? '—'}</span>
+                    )}
+                  </td>
+                  <td style={s.td}>{fmtDate(c.issued_at)}</td>
+                  <td style={s.td}>{fmtDate(c.expires_at)}</td>
+                  <td style={s.td}>{fmt(c.last_used_at)}</td>
+                  <td style={{ ...s.td, display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {c.status === 'active' && (
+                      <>
+                        <button style={s.secondaryBtn} onClick={() => setConfirmAction({ credentialId: c.credential_id, action: 'rotate' })}>Rotate</button>
+                        <button style={s.secondaryBtn} onClick={() => void handleSuspend(c.credential_id)}>Suspend</button>
+                        <button style={s.dangerBtn} onClick={() => setConfirmAction({ credentialId: c.credential_id, action: 'revoke' })}>Revoke</button>
+                      </>
+                    )}
+                    {c.status === 'suspended' && (
+                      <>
+                        <button style={s.secondaryBtn} onClick={() => void handleResume(c.credential_id)}>Resume</button>
+                        <button style={s.dangerBtn} onClick={() => setConfirmAction({ credentialId: c.credential_id, action: 'revoke' })}>Revoke</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'portal' | 'identity';
+type Tab = 'users' | 'portal' | 'credentials' | 'identity';
 
 export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
@@ -628,9 +879,9 @@ export default function TenantDetailPage() {
       </div>
 
       <div style={s.tabs}>
-        {(['users', 'portal', 'identity'] as const).map(t => (
+        {(['users', 'portal', 'credentials', 'identity'] as const).map(t => (
           <button key={t} style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }} onClick={() => { if (t === 'identity') setIdentityInitialTab('scorecard'); setTab(t); }}>
-            {t === 'users' ? 'Console users' : t === 'portal' ? 'Portal access' : 'Identity governance'}
+            {t === 'users' ? 'Console users' : t === 'portal' ? 'Portal access' : t === 'credentials' ? 'Service credentials' : 'Identity governance'}
           </button>
         ))}
       </div>
@@ -665,6 +916,7 @@ export default function TenantDetailPage() {
           />
         )}
         {tab === 'portal' && <PortalAccessTab tenantId={tenantId} />}
+        {tab === 'credentials' && <ServiceCredentialsTab tenantId={tenantId} />}
         {tab === 'identity' && <IdentityGovernancePanel tenantId={tenantId} initialTab={identityInitialTab} />}
       </div>
     </main>
