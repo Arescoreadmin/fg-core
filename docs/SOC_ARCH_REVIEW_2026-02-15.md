@@ -4168,7 +4168,7 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 
 ## P-113.4 Tenant Service Credential Administration — SOC Review (2026-09-01)
 
-**Change summary:** 9 new routes under `/admin/tenants/{tenant_id}/credential-administration/...` implementing delegated machine-credential lifecycle for tenant admins. All routes require `require_tenant_admin()` (DB-canonical authority check) plus `require_scopes("admin:read"/"admin:write")`.
+**Change summary (rev 2 — 2026-09-01):** 10 routes under `/admin/tenants/{tenant_id}/credential-administration/...` implementing delegated machine-credential lifecycle for tenant admins. Rev 1 had 9 routes; rev 2 adds `GET /{credential_id}/events` (per-credential audit events projection). All routes require `require_tenant_admin()` (DB-canonical authority check) plus `require_scopes("admin:read"/"admin:write")`.
 
 **Auth model:** Routes sit behind the existing `require_tenant_admin()` dependency which performs a DB-canonical check against `tenant_users` (role=tenant_admin, active=True, identity_binding_status=bound, principal_id non-null). No JWT claims are trusted without DB verification.
 
@@ -4182,11 +4182,17 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 
 **No schema change:** Credential name stored in existing `metadata["name"]` field of `tenant_credentials`. No new tables, no migrations.
 
+**Events route (rev 2):** `GET /{credential_id}/events` delegates to `credential_authority.list_credential_events()` filtered to `credential_id` and `authority.tenant_id`. Applies the same type guard (tenant_api_key only → 404 for other types). Response projection deliberately excludes `metadata` (same as the platform-admin events endpoint in `api/admin.py`) to prevent accidental leakage of internal fields. Events contain: event_id, credential_id, credential_type, event_type, outcome, actor_id, occurred_at, failure_reason. No plaintext, no raw_key, no secret material appears in the `tenant_credential_events` table — events record lifecycle actions, not credential material.
+
+**Credential lifecycle events are safe to project to tenant admins:** The `credential_authority.py` event emitter never writes plaintext or hash material to event records. Events include `event_type` (issued/rotated/revoked/suspended/resumed/validated), `outcome`, `actor_id` (the authority.subject who performed the action), and `failure_reason`. `metadata` is excluded from the tenant-admin projection as belt-and-suspenders.
+
+**Authorization denial tests (rev 2):** Tests C1-21 through C1-30 verify: non-admin user → 403, unbound tenant_admin → 403, inactive tenant_admin → 403, cross-tenant path attack → 403 (two-layer denial: resolve_authoritative_tenant fires first, check_tenant_admin_authority as secondary), governance_admin role → 200, read_only role → 200, revoked credential fails validate_credential, events endpoint returns events with correct type, events contain no plaintext/metadata, events type guard (portal_access → 404).
+
 **Critical-path files changed:**
-- `api/tenant_admin.py`: 9 additive routes; no existing route modified.
+- `api/tenant_admin.py`: 10 additive routes (rev 1: 9, rev 2: +1 events route); no existing route modified.
 - `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate`.
-- `contracts/core/openapi.json`: regenerated to include new routes; `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- `contracts/core/openapi.json`: regenerated to include new Pydantic component schemas; `Contract-Authority-SHA256` updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`. (Admin routes are filtered from core contract; tracked via route inventory.)
 
-**Test evidence:** `tests/test_tenant_credential_admin_001.py` — 20 tests (C1-01 through C1-20). Covers: list, issue, get, rotate, suspend, resume, revoke (idempotent + terminal conflict), self-service role assign, platform-only role denial (tenant_admin, platform_admin), unknown role rejection, RBAC list, cross-tenant isolation, no-plaintext guards (list + get), portal_access type guard, constants contract (subset/disjoint assertions).
+**Test evidence:** `tests/test_tenant_credential_admin_001.py` — 30 tests (C1-01 through C1-30). Covers: list, issue, get, rotate, suspend, resume, revoke (idempotent + terminal conflict), self-service role assign (all four roles: governance_admin, analyst, auditor, read_only), platform-only role denial (tenant_admin, platform_admin), unknown role rejection, RBAC list, cross-tenant isolation, cross-tenant path attack, non-admin user denial, unbound/inactive admin denial, no-plaintext guards (list + get + events), portal_access type guard, constants contract (subset/disjoint assertions), events endpoint round-trip, events no-plaintext/no-metadata guard, events type guard, revoke→validate_credential denial.
 
-**SOC review outcome:** approved. Additive surface with existing auth machinery. Self-service role ceiling prevents privilege escalation. Plaintext never in non-issuance/rotation responses. Type guard prevents cross-type access. Cross-tenant isolation enforced at authority-proof level, not request parameter level.
+**SOC review outcome:** approved (rev 2). Additive surface with existing auth machinery. Self-service role ceiling prevents privilege escalation. Plaintext never in non-issuance/rotation responses. Type guard prevents cross-type access. Cross-tenant isolation enforced at authority-proof level, not request parameter level. Auth denial tests prove the deny path is exercised — not just the happy path.

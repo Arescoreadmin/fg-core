@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -54,6 +54,7 @@ from api.credential_authority import (
     CredentialStateError,
     TenantLifecycleError,
     TenantNotFoundError,
+    list_credential_events,
 )
 from api.db import get_engine, set_tenant_context
 from api.deps import auth_ctx_db_session
@@ -1322,6 +1323,55 @@ def assign_service_credential_role(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return result
+
+
+@router.get(
+    "/{tenant_id}/credential-administration/{credential_id}/events",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+def list_service_credential_events(
+    tenant_id: str,
+    credential_id: str,
+    request: Request,
+    authority: TenantAdminAuthority = Depends(require_tenant_admin()),
+    db: Session = Depends(auth_ctx_db_session),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    """Return lifecycle audit events for a single tenant_api_key credential, newest first.
+
+    Metadata is deliberately excluded from the projection (same as the platform-admin
+    events endpoint) to prevent any future accidental leakage of internal fields.
+    """
+    engine = get_engine()
+    try:
+        rec = ca.get_credential(engine, credential_id, authority.tenant_id)
+    except CredentialNotFoundError:
+        raise _cred_not_found(credential_id)
+    if rec.credential_type != "tenant_api_key":
+        raise _cred_not_found(credential_id)
+    events = list_credential_events(
+        engine,
+        authority.tenant_id,
+        credential_id=credential_id,
+        limit=limit,
+    )
+    return {
+        "tenant_id": authority.tenant_id,
+        "credential_id": credential_id,
+        "events": [
+            {
+                "event_id": e.event_id,
+                "credential_id": e.credential_id,
+                "credential_type": e.credential_type,
+                "event_type": e.event_type,
+                "outcome": e.outcome,
+                "actor_id": e.actor_id,
+                "occurred_at": e.occurred_at.isoformat(),
+                "failure_reason": e.failure_reason,
+            }
+            for e in events
+        ],
+    }
 
 
 __all__ = [
