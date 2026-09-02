@@ -127,7 +127,7 @@ exceptions:
       captured in the connector audit trail; direct engagement-level audit for
       this path is a P2 item pending connector-audit unification.
     owner: field-assessment-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
@@ -143,9 +143,9 @@ exceptions:
     reason: >
       Schedule configuration write; low-risk control-plane operation with no
       direct impact on assessment findings or evidence. Audit to be added as
-      part of connector-plane governance hardening.
+      part of connector-audit governance hardening.
     owner: field-assessment-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
