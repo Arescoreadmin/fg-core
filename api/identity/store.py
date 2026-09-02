@@ -68,6 +68,11 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.member.updated",
         "tenant.portal_access.invited",
         "tenant.portal_access.revoked",
+        # P-113.5 workforce membership lifecycle events
+        "tenant.workforce.user_suspended",
+        "tenant.workforce.user_reactivated",
+        "tenant.workforce.user_role_changed",
+        "tenant.workforce.user_revoked",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -221,6 +226,18 @@ def emit_identity_audit_event(
         "issuer",
         "organization_id",
         "session_status",
+        # P-113.5 workforce membership lifecycle detail keys
+        "user_id",
+        "suspended_by",
+        "suspension_reason",
+        "reactivated_by",
+        "reactivation_reason",
+        "old_role",
+        "new_role",
+        "changed_by",
+        "role_change_reason",
+        "revoked_by",
+        "revocation_reason",
     }
     safe_details = {k: v for k, v in (details or {}).items() if k in safe_keys}
     created_at = _now()

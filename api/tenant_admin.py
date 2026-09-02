@@ -222,7 +222,8 @@ def _fetch_tenant_user_by_id(db: Session, tenant_id: str, user_id: str) -> Any |
     return db.execute(
         text("""
             SELECT id, email, display_name, role, active, principal_id,
-                   identity_binding_status, identity_provider, identity_subject
+                   identity_binding_status, identity_provider, identity_subject,
+                   membership_lifecycle_state
             FROM tenant_users
             WHERE tenant_id = :t AND id = :u
             """),
@@ -636,6 +637,16 @@ def update_tenant_user(
                     "Tenant admins cannot modify their own role or active "
                     "flag; ask another tenant_admin or platform admin."
                 ),
+            },
+        )
+
+    # Terminal: revoked memberships cannot be modified through any update path
+    if str(row.membership_lifecycle_state or "active") == "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MEMBERSHIP_REVOKED",
+                "message": "This membership has been revoked and cannot be modified.",
             },
         )
 

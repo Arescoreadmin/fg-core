@@ -6725,3 +6725,31 @@ Validation evidence:
 - New JS source regression test verifies `isTenantAdminCorePath` narrowing is present in route.ts.
 
 SOC review outcome: approved. All three changes strengthen the authorization boundary. No existing capability is removed; only stale-JWT privilege retention and fail-open resolver behavior are eliminated.
+
+---
+
+## 2026-09-02 — SOC-HIGH-002 — P-113.5 Workforce Identity Lifecycle & Administration
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (`tools/ci/check_plane_registry.py` and derived topology artifacts).
+
+Scope: P-113.5 adds terminal membership revocation, suspension with mandatory reason, last-admin protection, and revocation irreversibility to the workforce identity administration authority.
+
+Critical files changed:
+- `tools/ci/check_plane_registry.py`: added `("POST", "/workforce/users/{user_id}/revoke")` to `EXACT_TENANT_BINDING_EXCEPTIONS`. Justification: `require_tenant_admin()` enforces same-tenant isolation via the admin gateway path; `user_id` scopes within the already-verified tenant. Same pattern as the P-113.4 credential-administration routes already in the exception set.
+- `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `topology.sha256` / `plane_registry_snapshot.json` / `contract_routes.json`: regenerated artifacts reflecting the new `POST /workforce/users/{user_id}/revoke` route.
+
+Security posture:
+- The new revoke endpoint is POST (not DELETE), preserving the membership record for audit history, evidence lineage, and forensic reconstruction. No identity data is destroyed.
+- Revocation is terminal: any subsequent mutation attempt on a revoked membership returns 409 `MEMBERSHIP_REVOKED`. Idempotent re-revocation returns 204 with no side effects (no duplicate membership_version bump, projection, or audit event).
+- `membership_version` is bumped on every authority-changing mutation (suspend, reactivate, role change, revoke), immediately invalidating outstanding JWTs.
+- Last-admin guard uses the canonical operational-admin definition from `client_lifecycle.evaluate_client_lifecycle`: `tenant_users.active AND role='tenant_admin' AND identity_binding_status='bound' AND principal_id IS NOT NULL AND fg_principals.lifecycle_state='active'`. Guard fires on suspend, revoke, and admin-role demotion under `SELECT ... FOR UPDATE` to prevent concurrent-revocation races.
+- Suspension reason and revocation reason are mandatory fields. No secret or token material may appear in audit event details (enforced by `emit_identity_audit_event` safe_keys allowlist, extended for new event types).
+- Auth0 deprovision projection is enqueued on revocation. Projection failure does not restore canonical access — the DB state is authoritative.
+- No new API key grants, no RLS policy changes, no OPA rules touched.
+
+Validation evidence:
+- `pytest tests/test_p1135_workforce_identity_admin.py`: 27/27 passed, covering full lifecycle (C1), authorization denials (C2), last-admin protection (C3), and audit/membership_version invariants (I-series).
+- `make fg-fast`: all gates pass.
+- Console BFF: no PROXY_RULES wildcards introduced; existing `workforce/users` entry covers the revoke sub-route via `startsWith` match already present.
+
+SOC review outcome: approved. The changes extend the workforce authority boundary with terminal revocation semantics, mandatory reason capture, canonical principal lifecycle verification, and transactional last-admin protection. No existing capability is reduced; only previously unguarded membership lifecycle transitions are hardened.

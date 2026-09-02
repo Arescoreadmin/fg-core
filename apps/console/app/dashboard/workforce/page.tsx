@@ -795,6 +795,155 @@ function AlertsTab() {
 
 type Tab = 'risk' | 'users' | 'keywords' | 'alerts';
 
+// ─── Suspend modal ─────────────────────────────────────────────────────────────
+
+function SuspendModal({
+  user,
+  onClose,
+  onDone,
+}: {
+  user: TenantUser;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    if (!reason.trim()) { setError('Suspension reason is required.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await workforceApi.updateUser(user.user_id, { active: false, suspension_reason: reason.trim() });
+      onDone();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to suspend user.';
+      setError(msg.includes('LAST_ADMIN_PROTECTED')
+        ? 'Cannot suspend: this is the last operational administrator.'
+        : msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground">Suspend User</h2>
+        <p className="text-xs text-muted">Suspending <span className="text-foreground">{user.display_name}</span> will prevent them from accessing the platform. You can reactivate later.</p>
+        <div className="space-y-1">
+          <label className="text-xs text-muted">Reason (required)</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="w-full rounded border border-border bg-surface-2 px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="e.g. Account under review pending offboarding"
+          />
+        </div>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-border rounded">Cancel</button>
+          <button
+            onClick={submit}
+            disabled={loading || !reason.trim()}
+            className="px-3 py-1.5 text-xs bg-amber-600/20 border border-amber-500/40 text-amber-200 rounded disabled:opacity-50"
+          >
+            {loading ? 'Suspending…' : 'Suspend'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Revoke modal ──────────────────────────────────────────────────────────────
+
+function RevokeModal({
+  user,
+  onClose,
+  onDone,
+}: {
+  user: TenantUser;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    if (!reason.trim()) { setError('Revocation reason is required.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await workforceApi.revokeUser(user.user_id, reason.trim());
+      onDone();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to revoke user.';
+      setError(msg.includes('LAST_ADMIN_PROTECTED')
+        ? 'Cannot revoke: this is the last operational administrator.'
+        : msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-full max-w-md rounded-xl border border-red-500/30 bg-surface p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-red-300">Revoke Access — Permanent</h2>
+        <p className="text-xs text-muted">
+          Revoking <span className="text-foreground">{user.display_name}</span> is <span className="text-red-300 font-medium">permanent and irreversible</span>. Their account will be terminated and outstanding sessions invalidated.
+        </p>
+        <div className="space-y-1">
+          <label className="text-xs text-muted">Reason (required)</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="w-full rounded border border-border bg-surface-2 px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-red-500"
+            placeholder="e.g. Employee terminated — immediate access removal required"
+          />
+        </div>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-border rounded">Cancel</button>
+          <button
+            onClick={submit}
+            disabled={loading || !reason.trim()}
+            className="px-3 py-1.5 text-xs bg-red-600/20 border border-red-500/40 text-red-300 rounded disabled:opacity-50"
+          >
+            {loading ? 'Revoking…' : 'Permanently Revoke'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Lifecycle badge ───────────────────────────────────────────────────────────
+
+function LifecycleBadge({ state }: { state?: string }) {
+  if (!state || state === 'active') return null;
+  if (state === 'suspended') {
+    return (
+      <span className="ml-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] border border-amber-500/30 bg-amber-500/10 text-amber-200">
+        suspended
+      </span>
+    );
+  }
+  if (state === 'revoked') {
+    return (
+      <span className="ml-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] border border-red-500/30 bg-red-500/10 text-red-300">
+        revoked
+      </span>
+    );
+  }
+  return null;
+}
+
 export default function WorkforcePage() {
   const [tab, setTab] = useState<Tab>('risk');
   const [profiles, setProfiles] = useState<RiskProfile[]>([]);
@@ -803,6 +952,8 @@ export default function WorkforcePage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ invitationUrl: string; email: string } | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<TenantUser | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<TenantUser | null>(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -972,6 +1123,7 @@ export default function WorkforcePage() {
                       <span className={`font-medium ${u.active ? 'text-green-300' : 'text-muted'}`}>
                         {u.active ? 'Active' : 'Inactive'}
                       </span>
+                      <LifecycleBadge state={u.membership_lifecycle_state} />
                     </td>
                     <td className="px-3 py-2">
                       {u.identity_binding_status === 'unbound' || u.identity_binding_status === 'pending' ? (
@@ -985,26 +1137,41 @@ export default function WorkforcePage() {
                     <td className="px-3 py-2 text-muted">{fmtDate(u.last_active_at)}</td>
                     <td className="px-3 py-2 text-muted">{fmtDate(u.created_at)}</td>
                     <td className="px-3 py-2">
-                      {u.active ? (
-                        <button
-                          onClick={async () => {
-                            await workforceApi.updateUser(u.user_id, { active: false });
-                            loadData();
-                          }}
-                          className="text-xs text-red-400 hover:text-red-300"
-                        >
-                          Deactivate
-                        </button>
+                      {u.membership_lifecycle_state === 'revoked' ? (
+                        <span className="text-xs text-muted italic">Revoked</span>
+                      ) : u.active ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSuspendTarget(u)}
+                            className="text-xs text-amber-400 hover:text-amber-300"
+                          >
+                            Suspend
+                          </button>
+                          <button
+                            onClick={() => setRevokeTarget(u)}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Revoke
+                          </button>
+                        </div>
                       ) : (
-                        <button
-                          onClick={async () => {
-                            await workforceApi.updateUser(u.user_id, { active: true });
-                            loadData();
-                          }}
-                          className="text-xs text-green-400 hover:text-green-300"
-                        >
-                          Reactivate
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              await workforceApi.updateUser(u.user_id, { active: true });
+                              loadData();
+                            }}
+                            className="text-xs text-green-400 hover:text-green-300"
+                          >
+                            Reactivate
+                          </button>
+                          <button
+                            onClick={() => setRevokeTarget(u)}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Revoke
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1050,6 +1217,20 @@ export default function WorkforcePage() {
       )}
       {activeUserId && (
         <ActivityDrawer userId={activeUserId} onClose={() => setActiveUserId(null)} />
+      )}
+      {suspendTarget && (
+        <SuspendModal
+          user={suspendTarget}
+          onClose={() => setSuspendTarget(null)}
+          onDone={() => { setSuspendTarget(null); loadData(); }}
+        />
+      )}
+      {revokeTarget && (
+        <RevokeModal
+          user={revokeTarget}
+          onClose={() => setRevokeTarget(null)}
+          onDone={() => { setRevokeTarget(null); loadData(); }}
+        />
       )}
     </div>
   );

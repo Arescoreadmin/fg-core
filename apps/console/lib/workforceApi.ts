@@ -14,6 +14,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.detail?.message ?? body?.detail ?? `HTTP ${res.status}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -28,6 +29,7 @@ export interface TenantUser {
   identity_binding_status: string;
   last_active_at: string | null;
   created_at: string;
+  membership_lifecycle_state?: string;
 }
 
 export interface InviteResult {
@@ -154,9 +156,23 @@ export const workforceApi = {
 
   updateUser(
     userId: string,
-    payload: { active?: boolean; role?: string; display_name?: string },
+    payload: {
+      active?: boolean;
+      role?: string;
+      display_name?: string;
+      suspension_reason?: string;
+      reactivation_reason?: string;
+      role_change_reason?: string;
+    },
   ): Promise<{ ok: boolean }> {
     return req(`/workforce/users/${userId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  revokeUser(userId: string, revocationReason: string): Promise<void> {
+    return req(`/workforce/users/${userId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ revocation_reason: revocationReason }),
+    });
   },
 
   listRiskProfiles(): Promise<{ items: RiskProfile[]; total: number; period_days: number }> {

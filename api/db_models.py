@@ -3581,6 +3581,16 @@ class TenantUser(Base):
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+    # P-113.5: Membership lifecycle state (active / suspended / revoked)
+    membership_lifecycle_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="active", server_default=text("'active'")
+    )
+    suspension_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    suspended_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    suspended_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    revoked_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AIQueryLog(Base):
