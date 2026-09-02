@@ -192,6 +192,8 @@ artifacts/*
 
 # Keep volatile evidence ignored
 artifacts/platform_inventory.json
+# Runtime evidence artifacts from live proof harnesses (never commit production output)
+contracts/artifacts/identity/*-evidence-runtime.json
 # Local caches (Codex / CI / dev)
 .cache/
 
