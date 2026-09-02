@@ -154,32 +154,31 @@ If `FG_TENANT_ADMIN_TOKEN` is not set, Phase 4 records `MANUAL_PROOF_REQUIRED` a
 
 #### MP-001: Auth0 Org Config + Admin OIDC for Tenant A
 
-1. In Auth0 Dashboard → Organizations → Create organization named `{CLIENT_A_ID}`
+**Complete this before starting the test run.** The harness runs as a single uninterrupted session; tenant IDs are generated at process start and cannot be carried across separate pytest invocations.
+
+1. In Auth0 Dashboard → Organizations → Create an organization for the proof tenant
 2. Enable the FrostGate Auth0 application on the organization
-3. Configure `tenant_id` metadata on the Auth0 organization
-4. Visit the `invitation_url` from the Phase 3 bootstrap response for Admin A
-5. Sign in with `jcosat0211@gmail.com` via Auth0 Google OAuth flow for org `{CLIENT_A_ID}`
+3. Configure `tenant_id` metadata on the Auth0 organization matching the proof tenant ID
+4. Navigate to your Auth0 application login URL scoped to the organization
+   - Direct login URL format: `https://<auth0-domain>/authorize?organization=<org_id>&...`
+   - **Note:** `POST /admin/tenants/{id}/bootstrap-admin` does NOT return an `invitation_url` — Auth0 org configuration is a separate platform-operator step
+5. Sign in with `jcosat0211@gmail.com` via Auth0 Google OAuth flow
 6. Verify binding: `GET /admin/tenants/{CLIENT_A_ID}/users` → `identity_binding_status=bound`
-7. Capture the bound session token from the Admin Gateway → `export FG_TENANT_ADMIN_TOKEN=<token>`
-8. Re-fetch lifecycle: `GET /admin/tenants/{CLIENT_A_ID}/lifecycle` → `operational` expected
+7. Capture the bound session Bearer token → `export FG_TENANT_ADMIN_TOKEN=<token>`
+8. Confirm lifecycle: `GET /admin/tenants/{CLIENT_A_ID}/lifecycle` → `operational`
 
 #### MP-002: Auth0 Org Config + Admin OIDC for Tenant B
 
-Same steps as MP-001 for `{CLIENT_B_ID}`.
+Same steps as MP-001 for `{CLIENT_B_ID}`. Both must be completed before the full run.
 
-#### Resuming after MP-001
+#### Single-session execution
 
-After completing MP-001 and setting `FG_TENANT_ADMIN_TOKEN`, re-run the test suite from Phase 5:
+The proof is designed to run as **one uninterrupted pytest session** after all manual steps are complete. Restarting mid-proof regenerates tenant IDs and invalidates all prior state.
 
-```bash
-FG_LIVE_PROOF=1 \
-FG_WRITE_EVIDENCE=1 \
-FG_PLATFORM_ADMIN_KEY="..." \
-FG_INTERNAL_GATEWAY_SECRET="..." \
-FG_TENANT_ADMIN_TOKEN="..." \
-FG_CORE_API_URL="https://api.frostgate.ai" \
-.venv/bin/python -m pytest tests/test_client_production_e2e_002.py::TestClientProductionE2E002LiveProof -k "phase_5 or phase_6 or phase_7 or phase_8 or phase_9 or phase_10 or phase_11 or phase_12 or phase_13 or phase_14 or phase_15 or phase_16 or phase_17" -v
-```
+Workflow:
+1. Complete Auth0 org setup for both proof tenants (MP-001 + MP-002)
+2. Set all credentials including `FG_TENANT_ADMIN_TOKEN`
+3. Run the full suite in a single invocation (see execution commands below)
 
 ---
 

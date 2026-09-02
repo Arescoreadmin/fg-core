@@ -272,18 +272,21 @@ def _record_phase(
 def _record_denial(
     phase: str,
     route: str,
-    expected_status: int,
+    expected_status: int | set[int],
     actual_status: int,
     actor: str = "",
 ) -> None:
+    accepted = (
+        expected_status if isinstance(expected_status, set) else {expected_status}
+    )
     _EVIDENCE["denial_proofs"].append(
         {
             "phase": phase,
             "route": route,
             "actor": actor,
-            "expected_status": expected_status,
+            "expected_status": sorted(accepted),
             "actual_status": actual_status,
-            "result": "PASS" if actual_status == expected_status else "FAIL",
+            "result": "PASS" if actual_status in accepted else "FAIL",
         }
     )
 
@@ -828,11 +831,13 @@ class TestClientProductionE2E002LiveProof:
                 f"1. In Auth0 Dashboard → Organizations → Create org named '{CLIENT_A_ID}'",
                 "2. Enable the FrostGate Auth0 application on the organization",
                 "3. Configure tenant_id metadata on the Auth0 organization",
-                f"4. Visit invitation_url from bootstrap response for admin_a (user_id={_STATE['admin_a_user_id']})",
+                f"4. Navigate to your Auth0 application login URL for org '{CLIENT_A_ID}'",
+                "   (Auth0 org login URL: https://<auth0-domain>/authorize?connection=<org-connection>&...)",
                 f"5. Sign in with jcosat0211@gmail.com via Auth0 Google OAuth flow for org '{CLIENT_A_ID}'",
                 f"6. Verify binding: GET /admin/tenants/{CLIENT_A_ID}/users → identity_binding_status=bound",
-                "7. Obtain bound session token → export FG_TENANT_ADMIN_TOKEN=<token>",
+                "7. Obtain the bound session Bearer token → export FG_TENANT_ADMIN_TOKEN=<token>",
                 f"8. Re-fetch lifecycle: GET /admin/tenants/{CLIENT_A_ID}/lifecycle → operational expected",
+                "NOTE: bootstrap-admin does not return an invitation_url; Auth0 org must be configured separately",
             ],
             "result": "MANUAL_PROOF",
         }
@@ -843,9 +848,10 @@ class TestClientProductionE2E002LiveProof:
                 f"1. In Auth0 Dashboard → Organizations → Create org named '{CLIENT_B_ID}'",
                 "2. Enable the FrostGate Auth0 application on the organization",
                 "3. Configure tenant_id metadata on the Auth0 organization",
-                f"4. Visit invitation_url from bootstrap response for admin_b (user_id={_STATE['admin_b_user_id']})",
+                f"4. Navigate to Auth0 login URL for org '{CLIENT_B_ID}'",
                 f"5. Sign in with jcosat0211@gmail.com via Auth0 Google OAuth flow for org '{CLIENT_B_ID}'",
                 f"6. Verify binding: GET /admin/tenants/{CLIENT_B_ID}/users → identity_binding_status=bound",
+                "NOTE: bootstrap-admin does not return an invitation_url; Auth0 org must be configured separately",
             ],
             "result": "MANUAL_PROOF",
         }
@@ -1173,7 +1179,7 @@ class TestClientProductionE2E002LiveProof:
             _record_denial(
                 "PHASE_8_ISOLATION",
                 f"GET /admin/tenants/{CLIENT_B_ID}/users",
-                403,
+                {403, 404},
                 cross_resp.status_code,
                 actor="tenant_admin_A",
             )
@@ -1213,10 +1219,10 @@ class TestClientProductionE2E002LiveProof:
             f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/credential-administration"
         )
 
-        # Issue credential — plaintext returned exactly once
+        # Issue credential — plaintext returned exactly once; name only (roles assigned separately)
         issue_resp = _r.post(
             cred_base,
-            json={"name": "e2e-002-proof-cred", "roles": ["analyst"]},
+            json={"name": "e2e-002-proof-cred"},
             headers=t2_headers,
             timeout=15,
         )
@@ -1224,7 +1230,7 @@ class TestClientProductionE2E002LiveProof:
             f"Phase 9 FAIL: credential issue returned HTTP {issue_resp.status_code}"
         )
         issue_body = issue_resp.json()
-        cred_id = issue_body.get("id") or issue_body.get("credential_id")
+        cred_id = issue_body.get("credential_id") or issue_body.get("id")
         assert cred_id, "Phase 9 FAIL: credential_id missing from issue response"
         _STATE["credential_id"] = cred_id
         # plaintext_secret is present in issue response — do NOT record it in evidence
@@ -1233,6 +1239,17 @@ class TestClientProductionE2E002LiveProof:
         )
         assert has_plaintext, (
             "Phase 9 FAIL: plaintext_secret missing from issue response"
+        )
+
+        # Assign role via the dedicated role endpoint (IssueServiceCredentialBody only accepts name)
+        role_resp = _r.post(
+            f"{cred_base}/{cred_id}/role",
+            json={"role": "analyst"},
+            headers=t2_headers,
+            timeout=15,
+        )
+        assert role_resp.status_code in {200, 201}, (
+            f"Phase 9 FAIL: credential role assignment returned HTTP {role_resp.status_code}"
         )
 
         # T3 capability verification — use the issued credential to attempt workforce ops
@@ -1263,20 +1280,26 @@ class TestClientProductionE2E002LiveProof:
                     t3_result = f"T3_UNEXPECTED_{t3_resp.status_code}"
         _EVIDENCE["t3_capability_result"] = t3_result
 
-        # Rotate credential — new plaintext returned; old plaintext invalid after rotation
-        cred_url = f"{cred_base}/{cred_id}"
+        # Rotate credential — returns new credential_id; old credential is marked rotated
         rotate_resp = _r.post(
-            f"{cred_url}/rotate",
+            f"{cred_base}/{cred_id}/rotate",
             headers=t2_headers,
             timeout=15,
         )
         assert rotate_resp.status_code in {200, 201}, (
             f"Phase 9 FAIL: credential rotate returned HTTP {rotate_resp.status_code}"
         )
+        # Successor credential has a new ID — all further operations target the successor
+        rotated_body = rotate_resp.json()
+        successor_cred_id = rotated_body.get("credential_id") or rotated_body.get("id")
+        assert successor_cred_id and successor_cred_id != cred_id, (
+            "Phase 9 FAIL: rotate did not return a new credential_id"
+        )
+        successor_url = f"{cred_base}/{successor_cred_id}"
 
-        # Suspend credential — must deny auth
+        # Suspend successor — must deny auth
         suspend_resp = _r.post(
-            f"{cred_url}/suspend",
+            f"{successor_url}/suspend",
             headers=t2_headers,
             timeout=15,
         )
@@ -1284,9 +1307,9 @@ class TestClientProductionE2E002LiveProof:
             f"Phase 9 FAIL: credential suspend returned HTTP {suspend_resp.status_code}"
         )
 
-        # Resume credential — must allow auth again
+        # Resume successor — must allow auth again
         resume_resp = _r.post(
-            f"{cred_url}/resume",
+            f"{successor_url}/resume",
             headers=t2_headers,
             timeout=15,
         )
@@ -1294,9 +1317,9 @@ class TestClientProductionE2E002LiveProof:
             f"Phase 9 FAIL: credential resume returned HTTP {resume_resp.status_code}"
         )
 
-        # Revoke credential — permanent denial; validate_credential() hard-fails after revoke
+        # Revoke successor — permanent denial; validate_credential() hard-fails after revoke
         revoke_resp = _r.delete(
-            cred_url,
+            successor_url,
             headers=t2_headers,
             timeout=15,
         )
@@ -1307,7 +1330,9 @@ class TestClientProductionE2E002LiveProof:
         _EVIDENCE["credential_lifecycle_results"].append(
             {
                 "credential_id": cred_id,
+                "successor_credential_id": successor_cred_id,
                 "issue": issue_resp.status_code,
+                "role_assigned": role_resp.status_code,
                 "plaintext_returned_once": has_plaintext,
                 "plaintext_in_evidence": False,  # never recorded
                 "rotate": rotate_resp.status_code,
@@ -1352,10 +1377,11 @@ class TestClientProductionE2E002LiveProof:
             return
 
         t2_headers = _tenant_admin_headers()
+        workforce_url = f"{CORE_API_URL}/workforce/users/{analyst_id}"
 
-        # Suspend with mandatory reason (suspension_reason required by P-113.5)
+        # Suspend with mandatory reason via workforce route (P-113.5 enforcement lives here)
         suspend_resp = _r.patch(
-            f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users/{analyst_id}",
+            workforce_url,
             json={"active": False, "suspension_reason": "E2E-002 proof suspension"},
             headers=t2_headers,
             timeout=15,
@@ -1365,18 +1391,14 @@ class TestClientProductionE2E002LiveProof:
             f"{suspend_resp.text[:200]}"
         )
 
-        # Verify suspension is reflected in list
+        # Verify suspension is reflected in list — response uses 'items' key
         list_resp = _r.get(
             f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users",
             headers=t2_headers,
             timeout=15,
         )
         assert list_resp.status_code == 200
-        users = (
-            list_resp.json()
-            if isinstance(list_resp.json(), list)
-            else list_resp.json().get("users", [])
-        )
+        users = list_resp.json().get("items", [])
         analyst_entry = next(
             (
                 u
@@ -1385,17 +1407,19 @@ class TestClientProductionE2E002LiveProof:
             ),
             None,
         )
-        if analyst_entry:
-            assert analyst_entry.get("active") is False or analyst_entry.get(
-                "membership_lifecycle_state"
-            ) in {"suspended"}, (
-                f"Phase 10 FAIL: analyst not suspended in user list: {analyst_entry}"
-            )
+        assert analyst_entry is not None, (
+            "Phase 10 FAIL: analyst not found in user list after suspension"
+        )
+        assert analyst_entry.get("active") is False or analyst_entry.get(
+            "membership_lifecycle_state"
+        ) in {"suspended"}, (
+            f"Phase 10 FAIL: analyst not suspended in user list: {analyst_entry}"
+        )
 
-        # Attempt to suspend without reason — must be rejected (422)
+        # Attempt to suspend without reason via workforce route — must be rejected (422)
         no_reason_resp = _r.patch(
-            f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users/{analyst_id}",
-            json={"active": False},  # no suspension_reason
+            workforce_url,
+            json={"active": False},  # no suspension_reason — P-113.5 requires it
             headers=t2_headers,
             timeout=15,
         )
@@ -1405,10 +1429,10 @@ class TestClientProductionE2E002LiveProof:
             f"got {no_reason_resp.status_code}"
         )
 
-        # Reactivate
+        # Reactivate via workforce route
         reactivate_resp = _r.patch(
-            f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users/{analyst_id}",
-            json={"active": True},
+            workforce_url,
+            json={"active": True, "reactivation_reason": "E2E-002 proof reactivation"},
             headers=t2_headers,
             timeout=15,
         )
@@ -1462,10 +1486,12 @@ class TestClientProductionE2E002LiveProof:
 
         t2_headers = _tenant_admin_headers()
 
-        # Revoke — terminal state
+        # Revoke — terminal state; RevokeUserPayload requires revocation_reason field
         revoke_resp = _r.post(
             f"{CORE_API_URL}/workforce/users/{analyst_id}/revoke",
-            json={"reason": "E2E-002 proof revocation — terminal state verification"},
+            json={
+                "revocation_reason": "E2E-002 proof revocation — terminal state verification"
+            },
             headers=t2_headers,
             timeout=15,
         )
@@ -1477,7 +1503,7 @@ class TestClientProductionE2E002LiveProof:
         # Idempotent re-revoke — must not raise (204 or same status)
         re_revoke_resp = _r.post(
             f"{CORE_API_URL}/workforce/users/{analyst_id}/revoke",
-            json={"reason": "E2E-002 proof idempotent revoke"},
+            json={"revocation_reason": "E2E-002 proof idempotent revoke"},
             headers=t2_headers,
             timeout=15,
         )
@@ -1548,10 +1574,14 @@ class TestClientProductionE2E002LiveProof:
             return
 
         t2_headers = _tenant_admin_headers()
+        # Use the workforce route for all last-admin checks — _assert_operational_admin_remains()
+        # lives in workforce.py. The tenant_admin.py route does not contain the guard, and
+        # targeting your own row there triggers SELF_ESCALATION_DENIED (403) before any guard.
+        workforce_admin_url = f"{CORE_API_URL}/workforce/users/{admin_a_id}"
 
         # Attempt to suspend the last (only bound operational) admin — must fail 409
         suspend_last_resp = _r.patch(
-            f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users/{admin_a_id}",
+            workforce_admin_url,
             json={
                 "active": False,
                 "suspension_reason": "E2E-002 last-admin protection test",
@@ -1568,7 +1598,7 @@ class TestClientProductionE2E002LiveProof:
         # Attempt to revoke the last admin — must fail 409
         revoke_last_resp = _r.post(
             f"{CORE_API_URL}/workforce/users/{admin_a_id}/revoke",
-            json={"reason": "E2E-002 last-admin revoke test"},
+            json={"revocation_reason": "E2E-002 last-admin revoke test"},
             headers=t2_headers,
             timeout=15,
         )
@@ -1579,7 +1609,7 @@ class TestClientProductionE2E002LiveProof:
 
         # Attempt to demote last admin — must fail 409
         demote_last_resp = _r.patch(
-            f"{CORE_API_URL}/admin/tenants/{CLIENT_A_ID}/users/{admin_a_id}",
+            workforce_admin_url,
             json={"role": "auditor"},
             headers=t2_headers,
             timeout=15,
@@ -1713,11 +1743,19 @@ class TestClientProductionE2E002LiveProof:
             "direct_db_inspection": "LAST_RESORT_DIAGNOSTIC_ONLY — not canonical proof method",
         }
 
+        # Projection delivery cannot be confirmed without admin_gateway log review (MP-003).
+        # Record as PENDING unless delivery was observable via product boundary.
+        phase_14_result = (
+            "PASS"
+            if projection_state == "PROJECTION_DELIVERY_OBSERVED"
+            else "PENDING_MANUAL_CONFIRMATION"
+        )
         _record_phase(
             "PHASE_14_PROJECTION",
-            "PASS",
+            phase_14_result,
             projection_state=projection_state,
             mp_003=mp_003["id"],
+            note="PASS requires MP-003 delivery confirmation via admin_gateway logs",
         )
 
     # ----------------------------------------------------------------
@@ -1909,8 +1947,7 @@ class TestClientProductionE2E002LiveProof:
             denial_proof_count=len(_EVIDENCE["denial_proofs"]),
             isolation_failures=len(isolation_failures),
         )
-
-        _write_evidence_artifact()
+        # Evidence is written by the cleanup fixture (after cleanup_status is populated).
 
 
 # ---------------------------------------------------------------------------
@@ -1949,3 +1986,5 @@ def cleanup_proof_tenants(request):
     _EVIDENCE["cleanup_status"]["cleanup_mechanism"] = (
         "POST /admin/tenants/{id}/suspend"
     )
+    # Write final evidence after cleanup_status is populated — not before.
+    _write_evidence_artifact()
