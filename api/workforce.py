@@ -370,7 +370,7 @@ def list_users(
     rows = db.execute(
         text("""
             SELECT id, email, display_name, role, active, last_active_at, created_at,
-                   identity_binding_status
+                   identity_binding_status, membership_lifecycle_state
             FROM tenant_users
             WHERE tenant_id = :tenant_id
             ORDER BY created_at DESC
@@ -387,6 +387,9 @@ def list_users(
                 "role": r.role,
                 "active": r.active,
                 "identity_binding_status": r.identity_binding_status,
+                "membership_lifecycle_state": str(
+                    r.membership_lifecycle_state or "active"
+                ),
                 "last_active_at": (
                     r.last_active_at.isoformat()
                     if r.last_active_at and not isinstance(r.last_active_at, str)
@@ -643,17 +646,16 @@ def revoke_user(
     if not row:
         raise HTTPException(404, detail=api_error("USER_NOT_FOUND", "User not found."))
 
-    # Idempotent: already revoked → return 204, no side effects
-    if str(row.membership_lifecycle_state or "active") == "revoked":
-        return
-
     # Last-admin protection (transactional, under SELECT ... FOR UPDATE)
-    if str(row.role) == "tenant_admin":
+    if (
+        str(row.membership_lifecycle_state or "active") != "revoked"
+        and str(row.role) == "tenant_admin"
+    ):
         _assert_operational_admin_remains(db, tenant_id, user_id)
 
-    # Set terminal revocation state
+    # Conditional UPDATE — atomic idempotency guard; concurrent revokes only one wins
     now_ts = _now().isoformat()
-    db.execute(
+    result = db.execute(
         text("""
             UPDATE tenant_users
             SET active = FALSE,
@@ -663,6 +665,7 @@ def revoke_user(
                 revoked_at = :now_ts,
                 updated_at = :now_ts
             WHERE tenant_id = :tenant_id AND id = :user_id
+              AND membership_lifecycle_state != 'revoked'
         """),
         {
             "reason": payload.revocation_reason,
@@ -672,6 +675,9 @@ def revoke_user(
             "now_ts": now_ts,
         },
     )
+    if result.rowcount == 0:
+        # Already revoked (by this call or a concurrent one) — idempotent 204
+        return
 
     # Bump membership_version to invalidate outstanding JWTs
     try:
