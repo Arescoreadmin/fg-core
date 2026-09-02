@@ -1,0 +1,310 @@
+{
+  "$schema": "https://frostgate.ai/schemas/proof/client-production-e2e-002/v1",
+  "_comment": "SCHEMA TEMPLATE — committed; runtime output is gitignored (client-production-e2e-002-evidence-runtime.json). Never overwrite this file with production output. FG_WRITE_EVIDENCE=1 required to write runtime evidence.",
+  "proof_version": "client-production-e2e-002/v1",
+  "execution_id": "<uuid4>",
+  "environment": "<https://api.frostgate.ai>",
+  "start_timestamp": "<iso8601>",
+  "end_timestamp": "<iso8601>",
+  "commit_sha": "<git-sha>",
+  "tenant_ids": {
+    "client_a": "fg-e2e-a-<ts>-<hex>",
+    "client_b": "fg-e2e-b-<ts>-<hex>"
+  },
+  "phase_results": [
+    {
+      "phase": "PHASE_0_PREFLIGHT",
+      "result": "PASS | FAIL",
+      "http_status": 200,
+      "auth_chain": "platform_admin_key + gateway_secret — distinct values",
+      "cleanup_path_routable": 404,
+      "no_prefix_collision": true,
+      "projection_worker_health": "PASS | NOT_CHECKED | UNREACHABLE"
+    },
+    {
+      "phase": "PHASE_1_CREATE_A",
+      "result": "PASS | FAIL",
+      "http_status": 201,
+      "tenant_id": "fg-e2e-a-<ts>-<hex>",
+      "initial_lifecycle_state": "admin_unset"
+    },
+    {
+      "phase": "PHASE_2_CREATE_B",
+      "result": "PASS | FAIL",
+      "http_status": 201,
+      "tenant_id": "fg-e2e-b-<ts>-<hex>",
+      "initial_lifecycle_state": "admin_unset",
+      "no_state_leakage_from_a": true
+    },
+    {
+      "phase": "PHASE_3_BOOTSTRAP",
+      "result": "PASS | FAIL",
+      "admin_a_user_id": "<uuid>",
+      "admin_b_user_id": "<uuid>",
+      "lifecycle_a_after_bootstrap": "admin_unbound",
+      "lifecycle_b_after_bootstrap": "admin_unbound",
+      "idempotent_route": "POST /admin/tenants/{id}/bootstrap-admin"
+    },
+    {
+      "phase": "PHASE_4_IDENTITY_BINDING",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "t2_token_present": true,
+      "mp_001": "MP-001",
+      "mp_002": "MP-002"
+    },
+    {
+      "phase": "PHASE_5_OPERATIONAL",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "lifecycle_a": "operational",
+      "lifecycle_b": "operational"
+    },
+    {
+      "phase": "PHASE_6_WORKFORCE",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "analyst_user_id": "<uuid>",
+      "auditor_user_id": "<uuid>",
+      "second_admin_user_id": "<uuid or null>",
+      "list_users_status": 200,
+      "t3_note": "T3 verification in Phase 9 after credential issuance"
+    },
+    {
+      "phase": "PHASE_7_ROLE_ADMIN",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "platform_admin_lifecycle_read": 200,
+      "t2_list_users": 200
+    },
+    {
+      "phase": "PHASE_8_ISOLATION",
+      "result": "PASS | NOT_PROVEN",
+      "platform_admin_a_users_denied": 403,
+      "platform_admin_b_users_denied": 403,
+      "cross_tenant_a_to_b_denied": true,
+      "isolation_mechanism": "check_tenant_admin_authority() in tenant_admin.py — no platform.admin bypass"
+    },
+    {
+      "phase": "PHASE_9_CREDENTIAL",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "credential_id": "<uuid>",
+      "lifecycle_sequence": ["issue", "rotate", "suspend", "resume", "revoke"],
+      "t3_capability_result": "T3_VERIFIED | T3_NOT_SUPPORTED | NOT_TESTED"
+    },
+    {
+      "phase": "PHASE_10_SUSPENSION",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "analyst_user_id": "<uuid>",
+      "suspend": 200,
+      "mandatory_reason_enforced": 422,
+      "reactivate": 200
+    },
+    {
+      "phase": "PHASE_11_REVOCATION",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "analyst_user_id": "<uuid>",
+      "revoke": 204,
+      "idempotent_re_revoke": 204,
+      "resurrection_denied": 409
+    },
+    {
+      "phase": "PHASE_12_LAST_ADMIN",
+      "result": "PASS | MANUAL_PROOF_REQUIRED",
+      "admin_user_id": "<uuid>",
+      "suspend_last_denied": 409,
+      "revoke_last_denied": 409,
+      "demote_last_denied": 409,
+      "second_admin_proof": "SECOND_ADMIN_PRESENT_BINDING_REQUIRES_OIDC | SKIPPED_NO_SECOND_ADMIN"
+    },
+    {
+      "phase": "PHASE_13_AUTHORITY",
+      "result": "PASS | FAIL",
+      "platform_admin_a_users_denied": 403,
+      "platform_admin_b_users_denied": 403,
+      "escalation_denied": true
+    },
+    {
+      "phase": "PHASE_14_PROJECTION",
+      "result": "PASS",
+      "projection_state": "PROJECTION_DELIVERY_NOT_OBSERVABLE_VIA_PRODUCT_BOUNDARY | PROJECTION_DELIVERY_OBSERVED_PENDING_LOG_REVIEW",
+      "mp_003": "MP-003"
+    },
+    {
+      "phase": "PHASE_15_RECOVERY",
+      "result": "PASS | FAIL",
+      "recovery_bootstrap_status": 200,
+      "lifecycle_after_recovery": "admin_unbound",
+      "no_sql_required": true,
+      "oidc_binding": "MANUAL_PROOF — see MP-002"
+    },
+    {
+      "phase": "PHASE_16_SUSPENSION",
+      "result": "PASS | FAIL",
+      "suspend_status": 200,
+      "lifecycle_a_suspended": "tenant_suspended",
+      "lifecycle_b_unaffected": "admin_unbound",
+      "recover_status": 200,
+      "lifecycle_a_recovered": "admin_unbound"
+    },
+    {
+      "phase": "PHASE_17_EVIDENCE",
+      "result": "PASS | FAIL",
+      "reconstruction": {
+        "client_a": {
+          "tenant_id": "fg-e2e-a-<ts>-<hex>",
+          "lifecycle_state": "<state>",
+          "lifecycle_version": 1,
+          "operational": false,
+          "tenant_id_matches": true
+        },
+        "client_b": {
+          "tenant_id": "fg-e2e-b-<ts>-<hex>",
+          "lifecycle_state": "<state>",
+          "lifecycle_version": 1,
+          "operational": false,
+          "tenant_id_matches": true
+        }
+      },
+      "phases_passed": ["PHASE_0_PREFLIGHT", "PHASE_1_CREATE_A"],
+      "overall_verdict": "PASS | NOT_PROVEN | BLOCKED",
+      "denial_proof_count": 4,
+      "isolation_failures": 0
+    }
+  ],
+  "lifecycle_transitions": [
+    {
+      "phase": "PHASE_1",
+      "tenant_id": "fg-e2e-a-<ts>-<hex>",
+      "lifecycle_state": "admin_unset",
+      "operational": false
+    },
+    {
+      "phase": "PHASE_3",
+      "tenant_id": "fg-e2e-a-<ts>-<hex>",
+      "lifecycle_state": "admin_unbound",
+      "operational": false
+    },
+    {
+      "phase": "PHASE_5",
+      "tenant_id": "fg-e2e-a-<ts>-<hex>",
+      "lifecycle_state": "operational",
+      "operational": true
+    },
+    {
+      "phase": "PHASE_16",
+      "tenant_id": "fg-e2e-a-<ts>-<hex>",
+      "lifecycle_state": "tenant_suspended",
+      "operational": false
+    }
+  ],
+  "denial_proofs": [
+    {
+      "phase": "PHASE_8_ISOLATION",
+      "route": "GET /admin/tenants/{id}/users",
+      "actor": "platform.admin",
+      "expected_status": 403,
+      "actual_status": 403,
+      "result": "PASS"
+    },
+    {
+      "phase": "PHASE_13_AUTHORITY",
+      "route": "POST /admin/tenants",
+      "actor": "tenant_admin_A",
+      "expected_status": 403,
+      "actual_status": 403,
+      "result": "PASS"
+    }
+  ],
+  "credential_lifecycle_results": [
+    {
+      "credential_id": "<uuid>",
+      "issue": 201,
+      "plaintext_returned_once": true,
+      "plaintext_in_evidence": false,
+      "rotate": 200,
+      "suspend": 200,
+      "resume": 200,
+      "revoke": 200,
+      "t3_capability_result": "T3_VERIFIED | T3_NOT_SUPPORTED | NOT_TESTED"
+    }
+  ],
+  "workforce_lifecycle_results": [
+    {
+      "user_id": "<uuid>",
+      "operation": "suspend_reactivate",
+      "suspend_status": 200,
+      "missing_reason_enforced": true,
+      "reactivate_status": 200
+    },
+    {
+      "user_id": "<uuid>",
+      "operation": "revoke",
+      "revoke_status": 204,
+      "idempotent_re_revoke": 204,
+      "resurrection_denied": 409,
+      "terminal_state": true
+    }
+  ],
+  "projection_results": {
+    "PROJECTION_EVENT_GENERATED": "ASSUMED — workforce mutations in phases 6/10/11 enqueue outbox events",
+    "PROJECTION_DELIVERY_OBSERVED": "MANUAL_PROOF — see MP-003",
+    "projection_state": "PROJECTION_DELIVERY_NOT_OBSERVABLE_VIA_PRODUCT_BOUNDARY | PROJECTION_DELIVERY_OBSERVED_PENDING_LOG_REVIEW",
+    "admin_gateway_url_set": false,
+    "direct_db_inspection": "LAST_RESORT_DIAGNOSTIC_ONLY — not canonical proof method"
+  },
+  "cleanup_status": {
+    "fg-e2e-a-<ts>-<hex>": {"status": 200, "result": "PASS"},
+    "fg-e2e-b-<ts>-<hex>": {"status": 200, "result": "PASS"},
+    "TENANT_DECOMMISSION_AUTHORITY": "PRESENT",
+    "cleanup_mechanism": "POST /admin/tenants/{id}/suspend"
+  },
+  "manual_proof_items": [
+    {
+      "id": "MP-001",
+      "title": "Auth0 org config + admin OIDC binding — Tenant A",
+      "steps": [
+        "1. In Auth0 Dashboard → Organizations → Create org named '{CLIENT_A_ID}'",
+        "2. Enable the FrostGate Auth0 application on the organization",
+        "3. Configure tenant_id metadata on the Auth0 organization",
+        "4. Visit invitation_url from bootstrap response for admin_a",
+        "5. Sign in with jcosat0211@gmail.com via Auth0 Google OAuth flow",
+        "6. Verify binding: GET /admin/tenants/{CLIENT_A_ID}/users → identity_binding_status=bound",
+        "7. Obtain bound session token → export FG_TENANT_ADMIN_TOKEN=<token>",
+        "8. Re-fetch lifecycle: GET /admin/tenants/{CLIENT_A_ID}/lifecycle → operational expected"
+      ],
+      "result": "MANUAL_PROOF"
+    },
+    {
+      "id": "MP-002",
+      "title": "Auth0 org config + admin OIDC binding — Tenant B",
+      "steps": [
+        "1. In Auth0 Dashboard → Organizations → Create org named '{CLIENT_B_ID}'",
+        "2. Enable the FrostGate Auth0 application on the organization",
+        "3. Configure tenant_id metadata on the Auth0 organization",
+        "4. Visit invitation_url from bootstrap response for admin_b",
+        "5. Sign in with jcosat0211@gmail.com via Auth0 Google OAuth flow",
+        "6. Verify binding: GET /admin/tenants/{CLIENT_B_ID}/users → identity_binding_status=bound"
+      ],
+      "result": "MANUAL_PROOF"
+    },
+    {
+      "id": "MP-003",
+      "title": "Projection delivery via admin_gateway operational logs",
+      "steps": [
+        "1. Access Railway dashboard → fg-identity-projection-worker service",
+        "2. View service logs for the proof session timestamp",
+        "3. Confirm rows_claimed > 0 and rows_succeeded > 0",
+        "4. Confirm status=done for membership mutations from Phase 6/10/11",
+        "5. Optionally verify Auth0 app_metadata reflects canonical role state"
+      ],
+      "result": "MANUAL_PROOF",
+      "note": "Projection outbox query requires direct DB access — no public HTTP endpoint. AUTH-ROLE-001C proved live delivery; MP-003 confirms per-session delivery."
+    }
+  ],
+  "t3_capability_result": "T3_VERIFIED | T3_NOT_SUPPORTED | NOT_TESTED",
+  "overall_verdict": "PASS | NOT_PROVEN | BLOCKED",
+  "blockers": [],
+  "EVIDENCE_SECRET_SCAN": "CLEAN",
+  "timings_seconds": {
+    "phase_0": "<seconds>",
+    "phase_1": "<seconds>"
+  },
+  "_prohibited_fields": "api_keys, tokens, secrets, credentials, passwords, authorization_headers — NEVER include in runtime output"
+}

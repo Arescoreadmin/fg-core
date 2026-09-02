@@ -1,5 +1,32 @@
 # PR Fix Log (Strict)
 
+## P-51 — feat(proof): CLIENT-PRODUCTION-E2E-002 complete client lifecycle production proof harness
+
+- **PR/Branch:** `feat/client-production-e2e-002`
+- **Date:** 2026-09-02
+- **Files changed:** `tests/test_client_production_e2e_002.py` (new), `docs/architecture/client-production-e2e-002.md` (new), `contracts/artifacts/identity/client-production-e2e-002-evidence.json` (new), `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`
+- **Motivation:** Complete production proof harness orchestrating all authorities built through P-113.4 and P-113.5 to demonstrate the full FrostGate client lifecycle end-to-end through canonical product boundaries: client creation (T1), workforce administration (T2), service credential lifecycle (T2 + T3 capability verification), cross-tenant isolation (HARD GATE), last-admin protection, projection evidence, and cleanup.
+- **What changed:**
+  - `tests/test_client_production_e2e_002.py` — 36-test proof harness (18 non-live CI + 18 live phases). **Non-live class** (`TestClientProductionE2E002Gates`): lifecycle constant stability, `FailureClass` enum completeness (11 members), `ProofFailure` structured exception construction, secret scanner (catches all 9 forbidden keywords), phase ordering determinism, evidence dict shape, tenant ID format, credential-distinct gate. **Live class** (`TestClientProductionE2E002LiveProof`): Phase 0 preflight (auth chain + cleanup path + no-collision), Phase 1/2 client A/B creation, Phase 3 bootstrap admins (lifecycle → admin_unbound), Phase 4 identity binding (MANUAL_PROOF boundary — graceful degradation if FG_TENANT_ADMIN_TOKEN absent), Phase 5 operational verification, Phase 6 workforce invite + T3 capability verification, Phase 7 role administration, Phase 8 HARD GATE isolation (platform.admin 403, T2 cross-tenant 403 — TENANT_ISOLATION_FAILURE = immediate NOT_PROVEN), Phase 9 credential lifecycle (issue→rotate→suspend→resume→revoke + T3 attempt), Phase 10 workforce suspension (mandatory reason enforcement), Phase 11 workforce revocation (terminal state, idempotent re-revoke, no resurrection), Phase 12 last-admin protection (suspend/revoke/demote → 409), Phase 13 platform/tenant authority boundary, Phase 14 projection evidence (MP-003), Phase 15 recovery (idempotent bootstrap), Phase 16 client suspension (A suspended, B unaffected), Phase 17 evidence reconstruction + final verdict + secret scan.
+  - `docs/architecture/client-production-e2e-002.md` — Full operator runbook: authority map (T1/T2/T3 routes with file:line references), lifecycle state machine diagram, credential loading instructions, phase-by-phase execution guide, MP-001/MP-002/MP-003 manual proof steps, failure classification table, cleanup behavior, evidence artifact location, verdict definitions, rollback/recovery procedure, T3 capability verification instructions, production live execution commands.
+  - `contracts/artifacts/identity/client-production-e2e-002-evidence.json` — JSON schema template with `"example"` fields for all evidence properties. Never overwritten by runtime output. Runtime artifact is gitignored (`-evidence-runtime.json`).
+  - `ROADMAP.md` — Added CLIENT-PRODUCTION-E2E-002 row (🔄 open) and P-113.5 row (✅ COMPLETE); updated status line.
+- **Credential tiers documented:** T1 (platform.admin — `X-API-Key` + `X-FG-Internal-Token`, distinct values); T2 (bound human OIDC — `Authorization: Bearer` + `X-FG-Internal-Token`, requires `require_tenant_admin()`); T3 (service credential — empirically verified in Phase 9, result recorded without assumption).
+- **HARD STOP rules implemented:** Phase 8 raises `ProofFailure(classification=TENANT_ISOLATION_FAILURE)` and sets `overall_verdict=NOT_PROVEN` on any isolation defect. Phase 12 asserts 409 for all last-admin protection operations.
+- **T3 assessment:** Phase 9 issues an `analyst`-role `tenant_api_key` credential and attempts `PATCH /workforce/users/{uid}`. Expected outcome: `T3_NOT_SUPPORTED` (403 from `require_capability("identity.scim")`) because `tenant_api_key` does not carry `identity.scim` capability by default. Actual result recorded in `t3_capability_result` field without weakening `require_capability()`.
+- **MANUAL_PROOF items:** MP-001 (Auth0 org config + admin OIDC binding for Tenant A; provides `FG_TENANT_ADMIN_TOKEN`), MP-002 (Auth0 org config + admin OIDC binding for Tenant B), MP-003 (projection delivery via admin_gateway Railway logs for Phases 6/10/11 mutations).
+- **Evidence security:** `_secret_scan()` checks 9 forbidden keywords including `x-fg-internal-token:`. Runtime evidence is gitignored. Template committed. `FG_WRITE_EVIDENCE=1` required to write runtime output. Phase 17 runs final scan before write; assertion fails if secret material found.
+- **Cleanup:** `scope="class" autouse=True` fixture suspends all proof tenants via `POST /admin/tenants/{id}/suspend` regardless of test outcome. Cleanup records per-tenant HTTP status in evidence.
+- **Architecture references:** `api/tenant_admin.py` (T2 routes), `api/workforce.py` (T3 routes), `api/client_lifecycle.py` (lifecycle evaluator), `api/tenant_admin_authority.py` (require_tenant_admin), `api/entitlements.py` (require_capability).
+- **Behavioral impact:** None — proof harness only. No new routes, no DB changes, no migrations.
+- **Security impact:** Neutral — no auth changes, no bypasses, no new permissions. Secret scan prevents accidental token disclosure in evidence.
+- **Non-live test count:** 18 passed, 18 skipped.
+- **fg-fast result:** 496 passed, 2 skipped — all CI gates green.
+- **Validation:** `ruff check` CLEAN. `ruff format --check` CLEAN. `pytest tests/test_client_production_e2e_002.py -x -q` → 18 passed, 18 skipped. `make fg-fast` → 496 passed, 2 skipped.
+- **Result:** HARNESS_QUALITY=PASS. CI_SAFETY=PASS. PRODUCTION_E2E_PROOF=NOT_YET_RUN. MERGE_RECOMMENDATION=MERGE_HARNESS_ONLY.
+
+---
+
 ## P-112 — fix(proof): dual-credential auth chain, PSP format validation, and BFF path documentation
 
 - **PR/Branch:** `fix/proof-dual-credential-architecture`
