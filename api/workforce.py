@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
@@ -655,7 +656,7 @@ def revoke_user(
 
     # Conditional UPDATE — atomic idempotency guard; concurrent revokes only one wins
     now_ts = _now().isoformat()
-    result = db.execute(
+    result: CursorResult[Any] = db.execute(  # type: ignore[assignment]
         text("""
             UPDATE tenant_users
             SET active = FALSE,
