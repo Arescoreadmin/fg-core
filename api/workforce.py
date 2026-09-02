@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -22,9 +22,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
-from api.entitlements import require_capability
 from api.db_models_identity import TenantIdentityConfig
 from api.deps import tenant_db_required
+from api.entitlements import require_capability
 from api.error_contracts import api_error
 from api.identity.store import TenantIdentityStore, emit_identity_audit_event
 from api.identity.tenant_identity_policy import (
@@ -61,6 +61,9 @@ class UpdateUserPayload(BaseModel):
     active: bool | None = None
     role: str | None = None
     display_name: str | None = None
+    suspension_reason: str | None = None
+    reactivation_reason: str | None = None
+    role_change_reason: str | None = None
 
     @field_validator("role")
     @classmethod
@@ -70,11 +73,22 @@ class UpdateUserPayload(BaseModel):
         return v
 
 
+class RevokeUserPayload(BaseModel):
+    revocation_reason: str
+
+    @field_validator("revocation_reason")
+    @classmethod
+    def _not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("revocation_reason must not be empty")
+        return v.strip()
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _risk_band(score: float) -> str:
@@ -151,6 +165,84 @@ def _compute_risk_profile(db: Session, tenant_id: str, user_id: str) -> dict[str
         "active_days": rows.active_days or 0,
         "period_days": _RISK_WINDOW_DAYS,
     }
+
+
+def _assert_operational_admin_remains(
+    db: Session, tenant_id: str, excluding_user_id: str
+) -> None:
+    """Fail with 409 if no other operational tenant_admin would remain.
+
+    Uses SELECT ... FOR UPDATE to prevent concurrent revocations from both
+    observing the same safe state (TOCTOU protection).
+
+    The operational definition is identical to client_lifecycle.evaluate_client_lifecycle:
+      - tenant_users.active = TRUE
+      - tenant_users.role = 'tenant_admin'
+      - tenant_users.identity_binding_status = 'bound'
+      - tenant_users.principal_id IS NOT NULL
+      - fg_principals.lifecycle_state = 'active'
+      - tenant.lifecycle_state = 'active'
+    """
+    # Lock tenant_users rows for this tenant while we count.
+    # FOR UPDATE OF is not supported in SQLite; fall back to a plain SELECT.
+    try:
+        rows = db.execute(
+            text("""
+                SELECT tu.id, tu.active, tu.identity_binding_status, tu.principal_id,
+                       COALESCE(fp.lifecycle_state, 'inactive') AS principal_lifecycle_state
+                FROM tenant_users tu
+                LEFT JOIN fg_principals fp ON fp.id = tu.principal_id
+                WHERE tu.tenant_id = :tid
+                  AND tu.role = 'tenant_admin'
+                  AND tu.id != :exclude_id
+                FOR UPDATE OF tu
+            """),
+            {"tid": tenant_id, "exclude_id": excluding_user_id},
+        ).fetchall()
+    except Exception:
+        # SQLite (tests) does not support FOR UPDATE OF; fall back.
+        rows = db.execute(
+            text("""
+                SELECT tu.id, tu.active, tu.identity_binding_status, tu.principal_id,
+                       COALESCE(fp.lifecycle_state, 'inactive') AS principal_lifecycle_state
+                FROM tenant_users tu
+                LEFT JOIN fg_principals fp ON fp.id = tu.principal_id
+                WHERE tu.tenant_id = :tid
+                  AND tu.role = 'tenant_admin'
+                  AND tu.id != :exclude_id
+            """),
+            {"tid": tenant_id, "exclude_id": excluding_user_id},
+        ).fetchall()
+
+    # Tenant must itself be operational (reuse same check as client_lifecycle)
+    tenant_row = db.execute(
+        text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    ).fetchone()
+    tenant_operational = tenant_row is not None and str(tenant_row[0]) == "active"
+
+    if not tenant_operational:
+        # Tenant already non-operational; last-admin protection is moot
+        return
+
+    operational_count = sum(
+        1
+        for r in rows
+        if bool(r[1])  # active
+        and str(r[2]) == "bound"  # identity_binding_status
+        and r[3] is not None  # principal_id exists
+        and str(r[4]) == "active"  # canonical principal lifecycle
+    )
+
+    if operational_count == 0:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "LAST_ADMIN_PROTECTED",
+                "Cannot remove or demote the last operational tenant administrator. "
+                "Assign another administrator before this operation.",
+            ),
+        )
 
 
 # ─── User management ──────────────────────────────────────────────────────────
@@ -295,12 +387,16 @@ def list_users(
                 "role": r.role,
                 "active": r.active,
                 "identity_binding_status": r.identity_binding_status,
-                "last_active_at": r.last_active_at.isoformat()
-                if r.last_active_at and not isinstance(r.last_active_at, str)
-                else r.last_active_at,
-                "created_at": r.created_at
-                if isinstance(r.created_at, str)
-                else r.created_at.isoformat(),
+                "last_active_at": (
+                    r.last_active_at.isoformat()
+                    if r.last_active_at and not isinstance(r.last_active_at, str)
+                    else r.last_active_at
+                ),
+                "created_at": (
+                    r.created_at
+                    if isinstance(r.created_at, str)
+                    else r.created_at.isoformat()
+                ),
             }
             for r in rows
         ],
@@ -322,9 +418,13 @@ def update_user(
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
+    actor_subject = getattr(request.state, "subject", None) or "unknown"
 
     row = db.execute(
-        text("SELECT id FROM tenant_users WHERE tenant_id=:t AND id=:u"),
+        text(
+            "SELECT id, role, membership_lifecycle_state, active FROM tenant_users"
+            " WHERE tenant_id=:t AND id=:u"
+        ),
         {"t": tenant_id, "u": user_id},
     ).fetchone()
     if not row:
@@ -332,12 +432,77 @@ def update_user(
             status_code=404, detail=api_error("USER_NOT_FOUND", "User not found.")
         )
 
-    updates: list[str] = ["updated_at = NOW()"]
-    params: dict[str, Any] = {"tenant_id": tenant_id, "user_id": user_id}
+    # Revoked users are terminal — reject all mutations
+    current_lifecycle = str(row.membership_lifecycle_state or "active")
+    if current_lifecycle == "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "MEMBERSHIP_REVOKED",
+                "This membership has been revoked and cannot be modified.",
+            ),
+        )
+
+    # Validate mandatory reason when suspending
+    if payload.active is False and not (payload.suspension_reason or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "SUSPENSION_REASON_REQUIRED",
+                "suspension_reason is required when deactivating a user.",
+            ),
+        )
+
+    # Last-admin guard when suspending or demoting a tenant_admin
+    current_role = str(row.role)
+    is_admin_mutation = (
+        payload.active is False and current_role == "tenant_admin"
+    ) or (
+        payload.role is not None
+        and payload.role != "tenant_admin"
+        and current_role == "tenant_admin"
+    )
+    if is_admin_mutation:
+        _assert_operational_admin_remains(db, tenant_id, user_id)
+
+    now_ts = _now().isoformat()
+    updates: list[str] = ["updated_at = :now_ts"]
+    params: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "user_id": user_id,
+        "now_ts": now_ts,
+    }
+
+    was_active = bool(row.active)
 
     if payload.active is not None:
         updates.append("active = :active")
         params["active"] = payload.active
+        if payload.active is False:
+            # Suspending
+            updates.extend(
+                [
+                    "membership_lifecycle_state = 'suspended'",
+                    "suspension_reason = :suspension_reason",
+                    "suspended_by = :suspended_by",
+                    "suspended_at = :now_ts",
+                ]
+            )
+            params["suspension_reason"] = (
+                payload.suspension_reason or ""
+            ).strip() or None
+            params["suspended_by"] = actor_subject
+        else:
+            # Reactivating
+            updates.extend(
+                [
+                    "membership_lifecycle_state = 'active'",
+                    "suspension_reason = NULL",
+                    "suspended_by = NULL",
+                    "suspended_at = NULL",
+                ]
+            )
+
     if payload.role is not None:
         updates.append("role = :role")
         params["role"] = payload.role
@@ -347,10 +512,13 @@ def update_user(
 
     db.execute(
         text(
-            f"UPDATE tenant_users SET {', '.join(updates)} WHERE tenant_id=:tenant_id AND id=:user_id"
+            f"UPDATE tenant_users SET {', '.join(updates)}"
+            " WHERE tenant_id=:tenant_id AND id=:user_id"
         ),
         params,
     )
+
+    new_version: int | None = None
     if payload.active is not None or payload.role is not None:
         try:
             new_version = membership_version_svc.bump_version(
@@ -362,13 +530,11 @@ def update_user(
             # AUTH-ROLE-001B: enqueue projection for Auth0-backed memberships so
             # role/active changes converge into app_metadata within the same tx.
             member_row = db.execute(
-                text(
-                    """
+                text("""
                     SELECT principal_id, identity_provider, identity_subject, role, active
                     FROM tenant_users
                     WHERE tenant_id = :tenant_id AND id = :user_id
-                    """
-                ),
+                    """),
                 {"tenant_id": tenant_id, "user_id": user_id},
             ).fetchone()
             if (
@@ -376,6 +542,7 @@ def update_user(
                 and member_row.identity_provider == "auth0"
                 and member_row.identity_subject
                 and member_row.principal_id
+                and new_version is not None
             ):
                 from admin_gateway.identity.projection_outbox import (
                     enqueue_projection,
@@ -388,15 +555,164 @@ def update_user(
                     tenant_id=tenant_id,
                     provider=member_row.identity_provider,
                     provider_subject=member_row.identity_subject,
-                    roles=[]
-                    if not member_row.active
-                    else ([member_row.role] if member_row.role else []),
+                    roles=(
+                        []
+                        if not member_row.active
+                        else ([member_row.role] if member_row.role else [])
+                    ),
                     projection_revision=new_version,
                 )
         except ValueError:
             pass  # row deleted between SELECT and UPDATE; safe to ignore
+
+    # Emit distinct audit events
+    if payload.active is False and was_active:
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.workforce.user_suspended",
+            affected_email=None,
+            reason_code="WORKFORCE_USER_SUSPENDED",
+            details={
+                "user_id": user_id,
+                "suspended_by": actor_subject,
+                "suspension_reason": (payload.suspension_reason or "").strip() or None,
+            },
+        )
+    elif payload.active is True and not was_active:
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.workforce.user_reactivated",
+            affected_email=None,
+            reason_code="WORKFORCE_USER_REACTIVATED",
+            details={
+                "user_id": user_id,
+                "reactivated_by": actor_subject,
+                "reactivation_reason": (payload.reactivation_reason or "").strip()
+                or None,
+            },
+        )
+
+    if payload.role is not None and payload.role != current_role:
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.workforce.user_role_changed",
+            affected_email=None,
+            reason_code="WORKFORCE_USER_ROLE_CHANGED",
+            details={
+                "user_id": user_id,
+                "old_role": current_role,
+                "new_role": payload.role,
+                "changed_by": actor_subject,
+                "role_change_reason": (payload.role_change_reason or "").strip()
+                or None,
+            },
+        )
+
     db.commit()
     return {"ok": True, "user_id": user_id}
+
+
+@router.post(
+    "/users/{user_id}/revoke",
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_capability("identity.scim")),
+    ],
+    status_code=204,
+)
+def revoke_user(
+    user_id: str,
+    payload: RevokeUserPayload,
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+) -> None:
+    tenant_id = require_bound_tenant(request)
+    actor_subject = getattr(request.state, "subject", None) or "unknown"
+
+    row = db.execute(
+        text(
+            "SELECT id, role, membership_lifecycle_state, principal_id,"
+            " identity_provider, identity_subject"
+            " FROM tenant_users WHERE tenant_id=:t AND id=:u"
+        ),
+        {"t": tenant_id, "u": user_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, detail=api_error("USER_NOT_FOUND", "User not found."))
+
+    # Idempotent: already revoked → return 204, no side effects
+    if str(row.membership_lifecycle_state or "active") == "revoked":
+        return
+
+    # Last-admin protection (transactional, under SELECT ... FOR UPDATE)
+    if str(row.role) == "tenant_admin":
+        _assert_operational_admin_remains(db, tenant_id, user_id)
+
+    # Set terminal revocation state
+    now_ts = _now().isoformat()
+    db.execute(
+        text("""
+            UPDATE tenant_users
+            SET active = FALSE,
+                membership_lifecycle_state = 'revoked',
+                revocation_reason = :reason,
+                revoked_by = :revoked_by,
+                revoked_at = :now_ts,
+                updated_at = :now_ts
+            WHERE tenant_id = :tenant_id AND id = :user_id
+        """),
+        {
+            "reason": payload.revocation_reason,
+            "revoked_by": actor_subject,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "now_ts": now_ts,
+        },
+    )
+
+    # Bump membership_version to invalidate outstanding JWTs
+    try:
+        new_version = membership_version_svc.bump_version(
+            db, membership_id=user_id, tenant_id=tenant_id, reason="workforce_revoke"
+        )
+        # Enqueue Auth0 deprovision projection if bound
+        if (
+            row.principal_id is not None
+            and row.identity_provider == "auth0"
+            and row.identity_subject
+        ):
+            from admin_gateway.identity.projection_outbox import enqueue_projection
+
+            enqueue_projection(
+                db,
+                membership_id=user_id,
+                principal_id=str(row.principal_id),
+                tenant_id=tenant_id,
+                provider=row.identity_provider,
+                provider_subject=row.identity_subject,
+                roles=[],  # deprovision: empty roles
+                projection_revision=new_version,
+            )
+    except ValueError:
+        pass
+
+    # Audit event — revocation_reason included, no secret material
+    emit_identity_audit_event(
+        db,
+        tenant_id=tenant_id,
+        event_type="tenant.workforce.user_revoked",
+        affected_email=None,
+        reason_code="WORKFORCE_USER_REVOKED",
+        details={
+            "user_id": user_id,
+            "revoked_by": actor_subject,
+            "revocation_reason": payload.revocation_reason,
+        },
+    )
+    db.commit()
 
 
 # ─── Risk profiles ────────────────────────────────────────────────────────────
@@ -428,9 +744,9 @@ def list_risk_profiles(
                 "email": u.email,
                 "display_name": u.display_name,
                 "role": u.role,
-                "last_active_at": u.last_active_at.isoformat()
-                if u.last_active_at
-                else None,
+                "last_active_at": (
+                    u.last_active_at.isoformat() if u.last_active_at else None
+                ),
                 **profile,
             }
         )
@@ -516,9 +832,9 @@ def get_user_activity(
                 "subject_category": q.subject_category,
                 "work_relevance": q.work_relevance,
                 "sensitivity_flags": q.sensitivity_flags or [],
-                "classified_at": q.classified_at.isoformat()
-                if q.classified_at
-                else None,
+                "classified_at": (
+                    q.classified_at.isoformat() if q.classified_at else None
+                ),
                 "created_at": q.created_at.isoformat(),
             }
             for q in queries
@@ -720,9 +1036,7 @@ def _fire_alerts(db: Session, tenant_id: str, profiles: list[dict[str, Any]]) ->
 
             if last:
                 cooldown_delta = timedelta(hours=rule.cooldown_hours)
-                if (
-                    _now() - last.fired_at.replace(tzinfo=timezone.utc)
-                ) < cooldown_delta:
+                if (_now() - last.fired_at.replace(tzinfo=UTC)) < cooldown_delta:
                     continue
 
             try:
@@ -1000,9 +1314,9 @@ def list_alert_rules(
             {
                 "id": r.id,
                 "name": r.name,
-                "threshold_score": float(r.threshold_score)
-                if r.threshold_score is not None
-                else None,
+                "threshold_score": (
+                    float(r.threshold_score) if r.threshold_score is not None else None
+                ),
                 "threshold_band": r.threshold_band,
                 "cooldown_hours": r.cooldown_hours,
                 "active": r.active,

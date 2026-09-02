@@ -122,6 +122,11 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
         "PUT",
         "/admin/tenants/{tenant_id}/credential-administration/{credential_id}/role",
     ),
+    # P-113.5 workforce membership lifecycle: revoke is an action sub-route on
+    # /workforce/users/{user_id}/revoke. Tenant isolation is enforced by
+    # require_bound_tenant(request) which reads request.state.tenant_id set by
+    # AuthGateMiddleware — the same pattern as other workforce/users routes.
+    ("POST", "/workforce/users/{user_id}/revoke"),
 }
 
 

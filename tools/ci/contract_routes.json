@@ -6109,13 +6109,19 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/workforce/users/{user_id}/revoke",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/workforce/users/{user_id}/risk-history",
       "scopes": [],
       "source": "contract"
     }
   ],
-  "generated_at": "2026-08-08T23:11:55.044477+00:00",
+  "generated_at": "2026-09-02T16:35:13.517933+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

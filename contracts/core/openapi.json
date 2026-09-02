@@ -36540,6 +36540,19 @@
         "title": "RevokeSessionResponse",
         "type": "object"
       },
+      "RevokeUserPayload": {
+        "properties": {
+          "revocation_reason": {
+            "title": "Revocation Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revocation_reason"
+        ],
+        "title": "RevokeUserPayload",
+        "type": "object"
+      },
       "RingPolicy": {
         "properties": {
           "audit_level": {
@@ -43019,6 +43032,17 @@
             ],
             "title": "Display Name"
           },
+          "reactivation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reactivation Reason"
+          },
           "role": {
             "anyOf": [
               {
@@ -43029,6 +43053,28 @@
               }
             ],
             "title": "Role"
+          },
+          "role_change_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Change Reason"
+          },
+          "suspension_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suspension Reason"
           }
         },
         "title": "UpdateUserPayload",
@@ -119126,6 +119172,83 @@
           }
         },
         "summary": "Get User Activity",
+        "tags": [
+          "workforce"
+        ]
+      }
+    },
+    "/workforce/users/{user_id}/revoke": {
+      "post": {
+        "operationId": "revoke_user_workforce_users__user_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeUserPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke User",
         "tags": [
           "workforce"
         ]
