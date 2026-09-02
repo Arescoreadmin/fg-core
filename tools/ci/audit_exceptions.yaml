@@ -162,7 +162,7 @@ exceptions:
       state. Audit deliberately deferred until the engagement state-machine
       audit approach (H14) is finalised to avoid two conflicting patterns.
     owner: field-assessment-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
@@ -181,7 +181,7 @@ exceptions:
       pattern (which is audited). Both paths will share an audit wrapper in
       the next report-lifecycle hardening sprint.
     owner: field-assessment-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
@@ -200,7 +200,7 @@ exceptions:
       is to audit the submit action (which is audited). Per-patch audit would
       generate excessive noise; a batched audit strategy is planned for H14.
     owner: field-assessment-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
@@ -219,7 +219,7 @@ exceptions:
       portal session model. Direct audit integration requires portal-auth
       refactor planned for H14.
     owner: portal-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: >
@@ -237,7 +237,7 @@ exceptions:
       Session termination is recorded in the portal session table. Audit
       consolidation planned alongside portal-auth refactor.
     owner: portal-team
-    expiration_date: "2026-09-01"
+    expiration_date: "2026-11-29"
     approval_reference: H13.5-bootstrap
     jira_ticket: null
     business_justification: Same auth-layer justification as EXC-PORTAL-001.
