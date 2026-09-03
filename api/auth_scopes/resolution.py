@@ -15,6 +15,7 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from api.config.internal_gateway_secret import resolve_internal_gateway_secret
 from api.db import set_tenant_context
+from api.platform_auth_mode import is_canonical_mode
 
 from .definitions import AuthResult, ERR_INVALID
 from .helpers import (
@@ -318,85 +319,136 @@ def verify_api_key_detailed(
 
     raw = (raw or raw_key or "").strip()
 
-    # Path E — admin_internal_token (COMPATIBILITY; scheduled for retirement).
+    # ---------------------------------------------------------------------------
+    # Path E — admin_internal_token  (P-113.6.1 corrected semantics)
     #
-    # This block recognises X-API-Key == FG_INTERNAL_GATEWAY_SECRET on /admin/**
+    # PLATFORM_AUTH_MODE controls whether Path E is active or retired.
+    # Evaluated via is_canonical_mode() imported from api.platform_auth_mode.
+    #
+    # History and retirement plan
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Path E recognises X-API-Key == FG_INTERNAL_GATEWAY_SECRET on /admin/**
     # paths and returns reason="admin_internal_token".  Downstream, the api_key
     # identity provider maps admin_internal_token → _permissions_from_legacy_scopes()
     # → roles_to_permissions(["platform_admin"]) = ALL_PERMISSIONS ⊃ "platform.admin".
     #
-    # Retirement plan (P-113.6 / CANONICAL mode):
-    #   COMPATIBILITY mode (current default) — Path E remains active; all existing
-    #     deployments continue to work.  The console BFF sends the same value for
-    #     both X-API-Key and X-FG-Internal-Token.
-    #   CANONICAL mode (post-migration) — once FG_PLATFORM_ADMIN_KEY is issued via
-    #     POST /admin/system/platform-admin/bootstrap and the console BFF sends
-    #     X-API-Key=FG_PLATFORM_ADMIN_KEY / X-FG-Internal-Token=FG_INTERNAL_GATEWAY_SECRET,
-    #     Path E can be disabled by setting PLATFORM_AUTH_MODE=CANONICAL.
-    #   Removal — Path E code block deleted once all production environments have
-    #     rotated to CANONICAL and the compatibility window has closed.
+    #   COMPATIBILITY (default) — Path E is active.  The console BFF sends the
+    #     gateway secret as BOTH X-API-Key and X-FG-Internal-Token.
+    #     Canonical fgk.* credentials are NOT Path-E credentials; they skip Path E
+    #     entirely and proceed to canonical validation below.
     #
-    # DO NOT remove this block without completing the CANONICAL migration steps
-    # documented in docs/architecture/v1/platform-admin-credential-authority.md.
-    # Removing it prematurely will break all existing console BFF admin operations.
+    #   CANONICAL (post-migration) — Path E is completely disabled as a source of
+    #     platform.admin authority.  X-API-Key=FG_PLATFORM_ADMIN_KEY (a fgk.*
+    #     credential) is required.  X-FG-Internal-Token=FG_INTERNAL_GATEWAY_SECRET
+    #     independently authenticates gateway provenance via require_internal_admin_gateway().
     #
-    # Active when: prod/staging env, OR when a local internal token is configured.
-    # This closes the dev/local drift gap — a dev running with FG_INTERNAL_AUTH_SECRET
-    # set will get real enforcement, not a silent bypass.
+    #   Removal — Path E code deleted once all production environments have rotated
+    #     to CANONICAL and the compatibility window has closed.
+    #
+    # Security invariants (P-113.6.1 defect fix)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # The pre-fix defect: Path E evaluated BEFORE canonical credential validation.
+    # When BFF sent X-API-Key=FG_PLATFORM_ADMIN_KEY (fgk.*) with CANONICAL intent,
+    # Path E fired (admin route + gateway internal headers), then failed the secret
+    # comparison (FG_PLATFORM_ADMIN_KEY != FG_INTERNAL_GATEWAY_SECRET) and returned
+    # AuthResult(valid=False) — blocking canonical validation entirely.
+    #
+    # Fix applied here (Phase 3 / Phase 4):
+    #   - CANONICAL mode: Path E is fully skipped; the request falls through to
+    #     canonical credential validation.  Gateway provenance remains independently
+    #     enforced by require_internal_admin_gateway() at the route layer.
+    #   - COMPATIBILITY mode: Path E only fires if X-API-Key does NOT start with
+    #     "fgk." (canonical prefix).  A fgk.* credential on an admin route is NOT
+    #     a Path E credential — it is a canonical credential and must proceed to
+    #     canonical validation.  Only the legacy non-fgk secret comparison is Path E.
+    #   - A failed secret comparison in COMPATIBILITY mode (non-fgk credential that
+    #     does not match FG_INTERNAL_GATEWAY_SECRET) is still fail-closed (reject),
+    #     not a fall-through — consistent with existing security policy.
+    #
+    # NOTE: FG_PLATFORM_ADMIN_KEY and FG_INTERNAL_GATEWAY_SECRET MUST remain
+    # distinct.  validate_canonical_mode_config() enforces this at startup.
+    # ---------------------------------------------------------------------------
     _configured_internal = _admin_gateway_internal_token()
-    if (
+    _path_e_conditions_met = (
         (_is_production_env() or bool(_configured_internal))
         and _is_admin_route_path(request_path)
         and _is_gateway_internal_admin_request(request)
-    ):
-        required_internal = _configured_internal
-        if not required_internal:
+    )
+
+    if _path_e_conditions_met:
+        # CANONICAL mode: Path E is completely disabled.  The request MUST carry
+        # a canonical fgk.* credential.  Fall through to canonical validation below.
+        if is_canonical_mode():
             _log_auth_event(
                 "admin_internal_auth",
                 success=False,
-                reason="missing_internal_token_config",
+                reason="path_e_disabled_canonical_mode",
                 request_path=request_path,
                 client_ip=client_ip,
             )
-            return AuthResult(
-                valid=False,
-                reason="missing_internal_token_config",
+            log.debug(
+                "auth_path=path_e_skipped mode=CANONICAL reason=canonical_mode_enforced"
             )
-        if not (raw and _constant_time_compare(raw, required_internal)):
-            _log_auth_event(
-                "admin_internal_auth",
-                success=False,
-                reason="invalid_internal_token",
-                request_path=request_path,
-                client_ip=client_ip,
+            # Fall through — do not return here; let canonical validation run.
+        elif raw.startswith("fgk."):
+            # COMPATIBILITY mode + canonical fgk.* credential: not a Path E credential.
+            # Continue to canonical validation — this is Phase 3 of the P-113.6
+            # migration where both modes coexist.
+            log.debug(
+                "auth_path=path_e_skip_fgk mode=COMPATIBILITY reason=fgk_credential_not_path_e"
             )
-            return AuthResult(
-                valid=False,
-                reason="invalid_internal_token",
-            )
-        _log_auth_event(
-            "admin_internal_auth",
-            success=True,
-            reason="valid_internal_token",
-            request_path=request_path,
-            client_ip=client_ip,
-        )
-        internal_scopes = _internal_admin_scopes()
-        if required_scopes:
-            missing = set(required_scopes) - internal_scopes
-            if missing:
+            # Fall through — do not return here; let canonical validation run.
+        else:
+            # COMPATIBILITY mode + non-fgk credential on an admin route.
+            # This is the legacy Path E path.  Validate the secret comparison.
+            required_internal = _configured_internal
+            if not required_internal:
+                _log_auth_event(
+                    "admin_internal_auth",
+                    success=False,
+                    reason="missing_internal_token_config",
+                    request_path=request_path,
+                    client_ip=client_ip,
+                )
                 return AuthResult(
                     valid=False,
-                    reason="missing_required_scopes",
-                    key_prefix="ag_internal",
-                    scopes=internal_scopes,
+                    reason="missing_internal_token_config",
                 )
-        return AuthResult(
-            valid=True,
-            reason="admin_internal_token",
-            key_prefix="ag_internal",
-            scopes=internal_scopes,
-        )
+            if not (raw and _constant_time_compare(raw, required_internal)):
+                _log_auth_event(
+                    "admin_internal_auth",
+                    success=False,
+                    reason="invalid_internal_token",
+                    request_path=request_path,
+                    client_ip=client_ip,
+                )
+                return AuthResult(
+                    valid=False,
+                    reason="invalid_internal_token",
+                )
+            _log_auth_event(
+                "admin_internal_auth",
+                success=True,
+                reason="legacy_path_e_authenticated",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            internal_scopes = _internal_admin_scopes()
+            if required_scopes:
+                missing = set(required_scopes) - internal_scopes
+                if missing:
+                    return AuthResult(
+                        valid=False,
+                        reason="missing_required_scopes",
+                        key_prefix="ag_internal",
+                        scopes=internal_scopes,
+                    )
+            return AuthResult(
+                valid=True,
+                reason="admin_internal_token",
+                key_prefix="ag_internal",
+                scopes=internal_scopes,
+            )
 
     # 1) global key bypass (constant-time comparison)
     global_key = (os.getenv("FG_API_KEY") or "").strip()

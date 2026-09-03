@@ -1,8 +1,42 @@
 # Platform Administrator Credential Authority
 
 **P-113.6** — Canonical Platform Administrator Credential Authority  
-**Status**: IMPLEMENTED  
-**Date**: 2026-09-02  
+**P-113.6.1** — Canonical Cutover Defect Fix  
+**Status**: IMPLEMENTED (P-113.6.1 deployed)  
+**Date**: 2026-09-03
+
+## P-113.6.1 — Authentication Resolution Defect Fix
+
+**Defect**: `verify_api_key_detailed()` in `api/auth_scopes/resolution.py` evaluated
+legacy Path E (admin_internal_token) BEFORE canonical fgk.* credential validation. When
+the Console BFF operated in CANONICAL mode (sending `X-API-Key=FG_PLATFORM_ADMIN_KEY`
+which is an fgk.* credential), Path E fired first — its comparison
+`FG_PLATFORM_ADMIN_KEY != FG_INTERNAL_GATEWAY_SECRET` failed — and returned
+`AuthResult(valid=False)`, blocking canonical credential validation entirely.
+
+**Fix**: `api/auth_scopes/resolution.py` now consults `api/platform_auth_mode.py`
+(the canonical mode authority) before executing Path E logic:
+
+- **CANONICAL mode**: Path E is fully skipped. The request falls through to
+  canonical credential validation. Gateway provenance remains independently enforced
+  by `require_internal_admin_gateway()` at the route layer.
+- **COMPATIBILITY mode**: Path E only fires if `X-API-Key` does NOT start with `"fgk."`.
+  A canonical fgk.* credential on an admin route skips Path E and proceeds to
+  canonical validation. Non-fgk credentials on admin routes are still checked
+  against `FG_INTERNAL_GATEWAY_SECRET` (fail-closed on mismatch).
+
+**Key module added**: `api/platform_auth_mode.py` — single source of truth for
+`PLATFORM_AUTH_MODE` in Core. Values: `COMPATIBILITY` (default) | `CANONICAL`.
+Unknown values fail safe as `COMPATIBILITY` (+ warning log, never silent CANONICAL).
+
+**Startup validation**: `api/config/startup_validation.py` now calls
+`_check_platform_auth_mode()`, which validates that in CANONICAL mode:
+- `FG_PLATFORM_ADMIN_KEY` is present
+- `FG_INTERNAL_GATEWAY_SECRET` is present
+- They are distinct values
+
+**New test file**: `tests/test_platform_admin_credential_authority.py` — N01–N20
+negative security tests + M01–M04 migration regression tests.  
 
 ## Purpose
 
@@ -327,7 +361,7 @@ and `event_type=bootstrap_created`, providing a complete audit trail without SQL
 
 ---
 
-## Files Changed
+## Files Changed (P-113.6)
 
 - `api/tenant_rbac.py` — `TENANT_ASSIGNABLE_ROLES`, `PLATFORM_CREDENTIAL_ROLES`, expanded `VALID_ROLE_NAMES`
 - `api/admin.py` — bootstrap + lifecycle endpoints, Pydantic models, audit event emission
@@ -336,3 +370,10 @@ and `event_type=bootstrap_created`, providing a complete audit trail without SQL
 - `tests/test_platform_admin_authority_p1136.py` — negative security test matrix (N-01 through N-16)
 - `tests/test_platform_admin_authority_invariant.py` — authority invariant tests (I-01 through I-15)
 - `tests/test_tenant_rbac.py` — updated `test_valid_role_names_covers_all_builtins` to reflect namespace expansion
+
+## Files Changed (P-113.6.1)
+
+- `api/platform_auth_mode.py` — **NEW** canonical `PLATFORM_AUTH_MODE` resolver for Core
+- `api/auth_scopes/resolution.py` — Path E corrected semantics (mode-aware, fgk.* skip)
+- `api/config/startup_validation.py` — `_check_platform_auth_mode()` startup validation
+- `tests/test_platform_admin_credential_authority.py` — **NEW** N01–N20 + M01–M04 tests

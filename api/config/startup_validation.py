@@ -284,6 +284,7 @@ class StartupValidator:
         self._check_minisign_key(report)
         self._check_evidence_signing_key(report)
         self._check_observability_config(report)
+        self._check_platform_auth_mode(report)
 
         return report
 
@@ -1248,6 +1249,44 @@ class StartupValidator:
                 passed=True,
                 message="FG_OTEL_ENDPOINT configured; traces will be exported.",
                 severity="info",
+            )
+
+    def _check_platform_auth_mode(self, report: StartupValidationReport) -> None:
+        """P-113.6.1: Validate PLATFORM_AUTH_MODE configuration in Core.
+
+        In CANONICAL mode, FG_PLATFORM_ADMIN_KEY must be set, distinct from
+        FG_INTERNAL_GATEWAY_SECRET, and FG_INTERNAL_GATEWAY_SECRET must be set.
+
+        In COMPATIBILITY mode (default), only log the active mode — no error.
+        """
+        try:
+            from api.platform_auth_mode import (
+                PLATFORM_AUTH_MODE,
+                validate_canonical_mode_config,
+            )
+
+            issues = validate_canonical_mode_config()
+            if issues:
+                for issue in issues:
+                    report.add(
+                        name="platform_auth_mode_canonical_config",
+                        passed=False,
+                        message=issue,
+                        severity="error" if self.is_production else "warning",
+                    )
+            else:
+                report.add(
+                    name="platform_auth_mode",
+                    passed=True,
+                    message=f"PLATFORM_AUTH_MODE={PLATFORM_AUTH_MODE} is correctly configured.",
+                    severity="info",
+                )
+        except Exception as exc:
+            report.add(
+                name="platform_auth_mode_check_failed",
+                passed=False,
+                message=f"Platform auth mode validation raised {type(exc).__name__}: {exc}",
+                severity="error" if self.is_production else "warning",
             )
 
 
