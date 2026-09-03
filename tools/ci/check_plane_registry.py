@@ -127,6 +127,17 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # require_bound_tenant(request) which reads request.state.tenant_id set by
     # AuthGateMiddleware — the same pattern as other workforce/users routes.
     ("POST", "/workforce/users/{user_id}/revoke"),
+    # P-113.6 platform_admin credential authority: these routes operate on the
+    # frostgate-internal tenant's platform_admin credential — a fixed, platform-level
+    # identity that has no caller-tenant binding by design. Access is gated by
+    # require_internal_admin_gateway() (X-FG-Internal-Token) + require_permission
+    # ("platform.admin"). There is no per-caller tenant context to bind.
+    ("GET", "/admin/system/platform-admin"),
+    ("POST", "/admin/system/platform-admin/bootstrap"),
+    ("POST", "/admin/system/platform-admin/rotate"),
+    ("POST", "/admin/system/platform-admin/suspend"),
+    ("POST", "/admin/system/platform-admin/resume"),
+    ("POST", "/admin/system/platform-admin/revoke"),
 }
 
 
