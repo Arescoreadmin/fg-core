@@ -4196,3 +4196,37 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 **Test evidence:** `tests/test_tenant_credential_admin_001.py` — 30 tests (C1-01 through C1-30). Covers: list, issue, get, rotate, suspend, resume, revoke (idempotent + terminal conflict), self-service role assign (all four roles: governance_admin, analyst, auditor, read_only), platform-only role denial (tenant_admin, platform_admin), unknown role rejection, RBAC list, cross-tenant isolation, cross-tenant path attack, non-admin user denial, unbound/inactive admin denial, no-plaintext guards (list + get + events), portal_access type guard, constants contract (subset/disjoint assertions), events endpoint round-trip, events no-plaintext/no-metadata guard, events type guard, revoke→validate_credential denial.
 
 **SOC review outcome:** approved (rev 2). Additive surface with existing auth machinery. Self-service role ceiling prevents privilege escalation. Plaintext never in non-issuance/rotation responses. Type guard prevents cross-type access. Cross-tenant isolation enforced at authority-proof level, not request parameter level. Auth denial tests prove the deny path is exercised — not just the happy path.
+
+---
+
+## P-113.6 Canonical Platform Administrator Credential Authority — SOC Review (2026-09-03)
+
+**Change summary:** Establishes the canonical `platform_admin` credential authority. Three production defects fixed: (1) `platform_admin` absent from `VALID_ROLE_NAMES` (422 on `assign_role`); (2) no bootstrap endpoint for `FG_PLATFORM_ADMIN_KEY`; (3) Console BFF conflating `FG_INTERNAL_GATEWAY_SECRET` as both API key and internal token.
+
+**Critical-path file — `api/auth_scopes/resolution.py`:** Comment-only change. No logic modified. A retirement plan comment block was added to the Path E (`admin_internal_token`) detection code, documenting: (a) what Path E does and why it exists; (b) the two-stage migration (COMPATIBILITY → CANONICAL); (c) the 5-condition retirement gate; (d) an explicit warning against premature removal. The code that recognises `X-API-Key == FG_INTERNAL_GATEWAY_SECRET` and issues `reason="admin_internal_token"` is unchanged.
+
+**No auth paths weakened:** Path E remains active and behaves identically. The comment does not alter any conditional, any return value, or any token comparison. No permission is added, removed, or reordered.
+
+**New credential authority (`api/admin.py`):** Six endpoints under `/admin/system/platform-admin/` (bootstrap, status, rotate, suspend, resume, revoke). All require `require_internal_admin_gateway()` (X-FG-Internal-Token check) plus `require_permission("platform.admin")`. The bootstrap endpoint issues a credential under the `frostgate-internal` tenant via the existing `credential_authority.issue_credential()` — no direct SQL writes. Plaintext returned exactly once at bootstrap; not stored after issuance. All lifecycle events recorded in `tenant_credential_events` (automatic) and `internal_platform_authority_events` (explicit — bootstrap, rotate, revoke only).
+
+**Role namespace split (`api/tenant_rbac.py`):** `VALID_ROLE_NAMES` expanded from `frozenset(BUILTIN_ROLES)` to `TENANT_ASSIGNABLE_ROLES | PLATFORM_CREDENTIAL_ROLES`. The sets are disjoint by invariant test (I-06). `TENANT_ASSIGNABLE_ROLES` = {governance_admin, analyst, auditor, read_only}; `PLATFORM_CREDENTIAL_ROLES` = {tenant_admin, platform_admin}. Self-service endpoints are gated on `TENANT_ASSIGNABLE_ROLES`, not `VALID_ROLE_NAMES` — expansion does not widen any self-service surface.
+
+**Console BFF migration (`apps/console/app/api/core/[...path]/route.ts`):** `PLATFORM_AUTH_MODE` env var selects COMPATIBILITY (default; existing behavior, Path E active) or CANONICAL (uses distinct `FG_PLATFORM_ADMIN_KEY` as `X-API-Key`). In COMPATIBILITY mode the BFF is byte-for-byte identical to pre-P-113.6 behavior. CANONICAL mode requires a separate env var (`FG_PLATFORM_ADMIN_KEY`) that must differ from `FG_INTERNAL_GATEWAY_SECRET` — a startup guard logs `[STARTUP_FATAL]` if not.
+
+**Security invariants verified by test suite:**
+- I-1: `platform_admin` not in `TENANT_ASSIGNABLE_ROLES` (self-assignment blocked)
+- I-2: PSP credential cannot obtain `platform.admin`
+- I-3: `CORE_API_KEY` wildcard (`'*'`) does not grant `platform.admin`
+- I-4: `FG_INTERNAL_GATEWAY_SECRET` alone insufficient for `platform.admin` in CANONICAL mode
+- I-5: No direct SQL credential issuance — all writes through `credential_authority.issue_credential()`
+- I-6: `TENANT_ASSIGNABLE_ROLES ∩ PLATFORM_CREDENTIAL_ROLES = ∅`
+
+**Critical-path files changed:**
+- `api/auth_scopes/resolution.py`: comment-only — retirement plan annotation on Path E block; no logic change.
+- `api/admin.py`: 6 additive endpoints; no existing route or auth mechanism modified.
+- `api/tenant_rbac.py`: `VALID_ROLE_NAMES` expansion; self-service endpoints unaffected.
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated via `make route-inventory-generate` for 6 new `/admin/system/platform-admin/` routes.
+
+**Test evidence:** `tests/test_platform_admin_authority_p1136.py` (16 negative security tests N-01–N-16) and `tests/test_platform_admin_authority_invariant.py` (15 invariant tests I-01–I-15). Covers: VALID_ROLE_NAMES coverage, TENANT_ASSIGNABLE_ROLES exclusion, PLATFORM_CREDENTIAL_ROLES membership, bootstrap 201 first / 409 second, rotate 404 when no credential, PSP exclusion, CORE_API_KEY exclusion, tenant admin cannot self-assign platform_admin, role sets disjoint, assign_role() accepts platform_admin, all 6 security invariants.
+
+**SOC review outcome:** approved. The only critical-path file change (`resolution.py`) is comment-only — no auth logic modified. New endpoints are strictly additive, behind existing `require_internal_admin_gateway()` + `require_permission("platform.admin")` guards. Role namespace expansion does not widen any self-service surface. Invariant tests cover all 6 security invariants explicitly.
