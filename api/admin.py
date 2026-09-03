@@ -2619,7 +2619,7 @@ async def bootstrap_platform_admin_credential(
     log.info(
         "platform_admin credential bootstrapped",
         extra={
-            "credential_id": credential_id,
+            "cred_id": credential_id,
             "slot": _PLATFORM_ADMIN_SLOT,
             "actor": actor_id,
             "request_id": request_id,
