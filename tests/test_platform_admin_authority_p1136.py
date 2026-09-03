@@ -327,7 +327,9 @@ def test_n01_rbac_assignment_rejects_platform_admin(app, engine):
     cred_id = _seed_credential(engine, tid)
 
     # Mint a tenant_admin key — has keys:write scope
-    key = mint_key("admin:read", "admin:write", "keys:read", "keys:write", tenant_id=tid)
+    key = mint_key(
+        "admin:read", "admin:write", "keys:read", "keys:write", tenant_id=tid
+    )
     headers = {"X-API-Key": key, "X-Tenant-ID": tid}
 
     try:
@@ -419,7 +421,9 @@ def test_n07_n08_n14_bootstrap_lifecycle(app, engine, monkeypatch):
         body1 = r1.json()
         assert body1["status"] == "bootstrapped"
         assert body1["credential_id"]
-        assert body1["plaintext_key"], "plaintext_key must be present on first bootstrap"
+        assert body1["plaintext_key"], (
+            "plaintext_key must be present on first bootstrap"
+        )
         assert body1["plaintext_key"].startswith("fgk."), (
             f"Canonical credential must start with 'fgk.', got: {body1['plaintext_key'][:20]!r}"
         )
@@ -482,7 +486,10 @@ def test_n13_tenant_admin_cannot_assign_platform_admin():
     Verified at the constants level: PLATFORM_ONLY_CREDENTIAL_ROLES catches
     platform_admin before SELF_SERVICE_CREDENTIAL_ROLES check.
     """
-    from api.tenant_admin import PLATFORM_ONLY_CREDENTIAL_ROLES, SELF_SERVICE_CREDENTIAL_ROLES
+    from api.tenant_admin import (
+        PLATFORM_ONLY_CREDENTIAL_ROLES,
+        SELF_SERVICE_CREDENTIAL_ROLES,
+    )
 
     assert "platform_admin" in PLATFORM_ONLY_CREDENTIAL_ROLES, (
         "platform_admin must be in PLATFORM_ONLY_CREDENTIAL_ROLES"
@@ -531,7 +538,9 @@ def test_n15_rotate_carries_platform_admin_role(app, engine, monkeypatch):
         body2 = r2.json()
         assert body2["action"] == "rotated"
         new_cred_id = body2["credential_id"]
-        assert new_cred_id != original_cred_id, "Rotation must produce a new credential_id"
+        assert new_cred_id != original_cred_id, (
+            "Rotation must produce a new credential_id"
+        )
         assert body2["plaintext_key"], "Rotation must return plaintext_key"
 
         # Verify new credential has platform_admin role in tenant_credential_roles

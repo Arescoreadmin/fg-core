@@ -47,7 +47,9 @@ def test_i01c_rbac_router_uses_builtin_roles_not_valid_role_names():
 
     # The list_roles endpoint should reference BUILTIN_ROLES, not VALID_ROLE_NAMES.
     source = inspect.getsource(rbac_router)
-    assert "BUILTIN_ROLES" in source, "tenant_rbac_router must still reference BUILTIN_ROLES"
+    assert "BUILTIN_ROLES" in source, (
+        "tenant_rbac_router must still reference BUILTIN_ROLES"
+    )
 
 
 def test_i01d_assign_service_credential_role_blocks_platform_admin():
@@ -182,7 +184,9 @@ def test_i05_admin_bootstrap_uses_credential_authority():
     )
 
     # Must NOT have raw INSERT INTO tenant_credentials in bootstrap function
-    bootstrap_source = inspect.getsource(admin_module.bootstrap_platform_admin_credential)
+    bootstrap_source = inspect.getsource(
+        admin_module.bootstrap_platform_admin_credential
+    )
     assert "INSERT INTO tenant_credentials" not in bootstrap_source, (
         "bootstrap_platform_admin_credential must not contain raw SQL credential inserts. "
         "All credential writes must go through credential_authority.issue_credential()."
