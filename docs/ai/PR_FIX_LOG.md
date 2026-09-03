@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-54 — fix(identity): bind canonical platform-admin through verified delegation (P-113.6.2) — branch `fix/platform-admin-canonical-delegation-p1136-2`
+
+- **PR/Branch:** `fix/platform-admin-canonical-delegation-p1136-2`
+- **Date:** 2026-09-03
+- **Files changed:** `api/auth_scopes/resolution.py`, `api/identity_providers/api_key.py`, `api/entitlements.py`, `tests/test_platform_admin_credential_authority.py`, `tests/test_platform_admin_authority_invariant.py`, `tests/test_core_002c_capability_before_tenant_binding.py`, `docs/architecture/v1/platform-admin-credential-authority.md`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** P-113.6.1 (PR #678) fixed Path E skipping but used metadata (credential_slot == "platform-admin-credential:v1" AND tenant_id == "frostgate-internal") to classify `canonical_platform_admin`. This violated the architectural law: metadata is not RBAC. A credential with the correct slot and tenant but without a `platform_admin` role in `tenant_credential_roles` would incorrectly receive `canonical_platform_admin`. Conversely, a revoked role could not remove platform authority without also revoking the credential itself.
+- **Fix:** Added `_lookup_canonical_platform_admin_role(engine, tenant_id, credential_id)` private helper in `api/auth_scopes/resolution.py`. Unconditionally queries `tenant_credential_roles` via `get_credential_role()` after every canonical credential authentication — no tenant_id or slot pre-condition. Returns `True` only if `role_name == 'platform_admin'` AND `revoked_at IS NULL`. Fail-closed: any exception (DB unavailable, schema error) returns `False`, collapsing to `canonical_validated`. The `_ca_reason` variable is now set exclusively by this helper. Three `bind_tenant_id()` call sites extended to include `canonical_platform_admin` alongside `admin_internal_token`. Named-user delegation in `api/identity_providers/api_key.py` extended for `canonical_platform_admin` with canonical RBAC permissions (not legacy scope derivation). `api/entitlements.py` helpers extended to cover `canonical_platform_admin` for pre-capability tenant binding and admin-gateway bypass.
+- **Behavioral impact:** Any canonical credential with `role_name = 'platform_admin'` in `tenant_credential_roles` (regardless of slot or tenant) receives `canonical_platform_admin`. Any credential without that role (including those with the platform-admin slot name) receives `canonical_validated`. Role revocation (`revoked_at IS NOT NULL`) immediately removes platform authority without requiring credential revocation. RBAC lookup failure fails closed.
+- **Security impact:** Strictly positive. RBAC is now the sole authority for `canonical_platform_admin`. Slot name and tenant_id are irrelevant to classification. No metadata combination can produce `canonical_platform_admin` without a live, non-revoked RBAC row. Delegated binding still requires delegation proof + tenant lifecycle verification (identical to `admin_internal_token`). All six P-113.6 invariants preserved and strengthened.
+- **Schema/API impact:** None. No DB changes. No new routes. No new env vars.
+- **Tests added:** R01 (role → canonical_platform_admin), R02 (revoked role → canonical_validated), R03 (tenant_admin role → canonical_validated), R04 (RBAC exception → canonical_validated); Phase 9 cross-tenant delegation regression; DB-exception fail-closed; N08–N12, N20 RBAC-classification negatives; Invariants A–D + source invariant. Total new: ~20 tests.
+- **Validation:** `ruff check` PASS; `ruff format --check` PASS; 82/82 targeted tests pass; `make test-auth-hardening` 22 pass; `make test-tenant-isolation` 15 pass + 3 skip; `make test-core-invariants` 40 pass + 2 skip; `make fg-fast` 10/10 gates pass (post SOC doc update).
+- **Result:** PASS.
+
+---
+
 ## P-53 — fix(identity): repair canonical platform-admin auth cutover (P-113.6.1) — branch `fix/platform-admin-canonical-cutover-p1136-1`
 
 - **PR/Branch:** `fix/platform-admin-canonical-cutover-p1136-1`

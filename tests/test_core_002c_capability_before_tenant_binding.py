@@ -117,12 +117,12 @@ def test_D_helper_scoped_to_admin_internal_token() -> None:
     helper_end = _ENTITLEMENTS_SRC.index("\n\ndef ", helper_start + 1)
     helper_body = _ENTITLEMENTS_SRC[helper_start:helper_end]
     assert '"admin_internal_token"' in helper_body, (
-        "The helper must gate on auth.reason == 'admin_internal_token' so "
-        "tenant API-key / fgk.* paths continue using the existing "
-        "middleware-established tenant context."
+        "The helper must gate on auth.reason == 'admin_internal_token' (and "
+        "'canonical_platform_admin') so tenant API-key / non-delegated fgk.* "
+        "paths continue using the existing middleware-established tenant context."
     )
     assert "return None" in helper_body, (
-        "The helper must return None (no-op) for non-admin_internal_token "
+        "The helper must return None (no-op) for non-delegated "
         "requests — do not weaken existing binding for other auth paths."
     )
 
@@ -142,8 +142,10 @@ def test_E_resolution_uses_verified_flag_for_idempotent_binds() -> None:
 
 
 def test_F_verified_flag_set_only_after_delegation_and_tenant_verify() -> None:
+    # The delegated-tenant branch includes both admin_internal_token and
+    # canonical_platform_admin. Search for the in-tuple form (formatter may wrap).
     admin_branch_start = _RESOLUTION_SRC.index(
-        'if getattr(auth, "reason", "") == "admin_internal_token":'
+        'in ("admin_internal_token", "canonical_platform_admin")\n'
     )
     admin_branch_end = _RESOLUTION_SRC.index("\n    if requested:", admin_branch_start)
     branch = _RESOLUTION_SRC[admin_branch_start:admin_branch_end]
@@ -201,8 +203,9 @@ def test_H_authgate_middleware_still_excludes_admin_internal_token() -> None:
 
 
 def test_I_bind_tenant_id_falls_back_to_header_only_after_verification() -> None:
+    # Use the formatter-stable tuple string to locate the delegated-tenant branch.
     admin_branch_start = _RESOLUTION_SRC.index(
-        'if getattr(auth, "reason", "") == "admin_internal_token":'
+        'in ("admin_internal_token", "canonical_platform_admin")\n'
     )
     admin_branch_end = _RESOLUTION_SRC.index("\n    if requested:", admin_branch_start)
     branch = _RESOLUTION_SRC[admin_branch_start:admin_branch_end]

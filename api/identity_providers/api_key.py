@@ -224,16 +224,29 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
     # when calling tenant-admin routes with ADMIN_GATEWAY_TOKEN. The ADMIN_GATEWAY_TOKEN
     # + delegation proof establish machine-level authority; the forwarded sub resolves
     # the named user's tenant_users row for require_tenant_admin() DB checks.
-    if getattr(auth, "reason", None) == "admin_internal_token":
+    if getattr(auth, "reason", None) in (
+        "admin_internal_token",
+        "canonical_platform_admin",
+    ):
         named_sub = (request.headers.get("X-FG-Named-User-Sub") or "").strip()
         if named_sub:
-            scopes: set[str] = getattr(auth, "scopes", set()) or set()
+            if getattr(auth, "reason", None) == "admin_internal_token":
+                # Legacy path: permissions from scope strings (unchanged).
+                scopes: set[str] = getattr(auth, "scopes", set()) or set()
+                perms = _permissions_from_legacy_scopes(scopes)
+            else:
+                # Canonical path: permissions from canonical RBAC, not legacy scopes.
+                # reason=canonical_platform_admin proves RBAC already validated
+                # platform_admin — use that directly.
+                perms = roles_to_permissions(["platform_admin"])
             return ActorContext(
                 subject=named_sub,
                 email="",
                 name="",
-                permissions=_permissions_from_legacy_scopes(scopes),
-                roles=[],
+                permissions=perms,
+                roles=["platform_admin"]
+                if getattr(auth, "reason", None) == "canonical_platform_admin"
+                else [],
                 auth_source="api_key",
                 tenant_id=None,
             )

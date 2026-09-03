@@ -377,3 +377,60 @@ and `event_type=bootstrap_created`, providing a complete audit trail without SQL
 - `api/auth_scopes/resolution.py` — Path E corrected semantics (mode-aware, fgk.* skip)
 - `api/config/startup_validation.py` — `_check_platform_auth_mode()` startup validation
 - `tests/test_platform_admin_credential_authority.py` — **NEW** N01–N20 + M01–M04 tests
+
+## P-113.6.2 — Canonical Platform Admin Delegation & Tenant Binding
+
+**Status**: IMPLEMENTED (2026-09-03)
+
+### Canonical Authority Classification
+
+`canonical_platform_admin` is produced exclusively from canonical RBAC state after successful canonical credential authentication. No tenant_id, credential_slot, scopes, header value, or any combination of metadata may substitute.
+
+Authority chain:
+```
+fgk credential → CredentialAuthority PASS → credential_id + tenant_id
+→ get_credential_role(tenant_id, credential_id) [UNCONDITIONAL — no tenant_id gate]
+→ role == platform_admin?
+    ├── yes → canonical_platform_admin
+    └── no  → canonical_validated
+```
+
+RBAC lookup exception → fail closed → `canonical_validated` → NO platform authority.
+
+### Role Revocation Removes Authority
+
+Revoking the `platform_admin` role (`revoked_at IS NOT NULL`) immediately removes `canonical_platform_admin` classification. The credential remains cryptographically valid but receives `canonical_validated` reason — no delegated binding, no `platform.admin` permissions.
+
+### Fail-Closed Behavior on Lookup Exception
+
+If `get_credential_role()` raises any exception (DB unavailable, network failure, schema error), `_lookup_canonical_platform_admin_role()` catches it, logs a warning, and returns `False`. The credential receives `canonical_validated`. No platform authority is granted on uncertainty.
+
+### Delegated Tenant Binding
+
+`canonical_platform_admin` credentials require the same delegation proof and tenant lifecycle verification as `admin_internal_token` via `bind_tenant_id()`. Cross-tenant operations are denied without a valid HMAC delegation proof. The `_ensure_admin_gateway_tenant_bound()` helper in `api/entitlements.py` also handles `canonical_platform_admin` to establish verified tenant context before capability enforcement.
+
+### Path E Compatibility Preserved
+
+`admin_internal_token` (Path E, COMPATIBILITY mode) behavior is fully unchanged. P-113.6.2 adds `canonical_platform_admin` alongside it; the two paths are additive.
+
+### Security Invariants (P-113.6.2)
+
+| # | Invariant |
+|---|-----------|
+| A | platform-admin slot + frostgate-internal tenant + NO RBAC role → `canonical_validated` |
+| B | frostgate-internal tenant alone + NO RBAC role → `canonical_validated` |
+| C | Both slot + tenant + NO RBAC role → `canonical_validated` (metadata insufficient) |
+| D | `platform_admin` role + ANY slot → `canonical_platform_admin` (RBAC is the only authority) |
+| E | RBAC lookup exception → `canonical_validated` (fail-closed, zero platform authority) |
+| F | Revoked role (`revoked_at IS NOT NULL`) → `canonical_validated` |
+
+Test D is the strongest proof: slot name is irrelevant. The RBAC role is the only authority.
+
+## Files Changed (P-113.6.2)
+
+- `api/auth_scopes/resolution.py` — Added `_lookup_canonical_platform_admin_role()` helper; RBAC-based `_ca_reason` classification; `bind_tenant_id()` extended for `canonical_platform_admin`; removed false failure log in CANONICAL Path E skip
+- `api/identity_providers/api_key.py` — Extended named-user delegation to `canonical_platform_admin` with canonical RBAC permissions
+- `api/entitlements.py` — Extended `_ensure_admin_gateway_tenant_bound()` and `_admin_gateway_tenant_admin_satisfies_capability()` for `canonical_platform_admin`
+- `tests/test_platform_admin_credential_authority.py` — Added R01–R04 (RBAC revocation), Phase 9 regression, DB-exception fail-closed, N08–N12, N20 tests; updated N04, M02, M03 with RBAC role assignment
+- `tests/test_platform_admin_authority_invariant.py` — Added Tests A–D (RBAC-is-authority invariants) + source invariant check
+- `tests/test_core_002c_capability_before_tenant_binding.py` — Updated tests F and I for formatter-stable string search; updated test D for extended helper scope

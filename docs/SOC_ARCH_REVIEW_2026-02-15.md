@@ -1,3 +1,23 @@
+## 2026-09-03 — P-113.6.2 Canonical Platform Admin Delegation — fix/platform-admin-canonical-delegation-p1136-2
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (auth resolution: `api/auth_scopes/resolution.py`; identity provider: `api/identity_providers/api_key.py`; entitlements: `api/entitlements.py`).
+
+**Scope:** Replaces metadata-based (slot+tenant) `canonical_platform_admin` classification with RBAC-based classification via `get_credential_role()`. Changes:
+1. `api/auth_scopes/resolution.py` — Added `_lookup_canonical_platform_admin_role(engine, tenant_id, credential_id)` private helper. Unconditionally queries `tenant_credential_roles` via `get_credential_role()` after canonical credential authentication; returns `True` only if `role_name == 'platform_admin'` and `revoked_at IS NULL`. Fail-closed: any exception returns `False` (canonical_validated, no platform authority). Removed false `_log_auth_event(success=False)` call in CANONICAL mode Path E skip. Updated `bind_tenant_id()` at three locations to include `"canonical_platform_admin"` alongside `"admin_internal_token"` in the delegated-tenant branch.
+2. `api/identity_providers/api_key.py` — Extended named-user delegation block to handle `canonical_platform_admin`. Legacy (`admin_internal_token`) path: permissions from scope strings (unchanged). Canonical path: permissions from `roles_to_permissions(["platform_admin"])` directly (RBAC-proven, no scope derivation).
+3. `api/entitlements.py` — Extended `_ensure_admin_gateway_tenant_bound()` and `_admin_gateway_tenant_admin_satisfies_capability()` to also handle `canonical_platform_admin` reason, applying the same delegation proof + tenant lifecycle verification path as `admin_internal_token`.
+
+**Security posture:**
+- Authority chain: `fgk credential → CredentialAuthority PASS → credential_id + tenant_id → get_credential_role(tenant_id, credential_id) → role == platform_admin? → canonical_platform_admin`. No metadata (slot, tenant, header) substitutes for RBAC.
+- Fail-closed: RBAC lookup exception returns `canonical_validated` (zero platform authority). Role revocation (`revoked_at IS NOT NULL`) returns `canonical_validated`. Non-`platform_admin` role returns `canonical_validated`.
+- Delegated binding: `canonical_platform_admin` requires delegation proof + tenant lifecycle verification identical to `admin_internal_token`. Cross-tenant binding without valid proof is denied.
+- No new credentials. No schema changes. No new auth paths. Existing `admin_internal_token` (Path E) behavior fully preserved in COMPATIBILITY mode.
+- Tests A–D confirm RBAC is the sole authority (slot+tenant metadata without role → `canonical_validated`; `platform_admin` role with any slot → `canonical_platform_admin`).
+
+**SOC review outcome:** approved. No new authority surfaces. RBAC classification strictly stronger than prior metadata classification. Fail-closed behavior explicit and tested (R01–R04, N08–N12, N20).
+
+---
+
 ## 2026-08-28 — TENANT-ADMIN-001 P1/P2 bot fixes — feat/tenant-admin-001-delegated-administration
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI gate update: `tools/ci/check_plane_registry.py`; authority chain fixes: `api/tenant_admin_authority.py`, `api/tenant_admin.py`, `api/actor_context.py`).

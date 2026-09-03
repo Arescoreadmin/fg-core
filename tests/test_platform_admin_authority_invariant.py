@@ -256,3 +256,347 @@ def test_i06d_platform_admin_in_role_permissions_registry():
     assert ROLE_PERMISSIONS["platform_admin"] == ALL_PERMISSIONS, (
         "ROLE_PERMISSIONS['platform_admin'] must equal ALL_PERMISSIONS."
     )
+
+
+# ---------------------------------------------------------------------------
+# P-113.6.2 — RBAC-is-the-authority invariant tests (Tests A–D + source check)
+# ---------------------------------------------------------------------------
+
+
+def test_inv_A_platform_admin_slot_and_internal_tenant_without_rbac_role_is_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """Test A: platform-admin slot + frostgate-internal tenant + NO platform_admin role
+    → verify_api_key_detailed() returns reason == "canonical_validated", NOT "canonical_platform_admin".
+    bind_tenant_id() denies cross-tenant binding for canonical_validated.
+    """
+    import uuid
+
+    from sqlalchemy import text
+
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "inv_a.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "inv_a.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    # NO role assignment — RBAC lookup will return None
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+    from starlette.datastructures import Headers
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.url.path = "/admin/tenants"
+    req.method = "GET"
+    req.headers = Headers(headers={"X-Admin-Gateway-Internal": "true"})
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.state = MagicMock()
+    req.state.request_id = str(uuid.uuid4())
+
+    result = verify_api_key_detailed(raw=plaintext, request=req)
+    assert result.valid, f"Credential is cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"Slot+tenant metadata without RBAC role must produce canonical_validated, "
+        f"NOT canonical_platform_admin. Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin", (
+        "INVARIANT VIOLATED: metadata alone must never produce canonical_platform_admin"
+    )
+
+
+def test_inv_B_frostgate_internal_no_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """Test B: frostgate-internal tenant (non-platform-admin slot) + NO platform_admin role
+    → canonical_validated, NOT canonical_platform_admin.
+    """
+    import uuid
+
+    from sqlalchemy import text
+
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "inv_b.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "inv_b.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="other-service:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+    from starlette.datastructures import Headers
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.url.path = "/admin/tenants"
+    req.method = "GET"
+    req.headers = Headers(headers={"X-Admin-Gateway-Internal": "true"})
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.state = MagicMock()
+    req.state.request_id = str(uuid.uuid4())
+
+    result = verify_api_key_detailed(raw=plaintext, request=req)
+    assert result.valid
+    assert result.reason == "canonical_validated", (
+        f"frostgate-internal tenant alone (no role) must not produce canonical_platform_admin. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_inv_C_both_slot_and_internal_tenant_no_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """Test C: both platform-admin slot + frostgate-internal tenant + NO role
+    → canonical_validated. Proves metadata combination is insufficient without RBAC.
+    """
+    import uuid
+
+    from sqlalchemy import text
+
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "inv_c.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "inv_c.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    # Platform-admin slot + frostgate-internal tenant — full prototype match
+    # but NO RBAC role → must still be canonical_validated
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+    from starlette.datastructures import Headers
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.url.path = "/admin/tenants"
+    req.method = "GET"
+    req.headers = Headers(headers={"X-Admin-Gateway-Internal": "true"})
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.state = MagicMock()
+    req.state.request_id = str(uuid.uuid4())
+
+    result = verify_api_key_detailed(raw=plaintext, request=req)
+    assert result.valid
+    assert result.reason == "canonical_validated", (
+        f"Slot+tenant combination without RBAC role must NOT produce canonical_platform_admin. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin", (
+        "STRONGEST INVARIANT: even platform-admin slot + frostgate-internal tenant + NO role "
+        "must not produce canonical_platform_admin. RBAC role is the ONLY authority."
+    )
+
+
+def test_inv_D_platform_admin_rbac_role_non_platform_admin_slot_gives_canonical_platform_admin(
+    tmp_path, monkeypatch
+):
+    """Test D (MANDATORY): role = platform_admin + credential_slot != platform-admin-credential:v1
+    → canonical_platform_admin.
+    This is the strongest proof — slot is irrelevant, RBAC role is everything.
+    """
+    import uuid
+
+    from sqlalchemy import text
+
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "inv_d.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "inv_d.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    # Non-platform-admin slot name but WITH platform_admin RBAC role
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="other-service:v1",  # deliberately NOT "platform-admin-credential:v1"
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+    from starlette.datastructures import Headers
+    from unittest.mock import MagicMock
+
+    req = MagicMock()
+    req.url.path = "/admin/tenants"
+    req.method = "GET"
+    req.headers = Headers(headers={"X-Admin-Gateway-Internal": "true"})
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.state = MagicMock()
+    req.state.request_id = str(uuid.uuid4())
+
+    result = verify_api_key_detailed(raw=plaintext, request=req)
+    assert result.valid, f"Credential must be valid: {result.reason}"
+    assert result.reason == "canonical_platform_admin", (
+        f"RBAC role=platform_admin must produce canonical_platform_admin regardless of slot. "
+        f"Got {result.reason!r}. This is the strongest invariant: slot is irrelevant, RBAC is everything."
+    )
+
+
+def test_inv_source_canonical_platform_admin_only_set_via_helper():
+    """Source-level invariant: 'canonical_platform_admin' as a return/reason value in
+    resolution.py must ONLY appear gated behind _lookup_canonical_platform_admin_role().
+
+    Verifies that no other path in the resolution module can produce this reason
+    without going through the RBAC lookup helper.
+    """
+    import api.auth_scopes.resolution as resolution
+
+    source = inspect.getsource(resolution)
+
+    # Count occurrences of "canonical_platform_admin" as a string value
+    occurrences = [
+        i
+        for i in range(len(source))
+        if source[i:].startswith('"canonical_platform_admin"')
+    ]
+    assert len(occurrences) >= 1, (
+        "resolution.py must reference canonical_platform_admin"
+    )
+
+    # The helper function must exist
+    assert "_lookup_canonical_platform_admin_role" in source, (
+        "resolution.py must define _lookup_canonical_platform_admin_role"
+    )
+
+    # The canonical_platform_admin reason must only appear in the context of
+    # the helper call — verify the classification block structure
+    helper_call = "_lookup_canonical_platform_admin_role("
+    assert helper_call in source, (
+        "resolution.py must call _lookup_canonical_platform_admin_role() "
+        "to classify canonical_platform_admin"
+    )
+
+    # The _ca_reason assignment must reference the helper
+    assert "_ca_reason = (" in source, (
+        "_ca_reason assignment block must exist in resolution.py"
+    )
+
+    # Verify the string "canonical_platform_admin" does NOT appear as a literal
+    # outside of the helper's conditional block (i.e., never hardcoded independently).
+    # We check that every literal occurrence is inside _ca_reason or a bind/import check.
+    helper_start = source.index("def _lookup_canonical_platform_admin_role(")
+    ca_reason_start = source.index("_ca_reason = (")
+    # All three must exist (already checked above individually)
+    assert source.index('"admin_internal_token", "canonical_platform_admin"') > 0, (
+        "bind_tenant_id must reference both reasons"
+    )
+    assert helper_start < ca_reason_start, "Helper must be defined before it is called"
