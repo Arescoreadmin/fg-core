@@ -82,20 +82,23 @@ curl -i -H "Authorization: Bearer <plaintext-key>" \
 
 # G7: admin list accessible (admin endpoint returns tenant in list)
 # Requires two distinct credentials — inject from production secret manager.
-# FG_PSP_CREDENTIAL: platform admin API key with platform_admin role in tenant_credential_roles.
-#   NOTE: NOT the PSP (platform-service-principal) credential — PSP lacks platform.admin.
-#   Obtain from the platform admin credential record; do NOT use the PSP credential here.
-# FG_INTERNAL_GATEWAY_SECRET: internal gateway trust secret
+# FG_PLATFORM_ADMIN_KEY: canonical platform_admin credential.
+#   Bootstrapped via POST /admin/system/platform-admin/bootstrap (P-113.6).
+#   NOT the PSP (platform-service-principal) credential — PSP lacks platform.admin.
+#   NOT the FG_INTERNAL_GATEWAY_SECRET — these MUST be distinct values.
+#   See docs/architecture/v1/platform-admin-credential-authority.md for bootstrap procedure.
+# FG_INTERNAL_GATEWAY_SECRET: internal gateway trust secret.
 #   Obtain from production secret manager; rotation is an exceptional key-replacement event.
 # WARNING: avoid shell history — set in a non-logging shell or via secrets tooling.
 #
-# This is the direct PSP path (Path A). X-API-Key authenticates the PSP identity;
+# X-API-Key authenticates the platform_admin credential identity;
 # X-FG-Internal-Token satisfies require_internal_admin_gateway() on all /admin/* routes.
-# Do NOT use the same value for both headers — that activates the BFF path (Path B).
-export FG_PSP_CREDENTIAL="fgk.<from-secret-manager>"
+# These MUST be distinct values — using the same value for both headers activates the
+# legacy compatibility path (Path E) rather than the canonical platform-admin path.
+export FG_PLATFORM_ADMIN_KEY="fgk.<from-secret-manager>"
 export FG_INTERNAL_GATEWAY_SECRET="<from-secret-manager>"
 curl -i \
-  -H "X-API-Key: $FG_PSP_CREDENTIAL" \
+  -H "X-API-Key: $FG_PLATFORM_ADMIN_KEY" \
   -H "X-FG-Internal-Token: $FG_INTERNAL_GATEWAY_SECRET" \
   https://api.frostgate.ai/admin/tenants
 # Expected: 200

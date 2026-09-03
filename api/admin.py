@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -42,6 +42,7 @@ from api.auth_scopes import (
 )
 from api.credential_authority import (
     CredentialNotFoundError,
+    CredentialSlotNotFoundError,
     CredentialStateError,
     CredentialTypeError,
     TenantLifecycleError,
@@ -50,13 +51,19 @@ from api.credential_authority import (
     issue_credential,
     list_credential_events,
     list_credentials,
+    resume_credential,
     revoke_credential,
     rotate_credential,
+    suspend_credential,
 )
-from api.tenant_rbac import VALID_ROLE_NAMES, assign_role as rbac_assign_role
+from api.tenant_rbac import (
+    VALID_ROLE_NAMES,
+    assign_role as rbac_assign_role,
+)
 from api.error_contracts import api_error
 from api.db import get_engine, set_tenant_context
 from api.internal_platform_authority import (
+    CANONICAL_INTERNAL_TENANT_ID as _PLATFORM_TENANT_ID,
     OPERATOR_CREDENTIAL_SLOT,
     OPERATOR_CREDENTIAL_TYPE,
     InternalPlatformAuthorityError,
@@ -1344,6 +1351,49 @@ class ServicePrincipalLifecycleResponse(BaseModel):
     stable_key: Optional[str]
 
 
+# ---------------------------------------------------------------------------
+# P-113.6 — Platform Admin Credential Authority models
+# ---------------------------------------------------------------------------
+
+
+class PlatformAdminBootstrapResponse(BaseModel):
+    """Response for POST /admin/system/platform-admin/bootstrap."""
+
+    credential_id: str
+    credential_slot: str
+    status: str  # "bootstrapped" | "already_exists"
+    plaintext_key: Optional[str] = None  # present only on first bootstrap
+
+
+class PlatformAdminStatusResponse(BaseModel):
+    """Response for GET /admin/system/platform-admin."""
+
+    exists: bool
+    credential_id: Optional[str] = None
+    credential_slot: Optional[str] = None
+    credential_status: Optional[str] = None
+    created_at: Optional[str] = None
+    last_rotated_at: Optional[str] = None
+
+
+class PlatformAdminRotationResponse(BaseModel):
+    """Response for POST /admin/system/platform-admin/rotate."""
+
+    credential_id: str
+    credential_slot: str
+    action: str = "rotated"
+    plaintext_key: Optional[str] = None
+
+
+class PlatformAdminLifecycleResponse(BaseModel):
+    """Response for suspend/resume/revoke platform-admin routes."""
+
+    credential_id: str
+    credential_slot: str
+    action: str
+    credential_status: str
+
+
 @router.post(
     "/tenants",
     response_model=TenantRecord,
@@ -2400,6 +2450,480 @@ async def revoke_service_principal_route(
         lifecycle_state=status.lifecycle_state or "revoked",
         service_principal_id=status.id,
         stable_key=status.stable_key,
+    )
+
+
+# =============================================================================
+# P-113.6 — Platform Administrator Credential Authority
+#
+# These endpoints manage the canonical platform_admin credential stored under
+# the frostgate-internal tenant.  This credential is entirely separate from:
+#   • FG_INTERNAL_GATEWAY_SECRET  — internal machine-to-machine trust token
+#   • Platform Service Principal  — workload identity with explicit scopes
+#   • CORE_API_KEY / FG_API_KEY   — dev-mode global bypass
+#
+# The platform_admin credential is issued by this bootstrap endpoint and
+# rotated/suspended/revoked via the lifecycle endpoints below.  It carries the
+# platform_admin role (stored in tenant_credential_roles) which resolves via
+# roles_to_permissions(["platform_admin"]) = ALL_PERMISSIONS ⊃ "platform.admin".
+#
+# Path E (admin_internal_token) is retained as a COMPATIBILITY path for the
+# current production deployment.  See resolution.py for the retirement comment.
+# =============================================================================
+
+# Slot name that uniquely identifies the platform-admin credential within the
+# frostgate-internal tenant's credential_slots table.
+_PLATFORM_ADMIN_SLOT = "platform-admin-credential:v1"
+_PLATFORM_ADMIN_CREDENTIAL_TYPE = "tenant_api_key"
+_PLATFORM_ADMIN_IDEMPOTENCY_KEY = "platform-admin-credential:v1:bootstrap"
+_PLATFORM_ADMIN_ACTOR = "system:platform-admin-authority"
+
+
+def _find_active_platform_admin_credential(engine) -> Optional[dict]:
+    """Return the active platform_admin credential record, or None if absent.
+
+    Queries tenant_credentials for the frostgate-internal tenant, slot
+    platform-admin-credential:v1, status=active.  Returns None if not found.
+    """
+    with engine.connect() as conn:
+        is_pg = engine.dialect.name == "postgresql"
+        if is_pg:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": _PLATFORM_TENANT_ID},
+            )
+        row = conn.execute(
+            text(
+                "SELECT credential_id, credential_slot, status, issued_at, rotated_at "
+                "FROM tenant_credentials "
+                "WHERE tenant_id = :tid "
+                "  AND credential_slot = :slot "
+                "  AND status = 'active'"
+            ),
+            {"tid": _PLATFORM_TENANT_ID, "slot": _PLATFORM_ADMIN_SLOT},
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "credential_id": str(row[0]),
+        "credential_slot": str(row[1]),
+        "status": str(row[2]),
+        "created_at": str(row[3]) if row[3] else None,
+        "last_rotated_at": str(row[4]) if row[4] else None,
+    }
+
+
+@router.get(
+    "/system/platform-admin",
+    response_model=PlatformAdminStatusResponse,
+    dependencies=[
+        Depends(require_scopes("admin:read")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def get_platform_admin_status(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminStatusResponse:
+    """Return whether an active canonical platform-admin credential exists.
+
+    Does not expose any credential material.  Returns exists=False if no
+    active credential is present in the frostgate-internal tenant slot.
+    """
+    rec = _find_active_platform_admin_credential(get_engine())
+    if rec is None:
+        return PlatformAdminStatusResponse(exists=False)
+    return PlatformAdminStatusResponse(
+        exists=True,
+        credential_id=rec["credential_id"],
+        credential_slot=rec["credential_slot"],
+        credential_status=rec["status"],
+        created_at=rec["created_at"],
+        last_rotated_at=rec["last_rotated_at"],
+    )
+
+
+@router.post(
+    "/system/platform-admin/bootstrap",
+    response_model=PlatformAdminBootstrapResponse,
+    status_code=201,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def bootstrap_platform_admin_credential(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminBootstrapResponse:
+    """Bootstrap the canonical platform_admin credential.
+
+    Idempotency:
+      • 409 PLATFORM_ADMIN_ALREADY_EXISTS if an active credential already
+        occupies the platform-admin-credential:v1 slot.
+      • 201 + plaintext_key on first successful bootstrap.
+
+    The issued credential is stored under the frostgate-internal tenant with
+    the platform_admin role assigned via tenant_credential_roles.  Once issued,
+    the plaintext key is never retrievable — rotation is required to replace it.
+
+    Security invariants:
+      • Requires both X-FG-Internal-Token AND platform.admin permission.
+      • The credential is NOT the gateway secret — they are distinct values.
+      • No direct SQL credential issuance; all writes go through CredentialAuthority.
+    """
+    engine = get_engine()
+
+    # Idempotency guard: refuse if an active credential already exists.
+    existing = _find_active_platform_admin_credential(engine)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "PLATFORM_ADMIN_ALREADY_EXISTS",
+                "A platform_admin credential already exists. "
+                "Use /system/platform-admin/rotate to replace it.",
+                action="rotate the existing credential instead of bootstrapping",
+            ),
+        )
+
+    actor_id = actor_ctx.subject or _PLATFORM_ADMIN_ACTOR
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+
+    result = issue_credential(
+        engine,
+        tenant_id=_PLATFORM_TENANT_ID,
+        credential_type=_PLATFORM_ADMIN_CREDENTIAL_TYPE,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        scopes=None,  # role-based, not scope-based
+        metadata={"purpose": "platform_admin_credential"},
+        actor_id=actor_id,
+        request_id=request_id,
+        idempotency_key=_PLATFORM_ADMIN_IDEMPOTENCY_KEY,
+    )
+
+    credential_id = result.record.credential_id
+
+    # Assign platform_admin role via the canonical assign_role path.
+    # VALID_ROLE_NAMES now includes platform_admin (Defect 1 fix).
+    with Session(engine) as session:
+        set_tenant_context(session, _PLATFORM_TENANT_ID)
+        rbac_assign_role(
+            session,
+            tenant_id=_PLATFORM_TENANT_ID,
+            actor_key_prefix=actor_id,
+            credential_id=credential_id,
+            role_name="platform_admin",
+        )
+
+    log.info(
+        "platform_admin credential bootstrapped",
+        extra={
+            "credential_id": credential_id,
+            "slot": _PLATFORM_ADMIN_SLOT,
+            "actor": actor_id,
+            "request_id": request_id,
+        },
+    )
+
+    # Emit bootstrap event to internal_platform_authority_events.
+    # tenant_credential_events already received "issued" from issue_credential().
+    # This second event marks the operation as a platform_admin bootstrap
+    # (not a routine credential issuance) so the audit log is unambiguous.
+    _emit_internal_authority_event_best_effort(
+        engine,
+        event_type="bootstrap_created",
+        actor_id=actor_id,
+        service_id="platform-admin-authority",
+        target_tenant_id=_PLATFORM_TENANT_ID,
+        authority_tenant_id=_PLATFORM_TENANT_ID,
+        request_id=request_id,
+        credential_id=credential_id,
+        credential_type=_PLATFORM_ADMIN_CREDENTIAL_TYPE,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        metadata={"purpose": "platform_admin_credential", "role": "platform_admin"},
+    )
+
+    return PlatformAdminBootstrapResponse(
+        credential_id=credential_id,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        status="bootstrapped",
+        plaintext_key=result.plaintext_secret,
+    )
+
+
+@router.post(
+    "/system/platform-admin/rotate",
+    response_model=PlatformAdminRotationResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def rotate_platform_admin_credential(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminRotationResponse:
+    """Rotate the canonical platform_admin credential.
+
+    Issues a new credential generation; the old credential is marked rotated.
+    The new plaintext key is returned exactly once.  Requires an active
+    credential to exist (bootstrap first if not).
+    """
+    engine = get_engine()
+    existing = _find_active_platform_admin_credential(engine)
+    if existing is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "PLATFORM_ADMIN_NOT_FOUND",
+                "No active platform_admin credential found. Bootstrap first.",
+                action="call POST /admin/system/platform-admin/bootstrap",
+            ),
+        )
+
+    actor_id = actor_ctx.subject or _PLATFORM_ADMIN_ACTOR
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+
+    try:
+        result = rotate_credential(
+            engine,
+            tenant_id=_PLATFORM_TENANT_ID,
+            credential_type=_PLATFORM_ADMIN_CREDENTIAL_TYPE,
+            credential_slot=_PLATFORM_ADMIN_SLOT,
+            actor_id=actor_id,
+            request_id=request_id,
+        )
+    except (
+        CredentialNotFoundError,
+        CredentialSlotNotFoundError,
+        CredentialStateError,
+    ) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("PLATFORM_ADMIN_ROTATE_CONFLICT", str(exc)),
+        ) from exc
+
+    new_credential_id = result.record.credential_id
+
+    # Carry the platform_admin role to the new credential generation.
+    with Session(engine) as session:
+        set_tenant_context(session, _PLATFORM_TENANT_ID)
+        rbac_assign_role(
+            session,
+            tenant_id=_PLATFORM_TENANT_ID,
+            actor_key_prefix=actor_id,
+            credential_id=new_credential_id,
+            role_name="platform_admin",
+        )
+
+    # tenant_credential_events already received "rotated" from rotate_credential().
+    # Emit to internal_platform_authority_events so the rotation is visible in the
+    # platform-level audit trail alongside the bootstrap event.
+    _emit_internal_authority_event_best_effort(
+        engine,
+        event_type="credential_rotated",
+        actor_id=actor_id,
+        service_id="platform-admin-authority",
+        target_tenant_id=_PLATFORM_TENANT_ID,
+        authority_tenant_id=_PLATFORM_TENANT_ID,
+        request_id=request_id,
+        credential_id=new_credential_id,
+        credential_type=_PLATFORM_ADMIN_CREDENTIAL_TYPE,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        metadata={"role": "platform_admin"},
+    )
+
+    return PlatformAdminRotationResponse(
+        credential_id=new_credential_id,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        action="rotated",
+        plaintext_key=result.plaintext_secret,
+    )
+
+
+@router.post(
+    "/system/platform-admin/suspend",
+    response_model=PlatformAdminLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def suspend_platform_admin_credential(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminLifecycleResponse:
+    """Suspend the canonical platform_admin credential.
+
+    Suspended credentials are rejected at validation.  Use resume to re-enable.
+    This is the recommended emergency revocation path when rotation is not yet
+    possible — it preserves the credential_id for audit continuity.
+    """
+    engine = get_engine()
+    existing = _find_active_platform_admin_credential(engine)
+    if existing is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "PLATFORM_ADMIN_NOT_FOUND",
+                "No active platform_admin credential found.",
+            ),
+        )
+
+    actor_id = actor_ctx.subject or _PLATFORM_ADMIN_ACTOR
+    try:
+        rec = suspend_credential(
+            engine,
+            credential_id=existing["credential_id"],
+            tenant_id=_PLATFORM_TENANT_ID,
+            actor_id=actor_id,
+            reason="operator_suspend",
+        )
+    except (CredentialNotFoundError, CredentialStateError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("PLATFORM_ADMIN_SUSPEND_CONFLICT", str(exc)),
+        ) from exc
+
+    return PlatformAdminLifecycleResponse(
+        credential_id=rec.credential_id,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        action="suspended",
+        credential_status=rec.status,
+    )
+
+
+@router.post(
+    "/system/platform-admin/resume",
+    response_model=PlatformAdminLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def resume_platform_admin_credential(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminLifecycleResponse:
+    """Resume a suspended canonical platform_admin credential."""
+    engine = get_engine()
+    # Find suspended credential (not active — it was suspended)
+    with engine.connect() as conn:
+        is_pg = engine.dialect.name == "postgresql"
+        if is_pg:
+            conn.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": _PLATFORM_TENANT_ID},
+            )
+        row = conn.execute(
+            text(
+                "SELECT credential_id FROM tenant_credentials "
+                "WHERE tenant_id = :tid "
+                "  AND credential_slot = :slot "
+                "  AND status = 'suspended'"
+            ),
+            {"tid": _PLATFORM_TENANT_ID, "slot": _PLATFORM_ADMIN_SLOT},
+        ).fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "PLATFORM_ADMIN_NOT_SUSPENDED",
+                "No suspended platform_admin credential found to resume.",
+            ),
+        )
+
+    actor_id = actor_ctx.subject or _PLATFORM_ADMIN_ACTOR
+    credential_id = str(row[0])
+    try:
+        rec = resume_credential(
+            engine,
+            credential_id=credential_id,
+            tenant_id=_PLATFORM_TENANT_ID,
+            actor_id=actor_id,
+        )
+    except (CredentialNotFoundError, CredentialStateError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("PLATFORM_ADMIN_RESUME_CONFLICT", str(exc)),
+        ) from exc
+
+    return PlatformAdminLifecycleResponse(
+        credential_id=rec.credential_id,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        action="resumed",
+        credential_status=rec.status,
+    )
+
+
+@router.post(
+    "/system/platform-admin/revoke",
+    response_model=PlatformAdminLifecycleResponse,
+    dependencies=[
+        Depends(require_scopes("admin:write")),
+        Depends(require_internal_admin_gateway),
+    ],
+)
+async def revoke_platform_admin_credential(
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+) -> PlatformAdminLifecycleResponse:
+    """Permanently revoke the canonical platform_admin credential.
+
+    This action is irreversible.  A new credential must be bootstrapped to
+    recover platform_admin authority.  Use suspend/resume for temporary
+    disablement.
+    """
+    engine = get_engine()
+    existing = _find_active_platform_admin_credential(engine)
+    if existing is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "PLATFORM_ADMIN_NOT_FOUND",
+                "No active platform_admin credential found.",
+            ),
+        )
+
+    actor_id = actor_ctx.subject or _PLATFORM_ADMIN_ACTOR
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    try:
+        rec = revoke_credential(
+            engine,
+            credential_id=existing["credential_id"],
+            tenant_id=_PLATFORM_TENANT_ID,
+            actor_id=actor_id,
+            reason="operator_revoke",
+            request_id=request_id,
+        )
+    except (CredentialNotFoundError, CredentialStateError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("PLATFORM_ADMIN_REVOKE_CONFLICT", str(exc)),
+        ) from exc
+
+    # tenant_credential_events already received "revoked" from revoke_credential().
+    # Emit to internal_platform_authority_events for platform-level audit continuity.
+    _emit_internal_authority_event_best_effort(
+        engine,
+        event_type="credential_revoked",
+        actor_id=actor_id,
+        service_id="platform-admin-authority",
+        target_tenant_id=_PLATFORM_TENANT_ID,
+        authority_tenant_id=_PLATFORM_TENANT_ID,
+        request_id=request_id,
+        credential_id=rec.credential_id,
+        credential_type=_PLATFORM_ADMIN_CREDENTIAL_TYPE,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        metadata={"reason": "operator_revoke", "role": "platform_admin"},
+    )
+
+    return PlatformAdminLifecycleResponse(
+        credential_id=rec.credential_id,
+        credential_slot=_PLATFORM_ADMIN_SLOT,
+        action="revoked",
+        credential_status=rec.status,
     )
 
 

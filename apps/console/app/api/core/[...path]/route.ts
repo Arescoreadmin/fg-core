@@ -16,6 +16,46 @@ const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ADMIN_GATEWAY_TOKEN = internalGatewaySecret();
 const DELEGATION_SECRET_CURRENT = process.env.FG_GATEWAY_DELEGATION_SECRET_CURRENT;
+
+// P-113.6 — Canonical Platform Administrator Credential Authority.
+//
+// PLATFORM_AUTH_MODE controls which credential is sent as X-API-Key on /admin/**
+// paths.
+//
+//   COMPATIBILITY (default): X-API-Key = ADMIN_GATEWAY_TOKEN (same as before).
+//     Path E in resolution.py recognises FG_INTERNAL_GATEWAY_SECRET as
+//     admin_internal_token → platform.admin.  Use this mode until
+//     FG_PLATFORM_ADMIN_KEY is provisioned and tested.
+//
+//   CANONICAL: X-API-Key = FG_PLATFORM_ADMIN_KEY (the canonical credential
+//     issued by POST /admin/system/platform-admin/bootstrap).
+//     X-FG-Internal-Token continues to carry FG_INTERNAL_GATEWAY_SECRET for the
+//     require_internal_admin_gateway() dependency.
+//     The two values MUST be distinct; startup validation below enforces this.
+//
+// Migration checklist before switching to CANONICAL:
+//   1. Run POST /admin/system/platform-admin/bootstrap to issue the credential.
+//   2. Set FG_PLATFORM_ADMIN_KEY in the Railway console BFF service.
+//   3. Set PLATFORM_AUTH_MODE=CANONICAL in the Railway console BFF service.
+//   4. Verify that FG_PLATFORM_ADMIN_KEY !== FG_INTERNAL_GATEWAY_SECRET.
+//   5. Run test_client_production_e2e_002.py with FG_LIVE_PROOF=1.
+const PLATFORM_AUTH_MODE = (process.env.PLATFORM_AUTH_MODE || 'COMPATIBILITY').trim().toUpperCase();
+const FG_PLATFORM_ADMIN_KEY = (process.env.FG_PLATFORM_ADMIN_KEY || '').trim();
+
+// Startup validation for CANONICAL mode.
+if (PLATFORM_AUTH_MODE === 'CANONICAL') {
+  if (!FG_PLATFORM_ADMIN_KEY) {
+    console.error(
+      '[STARTUP_FATAL] PLATFORM_AUTH_MODE=CANONICAL but FG_PLATFORM_ADMIN_KEY is not set. ' +
+      'Admin operations will fail. Bootstrap the credential and set FG_PLATFORM_ADMIN_KEY.',
+    );
+  } else if (FG_PLATFORM_ADMIN_KEY === ADMIN_GATEWAY_TOKEN) {
+    console.error(
+      '[STARTUP_FATAL] FG_PLATFORM_ADMIN_KEY and FG_INTERNAL_GATEWAY_SECRET must be distinct values. ' +
+      'Using the same secret for both is a security violation (Defect 3 / P-113.6).',
+    );
+  }
+}
 const PROD_LIKE_FG_ENVS = new Set(['prod', 'production', 'staging']);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
@@ -531,7 +571,14 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
 
   if (isTenantAdminPath) {
     if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
-    headers.set('X-API-Key', ADMIN_GATEWAY_TOKEN);
+    // P-113.6: In CANONICAL mode, X-API-Key carries the platform_admin credential
+    // (FG_PLATFORM_ADMIN_KEY) and X-FG-Internal-Token carries the gateway secret
+    // (FG_INTERNAL_GATEWAY_SECRET).  In COMPATIBILITY mode both headers carry the
+    // gateway secret — Path E in resolution.py recognises this combination.
+    const platformAdminKey = PLATFORM_AUTH_MODE === 'CANONICAL' && FG_PLATFORM_ADMIN_KEY
+      ? FG_PLATFORM_ADMIN_KEY
+      : ADMIN_GATEWAY_TOKEN;
+    headers.set('X-API-Key', platformAdminKey);
     headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
     headers.set('X-Admin-Gateway-Internal', 'true');
     if (tenantId) headers.set('X-Tenant-ID', tenantId);

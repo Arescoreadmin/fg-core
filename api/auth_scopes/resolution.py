@@ -318,7 +318,28 @@ def verify_api_key_detailed(
 
     raw = (raw or raw_key or "").strip()
 
-    # Dedicated admin-gateway -> core token enforcement for admin paths.
+    # Path E — admin_internal_token (COMPATIBILITY; scheduled for retirement).
+    #
+    # This block recognises X-API-Key == FG_INTERNAL_GATEWAY_SECRET on /admin/**
+    # paths and returns reason="admin_internal_token".  Downstream, the api_key
+    # identity provider maps admin_internal_token → _permissions_from_legacy_scopes()
+    # → roles_to_permissions(["platform_admin"]) = ALL_PERMISSIONS ⊃ "platform.admin".
+    #
+    # Retirement plan (P-113.6 / CANONICAL mode):
+    #   COMPATIBILITY mode (current default) — Path E remains active; all existing
+    #     deployments continue to work.  The console BFF sends the same value for
+    #     both X-API-Key and X-FG-Internal-Token.
+    #   CANONICAL mode (post-migration) — once FG_PLATFORM_ADMIN_KEY is issued via
+    #     POST /admin/system/platform-admin/bootstrap and the console BFF sends
+    #     X-API-Key=FG_PLATFORM_ADMIN_KEY / X-FG-Internal-Token=FG_INTERNAL_GATEWAY_SECRET,
+    #     Path E can be disabled by setting PLATFORM_AUTH_MODE=CANONICAL.
+    #   Removal — Path E code block deleted once all production environments have
+    #     rotated to CANONICAL and the compatibility window has closed.
+    #
+    # DO NOT remove this block without completing the CANONICAL migration steps
+    # documented in docs/architecture/v1/platform-admin-credential-authority.md.
+    # Removing it prematurely will break all existing console BFF admin operations.
+    #
     # Active when: prod/staging env, OR when a local internal token is configured.
     # This closes the dev/local drift gap — a dev running with FG_INTERNAL_AUTH_SECRET
     # set will get real enforcement, not a silent bypass.

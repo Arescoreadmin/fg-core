@@ -481,7 +481,12 @@ class TestValidRoleNames:
             assert role in VALID_ROLE_NAMES
 
     def test_valid_role_names_covers_all_builtins(self):
-        assert VALID_ROLE_NAMES == frozenset(BUILTIN_ROLES)
+        # P-113.6: VALID_ROLE_NAMES was expanded to include platform_admin
+        # (TENANT_ASSIGNABLE_ROLES | PLATFORM_CREDENTIAL_ROLES).  BUILTIN_ROLES
+        # remains the tenant-facing set; VALID_ROLE_NAMES is now a superset.
+        assert frozenset(BUILTIN_ROLES).issubset(VALID_ROLE_NAMES)
+        # platform_admin must be present (Defect 1 fix)
+        assert "platform_admin" in VALID_ROLE_NAMES
 
     def test_invalid_role_raises_value_error(self, db):
         cid = _insert_credential(db, tenant_id="tenant-a")
