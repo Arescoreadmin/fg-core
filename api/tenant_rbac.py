@@ -116,7 +116,35 @@ _ROLE_IMPLIES: dict[str, frozenset[str]] = {
     "read_only": frozenset({"read_only"}),
 }
 
-VALID_ROLE_NAMES: frozenset[str] = frozenset(BUILTIN_ROLES)
+# Roles that tenant_admin actors may self-service-assign via /rbac/assignments
+# or credential-administration endpoints.  tenant_admin is excluded from
+# self-service to prevent privilege escalation (same policy as before).
+TENANT_ASSIGNABLE_ROLES: frozenset[str] = frozenset(
+    {
+        "governance_admin",
+        "analyst",
+        "auditor",
+        "read_only",
+    }
+)
+
+# Roles that only a platform credential authority may assign.  These are
+# stored in tenant_credential_roles alongside tenant roles (same table,
+# different assignment path) so the resolution chain works identically.
+# P-113.6: platform_admin is the canonical platform credential role.
+PLATFORM_CREDENTIAL_ROLES: frozenset[str] = frozenset(
+    {
+        "tenant_admin",
+        "platform_admin",
+    }
+)
+
+# Union of all storable roles.  assign_role() validates against this set.
+# Expanding VALID_ROLE_NAMES to include platform_admin fixes Defect 1:
+# assign_role() previously returned 422 for platform_admin because it was
+# not in BUILTIN_ROLES.  The platform-admin bootstrap endpoint needs to
+# store this role via the same assign_role() path.
+VALID_ROLE_NAMES: frozenset[str] = TENANT_ASSIGNABLE_ROLES | PLATFORM_CREDENTIAL_ROLES
 
 
 # ---------------------------------------------------------------------------

@@ -119,8 +119,14 @@ test('tenant-admin branch uses admin gateway authority with explicit tenant bind
   const elseStart = proxyBody.indexOf('} else {', branchStart);
   const branch = proxyBody.slice(branchStart, elseStart);
 
+  // ADMIN_GATEWAY_TOKEN must appear in the branch: as the X-FG-Internal-Token
+  // value (always) and as the COMPATIBILITY-mode fallback for platformAdminKey.
   assert.match(branch, /ADMIN_GATEWAY_TOKEN/);
-  assert.match(branch, /headers\.set\('X-API-Key', ADMIN_GATEWAY_TOKEN\)/);
+  // P-113.6: X-API-Key is now platformAdminKey — FG_PLATFORM_ADMIN_KEY in
+  // CANONICAL mode, ADMIN_GATEWAY_TOKEN in COMPATIBILITY mode (the default).
+  assert.match(branch, /headers\.set\('X-API-Key', platformAdminKey\)/);
+  // platformAdminKey must fall back to ADMIN_GATEWAY_TOKEN in COMPATIBILITY mode.
+  assert.match(branch, /:\s*ADMIN_GATEWAY_TOKEN/);
   assert.match(branch, /headers\.set\('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN\)/);
   assert.match(branch, /headers\.set\('X-Admin-Gateway-Internal', 'true'\)/);
   assert.match(branch, /headers\.set\('X-Tenant-ID', tenantId\)/);

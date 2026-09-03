@@ -403,6 +403,78 @@ Phase 9 issues a service credential and attempts `PATCH /workforce/users/{uid}` 
 
 ---
 
+## T1 Bootstrap Prerequisite (P-113.6)
+
+Before running any live proof phase that requires T1 authority, a canonical `platform_admin`
+credential must exist. This is a one-time bootstrap per production environment.
+
+**What it is:** A `tenant_api_key` credential stored under the `frostgate-internal` tenant,
+slot `platform-admin-credential:v1`, with `platform_admin` role assigned in
+`tenant_credential_roles`. It is entirely distinct from:
+
+- `FG_INTERNAL_GATEWAY_SECRET` — internal machine-to-machine trust secret
+- Platform Service Principal — workload identity; intentionally excludes `platform.admin`
+- `CORE_API_KEY` — dev-mode global bypass; does not grant `platform.admin`
+
+**Bootstrap command (run once using Path E — gateway secret in both headers):**
+
+```bash
+curl -s -X POST https://api.frostgate.ai/admin/system/platform-admin/bootstrap \
+  -H "X-API-Key: ${FG_INTERNAL_GATEWAY_SECRET}" \
+  -H "X-FG-Internal-Token: ${FG_INTERNAL_GATEWAY_SECRET}"
+```
+
+Expected response (201):
+
+```json
+{
+  "credential_id": "...",
+  "credential_slot": "platform-admin-credential:v1",
+  "status": "bootstrapped",
+  "plaintext_key": "fgk...."
+}
+```
+
+Copy `plaintext_key` to your secret manager immediately. It is not retrievable again.
+
+Set as `FG_PLATFORM_ADMIN_KEY` in:
+- Railway: `api` service environment
+- Railway: `admin-gateway` service environment
+- Vercel: `console.frostgate.ai` environment
+
+**Verify credential separation before running the proof:**
+
+```bash
+# Must not be empty and must not equal FG_INTERNAL_GATEWAY_SECRET
+echo "${FG_PLATFORM_ADMIN_KEY}" | grep -v "^$" | grep -vF "${FG_INTERNAL_GATEWAY_SECRET}"
+```
+
+**Verify the credential works:**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-API-Key: ${FG_PLATFORM_ADMIN_KEY}" \
+  -H "X-FG-Internal-Token: ${FG_INTERNAL_GATEWAY_SECRET}" \
+  https://api.frostgate.ai/admin/system/service-principal
+# Expected: 200
+```
+
+If `FG_PLATFORM_ADMIN_KEY` is lost, revoke and re-bootstrap:
+
+```bash
+# Step 1: Revoke via Path E (gateway secret in both headers)
+curl -s -X POST https://api.frostgate.ai/admin/system/platform-admin/revoke \
+  -H "X-API-Key: ${FG_INTERNAL_GATEWAY_SECRET}" \
+  -H "X-FG-Internal-Token: ${FG_INTERNAL_GATEWAY_SECRET}"
+
+# Step 2: Re-bootstrap (same command as initial bootstrap)
+curl -s -X POST https://api.frostgate.ai/admin/system/platform-admin/bootstrap \
+  -H "X-API-Key: ${FG_INTERNAL_GATEWAY_SECRET}" \
+  -H "X-FG-Internal-Token: ${FG_INTERNAL_GATEWAY_SECRET}"
+```
+
+---
+
 ## Production Live Execution Commands
 
 ### Full run (with T2 token already obtained)
