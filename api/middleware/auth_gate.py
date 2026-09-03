@@ -167,6 +167,12 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             result.tenant_id
             and requested_tenant
             and requested_tenant != result.tenant_id
+            # canonical_platform_admin carries tenant_id="frostgate-internal" but
+            # operates on customer tenants via the delegated-tenant path in
+            # bind_tenant_id().  Defer the mismatch check so bind_tenant_id() can
+            # apply gateway provenance + delegation proof first (same intent as the
+            # admin_internal_token exclusion in PR-CORE-002B).
+            and result.reason != "canonical_platform_admin"
         ):
             log_tenant_denial_event(
                 request=request,

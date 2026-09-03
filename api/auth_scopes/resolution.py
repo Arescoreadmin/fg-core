@@ -41,8 +41,17 @@ def _lookup_canonical_platform_admin_role(
     """
     try:
         from api.tenant_rbac import get_credential_role as _gcr  # noqa: PLC0415
+        from sqlalchemy import text as _text  # noqa: PLC0415
 
         with engine.connect() as _conn:
+            # PostgreSQL RLS: tenant_credential_roles is protected by a policy
+            # that requires app.tenant_id = tenant_id.  Set it before the query
+            # so the row is visible to the RBAC lookup.
+            if engine.dialect.name == "postgresql":
+                _conn.execute(
+                    _text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id},
+                )
             return (
                 _gcr(_conn, tenant_id=tenant_id, credential_id=credential_id)
                 == "platform_admin"
@@ -576,7 +585,25 @@ def verify_api_key_detailed(
         if _ca_principal is not None:
             _ca_scopes: Set[str] = set(_ca_principal.scopes)
 
-            if required_scopes:
+            # Resolve RBAC classification BEFORE scope enforcement.
+            # A platform_admin credential may be issued with empty scopes but
+            # still holds platform.admin via RBAC, which subsumes all legacy
+            # scope requirements.  Checking scopes first would reject a valid
+            # platform-admin credential before its authority can be established.
+            _ca_reason = (
+                "canonical_platform_admin"
+                if _lookup_canonical_platform_admin_role(
+                    _ca_get_engine(),
+                    _ca_principal.tenant_id,
+                    _ca_principal.credential_id,
+                )
+                else "canonical_validated"
+            )
+
+            if required_scopes and _ca_reason != "canonical_platform_admin":
+                # Scope enforcement applies only to non-platform-admin credentials.
+                # canonical_platform_admin has platform.admin (all permissions) by
+                # RBAC and is not constrained by legacy scope strings.
                 if isinstance(required_scopes, str):
                     _ca_needed: Set[str] = {required_scopes}
                 elif isinstance(required_scopes, (list, set, frozenset)):
@@ -596,16 +623,6 @@ def verify_api_key_detailed(
                         tenant_id=_ca_principal.tenant_id,
                         scopes=_ca_scopes,
                     )
-
-            _ca_reason = (
-                "canonical_platform_admin"
-                if _lookup_canonical_platform_admin_role(
-                    _ca_get_engine(),
-                    _ca_principal.tenant_id,
-                    _ca_principal.credential_id,
-                )
-                else "canonical_validated"
-            )
             _log_auth_event(
                 "auth_attempt",
                 success=True,
