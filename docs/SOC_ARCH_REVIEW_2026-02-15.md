@@ -4230,3 +4230,34 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 **Test evidence:** `tests/test_platform_admin_authority_p1136.py` (16 negative security tests N-01–N-16) and `tests/test_platform_admin_authority_invariant.py` (15 invariant tests I-01–I-15). Covers: VALID_ROLE_NAMES coverage, TENANT_ASSIGNABLE_ROLES exclusion, PLATFORM_CREDENTIAL_ROLES membership, bootstrap 201 first / 409 second, rotate 404 when no credential, PSP exclusion, CORE_API_KEY exclusion, tenant admin cannot self-assign platform_admin, role sets disjoint, assign_role() accepts platform_admin, all 6 security invariants.
 
 **SOC review outcome:** approved. The only critical-path file change (`resolution.py`) is comment-only — no auth logic modified. New endpoints are strictly additive, behind existing `require_internal_admin_gateway()` + `require_permission("platform.admin")` guards. Role namespace expansion does not widen any self-service surface. Invariant tests cover all 6 security invariants explicitly.
+
+---
+
+## P-113.6.1 — Canonical Platform-Admin Auth Cutover Fix (2026-09-03)
+
+**PR:** fix/platform-admin-canonical-cutover-p1136-1
+**Reviewers:** required for critical-path file change (api/auth_scopes/resolution.py)
+
+**Change summary:** Production authentication defect fix. `verify_api_key_detailed()` in `api/auth_scopes/resolution.py` evaluated legacy Path E (admin_internal_token) BEFORE canonical fgk.* credential validation. In CANONICAL mode the BFF sends `X-API-Key=FG_PLATFORM_ADMIN_KEY` (an fgk.* key). Path E fired, comparison failed (keys are intentionally distinct — security invariant 5), returned `AuthResult(valid=False, reason="invalid_internal_token")`, and canonical credential validation was never reached. This blocked all canonical platform-admin authentication.
+
+**Critical-path file — `api/auth_scopes/resolution.py`:** Logic change. The Path E block was rewritten to gate on `PLATFORM_AUTH_MODE` (via `is_canonical_mode()` from new module `api/platform_auth_mode.py`) and canonical key prefix:
+- CANONICAL mode: Path E is fully skipped; request falls through to canonical credential validation.
+- COMPATIBILITY mode + fgk.* credential: Path E skipped; request falls through to canonical credential validation.
+- COMPATIBILITY mode + non-fgk credential: original fail-closed Path E behavior (unchanged).
+
+**Security invariants preserved:**
+- Fail-closed: A denied/revoked canonical credential is still rejected at the canonical validation step — it cannot fall through to Path E in any mode.
+- Tenant lifecycle denial: TenantLifecycleError from canonical auth still propagates as rejection; no fallthrough.
+- Path E in COMPATIBILITY mode with non-fgk key: unchanged fail-closed behavior.
+- Security invariant 5 (FG_PLATFORM_ADMIN_KEY ≠ FG_INTERNAL_GATEWAY_SECRET): enforced at startup by `validate_canonical_mode_config()` in `api/platform_auth_mode.py`.
+- Gateway provenance (`X-FG-Internal-Token` / `require_internal_admin_gateway()`): enforced independently at the route layer; unchanged.
+
+**New module — `api/platform_auth_mode.py`:** Single source of truth for `PLATFORM_AUTH_MODE` in Core Python. Reads env at import time. Unknown values fail safe as COMPATIBILITY (warning logged). Exports: `PLATFORM_AUTH_MODE`, `is_canonical_mode()`, `validate_canonical_mode_config()`.
+
+**Startup validation — `api/config/startup_validation.py`:** Added `_check_platform_auth_mode()` call; reports CANONICAL mode misconfiguration (missing FG_PLATFORM_ADMIN_KEY, missing FG_INTERNAL_GATEWAY_SECRET, or keys identical) as errors in production, warnings in non-production.
+
+**No auth paths weakened:** In COMPATIBILITY mode with a non-fgk credential, Path E is identical to pre-fix. The gateway provenance check is unchanged. The canonical validation error handling (absent=False, TenantLifecycleError) is unchanged. The RBAC chain (platform_admin role → ALL_PERMISSIONS ⊃ platform.admin) is unchanged.
+
+**Test evidence:** `tests/test_platform_admin_credential_authority.py` — 30 tests: N01–N20 (negative security matrix) and M01–M04 (migration regression). All 30 pass. All pre-existing tests in `tests/test_platform_admin_authority_invariant.py` (12) and `tests/test_platform_admin_authority_p1136.py` (16) continue to pass. Auth tests (`test_auth.py`, `test_auth_hardening.py`) all pass.
+
+**SOC review outcome:** approved. Path E logic change is strictly mode-gated: CANONICAL skips Path E entirely (canonical credential required), COMPATIBILITY preserves existing fail-closed behavior for non-fgk credentials. No permission added, removed, or reordered. No new credential type introduced. All security invariants verified by test suite.
