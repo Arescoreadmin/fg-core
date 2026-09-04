@@ -1055,10 +1055,17 @@ def resend_invitation(
         inv.revoked_at = None
         inv.expires_at = new_expires_at
         inv.updated_at = now
-        # Rotate acceptance token atomically — old URL 404s immediately after commit
-        new_raw_token = _store.rotate_acceptance_token(
-            db, inv.id, new_expires_at=new_expires_at
-        )
+        # Rotate acceptance token only for workforce invitations (those created via
+        # POST /workforce/users, which set acceptance_token_hash). Admin-identity
+        # invitations (/admin/identity/tenants/.../invitations) have no workforce
+        # binding and no token hash — rotating them would produce an acceptance URL
+        # that deterministically fails with BINDING_CONFLICT.
+        invitation_url: str | None = None
+        if inv.acceptance_token_hash is not None:
+            new_raw_token = _store.rotate_acceptance_token(
+                db, inv.id, new_expires_at=new_expires_at
+            )
+            invitation_url = f"/identity/invitations/{new_raw_token}"
         emit_identity_audit_event(
             db,
             tenant_id=inv.tenant_id,
@@ -1068,12 +1075,14 @@ def resend_invitation(
             details={"invitation_status": "pending"},
         )
         db.commit()
-        return {
+        result: dict = {
             "invitation_id": invitation_id,
             "status": "pending",
             "resent": True,
-            "invitation_url": f"/identity/invitations/{new_raw_token}",
         }
+        if invitation_url is not None:
+            result["invitation_url"] = invitation_url
+        return result
     finally:
         db.close()
 

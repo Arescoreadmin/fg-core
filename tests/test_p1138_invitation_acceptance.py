@@ -62,6 +62,7 @@ def client(app) -> Iterator[TestClient]:
 @pytest.fixture
 def engine(app):
     from api.db import get_engine
+
     return get_engine()
 
 
@@ -204,23 +205,27 @@ def _admin_hdrs(tenant_id: str) -> dict[str, str]:
 class TestWorkforceToken:
     def test_generate_returns_fgwi1_prefix(self):
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         assert raw.startswith("fgwi1.")
         assert len(fp) == 64  # sha256 hex
 
     def test_fingerprint_for_matches_generate(self):
         from api.identity.workforce_token import generate, fingerprint_for
+
         raw, fp = generate()
         assert fingerprint_for(raw) == fp
 
     def test_fingerprint_for_wrong_prefix_returns_none(self):
         from api.identity.workforce_token import fingerprint_for
+
         assert fingerprint_for("pni1.abc123") is None
         assert fingerprint_for("abc123") is None
         assert fingerprint_for("") is None
 
     def test_two_generate_calls_produce_different_tokens(self):
         from api.identity.workforce_token import generate
+
         raw1, fp1 = generate()
         raw2, fp2 = generate()
         assert raw1 != raw2
@@ -228,6 +233,7 @@ class TestWorkforceToken:
 
     def test_fingerprint_for_truncated_prefix_returns_none(self):
         from api.identity.workforce_token import fingerprint_for
+
         # Missing prefix separator
         assert fingerprint_for("fgwi1") is None
 
@@ -240,6 +246,7 @@ class TestWorkforceToken:
 class TestGetInvitationPreflight:
     def test_valid_token_returns_preflight_data(self, client, engine):
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -258,10 +265,13 @@ class TestGetInvitationPreflight:
     def test_response_excludes_internal_ids(self, client, engine):
         """T-09: GET response contains no tenant_id, invitation_id, or acceptance_token_hash."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
-        _seed_invitation(engine, tenant_id, "invited@example.com", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tenant_id, "invited@example.com", acceptance_token_hash=fp
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         data = r.json()
@@ -272,10 +282,13 @@ class TestGetInvitationPreflight:
 
     def test_email_is_masked(self, client, engine):
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
-        _seed_invitation(engine, tenant_id, "alice@example.com", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tenant_id, "alice@example.com", acceptance_token_hash=fp
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         data = r.json()
@@ -285,10 +298,17 @@ class TestGetInvitationPreflight:
 
     def test_role_label_mapping(self, client, engine):
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
-        _seed_invitation(engine, tenant_id, "user@example.com", role="tenant_admin", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            role="tenant_admin",
+            acceptance_token_hash=fp,
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.json()["invited_role_display_name"] == "Tenant Administrator"
@@ -313,6 +333,7 @@ class TestInvalidTokenGET:
     def test_valid_format_never_issued_returns_404(self, client):
         """T-04: Well-formed fgwi1.* token that was never stored."""
         from api.identity.workforce_token import generate
+
         raw, _ = generate()
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
@@ -320,6 +341,7 @@ class TestInvalidTokenGET:
     def test_fingerprint_as_token_returns_404(self, client, engine):
         """T-05: The fingerprint itself submitted as the token."""
         from api.identity.workforce_token import generate
+
         _, fp = generate()
         r = client.get(f"/identity/invitations/{fp}")
         assert r.status_code == 404
@@ -327,12 +349,18 @@ class TestInvalidTokenGET:
     def test_expired_invitation_returns_404(self, client, engine):
         """T-06: Expired invitation — indistinguishable from not-found."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
         past = datetime.now(timezone.utc) - timedelta(seconds=1)
-        _seed_invitation(engine, tenant_id, "user@example.com",
-                         expires_at=past, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            expires_at=past,
+            acceptance_token_hash=fp,
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
@@ -340,11 +368,17 @@ class TestInvalidTokenGET:
     def test_revoked_invitation_returns_404(self, client, engine):
         """T-07: Revoked invitation — same 404 as not-found."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
-        _seed_invitation(engine, tenant_id, "user@example.com",
-                         status="revoked", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            status="revoked",
+            acceptance_token_hash=fp,
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
@@ -352,11 +386,17 @@ class TestInvalidTokenGET:
     def test_bound_invitation_returns_404(self, client, engine):
         """T-08: Already-consumed invitation — same 404."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
-        _seed_invitation(engine, tenant_id, "user@example.com",
-                         status="bound", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            status="bound",
+            acceptance_token_hash=fp,
+        )
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
@@ -371,6 +411,7 @@ class TestPOSTBodyRejection:
     def test_body_with_elevated_role_is_rejected(self, client, engine):
         """T-10: Request body with role override must be rejected."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -389,6 +430,7 @@ class TestPOSTBodyRejection:
     def test_body_with_email_override_is_rejected(self, client, engine):
         """T-11: Request body with email override must be rejected."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -410,8 +452,11 @@ class TestPOSTBodyRejection:
 
 
 class TestPOSTIdentityChecks:
-    def _setup(self, engine, email: str = "invited@example.com", role: str = "tenant_admin"):
+    def _setup(
+        self, engine, email: str = "invited@example.com", role: str = "tenant_admin"
+    ):
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -492,6 +537,7 @@ class TestBindingAtomicity:
         matches 0 rows, triggering BINDING_CONFLICT and rollback.
         """
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -515,7 +561,9 @@ class TestBindingAtomicity:
         # Invitation status must be restored to pending (rollback)
         with engine.begin() as conn:
             row = conn.execute(
-                text("SELECT status FROM tenant_invitations WHERE acceptance_token_hash = :fp"),
+                text(
+                    "SELECT status FROM tenant_invitations WHERE acceptance_token_hash = :fp"
+                ),
                 {"fp": fp},
             ).fetchone()
         assert row is not None
@@ -531,12 +579,15 @@ class TestResendRotatesToken:
     def test_old_token_404_after_resend(self, client, engine):
         """T-17: After resend, old token returns 404; new token returns 200 preflight."""
         from api.identity.workforce_token import generate
+
         raw_old, fp_old = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
         _seed_identity_config(engine, tenant_id)
         email = "user@example.com"
-        inv_id = _seed_invitation(engine, tenant_id, email, acceptance_token_hash=fp_old)
+        inv_id = _seed_invitation(
+            engine, tenant_id, email, acceptance_token_hash=fp_old
+        )
         _seed_tenant_user(engine, tenant_id, email, role="tenant_admin")
 
         # Resend via admin API
@@ -568,6 +619,7 @@ class TestConcurrentAcceptance:
     def test_concurrent_accept_one_wins(self, client, engine):
         """T-18: Two simultaneous POST accept attempts → exactly one 200, one error."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
@@ -613,12 +665,15 @@ class TestResponseShape:
     def test_accept_response_shape(self, client, engine):
         """T-19: POST response contains accepted, tenant_id, role — no raw token."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
         _seed_identity_config(engine, tenant_id)
         email = "invited@example.com"
-        _seed_invitation(engine, tenant_id, email, role="tenant_admin", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tenant_id, email, role="tenant_admin", acceptance_token_hash=fp
+        )
         _seed_tenant_user(engine, tenant_id, email, role="tenant_admin")
 
         r = client.post(
@@ -657,12 +712,15 @@ class TestRoleAuthority:
     def test_invitation_role_in_response(self, client, engine):
         """T-20b: Role in accept response matches the invitation role, not headers."""
         from api.identity.workforce_token import generate
+
         raw, fp = generate()
         tenant_id = _tid()
         _ensure_tenant(engine, tenant_id)
         _seed_identity_config(engine, tenant_id)
         email = "invited@example.com"
-        _seed_invitation(engine, tenant_id, email, role="auditor", acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tenant_id, email, role="auditor", acceptance_token_hash=fp
+        )
         _seed_tenant_user(engine, tenant_id, email, role="auditor")
 
         r = client.post(
@@ -685,6 +743,7 @@ class TestRoleAuthority:
 class TestActorContextEmailVerified:
     def test_actor_context_has_email_verified_field(self):
         from api.actor_context import ActorContext
+
         ctx = ActorContext(
             subject="auth0|test",
             email="test@example.com",
@@ -699,6 +758,7 @@ class TestActorContextEmailVerified:
 
     def test_actor_context_email_verified_set_true(self):
         from api.actor_context import ActorContext
+
         ctx = ActorContext(
             subject="auth0|test",
             email="test@example.com",

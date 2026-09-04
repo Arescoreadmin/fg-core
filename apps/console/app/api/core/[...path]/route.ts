@@ -793,7 +793,10 @@ async function handle(request: NextRequest, { params }: { params: { path: string
 
   const session = await auth();
   if (!session?.user) return jsonError('Unauthorized', 401, requestId);
-  if (!canAccessCoreApiPath(path, request.method, session)) {
+  // Invitation acceptance uses machine credential + fgwi1.* token authority —
+  // the user's session role is irrelevant. Bypass role check so roleless invitees
+  // (not yet bound) can reach the preflight and accept endpoints.
+  if (!isInvitationAcceptancePath(path) && !canAccessCoreApiPath(path, request.method, session)) {
     return jsonError('Forbidden for this console role', 403, requestId);
   }
 

@@ -90,6 +90,9 @@ export const authConfig = {
       session.emailVerified = typeof token.emailVerified === 'boolean' ? token.emailVerified : false;
       session.user = {
         ...session.user,
+        // Persist Auth0 subject into session.user.id so BFF can forward
+        // X-FG-Named-User-Sub for the invitation acceptance proxy path.
+        id: typeof token.sub === 'string' ? token.sub : (session.user as { id?: string })?.id ?? '',
         roles,
         tenantId,
         experienceClass,

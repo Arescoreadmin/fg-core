@@ -36,6 +36,42 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def _lookup_by_token_hash(db, fp: str):
+    """Pre-context lookup: returns (id, tenant_id, email, normalized_email, role, status, expires_at) or None.
+
+    Calls the security-definer function on PostgreSQL to bypass tenant RLS (FORCE
+    ROW LEVEL SECURITY prevents querying before app.tenant_id is set). Falls back
+    to a direct ORM query in SQLite (test env — no RLS enforced).
+    """
+    try:
+        row = db.execute(
+            _sql(
+                "SELECT id, tenant_id, email, normalized_email, role, status, expires_at"
+                " FROM get_invitation_by_token_hash(:fp)"
+            ),
+            {"fp": fp},
+        ).fetchone()
+        return row  # None if not found
+    except Exception:
+        # SQLite / function absent: no RLS enforced, direct query is safe
+        inv = (
+            db.query(TenantInvitation)
+            .filter(TenantInvitation.acceptance_token_hash == fp)
+            .first()
+        )
+        if inv is None:
+            return None
+        return (
+            inv.id,
+            inv.tenant_id,
+            inv.email,
+            inv.normalized_email,
+            inv.role,
+            inv.status,
+            inv.expires_at,
+        )
+
+
 def _get_trusted_named_user(request: Request) -> tuple[str, bool]:
     """Extract named-user email + verified from trusted headers.
 
@@ -70,17 +106,20 @@ def get_invitation_preflight(token: str) -> dict:
 
     db = get_sessionmaker()()
     try:
-        inv = (
-            db.query(TenantInvitation)
-            .filter(TenantInvitation.acceptance_token_hash == fp)
-            .first()
-        )
-        if inv is None or inv.status != "pending":
+        # Pre-context lookup via security-definer function (bypasses tenant RLS)
+        row = _lookup_by_token_hash(db, fp)
+        if row is None:
             raise HTTPException(
                 status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
             )
 
-        inv_expires = inv.expires_at
+        _id, tenant_id, _email, normalized_email, role, status, expires_at = row
+        if status != "pending":
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+
+        inv_expires = expires_at
         if inv_expires is not None and inv_expires.tzinfo is None:
             inv_expires = inv_expires.replace(tzinfo=timezone.utc)
         if inv_expires is None or inv_expires < _now():
@@ -88,12 +127,13 @@ def get_invitation_preflight(token: str) -> dict:
                 status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
             )
 
-        # Fetch tenant display name — safe to return without exposing tenant_id
-        row = db.execute(
+        # Fetch tenant display name within tenant context
+        set_tenant_context(db, tenant_id)
+        tn_row = db.execute(
             _sql("SELECT display_name FROM tenants WHERE tenant_id = :t"),
-            {"t": inv.tenant_id},
+            {"t": tenant_id},
         ).fetchone()
-        tenant_display_name = row[0] if row else "Your workspace"
+        tenant_display_name = tn_row[0] if tn_row else "Your workspace"
 
         role_labels = {
             "tenant_admin": "Tenant Administrator",
@@ -101,8 +141,8 @@ def get_invitation_preflight(token: str) -> dict:
             "user": "User",
             "admin": "Administrator",
         }
-        email = inv.normalized_email or inv.email or ""
-        parts = email.split("@", 1)
+        email_str = normalized_email or _email or ""
+        parts = email_str.split("@", 1)
         if len(parts) == 2 and parts[0]:
             masked = parts[0][0] + "***@" + parts[1]
         else:
@@ -111,11 +151,11 @@ def get_invitation_preflight(token: str) -> dict:
         return {
             "tenant_display_name": tenant_display_name,
             "invited_role_display_name": role_labels.get(
-                inv.role, inv.role.replace("_", " ").title()
+                role, role.replace("_", " ").title()
             ),
             "email_masked": masked,
             "expires_at": inv_expires.isoformat(),
-            "status": inv.status,
+            "status": status,
         }
     finally:
         db.close()
@@ -164,10 +204,22 @@ def accept_invitation(
 
     db = get_sessionmaker()()
     try:
-        # Lock invitation — serializes concurrent acceptance attempts
+        # Pre-context lookup via security-definer function (bypasses tenant RLS).
+        # Gives us the tenant_id so we can set the RLS context before locking.
+        pre = _lookup_by_token_hash(db, fp)
+        if pre is None:
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+        pre_id, pre_tenant_id = pre[0], pre[1]
+
+        # Set RLS context before the locking re-query
+        set_tenant_context(db, pre_tenant_id)
+
+        # Lock invitation within tenant scope — serializes concurrent acceptance attempts
         inv = (
             db.query(TenantInvitation)
-            .filter(TenantInvitation.acceptance_token_hash == fp)
+            .filter(TenantInvitation.id == pre_id)
             .with_for_update()
             .first()
         )
@@ -206,9 +258,6 @@ def accept_invitation(
             raise HTTPException(
                 status_code=403, detail={"code": "TENANT_NOT_AVAILABLE"}
             )
-
-        # Set RLS context for this tenant
-        set_tenant_context(db, inv.tenant_id)
 
         # --- Begin canonical authority sequence (single transaction) ---
 

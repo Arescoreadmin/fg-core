@@ -38,7 +38,6 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
     try {
       const res = await fetch(`/api/core/identity/invitations/${token}/accept`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       });
       if (res.ok) {
         const data = await res.json();

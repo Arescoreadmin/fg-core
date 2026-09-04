@@ -3,6 +3,7 @@
 Mirrors the portal_user_authority token pattern: 256-bit entropy,
 HMAC-SHA256 fingerprint with FG_KEY_PEPPER, plaintext never persisted.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +26,7 @@ def fingerprint_for(raw_token: str) -> str | None:
     """Compute fingerprint from raw token. Returns None if prefix is wrong."""
     if not raw_token.startswith(_PREFIX):
         return None
-    return _fingerprint(raw_token[len(_PREFIX):])
+    return _fingerprint(raw_token[len(_PREFIX) :])
 
 
 def _fingerprint(hex_: str) -> str:
