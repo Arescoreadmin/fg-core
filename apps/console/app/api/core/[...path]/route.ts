@@ -59,6 +59,7 @@ if (PLATFORM_AUTH_MODE === 'CANONICAL') {
 const PROD_LIKE_FG_ENVS = new Set(['prod', 'production', 'staging']);
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
+  { prefix: 'identity/invitations', methods: new Set(['GET', 'POST']) },
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'health/ready', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'stats/summary', methods: new Set(['GET', 'HEAD']) },
@@ -287,6 +288,12 @@ function tenantIdFromCorePath(path: string[]): string | null {
     return path[2] || null;
   }
   return null;
+}
+
+function isInvitationAcceptancePath(path: string[]): boolean {
+  const joined = path.join('/');
+  return joined === 'identity/invitations' ||
+    joined.startsWith('identity/invitations/');
 }
 
 function isTenantAdminCorePath(path: string[]): boolean {
@@ -561,6 +568,7 @@ function createDelegationProof(
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string, namedUserSub?: string): Promise<NextResponse> {
   const isTenantAdminPath = isTenantAdminCorePath(path);
+  const isInvitationPath = isInvitationAcceptancePath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
@@ -606,6 +614,40 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       );
       return jsonError('Admin gateway delegation secret not configured', 503, requestId);
     }
+  } else if (isInvitationPath) {
+    // Invitation acceptance: platform-admin machine credential (gateway auth) +
+    // trusted named-user identity headers. The named-user headers are an identity
+    // transport only — Core's invitation lock + email match provide authority.
+    //
+    // GET preflight is forwarded without session headers (public endpoint — Core
+    // does not require gateway auth for the preflight).
+    // POST accept requires gateway auth + named-user headers (injected below).
+    if (request.method === 'POST') {
+      if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
+      const platformAdminKey = PLATFORM_AUTH_MODE === 'CANONICAL' && FG_PLATFORM_ADMIN_KEY
+        ? FG_PLATFORM_ADMIN_KEY
+        : ADMIN_GATEWAY_TOKEN;
+      headers.set('X-API-Key', platformAdminKey);
+      headers.set('X-FG-Internal-Token', ADMIN_GATEWAY_TOKEN);
+      headers.set('X-Admin-Gateway-Internal', 'true');
+      // No tenant ID on this path — invitation determines tenant
+
+      // Inject verified named-user identity from NextAuth session.
+      // The session is already resolved in handle() — re-fetch here for the
+      // invitation-path branch which needs emailVerified from the session.
+      const session = await auth();
+      if (session?.user?.email) {
+        headers.set('X-FG-Named-User-Email', session.user.email);
+        headers.set('X-FG-Named-User-Sub', (session.user as { id?: string })?.id ?? '');
+        // Only assert verified=true when the session confirms it — fail-closed otherwise
+        headers.set(
+          'X-FG-Named-User-Email-Verified',
+          (session as { emailVerified?: boolean }).emailVerified === true ? 'true' : 'false',
+        );
+      }
+      // No session: POST accept will fail Core's email verification check (403 IDENTITY_UNVERIFIED)
+    }
+    // GET preflight: no auth headers needed — Core endpoint is public
   } else {
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {
@@ -751,7 +793,10 @@ async function handle(request: NextRequest, { params }: { params: { path: string
 
   const session = await auth();
   if (!session?.user) return jsonError('Unauthorized', 401, requestId);
-  if (!canAccessCoreApiPath(path, request.method, session)) {
+  // Invitation acceptance uses machine credential + fgwi1.* token authority —
+  // the user's session role is irrelevant. Bypass role check so roleless invitees
+  // (not yet bound) can reach the preflight and accept endpoints.
+  if (!isInvitationAcceptancePath(path) && !canAccessCoreApiPath(path, request.method, session)) {
     return jsonError('Forbidden for this console role', 403, requestId);
   }
 

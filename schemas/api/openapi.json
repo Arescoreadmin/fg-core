@@ -98683,6 +98683,94 @@
         ]
       }
     },
+    "/identity/invitations/{token}": {
+      "get": {
+        "description": "Public preflight: minimal display info for the acceptance UX.\n\nAll invalid/expired/revoked/consumed tokens return the same 404.\nNever returns tenant_id, invitation_id, fingerprint, or internal IDs.",
+        "operationId": "get_invitation_preflight_identity_invitations__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Invitation Preflight Identity Invitations  Token  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Invitation Preflight",
+        "tags": [
+          "identity-acceptance"
+        ]
+      }
+    },
+    "/identity/invitations/{token}/accept": {
+      "post": {
+        "description": "Accept a workforce invitation. Requires gateway auth + named-user identity headers.\n\nNo request body accepted. Any body present is rejected 422 by FastAPI since\nthe function signature declares no Body parameter \u2014 unexpected fields will\ncause a 422 automatically. Explicit body check added below as defense-in-depth.\n\nAuthority chain:\n  fgwi1.* token \u2192 fingerprint \u2192 locked invitation \u2192 named-user email match\n  \u2192 verified email \u2192 canonical principal \u2192 tenant_user binding \u2192 COMMIT",
+        "operationId": "accept_invitation_identity_invitations__token__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Accept Invitation Identity Invitations  Token  Accept Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invitation",
+        "tags": [
+          "identity-acceptance"
+        ]
+      }
+    },
     "/identity/me": {
       "get": {
         "description": "Return own identity profile.",

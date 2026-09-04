@@ -4232,6 +4232,18 @@
     },
     {
       "method": "GET",
+      "path": "/identity/invitations/{token}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/identity/invitations/{token}/accept",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/identity/me",
       "scopes": [],
       "source": "contract"
@@ -6121,7 +6133,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-09-02T16:35:13.517933+00:00",
+  "generated_at": "2026-09-04T17:11:23.970921+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

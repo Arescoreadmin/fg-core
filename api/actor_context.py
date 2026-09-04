@@ -512,6 +512,9 @@ class ActorContext:
         str  # "oidc_auth0" | "oidc_entra" | "api_key" | "system" | "dev_bypass"
     )
     tenant_id: Optional[str]  # from JWT claim or API key binding
+    email_verified: bool = (
+        False  # from Auth0 email_verified claim; default False (fail-closed)
+    )
     membership_id: Optional[str] = (
         None  # tenant_users.id — populated after resolver lookup
     )

@@ -68,4 +68,8 @@ PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     # the authorization credential. The route validates the token before revoking; no
     # separate service-account scope is required (same self-auth pattern as invitation acceptance).
     "/portal/named-sessions/",
+    # P-113.8 workforce invitation acceptance: fgwi1.* token IS the credential for the
+    # GET preflight (public display info — masked email, tenant name, role label).
+    # POST /identity/invitations/{token}/accept requires require_internal_admin_gateway.
+    "/identity/invitations/",
 )

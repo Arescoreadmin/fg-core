@@ -251,6 +251,23 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
                 tenant_id=None,
             )
 
+        # canonical_platform_admin without named_sub: the reason is assigned only
+        # when _lookup_canonical_platform_admin_role() already confirmed platform_admin
+        # via RBAC during authentication. Re-looking up the credential role here
+        # can fail when require_capability() has already bound request.state.tenant_id
+        # to the *requested* tenant, causing auth_ctx_db_session to set an RLS context
+        # that filters out the authority tenant's RBAC row. Short-circuit directly.
+        if getattr(auth, "reason", None) == "canonical_platform_admin":
+            return ActorContext(
+                subject=key_prefix or "canonical_platform_admin",
+                email="",
+                name="",
+                permissions=roles_to_permissions(["platform_admin"]),
+                roles=["platform_admin"],
+                auth_source="api_key",
+                tenant_id=tenant_id or None,
+            )
+
     # PSP attribution: if this credential belongs to the platform service
     # principal, resolve its identity and populate the ActorContext fields.
     # This makes PSP-authenticated requests distinguishable in the audit trail.

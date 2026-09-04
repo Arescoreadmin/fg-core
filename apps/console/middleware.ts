@@ -18,7 +18,10 @@ export default auth(function middleware(req: NextRequest & { auth: unknown }) {
     pathname === '/unauthorized' ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/onboarding') ||
-    pathname.startsWith('/products');
+    pathname.startsWith('/products') ||
+    // Invitation acceptance: roleless invited users arrive here before binding.
+    // The page handles its own auth redirect; authority is the fgwi1.* token.
+    pathname.startsWith('/identity/invitations');
 
   if (isPublic) return NextResponse.next();
 

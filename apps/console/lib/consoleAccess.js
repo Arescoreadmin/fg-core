@@ -641,6 +641,9 @@ const CORE_API_POLICIES = [
   { prefix: 'portal/grants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'admin/identity/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'admin/identity/invitations', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
+  // P-113.8 workforce invitation acceptance — any authenticated user may view/accept their own invitation.
+  // Authority is locked by the fgwi1.* token fingerprint; BFF adds named-user identity headers for POST.
+  { prefix: 'identity/invitations', allowedRoles: CLIENT_CONSOLE_ALLOWED_ROLES, tenantScoped: false, clientSafe: true, readOnly: false, mutationRoles: CLIENT_CONSOLE_ALLOWED_ROLES },
   // TENANT-ADMIN-001 delegated administration — /admin/tenants/{tenant_id}/...
   // tenant_admin uses their own-tenant path; bootstrap-admin is internal-only
   // (Core API enforces platform.admin; BFF allows TENANT_ADMIN_CONSOLE_ROLES through).

@@ -878,6 +878,17 @@ PLANE_REGISTRY: list[PlaneDef] = [
             require_any_scope=True,
             tenant_binding_required=False,
         ),
+        public_routes=(
+            ex(
+                "GET",
+                "/identity/invitations/{token}",
+                "public",
+                "P-113.8 invitation preflight: public endpoint; fgwi1.* token is "
+                "the credential. Returns masked display info only — no tenant_id, "
+                "no internal IDs, no PII beyond masked email.",
+                permanent=True,
+            ),
+        ),
         auth_exempt_routes=(
             ex(
                 "POST",
@@ -886,6 +897,16 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "Invite-token exchange: the invite token IS the credential. "
                 "SHA-256 hash comparison enforced; single-use replay protection. "
                 "No prior auth credential exists for a new invitee.",
+                permanent=True,
+            ),
+            ex(
+                "POST",
+                "/identity/invitations/{token}/accept",
+                "auth_exempt",
+                "P-113.8 canonical invitation acceptance: uses platform-admin gateway "
+                "auth (require_internal_admin_gateway) + fgwi1.* HMAC token authority. "
+                "Not gated by identity: scope — authority is the locked invitation "
+                "record + gateway credential.",
                 permanent=True,
             ),
         ),

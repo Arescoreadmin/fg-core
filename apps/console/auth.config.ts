@@ -67,6 +67,15 @@ export const authConfig = {
       token.roles = bootstrapped ? ['Administrator'] : claims.roles;
       token.tenantId = claims.tenantId;
       token.experienceClass = bootstrapped ? 'internal_console' : claims.experienceClass;
+
+      // email_verified: set from Auth0 profile at sign-in; retained across token refreshes.
+      // profile is only present on initial OAuth sign-in, not on session refresh.
+      // Value is server-signed in the NextAuth JWT — not user-editable.
+      // Absence defaults to false (fail-closed for invitation acceptance).
+      if (profile !== undefined) {
+        token.emailVerified = (profile as Record<string, unknown>)['email_verified'] === true;
+      }
+
       return token;
     },
     session({ session, token }) {
@@ -78,8 +87,12 @@ export const authConfig = {
       session.roles = roles;
       session.tenantId = tenantId;
       session.experienceClass = experienceClass;
+      session.emailVerified = typeof token.emailVerified === 'boolean' ? token.emailVerified : false;
       session.user = {
         ...session.user,
+        // Persist Auth0 subject into session.user.id so BFF can forward
+        // X-FG-Named-User-Sub for the invitation acceptance proxy path.
+        id: typeof token.sub === 'string' ? token.sub : (session.user as { id?: string })?.id ?? '',
         roles,
         tenantId,
         experienceClass,
