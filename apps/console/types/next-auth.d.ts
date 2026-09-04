@@ -7,6 +7,7 @@ declare module 'next-auth' {
     roles?: string[];
     tenantId?: string | null;
     experienceClass?: string;
+    emailVerified: boolean;
     user: DefaultSession['user'] & {
       roles?: string[];
       tenantId?: string | null;
@@ -26,5 +27,6 @@ declare module 'next-auth/jwt' {
     roles?: string[];
     tenantId?: string | null;
     experienceClass?: string;
+    emailVerified?: boolean;
   }
 }

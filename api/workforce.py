@@ -335,6 +335,10 @@ def invite_user(
         },
     )
 
+    from api.identity.workforce_token import generate as _gen_invite_token
+
+    _raw_token, _token_fp = _gen_invite_token()
+
     inv = _store.create_invitation(
         db,
         tenant_id=tenant_id,
@@ -345,6 +349,7 @@ def invite_user(
         expires_at=expires_at,
         identity_mode_at_invite=policy.identity_mode,
         identity_policy_config_id=config.id,
+        acceptance_token_hash=_token_fp,
     )
     inv.identity_type = "human"
     # Capture id before commit: set_config('app.tenant_id', ..., true) is
@@ -358,7 +363,7 @@ def invite_user(
         "display_name": payload.display_name,
         "role": payload.role,
         "invitation_id": invitation_id,
-        "invitation_url": f"/identity/invitations/{invitation_id}",
+        "invitation_url": f"/identity/invitations/{_raw_token}",
     }
 
 

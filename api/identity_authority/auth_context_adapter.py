@@ -65,6 +65,7 @@ def authorization_context_to_actor_context(
         roles=roles,
         auth_source=auth_source,
         tenant_id=resolved_tenant,
+        email_verified=False,  # FIAP path: email_verified not available from AuthorizationContext
         membership_id=resolved_membership,
     )
 

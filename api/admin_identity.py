@@ -1049,11 +1049,16 @@ def resend_invitation(
             )
         resolve_authoritative_tenant(request, actor_ctx, inv.tenant_id)
         set_tenant_context(db, inv.tenant_id)
+        now = _now()
+        new_expires_at = now + timedelta(hours=72)
         inv.status = "pending"
         inv.revoked_at = None
-        # FIX 4: refresh expiration so resent invitations are not dead on arrival
-        inv.expires_at = _now() + timedelta(hours=72)
-        inv.updated_at = _now()
+        inv.expires_at = new_expires_at
+        inv.updated_at = now
+        # Rotate acceptance token atomically — old URL 404s immediately after commit
+        new_raw_token = _store.rotate_acceptance_token(
+            db, inv.id, new_expires_at=new_expires_at
+        )
         emit_identity_audit_event(
             db,
             tenant_id=inv.tenant_id,
@@ -1063,7 +1068,12 @@ def resend_invitation(
             details={"invitation_status": "pending"},
         )
         db.commit()
-        return {"invitation_id": invitation_id, "status": "pending", "resent": True}
+        return {
+            "invitation_id": invitation_id,
+            "status": "pending",
+            "resent": True,
+            "invitation_url": f"/identity/invitations/{new_raw_token}",
+        }
     finally:
         db.close()
 

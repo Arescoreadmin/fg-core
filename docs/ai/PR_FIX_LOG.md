@@ -1,5 +1,37 @@
 # PR Fix Log (Strict)
 
+## P-56 — feat(identity): P-113.8 Canonical Identity Invitation Acceptance + Admin Binding — branch `feat/p1138-invitation-acceptance`
+
+- **PR/Branch:** `feat/p1138-invitation-acceptance`
+- **Date:** 2026-09-04
+- **Files changed:** `migrations/postgres/0186_tenant_invitations_acceptance_token.sql` (new), `api/actor_context.py`, `api/identity_providers/auth0.py`, `api/identity_authority/auth_context_adapter.py`, `api/identity/workforce_token.py` (new), `api/db_models_identity.py`, `api/identity/store.py`, `api/workforce.py`, `api/admin_identity.py`, `api/identity_acceptance.py` (new), `api/main.py`, `api/security/public_paths.py`, `apps/console/auth.config.ts`, `apps/console/types/next-auth.d.ts`, `apps/console/app/api/core/[...path]/route.ts`, `apps/console/lib/consoleAccess.js`, `apps/console/app/identity/invitations/[token]/page.tsx` (new), `tests/test_p1138_invitation_acceptance.py` (new), `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`, `tools/ci/route_inventory.json`, contracts regenerated
+- **Root cause:** Invitation acceptance endpoint did not exist. `POST /workforce/users` created a `tenant_invitations` row with a URL pointing to `/identity/invitations/{invitation_id}` — no page and no acceptance endpoint existed. `NO_BOUND_ADMIN` lifecycle blocker persisted because invited users had no mechanism to bind their identity. `ActorContext` lacked `email_verified` field; `validate_auth0_token()` did not extract the `email_verified` JWT claim.
+- **Fix:** (S1) Added `email_verified: bool = False` (fail-closed) to `ActorContext`; extracted from Auth0 JWT; defaulted to False in FIAP adapter. (Token) New `fgwi1.*` workforce invitation token module (HMAC-SHA256 fingerprint, FG_KEY_PEPPER, 256-bit entropy). (Migration 0186) Nullable `acceptance_token_hash` column on `tenant_invitations`. (invite_user) Generates token at invite time; `invitation_url` embeds raw token once; fingerprint stored. (resend) Atomically rotates acceptance token fingerprint and expiry; returns new `invitation_url`. (Core routes) `GET /identity/invitations/{token}` — public preflight (masked email, tenant name, role label); `POST /identity/invitations/{token}/accept` — gateway-authenticated; named-user identity headers carry email+verified+sub; authority derives from locked invitation only. Single transaction: principal resolution → tenant_user binding (rowcount guard) → invitation bound → COMMIT; any failure rolls back (invitation stays pending). (BFF) `isInvitationPath` branch in `proxyToCore`; GET forwarded without session headers; POST injects gateway credential + named-user headers from NextAuth session (`emailVerified` from server-signed JWT). (Console) `auth.config.ts` extracts `email_verified` from Auth0 profile into server-signed JWT; `types/next-auth.d.ts` extended; `apps/console/app/identity/invitations/[token]/page.tsx` acceptance UX created.
+- **Behavioral impact:** Invited workforce users can now accept their invitation via the `invitation_url` embedded in the invite response, authenticating with Auth0 and binding their identity canonically. Resend rotates the token (old URL 404s immediately). GET preflight returns only display metadata (no internal IDs). POST accept requires gateway auth + verified email match against the locked invitation.
+- **Security impact:** Positive — authority chain: fgwi1.* fingerprint → locked invitation → verified email → canonical principal → single-commit binding. No client-supplied field can override tenant, role, or email. Raw token never persisted. Body rejected defense-in-depth. Resend atomically invalidates old token.
+- **Schema/API impact:** Migration 0186 adds nullable `acceptance_token_hash` to `tenant_invitations`. 2 new routes. `invitation_url` format changed from `/{invitation_id}` to `/fgwi1.{hex}` — consumers must use `invitation_url` field, not construct URLs from `invitation_id`.
+- **Tests added:** `tests/test_p1138_invitation_acceptance.py` — 30 tests: T-01 through T-22 token/preflight/identity/atomicity/resend/concurrency/response-shape/role-authority matrix, plus ActorContext field tests.
+- **Validation:** `pytest tests/test_p1138_invitation_acceptance.py` 30/30 PASS; `make fg-fast` PASS; `make fg-contract` PASS; `git diff --check` PASS.
+- **Result:** PASS.
+
+---
+
+## P-55 — fix(identity): canonical_platform_admin actor bypasses RLS-poisoned credential lookup — commit a1fcb86f
+
+- **PR/Branch:** `feat/p1138-invitation-acceptance` (hotfix commit a1fcb86f)
+- **Date:** 2026-09-04
+- **Files changed:** `api/identity_providers/api_key.py`
+- **Root cause:** `extract_api_key_actor()` in `api/identity_providers/api_key.py` was performing a `_lookup_canonical_platform_admin_role()` lookup after `require_capability()` had already bound `request.state.tenant_id` to the requested tenant, causing the SQLAlchemy session to have an RLS context for the requested tenant. This filtered out the authority tenant's `tenant_credential_roles` row, causing the platform-admin role lookup to return False and collapsing authority to `canonical_validated` instead of `canonical_platform_admin`.
+- **Fix:** Added early-return short-circuit: when `request.state.auth.reason == 'canonical_platform_admin'` is already set (classification done during authentication in `resolution.py`), immediately return an `ActorContext` with `platform_admin` RBAC permissions without re-querying the (RLS-poisoned) DB. The `canonical_platform_admin` reason is only set by `_lookup_canonical_platform_admin_role()` in `resolution.py` during the authentication phase, before any tenant RLS context is established — so the early-return is safe.
+- **Behavioral impact:** `canonical_platform_admin` credentials no longer lose their authority when accessing tenant-scoped routes where `require_capability()` pre-binds the tenant RLS context.
+- **Security impact:** Positive — authority classification is preserved; no permission escalation (same permissions already granted during authentication); fail-closed in all other paths (non-platform-admin credentials continue to the full lookup path).
+- **Schema/API impact:** None.
+- **Tests added:** None (covered by existing platform-admin authority test suite).
+- **Validation:** Verified by existing `tests/test_platform_admin_authority_invariant.py` and `tests/test_platform_admin_authority_p1136.py`.
+- **Result:** PASS.
+
+---
+
 ## P-54 — fix(identity): bind canonical platform-admin through verified delegation (P-113.6.2) — branch `fix/platform-admin-canonical-delegation-p1136-2`
 
 - **PR/Branch:** `fix/platform-admin-canonical-delegation-p1136-2`

@@ -269,6 +269,7 @@ class TenantInvitation(Base):
     )
     approval_reason: Mapped[Any] = mapped_column(Text, nullable=True)
     bound_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    acceptance_token_hash: Mapped[Any] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),

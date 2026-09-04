@@ -14892,6 +14892,30 @@
       "tenant_bound": false
     },
     {
+      "dependency_categories": [],
+      "file": "api/identity_acceptance.py",
+      "method": "GET",
+      "path": "/identity/invitations/{token}",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/identity_acceptance.py",
+      "method": "POST",
+      "path": "/identity/invitations/{token}/accept",
+      "plane": "identity",
+      "plane_id": "identity",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
       "dependency_categories": [
         "auth"
       ],
@@ -21022,7 +21046,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-09-03T13:23:57.305907+00:00",
+  "generated_at": "2026-09-04T17:11:23.944439+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

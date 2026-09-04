@@ -4282,3 +4282,28 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 **Test evidence:** `tests/test_platform_admin_credential_authority.py` — 30 tests: N01–N20 (negative security matrix) and M01–M04 (migration regression). All 30 pass. All pre-existing tests in `tests/test_platform_admin_authority_invariant.py` (12) and `tests/test_platform_admin_authority_p1136.py` (16) continue to pass. Auth tests (`test_auth.py`, `test_auth_hardening.py`) all pass.
 
 **SOC review outcome:** approved. Path E logic change is strictly mode-gated: CANONICAL skips Path E entirely (canonical credential required), COMPATIBILITY preserves existing fail-closed behavior for non-fgk credentials. No permission added, removed, or reordered. No new credential type introduced. All security invariants verified by test suite.
+
+---
+
+## P-113.8 — Canonical Identity Invitation Acceptance + Admin Binding (2026-09-04)
+
+**Change summary:** Introduces `GET /identity/invitations/{token}` (public preflight) and `POST /identity/invitations/{token}/accept` (gateway-authenticated binding endpoint). New route module `api/identity_acceptance.py`. Migration 0186 adds `acceptance_token_hash` (nullable) to `tenant_invitations`.
+
+**Public paths change — `api/security/public_paths.py`:** Added `/identity/invitations/` prefix to `PUBLIC_PATHS_PREFIX`. This exempts the GET preflight from API-key authentication (the fgwi1.* token IS the credential for display-only data). The POST accept endpoint at `…/{token}/accept` is NOT exempted from auth; it requires `require_internal_admin_gateway` (X-FG-Internal-Token) via FastAPI Depends, which enforces fail-closed gateway provenance.
+
+**Authority chain (P-113.8):**
+  1. fgwi1.* token → HMAC-SHA256 fingerprint (FG_KEY_PEPPER) → DB lookup
+  2. Locked invitation (WITH FOR UPDATE) → status=pending, not expired
+  3. Named-user email (X-FG-Named-User-Email) verified against invitation email
+  4. X-FG-Named-User-Email-Verified=true required (fail-closed; false → 403 IDENTITY_UNVERIFIED)
+  5. Canonical principal resolved/created via resolve_or_create_principal_for_external_identity
+  6. Single UPDATE to tenant_users WHERE identity_binding_status='unbound'; rowcount guard
+  7. Single COMMIT covers all authority-changing writes; any failure → full rollback → invitation stays pending
+
+**GET preflight security:** Returns only: tenant_display_name, invited_role_display_name (label only), email_masked (first char + *** + domain), expires_at, status. Never returns: tenant_id, invitation_id, acceptance_token_hash, or internal IDs.
+
+**POST body rejection:** Content-Length guard rejects any request body (defense-in-depth; FastAPI also rejects via type signature). Role, tenant, and email cannot be overridden by caller.
+
+**Token lifecycle:** generate() → (raw_token, fingerprint); raw_token embedded in invitation_url once; fingerprint stored; resend atomically rotates fingerprint (old URL 404s immediately on commit).
+
+**SOC review outcome:** approved. No existing auth paths modified. GET preflight exposes only display metadata behind HMAC fingerprint gate. POST accept is behind require_internal_admin_gateway + named-user email verification + invitation lock. Single-transaction write with rowcount guard. Test matrix: 30 tests pass (T-01 through T-22 plus ActorContext field tests).

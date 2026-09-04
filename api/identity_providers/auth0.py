@@ -171,6 +171,7 @@ def validate_auth0_token(token: str) -> ActorContext:
         raise ValueError("jwt missing sub claim")
 
     email: str = claims.get("email") or ""
+    email_verified: bool = bool(claims.get("email_verified", False))
     name: str = claims.get("name") or ""
 
     # Roles from Auth0 custom namespace claim, with fallback to bare "roles"
@@ -201,4 +202,5 @@ def validate_auth0_token(token: str) -> ActorContext:
         roles=roles,
         auth_source="oidc_auth0",
         tenant_id=tenant_id,
+        email_verified=email_verified,
     )

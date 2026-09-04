@@ -580,6 +580,7 @@ class TenantIdentityStore:
         identity_policy_config_id: str | None = None,
         required_provider_record_id: str | None = None,
         membership_id: str | None = None,
+        acceptance_token_hash: str | None = None,
     ) -> TenantInvitation:
         if (
             identity_mode_at_invite is not None
@@ -602,6 +603,7 @@ class TenantIdentityStore:
             required_connection_id=required_connection_id,
             expires_at=expires_at,
             created_by_user_id=created_by_user_id,
+            acceptance_token_hash=acceptance_token_hash,
             created_at=now,
             updated_at=now,
         )
@@ -676,3 +678,33 @@ class TenantIdentityStore:
             details={"invitation_status": to_status},
         )
         return invitation
+
+    def rotate_acceptance_token(
+        self,
+        db: Session,
+        invitation_id: str,
+        *,
+        new_expires_at: datetime,
+    ) -> str:
+        """Atomically replace the acceptance token hash and reset expiry. Returns new raw token.
+
+        Caller must hold an open transaction that covers this call and the invitation
+        status reset in resend_invitation(). Old token fingerprint is gone immediately
+        on commit — old URLs 404 on first attempt after this.
+        """
+        from api.identity.workforce_token import generate as gen_token
+
+        inv = (
+            db.query(TenantInvitation)
+            .filter(TenantInvitation.id == invitation_id)
+            .with_for_update()
+            .first()
+        )
+        if inv is None:
+            raise IdentityPolicyError("INVITATION_NOT_FOUND", invitation_id)
+        raw_token, fingerprint = gen_token()
+        inv.acceptance_token_hash = fingerprint
+        inv.expires_at = new_expires_at
+        inv.updated_at = _now()
+        # Do not commit here — caller commits atomically with status reset
+        return raw_token
