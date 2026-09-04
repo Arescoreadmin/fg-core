@@ -29,6 +29,44 @@ from .validation import (
 log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
 
+
+def _lookup_canonical_platform_admin_role(
+    engine, tenant_id: str, credential_id: str
+) -> bool:
+    """Return True iff the canonical credential holds the platform_admin RBAC role.
+
+    Runs unconditionally for all authenticated canonical credentials — no
+    tenant_id or credential_slot pre-condition. Fail closed: any exception
+    returns False, collapsing platform authority to zero.
+    """
+    try:
+        from api.tenant_rbac import get_credential_role as _gcr  # noqa: PLC0415
+        from sqlalchemy import text as _text  # noqa: PLC0415
+
+        with engine.connect() as _conn:
+            # PostgreSQL RLS: tenant_credential_roles is protected by a policy
+            # that requires app.tenant_id = tenant_id.  Set it before the query
+            # so the row is visible to the RBAC lookup.
+            if engine.dialect.name == "postgresql":
+                _conn.execute(
+                    _text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id},
+                )
+            return (
+                _gcr(_conn, tenant_id=tenant_id, credential_id=credential_id)
+                == "platform_admin"
+            )
+    except Exception:
+        log.warning(
+            "canonical_platform_admin_role_lookup.failed",
+            extra={
+                "tenant_id": tenant_id,
+                "cred_id": credential_id[:8] if credential_id else "",
+            },
+        )
+        return False
+
+
 _DELEGATION_CLOCK_TOLERANCE = 5  # seconds of future-dating tolerance
 _DELEGATION_MAX_LIFETIME = 120  # reject proofs longer than 2 minutes
 
@@ -379,13 +417,6 @@ def verify_api_key_detailed(
         # CANONICAL mode: Path E is completely disabled.  The request MUST carry
         # a canonical fgk.* credential.  Fall through to canonical validation below.
         if is_canonical_mode():
-            _log_auth_event(
-                "admin_internal_auth",
-                success=False,
-                reason="path_e_disabled_canonical_mode",
-                request_path=request_path,
-                client_ip=client_ip,
-            )
             log.debug(
                 "auth_path=path_e_skipped mode=CANONICAL reason=canonical_mode_enforced"
             )
@@ -554,7 +585,25 @@ def verify_api_key_detailed(
         if _ca_principal is not None:
             _ca_scopes: Set[str] = set(_ca_principal.scopes)
 
-            if required_scopes:
+            # Resolve RBAC classification BEFORE scope enforcement.
+            # A platform_admin credential may be issued with empty scopes but
+            # still holds platform.admin via RBAC, which subsumes all legacy
+            # scope requirements.  Checking scopes first would reject a valid
+            # platform-admin credential before its authority can be established.
+            _ca_reason = (
+                "canonical_platform_admin"
+                if _lookup_canonical_platform_admin_role(
+                    _ca_get_engine(),
+                    _ca_principal.tenant_id,
+                    _ca_principal.credential_id,
+                )
+                else "canonical_validated"
+            )
+
+            if required_scopes and _ca_reason != "canonical_platform_admin":
+                # Scope enforcement applies only to non-platform-admin credentials.
+                # canonical_platform_admin has platform.admin (all permissions) by
+                # RBAC and is not constrained by legacy scope strings.
                 if isinstance(required_scopes, str):
                     _ca_needed: Set[str] = {required_scopes}
                 elif isinstance(required_scopes, (list, set, frozenset)):
@@ -574,24 +623,24 @@ def verify_api_key_detailed(
                         tenant_id=_ca_principal.tenant_id,
                         scopes=_ca_scopes,
                     )
-
             _log_auth_event(
                 "auth_attempt",
                 success=True,
                 key_prefix="fgk",
                 tenant_id=_ca_principal.tenant_id,
-                reason="canonical_validated",
+                reason=_ca_reason,
                 request_path=request_path,
                 client_ip=client_ip,
             )
             log.debug(
-                "auth_path=canonical tenant=%s cred=%s",
+                "auth_path=canonical tenant=%s cred=%s reason=%s",
                 _ca_principal.tenant_id,
                 _ca_principal.credential_id,
+                _ca_reason,
             )
             return AuthResult(
                 valid=True,
-                reason="canonical_validated",
+                reason=_ca_reason,
                 key_prefix="fgk",
                 tenant_id=_ca_principal.tenant_id,
                 scopes=_ca_scopes,
@@ -884,11 +933,13 @@ def bind_tenant_id(
             )
         )
         if (
-            getattr(_pre_auth, "reason", "") == "admin_internal_token"
+            getattr(_pre_auth, "reason", "")
+            in ("admin_internal_token", "canonical_platform_admin")
             and not _verified_flag
         ):
-            # Defense-in-depth (PR-CORE-002B): admin_internal_token must always pass
-            # delegation verification. Clear pre-bound state so the branch below runs.
+            # Defense-in-depth (PR-CORE-002B): admin_internal_token and
+            # canonical_platform_admin must always pass delegation verification.
+            # Clear pre-bound state so the branch below runs.
             request.state.tenant_is_key_bound = False
         else:
             cached = cached_tenant
@@ -913,7 +964,10 @@ def bind_tenant_id(
     key_prefix = getattr(auth, "key_prefix", None)
     scopes: set[str] = getattr(auth, "scopes", set())
 
-    if auth_tenant and getattr(auth, "reason", "") != "admin_internal_token":
+    if auth_tenant and getattr(auth, "reason", "") not in (
+        "admin_internal_token",
+        "canonical_platform_admin",
+    ):
         if requested and requested != auth_tenant:
             _tenant_denial_log(
                 request=request,
@@ -933,7 +987,10 @@ def bind_tenant_id(
         _apply_tenant_context(request, auth_tenant)
         return auth_tenant
 
-    if getattr(auth, "reason", "") == "admin_internal_token":
+    if getattr(auth, "reason", "") in (
+        "admin_internal_token",
+        "canonical_platform_admin",
+    ):
         if not requested:
             # PR-CORE-002C: fall back to X-Tenant-ID header when caller did not
             # forward the id explicitly. This is required for the second-hop

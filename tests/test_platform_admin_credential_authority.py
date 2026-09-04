@@ -236,6 +236,18 @@ def test_n04_canonical_valid_fgk_allowed(tmp_path, monkeypatch):
     principal = validate_credential(engine, plaintext)
     assert principal.tenant_id == "frostgate-internal"
 
+    # Assign platform_admin role in tenant_credential_roles so RBAC lookup returns it.
+    from api.tenant_rbac import assign_role
+
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
     # Via auth resolver in CANONICAL mode
     import api.auth_scopes.resolution as resolution_mod
 
@@ -248,7 +260,11 @@ def test_n04_canonical_valid_fgk_allowed(tmp_path, monkeypatch):
     assert result.valid, (
         f"Canonical fgk must succeed in CANONICAL mode: {result.reason}"
     )
-    assert result.reason == "canonical_validated"
+    assert result.reason == "canonical_platform_admin", (
+        "Platform-admin credential with platform_admin RBAC role must produce "
+        "canonical_platform_admin reason so bind_tenant_id() routes it through "
+        "the delegated-tenant path"
+    )
     assert result.tenant_id == "frostgate-internal"
 
 
@@ -976,7 +992,12 @@ def test_m01_compatibility_existing_bff_request_works(monkeypatch):
 
 
 def test_m02_compatibility_canonical_request_also_works(tmp_path, monkeypatch):
-    """M02: In COMPATIBILITY mode, new canonical fgk request also works (coexistence)."""
+    """M02: In COMPATIBILITY mode, new canonical fgk request also works (coexistence).
+
+    With platform_admin RBAC role assigned, reason is canonical_platform_admin.
+    Without the role, reason would be canonical_validated (fail-closed).
+    This test verifies the RBAC-based classification in COMPATIBILITY mode.
+    """
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "m02.db"))
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
@@ -989,6 +1010,7 @@ def test_m02_compatibility_canonical_request_also_works(tmp_path, monkeypatch):
 
     from api.db import get_engine
     from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
 
     engine = get_engine()
     with engine.begin() as conn:
@@ -1009,6 +1031,16 @@ def test_m02_compatibility_canonical_request_also_works(tmp_path, monkeypatch):
     )
     plaintext = issued.plaintext_secret
     assert plaintext and plaintext.startswith("fgk.")
+
+    # Assign platform_admin role so RBAC lookup returns it.
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
 
     import api.auth_scopes.resolution as resolution_mod
 
@@ -1021,11 +1053,19 @@ def test_m02_compatibility_canonical_request_also_works(tmp_path, monkeypatch):
     assert result.valid, (
         f"Canonical fgk must work in COMPATIBILITY mode: {result.reason}"
     )
-    assert result.reason == "canonical_validated"
+    assert result.reason == "canonical_platform_admin", (
+        "Platform-admin credential with platform_admin RBAC role must produce "
+        "canonical_platform_admin reason (authority from RBAC, not metadata)"
+    )
 
 
 def test_m03_canonical_new_request_works(tmp_path, monkeypatch):
-    """M03: In CANONICAL mode, new canonical fgk request works."""
+    """M03: In CANONICAL mode, new canonical fgk request works.
+
+    With platform_admin RBAC role assigned, reason is canonical_platform_admin.
+    Without the role, reason would be canonical_validated (fail-closed).
+    This test verifies the RBAC-based classification in CANONICAL mode.
+    """
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "m03.db"))
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
@@ -1038,6 +1078,7 @@ def test_m03_canonical_new_request_works(tmp_path, monkeypatch):
 
     from api.db import get_engine
     from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
 
     engine = get_engine()
     with engine.begin() as conn:
@@ -1059,6 +1100,16 @@ def test_m03_canonical_new_request_works(tmp_path, monkeypatch):
     plaintext = issued.plaintext_secret
     assert plaintext and plaintext.startswith("fgk.")
 
+    # Assign platform_admin role so RBAC lookup returns it.
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
     import api.auth_scopes.resolution as resolution_mod
 
     monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
@@ -1068,7 +1119,10 @@ def test_m03_canonical_new_request_works(tmp_path, monkeypatch):
     request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
     result = verify_api_key_detailed(raw=plaintext, request=request)
     assert result.valid, f"Canonical fgk must work in CANONICAL mode: {result.reason}"
-    assert result.reason == "canonical_validated"
+    assert result.reason == "canonical_platform_admin", (
+        "Platform-admin credential with platform_admin RBAC role must produce "
+        "canonical_platform_admin reason (authority from RBAC, not metadata)"
+    )
 
 
 def test_m04_canonical_old_path_e_no_longer_grants_platform_admin(monkeypatch):
@@ -1167,3 +1221,786 @@ def test_validate_canonical_mode_config_catches_identical_keys(monkeypatch):
     assert any("distinct" in issue.lower() for issue in issues), (
         f"Identical keys must be flagged: {issues}"
     )
+
+
+# ---------------------------------------------------------------------------
+# R01–R04: RBAC revocation and fail-closed tests (P-113.6.2)
+# ---------------------------------------------------------------------------
+
+
+def _seed_platform_admin_with_role(
+    engine, *, tenant_id: str = "frostgate-internal"
+) -> "tuple[str, str]":
+    """Issue a credential and assign platform_admin role. Returns (plaintext, credential_id)."""
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    issued = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test-slot-r-{uuid.uuid4().hex[:8]}",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id=tenant_id,
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+    return plaintext, issued.record.credential_id
+
+
+def test_r01_platform_admin_role_produces_canonical_platform_admin(
+    tmp_path, monkeypatch
+):
+    """R01: credential with platform_admin role → canonical_platform_admin."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "r01.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "r01.db"))
+
+    from api.db import get_engine
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    plaintext, _ = _seed_platform_admin_with_role(engine)
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, (
+        f"Credential with platform_admin role must authenticate: {result.reason}"
+    )
+    assert result.reason == "canonical_platform_admin", (
+        f"Expected canonical_platform_admin, got {result.reason!r}"
+    )
+
+
+def test_r02_revoked_platform_admin_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """R02: platform_admin role revoked (revoked_at IS NOT NULL) → canonical_validated."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "r02.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "r02.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot=f"test-slot-r02-{uuid.uuid4().hex[:8]}",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
+    # Revoke the role by setting revoked_at
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credential_roles SET revoked_at = '2000-01-01T00:00:00+00:00' "
+                "WHERE credential_id = :cid AND role_name = 'platform_admin'"
+            ),
+            {"cid": issued.record.credential_id},
+        )
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, f"Credential is still cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"Revoked RBAC role must fall back to canonical_validated (fail-closed), "
+        f"got {result.reason!r}"
+    )
+
+
+def test_r03_role_changed_to_tenant_admin_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """R03: role changed to tenant_admin → canonical_validated (not canonical_platform_admin)."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "r03.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "r03.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot=f"test-slot-r03-{uuid.uuid4().hex[:8]}",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    # Assign tenant_admin role (not platform_admin)
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="tenant_admin",
+        )
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, f"Credential is still cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"tenant_admin role must not produce canonical_platform_admin, "
+        f"got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_r04_rbac_lookup_exception_gives_canonical_validated(tmp_path, monkeypatch):
+    """R04: RBAC lookup raises DB exception → canonical_validated + NO delegated binding.
+
+    Monkeypatches get_credential_role (inside the helper) to raise, allowing the
+    helper's own try/except to catch it and return False → canonical_validated.
+    """
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "r04.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "r04.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot=f"test-slot-r04-{uuid.uuid4().hex[:8]}",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    assert plaintext and plaintext.startswith("fgk.")
+
+    import api.auth_scopes.resolution as resolution_mod
+    import api.tenant_rbac as tenant_rbac_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    # Patch get_credential_role to raise — the helper's try/except catches it and
+    # returns False, which collapses platform authority to canonical_validated.
+    def _raising_gcr(conn, *, tenant_id, credential_id):
+        raise RuntimeError("simulated DB failure in get_credential_role")
+
+    monkeypatch.setattr(tenant_rbac_mod, "get_credential_role", _raising_gcr)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    # Credential is cryptographically valid; RBAC lookup failed → fail closed
+    assert result.valid, f"Credential is cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"RBAC lookup exception must fail closed to canonical_validated (not canonical_platform_admin), "
+        f"got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin", (
+        "RBAC exception must NOT produce canonical_platform_admin — fail closed"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 9 regression: cross-tenant delegation with RBAC-proven platform_admin
+# ---------------------------------------------------------------------------
+
+
+def test_phase9_cross_tenant_delegation_with_rbac_platform_admin(tmp_path, monkeypatch):
+    """Phase 9 regression: canonical platform_admin credential can be delegated to
+    a customer tenant when RBAC proves platform_admin.
+
+    credential:
+        tenant_id = frostgate-internal
+        canonical role = platform_admin (in tenant_credential_roles)
+
+    Expected: result.reason == "canonical_platform_admin", result.valid == True.
+
+    Then: same credential with role removed → result.reason == "canonical_validated".
+    """
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "phase9.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "phase9.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+    assert plaintext and plaintext.startswith("fgk.")
+
+    # Step 1: Assign platform_admin role → expect canonical_platform_admin
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, f"Expected valid: {result.reason}"
+    assert result.reason == "canonical_platform_admin", (
+        f"Platform-admin credential with RBAC role must be canonical_platform_admin, "
+        f"got {result.reason!r}"
+    )
+
+    # Step 2: Revoke the role → expect canonical_validated (fail-closed)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credential_roles SET revoked_at = '2000-01-01T00:00:00+00:00' "
+                "WHERE credential_id = :cid AND role_name = 'platform_admin'"
+            ),
+            {"cid": issued.record.credential_id},
+        )
+
+    result2 = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result2.valid, f"Credential still cryptographically valid: {result2.reason}"
+    assert result2.reason == "canonical_validated", (
+        f"After role revocation, must fall back to canonical_validated, "
+        f"got {result2.reason!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# DB-exception fail-closed test: no delegated binding on RBAC failure
+# ---------------------------------------------------------------------------
+
+
+def test_db_exception_fail_closed_no_delegated_binding(tmp_path, monkeypatch):
+    """DB exception in RBAC lookup must not produce delegated binding.
+
+    credential cryptographically valid
+    RBAC lookup raises DB exception (monkeypatched)
+    Expected: reason == canonical_validated (NOT canonical_platform_admin)
+    """
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "db_exc.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "db_exc.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    import api.tenant_rbac as tenant_rbac_mod
+
+    call_count = {"n": 0}
+
+    def _always_raise(conn, *, tenant_id, credential_id):
+        call_count["n"] += 1
+        raise RuntimeError("simulated network failure during RBAC lookup")
+
+    monkeypatch.setattr(tenant_rbac_mod, "get_credential_role", _always_raise)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+
+    # RBAC lookup was called (via the helper which caught the exception)
+    assert call_count["n"] > 0, (
+        "RBAC lookup (get_credential_role) must have been invoked"
+    )
+
+    # Credential still valid cryptographically — fail-closed means canonical_validated
+    assert result.valid, "Credential must remain cryptographically valid"
+    assert result.reason == "canonical_validated", (
+        f"DB exception must produce canonical_validated (fail-closed), "
+        f"got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin", (
+        "DB exception must NEVER produce canonical_platform_admin — no platform authority without RBAC proof"
+    )
+
+
+# ---------------------------------------------------------------------------
+# N08-N12, N20: RBAC-classification negative security matrix (P-113.6.2)
+# ---------------------------------------------------------------------------
+
+
+def test_n_new_08_platform_admin_slot_no_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """N08: credential with platform-admin slot but no platform_admin role → canonical_validated."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_08.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_08.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    # Issue with the platform-admin slot name but NO role assignment
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, f"Credential is cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"Slot name alone must not produce canonical_platform_admin — RBAC role required. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_n_new_09_frostgate_internal_tenant_no_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """N09: credential under frostgate-internal but no platform_admin role → canonical_validated."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_09.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_09.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    # Issue under frostgate-internal but with a different slot and no role
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="other-service:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, f"Credential is cryptographically valid: {result.reason}"
+    assert result.reason == "canonical_validated", (
+        f"frostgate-internal tenant alone must not produce canonical_platform_admin. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_n_new_10_both_slot_and_internal_tenant_no_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """N10: both frostgate-internal + platform-admin slot but no role → canonical_validated."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_10.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_10.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    # Both slot and tenant match the "prototype" criteria — but NO RBAC role → canonical_validated
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid
+    assert result.reason == "canonical_validated", (
+        f"Metadata (slot+tenant) without RBAC role must produce canonical_validated. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_n_new_11_customer_tenant_same_slot_name_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """N11: customer tenant credential with same slot name → canonical_validated (not platform admin)."""
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_11.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_11.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    customer_tid = f"customer-n11-{uuid.uuid4().hex[:8]}"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES (:tid, :tid, 'active', 'customer')"
+            ),
+            {"tid": customer_tid},
+        )
+
+    # Customer tenant with platform-admin slot name — must not produce canonical_platform_admin
+    issued = issue_credential(
+        engine,
+        tenant_id=customer_tid,
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid
+    assert result.reason == "canonical_validated", (
+        f"Customer tenant credential must not obtain canonical_platform_admin. "
+        f"Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_n_new_12_revoked_platform_admin_role_gives_canonical_validated(
+    tmp_path, monkeypatch
+):
+    """N12: revoked platform_admin role (revoked_at set) → canonical_validated."""
+    # This overlaps with R02 but is included in the N-series for completeness.
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_12.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_12.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+    from api.tenant_rbac import assign_role
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    with engine.begin() as conn:
+        assign_role(
+            conn,
+            tenant_id="frostgate-internal",
+            actor_key_prefix="test",
+            credential_id=issued.record.credential_id,
+            role_name="platform_admin",
+        )
+
+    # Revoke the role
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE tenant_credential_roles SET revoked_at = '2000-01-01T00:00:00+00:00' "
+                "WHERE credential_id = :cid AND role_name = 'platform_admin'"
+            ),
+            {"cid": issued.record.credential_id},
+        )
+
+    import api.auth_scopes.resolution as resolution_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, "Credential is still cryptographically valid"
+    assert result.reason == "canonical_validated", (
+        f"Revoked RBAC role must produce canonical_validated. Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"
+
+
+def test_n_new_20_role_lookup_exception_fail_closed(tmp_path, monkeypatch):
+    """N20: role lookup exception → fail closed, canonical_validated (not canonical_platform_admin).
+
+    Monkeypatches get_credential_role to raise; the helper's try/except catches it
+    and returns False, so reason stays canonical_validated.
+    """
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(tmp_path / "n_new_20.db"))
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+
+    from api.db import init_db, reset_engine_cache
+
+    reset_engine_cache()
+    init_db(sqlite_path=str(tmp_path / "n_new_20.db"))
+
+    from api.db import get_engine
+    from api.credential_authority import issue_credential
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT OR IGNORE INTO tenants "
+                "(tenant_id, display_name, lifecycle_state, tenant_kind) "
+                "VALUES ('frostgate-internal', 'FrostGate Internal', 'active', 'internal_platform')"
+            )
+        )
+
+    issued = issue_credential(
+        engine,
+        tenant_id="frostgate-internal",
+        credential_type="tenant_api_key",
+        credential_slot="platform-admin-credential:v1",
+        actor_id="test",
+    )
+    plaintext = issued.plaintext_secret
+
+    import api.auth_scopes.resolution as resolution_mod
+    import api.tenant_rbac as tenant_rbac_mod
+
+    monkeypatch.setattr(resolution_mod, "is_canonical_mode", lambda: True)
+
+    def _raising_gcr_n20(conn, *, tenant_id, credential_id):
+        raise RuntimeError("simulated DB failure in N20")
+
+    monkeypatch.setattr(tenant_rbac_mod, "get_credential_role", _raising_gcr_n20)
+
+    from api.auth_scopes.resolution import verify_api_key_detailed
+
+    request = _make_request_mock("/admin/tenants", x_admin_gateway_internal="true")
+    result = verify_api_key_detailed(raw=plaintext, request=request)
+    assert result.valid, "Credential must remain cryptographically valid"
+    assert result.reason == "canonical_validated", (
+        f"RBAC exception must fail closed to canonical_validated. Got {result.reason!r}"
+    )
+    assert result.reason != "canonical_platform_admin"

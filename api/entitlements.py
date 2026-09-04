@@ -71,7 +71,10 @@ def _admin_gateway_tenant_admin_satisfies_capability(
     if not tenant_id:
         return False
     auth = getattr(getattr(request, "state", None), "auth", None)
-    if getattr(auth, "reason", "") != "admin_internal_token":
+    if getattr(auth, "reason", "") not in (
+        "admin_internal_token",
+        "canonical_platform_admin",
+    ):
         return False
     path = getattr(getattr(request, "url", None), "path", "") or ""
     prefixes = _ADMIN_GATEWAY_TENANT_ADMIN_CAPABILITIES.get(capability)
@@ -120,7 +123,10 @@ def _ensure_admin_gateway_tenant_bound(request: Request) -> str | None:
     tenant authority cannot be established.
     """
     auth = getattr(getattr(request, "state", None), "auth", None)
-    if getattr(auth, "reason", "") != "admin_internal_token":
+    if getattr(auth, "reason", "") not in (
+        "admin_internal_token",
+        "canonical_platform_admin",
+    ):
         return None
 
     cached = getattr(getattr(request, "state", None), "tenant_id", None)
@@ -129,15 +135,16 @@ def _ensure_admin_gateway_tenant_bound(request: Request) -> str | None:
     )
     if cached and key_bound:
         # bind_tenant_id defense-in-depth (PR-CORE-002B) still forces the
-        # admin_internal_token branch through delegation verification even when
-        # cached state is present, so calling it here is safe and correct.
+        # admin_internal_token / canonical_platform_admin branch through
+        # delegation verification even when cached state is present, so
+        # calling it here is safe and correct.
         pass
 
     header_tenant = (request.headers.get("X-Tenant-Id") or "").strip() or None
     # bind_tenant_id enforces delegation proof + tenant lifecycle verification
-    # for admin_internal_token. Raises HTTPException on any failure, which we
-    # let propagate so capability enforcement does not run on an unverified
-    # tenant context.
+    # for admin_internal_token and canonical_platform_admin. Raises HTTPException
+    # on any failure, which we let propagate so capability enforcement does not
+    # run on an unverified tenant context.
     return bind_tenant_id(request, header_tenant)
 
 
