@@ -148,6 +148,18 @@ function jsonError(message: string, status: number, requestId: string) {
   );
 }
 
+// Exhaustive public invitation error contract.
+// Only these Core detail.code values are safe to surface to the browser on
+// invitation/identity-recovery paths. Any other code normalizes to
+// INVITATION_NOT_FOUND. SESSION_EXPIRED is not derived from Core — it is a
+// BFF-level signal from absent session state (no Core call is made).
+const INVITATION_SAFE_CODES = new Set([
+  'INVITATION_EMAIL_MISMATCH',
+  'IDENTITY_UNVERIFIED',
+  'TENANT_NOT_AVAILABLE',
+] as const);
+type InvitationSafeCode = typeof INVITATION_SAFE_CODES extends Set<infer T> ? T : never;
+
 /**
  * Canonical BFF credential error responses.
  * Returns structured JSON with a stable error code and request_id — never raw
@@ -636,7 +648,16 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       // The session is already resolved in handle() — re-fetch here for the
       // invitation-path branch which needs emailVerified from the session.
       const session = await auth();
-      if (session?.user?.email) {
+      if (!session) {
+        // Session absent (expired or never established): signal the console to
+        // re-auth rather than letting Core return 403 IDENTITY_UNVERIFIED, which
+        // the console cannot distinguish from an email mismatch.
+        return NextResponse.json(
+          { error: 'SESSION_EXPIRED', request_id: requestId },
+          { status: 401, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+        );
+      }
+      if (session.user?.email) {
         headers.set('X-FG-Named-User-Email', session.user.email);
         headers.set('X-FG-Named-User-Sub', (session.user as { id?: string })?.id ?? '');
         // Only assert verified=true when the session confirms it — fail-closed otherwise
@@ -645,7 +666,6 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
           (session as { emailVerified?: boolean }).emailVerified === true ? 'true' : 'false',
         );
       }
-      // No session: POST accept will fail Core's email verification check (403 IDENTITY_UNVERIFIED)
     }
     // GET preflight: no auth headers needed — Core endpoint is public
   } else {
@@ -715,6 +735,25 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       `[core-proxy] CORE_AUTH_REJECTED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=401 normalized_error=CORE_AUTH_REJECTED`,
     );
     return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
+  }
+  if (response.status === 403 && isInvitationPath) {
+    // Invitation/identity-recovery path: surface a safe subset of Core error codes
+    // so the console can offer specific recovery actions (switch account, re-auth, etc.).
+    // Only INVITATION_SAFE_CODES pass through; anything else collapses to a generic
+    // safe code. Core message/detail body is never forwarded.
+    let detailCode: string = 'INVITATION_NOT_FOUND';
+    try {
+      const body403 = await response.json() as { detail?: { code?: string } };
+      const raw = body403?.detail?.code ?? '';
+      if (INVITATION_SAFE_CODES.has(raw as InvitationSafeCode)) detailCode = raw;
+    } catch { /* parse failure: retain safe default */ }
+    console.warn(
+      `[core-proxy] INVITATION_DENIED request_id=${requestId} surface=${path.join('/')} detail_code=${detailCode}`,
+    );
+    return NextResponse.json(
+      { error: 'INVITATION_DENIED', detail_code: detailCode, request_id: requestId },
+      { status: 403, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+    );
   }
   if (response.status === 403) {
     console.warn(

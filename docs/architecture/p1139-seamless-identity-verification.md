@@ -179,59 +179,79 @@ Make verification automatic when the IdP already proves it, make every failure r
 
 **Change:** On the invitation acceptance path only, extract `detail.code` from Core 403 responses and map it through an explicit closed allowlist before returning to the browser. The general 403 normalization (`CORE_ACCESS_DENIED`) continues to apply to all credential paths.
 
+**Scope: invitation/identity recovery path only.** The allowlist and `INVITATION_DENIED` response format apply exclusively when `isInvitationPath` is true. All other BFF 403s retain the existing `CORE_ACCESS_DENIED` behavior — the allowlist is not a generic 403 handler modification.
+
 **The allowlist is the contract.** Any code not on it collapses to `INVITATION_NOT_FOUND`. Core `message`, `detail.message`, or any other field is never forwarded.
 
 ```typescript
-// Exhaustive public invitation error contract — add to route.ts
-const INVITATION_ERROR_ALLOWLIST = new Set([
+// Module-level constant — exhaustive public invitation error contract
+const INVITATION_SAFE_CODES = new Set([
   'INVITATION_EMAIL_MISMATCH',
   'IDENTITY_UNVERIFIED',
   'TENANT_NOT_AVAILABLE',
 ] as const);
-
-type AllowedInvitationCode = typeof INVITATION_ERROR_ALLOWLIST extends Set<infer T> ? T : never;
+type InvitationSafeCode = typeof INVITATION_SAFE_CODES extends Set<infer T> ? T : never;
 ```
 
-**BFF response shape for invitation 403:**
+**SESSION_EXPIRED is not derived from a Core 403.** It is a BFF-level signal synthesized from session/auth state before the Core request is made. When `auth()` returns null on an invitation POST, the BFF detects the absent session immediately and returns `SESSION_EXPIRED` without making a Core call. This separation is important: `SESSION_EXPIRED` must never appear as a `detail_code` in a Core 403 response — it is structurally different (no Core call, different HTTP path).
+
+**BFF response shapes:**
 ```json
-{
-  "error": "INVITATION_DENIED",
-  "detail_code": "INVITATION_EMAIL_MISMATCH",
-  "request_id": "..."
-}
+// Core 403 on invitation path — known code
+{ "error": "INVITATION_DENIED", "detail_code": "INVITATION_EMAIL_MISMATCH", "request_id": "..." }
+
+// Core 403 on invitation path — unknown code
+{ "error": "INVITATION_DENIED", "detail_code": "INVITATION_NOT_FOUND", "request_id": "..." }
+
+// Null session before Core call
+{ "error": "SESSION_EXPIRED", "request_id": "..." }  // HTTP 401
+
+// All non-invitation 403s (unchanged)
+{ "error": "CORE_ACCESS_DENIED", "request_id": "..." }
 ```
 
 **Implementation sketch:**
 ```typescript
-// route.ts — BEFORE the existing general 403 handler
+// route.ts, invitation POST branch — BEFORE the Core fetch
+// (inside the isInvitationPath && request.method === 'POST' block)
+const session = await auth();
+if (!session) {
+  return NextResponse.json(
+    { error: 'SESSION_EXPIRED', request_id: requestId },
+    { status: 401, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+  );
+}
+// session exists: set named-user headers as before
+
+// route.ts, response handler — BEFORE the existing generic 403 handler
 if (response.status === 403 && isInvitationPath) {
   let detailCode: string = 'INVITATION_NOT_FOUND'; // safe default
   try {
     const body403 = await response.json() as { detail?: { code?: string } };
     const raw = body403?.detail?.code ?? '';
-    if (INVITATION_ERROR_ALLOWLIST.has(raw as AllowedInvitationCode)) {
+    if (INVITATION_SAFE_CODES.has(raw as InvitationSafeCode)) {
       detailCode = raw;
     }
-    // unknown code: fall through to safe default — not logged (prevents Core internals leaking via log aggregation)
+    // unknown code: fall through to safe default — not logged by name
   } catch { /* ignore parse failure */ }
-  console.warn(
-    `[core-proxy] INVITATION_DENIED request_id=${requestId} detail_code=${detailCode}`,
-  );
+  console.warn(`[core-proxy] INVITATION_DENIED request_id=${requestId} detail_code=${detailCode}`);
   return NextResponse.json(
     { error: 'INVITATION_DENIED', detail_code: detailCode, request_id: requestId },
     { status: 403, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
   );
 }
-// existing general 403 handler: credential paths still return CORE_ACCESS_DENIED
+// existing generic 403 handler follows unchanged:
+// if (response.status === 403) { return credentialError('CORE_ACCESS_DENIED', ...) }
 ```
 
-**Why not log unknown codes?** If an unknown Core code were logged by name in BFF log aggregation, it becomes externally observable to anyone with log access. The safe default absorbs it silently; the Core-side log (where the code originates) remains the authoritative diagnostic source.
+**Why unknown codes are not logged by name:** If an unknown Core code appeared in BFF log aggregation, it would become externally observable to anyone with log access. The safe default absorbs it silently; the Core-side log (where the code originates) is the authoritative diagnostic source.
 
 **Contract tests required (see 9A Test Requirements):**
 - Known allowlisted code → preserved in `detail_code`
 - Unknown Core code → `detail_code === 'INVITATION_NOT_FOUND'`
-- Core `message` field → absent from BFF response
-- Non-invitation 403 → `error === 'CORE_ACCESS_DENIED'` (regression guard)
+- Core `message` field present → absent from BFF response body
+- Null session on invitation POST → `SESSION_EXPIRED` 401, Core not called
+- Non-invitation 403 → `CORE_ACCESS_DENIED` unchanged (regression guard)
 
 ---
 
@@ -520,9 +540,18 @@ invite-initial-admin(tenant_id, email, display_name?):
     → return { status: "invitation_rotated", tenant_id, user_id, invitation_url, expires_at }
     → HTTP 200
 
-  CASE: active + unbound admin row exists for email, no valid pending invitation
-    (invitation expired, consumed, or absent)
-    → generate new acceptance token + invitation row
+  CASE: active + unbound admin row exists for email, existing invitation is expired
+    (status='pending' but past expiry, or status='expired')
+    → rotate acceptance token via canonical resend policy (same invitation row, new fingerprint)
+    → reset status to 'pending', reset expiry to standard window
+    → resend invitation email with new token URL
+    → return { status: "invitation_rotated", tenant_id, user_id, invitation_url, expires_at }
+    → HTTP 200
+    NOTE: preserves invitation lineage, avoids duplicate rows, keeps audit continuity
+
+  CASE: active + unbound admin row exists for email, existing invitation is in terminal state
+    (status in {'bound', 'revoked', 'cancelled'} — non-revivable by canonical resend policy)
+    → create new invitation row (old row remains as audit record, is not modified)
     → send invitation email
     → return { status: "invitation_sent", tenant_id, user_id, invitation_url, expires_at }
     → HTTP 200
