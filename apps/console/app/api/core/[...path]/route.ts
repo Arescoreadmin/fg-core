@@ -673,23 +673,30 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
 
   const init: RequestInit = { method: request.method, headers, cache: 'no-store' };
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    // For multipart uploads, stream the raw body and forward the content-type boundary.
-    // For all other mutation methods, read as text (JSON payloads).
-    const isMultipart = contentType?.toLowerCase().startsWith('multipart/form-data');
-    if (isMultipart && request.body) {
-      init.body = request.body;
-      // duplex is required for streaming request bodies in some Node.js environments
-      (init as Record<string, unknown>)['duplex'] = 'half';
-    } else if (contentType?.toLowerCase().includes('application/json')) {
-      const payload = await request.json();
-      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-        const { tenant_id: _ignoredTenantId, ...safePayload } = payload as Record<string, unknown>;
-        init.body = JSON.stringify(safePayload);
-      } else {
-        init.body = JSON.stringify(payload);
-      }
+    // Invitation accept POST carries no body — the API endpoint explicitly rejects
+    // any content-length > 0 and the middleware rejects text/plain.  Skip body
+    // handling so Node.js fetch sends no body and no implicit Content-Type header.
+    if (isInvitationPath && request.method === 'POST') {
+      // intentionally no body
     } else {
-      init.body = await request.text();
+      // For multipart uploads, stream the raw body and forward the content-type boundary.
+      // For all other mutation methods, read as text (JSON payloads).
+      const isMultipart = contentType?.toLowerCase().startsWith('multipart/form-data');
+      if (isMultipart && request.body) {
+        init.body = request.body;
+        // duplex is required for streaming request bodies in some Node.js environments
+        (init as Record<string, unknown>)['duplex'] = 'half';
+      } else if (contentType?.toLowerCase().includes('application/json')) {
+        const payload = await request.json();
+        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+          const { tenant_id: _ignoredTenantId, ...safePayload } = payload as Record<string, unknown>;
+          init.body = JSON.stringify(safePayload);
+        } else {
+          init.body = JSON.stringify(payload);
+        }
+      } else {
+        init.body = await request.text();
+      }
     }
   }
 
