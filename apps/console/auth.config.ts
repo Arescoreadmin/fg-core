@@ -34,7 +34,7 @@ export const authConfig = {
     signIn: '/login',
   },
   callbacks: {
-    jwt({ token, user, profile }) {
+    jwt({ token, user, account, profile }) {
       // Allow env-configured subjects or emails to receive a bootstrap role when no
       // Auth0 Post-Login Action is injecting claims (e.g. during setup).
       const bootstrapSubjects = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS ?? '')
@@ -68,11 +68,23 @@ export const authConfig = {
       token.tenantId = claims.tenantId;
       token.experienceClass = bootstrapped ? 'internal_console' : claims.experienceClass;
 
-      // email_verified: set from Auth0 profile at sign-in; retained across token refreshes.
+      // email_verified: set from Auth0 id_token at sign-in; retained across token refreshes.
       // profile is only present on initial OAuth sign-in, not on session refresh.
+      // The normalized profile() in NextAuth's Auth0 provider omits email_verified;
+      // read it from the raw id_token payload (always present, Auth0-signed) instead.
       // Value is server-signed in the NextAuth JWT — not user-editable.
       // Absence defaults to false (fail-closed for invitation acceptance).
-      if (profile !== undefined) {
+      if (account?.id_token) {
+        try {
+          const b64 = account.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          const raw = atob(b64);
+          const idTokenPayload = JSON.parse(raw) as Record<string, unknown>;
+          if (idTokenPayload['email_verified'] === true) token.emailVerified = true;
+          else if (idTokenPayload['email_verified'] === false) token.emailVerified = false;
+        } catch {
+          // malformed id_token: retain any existing value
+        }
+      } else if (profile !== undefined) {
         token.emailVerified = (profile as Record<string, unknown>)['email_verified'] === true;
       }
 
