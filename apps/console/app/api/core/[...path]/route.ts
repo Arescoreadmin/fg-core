@@ -636,13 +636,17 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       // The session is already resolved in handle() — re-fetch here for the
       // invitation-path branch which needs emailVerified from the session.
       const session = await auth();
+      const invEmailVerified = (session as { emailVerified?: boolean }).emailVerified;
+      console.info(
+        `[invitation-accept-diag] request_id=${requestId} gateway_set=${!!ADMIN_GATEWAY_TOKEN} session_email=${session?.user?.email || 'none'} email_verified_raw=${invEmailVerified} email_verified_sent=${invEmailVerified === true ? 'true' : 'false'}`,
+      );
       if (session?.user?.email) {
         headers.set('X-FG-Named-User-Email', session.user.email);
         headers.set('X-FG-Named-User-Sub', (session.user as { id?: string })?.id ?? '');
         // Only assert verified=true when the session confirms it — fail-closed otherwise
         headers.set(
           'X-FG-Named-User-Email-Verified',
-          (session as { emailVerified?: boolean }).emailVerified === true ? 'true' : 'false',
+          invEmailVerified === true ? 'true' : 'false',
         );
       }
       // No session: POST accept will fail Core's email verification check (403 IDENTITY_UNVERIFIED)
