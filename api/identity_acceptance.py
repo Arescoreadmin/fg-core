@@ -326,10 +326,15 @@ def accept_invitation(
         )
         _store.transition_invitation(db, inv, to_status="bound")
 
+        # Capture before commit: after commit, SQLAlchemy expires ORM objects and
+        # lazy-reload is blocked by RLS (app.tenant_id cleared on connection return).
+        return_tenant_id = inv.tenant_id
+        return_role = inv.role
+
         # Single commit covers all authority-changing writes
         db.commit()
 
-        return {"accepted": True, "tenant_id": inv.tenant_id, "role": inv.role}
+        return {"accepted": True, "tenant_id": return_tenant_id, "role": return_role}
 
     except HTTPException:
         db.rollback()
