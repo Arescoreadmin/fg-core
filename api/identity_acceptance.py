@@ -97,7 +97,12 @@ def _get_trusted_named_user(request: Request) -> tuple[str, bool]:
 def get_invitation_preflight(token: str) -> dict:
     """Public preflight: minimal display info for the acceptance UX.
 
-    All invalid/expired/revoked/consumed tokens return the same 404.
+    Returns 404 for any invalid, expired, or consumed token. The detail.code
+    distinguishes the cause so the console can offer specific recovery actions:
+      INVITATION_NOT_FOUND  — malformed token or fingerprint not in DB
+      INVITATION_EXPIRED    — token was real but is past expiry
+      INVITATION_CONSUMED   — token was used, revoked, or is no longer available
+
     Never returns tenant_id, invitation_id, fingerprint, or internal IDs.
     """
     fp = fingerprint_for(token)
@@ -114,17 +119,23 @@ def get_invitation_preflight(token: str) -> dict:
             )
 
         _id, tenant_id, _email, normalized_email, role, status, expires_at = row
-        if status != "pending":
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
-            )
 
         inv_expires = expires_at
         if inv_expires is not None and inv_expires.tzinfo is None:
             inv_expires = inv_expires.replace(tzinfo=timezone.utc)
+
+        if status == "expired":
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_EXPIRED"}
+            )
+        if status != "pending":
+            # bound, revoked, failed, auth_started, accepted_identity_pending_binding
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_CONSUMED"}
+            )
         if inv_expires is None or inv_expires < _now():
             raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+                status_code=404, detail={"code": "INVITATION_EXPIRED"}
             )
 
         # Fetch tenant display name within tenant context
