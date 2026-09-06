@@ -22348,3 +22348,17 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** `tests/test_auth_startup_guard.py` — 9 new tests: `test_invitation_prereqs_pass_when_both_set`, gateway secret missing (error in prod / warning in dev / legacy fallback satisfies), pepper missing (error in prod / warning in dev), both missing with auth disabled (both errors).
 - **Validation:** `pytest tests/test_auth_startup_guard.py` 25/25 PASS; `make fg-fast` PASS; `make fg-security` PASS; `make fg-contract` PASS; console `npm run typecheck` PASS; `npm run lint` PASS.
 - **Result:** PASS.
+
+## P-53 — test(identity): P-113.9-PRODUCTION-PROOF-001 harness — branch `feat/p1139-seamless-identity-verification`
+
+- **PR/Branch:** `feat/p1139-seamless-identity-verification`
+- **Date:** 2026-09-06
+- **Files changed:** `tests/test_p1139_production_proof.py` (new), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** No production proof harness existed for the `invite-initial-admin` path (PR-9B-1). The existing harnesses (`CLIENT-LIFECYCLE-PRODUCTION-PROOF-001`, `CLIENT-PRODUCTION-E2E-002`) both use `bootstrap-admin` and do not exercise the new state-derived invitation flow. A dedicated harness was needed to prove: (1) `invite-initial-admin` response contains no raw token, (2) lifecycle transitions `admin_unset → admin_unbound` after invite, (3) lifecycle transitions `admin_unbound → operational` after OIDC binding with zero additional operator intervention.
+- **Fix:** Two-phase production proof harness. Phase A (automated): creates synthetic tenant, calls `invite-initial-admin` once, asserts response has no raw `fgwi1.*` token or `invitation_url`, verifies lifecycle=`admin_unbound`. Operator stops after Phase A. Phase B (automated, post-manual OIDC binding): verifies lifecycle=`operational`. Controlled by `FG_LIVE_PROOF=1` (never set in CI); Phase B additionally requires `FG_PROOF_TENANT_ID` (output of Phase A). Non-live CI class (`TestP1139ProductionProofGates`) asserts: `LIFECYCLE_VERSION=2`, `ACTION_INVITE_INITIAL_ADMIN` constant, route in inventory, `InviteInitialAdminBody` has no token fields, secret scan catches `fgwi1.*`.
+- **Behavioral impact:** None (test-only).
+- **Security impact:** Documents and enforces the invariant that `invite-initial-admin` never exposes a raw token in its HTTP response.
+- **Schema/API impact:** None.
+- **Tests added:** `tests/test_p1139_production_proof.py` — 9 non-live CI tests (9/9 PASS), 3 live-gated tests (skip in CI).
+- **Validation:** `pytest tests/test_p1139_production_proof.py` 9/9 PASS, 3 skipped.
+- **Result:** PASS (harness only — live proof pending).
