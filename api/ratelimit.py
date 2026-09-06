@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as _dc_replace
 from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException, Request
@@ -421,6 +421,50 @@ def _allow(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
     if cfg.backend == "memory":
         return _allow_memory(key, cfg)
     return _allow_redis(key, cfg)
+
+
+# -----------------------------
+# Shared key-level rate check
+# -----------------------------
+
+
+def check_rate_limit_key(
+    key: str,
+    rate_per_sec: float,
+    capacity: float,
+) -> tuple[bool, int]:
+    """Rate-check a specific key using the configured backend (Redis or memory).
+
+    Uses the same Redis connection, prefix, and fail-open policy as
+    rate_limit_guard. Returns (allowed, reset_seconds).
+
+    Caller decides what to do with a False result. Raises HTTPException(503) if
+    the backend fails and fail-open is not acknowledged.
+
+    Capacity derivation: _capacity(cfg) = burst + max(1.0, rate_per_sec), so
+    burst is back-computed as capacity - max(1.0, rate_per_sec) clamped to 0.
+    """
+    cfg = load_config()
+    if not cfg.enabled:
+        return True, 0
+
+    burst = max(0, int(capacity - max(1.0, rate_per_sec)))
+    sub_cfg = _dc_replace(cfg, rate_per_sec=rate_per_sec, burst=burst)
+
+    try:
+        ok, _limit, _remaining, reset = _allow(key, sub_cfg)
+    except Exception as exc:
+        log.warning("check_rate_limit_key error key=%s: %s", key, exc)
+        if fail_open_acknowledged():
+            log.error(
+                "SECURITY: rate limiter fail-open triggered key=%s error=%s", key, exc
+            )
+            return True, 0
+        raise HTTPException(
+            status_code=503, detail="Rate limiter unavailable"
+        ) from exc
+
+    return ok, int(reset)
 
 
 # -----------------------------

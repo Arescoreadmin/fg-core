@@ -2,7 +2,7 @@
 P-113.9A — User-triggered invitation resend — proof matrix.
 
 Test matrix:
-  T-01  Expired invitation (past expires_at) → resend succeeds, returns {"queued": true}
+  T-01  Expired invitation (past expires_at) → resend succeeds, returns {"sent": true}
   T-02  Invitation with status='expired' → resend succeeds
   T-03  Pending, not yet expired → INVITATION_NOT_FOUND (not resendable)
   T-04  Bound (consumed) invitation → INVITATION_NOT_FOUND
@@ -16,10 +16,11 @@ Test matrix:
   T-12  New token valid (GET preflight 200 on new token from DB)
   T-13  Per-minute rate limit enforced (429 RESEND_RATE_LIMITED)
   T-14  Per-day rate limit enforced (429 RESEND_DAILY_LIMIT)
-  T-15  Response body contains no raw token
+  T-15  Response body contains no raw token, only {"sent": true}
   T-16  invitation_id is stable across resend (same row, different token)
-  T-17  Email skipped gracefully when FG_RESEND_API_KEY absent (no error raised)
-  T-18  Retry-After header present on 429 response
+  T-17  Email delivery failure → 503 RESEND_EMAIL_FAILED, old token still valid
+  T-18  Email skipped gracefully when FG_RESEND_API_KEY absent → 200 {"sent": true}
+  T-19  Retry-After header present on 429 response
 """
 
 from __future__ import annotations
@@ -42,6 +43,8 @@ from api.auth_scopes import mint_key
 @pytest.fixture
 def app(build_app, monkeypatch):
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.example.com")
+    # Use in-memory rate limiter in tests — no Redis required
+    monkeypatch.setenv("FG_RL_BACKEND", "memory")
     return build_app(auth_enabled=True, api_key="")
 
 
@@ -149,7 +152,7 @@ def _expired_token() -> tuple[str, str, datetime]:
 
 
 class TestResendExpiredPendingInvitation:
-    def test_resend_returns_queued(self, client, engine, monkeypatch):
+    def test_resend_returns_sent(self, client, engine, monkeypatch):
         monkeypatch.delenv("FG_RESEND_API_KEY", raising=False)
         tid = _tid()
         _ensure_tenant(engine, tid)
@@ -158,7 +161,7 @@ class TestResendExpiredPendingInvitation:
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
-        assert r.json() == {"queued": True}
+        assert r.json() == {"sent": True}
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +181,7 @@ class TestResendStatusExpired:
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
-        assert r.json()["queued"] is True
+        assert r.json()["sent"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -342,12 +345,10 @@ class TestPerMinuteRateLimit:
         raw, fp, past = _expired_token()
         inv_id = _seed_invitation(engine, tid, "rl@example.com", expires_at=past, acceptance_token_hash=fp)
 
-        from api.identity_acceptance import _resend_limiter
+        from api.ratelimit import check_rate_limit_key
 
         # Pre-consume the per-minute bucket so the next endpoint call is blocked
-        ok, _, _, _ = _resend_limiter.allow(
-            f"resend:{inv_id}:min", 1.0 / 60, 1.0
-        )
+        ok, _ = check_rate_limit_key(f"resend:inv:{inv_id}:min", 1.0 / 60, 1.0)
         assert ok  # bucket starts with 1 token
 
         # Endpoint call should now be rate-limited (bucket empty)
@@ -369,11 +370,11 @@ class TestPerDayRateLimit:
         raw, fp, past = _expired_token()
         inv_id = _seed_invitation(engine, tid, "rl2@example.com", expires_at=past, acceptance_token_hash=fp)
 
-        from api.identity_acceptance import _resend_limiter
+        from api.ratelimit import check_rate_limit_key
 
         # Exhaust the per-day bucket (5 tokens) via direct limiter calls
         for _ in range(5):
-            _resend_limiter.allow(f"resend:{inv_id}:day", 5.0 / 86400, 5.0)
+            check_rate_limit_key(f"resend:inv:{inv_id}:day", 5.0 / 86400, 5.0)
 
         # Endpoint call hits empty per-day bucket (per-minute still has capacity)
         r = client.post(f"/identity/invitations/{raw}/request-resend")
@@ -397,8 +398,8 @@ class TestResponseContainsNoToken:
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
         body = r.json()
-        # Only "queued" field — no token, no URL, no hash
-        assert set(body.keys()) == {"queued"}
+        # Only "sent" field — no token, no URL, no hash
+        assert set(body.keys()) == {"sent"}
         assert "fgwi1." not in r.text
         assert raw not in r.text
 
@@ -424,7 +425,45 @@ class TestInvitationIdStable:
 
 
 # ---------------------------------------------------------------------------
-# T-17: Email skipped gracefully without FG_RESEND_API_KEY
+# T-17: Email delivery failure → 503, old token still valid for retry
+# ---------------------------------------------------------------------------
+
+
+class TestEmailDeliveryFailure:
+    def test_email_failure_503_old_token_still_valid(self, client, engine, monkeypatch):
+        import unittest.mock as mock
+
+        tid = _tid()
+        _ensure_tenant(engine, tid)
+        raw, fp, past = _expired_token()
+        inv_id = _seed_invitation(engine, tid, "fail@example.com", expires_at=past, acceptance_token_hash=fp)
+
+        # Patch send_portal_invitation to simulate a provider failure
+        from api.notifications.email import EmailDeliveryResult
+
+        with mock.patch(
+            "api.identity_acceptance.send_portal_invitation",
+            return_value=EmailDeliveryResult(state="failed", error_code="EMAIL_PROVIDER_UNAVAILABLE", retryable=True),
+        ):
+            r = client.post(f"/identity/invitations/{raw}/request-resend")
+
+        assert r.status_code == 503
+        body = r.json()
+        assert body["detail"]["code"] == "RESEND_EMAIL_FAILED"
+        assert body["detail"]["retryable"] is True
+
+        # Old token still valid — fingerprint unchanged in DB (rollback occurred)
+        after = _get_invitation(engine, inv_id)
+        assert after["acceptance_token_hash"] == fp
+        assert after["status"] in {"pending", "expired"}  # not rotated
+
+        # Old token still resolves on GET preflight (invitation still in DB with old fp)
+        preflight = client.get(f"/identity/invitations/{raw}")
+        assert preflight.status_code == 404  # still expired — but INVITATION_EXPIRED, not CONSUMED
+
+
+# ---------------------------------------------------------------------------
+# T-18: Email skipped gracefully when FG_RESEND_API_KEY absent → 200 {"sent": true}
 # ---------------------------------------------------------------------------
 
 
@@ -437,13 +476,13 @@ class TestEmailSkippedWithoutKey:
         _seed_invitation(engine, tid, "noemail@example.com", expires_at=past, acceptance_token_hash=fp)
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
-        # Endpoint succeeds even without email delivery
+        # 'skipped' (no API key) is treated as success in dev — rotation committed
         assert r.status_code == 200
-        assert r.json()["queued"] is True
+        assert r.json()["sent"] is True
 
 
 # ---------------------------------------------------------------------------
-# T-18: Retry-After header present on 429
+# T-19: Retry-After header present on 429
 # ---------------------------------------------------------------------------
 
 
@@ -455,10 +494,10 @@ class TestRetryAfterHeader:
         raw, fp, past = _expired_token()
         inv_id = _seed_invitation(engine, tid, "rh@example.com", expires_at=past, acceptance_token_hash=fp)
 
-        from api.identity_acceptance import _resend_limiter
+        from api.ratelimit import check_rate_limit_key
 
         # Consume the minute bucket
-        _resend_limiter.allow(f"resend:{inv_id}:min", 1.0 / 60, 1.0)
+        check_rate_limit_key(f"resend:inv:{inv_id}:min", 1.0 / 60, 1.0)
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 429

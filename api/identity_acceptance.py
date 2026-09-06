@@ -20,23 +20,21 @@ from api.admin import require_internal_admin_gateway
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import TenantInvitation
 from api.identity.store import TenantIdentityStore, emit_identity_audit_event
-from api.identity.workforce_token import fingerprint_for
-from api.notifications.email import build_workforce_invitation_url, send_portal_invitation
+from api.identity.workforce_token import fingerprint_for, generate as _gen_token
+from api.notifications.email import (
+    EmailDeliveryResult,
+    build_workforce_invitation_url,
+    send_portal_invitation,
+)
 from api.principal_authority import resolve_or_create_principal_for_external_identity
-from api.ratelimit import MemoryRateLimiter
+from api.ratelimit import check_rate_limit_key
 
 _log = logging.getLogger(__name__)
 router = APIRouter(prefix="/identity", tags=["identity-acceptance"])
 _store = TenantIdentityStore()
 
-# Per-invitation rate limiter for user-triggered resend.
-# Separate from the global rate_limit_guard (path/tenant scoped) — this is keyed
-# by invitation ID to prevent one expired link from being used as an email cannon.
-_resend_limiter = MemoryRateLimiter()
-_RESEND_PER_MIN_RATE = 1.0 / 60      # 1 resend per minute
-_RESEND_PER_MIN_CAP = 1.0
-_RESEND_PER_DAY_RATE = 5.0 / 86400   # 5 resends per day
-_RESEND_PER_DAY_CAP = 5.0
+_RESEND_PER_MIN_RATE = 1.0 / 60      # 1 resend per minute; capacity = 1
+_RESEND_PER_DAY_RATE = 5.0 / 86400   # 5 resends per day; capacity = 5
 
 
 def _now() -> datetime:
@@ -370,8 +368,10 @@ def accept_invitation(
 
 
 def _check_resend_rate_limit(inv_id: str) -> None:
-    ok_min, _, _, reset_min = _resend_limiter.allow(
-        f"resend:{inv_id}:min", _RESEND_PER_MIN_RATE, _RESEND_PER_MIN_CAP
+    # check_rate_limit_key uses the configured backend (Redis in production, memory
+    # in dev/test). Keys are stable invitation ID so limits survive token rotation.
+    ok_min, reset_min = check_rate_limit_key(
+        f"resend:inv:{inv_id}:min", _RESEND_PER_MIN_RATE, 1.0
     )
     if not ok_min:
         raise HTTPException(
@@ -379,8 +379,8 @@ def _check_resend_rate_limit(inv_id: str) -> None:
             detail={"code": "RESEND_RATE_LIMITED", "retry_after_seconds": reset_min},
             headers={"Retry-After": str(reset_min)},
         )
-    ok_day, _, _, reset_day = _resend_limiter.allow(
-        f"resend:{inv_id}:day", _RESEND_PER_DAY_RATE, _RESEND_PER_DAY_CAP
+    ok_day, reset_day = check_rate_limit_key(
+        f"resend:inv:{inv_id}:day", _RESEND_PER_DAY_RATE, 5.0
     )
     if not ok_day:
         raise HTTPException(
@@ -398,9 +398,9 @@ _ROLE_LABELS = {
 }
 
 
-def _dispatch_resend_email(
+def _attempt_resend_email(
     to_email: str, role: str, raw_token: str, expires_at: datetime
-) -> None:
+) -> EmailDeliveryResult:
     result = send_portal_invitation(
         to_email=to_email,
         invitation_url=build_workforce_invitation_url(raw_token),
@@ -413,6 +413,7 @@ def _dispatch_resend_email(
             result.error_code,
             result.retryable,
         )
+    return result
 
 
 @router.post("/invitations/{token}/request-resend")
@@ -423,13 +424,20 @@ def request_resend(token: str) -> dict:
     GET preflight. No gateway auth or session required.
 
     Only genuinely expired invitations are resendable (status='expired' or
-    status='pending' past expires_at). Terminal states (bound, revoked, failed)
-    and in-progress states (auth_started, accepted_identity_pending_binding) are
-    not resendable — returns 404 to avoid leaking state.
+    status='pending' past expires_at). Terminal and in-progress states return
+    404 to avoid leaking state.
 
-    On success: rotates token (old token invalid immediately on commit), resets
-    expires_at to 72 h from now, sends email to the persisted invited address,
-    returns {"queued": true}. Email address, tenant, and role are immutable.
+    Delivery-before-rotation contract:
+      1. Generate new token in memory (not yet in DB).
+      2. Attempt email delivery while holding the row lock.
+      3. On delivery success ('sent' or 'skipped'): commit rotation — old token
+         invalid, new token live, 200 {"sent": true}.
+      4. On delivery failure: rollback — old expired token remains valid so the
+         user can retry with the same link — 503 with retryable flag.
+
+    This guarantees the user is never stranded with an unknown live token:
+    either they received the email with the new token, or the old token still
+    works for a retry. Email address, tenant, and role are immutable.
     """
     fp = fingerprint_for(token)
     if fp is None:
@@ -492,32 +500,46 @@ def request_resend(token: str) -> dict:
             )
 
         new_expires_at = now + timedelta(hours=72)
+
+        # Generate new token in memory before touching the DB.
+        # Row lock is held during email delivery so the old fingerprint cannot
+        # be used for a concurrent accept while delivery is in flight.
+        new_raw_token, new_fingerprint = _gen_token()
+
+        send_email = inv.normalized_email or inv.email or ""
+        send_role = inv.role
+
+        email_result = _attempt_resend_email(
+            send_email, send_role, new_raw_token, new_expires_at
+        )
+        if email_result.state == "failed":
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "RESEND_EMAIL_FAILED",
+                    "retryable": email_result.retryable,
+                },
+            )
+
+        # Email delivered (or skipped in dev) — commit rotation atomically
+        inv.acceptance_token_hash = new_fingerprint
+        inv.expires_at = new_expires_at
         inv.status = "pending"
         inv.revoked_at = None
         inv.updated_at = now
-
-        new_raw_token = _store.rotate_acceptance_token(
-            db, inv.id, new_expires_at=new_expires_at
-        )
 
         emit_identity_audit_event(
             db,
             tenant_id=inv.tenant_id,
             event_type="tenant.invite.created",
             invitation_id=inv.id,
-            affected_email=inv.normalized_email or inv.email,
+            affected_email=send_email,
             details={"invitation_status": "pending"},
         )
 
-        # Capture before commit — ORM objects expire after commit (RLS resets)
-        send_email = inv.normalized_email or inv.email or ""
-        send_role = inv.role
-
         db.commit()
-
-        _dispatch_resend_email(send_email, send_role, new_raw_token, new_expires_at)
-
-        return {"queued": True}
+        return {"sent": True}
 
     except HTTPException:
         db.rollback()

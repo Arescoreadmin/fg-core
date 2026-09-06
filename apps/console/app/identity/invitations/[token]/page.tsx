@@ -195,6 +195,17 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
         setState({ phase: 'resend_error', message: 'Too many resend requests. Please wait a moment and try again.' });
         return;
       }
+      if (res.status === 503) {
+        let retryable = true;
+        try { retryable = ((await res.json()) as { retryable?: boolean }).retryable ?? true; } catch { /* */ }
+        setState({
+          phase: 'resend_error',
+          message: retryable
+            ? 'The email could not be sent. Your invitation link is still valid — please try again.'
+            : 'The email could not be sent. Contact your workspace admin to resend the invitation.',
+        });
+        return;
+      }
       setState({ phase: 'resend_error', message: 'Unable to resend the invitation. Please try again.' });
     } catch {
       setState({ phase: 'resend_error', message: 'A network error occurred. Please try again.' });
