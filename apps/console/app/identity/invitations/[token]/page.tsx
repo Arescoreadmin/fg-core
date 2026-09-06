@@ -19,6 +19,9 @@ type InvitationState =
   | { phase: 'redirect_to_auth' }
   | { phase: 'preflight_loading' }
   | { phase: 'preflight_error'; code: PrefError }
+  | { phase: 'resend_sending' }
+  | { phase: 'resend_sent' }
+  | { phase: 'resend_error'; message: string }
   | { phase: 'ready' }
   | { phase: 'accepting' }
   | { phase: 'email_mismatch'; signedInAs: string }
@@ -29,7 +32,7 @@ type InvitationState =
   | { phase: 'error'; message: string };
 
 const PREF_ERROR_MESSAGES: Record<PrefError, string> = {
-  EXPIRED: 'This invitation has expired. Ask your workspace admin to resend your invitation.',
+  EXPIRED: 'This invitation has expired.',
   CONSUMED: 'This invitation has already been accepted or revoked.',
   INVALID: 'This invitation link is not valid. Check that you copied the full URL.',
   UNKNOWN: 'This invitation link is not available.',
@@ -178,6 +181,26 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
     }
   }, [token]);
 
+  const handleResend = useCallback(async () => {
+    setState({ phase: 'resend_sending' });
+    try {
+      const res = await fetch(`/api/core/identity/invitations/${token}/request-resend`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        setState({ phase: 'resend_sent' });
+        return;
+      }
+      if (res.status === 429) {
+        setState({ phase: 'resend_error', message: 'Too many resend requests. Please wait a moment and try again.' });
+        return;
+      }
+      setState({ phase: 'resend_error', message: 'Unable to resend the invitation. Please try again.' });
+    } catch {
+      setState({ phase: 'resend_error', message: 'A network error occurred. Please try again.' });
+    }
+  }, [token]);
+
   // Effect 2: auto-continuation after re-auth return
   useEffect(() => {
     if (state.phase !== 'ready') return;
@@ -211,7 +234,46 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
     return <div style={s.page}>Invitation accepted. Redirecting&hellip;</div>;
   }
 
+  if (state.phase === 'resend_sending') {
+    return <div style={s.page}>Sending new invitation&hellip;</div>;
+  }
+
+  if (state.phase === 'resend_sent') {
+    return (
+      <div style={s.card}>
+        <h1 style={s.heading}>New invitation sent</h1>
+        <p style={s.body}>
+          Check your email for a new invitation link. This page will no longer work — use the
+          link in the new email.
+        </p>
+      </div>
+    );
+  }
+
+  if (state.phase === 'resend_error') {
+    return (
+      <div style={s.card}>
+        <h1 style={s.heading}>Resend failed</h1>
+        <p style={s.body}>{state.message}</p>
+        <button style={s.btn} onClick={() => setState({ phase: 'preflight_error', code: 'EXPIRED' })}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
   if (state.phase === 'preflight_error') {
+    if (state.code === 'EXPIRED') {
+      return (
+        <div style={s.card}>
+          <h1 style={s.heading}>Invitation expired</h1>
+          <p style={s.body}>{PREF_ERROR_MESSAGES.EXPIRED}</p>
+          <button style={s.btn} onClick={handleResend}>
+            Send me a new invitation
+          </button>
+        </div>
+      );
+    }
     return (
       <div style={s.card}>
         <h1 style={s.heading}>Invitation unavailable</h1>

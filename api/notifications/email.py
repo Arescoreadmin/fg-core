@@ -6,6 +6,8 @@ Config (env vars):
   FG_EMAIL_FROM_ADDRESS          Sender address (default: FrostGate <noreply@frostgate.ai>)
   FG_PORTAL_INVITATION_BASE_URL  Portal acceptance URL base
                                  (default: https://app.frostgate.ai/accept-invite)
+  FG_CONSOLE_BASE_URL            Console base URL for workforce invitation links
+                                 (default: https://console.frostgate.ai)
 """
 
 from __future__ import annotations
@@ -55,6 +57,19 @@ class EmailDeliveryResult:
 def build_invitation_url(raw_token: str, tenant_id: str) -> str:
     """Return the canonical portal acceptance URL for this invitation token."""
     return f"{_invitation_base_url()}?token={raw_token}&tenant_id={tenant_id}"
+
+
+def _console_base_url() -> str:
+    return (
+        (os.getenv("FG_CONSOLE_BASE_URL") or "https://console.frostgate.ai")
+        .strip()
+        .rstrip("/")
+    )
+
+
+def build_workforce_invitation_url(raw_token: str) -> str:
+    """Return the canonical console acceptance URL for a workforce invitation token."""
+    return f"{_console_base_url()}/identity/invitations/{raw_token}"
 
 
 _HTML_TEMPLATE = """\

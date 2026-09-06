@@ -308,6 +308,14 @@ function isInvitationAcceptancePath(path: string[]): boolean {
     joined.startsWith('identity/invitations/');
 }
 
+function isInvitationAcceptSubpath(path: string[]): boolean {
+  // Matches identity/invitations/{token}/accept only — not request-resend or preflight
+  return path.length === 4 &&
+    path[0] === 'identity' &&
+    path[1] === 'invitations' &&
+    path[3] === 'accept';
+}
+
 function isTenantAdminCorePath(path: string[]): boolean {
   const joined = path.join('/');
   // admin/tenants is narrowed to the 3 delegated subroute families only;
@@ -631,10 +639,9 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     // trusted named-user identity headers. The named-user headers are an identity
     // transport only — Core's invitation lock + email match provide authority.
     //
-    // GET preflight is forwarded without session headers (public endpoint — Core
-    // does not require gateway auth for the preflight).
-    // POST accept requires gateway auth + named-user headers (injected below).
-    if (request.method === 'POST') {
+    // GET preflight + POST request-resend: no auth headers (public, token-authed).
+    // POST accept: gateway auth + named-user session headers (injected below).
+    if (request.method === 'POST' && isInvitationAcceptSubpath(path)) {
       if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
       const platformAdminKey = PLATFORM_AUTH_MODE === 'CANONICAL' && FG_PLATFORM_ADMIN_KEY
         ? FG_PLATFORM_ADMIN_KEY
@@ -667,7 +674,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
         );
       }
     }
-    // GET preflight: no auth headers needed — Core endpoint is public
+    // GET preflight + POST request-resend: no auth headers — Core endpoints are token-authed
   } else {
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {
