@@ -241,6 +241,7 @@ test('TENANT-ACCESS-001: admin/tenants path is accessible to internal operators'
   const operator = sessionWithRoles(['Operator']);
   assert.equal(canAccessCoreApiPath(['admin', 'tenants'], 'GET', operator), true);
   assert.equal(canAccessCoreApiPath(['admin', 'tenants', 'acme', 'bootstrap-admin'], 'POST', operator), true);
+  assert.equal(canAccessCoreApiPath(['admin', 'tenants', 'acme', 'invite-initial-admin'], 'POST', operator), true);
 });
 
 test('TENANT-ACCESS-001: portal_only is denied admin/tenants', () => {
@@ -307,6 +308,7 @@ test('PR-SEC-003: isTenantAdminCorePath is narrowed to delegated subroutes only'
   // Must NOT use the broad startsWith guard alone
   assert.doesNotMatch(src, /joined\.startsWith\('admin\/tenants\/'\)/);
   // Must use the narrowed path[3] discriminator
+  assert.match(src, /path\[3\]\s*===\s*'invite-initial-admin'/);
   assert.match(src, /path\[3\]\s*===\s*'bootstrap-admin'/);
   assert.match(src, /path\[3\]\s*===\s*'users'/);
   assert.match(src, /path\[3\]\s*===\s*'portal-access'/);

@@ -11,7 +11,8 @@ tenant_admin. It is idempotent and does not create a durable backdoor.
 
 Route table:
 
-    POST   /admin/tenants/{tenant_id}/bootstrap-admin        platform.admin only
+    POST   /admin/tenants/{tenant_id}/invite-initial-admin   platform.admin only (state-derived)
+    POST   /admin/tenants/{tenant_id}/bootstrap-admin        platform.admin only (low-level, kept for compat)
     GET    /admin/tenants/{tenant_id}/users                  tenant_admin (own tenant)
     POST   /admin/tenants/{tenant_id}/users/invite           tenant_admin (own tenant)
     PATCH  /admin/tenants/{tenant_id}/users/{user_id}        tenant_admin (own tenant)
@@ -36,7 +37,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -57,8 +58,15 @@ from api.credential_authority import (
     list_credential_events,
 )
 from api.db import get_engine, set_tenant_context
+from api.db_models_identity import TenantInvitation
 from api.deps import auth_ctx_db_session
-from api.identity.store import emit_identity_audit_event
+from api.identity.store import TenantIdentityStore, emit_identity_audit_event
+from api.identity.workforce_token import generate as _gen_inv_token
+from api.notifications.email import (
+    EmailDeliveryResult,
+    build_workforce_invitation_url,
+    send_portal_invitation,
+)
 from api.tenant_admin_authority import (
     TENANT_ADMIN_DENIED,
     TenantAdminAuthority,
@@ -71,9 +79,10 @@ from services.identity_resolver import membership_version_svc
 log = logging.getLogger("frostgate.tenant_admin")
 
 router = APIRouter(prefix="/admin/tenants", tags=["tenant-admin-001"])
-
+_inv_store = TenantIdentityStore()
 
 _INVITE_TTL_HOURS = 72
+_ADMIN_INVITE_TTL_HOURS = 168  # 7 days — longer TTL for first-admin invite
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -107,6 +116,16 @@ class BootstrapAdminBody(BaseModel):
     # resolved a canonical principal (rare — normally the invitation flow
     # binds this later). If provided, must be a UUID string.
     principal_id: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def _v_email(cls, v: str) -> str:
+        return _validate_email(v)
+
+
+class InviteInitialAdminBody(BaseModel):
+    email: str
+    display_name: Optional[str] = None
 
     @field_validator("email")
     @classmethod
@@ -315,7 +334,238 @@ def _cred_state_conflict(msg: str) -> HTTPException:
 
 
 # ---------------------------------------------------------------------------
-# 3C. First-admin bootstrap — platform-only
+# 3C-1. Invite initial admin — state-derived, delivery-before-commit
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{tenant_id}/invite-initial-admin",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+def invite_initial_admin(
+    tenant_id: str,
+    body: InviteInitialAdminBody,
+    actor_ctx: ActorContext = Depends(require_permission("platform.admin")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """Ensure the initial tenant_admin is invited. State-derived, idempotent.
+
+    Evaluates current admin state and takes the minimum necessary action:
+      admin_unset         → create tenant_user + send invitation
+      admin_unbound       → rotate/resend invitation (same email required)
+      admin_bound (same)  → no-op 200
+      admin_bound (diff)  → 409 ADMIN_ALREADY_BOUND
+      email mismatch      → 409 ADMIN_EMAIL_MISMATCH
+
+    Delivery-before-commit: email is sent before the DB token is written.
+    On delivery failure the DB is rolled back and 503 is returned so the
+    caller can retry — the old token (if any) remains valid.
+    """
+    set_tenant_context(db, tenant_id)
+    email = body.email
+    display_name = (body.display_name or email).strip() or email
+
+    # --- Query active tenant_admin rows (mirrors evaluate_client_lifecycle) ---
+    admin_rows = db.execute(
+        text("""
+            SELECT tu.id, tu.email, tu.active,
+                   tu.identity_binding_status, tu.principal_id,
+                   COALESCE(fp.lifecycle_state, 'inactive') AS principal_lifecycle_state
+            FROM tenant_users tu
+            LEFT JOIN fg_principals fp ON fp.id = tu.principal_id
+            WHERE tu.tenant_id = :tid AND tu.role = 'tenant_admin'
+            ORDER BY tu.created_at ASC
+        """),
+        {"tid": tenant_id},
+    ).fetchall()
+    # r[0]=id, r[1]=email, r[2]=active, r[3]=identity_binding_status,
+    # r[4]=principal_id, r[5]=principal_lifecycle_state
+
+    active_admins = [r for r in admin_rows if bool(r[2])]
+
+    # --- Case 1: no active admin → create + invite ---
+    if not active_admins:
+        user_id = str(uuid.uuid4())
+        now_iso = _now().isoformat()
+        db.execute(
+            text("""
+                INSERT INTO tenant_users
+                    (id, tenant_id, email, display_name, role, active,
+                     identity_binding_status, principal_id, created_at, updated_at)
+                VALUES
+                    (:id, :t, :e, :dn, 'tenant_admin', 1, 'unbound', NULL, :now, :now)
+            """),
+            {"id": user_id, "t": tenant_id, "e": email, "dn": display_name, "now": now_iso},
+        )
+        _send_admin_invite_and_commit(
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            email=email,
+            actor_subject=actor_ctx.subject,
+            existing_inv_id=None,
+        )
+        return {"tenant_id": tenant_id, "action": "invited", "email": email, "invitation_sent": True}
+
+    # --- Cases 2-5: active admin exists ---
+    first = active_admins[0]
+    existing_email = _norm_email(str(first[1] or ""))
+
+    if _norm_email(email) != existing_email:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ADMIN_EMAIL_MISMATCH",
+                "message": (
+                    "A different admin is already assigned to this tenant. "
+                    "Use the assigned email address or contact support."
+                ),
+            },
+        )
+
+    binding_status = str(first[3])
+    principal_id = first[4]
+    principal_lifecycle = str(first[5])
+    user_id = str(first[0])
+
+    is_bound = (
+        binding_status == "bound"
+        and principal_id is not None
+        and principal_lifecycle == "active"
+    )
+
+    if is_bound:
+        # Already bound — nothing to do
+        return {"tenant_id": tenant_id, "action": "noop", "reason": "already_bound", "email": email}
+
+    # --- admin_unbound: find existing invitation and resend/create ---
+    inv_row = db.execute(
+        text("""
+            SELECT id, status, expires_at FROM tenant_invitations
+            WHERE tenant_id = :t AND normalized_email = :e AND role = 'tenant_admin'
+            ORDER BY created_at DESC LIMIT 1
+        """),
+        {"t": tenant_id, "e": existing_email},
+    ).fetchone()
+
+    _TERMINAL_INV_STATES = frozenset(
+        {"bound", "revoked", "failed", "accepted_identity_pending_binding"}
+    )
+    existing_inv_id: str | None = None
+    if inv_row is not None:
+        inv_status = str(inv_row[1])
+        # Rotate any non-terminal invitation (pending or expired). Terminal states
+        # (bound, revoked, failed) require a fresh row — rotating them would
+        # resurrect a consumed or explicitly-killed invitation.
+        if inv_status not in _TERMINAL_INV_STATES:
+            existing_inv_id = str(inv_row[0])
+
+    _send_admin_invite_and_commit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        email=email,
+        actor_subject=actor_ctx.subject,
+        existing_inv_id=existing_inv_id,
+    )
+    action = "resent" if existing_inv_id else "invited"
+    return {"tenant_id": tenant_id, "action": action, "email": email, "invitation_sent": True}
+
+
+def _send_admin_invite_and_commit(
+    db: Session,
+    *,
+    tenant_id: str,
+    user_id: str,
+    email: str,
+    actor_subject: str,
+    existing_inv_id: str | None,
+) -> None:
+    """Generate token → send email → write DB → commit. Rollback + 503 on delivery failure."""
+    raw_token, fingerprint = _gen_inv_token()
+    expires_at = _now() + timedelta(hours=_ADMIN_INVITE_TTL_HOURS)
+    inv_url = build_workforce_invitation_url(raw_token)
+
+    result: EmailDeliveryResult = send_portal_invitation(
+        to_email=email,
+        invitation_url=inv_url,
+        portal_role="Tenant Administrator",
+        expires_at=expires_at.isoformat(),
+    )
+
+    if result.state == "failed":
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "INVITE_EMAIL_FAILED",
+                "retryable": getattr(result, "retryable", True),
+                "message": "The invitation email could not be sent. Try again.",
+            },
+        )
+
+    now_iso = _now().isoformat()
+    if existing_inv_id is not None:
+        # Rotate in-place — old token immediately invalid
+        db.execute(
+            text("""
+                UPDATE tenant_invitations
+                SET acceptance_token_hash = :fp, expires_at = :exp,
+                    status = 'pending', updated_at = :now
+                WHERE id = :inv_id
+            """),
+            {"fp": fingerprint, "exp": expires_at.isoformat(), "now": now_iso, "inv_id": existing_inv_id},
+        )
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.invite.created",
+            actor_user_id=actor_subject,
+            affected_email=email,
+            membership_id=user_id,
+            invitation_id=existing_inv_id,
+            reason_code="INITIAL_ADMIN_INVITE_RESENT",
+            details={"invitation_status": "pending"},
+        )
+    else:
+        inv_id = str(uuid.uuid4())
+        db.execute(
+            text("""
+                INSERT INTO tenant_invitations
+                    (id, tenant_id, membership_id, email, normalized_email, role,
+                     status, expires_at, acceptance_token_hash, created_at, updated_at)
+                VALUES
+                    (:id, :t, :uid, :e, :ne, 'tenant_admin',
+                     'pending', :exp, :fp, :now, :now)
+            """),
+            {
+                "id": inv_id,
+                "t": tenant_id,
+                "uid": user_id,
+                "e": email,
+                "ne": email.strip().lower(),
+                "exp": expires_at.isoformat(),
+                "fp": fingerprint,
+                "now": now_iso,
+            },
+        )
+        emit_identity_audit_event(
+            db,
+            tenant_id=tenant_id,
+            event_type="tenant.invite.created",
+            actor_user_id=actor_subject,
+            affected_email=email,
+            membership_id=user_id,
+            invitation_id=inv_id,
+            reason_code="INITIAL_ADMIN_INVITED",
+            details={"invitation_status": "pending"},
+        )
+
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 3C-2. First-admin bootstrap — platform-only (low-level, kept for compat)
 # ---------------------------------------------------------------------------
 
 

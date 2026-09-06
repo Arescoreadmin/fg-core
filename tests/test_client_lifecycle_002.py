@@ -327,7 +327,7 @@ class TestNextActionCodes:
         assert isinstance(diag["active_member_count"], int)
 
     def test_e2_admin_unset_next_actions(self, engine, app, client):
-        """L2-06: admin_unset → next_actions == ['BOOTSTRAP_ADMIN']."""
+        """L2-06: admin_unset → next_actions == ['INVITE_INITIAL_ADMIN']."""
         tid = "cl002-e2"
         _seed_tenant(engine, tid)
         resp = client.get(
@@ -337,7 +337,7 @@ class TestNextActionCodes:
         assert resp.status_code == 200
         data = resp.json()
         assert data["lifecycle_state"] == STATE_ADMIN_UNSET
-        assert "BOOTSTRAP_ADMIN" in data["next_actions"]
+        assert "INVITE_INITIAL_ADMIN" in data["next_actions"]
 
     def test_e3_admin_unbound_next_actions(self, engine, app, client):
         """L2-07: admin_unbound → next_actions == ['BIND_ADMIN_IDENTITY']."""
@@ -510,7 +510,7 @@ class TestBootstrapRepairRoundTrip:
 
 class TestSecurityInvariants:
     def test_g1_lifecycle_version_contract(self, engine, app, client):
-        """L2-13: GET lifecycle → assert lifecycle_version == 1.
+        """L2-13: GET lifecycle → assert lifecycle_version == LIFECYCLE_VERSION (currently 2).
         Backend always emits the expected version; the TypeScript guard in
         lifecycleApi.ts rejects anything else with ok:false."""
         tid = "cl002-g1"
@@ -522,7 +522,7 @@ class TestSecurityInvariants:
         assert resp.status_code == 200
         data = resp.json()
         assert data["lifecycle_version"] == LIFECYCLE_VERSION
-        assert data["lifecycle_version"] == 1
+        assert data["lifecycle_version"] == 2
 
     def test_g2_platform_admin_no_membership_created(self, engine, app, client):
         """L2-20: platform.admin calls cross-tenant lifecycle → 200;

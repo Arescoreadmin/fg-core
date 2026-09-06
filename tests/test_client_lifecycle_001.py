@@ -30,7 +30,7 @@ from api.actor_context import ActorContext, ROLE_PERMISSIONS
 from api.auth_scopes import mint_key
 from api.client_lifecycle import (
     ACTION_BIND_ADMIN_IDENTITY,
-    ACTION_BOOTSTRAP_ADMIN,
+    ACTION_INVITE_INITIAL_ADMIN,
     ACTION_INVITE_MEMBERS,
     BLOCKER_NO_BOUND_ADMIN,
     BLOCKER_TENANT_NOT_FOUND,
@@ -262,7 +262,7 @@ class TestEvaluatorUnit:
         assert result.operational is False
         assert result.repairable is True
         assert BLOCKER_NO_BOUND_ADMIN in result.blockers
-        assert ACTION_BOOTSTRAP_ADMIN in result.next_actions
+        assert ACTION_INVITE_INITIAL_ADMIN in result.next_actions
         assert result.has_bound_admin is False
 
     def test_a4_admin_unbound(self, engine, app):

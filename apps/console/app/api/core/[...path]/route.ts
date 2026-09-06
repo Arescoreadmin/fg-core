@@ -325,7 +325,7 @@ function isTenantAdminCorePath(path: string[]): boolean {
     path.length >= 4 &&
     path[0] === 'admin' &&
     path[1] === 'tenants' &&
-    (path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
+    (path[3] === 'invite-initial-admin' || path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
   return (
     joined.startsWith('workforce/users') ||
     joined === 'portal/grants' ||

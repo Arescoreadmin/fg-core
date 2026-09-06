@@ -9,7 +9,7 @@
 // ── Version contract ──────────────────────────────────────────────────────────
 
 /** The only lifecycle_version this client understands. Any other value → fail closed. */
-export const EXPECTED_LIFECYCLE_VERSION = 1;
+export const EXPECTED_LIFECYCLE_VERSION = 2;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

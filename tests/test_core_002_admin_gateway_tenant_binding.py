@@ -178,8 +178,11 @@ def test_verify_admin_gateway_tenant_function_exists_in_resolution() -> None:
 
 
 def test_verify_admin_gateway_tenant_called_in_admin_internal_token_branch() -> None:
+    # The branch covers both admin_internal_token and canonical_platform_admin (added in P-113.6);
+    # source uses `in (...)` not `==`. Invariant: _verify_admin_gateway_tenant must fire in that
+    # branch before request.state.tenant_id is written.
     branch_start = _RESOLUTION_SRC.index(
-        'getattr(auth, "reason", "") == "admin_internal_token"'
+        'getattr(auth, "reason", "") in ('
     )
     branch_end = _RESOLUTION_SRC.index("\n    if ", branch_start + 1)
     branch = _RESOLUTION_SRC[branch_start:branch_end]
@@ -227,7 +230,7 @@ def test_verify_delegation_proof_function_exists() -> None:
 
 def test_delegation_proof_called_in_admin_internal_token_branch() -> None:
     branch_start = _RESOLUTION_SRC.index(
-        'getattr(auth, "reason", "") == "admin_internal_token"'
+        'getattr(auth, "reason", "") in ('
     )
     branch_end = _RESOLUTION_SRC.index("\n    if ", branch_start + 1)
     branch = _RESOLUTION_SRC[branch_start:branch_end]

@@ -204,7 +204,7 @@ class TestNonLiveGating:
     def test_lifecycle_version_contract(self):
         from api.client_lifecycle import LIFECYCLE_VERSION
 
-        assert LIFECYCLE_VERSION == 1
+        assert LIFECYCLE_VERSION == 2
 
     def test_preflight_tenant_required_when_live(self):
         if os.getenv("FG_LIVE_PROOF") == "1":
@@ -277,10 +277,10 @@ class TestNonLiveGating:
         assert BLOCKER_TENANT_SUSPENDED == "TENANT_SUSPENDED"
         assert BLOCKER_NO_BOUND_ADMIN == "NO_BOUND_ADMIN"
 
-    def test_next_action_bootstrap_admin_present(self):
-        from api.client_lifecycle import ACTION_BOOTSTRAP_ADMIN
+    def test_next_action_invite_initial_admin_present(self):
+        from api.client_lifecycle import ACTION_INVITE_INITIAL_ADMIN
 
-        assert ACTION_BOOTSTRAP_ADMIN == "BOOTSTRAP_ADMIN"
+        assert ACTION_INVITE_INITIAL_ADMIN == "INVITE_INITIAL_ADMIN"
 
     def test_secret_scan_catches_multiple_forbidden(self):
         dirty = {"note": "password=abc client_secret=xyz"}
@@ -357,7 +357,7 @@ class TestPhase0Preflight:
         # Assert status before any response logging — never print the key
         assert resp.status_code == 200, f"Preflight failed: HTTP {resp.status_code}"
         body = resp.json()
-        assert body.get("lifecycle_version") == 1, (
+        assert body.get("lifecycle_version") == 2, (
             f"Unexpected version: {body.get('lifecycle_version')}"
         )
         assert "lifecycle_state" in body
@@ -652,8 +652,8 @@ class TestClientLifecycleProductionProof:
             assert lc_initial.get("operational") is False, (
                 "Phase 1b FAIL: new tenant must not be operational"
             )
-            assert "BOOTSTRAP_ADMIN" in lc_initial.get("next_actions", []), (
-                f"Phase 1b FAIL: BOOTSTRAP_ADMIN expected in next_actions, "
+            assert "INVITE_INITIAL_ADMIN" in lc_initial.get("next_actions", []), (
+                f"Phase 1b FAIL: INVITE_INITIAL_ADMIN expected in next_actions, "
                 f"got {lc_initial.get('next_actions')}"
             )
             _EVIDENCE["INITIAL_LIFECYCLE"] = {
@@ -1082,7 +1082,7 @@ class TestClientLifecycleProductionProof:
                 timeout=15,
             ).json()
             assert lc_reconstructed.get("tenant_id") == tenant_a_id
-            assert lc_reconstructed.get("lifecycle_version") == 1
+            assert lc_reconstructed.get("lifecycle_version") == 2
             assert lc_reconstructed.get("lifecycle_state") == lc_state_recovered, (
                 f"Phase 13 FAIL: state reconstruction mismatch — "
                 f"expected {lc_state_recovered}, got "

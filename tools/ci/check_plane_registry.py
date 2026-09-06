@@ -87,6 +87,7 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # Bootstrap uses platform.admin + set_tenant_context(db, tenant_id).
     # Delegated routes use DB-canonical check_tenant_admin_authority which
     # enforces same-tenant via resolve_authoritative_tenant inside _dep.
+    ("POST", "/admin/tenants/{tenant_id}/invite-initial-admin"),
     ("POST", "/admin/tenants/{tenant_id}/bootstrap-admin"),
     ("POST", "/admin/tenants/{tenant_id}/users/invite"),
     ("PATCH", "/admin/tenants/{tenant_id}/users/{user_id}"),

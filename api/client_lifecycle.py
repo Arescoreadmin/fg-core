@@ -13,7 +13,7 @@ Precedence (deterministic, multiple simultaneous failures):
 Callers operating as fg_app under FORCE ROW LEVEL SECURITY must call
 ``set_tenant_context(db, tenant_id)`` BEFORE calling evaluate_client_lifecycle.
 
-lifecycle_version: 1  (bumped when stable machine-contract fields change)
+lifecycle_version: 2  (bumped when stable machine-contract fields change)
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
-LIFECYCLE_VERSION = 1
+LIFECYCLE_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # Lifecycle state labels — versioned machine contract
@@ -56,7 +56,8 @@ WARN_NO_ACTIVE_MEMBERS = "NO_ACTIVE_MEMBERS"
 # ---------------------------------------------------------------------------
 
 ACTION_PROVISION_TENANT = "PROVISION_TENANT"
-ACTION_BOOTSTRAP_ADMIN = "BOOTSTRAP_ADMIN"
+ACTION_INVITE_INITIAL_ADMIN = "INVITE_INITIAL_ADMIN"
+ACTION_BOOTSTRAP_ADMIN = ACTION_INVITE_INITIAL_ADMIN  # deprecated alias — use ACTION_INVITE_INITIAL_ADMIN
 ACTION_BIND_ADMIN_IDENTITY = "BIND_ADMIN_IDENTITY"
 ACTION_INVITE_MEMBERS = "INVITE_MEMBERS"
 
@@ -200,7 +201,7 @@ def evaluate_client_lifecycle(
             repairable=True,
             blockers=(BLOCKER_NO_BOUND_ADMIN,),
             warnings=(),
-            next_actions=(ACTION_BOOTSTRAP_ADMIN,),
+            next_actions=(ACTION_INVITE_INITIAL_ADMIN,),
             tenant_canonical_state=tenant_canonical_state,
             has_bound_admin=False,
             active_member_count=active_member_count,
