@@ -58,7 +58,6 @@ from api.credential_authority import (
     list_credential_events,
 )
 from api.db import get_engine, set_tenant_context
-from api.db_models_identity import TenantInvitation
 from api.deps import auth_ctx_db_session
 from api.identity.store import TenantIdentityStore, emit_identity_audit_event
 from api.identity.workforce_token import generate as _gen_inv_token
@@ -395,7 +394,13 @@ def invite_initial_admin(
                 VALUES
                     (:id, :t, :e, :dn, 'tenant_admin', 1, 'unbound', NULL, :now, :now)
             """),
-            {"id": user_id, "t": tenant_id, "e": email, "dn": display_name, "now": now_iso},
+            {
+                "id": user_id,
+                "t": tenant_id,
+                "e": email,
+                "dn": display_name,
+                "now": now_iso,
+            },
         )
         _send_admin_invite_and_commit(
             db,
@@ -405,7 +410,12 @@ def invite_initial_admin(
             actor_subject=actor_ctx.subject,
             existing_inv_id=None,
         )
-        return {"tenant_id": tenant_id, "action": "invited", "email": email, "invitation_sent": True}
+        return {
+            "tenant_id": tenant_id,
+            "action": "invited",
+            "email": email,
+            "invitation_sent": True,
+        }
 
     # --- Cases 2-5: active admin exists ---
     first = active_admins[0]
@@ -436,7 +446,12 @@ def invite_initial_admin(
 
     if is_bound:
         # Already bound — nothing to do
-        return {"tenant_id": tenant_id, "action": "noop", "reason": "already_bound", "email": email}
+        return {
+            "tenant_id": tenant_id,
+            "action": "noop",
+            "reason": "already_bound",
+            "email": email,
+        }
 
     # --- admin_unbound: find existing invitation and resend/create ---
     inv_row = db.execute(
@@ -469,7 +484,12 @@ def invite_initial_admin(
         existing_inv_id=existing_inv_id,
     )
     action = "resent" if existing_inv_id else "invited"
-    return {"tenant_id": tenant_id, "action": action, "email": email, "invitation_sent": True}
+    return {
+        "tenant_id": tenant_id,
+        "action": action,
+        "email": email,
+        "invitation_sent": True,
+    }
 
 
 def _send_admin_invite_and_commit(
@@ -514,7 +534,12 @@ def _send_admin_invite_and_commit(
                     status = 'pending', updated_at = :now
                 WHERE id = :inv_id
             """),
-            {"fp": fingerprint, "exp": expires_at.isoformat(), "now": now_iso, "inv_id": existing_inv_id},
+            {
+                "fp": fingerprint,
+                "exp": expires_at.isoformat(),
+                "now": now_iso,
+                "inv_id": existing_inv_id,
+            },
         )
         emit_identity_audit_event(
             db,

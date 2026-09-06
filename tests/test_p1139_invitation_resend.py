@@ -33,8 +33,6 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
-from api.auth_scopes import mint_key
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -134,7 +132,20 @@ def _get_invitation(engine, inv_id: str) -> dict:
         ).fetchone()
     if row is None:
         return {}
-    return dict(zip(["id", "tenant_id", "email", "role", "status", "expires_at", "acceptance_token_hash"], row))
+    return dict(
+        zip(
+            [
+                "id",
+                "tenant_id",
+                "email",
+                "role",
+                "status",
+                "expires_at",
+                "acceptance_token_hash",
+            ],
+            row,
+        )
+    )
 
 
 def _expired_token() -> tuple[str, str, datetime]:
@@ -157,7 +168,9 @@ class TestResendExpiredPendingInvitation:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        _seed_invitation(engine, tid, "user@example.com", expires_at=past, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tid, "user@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
@@ -177,7 +190,14 @@ class TestResendStatusExpired:
         raw, fp, _ = _expired_token()
         # Use a still-future expires_at but status='expired' — backend treats status='expired' as resendable
         future = datetime.now(timezone.utc) + timedelta(hours=24)
-        _seed_invitation(engine, tid, "user2@example.com", status="expired", expires_at=future, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tid,
+            "user2@example.com",
+            status="expired",
+            expires_at=future,
+            acceptance_token_hash=fp,
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
@@ -197,7 +217,14 @@ class TestResendPendingNotExpired:
 
         raw, fp = generate()
         future = datetime.now(timezone.utc) + timedelta(hours=72)
-        _seed_invitation(engine, tid, "active@example.com", status="pending", expires_at=future, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tid,
+            "active@example.com",
+            status="pending",
+            expires_at=future,
+            acceptance_token_hash=fp,
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 404
@@ -218,7 +245,14 @@ class TestResendTerminalStates:
 
         raw, fp = generate()
         future = datetime.now(timezone.utc) + timedelta(hours=72)
-        _seed_invitation(engine, tid, f"{status}@example.com", status=status, expires_at=future, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tid,
+            f"{status}@example.com",
+            status=status,
+            expires_at=future,
+            acceptance_token_hash=fp,
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 404
@@ -265,7 +299,9 @@ class TestResendPreservesIdentity:
         role = "auditor"
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, email, role=role, expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, email, role=role, expires_at=past, acceptance_token_hash=fp
+        )
 
         before = _get_invitation(engine, inv_id)
         assert before["tenant_id"] == tid
@@ -276,11 +312,11 @@ class TestResendPreservesIdentity:
         assert r.status_code == 200
 
         after = _get_invitation(engine, inv_id)
-        assert after["id"] == inv_id          # same row
-        assert after["tenant_id"] == tid      # tenant unchanged
-        assert after["email"] == email        # email unchanged
-        assert after["role"] == role          # role unchanged
-        assert after["status"] == "pending"   # reset to pending
+        assert after["id"] == inv_id  # same row
+        assert after["tenant_id"] == tid  # tenant unchanged
+        assert after["email"] == email  # email unchanged
+        assert after["role"] == role  # role unchanged
+        assert after["status"] == "pending"  # reset to pending
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +330,9 @@ class TestOldTokenInvalidAfterResend:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        _seed_invitation(engine, tid, "old@example.com", expires_at=past, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tid, "old@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         resend_r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert resend_r.status_code == 200
@@ -315,7 +353,9 @@ class TestNewTokenValid:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "new@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "new@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
@@ -343,7 +383,9 @@ class TestPerMinuteRateLimit:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "rl@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "rl@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         from api.ratelimit import check_rate_limit_key
 
@@ -368,7 +410,9 @@ class TestPerDayRateLimit:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "rl2@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "rl2@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         from api.ratelimit import check_rate_limit_key
 
@@ -379,7 +423,10 @@ class TestPerDayRateLimit:
         # Endpoint call hits empty per-day bucket (per-minute still has capacity)
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 429
-        assert r.json()["detail"]["code"] in {"RESEND_RATE_LIMITED", "RESEND_DAILY_LIMIT"}
+        assert r.json()["detail"]["code"] in {
+            "RESEND_RATE_LIMITED",
+            "RESEND_DAILY_LIMIT",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +440,9 @@ class TestResponseContainsNoToken:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        _seed_invitation(engine, tid, "clean@example.com", expires_at=past, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine, tid, "clean@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
@@ -415,7 +464,9 @@ class TestInvitationIdStable:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "stable@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "stable@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         assert r.status_code == 200
@@ -436,14 +487,18 @@ class TestEmailDeliveryFailure:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "fail@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "fail@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         # Patch send_portal_invitation to simulate a provider failure
         from api.notifications.email import EmailDeliveryResult
 
         with mock.patch(
             "api.identity_acceptance.send_portal_invitation",
-            return_value=EmailDeliveryResult(state="failed", error_code="EMAIL_PROVIDER_UNAVAILABLE", retryable=True),
+            return_value=EmailDeliveryResult(
+                state="failed", error_code="EMAIL_PROVIDER_UNAVAILABLE", retryable=True
+            ),
         ):
             r = client.post(f"/identity/invitations/{raw}/request-resend")
 
@@ -459,7 +514,9 @@ class TestEmailDeliveryFailure:
 
         # Old token still resolves on GET preflight (invitation still in DB with old fp)
         preflight = client.get(f"/identity/invitations/{raw}")
-        assert preflight.status_code == 404  # still expired — but INVITATION_EXPIRED, not CONSUMED
+        assert (
+            preflight.status_code == 404
+        )  # still expired — but INVITATION_EXPIRED, not CONSUMED
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +530,13 @@ class TestEmailSkippedWithoutKey:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        _seed_invitation(engine, tid, "noemail@example.com", expires_at=past, acceptance_token_hash=fp)
+        _seed_invitation(
+            engine,
+            tid,
+            "noemail@example.com",
+            expires_at=past,
+            acceptance_token_hash=fp,
+        )
 
         r = client.post(f"/identity/invitations/{raw}/request-resend")
         # 'skipped' (no API key) is treated as success in dev — rotation committed
@@ -492,7 +555,9 @@ class TestRetryAfterHeader:
         tid = _tid()
         _ensure_tenant(engine, tid)
         raw, fp, past = _expired_token()
-        inv_id = _seed_invitation(engine, tid, "rh@example.com", expires_at=past, acceptance_token_hash=fp)
+        inv_id = _seed_invitation(
+            engine, tid, "rh@example.com", expires_at=past, acceptance_token_hash=fp
+        )
 
         from api.ratelimit import check_rate_limit_key
 

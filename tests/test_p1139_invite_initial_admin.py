@@ -202,7 +202,9 @@ def _get_invitation_fp(engine, inv_id: str) -> str | None:
 
 
 class TestInviteInitialAdminUnset:
-    def test_i01_admin_unset_creates_user_and_invitation(self, client, engine, monkeypatch):
+    def test_i01_admin_unset_creates_user_and_invitation(
+        self, client, engine, monkeypatch
+    ):
         monkeypatch.delenv("FG_RESEND_API_KEY", raising=False)
         tid = _tid()
         _ensure_tenant(engine, tid)
@@ -296,7 +298,9 @@ class TestInviteInitialAdminUnboundValidInvite:
         # Only one invitation row should exist
         with engine.connect() as conn:
             count = conn.execute(
-                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t AND role = 'tenant_admin'"),
+                text(
+                    "SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t AND role = 'tenant_admin'"
+                ),
                 {"t": tid},
             ).scalar()
         assert count == 1
@@ -315,7 +319,10 @@ class TestInviteInitialAdminUnboundExpiredInvite:
         _ensure_tenant(engine, tid)
         user_id = _seed_admin_user(engine, tid, "admin3@example.com")
         inv_id, old_fp = _seed_invitation(
-            engine, tid, user_id, "admin3@example.com",
+            engine,
+            tid,
+            user_id,
+            "admin3@example.com",
             expires_delta=timedelta(hours=-1),
         )
 
@@ -332,7 +339,9 @@ class TestInviteInitialAdminUnboundExpiredInvite:
         # Same invitation row — lineage preserved, no duplicate paperwork
         with engine.connect() as conn:
             count = conn.execute(
-                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t AND role = 'tenant_admin'"),
+                text(
+                    "SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t AND role = 'tenant_admin'"
+                ),
                 {"t": tid},
             ).scalar()
         assert count == 1
@@ -345,7 +354,9 @@ class TestInviteInitialAdminUnboundExpiredInvite:
         # Status restored to pending, expires_at extended into the future
         with engine.connect() as conn:
             row = conn.execute(
-                text("SELECT status, expires_at FROM tenant_invitations WHERE id = :id"),
+                text(
+                    "SELECT status, expires_at FROM tenant_invitations WHERE id = :id"
+                ),
                 {"id": inv_id},
             ).fetchone()
         assert row[0] == "pending"
@@ -403,8 +414,11 @@ class TestInviteInitialAdminBoundSameEmail:
         _ensure_tenant(engine, tid)
         pid = str(uuid.uuid4())
         _seed_admin_user(
-            engine, tid, "bound@example.com",
-            binding_status="bound", principal_id=pid,
+            engine,
+            tid,
+            "bound@example.com",
+            binding_status="bound",
+            principal_id=pid,
         )
 
         r = client.post(
@@ -420,7 +434,8 @@ class TestInviteInitialAdminBoundSameEmail:
         # No new invitation rows created
         with engine.connect() as conn:
             count = conn.execute(
-                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t"), {"t": tid}
+                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t"),
+                {"t": tid},
             ).scalar()
         assert count == 0
 
@@ -437,8 +452,11 @@ class TestInviteInitialAdminBoundDifferentEmail:
         _ensure_tenant(engine, tid)
         pid = str(uuid.uuid4())
         _seed_admin_user(
-            engine, tid, "existing@example.com",
-            binding_status="bound", principal_id=pid,
+            engine,
+            tid,
+            "existing@example.com",
+            binding_status="bound",
+            principal_id=pid,
         )
 
         r = client.post(
@@ -505,16 +523,21 @@ class TestInviteInitialAdminEmailFailure:
 
         with engine.connect() as conn:
             count = conn.execute(
-                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t"), {"t": tid}
+                text("SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = :t"),
+                {"t": tid},
             ).scalar()
         assert count == 0
 
-    def test_i08_unbound_resend_failure_old_token_preserved(self, client, engine, monkeypatch):
+    def test_i08_unbound_resend_failure_old_token_preserved(
+        self, client, engine, monkeypatch
+    ):
         """Email failure during resend must leave the original invitation fingerprint intact."""
         tid = _tid()
         _ensure_tenant(engine, tid)
         user_id = _seed_admin_user(engine, tid, "stable@example.com")
-        inv_id, original_fp = _seed_invitation(engine, tid, user_id, "stable@example.com")
+        inv_id, original_fp = _seed_invitation(
+            engine, tid, user_id, "stable@example.com"
+        )
 
         from api.notifications.email import EmailDeliveryResult
 

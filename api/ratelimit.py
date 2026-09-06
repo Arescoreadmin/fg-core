@@ -460,9 +460,7 @@ def check_rate_limit_key(
                 "SECURITY: rate limiter fail-open triggered key=%s error=%s", key, exc
             )
             return True, 0
-        raise HTTPException(
-            status_code=503, detail="Rate limiter unavailable"
-        ) from exc
+        raise HTTPException(status_code=503, detail="Rate limiter unavailable") from exc
 
     return ok, int(reset)
 

@@ -24094,6 +24094,30 @@
         "title": "InviteCreateBody",
         "type": "object"
       },
+      "InviteInitialAdminBody": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "InviteInitialAdminBody",
+        "type": "object"
+      },
       "InviteUserBody": {
         "properties": {
           "display_name": {
@@ -98685,7 +98709,7 @@
     },
     "/identity/invitations/{token}": {
       "get": {
-        "description": "Public preflight: minimal display info for the acceptance UX.\n\nAll invalid/expired/revoked/consumed tokens return the same 404.\nNever returns tenant_id, invitation_id, fingerprint, or internal IDs.",
+        "description": "Public preflight: minimal display info for the acceptance UX.\n\nReturns 404 for any invalid, expired, or consumed token. The detail.code\ndistinguishes the cause so the console can offer specific recovery actions:\n  INVITATION_NOT_FOUND  \u2014 malformed token or fingerprint not in DB\n  INVITATION_EXPIRED    \u2014 token was real but is past expiry\n  INVITATION_CONSUMED   \u2014 token was used, revoked, or is no longer available\n\nNever returns tenant_id, invitation_id, fingerprint, or internal IDs.",
         "operationId": "get_invitation_preflight_identity_invitations__token__get",
         "parameters": [
           {
@@ -98766,6 +98790,50 @@
           }
         },
         "summary": "Accept Invitation",
+        "tags": [
+          "identity-acceptance"
+        ]
+      }
+    },
+    "/identity/invitations/{token}/request-resend": {
+      "post": {
+        "description": "User-triggered resend for expired workforce invitations.\n\nThe expired bearer token authorizes the resend \u2014 same authority model as the\nGET preflight. No gateway auth or session required.\n\nOnly genuinely expired invitations are resendable (status='expired' or\nstatus='pending' past expires_at). Terminal and in-progress states return\n404 to avoid leaking state.\n\nDelivery-before-rotation contract:\n  1. Generate new token in memory (not yet in DB).\n  2. Attempt email delivery while holding the row lock.\n  3. On delivery success ('sent' or 'skipped'): commit rotation \u2014 old token\n     invalid, new token live, 200 {\"sent\": true}.\n  4. On delivery failure: rollback \u2014 old expired token remains valid so the\n     user can retry with the same link \u2014 503 with retryable flag.\n\nThis guarantees the user is never stranded with an unknown live token:\neither they received the email with the new token, or the old token still\nworks for a retry. Email address, tenant, and role are immutable.",
+        "operationId": "request_resend_identity_invitations__token__request_resend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Request Resend Identity Invitations  Token  Request Resend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Resend",
         "tags": [
           "identity-acceptance"
         ]

@@ -33,8 +33,8 @@ _log = logging.getLogger(__name__)
 router = APIRouter(prefix="/identity", tags=["identity-acceptance"])
 _store = TenantIdentityStore()
 
-_RESEND_PER_MIN_RATE = 1.0 / 60      # 1 resend per minute; capacity = 1
-_RESEND_PER_DAY_RATE = 5.0 / 86400   # 5 resends per day; capacity = 5
+_RESEND_PER_MIN_RATE = 1.0 / 60  # 1 resend per minute; capacity = 1
+_RESEND_PER_DAY_RATE = 5.0 / 86400  # 5 resends per day; capacity = 5
 
 
 def _now() -> datetime:
@@ -134,18 +134,12 @@ def get_invitation_preflight(token: str) -> dict:
             inv_expires = inv_expires.replace(tzinfo=timezone.utc)
 
         if status == "expired":
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_EXPIRED"}
-            )
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_EXPIRED"})
         if status != "pending":
             # bound, revoked, failed, auth_started, accepted_identity_pending_binding
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_CONSUMED"}
-            )
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_CONSUMED"})
         if inv_expires is None or inv_expires < _now():
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_EXPIRED"}
-            )
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_EXPIRED"})
 
         # Fetch tenant display name within tenant context
         set_tenant_context(db, tenant_id)
@@ -490,9 +484,7 @@ def request_resend(token: str) -> dict:
             inv_expires = inv_expires.replace(tzinfo=timezone.utc)
 
         is_still_resendable = inv.status == "expired" or (
-            inv.status == "pending"
-            and inv_expires is not None
-            and inv_expires < now
+            inv.status == "pending" and inv_expires is not None and inv_expires < now
         )
         if not is_still_resendable:
             raise HTTPException(

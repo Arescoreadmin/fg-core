@@ -6753,3 +6753,31 @@ Validation evidence:
 - Console BFF: no PROXY_RULES wildcards introduced; existing `workforce/users` entry covers the revoke sub-route via `startsWith` match already present.
 
 SOC review outcome: approved. The changes extend the workforce authority boundary with terminal revocation semantics, mandatory reason capture, canonical principal lifecycle verification, and transactional last-admin protection. No existing capability is reduced; only previously unguarded membership lifecycle transitions are hardened.
+
+---
+
+## 2026-09-06 — SOC-HIGH-002 — PR-9B-1: Invite-Initial-Admin State-Derived Operation
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (`tools/ci/check_plane_registry.py` and derived topology artifacts).
+
+Scope: PR-9B-1 replaces the tenant admin bootstrap ceremony with a single state-derived endpoint (`POST /admin/tenants/{tenant_id}/invite-initial-admin`). The endpoint evaluates DB state and takes the minimum necessary action: seeds admin user + dispatches invitation (admin_unset), rotates a non-terminal invitation in-place (admin_unbound or expired), or no-ops (bound + same email). Delivery-before-commit is enforced — token never persists without confirmed send. Expired invitations are revived via in-place rotation (invitation lineage preserved); only terminal states (bound, revoked, failed, accepted_identity_pending_binding) create a fresh row. `LIFECYCLE_VERSION` bumped to 2 to signal the machine contract change to TypeScript consumers.
+
+Critical files changed:
+- `tools/ci/check_plane_registry.py`: added `("POST", "/admin/tenants/{tenant_id}/invite-initial-admin")` to `EXACT_TENANT_BINDING_EXCEPTIONS`. Justification: same authority pattern as other TENANT-ADMIN-001 routes already in the exception set — `require_tenant_admin()` enforces same-tenant isolation via `resolve_authoritative_tenant` + DB-canonical `check_tenant_admin_authority`; `tenant_id` in path identifies the target tenant being managed, not the caller's auth-context tenant.
+- `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `topology.sha256` / `plane_registry_snapshot.json` / `contract_routes.json`: regenerated artifacts reflecting the new `POST /admin/tenants/{tenant_id}/invite-initial-admin` route and the existing `POST /identity/invitations/{token}/request-resend` route (the latter was added in 9A-4 but the inventory was not regenerated at that time).
+- `contracts/core/openapi.json` / `schemas/api/openapi.json`: regenerated OpenAPI spec; new route reflected under the `control` plane.
+- `BLUEPRINT_STAGED.md` / `CONTRACT.md`: contract authority SHA refreshed via `make contract-authority-refresh`.
+
+Security posture:
+- The new endpoint is gated by `require_tenant_admin()` (same authority chain as all other TENANT-ADMIN-001 routes) + `require_scopes(["admin:write"])` + `platform.admin` permission check. No weaker auth path introduced.
+- Delivery-before-commit invariant: `generate()` produces `(raw_token, fingerprint)`; raw_token transmitted once via Resend; fingerprint stored in `tenant_invitations`; on delivery failure `db.rollback()` + HTTP 503 — no stranded DB row.
+- Invitation lineage: expired invitations rotate in-place (same UUID, new fingerprint, extended expiry) rather than producing a second row. Only genuinely consumed/terminated states (`bound`, `revoked`, `failed`, `accepted_identity_pending_binding`) require a fresh row. This matches the invariant established in 9A-4 resend logic.
+- No new RLS policies, no OPA rules, no API key grants, no permission additions. The `bootstrap-admin` endpoint is preserved unchanged as a low-level platform tool.
+
+Validation evidence:
+- `pytest tests/test_p1139_invite_initial_admin.py`: 12/12 passed (I-01 through I-09 including email delivery failure and expired lineage preservation).
+- `pytest tests/test_core_002_admin_gateway_tenant_binding.py`: 40/40 passed (includes fix for pre-existing source-inspection regression from P-113.6 refactor).
+- `pytest tests/test_client_lifecycle_001.py tests/test_client_lifecycle_002.py tests/test_tenant_admin_001.py tests/test_client_lifecycle_production_proof_001.py`: 76 passed, 7 skipped (postgres-only).
+- `make fg-fast`: all gates pass after inventory regeneration and contract authority refresh.
+
+SOC review outcome: approved. One new endpoint added under the existing TENANT-ADMIN-001 authority pattern; no auth paths weakened; delivery-before-commit prevents stranded tokens; invitation lineage preservation prevents silent row duplication. All pre-existing security invariants hold.
