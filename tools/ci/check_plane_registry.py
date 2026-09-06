@@ -46,6 +46,10 @@ EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
     # state, and sets RLS context. Standard require_scopes dependency does not
     # apply to named-user session flows.
     ("GET", "/portal/named-users/me"),
+    # 9A-4 workforce invitation resend: the expired fgwi1.* bearer token IS
+    # the authorization credential — same auth model as the GET preflight.
+    # No service-account scope or gateway auth applies.
+    ("POST", "/identity/invitations/{token}/request-resend"),
 }
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {

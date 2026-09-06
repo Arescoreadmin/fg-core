@@ -6781,3 +6781,19 @@ Validation evidence:
 - `make fg-fast`: all gates pass after inventory regeneration and contract authority refresh.
 
 SOC review outcome: approved. One new endpoint added under the existing TENANT-ADMIN-001 authority pattern; no auth paths weakened; delivery-before-commit prevents stranded tokens; invitation lineage preservation prevents silent row duplication. All pre-existing security invariants hold.
+
+---
+
+## 2026-09-06 — SOC-HIGH-002 — PR-9B-1 follow-up: resend route public exception registration
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (`tools/ci/check_plane_registry.py` and derived topology artifacts).
+
+Scope: Post-merge full test suite revealed `test_plane_registry_checker_passes` failing because `POST /identity/invitations/{token}/request-resend` (added in 9A-4) was missing from `EXACT_PUBLIC_ROUTE_EXCEPTIONS` in `check_plane_registry.py`. The route uses the same expired fgwi1.* bearer token as auth credential — identical model to the GET preflight already in the exception set. No gateway auth or service-account scope applies.
+
+Critical files changed:
+- `tools/ci/check_plane_registry.py`: added `("POST", "/identity/invitations/{token}/request-resend")` to `EXACT_PUBLIC_ROUTE_EXCEPTIONS` with justification comment mirroring the 9A-4 resend auth model.
+- `tools/ci/plane_registry_snapshot.json` / `tools/ci/topology.sha256`: topology artifacts regenerated.
+
+Security posture: No auth path weakened. The route was already deployed and functional; this change corrects a missing CI gate registration, not the runtime auth behavior. The expired bearer token model is unchanged.
+
+Validation evidence: `pytest tests/test_plane_registry.py` 3/3 PASS after fix.
