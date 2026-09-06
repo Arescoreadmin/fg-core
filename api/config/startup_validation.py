@@ -285,6 +285,7 @@ class StartupValidator:
         self._check_evidence_signing_key(report)
         self._check_observability_config(report)
         self._check_platform_auth_mode(report)
+        self._check_invitation_acceptance_prerequisites(report)
 
         return report
 
@@ -1287,6 +1288,62 @@ class StartupValidator:
                 passed=False,
                 message=f"Platform auth mode validation raised {type(exc).__name__}: {exc}",
                 severity="error" if self.is_production else "warning",
+            )
+
+    def _check_invitation_acceptance_prerequisites(
+        self, report: StartupValidationReport
+    ) -> None:
+        """P-113.9B.5: Validate hard prerequisites for the invitation acceptance path.
+
+        FG_INTERNAL_GATEWAY_SECRET and FG_KEY_PEPPER are both required for the
+        P-113.8/P-113.9 invitation acceptance flow to work at runtime. They are
+        checked here unconditionally — regardless of PLATFORM_AUTH_MODE or
+        FG_AUTH_ENABLED — because invitation acceptance must be available in all
+        deployment modes. Discovering a missing secret at first acceptance (not at
+        startup) is precisely the kind of late-binding failure P-113.9 eliminates.
+        """
+        from api.config.internal_gateway_secret import resolve_internal_gateway_secret
+
+        gateway_secret = resolve_internal_gateway_secret()
+        if not gateway_secret:
+            report.add(
+                name="invitation_gateway_secret_missing",
+                passed=False,
+                message=(
+                    "FG_INTERNAL_GATEWAY_SECRET (or legacy fallback) is not set. "
+                    "POST /identity/invitations/{token}/accept requires "
+                    "require_internal_admin_gateway() which validates this secret. "
+                    "All invitation acceptances will fail at runtime until this is set."
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            report.add(
+                name="invitation_gateway_secret",
+                passed=True,
+                message="FG_INTERNAL_GATEWAY_SECRET is set (invitation acceptance ready).",
+                severity="info",
+            )
+
+        pepper = (os.getenv("FG_KEY_PEPPER") or "").strip()
+        if not pepper:
+            report.add(
+                name="invitation_token_pepper_missing",
+                passed=False,
+                message=(
+                    "FG_KEY_PEPPER is not set. Invitation token fingerprinting uses "
+                    "HMAC-SHA256 with this pepper. Without it, all fgwi1.* token "
+                    "verification silently uses an empty key — invitation acceptance "
+                    "and resend will produce incorrect fingerprints and fail."
+                ),
+                severity="error" if self.is_production else "warning",
+            )
+        else:
+            report.add(
+                name="invitation_token_pepper",
+                passed=True,
+                message="FG_KEY_PEPPER is set (invitation token fingerprinting ready).",
+                severity="info",
             )
 
 

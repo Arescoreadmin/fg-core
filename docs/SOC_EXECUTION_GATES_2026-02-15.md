@@ -6797,3 +6797,27 @@ Critical files changed:
 Security posture: No auth path weakened. The route was already deployed and functional; this change corrects a missing CI gate registration, not the runtime auth behavior. The expired bearer token model is unchanged.
 
 Validation evidence: `pytest tests/test_plane_registry.py` 3/3 PASS after fix.
+
+---
+
+## 2026-09-06 — P-113.9B.4/B.5/B.6 — admin_unbound banner + invitation acceptance startup hardening
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (startup validation changes touch security-critical configuration enforcement).
+
+Scope: Three residual items from P-113.9B:
+
+**9B.4 — admin_unbound banner + resend UX:** Console tenant detail page now detects `BIND_ADMIN_IDENTITY` action, fetches `GET /admin/identity/tenants/{tenantId}/invitations` via BFF to find the pending or expired tenant_admin invitation, and displays "Admin invitation sent to {masked_email} — waiting for acceptance" with a "Resend invitation" button. Resend calls `POST /admin/tenants/{tenantId}/invite-initial-admin` (state-derived, admin-authorized) — the canonical resend authority — rather than the public token-based `POST /identity/invitations/{token}/request-resend`. If no pending invitation exists (legacy bootstrap path), the banner falls back to the invite form. No raw invitation token is held in page state.
+
+**9B.5 — invitation acceptance prerequisites:** New `_check_invitation_acceptance_prerequisites()` method in `api/config/startup_validation.py` checks both `FG_INTERNAL_GATEWAY_SECRET` (via `resolve_internal_gateway_secret()`) and `FG_KEY_PEPPER` unconditionally — regardless of `PLATFORM_AUTH_MODE` or `FG_AUTH_ENABLED`. Previously: `FG_INTERNAL_GATEWAY_SECRET` was only validated in `CANONICAL` mode (the check returned early in `COMPATIBILITY` mode), and `FG_KEY_PEPPER` was only validated when `auth_enabled=True`. Both are hard prerequisites for the invitation acceptance path (`POST /identity/invitations/{token}/accept`). A missing secret discovered at first acceptance (not startup) is precisely the brittle failure pattern P-113.9 eliminates. Severity: error in production, warning in non-production.
+
+**9B.6 — bootstrap env var retirement warning:** `validateProductionConfig()` in `apps/console/lib/startup-validation.ts` now fails fast in prod-like environments if `FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS` or `FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS` are set. These are installation/DR-only controls that bypass DB-canonical authority by injecting `Administrator` role via JWT callback. Their presence in production is a security smell; they should be removed after the canonical platform admin credential is established.
+
+Security posture:
+- No existing auth paths modified.
+- `_check_invitation_acceptance_prerequisites` adds new failure conditions at startup; cannot weaken existing checks.
+- The admin_unbound resend path uses admin-authorized `invite-initial-admin`, not the public token endpoint — consistent with the two-entry-point architecture (admin path vs. expired-link self-service path).
+- Bootstrap env var check is fail-fast in production; does not affect non-production deployments.
+
+Validation evidence:
+- `pytest tests/test_auth_startup_guard.py` 25/25 PASS (14 existing + 9 new invitation prerequisite tests + 2 others).
+- `make fg-fast` PASS; `make fg-security` PASS; `make fg-contract` PASS; console `npm run typecheck` PASS; `npm run lint` PASS.

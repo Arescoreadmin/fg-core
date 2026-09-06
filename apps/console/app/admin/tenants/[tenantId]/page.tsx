@@ -6,7 +6,12 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { IdentityGovernancePanel } from '@/components/identity';
 import { getIdentityReadiness, type IdentityReadiness } from '@/lib/identityApi';
-import { getClientLifecycle, type ClientLifecycle } from '@/lib/lifecycleApi';
+import {
+  getClientLifecycle,
+  getPendingAdminInvitation,
+  type ClientLifecycle,
+  type PendingAdminInvitation,
+} from '@/lib/lifecycleApi';
 import { mapHttpError } from '@/lib/errors';
 import {
   listServiceCredentials,
@@ -253,12 +258,20 @@ function ConsoleUsersTab({ tenantId, onConfigureIdentity, onRefreshLifecycle }: 
 
 // ─── Lifecycle Banner ─────────────────────────────────────────────────────────
 
+function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return email;
+  return email[0] + '***' + email.slice(at);
+}
+
 function LifecycleBanner({
+  tenantId,
   lifecycle,
   lifecycleError,
   onInviteInitialAdmin,
   onConfigureIdentity,
 }: {
+  tenantId: string;
   lifecycle: ClientLifecycle | null;
   lifecycleError: string | null;
   onInviteInitialAdmin: (email: string, displayName: string) => Promise<void>;
@@ -269,6 +282,21 @@ function LifecycleBanner({
   const [inviteName, setInviteName] = useState('');
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Loaded when admin_unbound: the pending/expired admin invitation, if any.
+  const [pendingInvite, setPendingInvite] = useState<PendingAdminInvitation | null | 'loading'>(
+    null,
+  );
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState<'idle' | 'sent' | 'error'>('idle');
+
+  const hasBind = lifecycle?.next_actions.includes('BIND_ADMIN_IDENTITY') ?? false;
+
+  useEffect(() => {
+    if (!hasBind) return;
+    setPendingInvite('loading');
+    void getPendingAdminInvitation(tenantId).then(setPendingInvite);
+  }, [hasBind, tenantId]);
 
   async function handleInviteInitialAdmin() {
     setInviting(true);
@@ -282,6 +310,19 @@ function LifecycleBanner({
       setInviteError(e instanceof Error ? e.message : 'Invite failed');
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleResend(email: string) {
+    setResending(true);
+    setResendResult('idle');
+    try {
+      await onInviteInitialAdmin(email, '');
+      setResendResult('sent');
+    } catch {
+      setResendResult('error');
+    } finally {
+      setResending(false);
     }
   }
 
@@ -378,14 +419,97 @@ function LifecycleBanner({
                 </div>
               </div>
             )}
-            {lifecycle.next_actions.includes('BIND_ADMIN_IDENTITY') && (
+            {hasBind && pendingInvite === 'loading' && (
+              <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                Checking invitation status…
+              </span>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite !== null && (
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}
+                data-testid="lifecycle-cta-admin-waiting"
+              >
+                <span style={{ fontSize: '0.85rem' }}>
+                  Admin invitation sent to{' '}
+                  <strong>{maskEmail(pendingInvite.email)}</strong> — waiting for acceptance.
+                </span>
+                {resendResult === 'sent' && (
+                  <span style={{ fontSize: '0.8rem', color: '#16a34a' }}>Invitation resent.</span>
+                )}
+                {resendResult === 'error' && (
+                  <span style={{ fontSize: '0.8rem', color: '#dc2626' }}>
+                    Resend failed — try again.
+                  </span>
+                )}
+                <button
+                  style={s.secondaryBtn}
+                  onClick={() => { void handleResend(pendingInvite.email); }}
+                  disabled={resending}
+                  data-testid="lifecycle-cta-resend-admin-invite"
+                >
+                  {resending ? 'Resending…' : 'Resend invitation'}
+                </button>
+              </div>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite === null && !showInviteForm && (
               <button
-                style={s.secondaryBtn}
-                onClick={onConfigureIdentity}
+                style={s.primaryBtn}
+                onClick={() => setShowInviteForm(true)}
                 data-testid="lifecycle-cta-bind-identity"
               >
-                Configure identity
+                Invite initial admin
               </button>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite === null && showInviteForm && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={s.field}>
+                  Admin email (required)
+                  <input
+                    style={s.input}
+                    type="email"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="admin@client.com"
+                    autoFocus
+                  />
+                </label>
+                <label style={s.field}>
+                  Display name (optional)
+                  <input
+                    style={s.input}
+                    value={inviteName}
+                    onChange={e => setInviteName(e.target.value)}
+                    placeholder="Jane Smith"
+                  />
+                </label>
+                {inviteError && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--danger, #dc2626)' }}>
+                    {inviteError}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    style={s.secondaryBtn}
+                    onClick={() => {
+                      setShowInviteForm(false);
+                      setInviteEmail('');
+                      setInviteName('');
+                      setInviteError(null);
+                    }}
+                    disabled={inviting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={s.primaryBtn}
+                    onClick={() => { void handleInviteInitialAdmin(); }}
+                    disabled={inviting || !inviteEmail}
+                    data-testid="lifecycle-cta-invite-initial-admin-submit"
+                  >
+                    {inviting ? 'Inviting…' : 'Invite initial admin'}
+                  </button>
+                </div>
+              </div>
             )}
             {lifecycle.next_actions.includes('INVITE_MEMBERS') && (
               <span style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
@@ -887,6 +1011,7 @@ export default function TenantDetailPage() {
       </div>
 
       <LifecycleBanner
+        tenantId={tenantId}
         lifecycle={lifecycle}
         lifecycleError={lifecycleError}
         onInviteInitialAdmin={async (email: string, displayName: string) => {
