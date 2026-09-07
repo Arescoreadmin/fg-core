@@ -389,8 +389,9 @@ class TestPhaseAInvite:
             "lifecycle_version": lc_after.get("lifecycle_version"),
         }
         _EVIDENCE["security_invariants"]["no_raw_token_in_response"] = (
-            "PROVEN — invite-initial-admin response contains no token, "
-            "no invitation_url, no fgwi1.* pattern; token delivered via email only"
+            "PROVEN — invite-initial-admin response contains no token field, "
+            "no invitation_url, and no raw workforce invitation credential; "
+            "credential delivered via email only"
         )
         _EVIDENCE["security_invariants"]["operator_stops_after_invite"] = (
             f"PROVEN — tenant_id={tenant_id}; operator called invite-initial-admin once; "
