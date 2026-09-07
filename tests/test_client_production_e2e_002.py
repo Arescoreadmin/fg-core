@@ -478,7 +478,7 @@ class TestClientProductionE2E002Gates:
             STATE_TENANT_SUSPENDED,
         )
 
-        assert LIFECYCLE_VERSION == 1
+        assert LIFECYCLE_VERSION == 2
         assert STATE_OPERATIONAL == "operational"
         assert STATE_ADMIN_UNSET == "admin_unset"
         assert STATE_ADMIN_UNBOUND == "admin_unbound"
@@ -655,7 +655,7 @@ class TestClientProductionE2E002LiveProof:
             f"Phase 1 FAIL: expected admin_unset, got {lc.get('lifecycle_state')}"
         )
         assert lc.get("operational") is False
-        assert "BOOTSTRAP_ADMIN" in lc.get("next_actions", [])
+        assert "INVITE_INITIAL_ADMIN" in lc.get("next_actions", [])
 
         elapsed = datetime.now(timezone.utc).timestamp() - t_start
         _EVIDENCE["timings_seconds"]["phase_1"] = elapsed
@@ -1911,7 +1911,7 @@ class TestClientProductionE2E002LiveProof:
             assert lc.get("tenant_id") == tid, (
                 f"Phase 17 FAIL: reconstruction for {label} returned tenant_id={lc.get('tenant_id')}"
             )
-            assert lc.get("lifecycle_version") == 1
+            assert lc.get("lifecycle_version") == 2
 
         # Compute overall verdict
         passed = _STATE["phases_passed"]

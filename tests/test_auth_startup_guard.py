@@ -424,3 +424,138 @@ def test_sqlite_mode_pepper_missing_is_error() -> None:
     }
     assert "auth_store_pepper_missing" in error_names
     assert report.has_errors
+
+
+# ---------------------------------------------------------------------------
+# P-113.9B.5 — Invitation acceptance prerequisites
+# ---------------------------------------------------------------------------
+
+
+def _run_invitation_prereq_check(
+    env: dict[str, str], is_production: bool = True
+) -> Any:
+    """Run only _check_invitation_acceptance_prerequisites with a specific env."""
+    from api.config.startup_validation import StartupValidationReport, StartupValidator
+
+    with patch.dict(os.environ, env, clear=False):
+        validator = StartupValidator()
+        validator.is_production = is_production
+        report = StartupValidationReport(env=validator.env, is_production=is_production)
+        validator._check_invitation_acceptance_prerequisites(report)
+    return report
+
+
+def test_invitation_prereqs_pass_when_both_set() -> None:
+    """Both FG_INTERNAL_GATEWAY_SECRET and FG_KEY_PEPPER set → no errors."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "a" * 32,
+        "FG_KEY_PEPPER": "b" * 32,
+    }
+    report = _run_invitation_prereq_check(env)
+    assert not report.has_errors
+    pass_names = {r.name for r in report.results if r.passed}
+    assert "invitation_gateway_secret" in pass_names
+    assert "invitation_token_pepper" in pass_names
+
+
+def test_invitation_prereq_missing_gateway_secret_is_error_in_production() -> None:
+    """FG_INTERNAL_GATEWAY_SECRET absent → error in production."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "",
+        "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+        "FG_INTERNAL_AUTH_SECRET": "",
+        "FG_INTERNAL_TOKEN": "",
+        "FG_KEY_PEPPER": "b" * 32,
+    }
+    report = _run_invitation_prereq_check(env, is_production=True)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_gateway_secret_missing" in error_names
+    assert report.has_errors
+
+
+def test_invitation_prereq_missing_gateway_secret_is_warning_in_dev() -> None:
+    """FG_INTERNAL_GATEWAY_SECRET absent → warning (not error) in non-production."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "",
+        "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+        "FG_INTERNAL_AUTH_SECRET": "",
+        "FG_INTERNAL_TOKEN": "",
+        "FG_KEY_PEPPER": "b" * 32,
+    }
+    report = _run_invitation_prereq_check(env, is_production=False)
+    warn_names = {
+        r.name for r in report.results if not r.passed and r.severity == "warning"
+    }
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_gateway_secret_missing" in warn_names
+    assert "invitation_gateway_secret_missing" not in error_names
+
+
+def test_invitation_prereq_legacy_fallback_satisfies_gateway_secret() -> None:
+    """Legacy FG_INTERNAL_AUTH_SECRET satisfies the gateway secret check."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "",
+        "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+        "FG_INTERNAL_AUTH_SECRET": "legacy-secret-value",
+        "FG_INTERNAL_TOKEN": "",
+        "FG_KEY_PEPPER": "b" * 32,
+    }
+    report = _run_invitation_prereq_check(env, is_production=True)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_gateway_secret_missing" not in error_names
+
+
+def test_invitation_prereq_missing_pepper_is_error_in_production() -> None:
+    """FG_KEY_PEPPER absent → error in production regardless of FG_AUTH_ENABLED."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "a" * 32,
+        "FG_KEY_PEPPER": "",
+        "FG_AUTH_ENABLED": "false",  # auth disabled — pepper check must still fire
+    }
+    report = _run_invitation_prereq_check(env, is_production=True)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_token_pepper_missing" in error_names
+    assert report.has_errors
+
+
+def test_invitation_prereq_missing_pepper_is_warning_in_dev() -> None:
+    """FG_KEY_PEPPER absent → warning (not error) in non-production."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "a" * 32,
+        "FG_KEY_PEPPER": "",
+    }
+    report = _run_invitation_prereq_check(env, is_production=False)
+    warn_names = {
+        r.name for r in report.results if not r.passed and r.severity == "warning"
+    }
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_token_pepper_missing" in warn_names
+    assert "invitation_token_pepper_missing" not in error_names
+
+
+def test_invitation_prereqs_checked_regardless_of_auth_enabled() -> None:
+    """Prerequisite checks fire even when FG_AUTH_ENABLED=false."""
+    env = {
+        "FG_INTERNAL_GATEWAY_SECRET": "",
+        "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+        "FG_INTERNAL_AUTH_SECRET": "",
+        "FG_INTERNAL_TOKEN": "",
+        "FG_KEY_PEPPER": "",
+        "FG_AUTH_ENABLED": "false",
+    }
+    report = _run_invitation_prereq_check(env, is_production=True)
+    error_names = {
+        r.name for r in report.results if not r.passed and r.severity == "error"
+    }
+    assert "invitation_gateway_secret_missing" in error_names
+    assert "invitation_token_pepper_missing" in error_names

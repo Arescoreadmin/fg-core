@@ -9,7 +9,7 @@
 // ── Version contract ──────────────────────────────────────────────────────────
 
 /** The only lifecycle_version this client understands. Any other value → fail closed. */
-export const EXPECTED_LIFECYCLE_VERSION = 1;
+export const EXPECTED_LIFECYCLE_VERSION = 2;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +51,43 @@ export type SafeLifecycleResult =
  *   - Network/parse error → { ok: false, error: 'Network error' }
  *   - Only returns { ok: true, data } when ALL guards pass
  */
+// ── Pending admin invitation ───────────────────────────────────────────────────
+
+export interface PendingAdminInvitation {
+  id: string;
+  email: string;
+  status: string;
+  expires_at: string | null;
+}
+
+/**
+ * Fetch the most recent pending or expired tenant_admin invitation for a tenant.
+ * Returns null if none exists (e.g. admin was bootstrapped without an invitation).
+ * Used by the admin_unbound banner to offer a state-derived resend action.
+ */
+export async function getPendingAdminInvitation(
+  tenantId: string,
+): Promise<PendingAdminInvitation | null> {
+  try {
+    const url = `/api/core/admin/identity/tenants/${encodeURIComponent(tenantId)}/invitations?tenant_id=${encodeURIComponent(tenantId)}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { invitations?: unknown[] };
+    const invitations = Array.isArray(payload.invitations) ? payload.invitations : [];
+    const RESENDABLE = new Set(['pending', 'expired']);
+    const match = invitations.find(
+      (inv): inv is PendingAdminInvitation =>
+        typeof inv === 'object' &&
+        inv !== null &&
+        (inv as Record<string, unknown>)['role'] === 'tenant_admin' &&
+        RESENDABLE.has(String((inv as Record<string, unknown>)['status'])),
+    );
+    return match ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getClientLifecycle(tenantId: string): Promise<SafeLifecycleResult> {
   try {
     const url = `/api/core/admin/tenants/${encodeURIComponent(tenantId)}/lifecycle?tenant_id=${encodeURIComponent(tenantId)}`;

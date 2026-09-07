@@ -6,13 +6,15 @@ Live production proof requires FG_LIVE_PROOF=1 (post-merge step).
 
 Test matrix:
   T-01  Valid token GET → 200 with masked email, tenant display name, role label
-  T-02  Malformed token (no prefix) → GET 404
-  T-03  Wrong prefix → GET 404
-  T-04  Valid format, never-issued random token → GET 404
-  T-05  Fingerprint as token → GET 404
-  T-06  Expired invitation → GET 404
-  T-07  Revoked invitation → GET 404
-  T-08  Consumed (bound) invitation → GET 404
+  T-02  Malformed token (no prefix) → GET 404 INVITATION_NOT_FOUND
+  T-03  Wrong prefix → GET 404 INVITATION_NOT_FOUND
+  T-04  Valid format, never-issued random token → GET 404 INVITATION_NOT_FOUND
+  T-05  Fingerprint as token → GET 404 INVITATION_NOT_FOUND
+  T-06  Expired invitation (past expires_at, status=pending) → GET 404 INVITATION_EXPIRED
+  T-06b Invitation with status='expired' → GET 404 INVITATION_EXPIRED
+  T-07  Revoked invitation → GET 404 INVITATION_CONSUMED
+  T-08  Consumed (bound) invitation → GET 404 INVITATION_CONSUMED
+  T-08b Failed invitation → GET 404 INVITATION_CONSUMED
   T-09  GET response contains no tenant_id, invitation_id, or token hash
   T-10  POST with body {"role": "platform_admin"} → 422 or 400
   T-11  POST with body {"email": "attacker@evil.com"} → 422 or 400
@@ -346,8 +348,8 @@ class TestInvalidTokenGET:
         r = client.get(f"/identity/invitations/{fp}")
         assert r.status_code == 404
 
-    def test_expired_invitation_returns_404(self, client, engine):
-        """T-06: Expired invitation — indistinguishable from not-found."""
+    def test_expired_invitation_returns_404_invitation_expired(self, client, engine):
+        """T-06: Pending invitation past expires_at → INVITATION_EXPIRED."""
         from api.identity.workforce_token import generate
 
         raw, fp = generate()
@@ -364,9 +366,29 @@ class TestInvalidTokenGET:
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_EXPIRED"
 
-    def test_revoked_invitation_returns_404(self, client, engine):
-        """T-07: Revoked invitation — same 404 as not-found."""
+    def test_status_expired_returns_404_invitation_expired(self, client, engine):
+        """T-06b: Invitation with status='expired' → INVITATION_EXPIRED."""
+        from api.identity.workforce_token import generate
+
+        raw, fp = generate()
+        tenant_id = _tid()
+        _ensure_tenant(engine, tenant_id)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            status="expired",
+            acceptance_token_hash=fp,
+        )
+
+        r = client.get(f"/identity/invitations/{raw}")
+        assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_EXPIRED"
+
+    def test_revoked_invitation_returns_404_invitation_consumed(self, client, engine):
+        """T-07: Revoked invitation → INVITATION_CONSUMED."""
         from api.identity.workforce_token import generate
 
         raw, fp = generate()
@@ -382,9 +404,10 @@ class TestInvalidTokenGET:
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_CONSUMED"
 
-    def test_bound_invitation_returns_404(self, client, engine):
-        """T-08: Already-consumed invitation — same 404."""
+    def test_bound_invitation_returns_404_invitation_consumed(self, client, engine):
+        """T-08: Already-accepted invitation → INVITATION_CONSUMED."""
         from api.identity.workforce_token import generate
 
         raw, fp = generate()
@@ -400,6 +423,41 @@ class TestInvalidTokenGET:
 
         r = client.get(f"/identity/invitations/{raw}")
         assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_CONSUMED"
+
+    def test_failed_invitation_returns_404_invitation_consumed(self, client, engine):
+        """T-08b: Failed invitation → INVITATION_CONSUMED."""
+        from api.identity.workforce_token import generate
+
+        raw, fp = generate()
+        tenant_id = _tid()
+        _ensure_tenant(engine, tenant_id)
+        _seed_invitation(
+            engine,
+            tenant_id,
+            "user@example.com",
+            status="failed",
+            acceptance_token_hash=fp,
+        )
+
+        r = client.get(f"/identity/invitations/{raw}")
+        assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_CONSUMED"
+
+    def test_malformed_token_returns_invitation_not_found(self, client):
+        """T-02 code check: malformed token → INVITATION_NOT_FOUND."""
+        r = client.get("/identity/invitations/deadbeefdeadbeef")
+        assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_NOT_FOUND"
+
+    def test_never_issued_token_returns_invitation_not_found(self, client):
+        """T-04 code check: valid format, never stored → INVITATION_NOT_FOUND."""
+        from api.identity.workforce_token import generate
+
+        raw, _ = generate()
+        r = client.get(f"/identity/invitations/{raw}")
+        assert r.status_code == 404
+        assert r.json()["detail"]["code"] == "INVITATION_NOT_FOUND"
 
 
 # ---------------------------------------------------------------------------

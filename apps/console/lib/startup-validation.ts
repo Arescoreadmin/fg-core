@@ -50,6 +50,19 @@ export function validateProductionConfig(): void {
     );
   }
 
+  // Bootstrap env vars are installation/DR-only controls that bypass DB-canonical
+  // authority. They must not be present in production after platform admin is established.
+  const bootstrapSubjects = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS || '').trim();
+  const bootstrapEmails = (process.env.FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS || '').trim();
+  if (bootstrapSubjects || bootstrapEmails) {
+    errors.push(
+      '  FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS or FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS is set. ' +
+        'These are installation/DR-only controls and must be removed after the canonical ' +
+        'platform admin credential is established. Their presence bypasses DB-canonical ' +
+        'authority and is a security smell in production.',
+    );
+  }
+
   if (errors.length > 0) {
     throw new Error(
       'Production configuration invalid:\n' + errors.join('\n') + '\nConsole startup aborted.',

@@ -6,7 +6,12 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { IdentityGovernancePanel } from '@/components/identity';
 import { getIdentityReadiness, type IdentityReadiness } from '@/lib/identityApi';
-import { getClientLifecycle, type ClientLifecycle } from '@/lib/lifecycleApi';
+import {
+  getClientLifecycle,
+  getPendingAdminInvitation,
+  type ClientLifecycle,
+  type PendingAdminInvitation,
+} from '@/lib/lifecycleApi';
 import { mapHttpError } from '@/lib/errors';
 import {
   listServiceCredentials,
@@ -253,35 +258,71 @@ function ConsoleUsersTab({ tenantId, onConfigureIdentity, onRefreshLifecycle }: 
 
 // ─── Lifecycle Banner ─────────────────────────────────────────────────────────
 
+function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return email;
+  return email[0] + '***' + email.slice(at);
+}
+
 function LifecycleBanner({
+  tenantId,
   lifecycle,
   lifecycleError,
-  onBootstrapAdmin,
+  onInviteInitialAdmin,
   onConfigureIdentity,
 }: {
+  tenantId: string;
   lifecycle: ClientLifecycle | null;
   lifecycleError: string | null;
-  onBootstrapAdmin: (email: string, displayName: string) => Promise<void>;
+  onInviteInitialAdmin: (email: string, displayName: string) => Promise<void>;
   onConfigureIdentity: () => void;
 }) {
-  const [showBootstrapForm, setShowBootstrapForm] = useState(false);
-  const [bootstrapEmail, setBootstrapEmail] = useState('');
-  const [bootstrapName, setBootstrapName] = useState('');
-  const [bootstrapping, setBootstrapping] = useState(false);
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
-  async function handleBootstrap() {
-    setBootstrapping(true);
-    setBootstrapError(null);
+  // Loaded when admin_unbound: the pending/expired admin invitation, if any.
+  const [pendingInvite, setPendingInvite] = useState<PendingAdminInvitation | null | 'loading'>(
+    null,
+  );
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState<'idle' | 'sent' | 'error'>('idle');
+
+  const hasBind = lifecycle?.next_actions.includes('BIND_ADMIN_IDENTITY') ?? false;
+
+  useEffect(() => {
+    if (!hasBind) return;
+    setPendingInvite('loading');
+    void getPendingAdminInvitation(tenantId).then(setPendingInvite);
+  }, [hasBind, tenantId]);
+
+  async function handleInviteInitialAdmin() {
+    setInviting(true);
+    setInviteError(null);
     try {
-      await onBootstrapAdmin(bootstrapEmail, bootstrapName);
-      setShowBootstrapForm(false);
-      setBootstrapEmail('');
-      setBootstrapName('');
+      await onInviteInitialAdmin(inviteEmail, inviteName);
+      setShowInviteForm(false);
+      setInviteEmail('');
+      setInviteName('');
     } catch (e) {
-      setBootstrapError(e instanceof Error ? e.message : 'Bootstrap failed');
+      setInviteError(e instanceof Error ? e.message : 'Invite failed');
     } finally {
-      setBootstrapping(false);
+      setInviting(false);
+    }
+  }
+
+  async function handleResend(email: string) {
+    setResending(true);
+    setResendResult('idle');
+    try {
+      await onInviteInitialAdmin(email, '');
+      setResendResult('sent');
+    } catch {
+      setResendResult('error');
+    } finally {
+      setResending(false);
     }
   }
 
@@ -323,26 +364,26 @@ function LifecycleBanner({
         )}
         {lifecycle.next_actions.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
-            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && !showBootstrapForm && (
+            {lifecycle.next_actions.includes('INVITE_INITIAL_ADMIN') && !showInviteForm && (
               <div>
                 <button
                   style={s.primaryBtn}
-                  onClick={() => setShowBootstrapForm(true)}
-                  data-testid="lifecycle-cta-bootstrap-admin"
+                  onClick={() => setShowInviteForm(true)}
+                  data-testid="lifecycle-cta-invite-initial-admin"
                 >
-                  Bootstrap admin
+                  Invite initial admin
                 </button>
               </div>
             )}
-            {lifecycle.next_actions.includes('BOOTSTRAP_ADMIN') && showBootstrapForm && (
+            {lifecycle.next_actions.includes('INVITE_INITIAL_ADMIN') && showInviteForm && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label style={s.field}>
                   Admin email (required)
                   <input
                     style={s.input}
                     type="email"
-                    value={bootstrapEmail}
-                    onChange={e => setBootstrapEmail(e.target.value)}
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
                     placeholder="admin@client.com"
                     autoFocus
                   />
@@ -351,41 +392,124 @@ function LifecycleBanner({
                   Display name (optional)
                   <input
                     style={s.input}
-                    value={bootstrapName}
-                    onChange={e => setBootstrapName(e.target.value)}
+                    value={inviteName}
+                    onChange={e => setInviteName(e.target.value)}
                     placeholder="Jane Smith"
                   />
                 </label>
-                {bootstrapError && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--danger, #dc2626)' }}>{bootstrapError}</div>
+                {inviteError && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--danger, #dc2626)' }}>{inviteError}</div>
                 )}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
                     style={s.secondaryBtn}
-                    onClick={() => { setShowBootstrapForm(false); setBootstrapEmail(''); setBootstrapName(''); setBootstrapError(null); }}
-                    disabled={bootstrapping}
+                    onClick={() => { setShowInviteForm(false); setInviteEmail(''); setInviteName(''); setInviteError(null); }}
+                    disabled={inviting}
                   >
                     Cancel
                   </button>
                   <button
                     style={s.primaryBtn}
-                    onClick={() => { void handleBootstrap(); }}
-                    disabled={bootstrapping || !bootstrapEmail}
-                    data-testid="lifecycle-cta-bootstrap-admin-submit"
+                    onClick={() => { void handleInviteInitialAdmin(); }}
+                    disabled={inviting || !inviteEmail}
+                    data-testid="lifecycle-cta-invite-initial-admin-submit"
                   >
-                    {bootstrapping ? 'Bootstrapping…' : 'Bootstrap admin'}
+                    {inviting ? 'Inviting…' : 'Invite initial admin'}
                   </button>
                 </div>
               </div>
             )}
-            {lifecycle.next_actions.includes('BIND_ADMIN_IDENTITY') && (
+            {hasBind && pendingInvite === 'loading' && (
+              <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                Checking invitation status…
+              </span>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite !== null && (
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}
+                data-testid="lifecycle-cta-admin-waiting"
+              >
+                <span style={{ fontSize: '0.85rem' }}>
+                  Admin invitation sent to{' '}
+                  <strong>{maskEmail(pendingInvite.email)}</strong> — waiting for acceptance.
+                </span>
+                {resendResult === 'sent' && (
+                  <span style={{ fontSize: '0.8rem', color: '#16a34a' }}>Invitation resent.</span>
+                )}
+                {resendResult === 'error' && (
+                  <span style={{ fontSize: '0.8rem', color: '#dc2626' }}>
+                    Resend failed — try again.
+                  </span>
+                )}
+                <button
+                  style={s.secondaryBtn}
+                  onClick={() => { void handleResend(pendingInvite.email); }}
+                  disabled={resending}
+                  data-testid="lifecycle-cta-resend-admin-invite"
+                >
+                  {resending ? 'Resending…' : 'Resend invitation'}
+                </button>
+              </div>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite === null && !showInviteForm && (
               <button
-                style={s.secondaryBtn}
-                onClick={onConfigureIdentity}
+                style={s.primaryBtn}
+                onClick={() => setShowInviteForm(true)}
                 data-testid="lifecycle-cta-bind-identity"
               >
-                Configure identity
+                Invite initial admin
               </button>
+            )}
+            {hasBind && pendingInvite !== 'loading' && pendingInvite === null && showInviteForm && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={s.field}>
+                  Admin email (required)
+                  <input
+                    style={s.input}
+                    type="email"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="admin@client.com"
+                    autoFocus
+                  />
+                </label>
+                <label style={s.field}>
+                  Display name (optional)
+                  <input
+                    style={s.input}
+                    value={inviteName}
+                    onChange={e => setInviteName(e.target.value)}
+                    placeholder="Jane Smith"
+                  />
+                </label>
+                {inviteError && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--danger, #dc2626)' }}>
+                    {inviteError}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    style={s.secondaryBtn}
+                    onClick={() => {
+                      setShowInviteForm(false);
+                      setInviteEmail('');
+                      setInviteName('');
+                      setInviteError(null);
+                    }}
+                    disabled={inviting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={s.primaryBtn}
+                    onClick={() => { void handleInviteInitialAdmin(); }}
+                    disabled={inviting || !inviteEmail}
+                    data-testid="lifecycle-cta-invite-initial-admin-submit"
+                  >
+                    {inviting ? 'Inviting…' : 'Invite initial admin'}
+                  </button>
+                </div>
+              </div>
             )}
             {lifecycle.next_actions.includes('INVITE_MEMBERS') && (
               <span style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
@@ -887,11 +1011,12 @@ export default function TenantDetailPage() {
       </div>
 
       <LifecycleBanner
+        tenantId={tenantId}
         lifecycle={lifecycle}
         lifecycleError={lifecycleError}
-        onBootstrapAdmin={async (email: string, displayName: string) => {
+        onInviteInitialAdmin={async (email: string, displayName: string) => {
           const res = await fetch(
-            `/api/core/admin/tenants/${encodeURIComponent(tenantId)}/bootstrap-admin?tenant_id=${encodeURIComponent(tenantId)}`,
+            `/api/core/admin/tenants/${encodeURIComponent(tenantId)}/invite-initial-admin?tenant_id=${encodeURIComponent(tenantId)}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -900,7 +1025,7 @@ export default function TenantDetailPage() {
           );
           if (!res.ok) {
             const body = await res.json().catch(() => null);
-            throw new Error((body as { detail?: { message?: string } } | null)?.detail?.message ?? `Bootstrap failed: HTTP ${res.status}`);
+            throw new Error((body as { detail?: { message?: string } } | null)?.detail?.message ?? `Invite failed: HTTP ${res.status}`);
           }
           await refreshLifecycle();
         }}

@@ -11,7 +11,7 @@ The named-user headers supply only: email match target + email_verified state.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text as _sql
@@ -19,13 +19,22 @@ from sqlalchemy import text as _sql
 from api.admin import require_internal_admin_gateway
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models_identity import TenantInvitation
-from api.identity.store import TenantIdentityStore
-from api.identity.workforce_token import fingerprint_for
+from api.identity.store import TenantIdentityStore, emit_identity_audit_event
+from api.identity.workforce_token import fingerprint_for, generate as _gen_token
+from api.notifications.email import (
+    EmailDeliveryResult,
+    build_workforce_invitation_url,
+    send_portal_invitation,
+)
 from api.principal_authority import resolve_or_create_principal_for_external_identity
+from api.ratelimit import check_rate_limit_key
 
 _log = logging.getLogger(__name__)
 router = APIRouter(prefix="/identity", tags=["identity-acceptance"])
 _store = TenantIdentityStore()
+
+_RESEND_PER_MIN_RATE = 1.0 / 60  # 1 resend per minute; capacity = 1
+_RESEND_PER_DAY_RATE = 5.0 / 86400  # 5 resends per day; capacity = 5
 
 
 def _now() -> datetime:
@@ -97,7 +106,12 @@ def _get_trusted_named_user(request: Request) -> tuple[str, bool]:
 def get_invitation_preflight(token: str) -> dict:
     """Public preflight: minimal display info for the acceptance UX.
 
-    All invalid/expired/revoked/consumed tokens return the same 404.
+    Returns 404 for any invalid, expired, or consumed token. The detail.code
+    distinguishes the cause so the console can offer specific recovery actions:
+      INVITATION_NOT_FOUND  — malformed token or fingerprint not in DB
+      INVITATION_EXPIRED    — token was real but is past expiry
+      INVITATION_CONSUMED   — token was used, revoked, or is no longer available
+
     Never returns tenant_id, invitation_id, fingerprint, or internal IDs.
     """
     fp = fingerprint_for(token)
@@ -114,18 +128,18 @@ def get_invitation_preflight(token: str) -> dict:
             )
 
         _id, tenant_id, _email, normalized_email, role, status, expires_at = row
-        if status != "pending":
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
-            )
 
         inv_expires = expires_at
         if inv_expires is not None and inv_expires.tzinfo is None:
             inv_expires = inv_expires.replace(tzinfo=timezone.utc)
+
+        if status == "expired":
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_EXPIRED"})
+        if status != "pending":
+            # bound, revoked, failed, auth_started, accepted_identity_pending_binding
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_CONSUMED"})
         if inv_expires is None or inv_expires < _now():
-            raise HTTPException(
-                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
-            )
+            raise HTTPException(status_code=404, detail={"code": "INVITATION_EXPIRED"})
 
         # Fetch tenant display name within tenant context
         set_tenant_context(db, tenant_id)
@@ -342,6 +356,189 @@ def accept_invitation(
     except Exception:
         db.rollback()
         _log.exception("identity_acceptance.unexpected_error")
+        raise HTTPException(status_code=500, detail={"code": "INTERNAL_ERROR"})
+    finally:
+        db.close()
+
+
+def _check_resend_rate_limit(inv_id: str) -> None:
+    # check_rate_limit_key uses the configured backend (Redis in production, memory
+    # in dev/test). Keys are stable invitation ID so limits survive token rotation.
+    ok_min, reset_min = check_rate_limit_key(
+        f"resend:inv:{inv_id}:min", _RESEND_PER_MIN_RATE, 1.0
+    )
+    if not ok_min:
+        raise HTTPException(
+            status_code=429,
+            detail={"code": "RESEND_RATE_LIMITED", "retry_after_seconds": reset_min},
+            headers={"Retry-After": str(reset_min)},
+        )
+    ok_day, reset_day = check_rate_limit_key(
+        f"resend:inv:{inv_id}:day", _RESEND_PER_DAY_RATE, 5.0
+    )
+    if not ok_day:
+        raise HTTPException(
+            status_code=429,
+            detail={"code": "RESEND_DAILY_LIMIT", "retry_after_seconds": reset_day},
+            headers={"Retry-After": str(reset_day)},
+        )
+
+
+_ROLE_LABELS = {
+    "tenant_admin": "Tenant Administrator",
+    "auditor": "Auditor",
+    "user": "User",
+    "admin": "Administrator",
+}
+
+
+def _attempt_resend_email(
+    to_email: str, role: str, raw_token: str, expires_at: datetime
+) -> EmailDeliveryResult:
+    result = send_portal_invitation(
+        to_email=to_email,
+        invitation_url=build_workforce_invitation_url(raw_token),
+        portal_role=_ROLE_LABELS.get(role, role.replace("_", " ").title()),
+        expires_at=expires_at.isoformat(),
+    )
+    if result.state == "failed":
+        _log.error(
+            "identity_acceptance.resend_email_failed code=%s retryable=%s",
+            result.error_code,
+            result.retryable,
+        )
+    return result
+
+
+@router.post("/invitations/{token}/request-resend")
+def request_resend(token: str) -> dict:
+    """User-triggered resend for expired workforce invitations.
+
+    The expired bearer token authorizes the resend — same authority model as the
+    GET preflight. No gateway auth or session required.
+
+    Only genuinely expired invitations are resendable (status='expired' or
+    status='pending' past expires_at). Terminal and in-progress states return
+    404 to avoid leaking state.
+
+    Delivery-before-rotation contract:
+      1. Generate new token in memory (not yet in DB).
+      2. Attempt email delivery while holding the row lock.
+      3. On delivery success ('sent' or 'skipped'): commit rotation — old token
+         invalid, new token live, 200 {"sent": true}.
+      4. On delivery failure: rollback — old expired token remains valid so the
+         user can retry with the same link — 503 with retryable flag.
+
+    This guarantees the user is never stranded with an unknown live token:
+    either they received the email with the new token, or the old token still
+    works for a retry. Email address, tenant, and role are immutable.
+    """
+    fp = fingerprint_for(token)
+    if fp is None:
+        raise HTTPException(status_code=404, detail={"code": "INVITATION_NOT_FOUND"})
+
+    db = get_sessionmaker()()
+    try:
+        row = _lookup_by_token_hash(db, fp)
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+
+        pre_id, pre_tenant_id, _email, _norm, _role, pre_status, pre_expires = row
+
+        pre_expires_tz = pre_expires
+        if pre_expires_tz is not None and pre_expires_tz.tzinfo is None:
+            pre_expires_tz = pre_expires_tz.replace(tzinfo=timezone.utc)
+
+        now = _now()
+        is_resendable = pre_status == "expired" or (
+            pre_status == "pending"
+            and pre_expires_tz is not None
+            and pre_expires_tz < now
+        )
+        if not is_resendable:
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+
+        # Rate limit before acquiring the row lock (key = stable invitation ID)
+        _check_resend_rate_limit(pre_id)
+
+        set_tenant_context(db, pre_tenant_id)
+
+        inv = (
+            db.query(TenantInvitation)
+            .filter(TenantInvitation.id == pre_id)
+            .with_for_update()
+            .first()
+        )
+        if inv is None:
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+
+        # Re-validate under lock — state may have changed since pre-context lookup
+        inv_expires = inv.expires_at
+        if inv_expires is not None and inv_expires.tzinfo is None:
+            inv_expires = inv_expires.replace(tzinfo=timezone.utc)
+
+        is_still_resendable = inv.status == "expired" or (
+            inv.status == "pending" and inv_expires is not None and inv_expires < now
+        )
+        if not is_still_resendable:
+            raise HTTPException(
+                status_code=404, detail={"code": "INVITATION_NOT_FOUND"}
+            )
+
+        new_expires_at = now + timedelta(hours=72)
+
+        # Generate new token in memory before touching the DB.
+        # Row lock is held during email delivery so the old fingerprint cannot
+        # be used for a concurrent accept while delivery is in flight.
+        new_raw_token, new_fingerprint = _gen_token()
+
+        send_email = inv.normalized_email or inv.email or ""
+        send_role = inv.role
+
+        email_result = _attempt_resend_email(
+            send_email, send_role, new_raw_token, new_expires_at
+        )
+        if email_result.state == "failed":
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "RESEND_EMAIL_FAILED",
+                    "retryable": email_result.retryable,
+                },
+            )
+
+        # Email delivered (or skipped in dev) — commit rotation atomically
+        inv.acceptance_token_hash = new_fingerprint
+        inv.expires_at = new_expires_at
+        inv.status = "pending"
+        inv.revoked_at = None
+        inv.updated_at = now
+
+        emit_identity_audit_event(
+            db,
+            tenant_id=inv.tenant_id,
+            event_type="tenant.invite.created",
+            invitation_id=inv.id,
+            affected_email=send_email,
+            details={"invitation_status": "pending"},
+        )
+
+        db.commit()
+        return {"sent": True}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        _log.exception("identity_acceptance.resend_unexpected_error")
         raise HTTPException(status_code=500, detail={"code": "INTERNAL_ERROR"})
     finally:
         db.close()

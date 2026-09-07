@@ -6753,3 +6753,71 @@ Validation evidence:
 - Console BFF: no PROXY_RULES wildcards introduced; existing `workforce/users` entry covers the revoke sub-route via `startsWith` match already present.
 
 SOC review outcome: approved. The changes extend the workforce authority boundary with terminal revocation semantics, mandatory reason capture, canonical principal lifecycle verification, and transactional last-admin protection. No existing capability is reduced; only previously unguarded membership lifecycle transitions are hardened.
+
+---
+
+## 2026-09-06 — SOC-HIGH-002 — PR-9B-1: Invite-Initial-Admin State-Derived Operation
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (`tools/ci/check_plane_registry.py` and derived topology artifacts).
+
+Scope: PR-9B-1 replaces the tenant admin bootstrap ceremony with a single state-derived endpoint (`POST /admin/tenants/{tenant_id}/invite-initial-admin`). The endpoint evaluates DB state and takes the minimum necessary action: seeds admin user + dispatches invitation (admin_unset), rotates a non-terminal invitation in-place (admin_unbound or expired), or no-ops (bound + same email). Delivery-before-commit is enforced — token never persists without confirmed send. Expired invitations are revived via in-place rotation (invitation lineage preserved); only terminal states (bound, revoked, failed, accepted_identity_pending_binding) create a fresh row. `LIFECYCLE_VERSION` bumped to 2 to signal the machine contract change to TypeScript consumers.
+
+Critical files changed:
+- `tools/ci/check_plane_registry.py`: added `("POST", "/admin/tenants/{tenant_id}/invite-initial-admin")` to `EXACT_TENANT_BINDING_EXCEPTIONS`. Justification: same authority pattern as other TENANT-ADMIN-001 routes already in the exception set — `require_tenant_admin()` enforces same-tenant isolation via `resolve_authoritative_tenant` + DB-canonical `check_tenant_admin_authority`; `tenant_id` in path identifies the target tenant being managed, not the caller's auth-context tenant.
+- `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `topology.sha256` / `plane_registry_snapshot.json` / `contract_routes.json`: regenerated artifacts reflecting the new `POST /admin/tenants/{tenant_id}/invite-initial-admin` route and the existing `POST /identity/invitations/{token}/request-resend` route (the latter was added in 9A-4 but the inventory was not regenerated at that time).
+- `contracts/core/openapi.json` / `schemas/api/openapi.json`: regenerated OpenAPI spec; new route reflected under the `control` plane.
+- `BLUEPRINT_STAGED.md` / `CONTRACT.md`: contract authority SHA refreshed via `make contract-authority-refresh`.
+
+Security posture:
+- The new endpoint is gated by `require_tenant_admin()` (same authority chain as all other TENANT-ADMIN-001 routes) + `require_scopes(["admin:write"])` + `platform.admin` permission check. No weaker auth path introduced.
+- Delivery-before-commit invariant: `generate()` produces `(raw_token, fingerprint)`; raw_token transmitted once via Resend; fingerprint stored in `tenant_invitations`; on delivery failure `db.rollback()` + HTTP 503 — no stranded DB row.
+- Invitation lineage: expired invitations rotate in-place (same UUID, new fingerprint, extended expiry) rather than producing a second row. Only genuinely consumed/terminated states (`bound`, `revoked`, `failed`, `accepted_identity_pending_binding`) require a fresh row. This matches the invariant established in 9A-4 resend logic.
+- No new RLS policies, no OPA rules, no API key grants, no permission additions. The `bootstrap-admin` endpoint is preserved unchanged as a low-level platform tool.
+
+Validation evidence:
+- `pytest tests/test_p1139_invite_initial_admin.py`: 12/12 passed (I-01 through I-09 including email delivery failure and expired lineage preservation).
+- `pytest tests/test_core_002_admin_gateway_tenant_binding.py`: 40/40 passed (includes fix for pre-existing source-inspection regression from P-113.6 refactor).
+- `pytest tests/test_client_lifecycle_001.py tests/test_client_lifecycle_002.py tests/test_tenant_admin_001.py tests/test_client_lifecycle_production_proof_001.py`: 76 passed, 7 skipped (postgres-only).
+- `make fg-fast`: all gates pass after inventory regeneration and contract authority refresh.
+
+SOC review outcome: approved. One new endpoint added under the existing TENANT-ADMIN-001 authority pattern; no auth paths weakened; delivery-before-commit prevents stranded tokens; invitation lineage preservation prevents silent row duplication. All pre-existing security invariants hold.
+
+---
+
+## 2026-09-06 — SOC-HIGH-002 — PR-9B-1 follow-up: resend route public exception registration
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (`tools/ci/check_plane_registry.py` and derived topology artifacts).
+
+Scope: Post-merge full test suite revealed `test_plane_registry_checker_passes` failing because `POST /identity/invitations/{token}/request-resend` (added in 9A-4) was missing from `EXACT_PUBLIC_ROUTE_EXCEPTIONS` in `check_plane_registry.py`. The route uses the same expired fgwi1.* bearer token as auth credential — identical model to the GET preflight already in the exception set. No gateway auth or service-account scope applies.
+
+Critical files changed:
+- `tools/ci/check_plane_registry.py`: added `("POST", "/identity/invitations/{token}/request-resend")` to `EXACT_PUBLIC_ROUTE_EXCEPTIONS` with justification comment mirroring the 9A-4 resend auth model.
+- `tools/ci/plane_registry_snapshot.json` / `tools/ci/topology.sha256`: topology artifacts regenerated.
+
+Security posture: No auth path weakened. The route was already deployed and functional; this change corrects a missing CI gate registration, not the runtime auth behavior. The expired bearer token model is unchanged.
+
+Validation evidence: `pytest tests/test_plane_registry.py` 3/3 PASS after fix.
+
+---
+
+## 2026-09-06 — P-113.9B.4/B.5/B.6 — admin_unbound banner + invitation acceptance startup hardening
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (startup validation changes touch security-critical configuration enforcement).
+
+Scope: Three residual items from P-113.9B:
+
+**9B.4 — admin_unbound banner + resend UX:** Console tenant detail page now detects `BIND_ADMIN_IDENTITY` action, fetches `GET /admin/identity/tenants/{tenantId}/invitations` via BFF to find the pending or expired tenant_admin invitation, and displays "Admin invitation sent to {masked_email} — waiting for acceptance" with a "Resend invitation" button. Resend calls `POST /admin/tenants/{tenantId}/invite-initial-admin` (state-derived, admin-authorized) — the canonical resend authority — rather than the public token-based `POST /identity/invitations/{token}/request-resend`. If no pending invitation exists (legacy bootstrap path), the banner falls back to the invite form. No raw invitation token is held in page state.
+
+**9B.5 — invitation acceptance prerequisites:** New `_check_invitation_acceptance_prerequisites()` method in `api/config/startup_validation.py` checks both `FG_INTERNAL_GATEWAY_SECRET` (via `resolve_internal_gateway_secret()`) and `FG_KEY_PEPPER` unconditionally — regardless of `PLATFORM_AUTH_MODE` or `FG_AUTH_ENABLED`. Previously: `FG_INTERNAL_GATEWAY_SECRET` was only validated in `CANONICAL` mode (the check returned early in `COMPATIBILITY` mode), and `FG_KEY_PEPPER` was only validated when `auth_enabled=True`. Both are hard prerequisites for the invitation acceptance path (`POST /identity/invitations/{token}/accept`). A missing secret discovered at first acceptance (not startup) is precisely the brittle failure pattern P-113.9 eliminates. Severity: error in production, warning in non-production.
+
+**9B.6 — bootstrap env var retirement warning:** `validateProductionConfig()` in `apps/console/lib/startup-validation.ts` now fails fast in prod-like environments if `FG_CONSOLE_BOOTSTRAP_ADMIN_SUBJECTS` or `FG_CONSOLE_BOOTSTRAP_ADMIN_EMAILS` are set. These are installation/DR-only controls that bypass DB-canonical authority by injecting `Administrator` role via JWT callback. Their presence in production is a security smell; they should be removed after the canonical platform admin credential is established.
+
+Security posture:
+- No existing auth paths modified.
+- `_check_invitation_acceptance_prerequisites` adds new failure conditions at startup; cannot weaken existing checks.
+- The admin_unbound resend path uses admin-authorized `invite-initial-admin`, not the public token endpoint — consistent with the two-entry-point architecture (admin path vs. expired-link self-service path).
+- Bootstrap env var check is fail-fast in production; does not affect non-production deployments.
+
+Validation evidence:
+- `pytest tests/test_auth_startup_guard.py` 25/25 PASS (14 existing + 9 new invitation prerequisite tests + 2 others).
+- `make fg-fast` PASS; `make fg-security` PASS; `make fg-contract` PASS; console `npm run typecheck` PASS; `npm run lint` PASS.

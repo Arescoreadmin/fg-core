@@ -9,6 +9,7 @@ from __future__ import annotations
 # Re-export from the actual implementation
 from api.ratelimit import (
     rate_limit_guard,
+    check_rate_limit_key,
     load_config,
     RLConfig,
     MemoryRateLimiter,
@@ -17,6 +18,7 @@ from api.ratelimit import (
 
 __all__ = [
     "rate_limit_guard",
+    "check_rate_limit_key",
     "load_config",
     "RLConfig",
     "MemoryRateLimiter",

@@ -148,6 +148,18 @@ function jsonError(message: string, status: number, requestId: string) {
   );
 }
 
+// Exhaustive public invitation error contract.
+// Only these Core detail.code values are safe to surface to the browser on
+// invitation/identity-recovery paths. Any other code normalizes to
+// INVITATION_NOT_FOUND. SESSION_EXPIRED is not derived from Core — it is a
+// BFF-level signal from absent session state (no Core call is made).
+const INVITATION_SAFE_CODES = new Set([
+  'INVITATION_EMAIL_MISMATCH',
+  'IDENTITY_UNVERIFIED',
+  'TENANT_NOT_AVAILABLE',
+] as const);
+type InvitationSafeCode = typeof INVITATION_SAFE_CODES extends Set<infer T> ? T : never;
+
 /**
  * Canonical BFF credential error responses.
  * Returns structured JSON with a stable error code and request_id — never raw
@@ -296,6 +308,14 @@ function isInvitationAcceptancePath(path: string[]): boolean {
     joined.startsWith('identity/invitations/');
 }
 
+function isInvitationAcceptSubpath(path: string[]): boolean {
+  // Matches identity/invitations/{token}/accept only — not request-resend or preflight
+  return path.length === 4 &&
+    path[0] === 'identity' &&
+    path[1] === 'invitations' &&
+    path[3] === 'accept';
+}
+
 function isTenantAdminCorePath(path: string[]): boolean {
   const joined = path.join('/');
   // admin/tenants is narrowed to the 3 delegated subroute families only;
@@ -305,7 +325,7 @@ function isTenantAdminCorePath(path: string[]): boolean {
     path.length >= 4 &&
     path[0] === 'admin' &&
     path[1] === 'tenants' &&
-    (path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
+    (path[3] === 'invite-initial-admin' || path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
   return (
     joined.startsWith('workforce/users') ||
     joined === 'portal/grants' ||
@@ -619,10 +639,9 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     // trusted named-user identity headers. The named-user headers are an identity
     // transport only — Core's invitation lock + email match provide authority.
     //
-    // GET preflight is forwarded without session headers (public endpoint — Core
-    // does not require gateway auth for the preflight).
-    // POST accept requires gateway auth + named-user headers (injected below).
-    if (request.method === 'POST') {
+    // GET preflight + POST request-resend: no auth headers (public, token-authed).
+    // POST accept: gateway auth + named-user session headers (injected below).
+    if (request.method === 'POST' && isInvitationAcceptSubpath(path)) {
       if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
       const platformAdminKey = PLATFORM_AUTH_MODE === 'CANONICAL' && FG_PLATFORM_ADMIN_KEY
         ? FG_PLATFORM_ADMIN_KEY
@@ -636,7 +655,16 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       // The session is already resolved in handle() — re-fetch here for the
       // invitation-path branch which needs emailVerified from the session.
       const session = await auth();
-      if (session?.user?.email) {
+      if (!session) {
+        // Session absent (expired or never established): signal the console to
+        // re-auth rather than letting Core return 403 IDENTITY_UNVERIFIED, which
+        // the console cannot distinguish from an email mismatch.
+        return NextResponse.json(
+          { error: 'SESSION_EXPIRED', request_id: requestId },
+          { status: 401, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+        );
+      }
+      if (session.user?.email) {
         headers.set('X-FG-Named-User-Email', session.user.email);
         headers.set('X-FG-Named-User-Sub', (session.user as { id?: string })?.id ?? '');
         // Only assert verified=true when the session confirms it — fail-closed otherwise
@@ -645,9 +673,8 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
           (session as { emailVerified?: boolean }).emailVerified === true ? 'true' : 'false',
         );
       }
-      // No session: POST accept will fail Core's email verification check (403 IDENTITY_UNVERIFIED)
     }
-    // GET preflight: no auth headers needed — Core endpoint is public
+    // GET preflight + POST request-resend: no auth headers — Core endpoints are token-authed
   } else {
     const coreAuth = await resolveCoreAuth(tenantId, requestId);
     if (coreAuth.apiKey === null) {
@@ -715,6 +742,25 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       `[core-proxy] CORE_AUTH_REJECTED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=401 normalized_error=CORE_AUTH_REJECTED`,
     );
     return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
+  }
+  if (response.status === 403 && isInvitationPath) {
+    // Invitation/identity-recovery path: surface a safe subset of Core error codes
+    // so the console can offer specific recovery actions (switch account, re-auth, etc.).
+    // Only INVITATION_SAFE_CODES pass through; anything else collapses to a generic
+    // safe code. Core message/detail body is never forwarded.
+    let detailCode: string = 'INVITATION_NOT_FOUND';
+    try {
+      const body403 = await response.json() as { detail?: { code?: string } };
+      const raw = body403?.detail?.code ?? '';
+      if (INVITATION_SAFE_CODES.has(raw as InvitationSafeCode)) detailCode = raw;
+    } catch { /* parse failure: retain safe default */ }
+    console.warn(
+      `[core-proxy] INVITATION_DENIED request_id=${requestId} surface=${path.join('/')} detail_code=${detailCode}`,
+    );
+    return NextResponse.json(
+      { error: 'INVITATION_DENIED', detail_code: detailCode, request_id: requestId },
+      { status: 403, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+    );
   }
   if (response.status === 403) {
     console.warn(
@@ -799,7 +845,18 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const routeGroup = path[0] || 'unknown';
 
   const session = await auth();
-  if (!session?.user) return jsonError('Unauthorized', 401, requestId);
+  if (!session?.user) {
+    // Invitation accept POST needs SESSION_EXPIRED so the acceptance page can
+    // trigger re-auth with the invitation URL preserved, rather than landing on
+    // the generic 401 path which discards the acceptance intent.
+    if (isInvitationAcceptSubpath(path) && request.method === 'POST') {
+      return NextResponse.json(
+        { error: 'SESSION_EXPIRED', request_id: requestId },
+        { status: 401, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+      );
+    }
+    return jsonError('Unauthorized', 401, requestId);
+  }
   // Invitation acceptance uses machine credential + fgwi1.* token authority —
   // the user's session role is irrelevant. Bypass role check so roleless invitees
   // (not yet bound) can reach the preflight and accept endpoints.

@@ -46,6 +46,10 @@ EXACT_PUBLIC_ROUTE_EXCEPTIONS: set[tuple[str, str]] = {
     # state, and sets RLS context. Standard require_scopes dependency does not
     # apply to named-user session flows.
     ("GET", "/portal/named-users/me"),
+    # 9A-4 workforce invitation resend: the expired fgwi1.* bearer token IS
+    # the authorization credential — same auth model as the GET preflight.
+    # No service-account scope or gateway auth applies.
+    ("POST", "/identity/invitations/{token}/request-resend"),
 }
 
 EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
@@ -87,6 +91,7 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # Bootstrap uses platform.admin + set_tenant_context(db, tenant_id).
     # Delegated routes use DB-canonical check_tenant_admin_authority which
     # enforces same-tenant via resolve_authoritative_tenant inside _dep.
+    ("POST", "/admin/tenants/{tenant_id}/invite-initial-admin"),
     ("POST", "/admin/tenants/{tenant_id}/bootstrap-admin"),
     ("POST", "/admin/tenants/{tenant_id}/users/invite"),
     ("PATCH", "/admin/tenants/{tenant_id}/users/{user_id}"),
