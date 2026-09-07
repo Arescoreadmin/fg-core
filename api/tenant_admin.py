@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from api.actor_context import ActorContext
 from api.auth_dispatch import require_permission
 from api.auth_scopes import require_scopes, resolve_authoritative_tenant
+from api.config.env import is_production_env
 import api.credential_authority as ca
 import api.tenant_rbac as tenant_rbac
 from api.credential_authority import (
@@ -364,7 +365,29 @@ def invite_initial_admin(
     email = body.email
     display_name = (body.display_name or email).strip() or email
 
-    # --- Query active tenant_admin rows (mirrors evaluate_client_lifecycle) ---
+    # --- Validate tenant exists and is active before any write ---
+    tenant_row = db.execute(
+        text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    ).fetchone()
+    if tenant_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "TENANT_NOT_FOUND",
+                "message": f"Tenant {tenant_id!r} not found.",
+            },
+        )
+    if str(tenant_row[0]) != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "TENANT_NOT_AVAILABLE",
+                "message": f"Tenant {tenant_id!r} is not active (lifecycle_state={tenant_row[0]!r}).",
+            },
+        )
+
+    # --- Query ALL tenant_admin rows (active and inactive) ---
     admin_rows = db.execute(
         text("""
             SELECT tu.id, tu.email, tu.active,
@@ -382,26 +405,49 @@ def invite_initial_admin(
 
     active_admins = [r for r in admin_rows if bool(r[2])]
 
-    # --- Case 1: no active admin → create + invite ---
+    # --- Case 1: no active admin → create or reactivate + invite ---
     if not active_admins:
-        user_id = str(uuid.uuid4())
         now_iso = _now().isoformat()
-        db.execute(
-            text("""
-                INSERT INTO tenant_users
-                    (id, tenant_id, email, display_name, role, active,
-                     identity_binding_status, principal_id, created_at, updated_at)
-                VALUES
-                    (:id, :t, :e, :dn, 'tenant_admin', 1, 'unbound', NULL, :now, :now)
-            """),
-            {
-                "id": user_id,
-                "t": tenant_id,
-                "e": email,
-                "dn": display_name,
-                "now": now_iso,
-            },
+        # Check for an existing inactive row for this email; reactivate to avoid
+        # violating the unique(tenant_id, email) constraint on a fresh INSERT.
+        inactive_match = next(
+            (
+                r
+                for r in admin_rows
+                if _norm_email(str(r[1] or "")) == _norm_email(email)
+            ),
+            None,
         )
+        if inactive_match is not None:
+            user_id = str(inactive_match[0])
+            db.execute(
+                text("""
+                    UPDATE tenant_users
+                    SET active = TRUE, identity_binding_status = 'unbound',
+                        display_name = COALESCE(NULLIF(display_name, ''), :dn),
+                        updated_at = :now
+                    WHERE id = :uid AND tenant_id = :t
+                """),
+                {"uid": user_id, "t": tenant_id, "dn": display_name, "now": now_iso},
+            )
+        else:
+            user_id = str(uuid.uuid4())
+            db.execute(
+                text("""
+                    INSERT INTO tenant_users
+                        (id, tenant_id, email, display_name, role, active,
+                         identity_binding_status, principal_id, created_at, updated_at)
+                    VALUES
+                        (:id, :t, :e, :dn, 'tenant_admin', TRUE, 'unbound', NULL, :now, :now)
+                """),
+                {
+                    "id": user_id,
+                    "t": tenant_id,
+                    "e": email,
+                    "dn": display_name,
+                    "now": now_iso,
+                },
+            )
         _send_admin_invite_and_commit(
             db,
             tenant_id=tenant_id,
@@ -513,7 +559,10 @@ def _send_admin_invite_and_commit(
         expires_at=expires_at.isoformat(),
     )
 
-    if result.state == "failed":
+    email_failed = result.state == "failed" or (
+        result.state == "skipped" and is_production_env()
+    )
+    if email_failed:
         db.rollback()
         raise HTTPException(
             status_code=503,

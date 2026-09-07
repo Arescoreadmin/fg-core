@@ -845,7 +845,18 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const routeGroup = path[0] || 'unknown';
 
   const session = await auth();
-  if (!session?.user) return jsonError('Unauthorized', 401, requestId);
+  if (!session?.user) {
+    // Invitation accept POST needs SESSION_EXPIRED so the acceptance page can
+    // trigger re-auth with the invitation URL preserved, rather than landing on
+    // the generic 401 path which discards the acceptance intent.
+    if (isInvitationAcceptSubpath(path) && request.method === 'POST') {
+      return NextResponse.json(
+        { error: 'SESSION_EXPIRED', request_id: requestId },
+        { status: 401, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+      );
+    }
+    return jsonError('Unauthorized', 401, requestId);
+  }
   // Invitation acceptance uses machine credential + fgwi1.* token authority —
   // the user's session role is irrelevant. Bypass role check so roleless invitees
   // (not yet bound) can reach the preflight and accept endpoints.

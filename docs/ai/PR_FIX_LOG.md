@@ -22362,3 +22362,17 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** `tests/test_p1139_production_proof.py` — 9 non-live CI tests (9/9 PASS), 3 live-gated tests (skip in CI).
 - **Validation:** `pytest tests/test_p1139_production_proof.py` 9/9 PASS, 3 skipped.
 - **Result:** PASS (harness only — live proof pending).
+
+## P-54 — fix(identity): PR #681 code review — invite-initial-admin correctness fixes — branch `feat/p1139-seamless-identity-verification`
+
+- **PR/Branch:** `feat/p1139-seamless-identity-verification`
+- **Date:** 2026-09-06
+- **Files changed:** `api/tenant_admin.py`, `apps/console/app/api/core/[...path]/route.ts`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Four P1 and one P2 issues identified by automated code review on PR #681. (1) `active` column INSERT used integer literal `1`; PostgreSQL `BOOLEAN` does not implicitly coerce `1` to `TRUE`. (2) `set_tenant_context` sets the RLS variable but does not validate the tenant is active; orphaned admin/invitation rows could be written for nonexistent or suspended tenants. (3) `invite_initial_admin` queried only active admin rows; if an inactive row for the same email existed, the unconditional INSERT would violate `unique(tenant_id, email)` with a 500 instead of graceful reactivation. (4) `send_portal_invitation` returns `state="skipped"` when `FG_RESEND_API_KEY` is absent; only `"failed"` was checked, so a production misconfiguration would silently commit a token that was never emailed. (5) `handle()` in `route.ts` returns a generic `jsonError('Unauthorized', 401, ...)` before `proxyToCore` is reached; the inner `SESSION_EXPIRED` branch was unreachable for invitation accept POSTs with an expired session.
+- **Fix:** (1) Changed `1` to `TRUE` in `INSERT INTO tenant_users`. (2) Added tenant existence and `lifecycle_state='active'` check immediately after `set_tenant_context`, returning 404 `TENANT_NOT_FOUND` or 409 `TENANT_NOT_AVAILABLE`. (3) In the "no active admin" branch, scan all admin rows for an inactive row matching the given email; if found, UPDATE (reactivate) rather than INSERT. (4) Treat `state="skipped"` as failure when `is_production_env()` is true; import `is_production_env` from `api.config.env`. (5) In `handle()`, detect `isInvitationAcceptSubpath(path) && request.method === 'POST'` before the generic `jsonError` return and emit `SESSION_EXPIRED` instead, so the acceptance page can re-auth with the invitation URL preserved.
+- **Behavioral impact:** invite-initial-admin now correctly handles all edge cases; session expiry on the invitation acceptance path now returns an actionable error code.
+- **Security impact:** Positive — prevents orphaned invitation rows for invalid tenants; prevents silent delivery failures in production when email is misconfigured.
+- **Schema/API impact:** None.
+- **Tests added:** None (covered by existing `test_p1139_invite_initial_admin.py` — 12/12 PASS).
+- **Validation:** `pytest tests/test_p1139_invite_initial_admin.py` 12/12 PASS; `make fg-fast` PASS; console `npm run typecheck` PASS.
+- **Result:** PASS.
