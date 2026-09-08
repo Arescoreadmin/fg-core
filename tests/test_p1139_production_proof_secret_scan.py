@@ -23,9 +23,7 @@ def test_p1139_secret_scan_rejects_actual_workforce_invitation_token_shape() -> 
     # Build the prefix dynamically so the test source itself does not become
     # evidence containing the sensitive credential signature.
     prefix = "".join(("fg", "wi1", "."))
-    evidence = {
-        "leaked_credential": prefix + "synthetic-test-value-not-a-real-secret"
-    }
+    evidence = {"leaked_credential": prefix + "synthetic-test-value-not-a-real-secret"}
 
     result = _secret_scan(evidence)
 

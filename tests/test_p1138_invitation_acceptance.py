@@ -264,6 +264,30 @@ class TestGetInvitationPreflight:
         assert "expires_at" in data
         assert "status" in data
 
+    def test_preflight_returns_login_hint(self, client, engine):
+        """P-113.10 T-01b: login_hint is the normalized invited email."""
+        from api.identity.workforce_token import generate
+
+        raw, fp = generate()
+        tenant_id = _tid()
+        _ensure_tenant(engine, tenant_id)
+        _seed_invitation(
+            engine, tenant_id, "  Alice@Example.COM  ", acceptance_token_hash=fp
+        )
+
+        r = client.get(f"/identity/invitations/{raw}")
+        assert r.status_code == 200
+        data = r.json()
+        assert "login_hint" in data
+        assert data["login_hint"] == "alice@example.com"
+
+    def test_login_hint_absent_for_invalid_token(self, client):
+        """Gate-1 enumeration: invalid token collapses to 404 — no login_hint exposed."""
+        r = client.get("/identity/invitations/fgwi1.not-a-real-token-abcdef1234567890")
+        assert r.status_code == 404
+        body = r.json()
+        assert "login_hint" not in body
+
     def test_response_excludes_internal_ids(self, client, engine):
         """T-09: GET response contains no tenant_id, invitation_id, or acceptance_token_hash."""
         from api.identity.workforce_token import generate
