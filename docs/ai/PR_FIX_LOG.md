@@ -22376,3 +22376,31 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** None (covered by existing `test_p1139_invite_initial_admin.py` — 12/12 PASS).
 - **Validation:** `pytest tests/test_p1139_invite_initial_admin.py` 12/12 PASS; `make fg-fast` PASS; console `npm run typecheck` PASS.
 - **Result:** PASS.
+
+## P-55 — feat(identity): P-113.10 Invitation-Authorized Identity Enrollment — branch `feat/p1140-invitation-authorized-identity-enrollment`
+
+- **PR/Branch:** `feat/p1140-invitation-authorized-identity-enrollment`
+- **Date:** 2026-09-08
+- **Files changed:** `api/identity_acceptance.py`, `apps/console/app/api/core/[...path]/route.ts`, `apps/console/app/identity/invitations/[token]/page.tsx`, `tests/test_p1139_production_proof_secret_scan.py` (ruff format only), `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** The invitation acceptance page immediately redirected unauthenticated users to Auth0 with no context about the invitation, and with no mechanism to distinguish a new (unregistered) identity from an existing one. Users receiving their first invitation had no path to create an Auth0 account as part of the flow. The BFF session guard blocked unauthenticated GET preflight requests, making it impossible to fetch invitation metadata before triggering Auth0.
+- **Fix:** (1) `isInvitationPreflightGet()` helper in `route.ts` — exact 3-segment match (`GET identity/invitations/{token}`). Added early-return in `handle()` before the session check: rate-limit then proxy directly to Core with no auth headers. This makes the preflight fetch available to unauthenticated visitors without widening the session bypass beyond this single public endpoint. (2) `identity_acceptance.py` preflight GET response now includes `login_hint` (normalized invited email via `_normalize_email()`), gated behind the same valid `fgwi1.*` fingerprint as all other preflight data. (3) `page.tsx` replaces the immediate unauthenticated `signIn()` redirect with a preflight-first flow: fetch preflight → `choose_auth` state showing invitation details and two CTAs. "Sign in" passes `{ login_hint, prompt: 'login' }`. "Create account" passes `{ login_hint, screen_hint: 'signup', prompt: 'login' }`. Removed now-dead `redirect_to_auth` phase from the state union and render.
+- **Behavioral impact:** Unauthenticated invitation link visits now show the invitation details (tenant, role, masked email) before triggering Auth0, and offer both sign-in and account-creation paths pre-seeded with the invited email. The authorization boundary is unchanged — accept endpoint still validates invitation + email match + email_verified.
+- **Security impact:** Positive. `login_hint` is returned only after a valid high-entropy `fgwi1.*` token resolves; enumeration surface unchanged vs. `email_masked`. BFF bypass is microscopically narrow (exact path length + prefix check). Signup ≠ authorization: account creation in Auth0 grants zero FrostGate tenant authority without a valid invitation. Production IdP configuration note: `signup_disabled=true` on `Username-Password-Authentication` must be set to `false` before the new-user path is reachable in production (see Gate 5 in PR review).
+- **Schema/API impact:** `GET /identity/invitations/{token}` response gains `login_hint` field (non-breaking addition).
+- **Tests added:** None (gate tests in P-56).
+- **Validation:** `tsc --noEmit` PASS; `make fg-fast` 496 passed, 2 skipped.
+- **Result:** PASS (pending production IdP configuration and new-user browser proof).
+
+## P-56 — test(identity): P-113.10 gate tests — login_hint normalization and enumeration — branch `feat/p1140-invitation-authorized-identity-enrollment`
+
+- **PR/Branch:** `feat/p1140-invitation-authorized-identity-enrollment`
+- **Date:** 2026-09-08
+- **Files changed:** `api/identity_acceptance.py`, `tests/test_p1138_invitation_acceptance.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** (1) The preflight endpoint returned `login_hint: email_str` where `email_str` is `normalized_email or _email`. If `normalized_email` contains untrimmed whitespace (possible when the DB row was written without the normalization helper), `login_hint` would carry leading/trailing whitespace — invalid as an Auth0 `login_hint` parameter. (2) No test asserted `login_hint` presence or value; no test confirmed the enumeration guard (invalid token → no `login_hint` in error body).
+- **Fix:** Applied `_normalize_email()` to `login_hint` before returning it from the preflight endpoint. Added three tests to `TestGetInvitationPreflight`: `test_preflight_returns_login_hint` (mixed-case with whitespace email → normalized value); `test_login_hint_absent_for_invalid_token` (Gate-1 enumeration guard — 404 body contains no `login_hint`).
+- **Behavioral impact:** `login_hint` is always a clean `strip().lower()` normalized email, regardless of how the invitation row was written.
+- **Security impact:** Confirms enumeration guard: `login_hint` is unreachable without a valid `fgwi1.*` token. The normalization fix (`_normalize_email`) was caught by the new test — a real bug before this commit.
+- **Schema/API impact:** None beyond P-55.
+- **Tests added:** 2 new tests in `tests/test_p1138_invitation_acceptance.py`.
+- **Validation:** `pytest tests/test_p1138_invitation_acceptance.py` 36/36 PASS.
+- **Result:** PASS.
