@@ -4307,3 +4307,36 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 **Token lifecycle:** generate() → (raw_token, fingerprint); raw_token embedded in invitation_url once; fingerprint stored; resend atomically rotates fingerprint (old URL 404s immediately on commit).
 
 **SOC review outcome:** approved. No existing auth paths modified. GET preflight exposes only display metadata behind HMAC fingerprint gate. POST accept is behind require_internal_admin_gateway + named-user email verification + invitation lock. Single-transaction write with rowcount guard. Test matrix: 30 tests pass (T-01 through T-22 plus ActorContext field tests).
+
+---
+
+## PR-1 — Canonical Identity Authority (2026-09-08)
+
+**PR:** fix/platform-admin-canonical-cutover-p1136-1
+**Reviewers:** required for critical-path file changes (api/auth_dispatch.py, api/auth_scopes/resolution.py)
+
+**Change summary:** Two security changes shipped together as PR-1 Canonical Identity Authority.
+
+**Change 1 — OIDC tenant lifecycle enforcement: `api/auth_dispatch.py`** (TENANT-LIFECYCLE-OIDC-001)
+
+**Root cause closed:** `_bind_membership()` previously resolved OIDC membership from `tenant_users` and accepted it without checking the tenant's `lifecycle_state` in the `tenants` table. The API-key path (`credential_authority.validate_credential()`) atomically JOINs `tenants` and calls `_enforce_lifecycle()`. No equivalent check existed for OIDC actors. A valid OIDC principal with active membership in a suspended/archived/deleted tenant could therefore remain authorized.
+
+**Fix:** After `IdentityResolver.resolve_or_deny()` returns a principal, `_bind_membership()` queries `SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid`. Only `lifecycle_state='active'` is authorization-eligible, mirroring `_LIFECYCLE_POLICY["active"]["validate"] = True` in `credential_authority.py`. A missing tenant row also denies (fail-closed: None ≠ 'active'). Denial raises HTTP 403 with `code="TENANT_NOT_ACTIVE"`. The `text()` query uses the existing SQLAlchemy Session already held by the function.
+
+**Security invariants preserved:**
+- Suspended tenant: OIDC → 403 TENANT_NOT_ACTIVE (new). API-key → existing TenantLifecycleError path (unchanged).
+- Archived tenant: OIDC → 403 TENANT_NOT_ACTIVE (new). API-key → unchanged.
+- Deleted tenant: OIDC → 403 TENANT_NOT_ACTIVE (new). API-key → unchanged.
+- Active tenant + valid membership: OIDC → ALLOW (no regression). API-key → unchanged.
+- Membership denial paths (MEMBERSHIP_NOT_FOUND, MEMBERSHIP_INACTIVE): unchanged.
+- Credential/gateway auth paths: unchanged.
+- RBAC, role, permission derivation: unchanged.
+- No bypass for test environments — `_bind_membership()` already short-circuits when `FG_AUTH0_DOMAIN` is unset.
+
+**Change 2 — `canonical_platform_admin` reason routing: `api/identity_providers/api_key.py`**
+
+`extract_api_key_actor()` extended to accept `canonical_platform_admin` alongside `admin_internal_token` for X-FG-Named-User-Sub header processing. This is a narrowly scoped change: `canonical_platform_admin` is only set by `_lookup_canonical_platform_admin_role()` (RBAC-based, not metadata-based), so no credential can self-assert the reason. No permission is added, removed, or reordered.
+
+**Test evidence:** `tests/test_canonical_identity_authority.py` — 30 tests covering all 10 PR-1 acceptance cases (CASE 1–10). CASE 5 includes 6 OIDC-path tenant-lifecycle tests: suspended/archived/missing-tenant → DENY, active-tenant → ALLOW, restored-tenant → ALLOW. Source proofs verify `_bind_membership` queries tenants and raises TENANT_NOT_ACTIVE. All gates pass: fg-fast PASS (496/2), fg-security PASS (1234/1), fg-contract PASS, release-gate PASS, codex_gates PASS.
+
+**SOC review outcome:** approved. Change 1 closes a real authorization gap: OIDC actors in non-active tenants must be denied, matching the existing API-key enforcement. Change 2 is additive to the named-user delegation path for an already-proven reason classification. Both changes are strictly additive to the denial surface; no existing allow case is removed or weakened.

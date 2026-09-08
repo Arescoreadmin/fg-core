@@ -55,6 +55,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from sqlalchemy import text
+
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
 from api.db_models import TenantUser
@@ -65,7 +67,6 @@ from services.identity_resolver import (
     IdentityResolutionError,
     IdentityResolver,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -95,6 +96,15 @@ def _user(
     subject: str = "auth0|user-1",
     principal_id: str | None = None,
 ) -> TenantUser:
+    # Ensure the tenants row exists for _bind_membership's lifecycle check
+    # (PR-1 / TENANT-LIFECYCLE-OIDC-001).  INSERT OR IGNORE is idempotent.
+    db.execute(
+        text(
+            "INSERT OR IGNORE INTO tenants (tenant_id, display_name, lifecycle_state)"
+            " VALUES (:tid, :name, 'active')"
+        ),
+        {"tid": tenant_id, "name": tenant_id},
+    )
     # HARD-001 (chk_bound_requires_principal_id + fg_principals FK):
     # BOUND rows require principal_id, which must reference an existing
     # fg_principals row. For test scenarios that do not care about the

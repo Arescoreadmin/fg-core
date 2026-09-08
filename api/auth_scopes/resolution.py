@@ -15,6 +15,9 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from api.config.internal_gateway_secret import resolve_internal_gateway_secret
 from api.db import set_tenant_context
+from api.internal_platform_authority import (
+    CANONICAL_INTERNAL_TENANT_ID as _CANONICAL_INTERNAL_TENANT_ID,
+)
 from api.platform_auth_mode import is_canonical_mode
 
 from .definitions import AuthResult, ERR_INVALID
@@ -69,6 +72,11 @@ def _lookup_canonical_platform_admin_role(
 
 _DELEGATION_CLOCK_TOLERANCE = 5  # seconds of future-dating tolerance
 _DELEGATION_MAX_LIFETIME = 120  # reject proofs longer than 2 minutes
+
+# Credential slot for the canonical platform-admin credential.  Used to assign
+# reason="canonical_platform_admin" so bind_tenant_id() can route these
+# credentials through the same delegated-tenant path as admin_internal_token.
+_PLATFORM_ADMIN_CREDENTIAL_SLOT = "platform-admin-credential:v1"
 
 _ADMIN_GATEWAY_EXACT_PATHS = frozenset(
     {
