@@ -39,11 +39,24 @@ def _suffix() -> str:
 
 @pytest.fixture()
 def app_client(tmp_path, monkeypatch):
-    """Minimal app client with auth enabled and unique DB."""
+    """Minimal app client with auth enabled and unique DB.
+
+    Gateway secrets are explicitly cleared so require_internal_admin_gateway
+    sees no configured secret and FG_ENV=test → dev bypass (no enforcement).
+    This is the correct contract: these tests exercise tenant/credential auth
+    boundaries, not gateway provenance, so gateway enforcement must be absent.
+    """
     db_path = str(tmp_path / "export-isolation.db")
     monkeypatch.setenv("FG_SQLITE_PATH", db_path)
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_API_KEY", "")
+    for _gw in (
+        "FG_INTERNAL_GATEWAY_SECRET",
+        "FG_ADMIN_GATEWAY_INTERNAL_TOKEN",
+        "FG_INTERNAL_AUTH_SECRET",
+        "FG_INTERNAL_TOKEN",
+    ):
+        monkeypatch.delenv(_gw, raising=False)
 
     from api.db import init_db, reset_engine_cache
     from api.main import build_app

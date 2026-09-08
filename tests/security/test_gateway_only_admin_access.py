@@ -92,8 +92,14 @@ class TestRequireInternalAdminGateway:
 
     @pytest.mark.parametrize("env", ["prod", "production", "staging"])
     def test_hosted_accepts_correct_gateway_token(self, env, monkeypatch):
-        """Correct gateway internal token must be accepted in hosted profiles."""
+        """Correct gateway internal token must be accepted in hosted profiles.
+
+        Explicitly removes FG_INTERNAL_GATEWAY_SECRET so the legacy-fallback
+        path (FG_ADMIN_GATEWAY_INTERNAL_TOKEN) is exercised deterministically
+        regardless of what the caller environment has set.
+        """
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_INTERNAL_GATEWAY_SECRET", raising=False)
         monkeypatch.setenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", "correct-token")
         from api.admin import require_internal_admin_gateway
 
