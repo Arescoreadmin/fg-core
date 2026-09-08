@@ -168,6 +168,7 @@ def get_invitation_preflight(token: str) -> dict:
                 role, role.replace("_", " ").title()
             ),
             "email_masked": masked,
+            "login_hint": email_str,
             "expires_at": inv_expires.isoformat(),
             "status": status,
         }

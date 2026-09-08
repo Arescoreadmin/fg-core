@@ -8,6 +8,7 @@ interface PreflightData {
   tenant_display_name: string;
   invited_role_display_name: string;
   email_masked: string;
+  login_hint: string;
   expires_at: string;
   status: string;
 }
@@ -16,12 +17,12 @@ type PrefError = 'EXPIRED' | 'CONSUMED' | 'INVALID' | 'UNKNOWN';
 
 type InvitationState =
   | { phase: 'loading' }
-  | { phase: 'redirect_to_auth' }
   | { phase: 'preflight_loading' }
   | { phase: 'preflight_error'; code: PrefError }
   | { phase: 'resend_sending' }
   | { phase: 'resend_sent' }
   | { phase: 'resend_error'; message: string }
+  | { phase: 'choose_auth'; loginHint: string }
   | { phase: 'ready' }
   | { phase: 'accepting' }
   | { phase: 'email_mismatch'; signedInAs: string }
@@ -87,11 +88,6 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
   // Effect 1: session watch + preflight load
   useEffect(() => {
     if (sessionStatus === 'loading') return;
-    if (sessionStatus === 'unauthenticated') {
-      setState({ phase: 'redirect_to_auth' });
-      signIn('auth0', { callbackUrl: `/identity/invitations/${token}` });
-      return;
-    }
 
     setState({ phase: 'preflight_loading' });
     fetch(`/api/core/identity/invitations/${token}`)
@@ -108,7 +104,11 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
       })
       .then((data: PreflightData) => {
         setPreflight(data);
-        setState({ phase: 'ready' });
+        if (sessionStatus === 'unauthenticated') {
+          setState({ phase: 'choose_auth', loginHint: data.login_hint });
+        } else {
+          setState({ phase: 'ready' });
+        }
       })
       .catch((code: unknown) => {
         setState({
@@ -229,11 +229,11 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
 
   // --- Render ---
 
-  if (
-    state.phase === 'loading' ||
-    state.phase === 'redirect_to_auth' ||
-    state.phase === 'session_expired'
-  ) {
+  if (state.phase === 'session_expired') {
+    return <div style={s.page}>Redirecting to sign in&hellip;</div>;
+  }
+
+  if (state.phase === 'loading') {
     return <div style={s.page}>Redirecting to sign in&hellip;</div>;
   }
 
@@ -268,6 +268,46 @@ export default function InvitationAcceptancePage({ params }: { params: { token: 
         <p style={s.body}>{state.message}</p>
         <button style={s.btn} onClick={() => setState({ phase: 'preflight_error', code: 'EXPIRED' })}>
           Back
+        </button>
+      </div>
+    );
+  }
+
+  if (state.phase === 'choose_auth') {
+    const hint = state.loginHint;
+    return (
+      <div style={s.card}>
+        <h1 style={s.heading}>Sign in to accept your invitation</h1>
+        {preflight && (
+          <p style={s.body}>
+            You have been invited to <strong>{preflight.tenant_display_name}</strong> as{' '}
+            <strong>{preflight.invited_role_display_name}</strong>.
+          </p>
+        )}
+        <p style={s.meta}>Invitation sent to {preflight?.email_masked}</p>
+        <button
+          style={s.btn}
+          onClick={() =>
+            signIn(
+              'auth0',
+              { callbackUrl: `/identity/invitations/${token}` },
+              { login_hint: hint, prompt: 'login' },
+            )
+          }
+        >
+          Sign in
+        </button>
+        <button
+          style={{ ...s.btn, marginLeft: 12, background: '#393939' }}
+          onClick={() =>
+            signIn(
+              'auth0',
+              { callbackUrl: `/identity/invitations/${token}` },
+              { login_hint: hint, screen_hint: 'signup', prompt: 'login' },
+            )
+          }
+        >
+          Create account
         </button>
       </div>
     );

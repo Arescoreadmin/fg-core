@@ -316,6 +316,16 @@ function isInvitationAcceptSubpath(path: string[]): boolean {
     path[3] === 'accept';
 }
 
+function isInvitationPreflightGet(path: string[], method: string): boolean {
+  // Matches GET identity/invitations/{token} only — the public preflight endpoint.
+  // P-113.10: unauthenticated GET allowed so the acceptance page can fetch
+  // login_hint before triggering Auth0, enabling identity-type-aware sign-in.
+  return method === 'GET' &&
+    path.length === 3 &&
+    path[0] === 'identity' &&
+    path[1] === 'invitations';
+}
+
 function isTenantAdminCorePath(path: string[]): boolean {
   const joined = path.join('/');
   // admin/tenants is narrowed to the 3 delegated subroute families only;
@@ -843,6 +853,15 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   const requestId = getRequestId(request);
   const path = params.path || [];
   const routeGroup = path[0] || 'unknown';
+
+  // P-113.10: invitation preflight GET is public — proxy unauthenticated so the
+  // acceptance page can fetch login_hint before triggering Auth0.  The Core
+  // endpoint carries no auth requirement and returns no sensitive internal IDs.
+  if (isInvitationPreflightGet(path, request.method)) {
+    const rate = await enforceRateLimit(request, requestId, routeGroup, 'invitation-preflight');
+    if (rate) return rate;
+    return proxyToCore(request, path, requestId, '', undefined);
+  }
 
   const session = await auth();
   if (!session?.user) {
