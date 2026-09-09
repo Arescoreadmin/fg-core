@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-58 — fix(auth): enforce tenant lifecycle for all OIDC providers (TENANT-LIFECYCLE-OIDC-002) — branch `fix/oidc-lifecycle-fiap-gap`
+
+- **PR/Branch:** `fix/oidc-lifecycle-fiap-gap` (#684)
+- **Date:** 2026-09-09
+- **Files changed:** `api/auth_dispatch.py`, `tests/test_canonical_identity_authority.py`
+- **Root cause:** TENANT-LIFECYCLE-OIDC-002 — the tenant lifecycle check introduced in PR-1 (TENANT-LIFECYCLE-OIDC-001) was embedded in `_bind_membership()`, which is only called for `auth_source == "oidc_auth0"`. When `FG_IDENTITY_AUTHORITY_ENABLED=1`, FIAP actors (Entra, Google, generic OIDC) get `auth_source` values like `"oidc_entra"` or `"oidc_google"` and bypass `_bind_membership()` entirely. Their membership and tenant_id are already resolved by the identity authority, but `tenants.lifecycle_state` was never checked, leaving users in suspended/archived tenants authorized through non-Auth0 OIDC providers.
+- **Fix:** Extract the `SELECT lifecycle_state FROM tenants` check from `_bind_membership()` into a shared `_check_tenant_lifecycle(conn, tenant_id, subject_prefix)` helper. `_bind_membership()` delegates to it (same behaviour). In `get_actor_context()`, add an `elif actor.auth_source.startswith("oidc_") and actor.tenant_id:` branch that calls `_check_tenant_lifecycle()` directly for FIAP actors, whose tenant is already resolved by the identity authority.
+- **Behavioral impact:** FIAP-authenticated actors in tenants with `lifecycle_state != 'active'` are now denied at the authorization layer with 403 `TENANT_NOT_ACTIVE`, matching the Auth0 and API-key enforcement.
+- **Security impact:** Positive — closes TENANT-LIFECYCLE-OIDC-002; extends the existing lifecycle denial surface to all OIDC providers. No new identity authority created; no existing allow case removed or weakened.
+- **Schema/API impact:** None. No migrations. No new routes. No contract changes.
+- **Tests updated:** `tests/test_canonical_identity_authority.py` — CASE 5 source probes updated to verify `_check_tenant_lifecycle()` exists, contains the lifecycle query, and is called from both `_bind_membership()` and `get_actor_context()` for all `oidc_*` sources.
+- **Validation:** `pytest tests/test_canonical_identity_authority.py` 30/30 PASS; `pytest tests/security/test_identity_consolidation.py` 29/29 PASS.
+- **Result:** PASS.
+
+---
+
 ## P-57 — feat(identity): PR-1 Canonical Identity Authority — prove canonical authorization chain + OIDC tenant lifecycle fix — branch `feat/canonical-identity-authority-pr1`
 
 - **PR/Branch:** `feat/canonical-identity-authority-pr1`

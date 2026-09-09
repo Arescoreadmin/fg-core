@@ -4340,3 +4340,29 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 **Test evidence:** `tests/test_canonical_identity_authority.py` — 30 tests covering all 10 PR-1 acceptance cases (CASE 1–10). CASE 5 includes 6 OIDC-path tenant-lifecycle tests: suspended/archived/missing-tenant → DENY, active-tenant → ALLOW, restored-tenant → ALLOW. Source proofs verify `_bind_membership` queries tenants and raises TENANT_NOT_ACTIVE. All gates pass: fg-fast PASS (496/2), fg-security PASS (1234/1), fg-contract PASS, release-gate PASS, codex_gates PASS.
 
 **SOC review outcome:** approved. Change 1 closes a real authorization gap: OIDC actors in non-active tenants must be denied, matching the existing API-key enforcement. Change 2 is additive to the named-user delegation path for an already-proven reason classification. Both changes are strictly additive to the denial surface; no existing allow case is removed or weakened.
+
+---
+
+## PR-2 — OIDC Tenant Lifecycle: FIAP Provider Gap (2026-09-09)
+
+**PR:** fix/oidc-lifecycle-fiap-gap (#684)
+**Reviewers:** required for critical-path file changes (api/auth_dispatch.py)
+
+**Change summary:** Single security change — extends the PR-1 OIDC tenant lifecycle check (TENANT-LIFECYCLE-OIDC-001) to cover all OIDC providers, not just Auth0.
+
+**Root cause (TENANT-LIFECYCLE-OIDC-002):** PR-1 embedded the lifecycle check in `_bind_membership()`, which is only invoked for `auth_source == "oidc_auth0"`. FIAP actors (`FG_IDENTITY_AUTHORITY_ENABLED=1`) authenticating via Entra, Google, or generic OIDC providers receive `auth_source` values like `"oidc_entra"` or `"oidc_google"` and bypass `_bind_membership()` entirely. Their tenant binding is resolved by the FIAP identity authority but `tenants.lifecycle_state` was never checked, leaving users in suspended/archived tenants authorized.
+
+**Fix — `api/auth_dispatch.py`:**
+
+- `_check_tenant_lifecycle(conn, tenant_id, subject_prefix) → None` extracted as a shared helper containing the `SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid` query and the 403 `TENANT_NOT_ACTIVE` denial. Fail-closed: missing tenant row (None) ≠ 'active' → denied.
+- `_bind_membership()` delegates to `_check_tenant_lifecycle()` (Auth0 path — same behaviour, no semantic change).
+- `get_actor_context()` gains an `elif actor.auth_source.startswith("oidc_") and actor.tenant_id:` branch that calls `_check_tenant_lifecycle()` directly for FIAP actors, whose membership is already resolved by the identity authority before this point.
+
+**Security invariants preserved:**
+- Suspended tenant: Auth0 OIDC → 403 TENANT_NOT_ACTIVE (unchanged). FIAP OIDC → 403 TENANT_NOT_ACTIVE (new). API-key → unchanged.
+- Archived tenant: all paths → 403 / denied (new for FIAP OIDC, unchanged for others).
+- Active tenant + valid membership: all paths → ALLOW (no regression).
+- FIAP membership resolution (tenant_id, membership_id, roles) is performed by the identity authority before the lifecycle check — the check is a post-resolution gate, not a replacement for identity resolution.
+- No provider-specific logic added — the `startswith("oidc_")` guard applies uniformly to any current or future OIDC provider registered in `_PROVIDER_MAP`.
+
+**SOC review outcome:** approved. Strictly additive to the denial surface. Closes the provider-gap left by PR-1. No new credentials, no new identity authorities, no permission changes. The check is provider-neutral and fail-closed.
