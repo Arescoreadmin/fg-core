@@ -22470,3 +22470,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** 2 new tests in `tests/test_p1138_invitation_acceptance.py`.
 - **Validation:** `pytest tests/test_p1138_invitation_acceptance.py` 36/36 PASS.
 - **Result:** PASS.
+
+---
+
+## P-57 — fix(tests): post-FGA-026 strict-gate isolation and hygiene — branch `fix/invitation-resend-ratelimit-isolation`
+
+- **PR/Branch:** `fix/invitation-resend-ratelimit-isolation`
+- **Date:** 2026-09-09
+- **Files changed:** `tests/test_p1139_invitation_resend.py`, `tests/test_p1139_invite_initial_admin.py`, `tests/test_platform_admin_credential_authority.py`, `services/governance/report/epistemic.py`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause:** Post-FGA-026 strict-gate validation exposed three independent test/gate-hygiene defects. (1) Invitation resend rate-limit tests depended on process-global `FG_RL_ENABLED` state and the process-global in-memory limiter; unrelated modules could set `FG_RL_ENABLED=0` during full-suite collection, causing tests that require HTTP 429 to receive HTTP 200 despite passing in isolation. (2) `_seed_invitation()` in `tests/test_p1139_invite_initial_admin.py` returned `(raw_token, invitation_id)` while its return annotation declared `str`. (3) `_seed_platform_admin_with_role()` declared `tuple[str, str]` but `issued.plaintext_secret` is typed `str | None`, so mypy could not prove the helper contract. Separately, `services/governance/report/epistemic.py` did not satisfy the repository Ruff format gate after the FGA-026 squash merge.
+- **Fix:** Made the invitation resend fixture establish its complete rate-limit test contract by explicitly setting `FG_RL_ENABLED=1` and `FG_RL_BACKEND=memory`, and replacing the process-global `_memory_limiter` with a fresh `MemoryRateLimiter` per test. Corrected `_seed_invitation()` to return `tuple[str, str]`. Added an explicit non-None assertion for `issued.plaintext_secret` in `_seed_platform_admin_with_role()` so the helper's `tuple[str, str]` contract is statically proven. Applied Ruff formatting to `services/governance/report/epistemic.py`. No production runtime behavior or authority semantics changed.
+- **Behavioral impact:** None in production. Test execution is deterministic with respect to invitation resend rate limiting even when unrelated test modules mutate process-global rate-limit environment state. Test helper annotations now match their actual contracts.
+- **Security impact:** Positive test-assurance impact. Rate-limit security tests can no longer silently lose their enforcement precondition because another collected module disables rate limiting. No authentication, authorization, tenant-isolation, evidence, epistemic, or production rate-limit behavior changed.
+- **Schema/API impact:** None. No routes, contracts, database schema, migrations, or external API behavior changed.
+- **Tests added:** No new test cases. Existing invitation resend tests were hardened through fixture isolation; existing identity/platform-admin tests provide regression coverage for the typing-only helper corrections.
+- **Validation:** Hostile environment (`FG_RL_ENABLED=0`) exact resend rate-limit regression: 3/3 PASS; full `tests/test_p1139_invitation_resend.py`: 22/22 PASS; cross-suite contamination proofs: 101/101 PASS and 184/184 PASS; targeted post-repair mypy: `Success: no issues found in 3 source files`; combined targeted identity/rate-limit tests: 76/76 PASS; Ruff lint PASS; Ruff format check PASS; `git diff --check` PASS. `make fg-fast` and full strict `codex_gates.sh` pending final branch validation.
+- **Result:** PASS targeted validation; full repository gates pending.

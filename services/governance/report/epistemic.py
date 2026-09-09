@@ -164,7 +164,9 @@ def determine_epistemic_state(
     )
     # invalid_ids: refs with MISSING validation state (evidence absent entirely)
     invalid_ids = tuple(
-        sorted(r.evidence_id for r in refs if r.validation_state == ValidationState.MISSING)
+        sorted(
+            r.evidence_id for r in refs if r.validation_state == ValidationState.MISSING
+        )
     )
     # fresh_validated: VALIDATED refs with freshness within threshold
     fresh_validated = [r for r in refs if _is_fresh_validated(r, stale_threshold_days)]
@@ -215,7 +217,8 @@ def determine_epistemic_state(
             sorted(
                 r.evidence_id
                 for r in refs
-                if r.validation_state in (ValidationState.PENDING, ValidationState.MISSING)
+                if r.validation_state
+                in (ValidationState.PENDING, ValidationState.MISSING)
             )
         )
         return EpistemicDetermination(
