@@ -14,6 +14,12 @@ There is no proven P0 cross-tenant exploit in the audited paths. There are multi
 
 **Verdict:** charge conditionally for a tightly operated assessment after the Customer-One preflight below; do not sell continuous autonomous governance or self-service MRR yet.
 
+### Post-Audit Field Assessment Addendum
+
+A follow-up result-quality audit ran 825 Field Assessment and supporting tests successfully, then proved a P1 semantic defect those tests do not detect. The report route maps finding confidence to governance domain health (`api/field_assessment.py:8151-8171`), while the report engine suppresses findings when that score is 60 or greater (`services/governance/report/engine.py:55-63,196-206`). A high-confidence adverse finding can therefore disappear from generated governance findings and the executive summary. A direct runtime probe produced zero findings for a high-confidence input and one finding for a low-confidence input.
+
+**Updated commercial interpretation:** do not issue a paid client report from the current compiler until finding certainty is separated from control health, an expert-approved golden outcome corpus passes, malformed/incomplete evidence fails closed, and the corrected result is independently reviewed. The broader business, revenue, ROI, trend, and moat analysis is in `docs/audits/FROSTGATE_BUSINESS_OUTLOOK_2026.md`.
+
 ### A. System Health
 
 | Subsystem | Status | Confidence | Customer Ready | MRR Ready | Blocker |
@@ -21,8 +27,8 @@ There is no proven P0 cross-tenant exploit in the audited paths. There are multi
 | Core API and middleware | ACTIVE / PARTIAL | High | Conditional | No | Production proof and runtime DDL model |
 | Canonical identity and membership | ACTIVE / PARTIAL | High | Conditional | No | P-113.9 live proof pending; worker deployment drift |
 | Authorization and tenant binding | ACTIVE | High | Conditional | Conditional | Compatibility authority and incomplete RLS universe |
-| Field assessment | ACTIVE | High | Conditional | Conditional | Jobs are not durably executed |
-| Evidence and signed reports | ACTIVE / DUPLICATED | High | Conditional | Conditional | Parallel authorities; worker recovery gap |
+| Field assessment | ACTIVE / RESULT BLOCKED | High | No | No | Finding-confidence inversion and non-durable jobs |
+| Evidence and signed reports | ACTIVE / RESULT BLOCKED | High | No | No | Result truth, parallel authorities, and worker recovery |
 | Microsoft connectors | PARTIAL | High | No | No | No real Microsoft tenant proof |
 | No-auth scanners | ACTIVE | High | Yes with operator control | Conditional | Restart/retry handling |
 | Console | ACTIVE / PARTIAL | High | No | No | Critical Auth.js advisories; release gates |
@@ -534,16 +540,17 @@ FrostGate can sell expertise and a controlled evidence-backed deliverable sooner
 
 | Rank | Finding | Severity | Effort | Dependency | Revenue Impact |
 | ---: | --- | --- | --- | --- | --- |
-| 1 | Console/Portal critical and high dependency exposure | P1 | M | tested upgrade path | blocks external identities and admin use |
-| 2 | release gates do not bind tested SHA to deployed SHA | P1 | M | GitHub/Railway controls | invalidates all other production claims |
-| 3 | schema/RLS gate is not closed-world | P1 | M | migration reconciliation | unacceptable tenant-data uncertainty |
-| 4 | canonical platform auth is not the default/only production path | P1 | M | deployment config, client migration | excessive credential authority |
-| 5 | onboarding live proof is incomplete | P1 | M | Auth0, email, identity worker | administrator cannot be safely onboarded |
-| 6 | durable assessment execution/recovery is absent | P1 | M | worker/queue ownership | paid engagement can strand |
-| 7 | current backup/restore proof is red or stale | P1 | M | storage/KMS/restore env | customer data cannot be accepted defensibly |
-| 8 | Portal clean build fails | P1 | S | lockfile repair | customer-facing deployment is not reproducible |
-| 9 | Python upload dependencies have ignored fixed advisories | P1 | S-M | compatibility regression tests | exposed evidence ingestion risk |
-| 10 | Customer-One vertical production proof does not exist | P1 | M | blockers 1-9 | cannot substantiate readiness |
+| 1 | Field Assessment can suppress high-confidence adverse findings | P1 | S-M | semantic correction and golden corpus | blocks trustworthy paid report delivery |
+| 2 | Console/Portal critical and high dependency exposure | P1 | M | tested upgrade path | blocks external identities and admin use |
+| 3 | release gates do not bind tested SHA to deployed SHA | P1 | M | GitHub/Railway controls | invalidates all other production claims |
+| 4 | schema/RLS gate is not closed-world | P1 | M | migration reconciliation | unacceptable tenant-data uncertainty |
+| 5 | canonical platform auth is not the default/only production path | P1 | M | deployment config, client migration | excessive credential authority |
+| 6 | onboarding live proof is incomplete | P1 | M | Auth0, email, identity worker | administrator cannot be safely onboarded |
+| 7 | durable assessment execution/recovery is absent | P1 | M | worker/queue ownership | paid engagement can strand |
+| 8 | current backup/restore proof is red or stale | P1 | M | storage/KMS/restore env | customer data cannot be accepted defensibly |
+| 9 | Portal clean build fails | P1 | S | lockfile repair | customer-facing deployment is not reproducible |
+| 10 | Python upload dependencies have ignored fixed advisories | P1 | S-M | compatibility regression tests | exposed evidence ingestion risk |
+| 11 | Customer-One vertical production proof does not exist | P1 | M | blockers 1-10 | cannot substantiate readiness |
 
 "Conditional" means a contractually bounded, operator-led engagement only after these gates pass. It does not mean accepting risk through disclaimers.
 
@@ -620,6 +627,7 @@ This is the canonical finding register. Earlier observations roll up into these 
 | FGA-022 | P2 | HIGH | maintenance / duplicate Console | `apps/console/console/` full nested app in root globs | stale code can affect builds / no direct security exploit / slows changes | S-M | ownership confirmation | remove from build or document active purpose |
 | FGA-023 | P2 | PROVEN | documentation / runtime truth | password Portal, connector PASS, topology and env contradictions | operators follow unsafe/stale path / proof confusion / onboarding errors | S-M | canonical decisions | correct docs in same PRs as runtime changes |
 | FGA-024 | P3 | HIGH | hardening / invitation and DB grants | invite token hash lacks proven uniqueness; broad security-definer grant patterns need live inspection | replay/race defense relies on row/state; excessive DB privilege possible | S-M | live catalog proof | add constraint where compatible; least-privilege function grants |
+| FGA-025 | P1 | PROVEN | result integrity / Field Assessment reports | finding confidence becomes domain health; scores >=60 suppress report findings; executive summary uses suppressed set | material risks can be omitted from client conclusions / professional-liability and trust exposure / blocks paid report delivery | S-M | golden client corpus, independent SME review | separate finding certainty from control health; add exact expected/forbidden outcome and metamorphic gates |
 
 No finding is P0 because this audit did not prove an unauthenticated catastrophic tenant-data or authority exploit. FGA-001, FGA-002, FGA-005, FGA-009, and FGA-013 still require remediation before exposing their affected surfaces.
 
@@ -644,16 +652,17 @@ No finding is P0 because this audit did not prove an unauthenticated catastrophi
 
 The following is the minimum bar for accepting customer data or providing customer/admin access:
 
-1. **DO NOW:** lock the audited SHA to required CI and deployed artifact identity.
-2. **DO NOW:** eliminate exploitable critical/high frontend and upload-parser advisories and make clean installs/builds reproducible.
-3. **DO NOW:** reconcile metadata, migrations, live catalog, tenant ownership, and RLS; prevent runtime schema creation.
-4. **DO NOW:** deploy canonical-only platform authority with distinct gateway/delegation credentials and no legacy fallback.
-5. **BEFORE CUSTOMER ONE:** deploy the identity worker from the same SHA on PostgreSQL and prove invitation, verified identity, membership, role, replay, mismatch, expiry, and recovery end to end.
-6. **BEFORE CUSTOMER ONE:** move paid assessment/report execution to a recoverable durable worker and prove restart/idempotency.
-7. **BEFORE CUSTOMER ONE:** produce a current encrypted offsite backup and isolated restore at migration 0187; prove retention/legal holds.
-8. **BEFORE CUSTOMER ONE:** run the fixed-scope vertical workflow twice from clean tenant creation through signed report and remediation handoff.
-9. **BEFORE CUSTOMER ONE:** define operator ownership, escalation, status communication, RTO/RPO, and incident contacts.
-10. **BEFORE CUSTOMER ONE:** contract and marketing must match the proven wedge; exclude continuous/autonomous and Microsoft automation claims.
+1. **DO NOW:** correct Field Assessment result semantics and require expert-approved golden and metamorphic outcome tests.
+2. **DO NOW:** lock the audited SHA to required CI and deployed artifact identity.
+3. **DO NOW:** eliminate exploitable critical/high frontend and upload-parser advisories and make clean installs/builds reproducible.
+4. **DO NOW:** reconcile metadata, migrations, live catalog, tenant ownership, and RLS; prevent runtime schema creation.
+5. **DO NOW:** deploy canonical-only platform authority with distinct gateway/delegation credentials and no legacy fallback.
+6. **BEFORE CUSTOMER ONE:** deploy the identity worker from the same SHA on PostgreSQL and prove invitation, verified identity, membership, role, replay, mismatch, expiry, and recovery end to end.
+7. **BEFORE CUSTOMER ONE:** move paid assessment/report execution to a recoverable durable worker and prove restart/idempotency.
+8. **BEFORE CUSTOMER ONE:** produce a current encrypted offsite backup and isolated restore at migration 0187; prove retention/legal holds.
+9. **BEFORE CUSTOMER ONE:** run the fixed-scope vertical workflow twice from clean tenant creation through signed report and remediation handoff.
+10. **BEFORE CUSTOMER ONE:** define operator ownership, escalation, status communication, RTO/RPO, and incident contacts.
+11. **BEFORE CUSTOMER ONE:** contract and marketing must match the proven wedge; exclude continuous/autonomous and Microsoft automation claims.
 
 ## 34. Required Before MRR
 
@@ -759,19 +768,19 @@ By day 90, complete a second reassessment cycle, validate recurring unit economi
 
 ## 40. Final Recommendation
 
-Do next: execute PR-A and PR-B in parallel with separate owners, then PR-C/D/E as one authority-and-onboarding chain. These steps remove the two assumptions that invalidate every other claim: that the tested artifact is the deployed artifact, and that every runtime tenant table is covered by migrations and RLS. In parallel, sell only a conditional, fixed-scope assessment start date contingent on the Customer-One gate; do not place customer data in FrostGate before that gate and current restore proof pass.
+Do next: correct the Field Assessment result semantics and add the expert-approved golden outcome gate while executing PR-A and PR-B in parallel, then PR-C/D/E as one authority-and-onboarding chain. These steps remove three assumptions that invalidate every other claim: that the assessment produces the right client conclusion, that the tested artifact is the deployed artifact, and that every runtime tenant table is covered by migrations and RLS. Sell only a conditional, fixed-scope assessment start date contingent on all Customer-One gates; do not place customer data in FrostGate or issue a platform-generated report before result truth and current restore proof pass.
 
 1. **CAN I SAFELY PUT CUSTOMER ONE ON FROSTGATE TODAY?**
-   **CONDITIONAL.** Not on the currently evidenced Console/Portal deployment. Customer One becomes defensible only after the release, dependency, schema/RLS, canonical auth, onboarding, durable execution, and restore gates pass at one immutable SHA.
+   **CONDITIONAL.** Not on the currently evidenced report compiler or Console/Portal deployment. Customer One becomes defensible only after result truth, release, dependency, schema/RLS, canonical auth, onboarding, durable execution, and restore gates pass at one immutable SHA.
 
 2. **CAN I CHARGE FOR A FROSTGATE ASSESSMENT TODAY?**
-   **CONDITIONAL.** A fixed-scope, service-led engagement can be contracted now with platform processing/delivery contingent on preflight. It must use manual/no-auth evidence, human QA, and a signed report, with Microsoft and autonomous claims excluded.
+   **CONDITIONAL.** A fixed-scope, service-led engagement can be contracted now, but platform-generated findings and delivery must wait for the result-truth and production preflight gates. It must use validated manual/no-auth evidence, independent human QA, and a signed report, with Microsoft and autonomous claims excluded.
 
 3. **CAN I SUPPORT RECURRING MRR TODAY?**
    **NO.** Durable scheduling/recovery, Portal tenancy, current operational proof, support SLOs, and repeated longitudinal delivery are not demonstrated.
 
 4. **WHAT IS THE SINGLE SHORTEST PATH TO FIRST PAID REVENUE?**
-   Sell one service-led AI governance assessment: bounded evidence intake -> deterministic findings -> human QA -> signed report -> remediation review, after PR-A through PR-H's minimum gate passes.
+   Sell one service-led AI governance assessment after the expert-approved result-truth gate and PR-A through PR-H minimum production gate pass: bounded evidence intake -> deterministic findings -> human QA -> signed report -> remediation review.
 
 5. **WHAT IS THE SINGLE SHORTEST PATH TO DEFENSIBLE MRR?**
    Convert the paid assessment into managed remediation and monthly or quarterly reassessment after durable jobs, tenant-derived Portal access, alerts, restore/retention proof, and two successful longitudinal cycles.
@@ -780,10 +789,10 @@ Do next: execute PR-A and PR-B in parallel with separate owners, then PR-C/D/E a
    New framework families, additional connectors, new dashboards, autonomous remediation, digital-twin expansion, benchmark products, enterprise billing breadth, and new route groups.
 
 7. **WHAT IS THE HIGHEST-ROI ENGINEERING WORK REMAINING?**
-   A current-SHA vertical production gate that includes secure dependencies, closed-world schema/RLS, canonical identity/authority, crash recovery, and current restore.
+   An expert-approved result-truth gate, followed by a current-SHA vertical production gate covering secure dependencies, closed-world schema/RLS, canonical identity/authority, crash recovery, and current restore.
 
 8. **WHAT IS THE MOST DANGEROUS FALSE ASSUMPTION IN THE CURRENT PLATFORM?**
-   That green tests, OpenAPI presence, or a PASS summary prove production behavior. The Portal build, Microsoft proof, deployed SHA controls, schema/RLS census, and backup artifact demonstrate that they do not.
+   That green tests, OpenAPI presence, or a PASS summary prove correct client outcomes or production behavior. The finding-confidence inversion, Portal build, Microsoft proof, deployed SHA controls, schema/RLS census, and backup artifact demonstrate that they do not.
 
 9. **WHAT IS FROSTGATE'S STRONGEST CURRENT MOAT?**
    Evidence-to-decision-to-remediation provenance: signed artifacts, deterministic state, human QA, chain of custody, and auditable history.
