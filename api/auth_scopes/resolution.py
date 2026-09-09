@@ -15,9 +15,6 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from api.config.internal_gateway_secret import resolve_internal_gateway_secret
 from api.db import set_tenant_context
-from api.internal_platform_authority import (
-    CANONICAL_INTERNAL_TENANT_ID as _CANONICAL_INTERNAL_TENANT_ID,
-)
 from api.platform_auth_mode import is_canonical_mode
 
 from .definitions import AuthResult, ERR_INVALID
