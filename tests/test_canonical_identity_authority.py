@@ -644,9 +644,9 @@ def test_case5_bind_membership_source_checks_tenant_lifecycle() -> None:
     assert "TENANT_NOT_ACTIVE" in helper_src, (
         "_check_tenant_lifecycle must raise TENANT_NOT_ACTIVE when not eligible"
     )
-    assert (
-        '!= "active"' in helper_src or "!= 'active'" in helper_src
-    ), "_check_tenant_lifecycle must deny when lifecycle_state is not 'active'"
+    assert '!= "active"' in helper_src or "!= 'active'" in helper_src, (
+        "_check_tenant_lifecycle must deny when lifecycle_state is not 'active'"
+    )
 
     bind_src = inspect.getsource(_ad._bind_membership)  # type: ignore[attr-defined]
     assert "_check_tenant_lifecycle" in bind_src, (
