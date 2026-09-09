@@ -17,6 +17,13 @@ corroborated by a scan):
 Floor: 30.  Evidence never becomes worthless — it just signals that a
 re-scan is needed.  Findings at or below 60 after degradation trigger the
 low-confidence escalation path in the readiness engine.
+
+Fail-closed timestamp handling:
+    A malformed or missing ``updated_at`` value cannot be silently treated as
+    fully fresh (age zero).  ``evidence_age_days`` returns ``_FAIL_CLOSED_AGE_DAYS``
+    (91, one past the maximum decay threshold) so downstream callers and
+    epistemic authorities always apply maximum decay and treat such evidence
+    as STALE.
 """
 
 from __future__ import annotations
@@ -32,15 +39,28 @@ _DECAY_TABLE: list[tuple[int, int]] = [
 _DECAY_BEYOND_90 = 30
 _CONFIDENCE_FLOOR = 30
 
+# Fail-closed sentinel: returned when a timestamp cannot be parsed.
+# Value is one past the highest threshold in _DECAY_TABLE so the caller
+# always takes the maximum-decay path (_DECAY_BEYOND_90).  This is a
+# conservative sentinel, not an asserted factual age — the caller must
+# treat the evidence as STALE rather than CURRENT.
+_FAIL_CLOSED_AGE_DAYS: int = 91
+
 
 def evidence_age_days(iso_date: str) -> int:
-    """Return how many days have elapsed since *iso_date* (UTC ISO 8601)."""
+    """Return how many days have elapsed since *iso_date* (UTC ISO 8601).
+
+    Fail-closed: a malformed or missing timestamp cannot be interpreted as
+    age zero (fully fresh).  Returns _FAIL_CLOSED_AGE_DAYS so the caller
+    applies maximum decay and downstream epistemic authorities treat the
+    evidence as STALE rather than CURRENT.
+    """
     try:
         dt = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
         delta = datetime.now(timezone.utc) - dt
         return max(0, delta.days)
     except (ValueError, AttributeError):
-        return 0
+        return _FAIL_CLOSED_AGE_DAYS
 
 
 def degrade_confidence(base_score: int, updated_at: str) -> int:
