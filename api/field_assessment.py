@@ -8032,6 +8032,7 @@ _ALL_SECTIONS: list[str] = [
     "evidence_appendix",
     "framework_summary",
     "confidence",
+    "epistemic_states",
     "normalized_findings",
     "ai_tool_discovery",
     "ai_data_access_mapping",
@@ -8327,6 +8328,26 @@ def _build_engagement_report_json(
         }
     if "confidence" in active_sections:
         section_content["confidence"] = _serialize_confidence(report.confidence)
+    if "epistemic_states" in active_sections:
+        from services.governance.report.epistemic import assess_report_epistemic_states
+
+        epistemic_map = assess_report_epistemic_states(
+            report=report,
+            evidence_refs=evidence_refs,
+        )
+        section_content["epistemic_states"] = {
+            finding_id: {
+                "state": det.state.value,
+                "reason_codes": list(det.reason_codes),
+                "evidence_ids": list(det.evidence_ids),
+                "contradictory_evidence_ids": list(det.contradictory_evidence_ids),
+                "stale_evidence_ids": list(det.stale_evidence_ids),
+                "invalid_evidence_ids": list(det.invalid_evidence_ids),
+                "missing_requirements": list(det.missing_requirements),
+                "methodology_version": det.methodology_version,
+            }
+            for finding_id, det in epistemic_map.items()
+        }
     if "normalized_findings" in active_sections and report_type in (
         "findings_register",
         "full_assessment",

@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## P-60 — feat(governance): FGA-026 Evidence Sufficiency & Epistemic Authority — branch `feat/fga-026-epistemic-authority`
+
+- **PR/Branch:** `feat/fga-026-epistemic-authority`
+- **Date:** 2026-09-09
+- **Files changed:** `services/governance/report/epistemic.py` (new), `services/field_assessment/confidence.py`, `api/field_assessment.py`, `tests/test_epistemic_authority.py` (new)
+- **Root cause — confidence.py fail-open:** `evidence_age_days()` caught `(ValueError, AttributeError)` and returned `0`, treating any malformed or missing timestamp as fully fresh (age zero). This meant a finding with a garbage `updated_at` value would receive zero decay and be indistinguishable from a finding collected today. Downstream epistemic authorities could not distinguish current evidence from unparseable evidence.
+- **Root cause — missing epistemic layer:** No module existed to determine what a body of evidence, as a whole, establishes about a claim or control. Per-evidence trust (EvidenceTrustState) and per-evidence workflow (EvidenceLifecycleState) operated at evidence granularity. Claim-level epistemic determination — whether the full evidence body proves, partially supports, or contradicts a governance claim — had no canonical implementation.
+- **Fix — confidence.py:** Added named constant `_FAIL_CLOSED_AGE_DAYS = 91` (one past the 90-day max threshold in `_DECAY_TABLE`). Exception handler now returns `_FAIL_CLOSED_AGE_DAYS` instead of `0`, ensuring malformed timestamps always trigger maximum decay. The value is a conservative sentinel, not an asserted factual age.
+- **Fix — epistemic.py (new):** Standalone pure module `services/governance/report/epistemic.py` implementing claim-level epistemic determination. Six canonical states (`NOT_PROVEN`, `CONTRADICTORY`, `STALE`, `PARTIALLY_SUPPORTED`, `VERIFIED_DEFICIENT`, `VERIFIED_EFFECTIVE`). `EpistemicDetermination` frozen dataclass; `determine_epistemic_state()` pure deterministic function; `assess_report_epistemic_states()` batch wrapper for `GovernanceReport`. Does NOT modify `GovernanceFinding` or `GovernanceReport` (frozen/signed artifacts preserved). No DB migration. No LLM authority over epistemic state.
+- **Fix — API wiring:** `assess_report_epistemic_states()` called from `_build_engagement_report_json()` for every report generation that includes `"epistemic_states"` section. Added to `_ALL_SECTIONS` so it is computed by default.
+- **Fail-closed invariants proven:** (1) Empty evidence → NOT_PROVEN (never VERIFIED_EFFECTIVE). (2) freshness_days=None → stale. (3) CONTRADICTORY checked before STALE. (4) MISSING refs classified as invalid, not stale. (5) Malformed timestamps cannot improve confidence or produce VERIFIED_EFFECTIVE.
+- **Schema/API impact:** No DB migration. New `"epistemic_states"` key added to report JSON response (additive, backward compatible). No route changes. No signed artifact changes.
+- **Tests added:** `tests/test_epistemic_authority.py` (new, 43 tests) covering all six EpistemicState values, fail-closed malformed timestamp invariants, order invariance, contradiction detection logic, staleness thresholds, `assess_report_epistemic_states()` wrapper, and `_FAIL_CLOSED_AGE_DAYS` sentinel behavior.
+- **Validation:** `ruff check` PASS (tests/); `pytest tests/test_epistemic_authority.py` 43/43 PASS; `pytest tests/test_result_semantic_authority.py` 28/28 PASS; `codex_gates.sh` exit 0; `make fg-fast` exit 0.
+- **Result:** PASS.
+
+---
+
 ## P-59 — fix(governance): FGA-025 Semantic Determination Authority — domain health score inversion — branch `fix/fga-025-result-truth`
 
 - **PR/Branch:** `fix/fga-025-result-truth`
