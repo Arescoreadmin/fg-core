@@ -70,6 +70,11 @@ def _lookup_canonical_platform_admin_role(
 _DELEGATION_CLOCK_TOLERANCE = 5  # seconds of future-dating tolerance
 _DELEGATION_MAX_LIFETIME = 120  # reject proofs longer than 2 minutes
 
+# Credential slot for the canonical platform-admin credential.  Used to assign
+# reason="canonical_platform_admin" so bind_tenant_id() can route these
+# credentials through the same delegated-tenant path as admin_internal_token.
+_PLATFORM_ADMIN_CREDENTIAL_SLOT = "platform-admin-credential:v1"
+
 _ADMIN_GATEWAY_EXACT_PATHS = frozenset(
     {
         "/admin",

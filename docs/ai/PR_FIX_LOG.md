@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-57 — feat(identity): PR-1 Canonical Identity Authority — prove canonical authorization chain + OIDC tenant lifecycle fix — branch `feat/canonical-identity-authority-pr1`
+
+- **PR/Branch:** `feat/canonical-identity-authority-pr1`
+- **Date:** 2026-09-08
+- **Files changed:** `api/auth_dispatch.py`, `api/identity_providers/api_key.py`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `tests/test_canonical_identity_authority.py` (new), `tests/security/test_identity_consolidation.py`, `tests/test_core_002c_capability_before_tenant_binding.py`, `tests/test_platform_admin_credential_authority.py`
+- **Root cause:** TENANT-LIFECYCLE-OIDC-001 — the OIDC/JWT authentication path (`_bind_membership()` in `api/auth_dispatch.py`) resolved a membership via `IdentityResolver.resolve_or_deny()` but never checked `tenants.lifecycle_state`. The API-key path has enforced tenant lifecycle since `credential_authority.validate_credential()` (which atomically JOINs `tenants` and calls `_enforce_lifecycle()`), but OIDC actors in suspended/archived/deleted tenants received sessions.
+- **Fix:** After `IdentityResolver.resolve_or_deny()` succeeds in `_bind_membership()`, query `SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid` using the already-held Session. If the result is not `'active'` (including `None` for a missing tenant row), raise HTTP 403 `TENANT_NOT_ACTIVE`. Fail-closed semantics: missing tenant row → not 'active' → denied. Added `from sqlalchemy import text` import. `extract_api_key_actor()` in `api/identity_providers/api_key.py` extended to accept `canonical_platform_admin` alongside `admin_internal_token` for named-user delegation. `tests/security/test_identity_consolidation.py`: added `INSERT OR IGNORE INTO tenants` at start of `_user()` factory so all OIDC tests have a valid tenant row.
+- **Behavioral impact:** OIDC actors in tenants with `lifecycle_state != 'active'` are now denied at the authorization layer with 403 `TENANT_NOT_ACTIVE`, matching the behavior that API-key actors have had since R3.
+- **Security impact:** Positive — closes TENANT-LIFECYCLE-OIDC-001; no new identity authority created; no bypass of existing membership checks.
+- **Schema/API impact:** None. No DB migrations. No new routes. No contract changes.
+- **Tests added:** `tests/test_canonical_identity_authority.py` (new, 30 tests) — PR-1 10-case acceptance matrix (CASE 1–10) + SoD invariants.
+- **Validation:** `make fg-fast` PASS (496 passed, 2 skipped); `make fg-security` PASS (1234 passed, 1 skipped); `make fg-contract` PASS; `make release-gate` PASS; `bash codex_gates.sh` PASS.
+- **Result:** PASS.
+
+---
+
 ## P-56 — feat(identity): P-113.8 Canonical Identity Invitation Acceptance + Admin Binding — branch `feat/p1138-invitation-acceptance`
 
 - **PR/Branch:** `feat/p1138-invitation-acceptance`

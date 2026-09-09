@@ -39,6 +39,7 @@ import os
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.actor_context import ActorContext, ALL_PERMISSIONS, roles_to_permissions
@@ -159,7 +160,7 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
 
     Looks up the bound membership record using the identity triple
     (provider=auth0, issuer, subject). Adds membership_id and enforces
-    deactivation.
+    deactivation and tenant lifecycle state.
 
     Hard-fails 403 on MEMBERSHIP_NOT_FOUND: OIDC human actors must have a
     bound tenant_users record. Service accounts use API keys and never reach
@@ -168,6 +169,11 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
 
     Hard-fails 403 on MEMBERSHIP_INACTIVE: deactivated members are denied
     immediately regardless of when their session was issued.
+
+    Hard-fails 403 on TENANT_NOT_ACTIVE: only tenants with lifecycle_state='active'
+    may authorize OIDC actors. This mirrors the credential_authority
+    _enforce_lifecycle() check for API-key auth, closing the OIDC tenant-lifecycle
+    gap (PR-1 / TENANT-LIFECYCLE-OIDC-001).
     """
     try:
         from services.identity_resolver import IdentityResolver, IdentityResolutionError
@@ -197,6 +203,32 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
             raise HTTPException(
                 status_code=403,
                 detail={"code": exc.code, "reason": str(exc)},
+            )
+
+        # Verify the tenant is in an authorization-eligible lifecycle state.
+        # Only 'active' tenants may authorize OIDC actors — mirrors the
+        # credential_authority._enforce_lifecycle() check for API-key auth.
+        # Fail closed: missing tenant row → not eligible.
+        _tenant_row = conn.execute(
+            text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+            {"tid": principal.tenant_id},
+        ).fetchone()
+        _tenant_lifecycle = _tenant_row[0] if _tenant_row else None
+        if _tenant_lifecycle != "active":
+            log.warning(
+                "auth_dispatch.tenant_not_active",
+                extra={
+                    "tenant_id": principal.tenant_id,
+                    "lifecycle_state": _tenant_lifecycle,
+                    "subject_prefix": actor.subject[:16],
+                },
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "TENANT_NOT_ACTIVE",
+                    "reason": "tenant is not in an authorization-eligible state",
+                },
             )
 
         return ActorContext(
