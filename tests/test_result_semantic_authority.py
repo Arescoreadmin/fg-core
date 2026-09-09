@@ -100,9 +100,12 @@ def _domain_health_scores(findings: list[_MockFinding]) -> dict[str, float]:
 
     Semantics:
         - Only active adverse findings (status open/in_progress) contribute.
-        - domain_health = 100 - effective_confidence  (inverted scale).
+        - domain_health = 100 - confidence_score  (inverted scale, raw not degraded).
         - Aggregation: min() — worst-case finding governs the domain.
         - No active findings → default healthy (score 80, above threshold 60).
+
+    Staleness (_degrade) is NOT applied to health: staleness lowers certainty
+    but must not silently suppress or heal an open adverse finding.
     """
     adverse_active = [f for f in findings if f.status in ("open", "in_progress")]
 
@@ -117,8 +120,7 @@ def _domain_health_scores(findings: list[_MockFinding]) -> dict[str, float]:
             )
         else:
             domain_key = "data_governance"
-        effective = degrade_confidence(f.confidence_score, f.updated_at)
-        health = 100.0 - float(effective)
+        health = 100.0 - float(f.confidence_score)
         domain_scores.setdefault(domain_key, []).append(health)
 
     scores: dict[str, float] = {}
@@ -570,4 +572,43 @@ def test_fga025_old_behavior_would_have_promoted_low_confidence_finding() -> Non
     new_domain_health = 100.0 - float(effective)
     assert new_domain_health >= _FINDING_SCORE_THRESHOLD, (
         "New computation must suppress a finding for confidence=30 (too uncertain to be material)"
+    )
+
+
+def test_fga025_staleness_does_not_suppress_open_finding() -> None:
+    """Issue 2 regression: _degrade must not silently remove an open finding.
+
+    Before the fix, applying _degrade before inversion caused old findings to
+    appear healthier: confidence=70 fresh → health=30 (emitted), but after
+    91+ days _degrade yields effective=40 → health=60 (at threshold → suppressed).
+
+    The corrected code uses raw confidence_score for the health gate so an
+    open finding with confidence=70 is always emitted regardless of age.
+    """
+    fresh_finding = _MockFinding(
+        confidence_score=70,
+        updated_at=_TODAY,  # fresh
+    )
+    stale_finding = _MockFinding(
+        confidence_score=70,
+        updated_at="2026-05-12T00:00:00+00:00",  # 120 days before _TODAY — max decay
+    )
+
+    fresh_scores = _domain_health_scores([fresh_finding])
+    stale_scores = _domain_health_scores([stale_finding])
+
+    # Both must produce the same health score — staleness must not heal the domain.
+    assert fresh_scores == stale_scores, (
+        f"Staleness changed domain health: fresh={fresh_scores} stale={stale_scores} "
+        "— _degrade must not affect the threshold gate for open findings"
+    )
+
+    # Both must produce at least one finding (confidence=70 → health=30 < 60).
+    assert _engine_findings(stale_scores), (
+        "Stale open finding (confidence=70, 120 days old) must still appear in report"
+    )
+
+    # And neither must be suppressed by degradation.
+    assert _engine_findings(fresh_scores), (
+        "Fresh open finding (confidence=70) must appear in report"
     )

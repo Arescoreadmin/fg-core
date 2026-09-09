@@ -8165,8 +8165,6 @@ def _build_engagement_report_json(
     #
     # Only status="open"/"in_progress" findings contribute: resolved or
     # dismissed findings are no longer material adverse evidence.
-    from services.field_assessment.confidence import degrade_confidence as _degrade
-
     _adverse_active = [f for f in all_findings if f.status in ("open", "in_progress")]
 
     domain_scores: dict[str, list[float]] = {}
@@ -8180,9 +8178,10 @@ def _build_engagement_report_json(
             )
         else:
             domain_key = "data_governance"
-        effective = _degrade(f.confidence_score, f.updated_at)
-        # Invert: higher confidence in an adverse finding → lower domain health.
-        health = 100.0 - float(effective)
+        # Use raw confidence_score (not degraded) for the health gate.
+        # _degrade reduces certainty over time, but staleness must not
+        # silently improve posture or suppress an open finding.
+        health = 100.0 - float(f.confidence_score)
         domain_scores.setdefault(domain_key, []).append(health)
 
     scores: dict[str, float] = {}
