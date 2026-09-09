@@ -155,6 +155,36 @@ def _try_api_key_actor(request: Request, conn: Session) -> Optional[ActorContext
     return extract_api_key_actor(request, conn)
 
 
+def _check_tenant_lifecycle(conn: Session, tenant_id: str, subject_prefix: str) -> None:
+    """Raise 403 TENANT_NOT_ACTIVE if the tenant is not authorization-eligible.
+
+    Fail-closed: a missing tenant row denies (None != 'active').
+    Called for every OIDC actor regardless of provider — mirrors
+    credential_authority._enforce_lifecycle() for API-key auth.
+    """
+    _row = conn.execute(
+        text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    ).fetchone()
+    _lifecycle = _row[0] if _row else None
+    if _lifecycle != "active":
+        log.warning(
+            "auth_dispatch.tenant_not_active",
+            extra={
+                "tenant_id": tenant_id,
+                "lifecycle_state": _lifecycle,
+                "subject_prefix": subject_prefix[:16] if subject_prefix else "",
+            },
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "TENANT_NOT_ACTIVE",
+                "reason": "tenant is not in an authorization-eligible state",
+            },
+        )
+
+
 def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
     """Augment a JWT ActorContext with tenant_users membership_id.
 
@@ -170,10 +200,9 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
     Hard-fails 403 on MEMBERSHIP_INACTIVE: deactivated members are denied
     immediately regardless of when their session was issued.
 
-    Hard-fails 403 on TENANT_NOT_ACTIVE: only tenants with lifecycle_state='active'
-    may authorize OIDC actors. This mirrors the credential_authority
-    _enforce_lifecycle() check for API-key auth, closing the OIDC tenant-lifecycle
-    gap (PR-1 / TENANT-LIFECYCLE-OIDC-001).
+    Hard-fails 403 on TENANT_NOT_ACTIVE: delegates to _check_tenant_lifecycle(),
+    which mirrors the credential_authority._enforce_lifecycle() check for
+    API-key auth (PR-1 / TENANT-LIFECYCLE-OIDC-001).
     """
     try:
         from services.identity_resolver import IdentityResolver, IdentityResolutionError
@@ -205,31 +234,7 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
                 detail={"code": exc.code, "reason": str(exc)},
             )
 
-        # Verify the tenant is in an authorization-eligible lifecycle state.
-        # Only 'active' tenants may authorize OIDC actors — mirrors the
-        # credential_authority._enforce_lifecycle() check for API-key auth.
-        # Fail closed: missing tenant row → not eligible.
-        _tenant_row = conn.execute(
-            text("SELECT lifecycle_state FROM tenants WHERE tenant_id = :tid"),
-            {"tid": principal.tenant_id},
-        ).fetchone()
-        _tenant_lifecycle = _tenant_row[0] if _tenant_row else None
-        if _tenant_lifecycle != "active":
-            log.warning(
-                "auth_dispatch.tenant_not_active",
-                extra={
-                    "tenant_id": principal.tenant_id,
-                    "lifecycle_state": _tenant_lifecycle,
-                    "subject_prefix": actor.subject[:16],
-                },
-            )
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "TENANT_NOT_ACTIVE",
-                    "reason": "tenant is not in an authorization-eligible state",
-                },
-            )
+        _check_tenant_lifecycle(conn, principal.tenant_id, actor.subject)
 
         return ActorContext(
             subject=actor.subject,
@@ -297,9 +302,15 @@ def get_actor_context(
     if bearer.lower().startswith("bearer "):
         actor = _try_jwt_actor(request, conn)
         if actor:
-            # Bind membership_id and enforce deactivation for Auth0 JWT actors
+            # Bind membership_id and enforce deactivation for Auth0 JWT actors.
+            # For other OIDC providers (FIAP path: Entra, Google, generic OIDC)
+            # membership is already resolved by the identity authority; enforce
+            # tenant lifecycle so suspended/archived tenants are denied on every
+            # OIDC provider, not just Auth0.
             if actor.auth_source == "oidc_auth0":
                 actor = _bind_membership(actor, conn)
+            elif actor.auth_source.startswith("oidc_") and actor.tenant_id:
+                _check_tenant_lifecycle(conn, actor.tenant_id, actor.subject or "")
             resolved = actor
         # _try_jwt_actor raises HTTPException on invalid token; if it returns
         # None the bearer was empty — fall through to API key auth
