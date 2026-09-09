@@ -310,7 +310,22 @@ def get_actor_context(
             if actor.auth_source == "oidc_auth0":
                 actor = _bind_membership(actor, conn)
             elif actor.auth_source.startswith("oidc_") and actor.tenant_id:
-                _check_tenant_lifecycle(conn, actor.tenant_id, actor.subject or "")
+                try:
+                    _check_tenant_lifecycle(conn, actor.tenant_id, actor.subject or "")
+                except HTTPException:
+                    raise
+                except Exception as _exc:
+                    log.error(
+                        "auth_dispatch.lifecycle_lookup_error",
+                        extra={"exc": str(_exc)},
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "code": "MEMBERSHIP_LOOKUP_ERROR",
+                            "reason": "membership lookup unavailable",
+                        },
+                    )
             resolved = actor
         # _try_jwt_actor raises HTTPException on invalid token; if it returns
         # None the bearer was empty — fall through to API key auth
