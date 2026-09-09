@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from services.field_assessment.confidence import (
+    _FAIL_CLOSED_AGE_DAYS,
     degrade_confidence,
     evidence_age_days,
 )
@@ -29,11 +30,11 @@ class TestEvidenceAgeDays:
         )
         assert evidence_age_days(dt) == 10
 
-    def test_invalid_date_returns_zero(self) -> None:
-        assert evidence_age_days("not-a-date") == 0
+    def test_invalid_date_returns_fail_closed_sentinel(self) -> None:
+        assert evidence_age_days("not-a-date") == _FAIL_CLOSED_AGE_DAYS
 
-    def test_empty_string_returns_zero(self) -> None:
-        assert evidence_age_days("") == 0
+    def test_empty_string_returns_fail_closed_sentinel(self) -> None:
+        assert evidence_age_days("") == _FAIL_CLOSED_AGE_DAYS
 
 
 class TestDegradeConfidence:
@@ -67,9 +68,9 @@ class TestDegradeConfidence:
         # confidence 85, 91+ days → 55, which is below the 60-point escalation threshold
         assert degrade_confidence(85, _iso(91)) == 55
 
-    def test_invalid_date_returns_base(self) -> None:
-        # Bad updated_at — degradation returns base score unchanged
-        assert degrade_confidence(90, "not-a-date") == 90
+    def test_invalid_date_applies_max_decay(self) -> None:
+        # Bad updated_at → _FAIL_CLOSED_AGE_DAYS (91) → max decay (-30) → 90-30=60
+        assert degrade_confidence(90, "not-a-date") == 60
 
     @pytest.mark.parametrize(
         "base,days,expected",

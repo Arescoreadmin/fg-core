@@ -8329,25 +8329,59 @@ def _build_engagement_report_json(
     if "confidence" in active_sections:
         section_content["confidence"] = _serialize_confidence(report.confidence)
     if "epistemic_states" in active_sections:
-        from services.governance.report.epistemic import assess_report_epistemic_states
+        from services.governance.report.epistemic import determine_epistemic_state
 
-        epistemic_map = assess_report_epistemic_states(
-            report=report,
-            evidence_refs=evidence_refs,
-        )
-        section_content["epistemic_states"] = {
-            finding_id: {
-                "state": det.state.value,
-                "reason_codes": list(det.reason_codes),
-                "evidence_ids": list(det.evidence_ids),
-                "contradictory_evidence_ids": list(det.contradictory_evidence_ids),
-                "stale_evidence_ids": list(det.stale_evidence_ids),
-                "invalid_evidence_ids": list(det.invalid_evidence_ids),
-                "missing_requirements": list(det.missing_requirements),
-                "methodology_version": det.methodology_version,
-            }
-            for finding_id, det in epistemic_map.items()
+        # Build domain → evidence refs from the normalized findings' explicit
+        # evidence links (evidence_ref_ids = [scan_result.id]).  This matches
+        # the domain assignment used for health score computation above and
+        # avoids the engine's _infer_evidence_domain() heuristic, which can
+        # assign a scan result to a different domain than the normalized
+        # finding that references it (e.g. network_scan_bridge → infra_readiness
+        # vs. finding.domain = security_posture), leaving GovernanceFinding
+        # with empty evidence_ids and a spurious NOT_PROVEN determination.
+        #
+        # Note: evidence_refs is limited to the first 100 scan results (same
+        # cap as the engine query above).  Engagements with >100 scan results
+        # may have older evidence silently absent from this assessment.
+        _ep_evidence_by_id = {r.evidence_id: r for r in evidence_refs}
+        _ep_domain_evidence: dict[str, list[EvidenceRef]] = {}
+        for _f in _adverse_active:
+            _f_mappings = _f.framework_mappings or []
+            if _f_mappings:
+                _f_domain = str(
+                    _f_mappings[0].get("domain", "data_governance")
+                    if isinstance(_f_mappings[0], dict)
+                    else "data_governance"
+                )
+            else:
+                _f_domain = "data_governance"
+            for _eid in _f.evidence_ref_ids or []:
+                _ref = _ep_evidence_by_id.get(_eid)
+                if _ref:
+                    _ep_domain_evidence.setdefault(_f_domain, []).append(_ref)
+        # Deduplicate refs per domain (multiple findings may cite the same scan result)
+        _ep_domain_evidence = {
+            d: list({r.evidence_id: r for r in refs}.values())
+            for d, refs in _ep_domain_evidence.items()
         }
+
+        _epistemic_out: dict[str, Any] = {}
+        for _finding in report.findings:
+            _det = determine_epistemic_state(
+                evidence_refs=_ep_domain_evidence.get(_finding.domain, []),
+                has_adverse_finding=True,
+            )
+            _epistemic_out[_finding.finding_id] = {
+                "state": _det.state.value,
+                "reason_codes": list(_det.reason_codes),
+                "evidence_ids": list(_det.evidence_ids),
+                "contradictory_evidence_ids": list(_det.contradictory_evidence_ids),
+                "stale_evidence_ids": list(_det.stale_evidence_ids),
+                "invalid_evidence_ids": list(_det.invalid_evidence_ids),
+                "missing_requirements": list(_det.missing_requirements),
+                "methodology_version": _det.methodology_version,
+            }
+        section_content["epistemic_states"] = _epistemic_out
     if "normalized_findings" in active_sections and report_type in (
         "findings_register",
         "full_assessment",
