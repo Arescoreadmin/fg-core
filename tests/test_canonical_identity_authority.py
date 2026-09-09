@@ -625,21 +625,41 @@ def test_case5_credential_authority_source_enforces_tenant_lifecycle() -> None:
 
 
 def test_case5_bind_membership_source_checks_tenant_lifecycle() -> None:
-    """CASE 5 OIDC path source proof: _bind_membership now enforces tenant lifecycle state."""
+    """CASE 5 OIDC path source proof: tenant lifecycle is enforced for all OIDC actors.
+
+    After the FIAP-gap fix the lifecycle check lives in _check_tenant_lifecycle()
+    (a shared helper) rather than inline in _bind_membership().  We verify:
+      1. _check_tenant_lifecycle contains the query and the denial code.
+      2. _bind_membership delegates to _check_tenant_lifecycle.
+      3. get_actor_context enforces lifecycle for non-Auth0 OIDC sources too.
+    """
     import inspect
 
     from api import auth_dispatch as _ad
 
-    src = inspect.getsource(_ad._bind_membership)  # type: ignore[attr-defined]
-    assert "lifecycle_state FROM tenants" in src, (
-        "_bind_membership must query tenants.lifecycle_state for OIDC actors"
+    helper_src = inspect.getsource(_ad._check_tenant_lifecycle)  # type: ignore[attr-defined]
+    assert "lifecycle_state FROM tenants" in helper_src, (
+        "_check_tenant_lifecycle must query tenants.lifecycle_state"
     )
-    assert "TENANT_NOT_ACTIVE" in src, (
-        "_bind_membership must use TENANT_NOT_ACTIVE code when tenant is not eligible"
+    assert "TENANT_NOT_ACTIVE" in helper_src, (
+        "_check_tenant_lifecycle must raise TENANT_NOT_ACTIVE when not eligible"
     )
-    assert (
-        '_tenant_lifecycle != "active"' in src or "_tenant_lifecycle != 'active'" in src
-    ), "_bind_membership must deny when lifecycle_state is not 'active'"
+    assert '!= "active"' in helper_src or "!= 'active'" in helper_src, (
+        "_check_tenant_lifecycle must deny when lifecycle_state is not 'active'"
+    )
+
+    bind_src = inspect.getsource(_ad._bind_membership)  # type: ignore[attr-defined]
+    assert "_check_tenant_lifecycle" in bind_src, (
+        "_bind_membership must delegate lifecycle enforcement to _check_tenant_lifecycle"
+    )
+
+    ctx_src = inspect.getsource(_ad.get_actor_context)  # type: ignore[attr-defined]
+    assert "_check_tenant_lifecycle" in ctx_src, (
+        "get_actor_context must call _check_tenant_lifecycle for non-Auth0 OIDC actors"
+    )
+    assert 'startswith("oidc_")' in ctx_src, (
+        "get_actor_context must enforce lifecycle for all oidc_* auth sources, not just oidc_auth0"
+    )
 
 
 # ---------------------------------------------------------------------------
