@@ -102,9 +102,9 @@ _TENANT_B = "tenant-cr-b"
 _FUTURE_DUE = "2099-06-01T00:00:00+00:00"
 _PAST_DUE = "2020-06-01T00:00:00+00:00"
 # Verified 200 days ago with 90-day cycle = expired
-_OLD_VERIFIED = "2025-12-04T00:00:00+00:00"
+_OLD_VERIFIED = "2026-03-23T00:00:00+00:00"
 # Verified 10 days ago with 90-day cycle = fresh
-_RECENT_VERIFIED = "2026-06-11T00:00:00+00:00"
+_RECENT_VERIFIED = "2026-08-30T00:00:00+00:00"
 
 
 # ---------------------------------------------------------------------------

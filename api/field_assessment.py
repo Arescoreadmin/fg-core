@@ -8148,12 +8148,27 @@ def _build_engagement_report_json(
             break
         offset += 100
 
-    # Derive synthetic domain scores from normalized findings
-    # Maps effective confidence (0-100, decay-adjusted) → domain score
-    from services.field_assessment.confidence import degrade_confidence as _degrade
+    # Derive domain health scores from active adverse findings.
+    #
+    # Semantic boundary (FGA-025):
+    #   confidence_score  — certainty that the finding is supported by evidence.
+    #   domain_health     — how healthy the control domain is (lower = worse).
+    #
+    # For an adverse finding, higher confidence means the gap is MORE real, so
+    # domain health must be LOWER.  The correct mapping is:
+    #
+    #   domain_health = 100 - effective_confidence
+    #
+    # Aggregation: take the MINIMUM health (worst-case) across all active
+    # findings in a domain so that adding a low-confidence finding cannot
+    # dilute or mask a high-confidence one.
+    #
+    # Only status="open"/"in_progress" findings contribute: resolved or
+    # dismissed findings are no longer material adverse evidence.
+    _adverse_active = [f for f in all_findings if f.status in ("open", "in_progress")]
 
     domain_scores: dict[str, list[float]] = {}
-    for f in all_findings:
+    for f in _adverse_active:
         mappings = f.framework_mappings or []
         if mappings:
             domain_key = str(
@@ -8163,14 +8178,19 @@ def _build_engagement_report_json(
             )
         else:
             domain_key = "data_governance"
-        effective = _degrade(f.confidence_score, f.updated_at)
-        domain_scores.setdefault(domain_key, []).append(float(effective))
+        # Use raw confidence_score (not degraded) for the health gate.
+        # _degrade reduces certainty over time, but staleness must not
+        # silently improve posture or suppress an open finding.
+        health = 100.0 - float(f.confidence_score)
+        domain_scores.setdefault(domain_key, []).append(health)
 
     scores: dict[str, float] = {}
     for domain, values in domain_scores.items():
-        scores[domain] = sum(values) / len(values)
+        # Worst-case: most adverse finding governs the domain health.
+        scores[domain] = min(values)
 
-    # Ensure engine has at least one domain to work with
+    # Ensure engine has at least one domain to work with.
+    # No active adverse findings → domain is healthy (score 80 > threshold 60).
     if not scores:
         scores = {"data_governance": 80.0}
 

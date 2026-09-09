@@ -243,8 +243,10 @@ class GovernanceReportEngine:
                 priority=priority,
             )
 
-            # Confidence for this specific finding
-            finding_confidence = score / 100.0 * 0.8 + 0.2 * (
+            # Confidence for this specific finding.
+            # scores are domain-health values (lower = worse), so invert to
+            # recover evidence certainty: health=5 (confidence=95) → 0.76.
+            finding_confidence = (1.0 - score / 100.0) * 0.8 + 0.2 * (
                 1.0 if reviewer_validated else 0.0
             )
 

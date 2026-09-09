@@ -1,5 +1,21 @@
 # PR Fix Log (Strict)
 
+## P-59 — fix(governance): FGA-025 Semantic Determination Authority — domain health score inversion — branch `fix/fga-025-result-truth`
+
+- **PR/Branch:** `fix/fga-025-result-truth`
+- **Date:** 2026-09-09
+- **Files changed:** `api/field_assessment.py`, `tests/test_result_semantic_authority.py` (new)
+- **Root cause:** FGA-025 — Proven P1 semantic contradiction in domain health score computation inside `_compute_domain_scores()` (approx. `api/field_assessment.py:8151–8175`). `confidence_score` (0–100, certainty of an adverse finding) was used directly as a domain health score (0–100, higher=healthier). These are opposite scales. High-confidence (95) adverse finding → domain_score=95 → ≥ `_FINDING_SCORE_THRESHOLD=60` → finding suppressed from governance report. Low-confidence (30) adverse finding → domain_score=30 → < 60 → emitted as critical. Clients with high-certainty adverse findings saw no findings in their governance report.
+- **Fix:** Three-part minimal correction: (1) **Scale inversion** — `health = 100.0 - effective_confidence` so a high-confidence adverse finding maps to low health and is always emitted. (2) **Worst-case aggregation** — `min(values)` replaces `sum(values)/len(values)`; adding a weaker-confidence finding to a domain can no longer dilute a high-confidence one (ADVERSE EVIDENCE MONOTONICITY invariant). (3) **Active-findings filter** — only `status in ("open", "in_progress")` contribute to domain health; resolved/dismissed findings no longer artificially degrade posture when they should have no adverse weight.
+- **Behavioral impact:** High-confidence adverse findings now always generate critical governance report entries. Domains with no active adverse findings return healthy default (80.0). Resolved/dismissed findings are excluded from the health score entirely.
+- **Security/governance impact:** Positive — prevents governance reports from misrepresenting a high-confidence adverse finding as a healthy domain. Closes FGA-025.
+- **Schema/API impact:** None. No DB migrations. No route changes. No contract changes.
+- **Tests added:** `tests/test_result_semantic_authority.py` (new, 27 tests) — 9 mandatory cases A–I: confidence inversion (Case A), adverse evidence monotonicity (Case B), severity ordering (Case C), low-confidence ordering (Case D), resolved-finding isolation (Case E), worst-case aggregation (Case F), order invariance (Case G), LLM-free engine assertion (Case H), boundary/status exclusion (Case I). Plus two explicit old-behavior regression proofs: `test_fga025_old_behavior_would_have_suppressed_high_confidence_finding` and `test_fga025_old_behavior_would_have_promoted_low_confidence_finding`.
+- **Validation:** `ruff check/format` PASS; `mypy` PASS (2 pre-existing errors in unrelated files); `pytest tests/test_result_semantic_authority.py` 27/27 PASS; `pytest tests/test_field_assessment_reports.py tests/test_field_assessment_report_qa_gate.py` 38/38 PASS; `make fg-fast` exit 0.
+- **Result:** PASS.
+
+---
+
 ## P-58 — fix(auth): enforce tenant lifecycle for all OIDC providers (TENANT-LIFECYCLE-OIDC-002) — branch `fix/oidc-lifecycle-fiap-gap`
 
 - **PR/Branch:** `fix/oidc-lifecycle-fiap-gap` (#684)
