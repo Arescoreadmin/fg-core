@@ -40,9 +40,24 @@ from starlette.testclient import TestClient
 
 @pytest.fixture
 def app(build_app, monkeypatch):
+    import api.ratelimit as ratelimit
+
     monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.example.com")
-    # Use in-memory rate limiter in tests — no Redis required
+
+    # This suite exercises resend rate-limit behavior directly. Establish the
+    # complete rate-limit contract here so unrelated test modules cannot disable
+    # it through process-global environment mutations during pytest collection.
+    monkeypatch.setenv("FG_RL_ENABLED", "1")
     monkeypatch.setenv("FG_RL_BACKEND", "memory")
+
+    # The in-memory limiter is process-global. Give each test a fresh authority
+    # so bucket state cannot leak between tests or from earlier collected suites.
+    monkeypatch.setattr(
+        ratelimit,
+        "_memory_limiter",
+        ratelimit.MemoryRateLimiter(),
+    )
+
     return build_app(auth_enabled=True, api_key="")
 
 
