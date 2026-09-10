@@ -220,17 +220,54 @@ class IdentityAuthority:
         correlation_id: str,
         db: Optional[Session] = None,
     ) -> AuthorizationContext:
-        """Resolve tenant, permissions, and assemble AuthorizationContext."""
-        binding = identity.tenant_binding
+        """Resolve tenant, permissions, and assemble AuthorizationContext.
 
+        Canonical delegation invariant (P1-01-PR2):
+            For OIDC/human identities (auth0, entra, google, generic_oidc)
+            the JWT-derived ``tenant_binding`` is TRUSTED FOR IDENTITY ONLY.
+            Authoritative tenant + roles + permissions MUST come from the
+            canonical FrostGate ``tenant_users`` membership row resolved
+            through :class:`TenantResolver`.  If no canonical membership
+            binding is produced, the returned :class:`AuthorizationContext`
+            has ``permissions=frozenset()`` and ``tenant_id=None`` — the
+            authenticated subject is preserved but no delegated authority
+            flows.
+
+        Machine / service identities (api_key, machine, agent) continue
+        to use ``TenantResolver`` — API-key credentials are validated by
+        the canonical credential-authority before this method runs, so
+        their tenant binding is already canonical.
+
+        Fail-closed conditions:
+            - ``db is None`` for an OIDC/human identity → no authority.
+            - :meth:`TenantResolver.resolve` returns ``None`` for an
+              OIDC/human identity → no authority (JWT-declared roles or
+              tenant_id in the token do NOT confer authority).
+            - Cross-tenant hint mismatch → no authority (already enforced
+              inside :class:`TenantResolver`).
+        """
+        is_oidc_human = identity.identity_type == "human"
+
+        resolved_binding = None
         if db is not None:
-            resolved = self._resolver.resolve(
+            resolved_binding = self._resolver.resolve(
                 identity=identity,
                 db=db,
                 tenant_id_hint=tenant_id_hint,
             )
-            if resolved is not None:
-                binding = resolved
+
+        # Canonical delegation gate: OIDC/human identities NEVER inherit
+        # authority from JWT claims — only from canonical resolver output.
+        # A JWT with roles=["platform_admin"] and no membership row must
+        # produce zero permissions.
+        if is_oidc_human:
+            binding = resolved_binding  # may be None → unbound / no authority
+        else:
+            # Machine identities: canonical credential-authority has already
+            # validated the tenant binding on ``identity.tenant_binding``;
+            # keep the resolver output when present, otherwise fall back to
+            # that pre-validated binding.
+            binding = resolved_binding or identity.tenant_binding
 
         permissions = binding.permissions if binding else frozenset()
         capabilities = (
@@ -246,15 +283,35 @@ class IdentityAuthority:
                 correlation_id=correlation_id,
             )
         else:
-            log.debug(
-                "identity_authority.no_tenant_binding",
-                extra={"subject_prefix": identity.subject[:16]},
-            )
+            if is_oidc_human and identity.tenant_binding is not None:
+                # JWT carried a tenant_binding but no canonical membership
+                # exists — refuse to promote the JWT claim to authority.
+                log.warning(
+                    "identity_authority.jwt_binding_rejected_no_membership",
+                    extra={
+                        "subject_prefix": identity.subject[:16],
+                        "provider": identity.provider.name,
+                        "jwt_declared_tenant": identity.tenant_binding.tenant_id,
+                        "jwt_declared_roles": sorted(identity.tenant_binding.roles),
+                    },
+                )
+            else:
+                log.debug(
+                    "identity_authority.no_tenant_binding",
+                    extra={"subject_prefix": identity.subject[:16]},
+                )
+
+        # Scrub JWT-derived binding off the identity when no canonical
+        # binding was produced, so downstream consumers of
+        # ``AuthorizationContext.identity.tenant_binding`` cannot re-derive
+        # permissions from JWT claims.
+        if binding is None and identity.tenant_binding is not None:
+            identity = _identity_with_binding(identity, None)
+        elif binding is not None and binding is not identity.tenant_binding:
+            identity = _identity_with_binding(identity, binding)
 
         return AuthorizationContext(
-            identity=identity
-            if binding is None
-            else _identity_with_binding(identity, binding),
+            identity=identity,
             permissions=permissions,
             capabilities=capabilities,
             tenant_id=binding.tenant_id if binding else None,
@@ -269,7 +326,13 @@ def _identity_with_binding(
     identity: CanonicalIdentity,
     binding,
 ) -> CanonicalIdentity:
-    """Return a new CanonicalIdentity with the resolved tenant_binding."""
+    """Return a new CanonicalIdentity with the resolved tenant_binding.
+
+    Passing ``binding=None`` scrubs any JWT-derived binding off the identity;
+    this is required by the P1-01-PR2 canonical-delegation invariant so
+    downstream consumers cannot re-derive authority from JWT claims when
+    no canonical membership row exists.
+    """
     from dataclasses import replace
 
     return replace(identity, tenant_binding=binding)

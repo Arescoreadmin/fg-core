@@ -119,38 +119,61 @@ class TenantResolver:
     ) -> Optional[TenantBinding]:
         """Resolve a tenant by ID hint (e.g., from API key binding).
 
-        For JWT identities, the hint only applies if it matches the tenant_binding
-        already present on the identity (security: prevent cross-tenant escalation).
+        Canonical delegation invariant (P1-01-PR2):
+            For OIDC/human identities the hint MUST NOT confer authority
+            from JWT-declared roles or tenant_id.  Only :meth:`_resolve_by_membership`
+            — which reads the canonical ``tenant_users`` row — can bind an
+            OIDC/human identity to a tenant.  This method therefore returns
+            ``None`` for OIDC/human identities, causing :meth:`resolve` to
+            fall through to the fail-closed "no authority" outcome.
+
+        For machine / service identities (API keys, agents) the credential
+        authority has already validated the caller and produced the tenant
+        binding on ``identity.tenant_binding``.  In that path the hint is
+        used solely to catch a caller-supplied ``X-Tenant-Id`` header that
+        disagrees with the credential-bound tenant.  A matching hint returns
+        the pre-validated binding; a mismatching hint denies.  A machine
+        identity with NO pre-validated binding never fabricates a binding
+        from the hint alone — this closes the pre-fix path where a raw
+        ``X-Tenant-Id`` value could manufacture authority.
         """
-        # For JWT identities with a tenant_binding, validate the hint matches
-        if identity.tenant_binding:
-            existing_tid = identity.tenant_binding.tenant_id
-            if existing_tid and existing_tid != tenant_id:
+        if identity.identity_type == "human":
+            # OIDC/human path: JWT-declared tenant is not authoritative.
+            # Fall through to the fail-closed outcome in resolve().
+            if identity.tenant_binding is not None:
                 log.warning(
-                    "tenant_resolver.cross_tenant_hint_denied",
+                    "tenant_resolver.oidc_jwt_hint_rejected",
                     extra={
                         "hint": tenant_id,
-                        "bound": existing_tid,
+                        "jwt_declared": identity.tenant_binding.tenant_id,
                         "subject_prefix": identity.subject[:16],
+                        "provider": identity.provider.name,
                     },
                 )
-                return None
-            return identity.tenant_binding
+            return None
 
-        # For machine identities (API keys), accept the hint directly
-        if identity.identity_type in ("machine", "service"):
-            from api.actor_context import roles_to_permissions
-
-            roles = (
-                list(identity.tenant_binding.roles) if identity.tenant_binding else []
+        # Machine / service identity — must already have a
+        # credential-authority-validated tenant_binding.
+        if identity.tenant_binding is None:
+            log.warning(
+                "tenant_resolver.machine_hint_without_binding_denied",
+                extra={
+                    "hint": tenant_id,
+                    "subject_prefix": identity.subject[:16],
+                    "identity_type": identity.identity_type,
+                },
             )
-            perms = roles_to_permissions(roles)
-            return TenantBinding(
-                tenant_id=tenant_id,
-                organization_id=None,
-                membership_id=None,
-                roles=frozenset(roles),
-                permissions=perms,
-            )
+            return None
 
-        return None
+        existing_tid = identity.tenant_binding.tenant_id
+        if existing_tid and existing_tid != tenant_id:
+            log.warning(
+                "tenant_resolver.cross_tenant_hint_denied",
+                extra={
+                    "hint": tenant_id,
+                    "bound": existing_tid,
+                    "subject_prefix": identity.subject[:16],
+                },
+            )
+            return None
+        return identity.tenant_binding
