@@ -1,5 +1,7 @@
 # FrostGate Authorization & Compliance Plan
 
+> **SUBORDINATE (2026-09-09):** This document tracks RBAC and compliance hardening phases and is SUBORDINATE to the Level-2 Customer-One sequencing authority at `docs/plans/customer_one_verified_governance_roadmap_20260910.md`. Items in this plan that are not in the NEXT sequence are DEFERRED under the Freeze Law until Customer-One is complete. Use the checker: `python tools/ci/check_customer_one_roadmap.py --work-class DEFERRED` to confirm.
+
 **Version:** 1.0  
 **Created:** 2026-07-07  
 **Owner:** Jason Cosat  

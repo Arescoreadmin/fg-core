@@ -5,7 +5,8 @@
 Read these files first — they are the authoritative product state:
 - `FOUNDER_DIRECTIVE.md` — **MANDATORY FIRST READ** for any agent producing planning artifacts; contains founder strategic direction that overrides defaults on competitive positioning, moat framing, and enterprise requirements
 - `SYSTEM.md` — unified system reference (architecture, tech stack, what is built)
-- `ROADMAP.md` — living PR tracker (what is done, what is next, client readiness blockers)
+- `docs/plans/customer_one_verified_governance_roadmap_20260910.md` — **Level-2 sequencing authority** (what is NEXT vs DEFERRED); run `tools/ci/check_customer_one_roadmap.py --work-class <CLASS>` before proposing new capabilities
+- `ROADMAP.md` — Level-3 status ledger (merged PR tracker only; not a sequencing authority)
 - `BLUEPRINT_STAGED.md` — governance compliance gates (authoritative for compliance decisions)
 
 ## Change rules

@@ -1,5 +1,7 @@
 # FrostGate Canonical Implementation Roadmap
 
+> **SUPERSEDED (2026-09-09):** This document was the sequencing authority as of 2026-07-14. It has been superseded by `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (Level-2). This document is retained as Level-5 historical evidence. For current sequencing decisions, read the Level-2 document. Do not update this file.
+
 **Document Authority:** This document supersedes all prior phase descriptions, chat-history roadmaps, and ad hoc feature lists. ROADMAP.md remains the per-PR merge tracker. This document defines phase objectives, criteria, PR sequence, and competitive positioning.
 
 **Date:** 2026-07-14

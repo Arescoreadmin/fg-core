@@ -1,5 +1,7 @@
 # FrostGate Enterprise Plan
 
+> **SUBORDINATE (2026-09-09):** This document describes Phase 3+ product strategy and is SUBORDINATE to the Level-2 Customer-One sequencing authority at `docs/plans/customer_one_verified_governance_roadmap_20260910.md`. For what engineering work is authorized now, consult that document first. This document remains authoritative for Phase 3+ product direction once Customer-One is complete.
+
 **Version:** 1.1  
 **Date:** 2026-06-02  
 **Author:** Jason Cosat  
