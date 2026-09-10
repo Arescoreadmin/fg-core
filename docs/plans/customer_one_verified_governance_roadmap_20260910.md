@@ -79,11 +79,11 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 complete |
-| Open engineering work | P1-01-PR2 (IN PROGRESS), P0-ID-CUTOVER (NEXT) |
+| Open engineering work | P1-01-PR2 (IN PROGRESS) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. The path to Customer-One is now gated by:
-- Completing the identity authority critical path (P1-01-PR2 then P0-ID-CUTOVER).
+- Completing the identity authority critical path (P1-01-PR2).
 - Executing the commercial track (L14) in parallel.
 
 ---
@@ -97,7 +97,6 @@ can be added.
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
 | P1-01-PR2 | Canonical Delegation — FIAP path integration + auth_scopes enforcement | IN PROGRESS | FIAP-authenticated actor delegation boundary not enforced |
-| P0-ID-CUTOVER | Runtime Identity Authority Cutover | NEXT | `invitation_flow.py` sets `identity_binding_status=bound` without `principal_id`; `chk_bound_requires_principal_id` CHECK deferred |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client — L14 is the sole open commercial gate |
 
 ### P1-01-PR2 — Canonical Delegation
@@ -105,16 +104,6 @@ can be added.
 - **Worktree:** `.claude/worktrees/p1136-2-canonical-delegation/`
 - **Key files:** `api/identity_authority/authority.py`, `api/auth_scopes/`
 - **Status:** IN PROGRESS — worktree exists, implementation underway.
-
-### P0-ID-CUTOVER — Runtime Identity Authority Cutover
-
-- **Key files:** `api/invitation_flow.py`, `migrations/postgres/`
-- **Status:** NEXT — begins after P1-01-PR2 merges.
-- **Note:** The same migration must add the `chk_bound_requires_principal_id` CHECK
-  constraint. Migration 0183 is the next available slot.
-- **What must change:** `invitation_flow.py` must set `principal_id` before setting
-  `identity_binding_status='bound'`. The deferred CHECK constraint must be added in the
-  same migration to enforce the invariant at the database layer.
 
 ### L14 — Customer-One Commercial Execution
 
@@ -164,6 +153,7 @@ All items below are fully merged and production-proven unless otherwise noted.
 | TENANT-LIFECYCLE-OIDC-002 | Tenant lifecycle enforcement for all OIDC providers | #684 |
 | FGA-025 | Domain health scale inversion + worst-case aggregation | #686 |
 | FGA-026 | Evidence Sufficiency & Epistemic Authority | #687 |
+| P0-ID-CUTOVER | Runtime Identity Authority Cutover | HARD-001 #657, migration 0183 — production proven (artifacts/identity/hard-002-production-proof.json) |
 | REVENUE-GATE-1 | Revenue Gate 1 — all 12 items cleared | #539, #540, #544, P-1, FA-1, FA-2, R-1, R-2, P-2 |
 
 ---

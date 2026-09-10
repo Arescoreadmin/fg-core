@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 """Deterministic Customer-One roadmap authority checker.
 
+Derives authorization from the authority file — the caller cannot self-declare
+a work class and bypass the Freeze Law.  Authorization is determined by looking
+up the proposed work item in next_sequence (authorized) or deferred (blocked).
+Items not listed in either are fail-closed (blocked).
+
 Usage:
-    python tools/ci/check_customer_one_roadmap.py --work-class NEXT
-    python tools/ci/check_customer_one_roadmap.py --authority customer_one/roadmap_authority.yaml --work-class REPAIR
+    # Specific work item — authorization derived from authority file:
+    python tools/ci/check_customer_one_roadmap.py --work-item P1-01-PR2
+    python tools/ci/check_customer_one_roadmap.py --work-item SAML
+
+    # Defect repair — always authorized, no item ID required:
+    python tools/ci/check_customer_one_roadmap.py --work-class REPAIR
+
+    # Custom authority path:
+    python tools/ci/check_customer_one_roadmap.py --authority customer_one/roadmap_authority.yaml --work-item P1-01-PR2
 
 Exit codes:
-    0 — work class is authorized (gate=OPEN)
-    1 — work class is blocked, unknown, or authority file is missing/malformed
+    0 — work item is authorized (in next_sequence) or work-class is REPAIR
+    1 — work item is deferred, unknown, or authority file is missing/malformed
 """
 
 from __future__ import annotations
@@ -36,31 +48,59 @@ def _load_authority(path: str) -> dict:
         print(f"ERROR: malformed YAML in {path}: {exc}", file=sys.stderr)
         sys.exit(1)
     if not isinstance(data, dict):
-        print(f"ERROR: authority file must be a YAML mapping, got {type(data).__name__}", file=sys.stderr)
+        print(
+            f"ERROR: authority file must be a YAML mapping, got {type(data).__name__}",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    if "work_classes" not in data:
-        print(f"ERROR: authority file missing required key 'work_classes'", file=sys.stderr)
+    if "next_sequence" not in data or "deferred" not in data:
+        print(
+            "ERROR: authority file missing required keys 'next_sequence' and/or 'deferred'",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return data
 
 
-def _check(authority: dict, work_class: str) -> bool:
-    """Return True if work_class is authorized (gate=OPEN). Fail-closed on unknown class."""
-    classes = authority.get("work_classes", {})
-    entry = classes.get(work_class)
-    if entry is None:
+def _check_item(authority: dict, work_item: str) -> bool:
+    """Derive authorization from item presence in next_sequence or deferred.
+
+    Fail-closed: an item not listed in either is blocked.
+    """
+    next_ids = {
+        entry["id"] for entry in authority.get("next_sequence", []) if "id" in entry
+    }
+    deferred_ids = {
+        entry["id"] for entry in authority.get("deferred", []) if "id" in entry
+    }
+
+    if work_item in next_ids:
         print(
-            f"BLOCKED: work class '{work_class}' is not declared in authority; "
-            "fail-closed — add it explicitly with gate=OPEN to authorize",
-            file=sys.stderr,
+            f"AUTHORIZED: '{work_item}' is in next_sequence — on Customer-One critical path"
         )
-        return False
-    gate = entry.get("gate", "BLOCKED")
-    if gate == "OPEN":
-        print(f"AUTHORIZED: work class '{work_class}' — gate=OPEN")
         return True
-    desc = entry.get("description", "")
-    print(f"BLOCKED: work class '{work_class}' — gate={gate}. {desc}", file=sys.stderr)
+
+    if work_item in deferred_ids:
+        # Find reason if available
+        reason = next(
+            (
+                e.get("reason", "")
+                for e in authority.get("deferred", [])
+                if e.get("id") == work_item
+            ),
+            "",
+        )
+        msg = f"BLOCKED: '{work_item}' is explicitly DEFERRED under the Freeze Law"
+        if reason:
+            msg += f" — {reason}"
+        print(msg, file=sys.stderr)
+        return False
+
+    print(
+        f"BLOCKED: '{work_item}' is not in next_sequence or deferred — fail-closed; "
+        "add it to next_sequence with Freeze Law justification to authorize",
+        file=sys.stderr,
+    )
     return False
 
 
@@ -71,15 +111,24 @@ def main() -> None:
         default=_DEFAULT_AUTHORITY,
         help=f"Path to roadmap authority YAML (default: {_DEFAULT_AUTHORITY})",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--work-item",
+        help="ID of the proposed work item (looked up in next_sequence/deferred)",
+    )
+    group.add_argument(
         "--work-class",
-        required=True,
-        help="Work class of the proposed change (NEXT, REPAIR, DEFERRED, UNKNOWN)",
+        choices=["REPAIR"],
+        help="Work class for class-level authorization (only REPAIR is accepted; use --work-item for all other work)",
     )
     args = parser.parse_args()
 
+    if args.work_class == "REPAIR":
+        print("AUTHORIZED: work-class REPAIR — defect repairs are always authorized")
+        sys.exit(0)
+
     authority = _load_authority(args.authority)
-    authorized = _check(authority, args.work_class)
+    authorized = _check_item(authority, args.work_item)
     sys.exit(0 if authorized else 1)
 
 

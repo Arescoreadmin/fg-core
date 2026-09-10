@@ -34,15 +34,6 @@ next_sequence:
     blocker_closed: "FIAP-authenticated actor delegation boundary not enforced"
     status: IN_PROGRESS
 
-  - id: "P0-ID-CUTOVER"
-    title: "Runtime Identity Authority Cutover"
-    files:
-      - "api/invitation_flow.py"
-      - "migrations/postgres/"
-    blocker_closed: "invitation_flow.py sets identity_binding_status=bound without principal_id; chk_bound_requires_principal_id CHECK deferred"
-    status: NEXT
-    note: "Same migration must add chk_bound_requires_principal_id CHECK. Migration 0183 is next available."
-
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -107,6 +98,10 @@ completed:
   - id: "FGA-026"
     title: "Evidence Sufficiency & Epistemic Authority"
     prs: ["#687"]
+  - id: "P0-ID-CUTOVER"
+    title: "Runtime Identity Authority Cutover"
+    prs: ["HARD-001 #657", "HARD-002"]
+    note: "invitation_flow.py:553-564 assigns principal_id before identity_binding_status=bound; migration 0183 adds chk_bound_requires_principal_id; production-proven per artifacts/identity/hard-002-production-proof.json"
   - id: "REVENUE-GATE-1"
     title: "Revenue Gate 1 — all 12 items cleared"
     prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]
