@@ -1,0 +1,131 @@
+schema_version: "1.0"
+authority_date: "2026-09-09"
+authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
+phase: "Identity Platform Completion → First Paying Client"
+goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
+
+freeze_law: >
+  New capability enters the critical path only if it: (1) closes a Customer-One
+  blocker with evidence, (2) is required by a contracted customer requirement, or
+  (3) measurably reduces delivery risk or cost with evidence. Preference, curiosity,
+  and speculative scale are not sufficient justification.
+
+work_classes:
+  NEXT:
+    description: "Authorized work — on the critical path to Customer-One"
+    gate: OPEN
+  REPAIR:
+    description: "Defect repair — always authorized; no Customer-One justification required"
+    gate: OPEN
+  DEFERRED:
+    description: "Explicitly deferred until after Customer-One or a named gate"
+    gate: BLOCKED
+  UNKNOWN:
+    description: "Work of unknown classification — fail-closed, treated as blocked"
+    gate: BLOCKED
+
+next_sequence:
+  - id: "P1-01-PR2"
+    title: "Canonical Delegation — FIAP path integration + auth_scopes enforcement"
+    worktree: ".claude/worktrees/p1136-2-canonical-delegation/"
+    files:
+      - "api/identity_authority/authority.py"
+      - "api/auth_scopes/"
+    blocker_closed: "FIAP-authenticated actor delegation boundary not enforced"
+    status: IN_PROGRESS
+
+  - id: "P0-ID-CUTOVER"
+    title: "Runtime Identity Authority Cutover"
+    files:
+      - "api/invitation_flow.py"
+      - "migrations/postgres/"
+    blocker_closed: "invitation_flow.py sets identity_binding_status=bound without principal_id; chk_bound_requires_principal_id CHECK deferred"
+    status: NEXT
+    note: "Same migration must add chk_bound_requires_principal_id CHECK. Migration 0183 is next available."
+
+  - id: "L14"
+    title: "Customer-One Commercial Execution"
+    files: []
+    blocker_closed: "No paying client — L14 is the sole open commercial gate"
+    status: NEXT
+    note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review."
+
+deferred:
+  - id: "RAG-RETRY"
+    title: "RAG ingestion retry endpoint (currently returns 503)"
+    reason: "Planned capability; no live client requires it"
+  - id: "SAML"
+    title: "SAML support"
+    reason: "Before client 5; no current client requirement"
+  - id: "FEDRAMP"
+    title: "FedRAMP preparation"
+    reason: "Before signed govcon LOI"
+  - id: "PCI-PLAYBOOK"
+    title: "PCI DSS playbook"
+    reason: "Before PCI client identified"
+  - id: "GOV-SERVICES"
+    title: "Governance orchestration/simulation/digital twin services"
+    reason: "services/governance_orchestration/, governance_simulation/, governance_digital_twin/ — no live client use case"
+  - id: "NEW-CI-LANES"
+    title: "New CI lanes"
+    reason: "Before team exceeds 3 engineers"
+  - id: "CROSS-FINDING"
+    title: "Cross-finding correlation"
+    reason: "Portal enhancement; not Customer-One blocker"
+  - id: "PORTAL-AI-GATE"
+    title: "Remove portal_ai_enabled manual gate"
+    reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
+
+completed:
+  - id: "P-113.1-P-113.5"
+    title: "Identity administration phases 1–5"
+    prs: ["#639", "#650", "#651", "#652", "#653", "#654", "#655", "#656", "#657"]
+  - id: "P-113.6"
+    title: "Platform Admin Credential Authority"
+    prs: ["#677", "#678", "#679"]
+  - id: "P-113.7"
+    title: "Console canonical platform-admin cutover (production proven)"
+    prs: ["#680"]
+  - id: "P-113.8"
+    title: "Canonical Invitation Acceptance (production proven)"
+    prs: ["#680"]
+  - id: "P-113.9"
+    title: "Seamless Identity Verification"
+    prs: ["#681"]
+  - id: "P-113.10"
+    title: "Invitation-Authorized Identity Enrollment"
+    prs: ["#682"]
+  - id: "P1-01-PR1"
+    title: "Canonical Identity Authority PR-1 (tenant lifecycle OIDC gate)"
+    prs: ["#683"]
+  - id: "TENANT-LIFECYCLE-OIDC-002"
+    title: "Tenant lifecycle enforcement for all OIDC providers"
+    prs: ["#684"]
+  - id: "FGA-025"
+    title: "Domain health scale inversion + worst-case aggregation"
+    prs: ["#686"]
+  - id: "FGA-026"
+    title: "Evidence Sufficiency & Epistemic Authority"
+    prs: ["#687"]
+  - id: "REVENUE-GATE-1"
+    title: "Revenue Gate 1 — all 12 items cleared"
+    prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]
+
+precedence:
+  - level: 1
+    name: "Safety invariants"
+    sources: ["SPINE_INVARIANTS.md", "security regression tests", "RLS enforcement gates"]
+  - level: 2
+    name: "Customer-One execution authority"
+    sources: ["docs/plans/customer_one_verified_governance_roadmap_20260910.md", "customer_one/roadmap_authority.yaml"]
+  - level: 3
+    name: "ROADMAP.md status ledger"
+    sources: ["ROADMAP.md"]
+    note: "Merged PR tracker only — not a sequencing authority"
+  - level: 4
+    name: "Scoped plans"
+    sources: ["docs/plans/", "docs/architecture/"]
+  - level: 5
+    name: "Historical evidence"
+    sources: ["ENTERPRISE_PLAN.md", "AUTHZ_COMPLIANCE_PLAN.md", "artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md"]
+    note: "SUBORDINATE to Level 2 for sequencing decisions"

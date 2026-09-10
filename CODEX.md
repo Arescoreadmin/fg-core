@@ -6,9 +6,12 @@ Before proposing or implementing any change, Codex MUST:
 1) Read `CODEX.md`
 2) Read `CLAUDE.md`
 3) Read `SYSTEM.md` — authoritative product state (architecture, what is built, tech stack)
-4) Read `ROADMAP.md` — living PR tracker (what is done, what is next, client readiness blockers)
-5) Read `docs/ai/PR_FIX_LOG.md` (if present)
-6) Read `docs/ai/GOTCHAS.md` (if present)
+4) Read `docs/plans/customer_one_verified_governance_roadmap_20260910.md` — **Level-2 sequencing authority** (what is authorized NEXT vs DEFERRED); supersedes `artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md` for sequencing decisions
+5) Read `ROADMAP.md` — Level-3 status ledger (merged PR tracker only; not a sequencing authority)
+6) Read `docs/ai/PR_FIX_LOG.md` (if present)
+7) Read `docs/ai/GOTCHAS.md` (if present)
+
+**Preflight gate:** Before proposing any new capability, classify it as NEXT, REPAIR, or DEFERRED using `tools/ci/check_customer_one_roadmap.py --work-class <CLASS>`. A DEFERRED or UNKNOWN classification blocks the proposal.
 
 If a relevant prior fix, invariant, or constraint exists:
 - Reuse it

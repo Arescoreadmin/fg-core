@@ -12,13 +12,15 @@ This template may be used only when one of these triggers exists:
 - a signed enterprise requirement emerged
 - a dependency or platform constraint invalidated the current sequence
 
-Read:
+Read (in precedence order):
 
-- `artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md`
+- `docs/plans/customer_one_verified_governance_roadmap_20260910.md` — **Level-2 sequencing authority** (supersedes the canonical roadmap below for sequencing decisions as of 2026-09-09)
+- `customer_one/roadmap_authority.yaml` — machine-readable mirror of the Level-2 authority
+- `artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md` — Level-5 historical evidence (superseded; read-only)
 - `artifacts/audits/canonical_roadmap/roadmap_manifest.json`
 - `artifacts/audits/canonical_roadmap/EXECUTION_STATE.json`
 
-Assume the current documents are authoritative.
+Assume the Level-2 document is authoritative for sequencing. The Level-5 canonical roadmap is historical evidence only.
 
 Do not redesign the roadmap.
 

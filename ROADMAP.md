@@ -1,5 +1,7 @@
 # FrostGate Roadmap
 
+> **LEVEL-3 STATUS LEDGER (2026-09-09):** This document is the merged-PR tracker. It is NOT the sequencing authority. For what work is authorized NEXT vs DEFERRED, read `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (Level-2). For safety invariants, read `SPINE_INVARIANTS.md` (Level-1). Adding a row here does not authorize new work — it records work that was already authorized and shipped.
+
 **Owner:** Jason Cosat  
 **Goal:** Client-ready field assessment delivery within 30 days of 2026-05-27  
 **Authority:** `SYSTEM.md` (system design), `BLUEPRINT_STAGED.md` (governance compliance gates)
