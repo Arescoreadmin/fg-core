@@ -6821,3 +6821,14 @@ Security posture:
 Validation evidence:
 - `pytest tests/test_auth_startup_guard.py` 25/25 PASS (14 existing + 9 new invitation prerequisite tests + 2 others).
 - `make fg-fast` PASS; `make fg-security` PASS; `make fg-contract` PASS; console `npm run typecheck` PASS; `npm run lint` PASS.
+---
+
+## 2026-09-09 — Customer-One Roadmap Authority — check_customer_one_roadmap.py
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (new `tools/ci/` file; SOC critical prefix requires review acknowledgment).
+
+Scope: New deterministic checker `tools/ci/check_customer_one_roadmap.py` establishes the Customer-One Roadmap Authority gate. The checker reads `customer_one/roadmap_authority.yaml` (machine-readable Level-2 sequencing authority) and derives authorization from item lookup — not caller-supplied work class — so the Freeze Law cannot be bypassed by self-declaration. Authorization is item-derived: `--work-item <ID>` resolves against `next_sequence` (exit 0) or `deferred` (exit 1); items in neither fail-closed (exit 1). `--work-class REPAIR` is the only class-level bypass and is always authorized for defect fixes. The checker exits 1 on missing or malformed authority file.
+
+Security posture: The checker has no runtime effect on authentication, authorization, RLS, or any production system. It is a documentation/sequencing gate that fails open in CI (exit 1 blocks PR merge; does not affect deployed services). No auth paths modified. No database changes. No API changes. Strictly additive.
+
+Validation evidence: `pytest tests/test_customer_one_roadmap_checker.py` 11/11 PASS. `python tools/ci/check_customer_one_roadmap.py --work-item P1-01-PR2` exit 0; `--work-item SAML` exit 1; `--work-class REPAIR` exit 0.
