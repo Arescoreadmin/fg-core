@@ -83,15 +83,33 @@ def test_authenticate_jwt_provider_error_raises(authority, mock_registry, mock_a
     mock_auditor.emit.assert_called()
 
 
-def test_authenticate_jwt_no_db_skips_resolver(
+def test_authenticate_jwt_no_db_denies_oidc_human_authority(
     authority, mock_registry, mock_resolver, canonical_identity
 ):
+    """P1-01-PR2 canonical delegation invariant.
+
+    When no DB session is available the canonical resolver cannot run,
+    so an OIDC/human identity MUST NOT inherit authority from its JWT
+    tenant_binding.  The AuthorizationContext returned still preserves
+    the authenticated subject (identity anchor) but has an empty
+    permission set and no tenant_id.
+
+    Pre-fix behavior returned tenant_id="tenant-123" from the JWT-declared
+    binding — this test now guards against that regression.
+    """
     mock_registry.resolve_jwt.return_value = canonical_identity
 
     ctx = authority.authenticate_jwt("token", db=None)
 
     mock_resolver.resolve.assert_not_called()
-    assert ctx.tenant_id == "tenant-123"  # from identity's own binding
+    # Identity anchor preserved (audit + attribution) …
+    assert ctx.identity.subject == canonical_identity.subject
+    # … but NO delegated authority when db is absent.
+    assert ctx.tenant_id is None
+    assert ctx.permissions == frozenset()
+    # JWT-declared tenant_binding must have been scrubbed from the identity
+    # so downstream consumers cannot re-derive authority from it.
+    assert ctx.identity.tenant_binding is None
 
 
 def test_create_session_issues_token(authority, mock_session, canonical_identity):

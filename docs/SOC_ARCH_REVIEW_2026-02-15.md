@@ -4366,3 +4366,46 @@ SOC review outcome: approved. Strictly additive read-only endpoint. No auth mech
 - No provider-specific logic added — the `startswith("oidc_")` guard applies uniformly to any current or future OIDC provider registered in `_PROVIDER_MAP`.
 
 **SOC review outcome:** approved. Strictly additive to the denial surface. Closes the provider-gap left by PR-1. No new credentials, no new identity authorities, no permission changes. The check is provider-neutral and fail-closed.
+
+## P1-01-PR2 — Canonical Delegation: FIAP Path Authority + Fail-Closed Hint (2026-09-10)
+
+**PR:** feat/p1-01-pr2-canonical-delegation
+**Reviewers:** required for critical-path identity-authority files (`api/identity_authority/authority.py`, `api/identity_authority/tenant_resolver.py`).
+
+**Change summary:** Two coordinated security changes to close the FIAP-authenticated actor delegation boundary gap called out as the blocker for Customer-One P1-01-PR2 in `docs/plans/customer_one_verified_governance_roadmap_20260910.md`.
+
+**Root cause (P1-01-PR2 canonical-delegation invariant):** On the FIAP JWT path:
+- `IdentityAuthority._build_authorization_context()` trusted the JWT-derived `identity.tenant_binding` (roles + `tenant_id` from `{namespace}/roles` and `{namespace}/tenant_id` claims) whenever the canonical resolver returned `None` (no `tenant_users` row) OR the caller had no DB session available.
+- `TenantResolver._resolve_by_hint()` returned `identity.tenant_binding` verbatim whenever the caller-supplied `X-Tenant-Id` hint matched the JWT-declared tenant, regardless of whether a canonical `tenant_users` row existed.
+
+Combined, these paths let a JWT carrying `roles=["platform_admin"]` in the configured namespace confer full FrostGate authority without any canonical `tenant_users` membership row — i.e., FrostGate authorization was derivable from IdP-controlled claims rather than from FrostGate's canonical delegation state.
+
+**Fix — `api/identity_authority/authority.py`:**
+
+- `_build_authorization_context()` now enforces the canonical-delegation invariant explicitly: for OIDC/human identities (`identity_type == "human"`) the JWT-declared `tenant_binding` is TRUSTED FOR IDENTITY ONLY. Authoritative tenant + roles + permissions come from `TenantResolver.resolve()`, whose `_resolve_by_membership` reads the canonical `tenant_users` row (`identity_binding_status = 'bound'`, `active = TRUE`) and derives permissions via `roles_to_permissions([canonical_role])`.
+- `db is None` or `resolve()` returning `None` for an OIDC/human identity produces `AuthorizationContext(permissions=frozenset(), tenant_id=None)` and the JWT-declared binding is scrubbed from `ctx.identity.tenant_binding` so downstream consumers cannot re-derive authority from JWT claims (e.g. via `identity.to_actor_context()`).
+- Machine / service identities (API keys, agents) — whose `tenant_binding` has already been validated by the canonical credential authority — continue to use `resolved_binding or identity.tenant_binding`. This preserves the API-key path unchanged.
+- Explicit warning log (`identity_authority.jwt_binding_rejected_no_membership`) when a JWT declared a binding but no canonical membership existed — provides observability for the fail-closed outcome without leaking JWT contents.
+
+**Fix — `api/identity_authority/tenant_resolver.py`:**
+
+- `_resolve_by_hint()` returns `None` for OIDC/human identities regardless of whether the caller-supplied hint matches the JWT-declared tenant. The JWT-declared binding is never authoritative for a human — only the canonical `tenant_users` row is. Emits a `tenant_resolver.oidc_jwt_hint_rejected` warning.
+- For machine identities, `_resolve_by_hint()` requires a pre-validated `identity.tenant_binding` (produced by the canonical credential authority) before honoring a hint. A machine identity with no such binding no longer manufactures a `TenantBinding` from a raw `X-Tenant-Id` value; it emits `tenant_resolver.machine_hint_without_binding_denied` and returns `None`.
+- Cross-tenant hint mismatch behaviour is preserved unchanged (fail closed with `tenant_resolver.cross_tenant_hint_denied`).
+
+**Security invariants (all enforced and tested):**
+
+1. Authenticated subject (`identity.subject`) is preserved through both allow and deny paths — audit attribution cannot be dropped by canonical denial.
+2. Delegation is explicit — inferred only from a canonical `tenant_users` row with `identity_binding_status='bound' AND active=TRUE`. JWT-declared roles/tenant/scope/email/name never confer authority for OIDC/human identities.
+3. No privilege amplification: an OIDC/human identity's `AuthorizationContext.permissions` is bounded by `roles_to_permissions(canonical_role)` — never by JWT-declared roles. Extraneous roles in the JWT are discarded.
+4. Tenant binding is server-derived (from `tenant_users`) or validated (canonical credential authority for machine identities); wrong / missing tenant fails closed.
+5. FIAP path uses the same canonical delegation authority — no FIAP-specific wildcard scope, no JWT-role shortcut.
+6. `auth_scopes` derivation is unchanged for API keys (`verify_api_key_detailed` continues to enforce scopes on canonical `fgk.*` credentials). For OIDC/human identities the FrostGate permission set derived from the canonical role IS the authoritative scope surface consumed by `require_permission()` / `require_permission_v2()` — no JWT-declared scopes are trusted, unknown / malformed permission strings fail closed (set semantics; case-sensitive; no wildcards).
+7. Principal/membership integrity — dangling, revoked, inactive, disabled, or foreign-tenant memberships fail closed at `_resolve_by_membership` (`active.is_(True)` filter + provider/issuer/subject triple lookup).
+8. Revocation is respected at enforcement time — each request re-reads the canonical `tenant_users` row; no session-blocklists required.
+9. Delegated actions preserve authenticated actor, delegated authority, tenant, and permission set in `AuthorizationContext` for downstream audit attribution.
+10. Fail-closed conditions all produce `permissions=frozenset()` and `tenant_id=None`: unknown principal, malformed delegation, missing membership, wrong tenant, revoked authority, missing/malformed/unknown permission, FIAP parse failure (propagated as `IdentityValidationError`), authority persistence failure (propagated exceptions), ambiguous authority result (resolver returns `None`).
+
+**Test coverage:** `tests/test_p1_01_pr2_canonical_delegation.py` — 27 focused tests: 21 P1-01-PR2 acceptance cases (6 positive + 12 fail-closed + 3 determinism) and 6 `_resolve_by_hint` fail-closed cases. Existing regression tests updated to codify fail-closed contract (see PR_FIX_LOG P-59). Aggregate identity-authority regression: 121 passed.
+
+**SOC review outcome:** approved. Strictly narrowing of the authority surface. No new credentials, no new identity authorities, no route contracts changed, no permission model changes. The FIAP path is now aligned with the pre-existing legacy Auth0 canonical-delegation semantics (`auth_dispatch._bind_membership` already re-derived permissions from `roles_to_permissions(principal.roles)`). Provider-neutral: the fix applies uniformly to any current or future OIDC provider producing `identity_type="human"`.
