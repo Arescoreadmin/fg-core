@@ -266,8 +266,23 @@ class IdentityAuthority:
             # Machine identities: canonical credential-authority has already
             # validated the tenant binding on ``identity.tenant_binding``;
             # keep the resolver output when present, otherwise fall back to
-            # that pre-validated binding.
-            binding = resolved_binding or identity.tenant_binding
+            # that pre-validated binding — UNLESS the resolver returned None
+            # because a caller-supplied hint disagreed with the bound tenant.
+            # In that case the resolver already emitted cross_tenant_hint_denied;
+            # restoring the pre-validated binding here would silently undo the
+            # denial and grant authority under the credential-bound tenant.
+            _cross_tenant_denied = (
+                resolved_binding is None
+                and tenant_id_hint is not None
+                and identity.tenant_binding is not None
+                and bool(identity.tenant_binding.tenant_id)
+                and identity.tenant_binding.tenant_id != tenant_id_hint
+            )
+            binding = (
+                None
+                if _cross_tenant_denied
+                else (resolved_binding or identity.tenant_binding)
+            )
 
         permissions = binding.permissions if binding else frozenset()
         capabilities = (

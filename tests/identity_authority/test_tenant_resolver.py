@@ -210,6 +210,33 @@ def test_resolve_by_hint_machine_without_binding_denied(resolver, mock_db):
     assert result is None
 
 
+def test_resolve_cross_tenant_hint_returns_none_for_machine(resolver, mock_db):
+    """P2 fix: TenantResolver.resolve() must return None when a machine identity
+    passes a hint that disagrees with its credential-bound tenant — verifying the
+    full resolve() path, not just _resolve_by_hint().
+    """
+    from api.identity_authority.models import TenantBinding
+
+    existing_binding = TenantBinding(
+        tenant_id="tenant-a",
+        organization_id=None,
+        membership_id=None,
+        roles=frozenset(["viewer"]),
+        permissions=frozenset(),
+    )
+    identity = _make_identity(
+        subject="machine|key1",
+        provider="api_key",
+        tenant_binding=existing_binding,
+    )
+    identity = _replace_identity_type(identity, "machine")
+
+    with patch.object(resolver, "_resolve_by_membership", return_value=None):
+        result = resolver.resolve(identity, mock_db, tenant_id_hint="tenant-b")
+
+    assert result is None
+
+
 def test_resolve_membership_import_error_returns_none(resolver, mock_db):
     identity = _make_identity()
     with patch("builtins.__import__", side_effect=ImportError("no admin_gateway")):

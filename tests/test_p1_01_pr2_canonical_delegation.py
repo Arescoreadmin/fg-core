@@ -528,6 +528,34 @@ def test_case21_repeated_evaluation_is_deterministic() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_case22_machine_cross_tenant_hint_does_not_restore_credential_binding() -> None:
+    """P2 fix — machine identity: cross-tenant hint must not grant authority.
+
+    Pre-fix: when TenantResolver returned None for a cross-tenant mismatch,
+    authority.py fell back to ``identity.tenant_binding`` and silently granted
+    the machine the authority of its credential-bound tenant.
+
+    Post-fix: authority.py detects the mismatch before the fallback and keeps
+    ``binding = None``, so ctx.tenant_id and ctx.permissions are both empty.
+    """
+    credential_binding = _binding(_TENANT_A, "viewer")
+    identity = _make_identity(
+        subject="machine|api-key-001",
+        provider_name="api_key",
+        identity_type="machine",
+        tenant_binding=credential_binding,
+    )
+
+    # Stub resolver returns None — simulating the cross-tenant-hint denial
+    # that TenantResolver._resolve_by_hint() produces for a mismatch.
+    authority = _authority(identity, None)
+    ctx = authority.authenticate_jwt("token", tenant_id_hint=_TENANT_B, db=MagicMock())
+
+    assert ctx.tenant_id is None
+    assert ctx.permissions == frozenset()
+    assert ctx.identity.tenant_binding is None
+
+
 class TestResolverHintFailClosed:
     """P1-01-PR2: ``TenantResolver._resolve_by_hint`` must fail closed for
     OIDC/human identities regardless of whether the hint matches or not.
