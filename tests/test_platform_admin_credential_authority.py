@@ -230,6 +230,7 @@ def test_n04_canonical_valid_fgk_allowed(tmp_path, monkeypatch):
         actor_id="test",
     )
     plaintext = issued.plaintext_secret
+    assert plaintext is not None, "issued test credential must include plaintext_secret"
     assert plaintext and plaintext.startswith("fgk.")
 
     # Direct credential validation succeeds
@@ -1243,6 +1244,7 @@ def _seed_platform_admin_with_role(
         actor_id="test",
     )
     plaintext = issued.plaintext_secret
+    assert plaintext is not None, "issued test credential must include plaintext_secret"
     with engine.begin() as conn:
         assign_role(
             conn,

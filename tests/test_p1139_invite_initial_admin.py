@@ -141,7 +141,7 @@ def _seed_invitation(
     status: str = "pending",
     expires_delta: timedelta | None = None,
     fingerprint: str | None = None,
-) -> str:
+) -> tuple[str, str]:
     """Insert a tenant_invitation row. Returns invitation_id."""
     from api.identity.workforce_token import generate
 
