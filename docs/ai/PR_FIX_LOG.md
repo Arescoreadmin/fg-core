@@ -22562,3 +22562,12 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - `make fg-fast` after the code repair and SOC acknowledgement reached `pr-fix-log` and stopped solely because this required ledger entry had not yet been appended.
 
 **Result:** The post-#691 strict-mypy regression is repaired without widening or changing Customer-One roadmap authority.
+
+
+## FGA-027 — Complete evidence state authority
+
+- **Work class:** NEXT
+- **Root cause:** Governance report construction fetched scan evidence with a single `limit=100` query, truncating evidence refs, appendix, and downstream evidence state.
+- **Fix:** Exhaust tenant+engagement-scoped pages, reject duplicate/scope-mismatched identities, canonically order records, and add deterministic population counts and SHA-256 fingerprint metadata to the report input.
+- **Tests:** Added focused >100-row, ordering/fingerprint invariance, partial-page failure, and duplicate-identity tests.
+- **Security:** Tenant and engagement scope remain enforced and violations fail closed.
