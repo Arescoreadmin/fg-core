@@ -22531,3 +22531,34 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests added:** `test_item_in_both_completed_and_next_sequence_is_blocked` — proves completed takes precedence over next_sequence.
 - **Validation:** `pytest tests/test_customer_one_roadmap_checker.py` → 14/14 PASS. Checker: `--work-item P1-01-PR2` exit 1 (`BLOCKED: COMPLETED #690`); `--work-item FGA-027` exit 0 (`AUTHORIZED`); `--work-item SAML` exit 1; unknown exit 1. `git diff --check` PASS.
 - **Result:** PASS.
+
+### 2026-09-11 — Post-#691 Customer-One roadmap checker mypy repair
+
+**Area:** Customer-One roadmap authority · CI governance · static typing
+
+**Work class:** REPAIR
+
+**Root cause:** PR #691 added completed-item reporting to `tools/ci/check_customer_one_roadmap.py`. The local `prs` value was inferred from an untyped authority mapping, generator expression, and empty-list default. Repository-wide strict mypy therefore failed with `[var-annotated]` at the completed-item PR reference assignment.
+
+**Repair:** Added the explicit annotation `prs: list[str]` to the existing assignment. This is a type-only repair. Runtime control flow and roadmap authorization semantics are unchanged.
+
+**Authority/security invariants preserved:**
+- P1-01-PR2 remains COMPLETED and blocked.
+- FGA-027 remains the authorized Customer-One engineering item.
+- Deferred work remains blocked.
+- Unknown work remains fail-closed.
+- REPAIR authorization behavior is unchanged.
+- No authority YAML, canonical roadmap sequencing, authentication, authorization, tenant isolation, RLS, privilege, or production runtime behavior changed.
+
+**SOC:** Added a synchronized SOC-HIGH-002 acknowledgement to `docs/SOC_EXECUTION_GATES_2026-02-15.md` because the repaired checker resides under the security-critical `tools/ci/` prefix.
+
+**Validation:**
+- `mypy tools/ci/check_customer_one_roadmap.py` — PASS.
+- `pytest -q tests/test_customer_one_roadmap_checker.py` — 14 passed.
+- `P1-01-PR2` checker result — BLOCKED / COMPLETED, exit 1.
+- `FGA-027` checker result — AUTHORIZED, exit 0.
+- `SAML` checker result — BLOCKED / DEFERRED, exit 1.
+- Unknown work item checker result — BLOCKED fail-closed, exit 1.
+- `make fg-fast` after the code repair and SOC acknowledgement reached `pr-fix-log` and stopped solely because this required ledger entry had not yet been appended.
+
+**Result:** The post-#691 strict-mypy regression is repaired without widening or changing Customer-One roadmap authority.

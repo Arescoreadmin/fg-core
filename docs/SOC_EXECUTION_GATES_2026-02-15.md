@@ -6848,3 +6848,34 @@ Scope: `tools/ci/check_customer_one_roadmap.py` updated for post-P1-01-PR2 state
 Security posture: No auth paths modified. No production system affected. The checker is a sequencing gate only — it enforces roadmap governance, not runtime authorization. The change is strictly additive (adds a new classification path, expands a validation check). It cannot weaken any existing authorization, RLS, or security invariant.
 
 Validation evidence: `pytest tests/test_customer_one_roadmap_checker.py` 13/13 PASS. Checker output: `--work-item P1-01-PR2` → `BLOCKED: COMPLETED (#690)` exit 1; `--work-item FGA-027` → `AUTHORIZED` exit 0; `--work-item SAML` → `BLOCKED: DEFERRED` exit 1; `--work-item UNKNOWN` → `BLOCKED: fail-closed` exit 1.
+
+## 2026-09-11 — SOC-HIGH-002 — Post-#691 roadmap checker mypy repair
+
+Reviewer: Claude/Codex assisted review. Classification: SOC-HIGH-002 (`tools/ci/check_customer_one_roadmap.py` type-only repair; SOC critical prefix requires review acknowledgment).
+
+Scope: `tools/ci/check_customer_one_roadmap.py` received a type annotation on the completed-item PR reference collection (`prs: list[str]`) to satisfy mypy after the post-#691 roadmap authority advancement.
+
+Security and authority review:
+
+- No roadmap authorization semantics changed.
+- No Customer-One sequencing changed.
+- No authority YAML or canonical roadmap state changed.
+- No trust boundary, authentication, authorization, tenant isolation, or privilege behavior changed.
+- `REPAIR` authorization behavior is unchanged.
+- Completed work remains fail-closed and unauthorized for additional implementation.
+- Deferred work remains blocked.
+- Unknown work remains fail-closed.
+- `FGA-027` remains the authorized Customer-One engineering item.
+- The change is type-only and does not alter runtime control flow.
+
+Validation evidence before this SOC acknowledgement:
+
+- `mypy tools/ci/check_customer_one_roadmap.py` — PASS, no issues in 1 source file.
+- `pytest -q tests/test_customer_one_roadmap_checker.py` — 14 passed.
+- `P1-01-PR2` — BLOCKED as COMPLETED, exit 1.
+- `FGA-027` — AUTHORIZED, exit 0.
+- `SAML` — BLOCKED as DEFERRED, exit 1.
+- Unknown work item — BLOCKED fail-closed, exit 1.
+- `make fg-fast` progressed through production profile, contracts, security regression, OpenAPI security diff, artifact policy, trust enforcement, and SOC invariants before stopping solely because this SOC-HIGH-002 acknowledgement was not yet present.
+
+SOC review outcome: APPROVED. This repair narrows static typing only and preserves the existing fail-closed Customer-One roadmap authority boundary.
