@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import os
 import secrets
@@ -2960,6 +2961,71 @@ def _fetch_all_pages(fetch_fn: Any, **kwargs: Any) -> list[Any]:
             break
         offset += _EVAL_PAGE_SIZE
     return results
+
+
+def _fetch_complete_scan_evidence(
+    *, db: Session, engagement_id: str, tenant_id: str
+) -> tuple[list[Any], dict[str, Any]]:
+    """Return the complete, canonical scan evidence population for an engagement.
+
+    Store pages are an implementation detail: pagination boundaries and backend
+    return order must not affect governance truth. A repeated identity means a
+    backend failed to advance (or returned duplicate evidence), so we fail
+    closed instead of presenting a partial population as complete.
+    """
+    rows = _fetch_all_pages(
+        list_scan_results,
+        db=db,
+        engagement_id=engagement_id,
+        tenant_id=tenant_id,
+    )
+    seen_ids: set[str] = set()
+    for row in rows:
+        row_id = str(getattr(row, "id", ""))
+        if not row_id or row_id in seen_ids:
+            raise RuntimeError("scan evidence pagination returned duplicate identity")
+        if (
+            getattr(row, "tenant_id", tenant_id) != tenant_id
+            or getattr(row, "engagement_id", engagement_id) != engagement_id
+        ):
+            raise RuntimeError("scan evidence scope mismatch")
+        seen_ids.add(row_id)
+
+    canonical_rows = sorted(
+        rows,
+        key=lambda row: (
+            str(row.id),
+            str(row.source_type),
+            str(row.collected_at),
+            str(getattr(row, "evidence_hash", "")),
+        ),
+    )
+    canonical_population = [
+        {
+            "evidence_id": str(row.id),
+            "source": str(row.source_type),
+            "collected_at": str(row.collected_at),
+            "evidence_hash": str(getattr(row, "evidence_hash", "")),
+        }
+        for row in canonical_rows
+    ]
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            canonical_population,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    metadata = {
+        "total_discovered": len(rows),
+        "eligible_count": len(canonical_rows),
+        "evaluated_count": len(canonical_rows),
+        "excluded_count": 0,
+        "exclusion_reasons": {},
+        "fingerprint": fingerprint,
+    }
+    return canonical_rows, metadata
 
 
 def _evaluate_execution_state(db: Session, *, eng: Any, tenant_id: str) -> Any:
@@ -8195,9 +8261,9 @@ def _build_engagement_report_json(
     if not scores:
         scores = {"data_governance": 80.0}
 
-    # Build evidence refs from scan results (metadata only, no raw payloads)
-    scan_rows = list_scan_results(
-        db, engagement_id=engagement_id, tenant_id=tenant_id, limit=100
+    # Build evidence refs from the complete canonical scan population.
+    scan_rows, evidence_population = _fetch_complete_scan_evidence(
+        db=db, engagement_id=engagement_id, tenant_id=tenant_id
     )
     scan_result_ids: list[str] = [sr.id for sr in scan_rows]
     _now = datetime.now(timezone.utc)
@@ -8340,9 +8406,7 @@ def _build_engagement_report_json(
         # vs. finding.domain = security_posture), leaving GovernanceFinding
         # with empty evidence_ids and a spurious NOT_PROVEN determination.
         #
-        # Note: evidence_refs is limited to the first 100 scan results (same
-        # cap as the engine query above).  Engagements with >100 scan results
-        # may have older evidence silently absent from this assessment.
+        # Evidence refs come from the complete canonical scan population above.
         _ep_evidence_by_id = {r.evidence_id: r for r in evidence_refs}
         _ep_domain_evidence: dict[str, list[EvidenceRef]] = {}
         for _f in _adverse_active:
@@ -8550,6 +8614,8 @@ def _build_engagement_report_json(
         "schema_version": report.schema_version,
         "manifest_hash": report.manifest_hash,
         "generated_at": report.generated_at,
+        "evidence_population": evidence_population,
+        "evidence_state_hash": evidence_population["fingerprint"],
         **section_content,
     }
     return report_json, section_hashes, scan_result_ids
