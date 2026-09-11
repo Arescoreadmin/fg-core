@@ -53,9 +53,9 @@ def _load_authority(path: str) -> dict:
             file=sys.stderr,
         )
         sys.exit(1)
-    if "next_sequence" not in data or "deferred" not in data:
+    if "next_sequence" not in data or "deferred" not in data or "completed" not in data:
         print(
-            "ERROR: authority file missing required keys 'next_sequence' and/or 'deferred'",
+            "ERROR: authority file missing required keys 'next_sequence', 'deferred', and/or 'completed'",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -65,7 +65,9 @@ def _load_authority(path: str) -> dict:
 def _check_item(authority: dict, work_item: str) -> bool:
     """Derive authorization from item presence in next_sequence or deferred.
 
-    Fail-closed: an item not listed in either is blocked.
+    Completed items are explicitly blocked — re-opening completed work requires
+    a new Freeze Law justification filed as a PR against the authority file.
+    Fail-closed: an item not listed in any known set is blocked.
     """
     next_ids = {
         entry["id"] for entry in authority.get("next_sequence", []) if "id" in entry
@@ -73,6 +75,26 @@ def _check_item(authority: dict, work_item: str) -> bool:
     deferred_ids = {
         entry["id"] for entry in authority.get("deferred", []) if "id" in entry
     }
+    completed_ids = {
+        entry["id"] for entry in authority.get("completed", []) if "id" in entry
+    }
+
+    if work_item in completed_ids:
+        prs = next(
+            (
+                e.get("prs", [])
+                for e in authority.get("completed", [])
+                if e.get("id") == work_item
+            ),
+            [],
+        )
+        pr_str = f" ({', '.join(prs)})" if prs else ""
+        print(
+            f"BLOCKED: '{work_item}' is COMPLETED{pr_str} — already merged and closed; "
+            "no further work authorized on this item",
+            file=sys.stderr,
+        )
+        return False
 
     if work_item in next_ids:
         print(

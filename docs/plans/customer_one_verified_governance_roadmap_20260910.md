@@ -71,19 +71,21 @@ records but do not authorize new work or reprioritize the sequence below.
 
 ## 4. Current State
 
-**As of 2026-09-09:**
+**As of 2026-09-11:**
 
 | Metric | Value |
 |--------|-------|
 | Revenue Gate 1 | 12 / 12 items cleared |
 | MRR | $0 |
 | First invoice issued | Not yet |
-| Identity platform | P-113.10 + P1-01-PR1 complete |
-| Open engineering work | P1-01-PR2 (IN PROGRESS) |
+| Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
+| Open engineering work | FGA-027 (NEXT) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
-Revenue Gate 1 is fully cleared. The path to Customer-One is now gated by:
-- Completing the identity authority critical path (P1-01-PR2).
+Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
+The path to Customer-One is now gated by:
+- Completing FGA-027 (Complete Evidence State Authority) — governance report evidence must
+  enumerate the complete eligible scan-result population, not a truncated 100-row subset.
 - Executing the commercial track (L14) in parallel.
 
 ---
@@ -96,14 +98,25 @@ can be added.
 
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
-| P1-01-PR2 | Canonical Delegation — FIAP path integration + auth_scopes enforcement | IN PROGRESS | FIAP-authenticated actor delegation boundary not enforced |
+| FGA-027 | Complete Evidence State Authority | NEXT | Governance report evidence appendix truncated at 100 scan results — conclusions must operate over the complete eligible population |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client — L14 is the sole open commercial gate |
 
-### P1-01-PR2 — Canonical Delegation
+### FGA-027 — Complete Evidence State Authority
 
-- **Worktree:** `.claude/worktrees/p1136-2-canonical-delegation/`
-- **Key files:** `api/identity_authority/authority.py`, `api/auth_scopes/`
-- **Status:** IN PROGRESS — worktree exists, implementation underway.
+- **Key files:** `api/field_assessment.py`, `services/governance/report/engine.py`
+- **Status:** NEXT — authorized; implementation not yet started.
+- **Blocker:** `api/field_assessment.py:8199` calls `list_scan_results(limit=100)` without
+  the `_fetch_all_pages()` exhaustion loop used elsewhere in the same file (line 2973).
+  The governance report's `evidence_refs`, `evidence_appendix`, and `evidence_state_hash`
+  are therefore derived from a 100-row-truncated population rather than the complete
+  eligible scan-result set. This violates the truth invariant that assessment conclusions
+  must operate over the full eligible evidence population.
+- **Required invariants:**
+  - No arbitrary row-count truncation in the evidence population fed to the report engine.
+  - Same engagement snapshot → same evidence set → same `evidence_state_hash`.
+  - `eligible_count`, `evaluated_count`, and `excluded_count` tracked and surfaced.
+  - `exclusion_reason` defined for any excluded evidence.
+  - Pagination cannot alter conclusions.
 
 ### L14 — Customer-One Commercial Execution
 
@@ -143,6 +156,7 @@ All items below are fully merged and production-proven unless otherwise noted.
 
 | ID | Title | PRs |
 |----|-------|-----|
+| P1-01-PR2 | Canonical Delegation — FIAP path integration + auth_scopes enforcement | #690 (df1fc85f) — focused 154/1, fg-fast 496/2/22149, strict 22555/92, rc=0 |
 | P-113.1–P-113.5 | Identity administration phases 1–5 | #639, #650, #651, #652, #653, #654, #655, #656, #657 |
 | P-113.6 | Platform Admin Credential Authority | #677, #678, #679 |
 | P-113.7 | Console canonical platform-admin cutover (production proven) | #680 |

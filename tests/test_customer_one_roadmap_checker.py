@@ -45,8 +45,8 @@ def _run_class(
 
 class TestAuthorizedItems:
     def test_next_sequence_item_authorized(self) -> None:
-        # P1-01-PR2 is in next_sequence — must be authorized
-        result = _run_item("P1-01-PR2")
+        # FGA-027 is in next_sequence — must be authorized
+        result = _run_item("FGA-027")
         assert result.returncode == 0, result.stderr
 
     def test_l14_authorized(self) -> None:
@@ -60,6 +60,23 @@ class TestAuthorizedItems:
 
 
 class TestBlockedItems:
+    def test_p1_01_pr2_completed_blocked(self) -> None:
+        # P1-01-PR2 was completed in #690 — must be blocked with COMPLETED message
+        result = _run_item("P1-01-PR2")
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+
+    def test_completed_item_pr_recorded(self) -> None:
+        # The COMPLETED message must include the PR reference (#690)
+        result = _run_item("P1-01-PR2")
+        assert result.returncode == 1
+        assert "#690" in result.stderr
+
+    def test_completed_item_blocked(self) -> None:
+        # P0-ID-CUTOVER is in completed — must be blocked
+        result = _run_item("P0-ID-CUTOVER")
+        assert result.returncode == 1
+
     def test_deferred_item_blocked(self) -> None:
         # SAML is in deferred — must be blocked
         result = _run_item("SAML")
@@ -75,33 +92,56 @@ class TestBlockedItems:
         assert result.returncode == 1
         assert "fail-closed" in result.stderr
 
-    def test_completed_item_blocked(self) -> None:
-        # P0-ID-CUTOVER was moved to completed — not in next_sequence, so blocked
-        result = _run_item("P0-ID-CUTOVER")
+
+class TestCompletedOverlapRejected:
+    def test_item_in_both_completed_and_next_sequence_is_blocked(
+        self, tmp_path: Path
+    ) -> None:
+        """P2 fix: completed takes precedence over next_sequence.
+
+        If a roadmap update accidentally leaves an ID in next_sequence while
+        also adding it to completed, the checker must return BLOCKED, not
+        AUTHORIZED.  This proves completed_ids is checked before next_ids.
+        """
+        overlap = tmp_path / "overlap.yaml"
+        overlap.write_text(
+            "schema_version: '1.0'\n"
+            "next_sequence:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    title: 'accidentally left in next after closure'\n"
+            "    status: NEXT\n"
+            "deferred: []\n"
+            "completed:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    title: 'should be closed'\n"
+            "    prs: ['#999']\n"
+        )
+        result = _run_item("DOUBLE-LISTED", authority=str(overlap))
         assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
 
 
 class TestAuthorityFileErrors:
     def test_path_mismatch_blocked(self) -> None:
-        result = _run_item("P1-01-PR2", authority="nonexistent_authority.yaml")
+        result = _run_item("FGA-027", authority="nonexistent_authority.yaml")
         assert result.returncode == 1
         assert "not found" in result.stderr
 
     def test_malformed_yaml_blocked(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.yaml"
         bad.write_text("[unclosed bracket\n")
-        result = _run_item("P1-01-PR2", authority=str(bad))
+        result = _run_item("FGA-027", authority=str(bad))
         assert result.returncode == 1
 
     def test_missing_required_keys_blocked(self, tmp_path: Path) -> None:
         incomplete = tmp_path / "incomplete.yaml"
         incomplete.write_text("schema_version: '1.0'\ngoal: test\n")
-        result = _run_item("P1-01-PR2", authority=str(incomplete))
+        result = _run_item("FGA-027", authority=str(incomplete))
         assert result.returncode == 1
         assert "next_sequence" in result.stderr or "deferred" in result.stderr
 
     def test_non_mapping_yaml_blocked(self, tmp_path: Path) -> None:
         list_yaml = tmp_path / "list.yaml"
         list_yaml.write_text("- item1\n- item2\n")
-        result = _run_item("P1-01-PR2", authority=str(list_yaml))
+        result = _run_item("FGA-027", authority=str(list_yaml))
         assert result.returncode == 1
