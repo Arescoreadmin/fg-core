@@ -6832,3 +6832,19 @@ Scope: New deterministic checker `tools/ci/check_customer_one_roadmap.py` establ
 Security posture: The checker has no runtime effect on authentication, authorization, RLS, or any production system. It is a documentation/sequencing gate that fails open in CI (exit 1 blocks PR merge; does not affect deployed services). No auth paths modified. No database changes. No API changes. Strictly additive.
 
 Validation evidence: `pytest tests/test_customer_one_roadmap_checker.py` 11/11 PASS. `python tools/ci/check_customer_one_roadmap.py --work-item P1-01-PR2` exit 0; `--work-item SAML` exit 1; `--work-class REPAIR` exit 0.
+
+---
+
+## 2026-09-11 — Customer-One Authority Advancement post-#690 — check_customer_one_roadmap.py
+
+Reviewer: Codex. Classification: SOC-HIGH-002 (change to existing `tools/ci/` file; SOC critical prefix requires review acknowledgment).
+
+Scope: `tools/ci/check_customer_one_roadmap.py` updated for post-P1-01-PR2 state. Two changes:
+
+**1. Completed-item classification:** `_check_item()` now checks `authority.completed[]` before the fail-closed fallback. A work item found in `completed` returns exit 1 with a specific `BLOCKED: COMPLETED (<prs>)` message instead of the generic "fail-closed; add it to next_sequence" message. This prevents completed items (like P1-01-PR2/#690) from being ambiguously reported as "unknown" — operators can now immediately see that the item is done, not merely unregistered.
+
+**2. Required keys validation expanded:** `_load_authority()` now requires `completed` in addition to `next_sequence` and `deferred`. This ensures the authority file is structurally complete before any item lookup proceeds.
+
+Security posture: No auth paths modified. No production system affected. The checker is a sequencing gate only — it enforces roadmap governance, not runtime authorization. The change is strictly additive (adds a new classification path, expands a validation check). It cannot weaken any existing authorization, RLS, or security invariant.
+
+Validation evidence: `pytest tests/test_customer_one_roadmap_checker.py` 13/13 PASS. Checker output: `--work-item P1-01-PR2` → `BLOCKED: COMPLETED (#690)` exit 1; `--work-item FGA-027` → `AUTHORIZED` exit 0; `--work-item SAML` → `BLOCKED: DEFERRED` exit 1; `--work-item UNKNOWN` → `BLOCKED: fail-closed` exit 1.

@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-09-09"
+authority_date: "2026-09-11"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -25,14 +25,18 @@ work_classes:
     gate: BLOCKED
 
 next_sequence:
-  - id: "P1-01-PR2"
-    title: "Canonical Delegation — FIAP path integration + auth_scopes enforcement"
-    worktree: ".claude/worktrees/p1136-2-canonical-delegation/"
+  - id: "FGA-027"
+    title: "Complete Evidence State Authority"
     files:
-      - "api/identity_authority/authority.py"
-      - "api/auth_scopes/"
-    blocker_closed: "FIAP-authenticated actor delegation boundary not enforced"
-    status: IN_PROGRESS
+      - "api/field_assessment.py"
+      - "services/governance/report/engine.py"
+    blocker_closed: >
+      Governance report evidence appendix and evidence_state_hash are derived
+      from a truncated (limit=100) scan-result set — assessment conclusions must
+      operate over the complete eligible evidence population to be verifiable.
+      api/field_assessment.py:8199 calls list_scan_results(limit=100) without
+      the _fetch_all_pages() exhaustion loop used in _evaluate_execution_state().
+    status: NEXT
 
   - id: "L14"
     title: "Customer-One Commercial Execution"
@@ -68,6 +72,17 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "P1-01-PR2"
+    title: "Canonical Delegation — FIAP path integration + auth_scopes enforcement"
+    prs: ["#690"]
+    merged_sha: "df1fc85f31312d0961c24fc3adf786fc0376511c"
+    note: >
+      Merged 2026-09-10. OIDC/human identities now derive authority exclusively
+      from canonical tenant_users membership rows — JWT-declared tenant_binding
+      is identity anchor only. Machine cross-tenant hint denial enforced through
+      context assembly (P2 fix). Post-merge validation: focused 154/1 pass/skip;
+      fg-fast 496/2/22149 pass/skip/deselected; strict 22555/92; all gates rc=0.
+
   - id: "P-113.1-P-113.5"
     title: "Identity administration phases 1–5"
     prs: ["#639", "#650", "#651", "#652", "#653", "#654", "#655", "#656", "#657"]
