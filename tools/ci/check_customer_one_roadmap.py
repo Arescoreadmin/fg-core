@@ -80,7 +80,7 @@ def _check_item(authority: dict, work_item: str) -> bool:
     }
 
     if work_item in completed_ids:
-        prs = next(
+        prs: list[str] = next(
             (
                 e.get("prs", [])
                 for e in authority.get("completed", [])
