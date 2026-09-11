@@ -79,12 +79,6 @@ def _check_item(authority: dict, work_item: str) -> bool:
         entry["id"] for entry in authority.get("completed", []) if "id" in entry
     }
 
-    if work_item in next_ids:
-        print(
-            f"AUTHORIZED: '{work_item}' is in next_sequence — on Customer-One critical path"
-        )
-        return True
-
     if work_item in completed_ids:
         prs = next(
             (
@@ -101,6 +95,12 @@ def _check_item(authority: dict, work_item: str) -> bool:
             file=sys.stderr,
         )
         return False
+
+    if work_item in next_ids:
+        print(
+            f"AUTHORIZED: '{work_item}' is in next_sequence — on Customer-One critical path"
+        )
+        return True
 
     if work_item in deferred_ids:
         # Find reason if available

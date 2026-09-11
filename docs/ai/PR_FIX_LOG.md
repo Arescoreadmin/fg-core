@@ -22515,3 +22515,19 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Tests re-aligned:** Two pre-existing tests codified the pre-fix vulnerable behavior and were updated to the fail-closed contract, not weakened: `tests/identity_authority/test_authority.py::test_authenticate_jwt_no_db_denies_oidc_human_authority` (previously `..._skips_resolver`) now asserts `tenant_id is None`, `permissions == frozenset()`, and `ctx.identity.tenant_binding is None` when db=None for an OIDC/human identity — with strengthened invariants over the pre-fix version. `tests/identity_authority/test_tenant_resolver.py::test_resolve_by_hint_matching_binding_returned_for_machine` (previously covered a JWT identity) now covers the machine-identity credential-bound-hint path; `test_resolve_by_hint_oidc_human_denied_even_when_matching` and `test_resolve_by_hint_machine_without_binding_denied` are new fail-closed cases.
 - **Validation:** `pytest tests/test_p1_01_pr2_canonical_delegation.py` → 27 passed. `pytest tests/identity_authority/ tests/test_canonical_identity_authority.py` → 121 passed. `python tools/ci/check_customer_one_roadmap.py --work-item P1-01-PR2` → exit 0 (authorized).
 - **Result:** PASS.
+
+## P-60 — docs(roadmap): Customer-One authority advancement post-#690 — branch `docs/customer-one-authority-post-690`
+
+- **PR/Branch:** `docs/customer-one-authority-post-690` (#691)
+- **Date:** 2026-09-11
+- **Files changed:** `customer_one/roadmap_authority.yaml`, `docs/plans/customer_one_verified_governance_roadmap_20260910.md`, `ROADMAP.md`, `tools/ci/check_customer_one_roadmap.py`, `tests/test_customer_one_roadmap_checker.py`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`
+- **Root cause (P2 — completed-before-next ordering):** `_check_item()` evaluated `next_ids` before `completed_ids`. A roadmap update that accidentally leaves an ID in `next_sequence` while also adding it to `completed` (a realistic editing mistake during authority advancement) would return `AUTHORIZED` rather than `BLOCKED`, defeating the stated fail-closed behavior for completed items.
+- **Root cause (pr-fix-log-guard gate):** `tools/ci/check_customer_one_roadmap.py` was modified but no `PR_FIX_LOG.md` entry was present, triggering the AI Ledger Guard gate.
+- **Fix (P2):** Moved the `completed_ids` check before the `next_ids` check in `_check_item()`. `completed` wins over `next_sequence` if both list the same ID. Added `TestCompletedOverlapRejected::test_item_in_both_completed_and_next_sequence_is_blocked` to prove the invariant with a synthetic authority file containing a double-listed ID.
+- **Roadmap state change:** P1-01-PR2 moved from `next_sequence` (IN_PROGRESS) to `completed` (PR #690, SHA `df1fc85f`, post-merge validated). FGA-027 (Complete Evidence State Authority) added to `next_sequence` as the authorized next engineering item — closes the `list_scan_results(limit=100)` truncation at `api/field_assessment.py:8199` where the governance report evidence population is truncated rather than exhausted via `_fetch_all_pages()`.
+- **Behavioral impact:** None in production. Checker now correctly blocks completed items even if accidentally duplicated in next_sequence.
+- **Security impact:** None.
+- **Schema/API impact:** None.
+- **Tests added:** `test_item_in_both_completed_and_next_sequence_is_blocked` — proves completed takes precedence over next_sequence.
+- **Validation:** `pytest tests/test_customer_one_roadmap_checker.py` → 14/14 PASS. Checker: `--work-item P1-01-PR2` exit 1 (`BLOCKED: COMPLETED #690`); `--work-item FGA-027` exit 0 (`AUTHORIZED`); `--work-item SAML` exit 1; unknown exit 1. `git diff --check` PASS.
+- **Result:** PASS.

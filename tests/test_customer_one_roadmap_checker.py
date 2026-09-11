@@ -93,6 +93,34 @@ class TestBlockedItems:
         assert "fail-closed" in result.stderr
 
 
+class TestCompletedOverlapRejected:
+    def test_item_in_both_completed_and_next_sequence_is_blocked(
+        self, tmp_path: Path
+    ) -> None:
+        """P2 fix: completed takes precedence over next_sequence.
+
+        If a roadmap update accidentally leaves an ID in next_sequence while
+        also adding it to completed, the checker must return BLOCKED, not
+        AUTHORIZED.  This proves completed_ids is checked before next_ids.
+        """
+        overlap = tmp_path / "overlap.yaml"
+        overlap.write_text(
+            "schema_version: '1.0'\n"
+            "next_sequence:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    title: 'accidentally left in next after closure'\n"
+            "    status: NEXT\n"
+            "deferred: []\n"
+            "completed:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    title: 'should be closed'\n"
+            "    prs: ['#999']\n"
+        )
+        result = _run_item("DOUBLE-LISTED", authority=str(overlap))
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+
+
 class TestAuthorityFileErrors:
     def test_path_mismatch_blocked(self) -> None:
         result = _run_item("FGA-027", authority="nonexistent_authority.yaml")
