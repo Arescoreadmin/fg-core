@@ -22580,3 +22580,9 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Authority change:** Moved FGA-027 from `next_sequence` to `completed` in the machine-readable and human-readable Customer-One authorities.
 - **Next authority:** Authorized exactly one engineering successor, FGA-028 Grounded Determination & Executive Reporting Authority, because the forensic audit still identifies expert-approved result-truth/golden outcome gating and claim lineage as the immediate blocker to a defensible paid baseline. No FGA-028 implementation is included here.
 - **Security/governance:** Freeze Law, fail-closed checker behavior, deferred-item blocking, tenant isolation, and the existing L14 commercial lane are preserved.
+
+
+## Review reconciliation — mandatory production gates remain on Customer-One path
+
+- **Finding:** The FGA-028 candidate table described dependency security, schema/RLS, canonical proof, durable execution, and recovery as deferred, which could make the roadmap checker reject required gates and allow L14 to close prematurely.
+- **Correction:** These controls are now explicit mandatory FGA-028 acceptance gates. L14 closure is blocked until result truth and every named production gate pass. No gate implementation is included in this documentation-only change.

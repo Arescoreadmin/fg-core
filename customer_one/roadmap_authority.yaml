@@ -38,13 +38,26 @@ next_sequence:
       FGA-025–027 fixes are not yet assembled into a release-blocking authority
       that proves grounded findings, claim lineage, and executive-report safety.
     status: NEXT
+    required_gates:
+      - "FG_RESULT_TRUTH_GATE"
+      - "PRODUCTION_DEPENDENCY_SECURITY"
+      - "PRODUCTION_SCHEMA_AND_RLS"
+      - "CANONICAL_ASSESSMENT_PROOF"
+      - "DURABLE_EXECUTION_AND_RECOVERY"
+    gate_policy: >
+      These named production gates are mandatory acceptance gates within FGA-028
+      and must pass before Customer-One data access, report issuance, or L14
+      closure. They are not independently authorized feature work.
 
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
-    blocker_closed: "No paying client — L14 is the sole open commercial gate"
+    blocker_closed: >
+      No paying client; L14 cannot close until FGA-028 result truth and all
+      mandatory production gates (dependency security, schema/RLS, canonical
+      assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
-    note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review."
+    note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FGA-028 acceptance gates."
 
 deferred:
   - id: "RAG-RETRY"

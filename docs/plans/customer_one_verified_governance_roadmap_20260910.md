@@ -100,7 +100,7 @@ can be added.
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
 | FGA-028 | Grounded Determination & Executive Reporting Authority | NEXT | The forensic audit still requires an expert-approved result-truth gate before a defensible Verified AI Governance Baseline can be issued; current semantic tests are not yet a release-blocking authority |
-| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client — L14 is the sole open commercial gate |
+| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FGA-028 result truth and all mandatory production gates pass |
 
 ### FGA-027 — Complete Evidence State Authority
 
@@ -124,6 +124,7 @@ can be added.
   FGA-025 semantic corrections, FGA-026 epistemic states, and FGA-027 complete evidence
   population are necessary foundations but are not yet composed into a release-blocking
   authority with material-claim lineage and executive-report safety.
+- **Mandatory acceptance gates:** FG_RESULT_TRUTH_GATE, production dependency security, production schema authority/closed-world RLS, canonical assessment proof, durable execution, and recovery/retention. All must pass before customer data access, report issuance, or L14 closure.
 - **Required invariants:**
   - deterministic findings and posture are grounded in complete evidence and replay identically;
   - expert-approved golden and metamorphic outcomes are required for release;
@@ -138,9 +139,9 @@ can be added.
 | FGA-028 — Grounded Determination & Executive Reporting Authority | Forensic audit requires result-truth correction plus expert-approved golden/metamorphic outcomes before paid reports; current tests are regression coverage, not a release authority. | **NEXT** — immediate Customer-One truth blocker. |
 | `FG_RESULT_TRUTH_GATE` promotion | The invariant set is the eventual gate, but no composed implementation or authority exists yet; promote through FGA-028 only after core truth/lineage checks are assembled. | Later within FGA-028; do not implement in this documentation PR. |
 | Artifact ownership & evidence storage | Existing report/export manifests and storage-key validation provide foundations; no current evidence shows this is the immediate blocker ahead of result truth. | Deferred until result truth is release-gated. |
-| Production dependency security closure | Forensic audit records dependency advisories as a prerequisite to external access, but this is downstream of proving the report result itself and remains outside this single next engineering slot. | Deferred; preserve as a later production-readiness gate. |
-| Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as production prerequisites, but no authority change here should pull schema work ahead of the direct report-truth blocker. | Deferred; preserve safety gates. |
-| Canonical assessment proof, durable execution, recovery/retention | Required before broad production operation, but depend on a trustworthy deterministic report contract and are not the immediate truth-layer blocker. | Deferred; no scope expansion. |
+| Production dependency security closure | Forensic audit records critical/high dependency advisories as mandatory before external access. | **MANDATORY FGA-028 ACCEPTANCE GATE** — must pass before customer data access, report issuance, or L14 closure; no independent feature authorization. |
+| Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as mandatory production prerequisites. | **MANDATORY FGA-028 ACCEPTANCE GATE** — migrations-only schema authority and tenant RLS proof required before L14 closure. |
+| Canonical assessment proof, durable execution, recovery/retention | Audit requires a current-SHA end-to-end proof plus recoverable execution and restore/retention evidence before accepting customer data. | **MANDATORY FGA-028 ACCEPTANCE GATES** — required for Customer-One closure; implementation remains separately scoped and is not performed in this documentation PR. |
 
 ### L14 — Customer-One Commercial Execution
 
