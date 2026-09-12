@@ -79,13 +79,14 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | FGA-027 (NEXT) |
+| Open engineering work | FGA-028 (NEXT) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
 The path to Customer-One is now gated by:
-- Completing FGA-027 (Complete Evidence State Authority) — governance report evidence must
-  enumerate the complete eligible scan-result population, not a truncated 100-row subset.
+- Completing FGA-028 (Grounded Determination & Executive Reporting Authority) — the
+  deterministic result path must be release-gated by expert-approved golden and
+  metamorphic outcomes with resolvable material-claim lineage.
 - Executing the commercial track (L14) in parallel.
 
 ---
@@ -98,25 +99,49 @@ can be added.
 
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
-| FGA-027 | Complete Evidence State Authority | NEXT | Governance report evidence appendix truncated at 100 scan results — conclusions must operate over the complete eligible population |
-| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client — L14 is the sole open commercial gate |
+| FGA-028 | Grounded Determination & Executive Reporting Authority | NEXT | The forensic audit still requires an expert-approved result-truth gate before a defensible Verified AI Governance Baseline can be issued; current semantic tests are not yet a release-blocking authority |
+| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FGA-028 result truth and all mandatory production gates pass |
 
 ### FGA-027 — Complete Evidence State Authority
 
-- **Key files:** `api/field_assessment.py`, `services/governance/report/engine.py`
-- **Status:** NEXT — authorized; implementation not yet started.
-- **Blocker:** `api/field_assessment.py:8199` calls `list_scan_results(limit=100)` without
-  the `_fetch_all_pages()` exhaustion loop used elsewhere in the same file (line 2973).
-  The governance report's `evidence_refs`, `evidence_appendix`, and `evidence_state_hash`
-  are therefore derived from a 100-row-truncated population rather than the complete
-  eligible scan-result set. This violates the truth invariant that assessment conclusions
-  must operate over the full eligible evidence population.
+- **Status:** COMPLETED — PR #693, merged SHA `c8c49d14aecf2838876d3d4a8f68a25e689ee9f3`.
+- **Completion evidence:** Governance-report regressions and focused tests passed; mypy passed;
+  `make fg-fast` passed; strict `codex_gates.sh` passed with `22562 passed, 92 skipped`,
+  `==> All gates passed.`, and `codex_gates rc=0`.
+- **Result:** Report evidence population is exhaustive, deterministic, replay-safe, and
+  tenant/engagement scoped; partial retrieval, duplicate identities, and scope violations
+  fail closed.
+
+### FGA-028 — Grounded Determination & Executive Reporting Authority
+
+- **Status:** NEXT — authorized; implementation not started.
+- **Key files:** `api/field_assessment.py`, `services/governance/report/engine.py`,
+  `tests/test_result_semantic_authority.py`.
+- **Blocker:** The forensic Customer-One audit states that FrostGate must not issue a paid
+  client report until an expert-approved golden and metamorphic result-truth gate proves
+  malformed/incomplete evidence fails closed, adverse evidence cannot improve posture, and
+  deterministic findings remain independent of LLM executive-summary behavior. Existing
+  FGA-025 semantic corrections, FGA-026 epistemic states, and FGA-027 complete evidence
+  population are necessary foundations but are not yet composed into a release-blocking
+  authority with material-claim lineage and executive-report safety.
+- **Mandatory acceptance gates:** FG_RESULT_TRUTH_GATE, production dependency security, production schema authority/closed-world RLS, canonical assessment proof, durable execution, and recovery/retention. All must pass before customer data access, report issuance, or L14 closure.
 - **Required invariants:**
-  - No arbitrary row-count truncation in the evidence population fed to the report engine.
-  - Same engagement snapshot → same evidence set → same `evidence_state_hash`.
-  - `eligible_count`, `evaluated_count`, and `excluded_count` tracked and surfaced.
-  - `exclusion_reason` defined for any excluded evidence.
-  - Pagination cannot alter conclusions.
+  - deterministic findings and posture are grounded in complete evidence and replay identically;
+  - expert-approved golden and metamorphic outcomes are required for release;
+  - incomplete, malformed, stale, contradictory, or unsupported evidence cannot improve truth;
+  - every material executive claim resolves to canonical finding/evidence lineage;
+  - LLM failure or disagreement cannot alter deterministic posture.
+
+### Next-item determination
+
+| Candidate | Repository evidence | Disposition |
+|---|---|---|
+| FGA-028 — Grounded Determination & Executive Reporting Authority | Forensic audit requires result-truth correction plus expert-approved golden/metamorphic outcomes before paid reports; current tests are regression coverage, not a release authority. | **NEXT** — immediate Customer-One truth blocker. |
+| `FG_RESULT_TRUTH_GATE` promotion | The invariant set is the eventual gate, but no composed implementation or authority exists yet; promote through FGA-028 only after core truth/lineage checks are assembled. | Later within FGA-028; do not implement in this documentation PR. |
+| Artifact ownership & evidence storage | Existing report/export manifests and storage-key validation provide foundations; no current evidence shows this is the immediate blocker ahead of result truth. | Deferred until result truth is release-gated. |
+| Production dependency security closure | Forensic audit records critical/high dependency advisories as mandatory before external access. | **MANDATORY FGA-028 ACCEPTANCE GATE** — must pass before customer data access, report issuance, or L14 closure; no independent feature authorization. |
+| Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as mandatory production prerequisites. | **MANDATORY FGA-028 ACCEPTANCE GATE** — migrations-only schema authority and tenant RLS proof required before L14 closure. |
+| Canonical assessment proof, durable execution, recovery/retention | Audit requires a current-SHA end-to-end proof plus recoverable execution and restore/retention evidence before accepting customer data. | **MANDATORY FGA-028 ACCEPTANCE GATES** — required for Customer-One closure; implementation remains separately scoped and is not performed in this documentation PR. |
 
 ### L14 — Customer-One Commercial Execution
 

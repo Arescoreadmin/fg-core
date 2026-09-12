@@ -22571,3 +22571,18 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Fix:** Exhaust tenant+engagement-scoped pages, reject duplicate/scope-mismatched identities, canonically order records, and add deterministic population counts and SHA-256 fingerprint metadata to the report input.
 - **Tests:** Added focused >100-row, ordering/fingerprint invariance, partial-page failure, and duplicate-identity tests.
 - **Security:** Tenant and engagement scope remain enforced and violations fail closed.
+
+
+## FGA-027 reconciliation — Customer-One authority advancement after PR #693
+
+- **Work class:** NEXT (documentation / authority reconciliation)
+- **Evidence:** PR #693 merged at `c8c49d14aecf2838876d3d4a8f68a25e689ee9f3`; strict post-merge `codex_gates.sh` completed with `22562 passed, 92 skipped`, `==> All gates passed.`, and `codex_gates rc=0`.
+- **Authority change:** Moved FGA-027 from `next_sequence` to `completed` in the machine-readable and human-readable Customer-One authorities.
+- **Next authority:** Authorized exactly one engineering successor, FGA-028 Grounded Determination & Executive Reporting Authority, because the forensic audit still identifies expert-approved result-truth/golden outcome gating and claim lineage as the immediate blocker to a defensible paid baseline. No FGA-028 implementation is included here.
+- **Security/governance:** Freeze Law, fail-closed checker behavior, deferred-item blocking, tenant isolation, and the existing L14 commercial lane are preserved.
+
+
+## Review reconciliation — mandatory production gates remain on Customer-One path
+
+- **Finding:** The FGA-028 candidate table described dependency security, schema/RLS, canonical proof, durable execution, and recovery as deferred, which could make the roadmap checker reject required gates and allow L14 to close prematurely.
+- **Correction:** These controls are now explicit mandatory FGA-028 acceptance gates. L14 closure is blocked until result truth and every named production gate pass. No gate implementation is included in this documentation-only change.

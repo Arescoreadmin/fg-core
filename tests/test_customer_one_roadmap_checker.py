@@ -45,9 +45,14 @@ def _run_class(
 
 class TestAuthorizedItems:
     def test_next_sequence_item_authorized(self) -> None:
-        # FGA-027 is in next_sequence — must be authorized
-        result = _run_item("FGA-027")
+        # FGA-028 is in next_sequence — must be authorized
+        result = _run_item("FGA-028")
         assert result.returncode == 0, result.stderr
+
+    def test_fga_027_completed_blocked(self) -> None:
+        result = _run_item("FGA-027")
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
 
     def test_l14_authorized(self) -> None:
         result = _run_item("L14")
