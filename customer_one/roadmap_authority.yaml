@@ -25,17 +25,18 @@ work_classes:
     gate: BLOCKED
 
 next_sequence:
-  - id: "FGA-027"
-    title: "Complete Evidence State Authority"
+  - id: "FGA-028"
+    title: "Grounded Determination & Executive Reporting Authority"
     files:
       - "api/field_assessment.py"
       - "services/governance/report/engine.py"
+      - "tests/test_result_semantic_authority.py"
     blocker_closed: >
-      Governance report evidence appendix and evidence_state_hash are derived
-      from a truncated (limit=100) scan-result set — assessment conclusions must
-      operate over the complete eligible evidence population to be verifiable.
-      api/field_assessment.py:8199 calls list_scan_results(limit=100) without
-      the _fetch_all_pages() exhaustion loop used in _evaluate_execution_state().
+      The forensic Customer-One audit requires an expert-approved golden and
+      metamorphic result-truth gate before FrostGate may issue a defensible
+      Verified AI Governance Baseline. Existing deterministic semantics and
+      FGA-025–027 fixes are not yet assembled into a release-blocking authority
+      that proves grounded findings, claim lineage, and executive-report safety.
     status: NEXT
 
   - id: "L14"
@@ -113,6 +114,17 @@ completed:
   - id: "FGA-026"
     title: "Evidence Sufficiency & Epistemic Authority"
     prs: ["#687"]
+  - id: "FGA-027"
+    title: "Complete Evidence State Authority"
+    prs: ["#693"]
+    merged_sha: "c8c49d14aecf2838876d3d4a8f68a25e689ee9f3"
+    note: >
+      Merged 2026-09-11. Governance reports now exhaust the complete
+      tenant+engagement scan-result population, canonically order evidence,
+      fingerprint the normalized population, and fail closed on page, duplicate,
+      or scope failures. Post-merge validation: focused and governance-report
+      regressions passed; mypy passed; make fg-fast passed; strict codex gates
+      passed with 22562 tests passed, 92 skipped, and codex_gates rc=0.
   - id: "P0-ID-CUTOVER"
     title: "Runtime Identity Authority Cutover"
     prs: ["HARD-001 #657", "HARD-002"]
