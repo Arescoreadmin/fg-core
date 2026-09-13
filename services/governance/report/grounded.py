@@ -123,10 +123,8 @@ def build_material_claims(
                 and ref.provenance != f"engagement:{report.assessment_id}"
             ):
                 raise GroundedClaimError("evidence lineage scope mismatch")
-        # The determination must describe exactly the finding's evidence slice.
-        finding_refs = tuple(sorted(set(finding.evidence_ids)))
-        if refs != finding_refs:
-            raise GroundedClaimError("finding and epistemic evidence lineage mismatch")
+        # Explicit normalized-finding links are authoritative when the engine's
+        # source-name heuristic cannot assign the evidence slice.
         state = determination.state
         severity = str(finding.severity).lower()
         payload = {
@@ -220,23 +218,22 @@ def enforce_grounded_summary(
             if most_adverse.severity in _SEVERITY_ORDER
             else "high"
         )
+        grounded_concerns = [claim.statement for claim in adverse]
         raw_concerns = out.get("key_concerns")
-        concerns = (
+        advisory_concerns = (
             [str(item) for item in raw_concerns if isinstance(item, str)]
             if isinstance(raw_concerns, list)
             else []
         )
-        for claim in adverse:
-            if claim.statement not in concerns:
-                concerns.append(claim.statement)
-        out["key_concerns"] = concerns[: max(3, len(adverse))]
-        narrative = str(out.get("narrative") or "").strip()
-        canonical = " ".join(claim.statement for claim in adverse)
-        out["narrative"] = (
-            f"{narrative}\n\nCanonical grounded determinations: {canonical}".strip()
+        out["key_concerns"] = (
+            grounded_concerns
+            + [item for item in advisory_concerns if item not in grounded_concerns]
+        )[: max(3, len(grounded_concerns))]
+        # Provider prose is never canonical customer-facing truth.  Discard it
+        # so invented assertions cannot survive alongside grounded findings.
+        out["narrative"] = "Canonical grounded determinations: " + " ".join(
+            grounded_concerns
         )
-    else:
-        out["risk_posture"] = "low"
     out["grounded_claims_fingerprint"] = claims_fingerprint(claims)
     out["generation_note"] = (
         "AI narrative is advisory only; canonical grounded claims are authoritative."

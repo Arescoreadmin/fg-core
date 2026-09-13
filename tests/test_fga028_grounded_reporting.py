@@ -7,17 +7,17 @@ from services.governance.report import (
     GovernanceReportEngine,
     ValidationState,
 )
-from services.governance.report.grounded import (
-    GroundedClaimError,
-    build_material_claims,
-    claims_fingerprint,
-    enforce_grounded_summary,
-)
 from services.governance.report.epistemic import (
     EpistemicDetermination,
     EpistemicState,
     assess_report_epistemic_states,
     determine_epistemic_state,
+)
+from services.governance.report.grounded import (
+    GroundedClaimError,
+    build_material_claims,
+    claims_fingerprint,
+    enforce_grounded_summary,
 )
 
 
@@ -128,6 +128,7 @@ def test_summary_cannot_override_adverse_truth_or_omit_it() -> None:
     )
     assert result["risk_posture"] == "critical"
     assert "verified critical governance deficiency" in str(result["narrative"])
+    assert "Everything is compliant" not in str(result["narrative"])
     assert claims[0].statement in result["key_concerns"]
 
 

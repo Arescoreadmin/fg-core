@@ -8395,14 +8395,46 @@ def _build_engagement_report_json(
         }
     if "confidence" in active_sections:
         section_content["confidence"] = _serialize_confidence(report.confidence)
-    from services.governance.report.epistemic import assess_report_epistemic_states
+    from services.governance.report.epistemic import determine_epistemic_state
     from services.governance.report.grounded import (
         build_material_claims,
         claims_fingerprint,
         enforce_grounded_summary,
     )
 
-    _grounded_determinations = assess_report_epistemic_states(report, evidence_refs)
+    # Explicit normalized-finding evidence links outrank the report engine's
+    # source-name heuristic when assigning epistemic evidence.
+    _grounded_evidence_by_id = {ref.evidence_id: ref for ref in evidence_refs}
+    _grounded_domain_evidence: dict[str, list[EvidenceRef]] = {}
+    for _normalized in _adverse_active:
+        _mappings = _normalized.framework_mappings or []
+        _domain = str(
+            _mappings[0].get("domain", "data_governance")
+            if _mappings and isinstance(_mappings[0], dict)
+            else "data_governance"
+        )
+        for _evidence_id in _normalized.evidence_ref_ids or []:
+            _ref = _grounded_evidence_by_id.get(_evidence_id)
+            if _ref is not None:
+                _grounded_domain_evidence.setdefault(_domain, []).append(_ref)
+    _grounded_domain_evidence = {
+        _domain: list({ref.evidence_id: ref for ref in refs}.values())
+        for _domain, refs in _grounded_domain_evidence.items()
+    }
+    _grounded_determinations = {
+        _finding.finding_id: determine_epistemic_state(
+            evidence_refs=_grounded_domain_evidence.get(
+                _finding.domain,
+                [
+                    _grounded_evidence_by_id[eid]
+                    for eid in _finding.evidence_ids
+                    if eid in _grounded_evidence_by_id
+                ],
+            ),
+            has_adverse_finding=True,
+        )
+        for _finding in report.findings
+    }
     _grounded_claims = build_material_claims(report, _grounded_determinations)
 
     if "epistemic_states" in active_sections:
