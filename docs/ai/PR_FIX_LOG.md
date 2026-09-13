@@ -22592,3 +22592,9 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** Engine source-name heuristics could omit explicit normalized-finding evidence links from epistemic determinations; provider narrative could preserve unsupported or contradictory assertions and crowd out grounded concerns.
 - **Correction:** FGA-028 now derives determinations from explicit normalized-finding links, permits that authoritative lineage to populate claims, discards provider narrative in favor of canonical grounded statements, and preserves all grounded concerns ahead of advisory text.
 - **Scope:** No new truth engine, schema, route, or roadmap sequencing change.
+
+## Post-695 FGA-028 strict-gate repair
+
+- **Finding:** Strict post-merge mypy rejected direct membership against the broadly typed `enforce_grounded_summary()` result (`tests/test_fga028_grounded_reporting.py:132`).
+- **Correction:** Narrowed `key_concerns` to a runtime-validated `list[str]` in the test before asserting grounded membership.
+- **Scope:** Test typing only; FGA-028 production semantics and roadmap authority unchanged.
