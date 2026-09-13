@@ -129,7 +129,10 @@ def test_summary_cannot_override_adverse_truth_or_omit_it() -> None:
     assert result["risk_posture"] == "critical"
     assert "verified critical governance deficiency" in str(result["narrative"])
     assert "Everything is compliant" not in str(result["narrative"])
-    assert claims[0].statement in result["key_concerns"]
+    key_concerns = result["key_concerns"]
+    assert isinstance(key_concerns, list)
+    assert all(isinstance(item, str) for item in key_concerns)
+    assert claims[0].statement in key_concerns
 
 
 def test_epistemic_order_is_invariant() -> None:
