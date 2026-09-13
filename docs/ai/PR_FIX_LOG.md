@@ -22586,3 +22586,9 @@ returns the tenant — filesystem can be empty and tenants resolve.
 
 - **Finding:** The FGA-028 candidate table described dependency security, schema/RLS, canonical proof, durable execution, and recovery as deferred, which could make the roadmap checker reject required gates and allow L14 to close prematurely.
 - **Correction:** These controls are now explicit mandatory FGA-028 acceptance gates. L14 closure is blocked until result truth and every named production gate pass. No gate implementation is included in this documentation-only change.
+
+## FGA-028 review fixes — explicit lineage and narrative authority
+
+- **Finding:** Engine source-name heuristics could omit explicit normalized-finding evidence links from epistemic determinations; provider narrative could preserve unsupported or contradictory assertions and crowd out grounded concerns.
+- **Correction:** FGA-028 now derives determinations from explicit normalized-finding links, permits that authoritative lineage to populate claims, discards provider narrative in favor of canonical grounded statements, and preserves all grounded concerns ahead of advisory text.
+- **Scope:** No new truth engine, schema, route, or roadmap sequencing change.

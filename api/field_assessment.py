@@ -8099,6 +8099,7 @@ _ALL_SECTIONS: list[str] = [
     "framework_summary",
     "confidence",
     "epistemic_states",
+    "material_claims",
     "normalized_findings",
     "ai_tool_discovery",
     "ai_data_access_mapping",
@@ -8394,9 +8395,49 @@ def _build_engagement_report_json(
         }
     if "confidence" in active_sections:
         section_content["confidence"] = _serialize_confidence(report.confidence)
-    if "epistemic_states" in active_sections:
-        from services.governance.report.epistemic import determine_epistemic_state
+    from services.governance.report.epistemic import determine_epistemic_state
+    from services.governance.report.grounded import (
+        build_material_claims,
+        claims_fingerprint,
+        enforce_grounded_summary,
+    )
 
+    # Explicit normalized-finding evidence links outrank the report engine's
+    # source-name heuristic when assigning epistemic evidence.
+    _grounded_evidence_by_id = {ref.evidence_id: ref for ref in evidence_refs}
+    _grounded_domain_evidence: dict[str, list[EvidenceRef]] = {}
+    for _normalized in _adverse_active:
+        _mappings = _normalized.framework_mappings or []
+        _domain = str(
+            _mappings[0].get("domain", "data_governance")
+            if _mappings and isinstance(_mappings[0], dict)
+            else "data_governance"
+        )
+        for _evidence_id in _normalized.evidence_ref_ids or []:
+            _ref = _grounded_evidence_by_id.get(_evidence_id)
+            if _ref is not None:
+                _grounded_domain_evidence.setdefault(_domain, []).append(_ref)
+    _grounded_domain_evidence = {
+        _domain: list({ref.evidence_id: ref for ref in refs}.values())
+        for _domain, refs in _grounded_domain_evidence.items()
+    }
+    _grounded_determinations = {
+        _finding.finding_id: determine_epistemic_state(
+            evidence_refs=_grounded_domain_evidence.get(
+                _finding.domain,
+                [
+                    _grounded_evidence_by_id[eid]
+                    for eid in _finding.evidence_ids
+                    if eid in _grounded_evidence_by_id
+                ],
+            ),
+            has_adverse_finding=True,
+        )
+        for _finding in report.findings
+    }
+    _grounded_claims = build_material_claims(report, _grounded_determinations)
+
+    if "epistemic_states" in active_sections:
         # Build domain → evidence refs from the normalized findings' explicit
         # evidence links (evidence_ref_ids = [scan_result.id]).  This matches
         # the domain assignment used for health score computation above and
@@ -8431,10 +8472,7 @@ def _build_engagement_report_json(
 
         _epistemic_out: dict[str, Any] = {}
         for _finding in report.findings:
-            _det = determine_epistemic_state(
-                evidence_refs=_ep_domain_evidence.get(_finding.domain, []),
-                has_adverse_finding=True,
-            )
+            _det = _grounded_determinations[_finding.finding_id]
             _epistemic_out[_finding.finding_id] = {
                 "state": _det.state.value,
                 "reason_codes": list(_det.reason_codes),
@@ -8446,6 +8484,10 @@ def _build_engagement_report_json(
                 "methodology_version": _det.methodology_version,
             }
         section_content["epistemic_states"] = _epistemic_out
+    if "material_claims" in active_sections:
+        section_content["material_claims"] = [
+            claim.to_dict() for claim in _grounded_claims
+        ]
     if "normalized_findings" in active_sections and report_type in (
         "findings_register",
         "full_assessment",
@@ -8463,7 +8505,7 @@ def _build_engagement_report_json(
         )
 
         confidence_overall = report.confidence.overall if report.confidence else 0.0
-        section_content["executive_summary"] = generate_executive_summary(
+        _ai_summary = generate_executive_summary(
             engagement_id=engagement_id,
             tenant_id=tenant_id,
             findings=[
@@ -8476,6 +8518,9 @@ def _build_engagement_report_json(
             ],
             framework_summary=dict(report.framework_summary),
             confidence_overall=confidence_overall,
+        )
+        section_content["executive_summary"] = enforce_grounded_summary(
+            _ai_summary, _grounded_claims
         )
 
     if "ai_tool_discovery" in active_sections:
@@ -8616,6 +8661,7 @@ def _build_engagement_report_json(
         "generated_at": report.generated_at,
         "evidence_population": evidence_population,
         "evidence_state_hash": evidence_population["fingerprint"],
+        "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
         **section_content,
     }
     return report_json, section_hashes, scan_result_ids
