@@ -8401,6 +8401,10 @@ def _build_engagement_report_json(
         claims_fingerprint,
         enforce_grounded_summary,
     )
+    from services.governance.report.result_truth_gate import (
+        ResultTruthGateError,
+        evaluate_result_truth_gate,
+    )
 
     # Explicit normalized-finding evidence links outrank the report engine's
     # source-name heuristic when assigning epistemic evidence.
@@ -8436,6 +8440,32 @@ def _build_engagement_report_json(
         for _finding in report.findings
     }
     _grounded_claims = build_material_claims(report, _grounded_determinations)
+    # Enforce the release authority against canonical outputs before any
+    # presentation-section filtering can hide required truth inputs.
+    _gate_epistemic = {
+        _finding.finding_id: {
+            "state": _grounded_determinations[_finding.finding_id].state.value
+        }
+        for _finding in report.findings
+    }
+    _gate_projection = {
+        "tenant_id": report.tenant_id,
+        "engagement_id": engagement_id,
+        "assessment_id": report.assessment_id,
+        "evidence_population": evidence_population,
+        "evidence_state_hash": evidence_population["fingerprint"],
+        "evidence_appendix": [_serialize_evidence_ref(r) for r in evidence_refs],
+        "findings": [_serialize_finding(f) for f in report.findings],
+        "epistemic_states": _gate_epistemic,
+        "material_claims": [claim.to_dict() for claim in _grounded_claims],
+        "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
+    }
+    try:
+        _gate_result = evaluate_result_truth_gate(
+            _gate_projection, tenant_id=tenant_id, engagement_id=engagement_id
+        )
+    except ResultTruthGateError as exc:
+        raise RuntimeError("RESULT_TRUTH_GATE_BLOCKED: " + str(exc)) from exc
 
     if "epistemic_states" in active_sections:
         # Build domain → evidence refs from the normalized findings' explicit
@@ -8662,6 +8692,7 @@ def _build_engagement_report_json(
         "evidence_population": evidence_population,
         "evidence_state_hash": evidence_population["fingerprint"],
         "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
+        "result_truth_gate": _gate_result.to_dict(),
         **section_content,
     }
     return report_json, section_hashes, scan_result_ids
