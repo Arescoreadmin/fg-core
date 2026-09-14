@@ -39,6 +39,7 @@ from .result_truth_gate import (
     ResultTruthGateError,
     ResultTruthGateResult,
     evaluate_result_truth_gate,
+    load_production_gate_attestations,
 )
 
 __all__ = [
@@ -79,4 +80,5 @@ __all__ = [
     "ResultTruthGateError",
     "ResultTruthGateResult",
     "evaluate_result_truth_gate",
+    "load_production_gate_attestations",
 ]

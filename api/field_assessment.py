@@ -8404,6 +8404,7 @@ def _build_engagement_report_json(
     from services.governance.report.result_truth_gate import (
         ResultTruthGateError,
         evaluate_result_truth_gate,
+        load_production_gate_attestations,
     )
 
     # Explicit normalized-finding evidence links outrank the report engine's
@@ -8453,6 +8454,12 @@ def _build_engagement_report_json(
         "engagement_id": engagement_id,
         "assessment_id": report.assessment_id,
         "evidence_population": evidence_population,
+        "production_gates": load_production_gate_attestations(),
+        "normalized_findings": [_safe_finding_dict(f) for f in _adverse_active],
+        "canonical_posture": {
+            "active_adverse_count": len(_adverse_active),
+            "domain_scores": scores,
+        },
         "evidence_state_hash": evidence_population["fingerprint"],
         "evidence_appendix": [_serialize_evidence_ref(r) for r in evidence_refs],
         "findings": [_serialize_finding(f) for f in report.findings],

@@ -22612,3 +22612,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** Canonical FGA-025–028 truth outputs had no mandatory, release-path enforcement boundary.
 - **Correction:** Added deterministic, versioned, fail-closed result-truth validation at the shared governance report construction choke point, including complete evidence, scope, lineage, epistemic, and fingerprint checks.
 - **Scope:** No upstream scoring changes, no LLM truth authority, no roadmap advancement, and no unrelated production-gate implementation.
+
+
+## Post-merge FG_RESULT_TRUTH_GATE attestation repair
+
+- **Finding:** The report projection supplied an empty production-gate map, making valid issuance impossible; omitted canonical posture inputs could also default permissively.
+- **Correction:** Load explicit deployment attestations, require all mandatory production gates, and validate canonical posture inputs and adverse-count consistency before PASS.
+- **Scope:** FG_RESULT_TRUTH_GATE repair only; no roadmap advancement or unrelated work.

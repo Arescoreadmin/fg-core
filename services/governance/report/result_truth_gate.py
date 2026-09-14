@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -72,6 +73,20 @@ def _fingerprint(payload: Mapping[str, Any]) -> str:
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         ).encode("utf-8")
     ).hexdigest()
+
+
+def load_production_gate_attestations() -> dict[str, bool]:
+    """Load explicit deployment gate attestations; invalid input fails closed."""
+    raw = os.environ.get("FG_RESULT_TRUTH_GATE_PRODUCTION_GATES", "")
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): item for key, item in value.items() if isinstance(item, bool)}
 
 
 def evaluate_result_truth_gate(

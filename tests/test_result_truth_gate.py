@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 import copy
@@ -37,7 +39,7 @@ def _report(count: int = 2) -> dict[str, Any]:
         "engagement_id": "eng-1",
         "lineage": ["engagement:eng-1", "finding:finding-1", "evidence:ev-0"],
     }
-    return {
+    report = {
         "tenant_id": "tenant-1",
         "engagement_id": "eng-1",
         "assessment_id": "eng-1",
@@ -53,8 +55,22 @@ def _report(count: int = 2) -> dict[str, Any]:
         "findings": [finding],
         "epistemic_states": {"finding-1": {"state": "VERIFIED_DEFICIENT"}},
         "material_claims": [claim],
-        "grounded_claims_fingerprint": "claims-hash",
+        "grounded_claims_fingerprint": "",
+        "production_gates": {
+            "PRODUCTION_DEPENDENCY_SECURITY": True,
+            "PRODUCTION_SCHEMA_AND_RLS": True,
+            "CANONICAL_ASSESSMENT_PROOF": True,
+            "DURABLE_EXECUTION_AND_RECOVERY": True,
+        },
+        "normalized_findings": [finding],
+        "canonical_posture": {"active_adverse_count": 1},
     }
+    report["grounded_claims_fingerprint"] = hashlib.sha256(
+        json.dumps(
+            {"version": "1.0", "claims": [claim]}, sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    return report
 
 
 def test_valid_result_passes_and_replays() -> None:
