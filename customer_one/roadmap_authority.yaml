@@ -54,11 +54,11 @@ next_sequence:
     title: "Customer-One Commercial Execution"
     files: []
     blocker_closed: >
-      No paying client; L14 cannot close until FGA-028 result truth and all
+      No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE result truth and all
       mandatory production gates (dependency security, schema/RLS, canonical
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
-    note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FGA-028 acceptance gates."
+    note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
 
 deferred:
   - id: "RAG-RETRY"
