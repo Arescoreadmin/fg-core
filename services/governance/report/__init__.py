@@ -34,6 +34,12 @@ from .serialization import (
     serialize_for_manifest,
     serialize_report,
 )
+from .result_truth_gate import (
+    RESULT_TRUTH_GATE_VERSION,
+    ResultTruthGateError,
+    ResultTruthGateResult,
+    evaluate_result_truth_gate,
+)
 
 __all__ = [
     # Engine
@@ -69,4 +75,8 @@ __all__ = [
     "export_pdf_bytes",
     "serialize_for_manifest",
     "serialize_report",
+    "RESULT_TRUTH_GATE_VERSION",
+    "ResultTruthGateError",
+    "ResultTruthGateResult",
+    "evaluate_result_truth_gate",
 ]

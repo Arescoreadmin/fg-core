@@ -22605,3 +22605,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Evidence:** Main synchronized at `9254df5eb323e8b631cc31c4e20aea369bbbb825`; strict post-merge validation recorded repository-wide mypy clean in 2,124 source files, full pytest `22,574 passed, 92 skipped`, `==> All gates passed.`, and `codex_gates rc=0`.
 - **Authority change:** Marked FGA-028 completed and authorized `FG_RESULT_TRUTH_GATE` as the single next engineering item; L14 and mandatory production gates remain gated.
 - **Scope:** Documentation/checker authority only; no product implementation or roadmap freeze-law expansion.
+
+
+## FG_RESULT_TRUTH_GATE release authority
+
+- **Finding:** Canonical FGA-025–028 truth outputs had no mandatory, release-path enforcement boundary.
+- **Correction:** Added deterministic, versioned, fail-closed result-truth validation at the shared governance report construction choke point, including complete evidence, scope, lineage, epistemic, and fingerprint checks.
+- **Scope:** No upstream scoring changes, no LLM truth authority, no roadmap advancement, and no unrelated production-gate implementation.

@@ -1,0 +1,115 @@
+"""FG_RESULT_TRUTH_GATE release-authority tests."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import copy
+
+import pytest
+
+from services.governance.report.result_truth_gate import (
+    ResultTruthGateError,
+    evaluate_result_truth_gate,
+)
+
+
+def _report(count: int = 2) -> dict[str, Any]:
+    evidence = [
+        {"evidence_id": f"ev-{i}", "provenance": "engagement:eng-1"}
+        for i in range(count)
+    ]
+    finding = {
+        "finding_id": "finding-1",
+        "evidence_ids": ["ev-0"],
+        "severity": "high",
+    }
+    claim = {
+        "claim_id": "claim-1",
+        "finding_id": "finding-1",
+        "control_id": "security_posture",
+        "domain": "security_posture",
+        "severity": "high",
+        "epistemic_state": "VERIFIED_DEFICIENT",
+        "disposition": "verified_deficient",
+        "evidence_ids": ["ev-0"],
+        "tenant_id": "tenant-1",
+        "engagement_id": "eng-1",
+        "lineage": ["engagement:eng-1", "finding:finding-1", "evidence:ev-0"],
+    }
+    return {
+        "tenant_id": "tenant-1",
+        "engagement_id": "eng-1",
+        "assessment_id": "eng-1",
+        "evidence_population": {
+            "total_discovered": count,
+            "eligible_count": count,
+            "evaluated_count": count,
+            "excluded_count": 0,
+            "fingerprint": "population-hash",
+        },
+        "evidence_state_hash": "population-hash",
+        "evidence_appendix": evidence,
+        "findings": [finding],
+        "epistemic_states": {"finding-1": {"state": "VERIFIED_DEFICIENT"}},
+        "material_claims": [claim],
+        "grounded_claims_fingerprint": "claims-hash",
+    }
+
+
+def test_valid_result_passes_and_replays() -> None:
+    first = evaluate_result_truth_gate(
+        _report(101), tenant_id="tenant-1", engagement_id="eng-1"
+    )
+    second = evaluate_result_truth_gate(
+        _report(101), tenant_id="tenant-1", engagement_id="eng-1"
+    )
+    assert first.decision == "PASS"
+    assert first.result_fingerprint == second.result_fingerprint
+
+
+@pytest.mark.parametrize(
+    "mutation,reason",
+    [
+        (
+            lambda r: r.update({"evidence_state_hash": "tampered"}),
+            "EVIDENCE_FINGERPRINT_MISMATCH",
+        ),
+        (
+            lambda r: r["material_claims"][0].update({"epistemic_state": "UNKNOWN"}),
+            "UNKNOWN_EPISTEMIC_STATE",
+        ),
+        (
+            lambda r: r["material_claims"][0].update({"finding_id": "other"}),
+            "UNRESOLVED_CLAIM_FINDING_LINEAGE",
+        ),
+        (lambda r: r.update({"tenant_id": "other"}), "TENANT_SCOPE_MISMATCH"),
+    ],
+)
+def test_invalid_canonical_inputs_fail_closed(mutation, reason: str) -> None:
+    report = _report()
+    mutation(report)
+    with pytest.raises(ResultTruthGateError) as exc_info:
+        evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")
+    assert reason in exc_info.value.reasons
+
+
+def test_population_appendix_cannot_be_truncated() -> None:
+    report = _report(101)
+    report["evidence_appendix"] = report["evidence_appendix"][:100]
+    with pytest.raises(ResultTruthGateError, match="EVIDENCE_APPENDIX_INCOMPLETE"):
+        evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")
+
+
+def test_input_order_does_not_change_result() -> None:
+    first = _report(3)
+    second = copy.deepcopy(first)
+    second["evidence_appendix"] = list(reversed(second["evidence_appendix"]))
+    assert (
+        evaluate_result_truth_gate(
+            first, tenant_id="tenant-1", engagement_id="eng-1"
+        ).result_fingerprint
+        == evaluate_result_truth_gate(
+            second, tenant_id="tenant-1", engagement_id="eng-1"
+        ).result_fingerprint
+    )
