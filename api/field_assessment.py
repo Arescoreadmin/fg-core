@@ -8453,6 +8453,12 @@ def _build_engagement_report_json(
         "engagement_id": engagement_id,
         "assessment_id": report.assessment_id,
         "evidence_population": evidence_population,
+        "production_gates": {},
+        "normalized_findings": [_safe_finding_dict(f) for f in _adverse_active],
+        "canonical_posture": {
+            "active_adverse_count": len(_adverse_active),
+            "domain_scores": scores,
+        },
         "evidence_state_hash": evidence_population["fingerprint"],
         "evidence_appendix": [_serialize_evidence_ref(r) for r in evidence_refs],
         "findings": [_serialize_finding(f) for f in report.findings],

@@ -22,6 +22,12 @@ _EPISTEMIC_STATES = {
     "VERIFIED_DEFICIENT",
     "VERIFIED_EFFECTIVE",
 }
+_REQUIRED_PRODUCTION_GATES = (
+    "PRODUCTION_DEPENDENCY_SECURITY",
+    "PRODUCTION_SCHEMA_AND_RLS",
+    "CANONICAL_ASSESSMENT_PROOF",
+    "DURABLE_EXECUTION_AND_RECOVERY",
+)
 _DISPOSITION_BY_STATE = {
     "NOT_PROVEN": "not_proven",
     "CONTRADICTORY": "contradictory",
@@ -80,6 +86,13 @@ def evaluate_result_truth_gate(
     """Validate canonical FGA-025..028 outputs without recalculating them."""
 
     reasons: list[str] = []
+    production_gates = report.get("production_gates")
+    if not isinstance(production_gates, Mapping):
+        reasons.append("MISSING_PRODUCTION_GATES")
+        production_gates = {}
+    for gate_name in _REQUIRED_PRODUCTION_GATES:
+        if production_gates.get(gate_name) is not True:
+            reasons.append(f"PRODUCTION_GATE_NOT_PROVEN:{gate_name}")
     if not tenant_id or report.get("tenant_id") != tenant_id:
         reasons.append("TENANT_SCOPE_MISMATCH")
     report_engagement = report.get("engagement_id") or report.get("assessment_id")
@@ -136,6 +149,8 @@ def evaluate_result_truth_gate(
     ):
         reasons.append("EVIDENCE_APPENDIX_INCOMPLETE")
 
+    normalized_findings = report.get("normalized_findings", [])
+    canonical_posture = report.get("canonical_posture", {})
     findings = report.get("findings", [])
     claims = report.get("material_claims", [])
     epistemic = report.get("epistemic_states", {})
@@ -148,6 +163,23 @@ def evaluate_result_truth_gate(
         findings = findings if isinstance(findings, list) else []
         claims = claims if isinstance(claims, list) else []
         epistemic = epistemic if isinstance(epistemic, Mapping) else {}
+    if not isinstance(normalized_findings, list) or not isinstance(
+        canonical_posture, Mapping
+    ):
+        reasons.append("MISSING_CANONICAL_POSTURE_INPUT")
+        normalized_findings = (
+            normalized_findings if isinstance(normalized_findings, list) else []
+        )
+        canonical_posture = (
+            canonical_posture if isinstance(canonical_posture, Mapping) else {}
+        )
+    active_adverse_count = canonical_posture.get("active_adverse_count")
+    if (
+        isinstance(active_adverse_count, int)
+        and active_adverse_count > 0
+        and not findings
+    ):
+        reasons.append("ADVERSE_FINDING_SUPPRESSED")
 
     finding_ids: set[str] = set()
     for finding in findings:
@@ -204,16 +236,35 @@ def evaluate_result_truth_gate(
         ):
             reasons.append("EPISTEMIC_INPUT_MISMATCH")
 
-    normalized_reasons = tuple(sorted(set(reasons)))
-    if not isinstance(report.get("grounded_claims_fingerprint"), str) or not report.get(
-        "grounded_claims_fingerprint"
+    supplied_claims_fingerprint = report.get("grounded_claims_fingerprint")
+    if (
+        not isinstance(supplied_claims_fingerprint, str)
+        or not supplied_claims_fingerprint
     ):
         reasons.append("MISSING_GROUNDED_CLAIMS_FINGERPRINT")
+    else:
+        expected_claims_fingerprint = _fingerprint(
+            {
+                "version": "1.0",
+                "claims": sorted(
+                    claims,
+                    key=lambda item: str(
+                        item.get("claim_id", "") if isinstance(item, Mapping) else ""
+                    ),
+                ),
+            }
+        )
+        if supplied_claims_fingerprint != expected_claims_fingerprint:
+            reasons.append("GROUNDED_CLAIMS_FINGERPRINT_MISMATCH")
+    normalized_reasons = tuple(sorted(set(reasons)))
     canonical = {
         "authority_version": RESULT_TRUTH_GATE_VERSION,
         "tenant_id": tenant_id,
         "engagement_id": engagement_id,
         "evidence_state_hash": evidence_hash,
+        "production_gates": dict(sorted(production_gates.items())),
+        "canonical_posture": canonical_posture,
+        "normalized_findings": normalized_findings,
         "grounded_claims_fingerprint": report.get("grounded_claims_fingerprint", ""),
         "findings": sorted(
             findings,
