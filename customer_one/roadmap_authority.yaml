@@ -25,29 +25,30 @@ work_classes:
     gate: BLOCKED
 
 next_sequence:
-  - id: "FGA-028"
-    title: "Grounded Determination & Executive Reporting Authority"
+  - id: "FG_RESULT_TRUTH_GATE"
+    title: "FG_RESULT_TRUTH_GATE — Expert-Approved Result Truth Release Authority"
     files:
-      - "api/field_assessment.py"
       - "services/governance/report/engine.py"
-      - "tests/test_result_semantic_authority.py"
+      - "services/governance/report/epistemic.py"
+      - "services/governance/report/grounded.py"
+      - "tests/test_fga028_grounded_reporting.py"
     blocker_closed: >
-      The forensic Customer-One audit requires an expert-approved golden and
-      metamorphic result-truth gate before FrostGate may issue a defensible
-      Verified AI Governance Baseline. Existing deterministic semantics and
-      FGA-025–027 fixes are not yet assembled into a release-blocking authority
-      that proves grounded findings, claim lineage, and executive-report safety.
+      FGA-025 through FGA-028 now provide semantic directionality, epistemic
+      states, complete evidence population, and grounded material-claim lineage.
+      The remaining Customer-One blocker is promotion of those invariants into
+      an expert-approved golden/metamorphic release gate that blocks issuance
+      when deterministic result truth is not proven.
     status: NEXT
     required_gates:
-      - "FG_RESULT_TRUTH_GATE"
       - "PRODUCTION_DEPENDENCY_SECURITY"
       - "PRODUCTION_SCHEMA_AND_RLS"
       - "CANONICAL_ASSESSMENT_PROOF"
       - "DURABLE_EXECUTION_AND_RECOVERY"
     gate_policy: >
-      These named production gates are mandatory acceptance gates within FGA-028
-      and must pass before Customer-One data access, report issuance, or L14
-      closure. They are not independently authorized feature work.
+      The named production gates remain mandatory acceptance gates within the
+      FG_RESULT_TRUTH_GATE path and must pass before Customer-One data access,
+      report issuance, or L14 closure. They are not independently authorized
+      feature work.
 
   - id: "L14"
     title: "Customer-One Commercial Execution"
@@ -86,6 +87,17 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "FGA-028"
+    title: "Grounded Determination & Executive Reporting Authority"
+    prs: ["#695", "#696"]
+    merged_sha: "9254df5eb323e8b631cc31c4e20aea369bbbb825"
+    note: >
+      PR #695 implemented the grounded deterministic report boundary and
+      material-claim lineage. PR #696 repaired the post-merge strict-gate mypy
+      regression. Both are merged and synced to main; post-merge strict proof
+      completed with repository-wide mypy clean in 2,124 source files, full
+      pytest 22,574 passed and 92 skipped, pip/contract/authority/dependency
+      gates clean, `==> All gates passed.`, and codex_gates rc=0.
   - id: "P1-01-PR2"
     title: "Canonical Delegation — FIAP path integration + auth_scopes enforcement"
     prs: ["#690"]

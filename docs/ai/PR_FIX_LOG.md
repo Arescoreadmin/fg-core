@@ -22598,3 +22598,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** Strict post-merge mypy rejected direct membership against the broadly typed `enforce_grounded_summary()` result (`tests/test_fga028_grounded_reporting.py:132`).
 - **Correction:** Narrowed `key_concerns` to a runtime-validated `list[str]` in the test before asserting grounded membership.
 - **Scope:** Test typing only; FGA-028 production semantics and roadmap authority unchanged.
+
+
+## FGA-028 completion reconciliation after PRs #695/#696
+
+- **Evidence:** Main synchronized at `9254df5eb323e8b631cc31c4e20aea369bbbb825`; strict post-merge validation recorded repository-wide mypy clean in 2,124 source files, full pytest `22,574 passed, 92 skipped`, `==> All gates passed.`, and `codex_gates rc=0`.
+- **Authority change:** Marked FGA-028 completed and authorized `FG_RESULT_TRUTH_GATE` as the single next engineering item; L14 and mandatory production gates remain gated.
+- **Scope:** Documentation/checker authority only; no product implementation or roadmap freeze-law expansion.

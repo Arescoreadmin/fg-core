@@ -5,7 +5,7 @@ engineering after 2026-09-09. It supersedes
 `artifacts/audits/canonical_roadmap/FROSTGATE_CANONICAL_ROADMAP.md` for sequencing decisions.
 `ROADMAP.md` is the Level-3 status ledger (merged PR tracker only).
 
-- **Date:** 2026-09-09
+- **Date:** 2026-09-13
 - **Machine-readable mirror:** `customer_one/roadmap_authority.yaml`
 - **Checker:** `tools/ci/check_customer_one_roadmap.py`
 
@@ -79,14 +79,14 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | FGA-028 (NEXT) |
+| Open engineering work | FG_RESULT_TRUTH_GATE (NEXT) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
 The path to Customer-One is now gated by:
-- Completing FGA-028 (Grounded Determination & Executive Reporting Authority) — the
-  deterministic result path must be release-gated by expert-approved golden and
-  metamorphic outcomes with resolvable material-claim lineage.
+- Completing FG_RESULT_TRUTH_GATE — the FGA-025–028 deterministic truth chain must be
+  promoted into a release-blocking authority with expert-approved golden and metamorphic
+  outcomes before a Verified AI Governance Baseline is issued.
 - Executing the commercial track (L14) in parallel.
 
 ---
@@ -99,8 +99,14 @@ can be added.
 
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
-| FGA-028 | Grounded Determination & Executive Reporting Authority | NEXT | The forensic audit still requires an expert-approved result-truth gate before a defensible Verified AI Governance Baseline can be issued; current semantic tests are not yet a release-blocking authority |
-| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FGA-028 result truth and all mandatory production gates pass |
+| FG_RESULT_TRUTH_GATE | Expert-Approved Result Truth Release Authority | NEXT | FGA-025–028 now provide the deterministic truth chain; the remaining blocker is promoting golden/metamorphic invariants into a release-blocking gate before issuing a Verified AI Governance Baseline |
+| L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE and all mandatory production gates pass |
+
+### FGA-028 — Grounded Determination & Executive Reporting Authority
+
+- **Status:** COMPLETED — PR #695 merged and PR #696 repair merged; synchronized main SHA `9254df5eb323e8b631cc31c4e20aea369bbbb825`.
+- **Completion evidence:** PR #695 introduced grounded material claims, deterministic lineage, canonical claim fingerprinting, and executive-report truth preservation. PR #696 repaired the strict-gate mypy regression. Post-merge strict validation: repository-wide mypy clean in 2,124 source files; full pytest `22,574 passed, 92 skipped`; pip, contract, authority integration, and dependency audits clean; `==> All gates passed.`; `codex_gates rc=0`.
+- **Result:** Customer-facing report claims now project from FGA-025 semantic findings, FGA-026 epistemic determinations, and FGA-027 complete evidence state without allowing AI narrative to alter canonical truth.
 
 ### FGA-027 — Complete Evidence State Authority
 
@@ -134,10 +140,12 @@ can be added.
 
 ### Next-item determination
 
+**Selected next authority: `FG_RESULT_TRUTH_GATE` — Expert-Approved Result Truth Release Authority.** This is the single authorized engineering item because the preceding four authorities are now implemented and validated, while repository evidence still shows no release-blocking promotion gate for golden/metamorphic result truth.
+
 | Candidate | Repository evidence | Disposition |
 |---|---|---|
-| FGA-028 — Grounded Determination & Executive Reporting Authority | Forensic audit requires result-truth correction plus expert-approved golden/metamorphic outcomes before paid reports; current tests are regression coverage, not a release authority. | **NEXT** — immediate Customer-One truth blocker. |
-| `FG_RESULT_TRUTH_GATE` promotion | The invariant set is the eventual gate, but no composed implementation or authority exists yet; promote through FGA-028 only after core truth/lineage checks are assembled. | Later within FGA-028; do not implement in this documentation PR. |
+| FGA-028 — Grounded Determination & Executive Reporting Authority | PR #695/#696 are merged and strict post-merge validated; grounded claims and executive-report truth boundary are implemented. | **COMPLETED** — reconciled after strict validation. |
+| `FG_RESULT_TRUTH_GATE` promotion | FGA-025–028 now provide semantic, epistemic, complete-evidence, and grounded-claim authorities; repository tests prove the invariants but no release-blocking promotion gate exists. | **NEXT** — immediate Customer-One truth blocker. |
 | Artifact ownership & evidence storage | Existing report/export manifests and storage-key validation provide foundations; no current evidence shows this is the immediate blocker ahead of result truth. | Deferred until result truth is release-gated. |
 | Production dependency security closure | Forensic audit records critical/high dependency advisories as mandatory before external access. | **MANDATORY FGA-028 ACCEPTANCE GATE** — must pass before customer data access, report issuance, or L14 closure; no independent feature authorization. |
 | Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as mandatory production prerequisites. | **MANDATORY FGA-028 ACCEPTANCE GATE** — migrations-only schema authority and tenant RLS proof required before L14 closure. |
