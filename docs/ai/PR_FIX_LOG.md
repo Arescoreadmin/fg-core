@@ -22633,3 +22633,9 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** A non-qualified truth report could proceed through QA approval toward client delivery, and empty evidence could produce a favorable internal posture.
 - **Correction:** Require explicit all-authority production qualification before QA approval/release-version approval, and keep empty evidence fail-closed in the truth gate.
 - **Scope:** REPAIR only; future production authorities remain unimplemented and unproven.
+
+## Post-700 report construction versus truth-release lifecycle repair
+
+- **Finding:** Evaluating the fail-closed result-truth gate during internal report construction blocked draft artifacts with incomplete evidence; allowing empty evidence to pass would incorrectly imply a favorable governance posture.
+- **Correction:** Construction now records a deterministic failing gate result without releasing it. Empty evidence remains blocked by default, and client delivery requires a passing truth gate plus explicit production qualification attestations.
+- **Scope:** REPAIR only; no roadmap advancement and no future production authority implementation.
