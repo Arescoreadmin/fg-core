@@ -12862,6 +12862,14 @@ def deliver_report_version_route(
         report_id=report_id,
         version_id=version_id,
     )
+    report_record = _load_report_record(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+    _require_production_qualified(report_record.report_json or {})
+
     if rv.status != "approved":
         raise HTTPException(
             status_code=409,
