@@ -23,7 +23,7 @@ import threading
 import uuid as _uuid_module
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, Mapping, cast
 
 from fastapi import (
     APIRouter,
@@ -7394,6 +7394,41 @@ class ReportQaApproveBody(BaseModel):
     decision_notes: str | None = None
 
 
+def _require_production_qualified(report_json: Mapping[str, Any]) -> None:
+    """Require explicit production qualification before client-facing release."""
+    qualification = report_json.get("production_qualification")
+    if not isinstance(qualification, Mapping):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "PRODUCTION_QUALIFICATION_BLOCKED",
+                "Production qualification is missing; report remains internal-only.",
+            ),
+        )
+    required = (
+        "PRODUCTION_DEPENDENCY_SECURITY",
+        "PRODUCTION_SCHEMA_AND_RLS",
+        "CANONICAL_ASSESSMENT_PROOF",
+        "DURABLE_EXECUTION_AND_RECOVERY",
+    )
+    attestations = qualification.get("attestations") or qualification.get(
+        "production_gates"
+    )
+    if (
+        qualification.get("status") != "QUALIFIED"
+        or qualification.get("qualified") is not True
+        or not isinstance(attestations, Mapping)
+        or any(attestations.get(name) is not True for name in required)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "PRODUCTION_QUALIFICATION_BLOCKED",
+                "All required production authorities must pass before client delivery.",
+            ),
+        )
+
+
 @router.post(
     "/engagements/{engagement_id}/reports/{report_id}/qa-approve",
     response_model=ReportQaApproveResponse,
@@ -7446,6 +7481,8 @@ def qa_approve_report_route(
                 "Only finalized reports can be QA-approved.",
             ),
         )
+
+    _require_production_qualified(report.report_json or {})
 
     if report.qa_approved_by is not None:
         raise HTTPException(
@@ -8454,6 +8491,7 @@ def _build_engagement_report_json(
         "assessment_id": report.assessment_id,
         "evidence_population": evidence_population,
         "production_gates": {},
+        "production_qualification_requested": False,
         "normalized_findings": [_safe_finding_dict(f) for f in _adverse_active],
         "canonical_posture": {
             "active_adverse_count": len(_adverse_active),
@@ -8699,6 +8737,16 @@ def _build_engagement_report_json(
         "evidence_state_hash": evidence_population["fingerprint"],
         "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
         "result_truth_gate": _gate_result.to_dict(),
+        "production_qualification": {
+            "status": "NOT_REQUESTED",
+            "required_gates": [
+                "PRODUCTION_DEPENDENCY_SECURITY",
+                "PRODUCTION_SCHEMA_AND_RLS",
+                "CANONICAL_ASSESSMENT_PROOF",
+                "DURABLE_EXECUTION_AND_RECOVERY",
+            ],
+            "qualified": False,
+        },
         **section_content,
     }
     return report_json, section_hashes, scan_result_ids
@@ -12711,6 +12759,13 @@ def approve_report_version_route(
         version_id=version_id,
     )
     _guard_mutable(rv)
+    report_record = _load_report_record(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+    _require_production_qualified(report_record.report_json or {})
     if rv.status != "internal_review":
         raise HTTPException(
             status_code=409,

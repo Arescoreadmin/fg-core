@@ -135,7 +135,12 @@ def test_production_gates_and_claim_fingerprint_are_required() -> None:
     report = _report()
     report["production_gates"] = {}
     with pytest.raises(ResultTruthGateError) as exc_info:
-        evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")
+        evaluate_result_truth_gate(
+            report,
+            tenant_id="tenant-1",
+            engagement_id="eng-1",
+            require_production_gates=True,
+        )
     assert (
         "PRODUCTION_GATE_NOT_PROVEN:PRODUCTION_SCHEMA_AND_RLS" in exc_info.value.reasons
     )
@@ -145,4 +150,37 @@ def test_suppressed_adverse_finding_fails_closed() -> None:
     report = _report()
     report["findings"] = []
     with pytest.raises(ResultTruthGateError, match="ADVERSE_FINDING_SUPPRESSED"):
+        evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")
+
+
+def test_truth_passes_without_production_qualification() -> None:
+    report = _report()
+    report["production_gates"] = {}
+    result = evaluate_result_truth_gate(
+        report, tenant_id="tenant-1", engagement_id="eng-1"
+    )
+    assert result.decision == "PASS"
+
+
+def test_requested_production_qualification_fails_closed() -> None:
+    report = _report()
+    report["production_gates"] = {}
+    report["production_qualification_requested"] = True
+    with pytest.raises(ResultTruthGateError, match="PRODUCTION_GATE_NOT_PROVEN"):
+        evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")
+
+
+def test_empty_evidence_population_fails_closed() -> None:
+    report = _report(0)
+    report["findings"] = []
+    report["normalized_findings"] = []
+    report["material_claims"] = []
+    report["grounded_claims_fingerprint"] = hashlib.sha256(
+        json.dumps(
+            {"version": "1.0", "claims": []},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    with pytest.raises(ResultTruthGateError, match="EMPTY_EVIDENCE_POPULATION"):
         evaluate_result_truth_gate(report, tenant_id="tenant-1", engagement_id="eng-1")

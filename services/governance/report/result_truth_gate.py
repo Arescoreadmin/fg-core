@@ -81,18 +81,30 @@ def _fingerprint(payload: Mapping[str, Any]) -> str:
 
 
 def evaluate_result_truth_gate(
-    report: Mapping[str, Any], *, tenant_id: str, engagement_id: str
+    report: Mapping[str, Any],
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    require_production_gates: bool = False,
 ) -> ResultTruthGateResult:
     """Validate canonical FGA-025..028 outputs without recalculating them."""
 
     reasons: list[str] = []
     production_gates = report.get("production_gates")
     if not isinstance(production_gates, Mapping):
-        reasons.append("MISSING_PRODUCTION_GATES")
+        if (
+            require_production_gates
+            or report.get("production_qualification_requested") is True
+        ):
+            reasons.append("MISSING_PRODUCTION_GATES")
         production_gates = {}
-    for gate_name in _REQUIRED_PRODUCTION_GATES:
-        if production_gates.get(gate_name) is not True:
-            reasons.append(f"PRODUCTION_GATE_NOT_PROVEN:{gate_name}")
+    if (
+        require_production_gates
+        or report.get("production_qualification_requested") is True
+    ):
+        for gate_name in _REQUIRED_PRODUCTION_GATES:
+            if production_gates.get(gate_name) is not True:
+                reasons.append(f"PRODUCTION_GATE_NOT_PROVEN:{gate_name}")
     if not tenant_id or report.get("tenant_id") != tenant_id:
         reasons.append("TENANT_SCOPE_MISMATCH")
     report_engagement = report.get("engagement_id") or report.get("assessment_id")
