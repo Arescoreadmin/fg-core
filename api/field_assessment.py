@@ -12868,8 +12868,6 @@ def deliver_report_version_route(
         engagement_id=engagement_id,
         report_id=report_id,
     )
-    _require_production_qualified(report_record.report_json or {})
-
     if rv.status != "approved":
         raise HTTPException(
             status_code=409,
@@ -12878,6 +12876,8 @@ def deliver_report_version_route(
                 "Only approved versions can be delivered.",
             ),
         )
+
+    _require_production_qualified(report_record.report_json or {})
 
     rv.status = "delivered"
     rv.delivered_at = utc_iso8601_z_now()
