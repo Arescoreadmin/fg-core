@@ -136,14 +136,7 @@ def evaluate_result_truth_gate(
         and population["eligible_count"] > population["total_discovered"]
     ):
         reasons.append("EVIDENCE_COUNTS_INCONSISTENT")
-    # An empty evidence set is valid for an internal report that contains no
-    # canonical findings or claims.  Once canonical truth asserts a finding,
-    # normalized finding, or material claim, evidence is mandatory; allowing
-    # that population to pass would turn missing support into governance truth.
-    if population.get("eligible_count") == 0 and any(
-        report.get(key)
-        for key in ("findings", "normalized_findings", "material_claims")
-    ):
+    if population.get("eligible_count") == 0:
         reasons.append("EMPTY_EVIDENCE_POPULATION")
     if (
         isinstance(population.get("evaluated_count"), int)

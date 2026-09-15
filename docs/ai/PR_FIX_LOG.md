@@ -22626,3 +22626,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** FG_RESULT_TRUTH_GATE enforced future production-qualification authorities during ordinary internal report construction, blocking valid deterministic reports.
 - **Correction:** Added an explicit production-qualification requirement switch; ordinary truth evaluation remains fail-closed for malformed/incomplete truth, while qualification requests still require all four attestations. Reports explicitly mark production qualification as not requested/unqualified.
 - **Scope:** REPAIR only; future production authorities remain unproven and roadmap authority unchanged.
+
+
+## Post-699 review follow-up: release qualification boundary
+
+- **Finding:** A non-qualified truth report could proceed through QA approval toward client delivery, and empty evidence could produce a favorable internal posture.
+- **Correction:** Require explicit all-authority production qualification before QA approval/release-version approval, and keep empty evidence fail-closed in the truth gate.
+- **Scope:** REPAIR only; future production authorities remain unimplemented and unproven.
