@@ -8454,6 +8454,7 @@ def _build_engagement_report_json(
         "assessment_id": report.assessment_id,
         "evidence_population": evidence_population,
         "production_gates": {},
+        "production_qualification_requested": False,
         "normalized_findings": [_safe_finding_dict(f) for f in _adverse_active],
         "canonical_posture": {
             "active_adverse_count": len(_adverse_active),
@@ -8699,6 +8700,16 @@ def _build_engagement_report_json(
         "evidence_state_hash": evidence_population["fingerprint"],
         "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
         "result_truth_gate": _gate_result.to_dict(),
+        "production_qualification": {
+            "status": "NOT_REQUESTED",
+            "required_gates": [
+                "PRODUCTION_DEPENDENCY_SECURITY",
+                "PRODUCTION_SCHEMA_AND_RLS",
+                "CANONICAL_ASSESSMENT_PROOF",
+                "DURABLE_EXECUTION_AND_RECOVERY",
+            ],
+            "qualified": False,
+        },
         **section_content,
     }
     return report_json, section_hashes, scan_result_ids

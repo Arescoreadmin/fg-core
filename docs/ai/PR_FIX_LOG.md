@@ -22619,3 +22619,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** The gate could pass without mandatory production-gate attestations, could accept suppressed adverse inputs, and normalized claim-fingerprint failures too late.
 - **Correction:** Require all four production gates, validate canonical adverse posture inputs, and verify the grounded-claims fingerprint before finalizing the deterministic decision.
 - **Scope:** FG_RESULT_TRUTH_GATE only; no roadmap advancement or unrelated gate implementation.
+
+
+## Post-699 result-truth release-boundary repair
+
+- **Finding:** FG_RESULT_TRUTH_GATE enforced future production-qualification authorities during ordinary internal report construction, blocking valid deterministic reports.
+- **Correction:** Added an explicit production-qualification requirement switch; ordinary truth evaluation remains fail-closed for malformed/incomplete truth, while qualification requests still require all four attestations. Reports explicitly mark production qualification as not requested/unqualified.
+- **Scope:** REPAIR only; future production authorities remain unproven and roadmap authority unchanged.
