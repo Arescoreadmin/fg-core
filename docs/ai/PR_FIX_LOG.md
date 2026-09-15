@@ -22639,3 +22639,9 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** Evaluating the fail-closed result-truth gate during internal report construction blocked draft artifacts with incomplete evidence; allowing empty evidence to pass would incorrectly imply a favorable governance posture.
 - **Correction:** Construction now records a deterministic failing gate result without releasing it. Empty evidence remains blocked by default, and client delivery requires a passing truth gate plus explicit production qualification attestations.
 - **Scope:** REPAIR only; no roadmap advancement and no future production authority implementation.
+
+## Report delivery lifecycle precedence repair
+
+- **Finding:** Version delivery evaluated truth and production qualification before confirming that the version was approved, so draft delivery returned a truth-gate error instead of the canonical lifecycle conflict.
+- **Correction:** Validate approved lifecycle state before release qualification, with regression coverage proving lifecycle and truth-gate failures do not mutate delivery state or emit delivery-success events.
+- **Scope:** REPAIR only; truth-gate and production-qualification semantics are unchanged, successful delivery remains unavailable without genuine production authority, and roadmap state is unchanged.

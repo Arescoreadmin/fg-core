@@ -151,6 +151,48 @@ def _bootstrap(client: TestClient) -> tuple[str, str]:
     return eid, report["report_id"]
 
 
+def _assert_delivery_rejected_without_mutation(
+    client: TestClient,
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    *,
+    expected_status: str,
+) -> None:
+    from sqlalchemy import select
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaEngagementAuditEvent
+
+    version_resp = client.get(
+        f"/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}",
+    )
+    assert version_resp.status_code == 200, version_resp.text
+    version = version_resp.json()
+    assert version["status"] == expected_status
+    assert version["delivered_at"] is None
+
+    history_resp = client.get(
+        f"/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/history",
+    )
+    assert history_resp.status_code == 200, history_resp.text
+    assert "downloaded" not in {event["event_type"] for event in history_resp.json()}
+
+    db = get_sessionmaker()()
+    try:
+        delivered_audit_id = db.execute(
+            select(FaEngagementAuditEvent.id).where(
+                FaEngagementAuditEvent.tenant_id == _TENANT_A,
+                FaEngagementAuditEvent.engagement_id == engagement_id,
+                FaEngagementAuditEvent.entity_id == version_id,
+                FaEngagementAuditEvent.event_type == "report_version_delivered",
+            )
+        ).scalar_one_or_none()
+    finally:
+        db.close()
+    assert delivered_audit_id is None
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -260,6 +302,26 @@ def test_deliver_requires_approved_status(client: TestClient) -> None:
     )
     assert resp.status_code == 409, resp.text
     assert resp.json()["detail"]["code"] == "REPORT_VERSION_INVALID_TRANSITION"
+    _assert_delivery_rejected_without_mutation(
+        client, eid, rid, v["id"], expected_status="draft"
+    )
+
+
+def test_approved_truth_failing_report_cannot_deliver(client: TestClient) -> None:
+    eid, rid = _bootstrap(client)
+    v = _create_version(client, eid, rid)
+    _submit(client, eid, rid, v["id"])
+    _approve(client, eid, rid, v["id"])
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{v['id']}/deliver",
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "RESULT_TRUTH_GATE_BLOCKED"
+    _assert_delivery_rejected_without_mutation(
+        client, eid, rid, v["id"], expected_status="approved"
+    )
 
 
 def test_supersede_creates_lineage(client: TestClient) -> None:
