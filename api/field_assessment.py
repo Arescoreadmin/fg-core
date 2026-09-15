@@ -7405,6 +7405,15 @@ def _require_production_qualified(report_json: Mapping[str, Any]) -> None:
                 "Production qualification is missing; report remains internal-only.",
             ),
         )
+    truth_gate = report_json.get("result_truth_gate")
+    if not isinstance(truth_gate, Mapping) or truth_gate.get("decision") != "PASS":
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "RESULT_TRUTH_GATE_BLOCKED",
+                "A passing result truth gate is required before client delivery.",
+            ),
+        )
     required = (
         "PRODUCTION_DEPENDENCY_SECURITY",
         "PRODUCTION_SCHEMA_AND_RLS",
@@ -7481,8 +7490,6 @@ def qa_approve_report_route(
                 "Only finalized reports can be QA-approved.",
             ),
         )
-
-    _require_production_qualified(report.report_json or {})
 
     if report.qa_approved_by is not None:
         raise HTTPException(
@@ -7629,68 +7636,85 @@ def qa_approve_report_route(
     delivery_blockers: list[dict[str, Any]] = []
 
     if eng.status == "in_progress":
-        execution_state = _evaluate_execution_state(db, eng=eng, tenant_id=tenant_id)
-        blockers = [
-            b
-            for b in execution_state.transition_blockers
-            if b.target_status == "delivered"
-        ]
-        if blockers:
-            # QA approval recorded; delivery blocked by remaining gates.
+        try:
+            _require_production_qualified(report.report_json or {})
+        except HTTPException:
             delivery_blocked = True
-            blocked_gate_ids = blockers[0].blocked_by_gate_ids
             delivery_blockers = [
                 {
-                    "gate_id": g.gate_id,
-                    "title": g.title,
-                    "missing_items": g.missing_items,
+                    "gate_id": "RESULT_TRUTH_GATE",
+                    "title": "Production qualification required",
+                    "missing_items": [
+                        "All required production authorities must pass before client delivery."
+                    ],
                 }
-                for g in execution_state.gates
-                if g.gate_id in blocked_gate_ids and g.status == "blocked"
             ]
         else:
-            # All gates pass — advance to delivered. Create a portal grant.
-            gate_snapshot: dict[str, Any] = {
-                "gates_evaluated": [g.gate_id for g in execution_state.gates],
-                "gates_passed": [
-                    g.gate_id for g in execution_state.gates if g.status == "passed"
-                ],
-                "readiness_score": execution_state.readiness_score,
-            }
-            eng.status = "delivered"
-            eng.updated_at = now
-            db.flush()
-            emit_engagement_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="engagement.status_transitioned",
-                actor=actor,
-                reason_code="AUTO_ADVANCE_QA_APPROVED",
-                payload={
-                    "new_status": "delivered",
-                    "triggered_by": "report.qa_approved",
-                    **gate_snapshot,
-                },
+            execution_state = _evaluate_execution_state(
+                db, eng=eng, tenant_id=tenant_id
             )
-            promote_engagement_to_governance(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                gate_snapshot=gate_snapshot,
-                baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
-            )
-            # Create a hashed portal grant for client delivery access.
-            grant_result = _portal_grant_svc.create_grant(
-                db,
-                tenant_id=tenant_id,
-                client_id=eng.client_name,
-                engagement_id=engagement_id,
-                created_by=actor,
-            )
-            portal_grant_id = grant_result.credential_id
-            portal_raw_secret = grant_result.raw_secret
-            portal_expires_at = grant_result.expires_at
+        if not delivery_blocked:
+            blockers = [
+                b
+                for b in execution_state.transition_blockers
+                if b.target_status == "delivered"
+            ]
+            if blockers:
+                # QA approval recorded; delivery blocked by remaining gates.
+                delivery_blocked = True
+                blocked_gate_ids = blockers[0].blocked_by_gate_ids
+                delivery_blockers = [
+                    {
+                        "gate_id": g.gate_id,
+                        "title": g.title,
+                        "missing_items": g.missing_items,
+                    }
+                    for g in execution_state.gates
+                    if g.gate_id in blocked_gate_ids and g.status == "blocked"
+                ]
+            else:
+                # All gates pass — advance to delivered. Create a portal grant.
+                gate_snapshot: dict[str, Any] = {
+                    "gates_evaluated": [g.gate_id for g in execution_state.gates],
+                    "gates_passed": [
+                        g.gate_id for g in execution_state.gates if g.status == "passed"
+                    ],
+                    "readiness_score": execution_state.readiness_score,
+                }
+                eng.status = "delivered"
+                eng.updated_at = now
+                db.flush()
+                emit_engagement_audit_event(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    event_type="engagement.status_transitioned",
+                    actor=actor,
+                    reason_code="AUTO_ADVANCE_QA_APPROVED",
+                    payload={
+                        "new_status": "delivered",
+                        "triggered_by": "report.qa_approved",
+                        **gate_snapshot,
+                    },
+                )
+                promote_engagement_to_governance(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    gate_snapshot=gate_snapshot,
+                    baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
+                )
+                # Create a hashed portal grant for client delivery access.
+                grant_result = _portal_grant_svc.create_grant(
+                    db,
+                    tenant_id=tenant_id,
+                    client_id=eng.client_name,
+                    engagement_id=engagement_id,
+                    created_by=actor,
+                )
+                portal_grant_id = grant_result.credential_id
+                portal_raw_secret = grant_result.raw_secret
+                portal_expires_at = grant_result.expires_at
 
     evidence_lifecycle_svc.lock_evidence_for_engagement(
         db,
@@ -8506,7 +8530,10 @@ def _build_engagement_report_json(
     }
     try:
         _gate_result = evaluate_result_truth_gate(
-            _gate_projection, tenant_id=tenant_id, engagement_id=engagement_id
+            _gate_projection,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            raise_on_failure=False,
         )
     except ResultTruthGateError as exc:
         raise RuntimeError("RESULT_TRUTH_GATE_BLOCKED: " + str(exc)) from exc
@@ -12759,13 +12786,6 @@ def approve_report_version_route(
         version_id=version_id,
     )
     _guard_mutable(rv)
-    report_record = _load_report_record(
-        db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        report_id=report_id,
-    )
-    _require_production_qualified(report_record.report_json or {})
     if rv.status != "internal_review":
         raise HTTPException(
             status_code=409,

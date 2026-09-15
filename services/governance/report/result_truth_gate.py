@@ -86,6 +86,7 @@ def evaluate_result_truth_gate(
     tenant_id: str,
     engagement_id: str,
     require_production_gates: bool = False,
+    raise_on_failure: bool = True,
 ) -> ResultTruthGateResult:
     """Validate canonical FGA-025..028 outputs without recalculating them."""
 
@@ -304,6 +305,6 @@ def evaluate_result_truth_gate(
         result_fingerprint=_fingerprint(canonical),
         failure_reasons=normalized_reasons,
     )
-    if normalized_reasons:
+    if normalized_reasons and raise_on_failure:
         raise ResultTruthGateError(normalized_reasons)
     return result
