@@ -53,6 +53,7 @@ def delegation_headers(
     secret: str | None = None,
     lifetime: int = 60,
     offset_seconds: int = 0,
+    actor_subject: str | None = None,
 ) -> dict[str, str]:
     """Return the four X-FG-Delegation-* headers for a canonical request.
 
@@ -64,15 +65,16 @@ def delegation_headers(
     resolved_secret = (secret or _resolve_secret()).strip()
     issued_at = int(time.time()) + offset_seconds
     expires_at = issued_at + lifetime
+    version = "v2" if actor_subject else "v1"
     canonical = (
-        f"v1\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}"
-        f"\n{issued_at}\n{expires_at}"
+        f"{version}\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}"
+        f"\n{issued_at}\n{expires_at}" + (f"\n{actor_subject}" if actor_subject else "")
     )
     proof = hmac.new(
         resolved_secret.encode(), canonical.encode(), hashlib.sha256
     ).hexdigest()
     return {
-        "X-FG-Delegation-Version": "v1",
+        "X-FG-Delegation-Version": version,
         "X-FG-Delegation-Issued-At": str(issued_at),
         "X-FG-Delegation-Expires-At": str(expires_at),
         "X-FG-Delegation-Proof": proof,

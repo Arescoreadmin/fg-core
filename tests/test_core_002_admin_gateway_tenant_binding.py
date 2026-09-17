@@ -116,7 +116,7 @@ def _make_proof(
     offset_seconds: int = 0,
     lifetime: int = 60,
 ) -> tuple[str, int, int]:
-    """Create a valid delegation proof. Returns (proof_hex, issued_at, expires_at)."""
+    """Create a valid v1 delegation proof."""
     issued_at = int(_time.time()) + offset_seconds
     expires_at = issued_at + lifetime
     canonical = f"v1\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}\n{issued_at}\n{expires_at}"
@@ -135,6 +135,7 @@ def _delegation_mirror(
     expires_at: int | None,
     proof: str | None,
     secrets: list[str],
+    actor_subject: str | None = None,
 ) -> _VerifyResult:
     """Inline mirror of _verify_delegation_proof using only stdlib."""
     if not secrets:
@@ -143,7 +144,7 @@ def _delegation_mirror(
     if not all([version, issued_at is not None, expires_at is not None, proof]):
         return _VerifyResult(ok=False, status_code=403, reason="proof_required")
 
-    if version != "v1":
+    if version not in {"v1", "v2"}:
         return _VerifyResult(ok=False, status_code=403, reason="unknown_version")
 
     now = int(_time.time())
@@ -159,7 +160,13 @@ def _delegation_mirror(
     if expires_at - issued_at > _MAX_LIFETIME:  # type: ignore[operator]
         return _VerifyResult(ok=False, status_code=403, reason="lifetime_exceeded")
 
-    canonical = f"v1\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}\n{issued_at}\n{expires_at}"
+    if version == "v2" and not actor_subject:
+        return _VerifyResult(ok=False, status_code=403, reason="actor_required")
+    canonical = (
+        f"{version}\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}"
+        f"\n{issued_at}\n{expires_at}"
+        + (f"\n{actor_subject}" if version == "v2" else "")
+    )
     for secret in secrets:
         expected = _hmac.new(
             secret.encode(), canonical.encode(), hashlib.sha256
@@ -336,6 +343,73 @@ def test_active_internal_platform_tenant_passes() -> None:
 
 
 # ── Behavioral invariants: delegation proof ───────────────────────────────────
+
+
+def _make_actor_proof(
+    actor_subject: str, tenant_id: str = "tenant-a"
+) -> tuple[str, int, int]:
+    issued_at = int(_time.time())
+    expires_at = issued_at + 60
+    canonical = (
+        f"v2\n{_TEST_REQUEST_ID}\n{tenant_id}\n{_TEST_METHOD}\n{_TEST_PATH}"
+        f"\n{issued_at}\n{expires_at}\n{actor_subject}"
+    )
+    proof = _hmac.new(
+        _TEST_SECRET.encode(), canonical.encode(), hashlib.sha256
+    ).hexdigest()
+    return proof, issued_at, expires_at
+
+
+def test_actor_bound_v2_proof_accepts_matching_actor() -> None:
+    proof, iat, exp = _make_actor_proof("auth0|alice")
+    result = _delegation_mirror(
+        tenant_id="tenant-a",
+        request_id=_TEST_REQUEST_ID,
+        method=_TEST_METHOD,
+        path=_TEST_PATH,
+        version="v2",
+        issued_at=iat,
+        expires_at=exp,
+        proof=proof,
+        secrets=[_TEST_SECRET],
+        actor_subject="auth0|alice",
+    )
+    assert result.ok
+
+
+def test_actor_bound_v2_proof_rejects_forged_actor() -> None:
+    proof, iat, exp = _make_actor_proof("auth0|alice")
+    result = _delegation_mirror(
+        tenant_id="tenant-a",
+        request_id=_TEST_REQUEST_ID,
+        method=_TEST_METHOD,
+        path=_TEST_PATH,
+        version="v2",
+        issued_at=iat,
+        expires_at=exp,
+        proof=proof,
+        secrets=[_TEST_SECRET],
+        actor_subject="auth0|mallory",
+    )
+    assert not result.ok
+    assert result.reason == "proof_invalid"
+
+
+def test_actor_bound_v2_proof_requires_actor() -> None:
+    proof, iat, exp = _make_actor_proof("auth0|alice")
+    result = _delegation_mirror(
+        tenant_id="tenant-a",
+        request_id=_TEST_REQUEST_ID,
+        method=_TEST_METHOD,
+        path=_TEST_PATH,
+        version="v2",
+        issued_at=iat,
+        expires_at=exp,
+        proof=proof,
+        secrets=[_TEST_SECRET],
+        actor_subject=None,
+    )
+    assert not result.ok
 
 
 def test_valid_proof_correct_tenant_passes() -> None:

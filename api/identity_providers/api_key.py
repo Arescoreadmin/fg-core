@@ -228,7 +228,11 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
         "admin_internal_token",
         "canonical_platform_admin",
     ):
-        named_sub = (request.headers.get("X-FG-Named-User-Sub") or "").strip()
+        # Only consume an actor identity that Core's delegation verifier has
+        # authenticated. Raw browser/external headers never establish authority.
+        named_sub = (
+            getattr(request.state, "_delegated_actor_subject", None) or ""
+        ).strip()
         if named_sub:
             if getattr(auth, "reason", None) == "admin_internal_token":
                 # Legacy path: permissions from scope strings (unchanged).

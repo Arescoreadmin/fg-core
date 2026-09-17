@@ -576,7 +576,7 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 type DelegationProof = {
-  version: 'v1';
+  version: 'v1' | 'v2';
   issuedAt: number;
   expiresAt: number;
   proof: string;
@@ -588,12 +588,16 @@ function createDelegationProof(
   tenantId: string,
   method: string,
   canonicalPath: string,
+  actorSubject?: string,
 ): DelegationProof {
   const issuedAt = Math.floor(Date.now() / 1000);
   const expiresAt = issuedAt + 60;
-  const canonical = `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
+  const version = actorSubject ? 'v2' : 'v1';
+  const canonical = actorSubject
+    ? `v2\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}`
+    : `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
   const proof = createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
-  return { version: 'v1', issuedAt, expiresAt, proof };
+  return { version, issuedAt, expiresAt, proof };
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string, namedUserSub?: string): Promise<NextResponse> {
@@ -632,6 +636,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
         tenantId,
         request.method,
         canonicalPath,
+        namedUserSub,
       );
       headers.set('X-FG-Delegation-Version', delegation.version);
       headers.set('X-FG-Delegation-Issued-At', String(delegation.issuedAt));

@@ -751,6 +751,7 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
         return
 
     version = (request.headers.get("x-fg-delegation-version") or "").strip()
+    actor_subject = (request.headers.get("x-fg-named-user-sub") or "").strip()
     issued_at_str = (request.headers.get("x-fg-delegation-issued-at") or "").strip()
     expires_at_str = (request.headers.get("x-fg-delegation-expires-at") or "").strip()
     proof = (request.headers.get("x-fg-delegation-proof") or "").strip().lower()
@@ -765,7 +766,7 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
             detail=redact_detail("delegation proof required", generic="forbidden"),
         )
 
-    if version != "v1":
+    if version not in {"v1", "v2"}:
         log.warning("delegation_proof.unknown_version", extra={"version": version})
         raise HTTPException(
             status_code=403,
@@ -824,8 +825,15 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
     method = (request.method or "").upper()
     path = str(request.url.path) if request.url else ""
 
+    if version == "v2" and not actor_subject:
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("delegated actor required", generic="forbidden"),
+        )
+
     canonical = (
-        f"v1\n{req_id}\n{tenant_id}\n{method}\n{path}\n{issued_at}\n{expires_at}"
+        f"{version}\n{req_id}\n{tenant_id}\n{method}\n{path}\n{issued_at}\n{expires_at}"
+        + (f"\n{actor_subject}" if version == "v2" else "")
     )
 
     for secret in secrets:
@@ -833,6 +841,8 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
             secret.encode(), canonical.encode(), hashlib.sha256
         ).hexdigest()
         if hmac.compare_digest(expected, proof):
+            if version == "v2":
+                request.state._delegated_actor_subject = actor_subject
             return
 
     log.warning(

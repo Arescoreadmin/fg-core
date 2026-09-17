@@ -28,8 +28,11 @@ const GOLDEN_EXP = 1786992060;
 // If you change the canonical format, update BOTH implementations and this pin.
 const GOLDEN_DIGEST = '3a46a692f025f3a8a968c59ea1dc45f90eb155e916235b651260c1c26e0b3b33';
 
-function computeProof(secret, requestId, tenantId, method, canonicalPath, issuedAt, expiresAt) {
-  const canonical = `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
+function computeProof(secret, requestId, tenantId, method, canonicalPath, issuedAt, expiresAt, actorSubject) {
+  const version = actorSubject ? 'v2' : 'v1';
+  const canonical = actorSubject
+    ? `v2\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}`
+    : `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
   return createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
 }
 
@@ -61,6 +64,19 @@ test('method is uppercased before signing', () => {
   const lower = computeProof(GOLDEN_SECRET, 'r', 't', 'post', '/p', 1000, 1060);
   const upper = computeProof(GOLDEN_SECRET, 'r', 't', 'POST', '/p', 1000, 1060);
   assert.strictEqual(lower, upper, 'method case must not affect the digest');
+});
+
+
+test('actor-bound v2 proof changes when the actor changes', () => {
+  const alice = computeProof(GOLDEN_SECRET, GOLDEN_REQUEST_ID, GOLDEN_TENANT_ID, GOLDEN_METHOD, GOLDEN_PATH, GOLDEN_IAT, GOLDEN_EXP, 'auth0|alice');
+  const mallory = computeProof(GOLDEN_SECRET, GOLDEN_REQUEST_ID, GOLDEN_TENANT_ID, GOLDEN_METHOD, GOLDEN_PATH, GOLDEN_IAT, GOLDEN_EXP, 'auth0|mallory');
+  assert.notStrictEqual(alice, mallory);
+});
+
+test('route binds named actor into delegation proof', () => {
+  const src = readRoute();
+  assert.match(src, /canonicalPath,\n        namedUserSub,/);
+  assert.match(src, /actorSubject \? 'v2' : 'v1'/);
 });
 
 test('changing tenant_id changes the digest', () => {
