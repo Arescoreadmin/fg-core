@@ -248,6 +248,10 @@ ALLOWED_CHANGED_PATHS = {
     "migrations/postgres/0167_internal_platform_authority_bootstrap.sql",
     # PR 637 — Console tenant-admin gateway authority alignment
     "api/auth_scopes/resolution.py",
+    "api/identity_providers/api_key.py",
+    "apps/console/tests/delegation-proof-contract.test.js",
+    "tests/admin_gateway_delegation.py",
+    "tests/test_core_002_admin_gateway_tenant_binding.py",
     "docs/architecture/admin_gateway_identity_enforcement.md",
     "tests/test_core_invariants.py",
     "tests/test_console_tenant_admin_authorization.py",

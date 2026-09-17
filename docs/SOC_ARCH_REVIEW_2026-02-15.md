@@ -4409,3 +4409,13 @@ Combined, these paths let a JWT carrying `roles=["platform_admin"]` in the confi
 **Test coverage:** `tests/test_p1_01_pr2_canonical_delegation.py` — 27 focused tests: 21 P1-01-PR2 acceptance cases (6 positive + 12 fail-closed + 3 determinism) and 6 `_resolve_by_hint` fail-closed cases. Existing regression tests updated to codify fail-closed contract (see PR_FIX_LOG P-59). Aggregate identity-authority regression: 121 passed.
 
 **SOC review outcome:** approved. Strictly narrowing of the authority surface. No new credentials, no new identity authorities, no route contracts changed, no permission model changes. The FIAP path is now aligned with the pre-existing legacy Auth0 canonical-delegation semantics (`auth_dispatch._bind_membership` already re-derived permissions from `roles_to_permissions(principal.roles)`). Provider-neutral: the fix applies uniformly to any current or future OIDC provider producing `identity_type="human"`.
+
+## 2026-09-17 — SOC-HIGH-002 — Console delegated actor proof binding
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical auth files: `api/auth_scopes/resolution.py`, `api/identity_providers/api_key.py`; Console BFF route: `apps/console/app/api/core/[...path]/route.ts`).
+
+**Change:** Delegated Console requests now use version `v2` HMAC proofs that bind the named human subject in addition to request ID, tenant, method, path, and bounded timestamps. Core stores the actor only after successful proof verification; raw `X-FG-Named-User-Sub` headers are ignored. Legacy v1 proofs remain available for non-delegated machine paths.
+
+**Security review:** A gateway credential or forged actor header cannot manufacture human tenant-admin authority. Core still performs canonical membership, role, active-state, and tenant-scope checks. No permissions, credentials, tenant defaults, or platform-admin boundaries were widened.
+
+**Validation:** Focused tenant-admin/delegation suites passed; Console delegation contract tests passed; Ruff, format, mypy, and diff checks passed.

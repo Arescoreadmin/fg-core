@@ -22645,3 +22645,10 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Finding:** Version delivery evaluated truth and production qualification before confirming that the version was approved, so draft delivery returned a truth-gate error instead of the canonical lifecycle conflict.
 - **Correction:** Validate approved lifecycle state before release qualification, with regression coverage proving lifecycle and truth-gate failures do not mutate delivery state or emit delivery-success events.
 - **Scope:** REPAIR only; truth-gate and production-qualification semantics are unchanged, successful delivery remains unavailable without genuine production authority, and roadmap state is unchanged.
+
+## 2026-09-17 — fix(auth): bind Console delegated actor identity to Core proof
+
+- **Root cause:** Console forwarded `X-FG-Named-User-Sub` while the gateway HMAC proof authenticated only request/tenant/path metadata. A caller possessing the gateway credential could substitute another subject header.
+- **Fix:** Added actor-bound delegation proof version `v2` in the Console BFF and Core verifier. Core records the named subject only after v2 proof verification; unverified raw actor headers are ignored. v1 remains for non-human machine paths.
+- **Tests:** Added actor-binding and forged/missing actor proof coverage, Console cross-language contract checks, and raw-header spoof denial regression.
+- **Security impact:** Service authentication remains distinct from human authorization; canonical tenant membership and tenant scope remain mandatory.

@@ -207,3 +207,26 @@ def test_stale_admin_gateway_token_fails_closed_before_capability_check(
 
     assert response.status_code == 401, response.text
     assert response.json()["detail"] == "Invalid or missing API key"
+
+
+def test_raw_named_actor_header_cannot_create_delegated_identity() -> None:
+    """Core must consume the actor only after delegation proof verification."""
+    from types import SimpleNamespace
+
+    from api.identity_providers.api_key import extract_api_key_actor
+    from api.auth_scopes.definitions import AuthResult
+
+    request = SimpleNamespace(
+        headers={"X-FG-Named-User-Sub": "auth0|forged"},
+        state=SimpleNamespace(
+            auth=AuthResult(
+                valid=True,
+                reason="admin_internal_token",
+                key_prefix="gateway",
+                scopes={"admin:write"},
+            )
+        ),
+    )
+    actor = extract_api_key_actor(request, None)  # type: ignore[arg-type]
+    assert actor is not None
+    assert actor.subject != "auth0|forged"
