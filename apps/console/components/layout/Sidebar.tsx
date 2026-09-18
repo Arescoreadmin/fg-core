@@ -31,7 +31,7 @@ import type { NavigationGroup } from '@fg/navigation';
 import { cn } from '@/lib/cn';
 import { FrostGateShield } from '@/components/governance/FrostGateShield';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { getNavigationItemsForPrincipal } from '@/lib/consoleAccess';
+import { getNavigationItemsForPrincipal, isTenantAdminSession, getSessionClaims } from '@/lib/consoleAccess';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   'executive-intelligence': Brain,
@@ -86,6 +86,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     return pathname.startsWith(route);
   }
 
+  // Derive organization identity for Tenant Admin sessions.
+  // Uses canonical session claims — never browser-supplied tenant IDs.
+  const isTenantAdmin = isTenantAdminSession(session);
+  const claims = isTenantAdmin ? getSessionClaims(session) : null;
+  const orgLabel = claims?.tenantId
+    ? claims.tenantId.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : null;
+
   return (
     <aside
       className={cn(
@@ -95,9 +103,16 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     >
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
         <FrostGateShield size={26} />
-        <span className="text-sm font-semibold tracking-wide text-foreground">FrostGate</span>
+        {isTenantAdmin && orgLabel ? (
+          // Tenant Admin: show their organization name — not FrostGate's internal branding
+          <span className="truncate text-sm font-semibold tracking-wide text-foreground" data-testid="org-identity-label">
+            {orgLabel}
+          </span>
+        ) : (
+          <span className="text-sm font-semibold tracking-wide text-foreground">FrostGate</span>
+        )}
         <span className="ml-auto rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">
-          Console
+          {isTenantAdmin ? 'Admin' : 'Console'}
         </span>
         {onClose && (
           <button

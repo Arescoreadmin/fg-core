@@ -1,5 +1,27 @@
 # PR Fix Log (Strict)
 
+## P-62 — feat(console): deliver authority-aware tenant administration workspace — branch `feat/tenant-console-shell-administration-ux`
+
+- **PR/Branch:** `feat/tenant-console-shell-administration-ux`
+- **Date:** 2026-09-18
+- **Files changed:**
+  - `apps/console/app/admin/tenants/page.tsx` — TenantCard assessment link uses `/field-assessment` (no tenant_id param) for tenant admin; Portal link restricted to platform admin; consistent with P-61 authority model.
+  - `apps/console/app/admin/tenants/[tenantId]/page.tsx` — Added `useSession` + `isPlatformAdminSession` import; raw tenantId in subtitle gated on `showTenantId = isPlatformAdminSession(session)` with `data-testid="tenant-id-display"`.
+  - `apps/console/components/layout/Sidebar.tsx` — Added `isTenantAdminSession`, `getSessionClaims` imports; Tenant Admin sessions show org label from canonical session claims (not "FrostGate") with `data-testid="org-identity-label"`; badge shows "Admin" vs "Console" based on authority class.
+  - `apps/console/tests/tenant-console-shell.test.js` — New 66-test suite covering T-01–T-40 (tenant admin, platform admin, support, general) plus 26-vector adversarial matrix (ADV-01–ADV-26).
+- **Root cause — shell identity leakage:** The sidebar header showed "FrostGate Console" for all users. A `tenant_admin` session (e.g., "The High Table Financial") saw FrostGate's internal branding instead of their organization's identity — violating the commercial requirement that tenant admins see their own workspace, not multi-tenant infrastructure metadata.
+- **Root cause — tenant ID oracle in assessment link:** `TenantCard` built `consoleUrl = /field-assessment?tenant_id=${tenant.tenant_id}` for all authority classes. A tenant admin card included the raw `tenant_id` as a browser-visible query parameter in the Assessments button. Server-side canonical authority already handles tenant context — the browser parameter was unnecessary and exposed internal identifiers.
+- **Root cause — raw tenant ID in detail page subtitle:** `/admin/tenants/[tenantId]/page.tsx` unconditionally rendered `Tenant ID: <code>{tenantId}</code>` in the page subtitle, visible to tenant admins who reach their own org workspace. Platform Admin operational metadata (internal IDs) was leaking into the tenant admin view.
+- **Fix — Sidebar org identity:** `isTenantAdminSession(session)` detected; if true, `getSessionClaims(session).tenantId` derives the org label (converted from slug to title-case). Org label rendered in place of "FrostGate" for tenant admin. Canonical source: session claims from NextAuth (server-verified), never localStorage or URL.
+- **Fix — TenantCard assessment link:** `assessmentUrl` is now conditional: Platform Admin gets `/field-assessment?tenant_id=${tenant.tenant_id}` (legitimate cross-tenant operator use); Tenant Admin gets `/field-assessment` (server derives tenant from canonical session authority). Portal link (`/login?tenant_id=…`) restricted to Platform Admin only — tenant admin has no operational need for this link.
+- **Fix — detail page tenant ID:** `showTenantId = isPlatformAdminSession(session)` gates the raw tenant ID display. Platform Admins retain the operational identifier; Tenant Admins see only the human-readable org label.
+- **Security invariants preserved:** (1) No new browser-side authority source created. (2) All PR #703 delegation protections unchanged. (3) All PR #704 CLIENT_ADMIN_ROLES/isPlatformAdminSession allowlists unchanged. (4) Tenant admin never receives global registry data. (5) Credential one-time secret semantics unchanged. (6) Unknown/future roles fail closed (unsupported experience class). (7) No 403→200 conversions.
+- **Tests added:** `apps/console/tests/tenant-console-shell.test.js` — 66 tests: T-01–T-22 (tenant admin), T-23–T-28 (platform admin), T-29–T-30 (support), T-31–T-40 (general), ADV-01–ADV-26 (adversarial matrix).
+- **Validation:** `node apps/console/tests/tenant-console-shell.test.js` → 66/66 PASS; `node apps/console/tests/authority-aware-client-administration.test.js` → 45/45 PASS; `node apps/console/tests/console-shell.test.js` → 28/28 PASS; all other console tests green.
+- **Result:** PASS.
+
+---
+
 ## P-61 — fix(console): enforce authority-aware client administration — branch `security/authority-aware-client-administration`
 
 - **PR/Branch:** `security/authority-aware-client-administration`
