@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## P-61 — fix(console): enforce authority-aware client administration — branch `security/authority-aware-client-administration`
+
+- **PR/Branch:** `security/authority-aware-client-administration`
+- **Date:** 2026-09-18
+- **Files changed:** `apps/console/lib/consoleAccess.js`, `apps/console/lib/consoleAccess.d.ts`, `apps/console/app/api/tenants/route.ts`, `apps/console/app/api/admin/provision-tenant/route.ts`, `apps/console/app/admin/tenants/page.tsx` (new test: `apps/console/tests/authority-aware-client-administration.test.js`)
+- **Root cause:** `CONSOLE_ROUTE_AUDITS` for `/admin/tenants` and `/admin/tenants/[tenantId]` used `audience: 'support_limited'` with `allowedRoles: SUPPORT_LIMITED_ROLES` (`['Support', 'Administrator']`). Tenant admins (`tenant_admin` role, `console_enabled_client` experience class) had no access to a client administration workspace. Additionally, `/api/tenants` GET always returned the global registry to any admitted session — if a `tenant_admin` had been admitted, they would have received all tenant IDs. `/api/admin/provision-tenant` POST had no explicit denial for `tenant_admin` sessions, creating a privilege-escalation vector.
+- **Fix — consoleAccess.js:** Added `PLATFORM_ADMIN_ROLES = ['Support', 'Administrator']` and `CLIENT_ADMIN_ROLES = ['tenant_admin', ...INTERNAL_CONSOLE_ROLES]`. Changed `/admin/tenants` audience to `'tenant_admin_console'`, allowedRoles to `CLIENT_ADMIN_ROLES`. Changed `/admin/tenants/[tenantId]` same audience/role + `tenantScoped: true`. Added `isPlatformAdminSession(source)` and `isTenantAdminSession(source)` helper functions. Updated `module.exports`.
+- **Fix — /api/tenants route.ts:** Added authority-branching before any registry access. `isTenantAdminSession(session)` short-circuits to return only the session-bound tenant (label derived from ID, never fetched from global registry). Response includes `authority: 'tenant_admin'` or `authority: 'platform_admin'` for conditional UI rendering. `is_default: false` preserved to satisfy existing `tenants_api_does_not_synthesize_operator_tenant_into_customer_selector` test.
+- **Fix — /api/admin/provision-tenant route.ts:** Added explicit `isTenantAdminSession` check returning 403 before the gateway secret check. Tenant creation is Platform Admin only — tenant admins may never create new tenants.
+- **Fix — tenants/page.tsx:** Added `AuthorityClass` type and `authorityClass` state. `loadTenants()` reads `d.authority`. Tenant Admin branch renders own-org card only, no Create client button, no Regen key, no global list. Platform Admin branch unchanged. `TenantCard` accepts `isPlatformAdmin: boolean` and conditionally shows `tenant_id` code element and Regen key button.
+- **Security invariants:** (1) Tenant admin never loads global registry. (2) Foreign tenant and nonexistent tenant both return 403 (no oracle). (3) `tenant_admin` without session tenantId fails closed (403). (4) Malformed tenantId fails closed (403). (5) Internal+tenant_admin role combo → classified as `internal_console` (not tenant_admin). (6) `client_read_only` and other client roles denied at route level. (7) No Core API changes — `require_tenant_admin`, `resolve_authoritative_tenant`, delegation proof all unchanged.
+- **Root cause of is_default regression caught:** Initial implementation used `is_default: true` for tenant_admin own-tenant entry. Existing test `tenants_api_does_not_synthesize_operator_tenant_into_customer_selector` asserts `is_default: true` never appears in route source. Fixed to `is_default: false`.
+- **Tests added:** `apps/console/tests/authority-aware-client-administration.test.js` (40 tests) covering authority classification, route access, BFF authority branching, 12 adversarial scenarios, CLIENT_ADMIN_ROLES constants, route audit inventory.
+- **Validation:** Console test suite 3002/3002 PASS; `make fg-fast` exit 0.
+- **Result:** PASS.
+
+---
+
 ## P-60 — feat(governance): FGA-026 Evidence Sufficiency & Epistemic Authority — branch `feat/fga-026-epistemic-authority`
 
 - **PR/Branch:** `feat/fga-026-epistemic-authority`

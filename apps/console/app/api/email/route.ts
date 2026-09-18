@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccessConsoleRoute } from '@/lib/consoleAccess';
+import { canAccessConsoleRoute, isPlatformAdminSession } from '@/lib/consoleAccess';
 import { sendMail } from '@/lib/mailer';
 
 const PORTAL_ORIGIN =
@@ -132,6 +132,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   if (!canAccessConsoleRoute('/admin/tenants/[tenantId]', session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Email dispatch trusts caller-supplied to/raw_secret/portal_login_url without
+  // artifact validation — restrict to Platform Admin (Support/Administrator) only.
+  // Tenant admin invitation flows must use a tenant-scoped endpoint that validates
+  // the invitation artifact belongs to their own tenant.
+  if (!isPlatformAdminSession(session)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
