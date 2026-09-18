@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { IdentityGovernancePanel } from '@/components/identity';
@@ -12,6 +13,7 @@ import {
   type ClientLifecycle,
   type PendingAdminInvitation,
 } from '@/lib/lifecycleApi';
+import { isPlatformAdminSession } from '@/lib/consoleAccess';
 import { mapHttpError } from '@/lib/errors';
 import {
   listServiceCredentials,
@@ -972,6 +974,7 @@ type Tab = 'users' | 'portal' | 'credentials' | 'identity';
 
 export default function TenantDetailPage() {
   const { tenantId } = useParams<{ tenantId: string }>();
+  const { data: session } = useSession();
   const [tab, setTab] = useState<Tab>('users');
   const [identityInitialTab, setIdentityInitialTab] = useState<'scorecard' | 'config'>('scorecard');
   const [lifecycle, setLifecycle] = useState<ClientLifecycle | null>(null);
@@ -991,15 +994,20 @@ export default function TenantDetailPage() {
   useEffect(() => { void refreshLifecycle(); }, [refreshLifecycle]);
 
   const label = tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  // Only expose raw tenant ID to Platform Admins — tenant admins see only their
+  // org label, never internal infrastructure identifiers.
+  const showTenantId = isPlatformAdminSession(session);
 
   return (
     <main style={s.main}>
       <div style={s.pageHeader}>
         <Link href="/admin/tenants" style={s.backLink}><ArrowLeft size={14} style={{ marginRight: 4 }} />All clients</Link>
         <h1 style={s.pageTitle}>{label}</h1>
-        <p style={s.pageSubtitle}>
-          Tenant ID: <code style={{ fontSize: '0.8rem' }}>{tenantId}</code>
-        </p>
+        {showTenantId && (
+          <p style={s.pageSubtitle} data-testid="tenant-id-display">
+            Tenant ID: <code style={{ fontSize: '0.8rem' }}>{tenantId}</code>
+          </p>
+        )}
       </div>
 
       <div style={s.tabs}>

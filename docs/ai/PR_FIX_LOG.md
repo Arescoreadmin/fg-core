@@ -1,5 +1,77 @@
 # PR Fix Log (Strict)
 
+## P-62 — feat(console): deliver authority-aware tenant administration workspace — branch `feat/tenant-console-shell-administration-ux`
+
+- **PR/Branch:** `feat/tenant-console-shell-administration-ux`
+- **Date:** 2026-09-18
+- **Files changed:**
+  - `apps/console/app/admin/tenants/page.tsx` — TenantCard assessment link uses `/field-assessment` (no tenant_id param) for tenant admin; Portal link restricted to platform admin; consistent with P-61 authority model.
+  - `apps/console/app/admin/tenants/[tenantId]/page.tsx` — Added `useSession` + `isPlatformAdminSession` import; raw tenantId in subtitle gated on `showTenantId = isPlatformAdminSession(session)` with `data-testid="tenant-id-display"`.
+  - `apps/console/components/layout/Sidebar.tsx` — Added `isTenantAdminSession`, `getSessionClaims` imports; Tenant Admin sessions show org label from canonical session claims (not "FrostGate") with `data-testid="org-identity-label"`; badge shows "Admin" vs "Console" based on authority class.
+  - `apps/console/tests/tenant-console-shell.test.js` — New 66-test suite covering T-01–T-40 (tenant admin, platform admin, support, general) plus 26-vector adversarial matrix (ADV-01–ADV-26).
+- **Root cause — shell identity leakage:** The sidebar header showed "FrostGate Console" for all users. A `tenant_admin` session (e.g., "The High Table Financial") saw FrostGate's internal branding instead of their organization's identity — violating the commercial requirement that tenant admins see their own workspace, not multi-tenant infrastructure metadata.
+- **Root cause — raw tenant ID in detail page subtitle:** `/admin/tenants/[tenantId]/page.tsx` unconditionally rendered `Tenant ID: <code>{tenantId}</code>` in the page subtitle, visible to tenant admins who reach their own org workspace. Platform Admin operational metadata (internal IDs) was leaking into the tenant admin view.
+- **Fix — Sidebar org identity:** `isTenantAdminSession(session)` detected; if true, `getSessionClaims(session).tenantId` derives the org label (converted from slug to title-case). Org label rendered in place of "FrostGate" for tenant admin. Canonical source: session claims from NextAuth (server-verified), never localStorage or URL.
+- **Fix — TenantCard assessment link:** `assessmentUrl = /field-assessment?tenant_id=${tenant.tenant_id}` unconditionally for all authority classes. Platform Admin: cross-tenant operator access. Tenant Admin: their own tenant (the card only renders their single org per #704). The `?tenant_id` parameter is required so the BFF `resolveAuthorizedTenant()` can validate the request against session authority — omitting it causes a configured-operator-tenant fallback (see P-62a). Portal link restricted to `isPlatformAdmin` only.
+- **Fix — detail page tenant ID:** `showTenantId = isPlatformAdminSession(session)` gates the raw tenant ID display. Platform Admins retain the operational identifier; Tenant Admins see only the human-readable org label.
+- **Security invariants preserved:** (1) No new browser-side authority source created. (2) All PR #703 delegation protections unchanged. (3) All PR #704 CLIENT_ADMIN_ROLES/isPlatformAdminSession allowlists unchanged. (4) Tenant admin never receives global registry data. (5) Credential one-time secret semantics unchanged. (6) Unknown/future roles fail closed (unsupported experience class). (7) No 403→200 conversions.
+- **Tests added:** `apps/console/tests/tenant-console-shell.test.js` — 66 tests: T-01–T-22 (tenant admin), T-23–T-28 (platform admin), T-29–T-30 (support), T-31–T-40 (general), ADV-01–ADV-26 (adversarial matrix).
+- **Validation (post P-62a):** `node apps/console/tests/tenant-console-shell.test.js` → 66/66 PASS; `node apps/console/tests/authority-aware-client-administration.test.js` → 45/45 PASS; `make fg-fast` → exit 0; `make fg-security` → 1234 passed, 1 skipped; `make fg-contract` → OK; ruff → clean; `git diff --check` → clean.
+- **Result:** PASS.
+
+---
+
+## P-62a — P1: Field Assessment missing-tenant operator fallback — commit `3e9ca3fb` on `feat/tenant-console-shell-administration-ux`
+
+- **Severity:** P1 — cross-tenant data access
+- **Discovered:** Code review of #705 (PR comment on `apps/console/app/admin/tenants/page.tsx` lines 318–320)
+- **Date:** 2026-09-18
+
+**Broken model introduced in P-62 initial commit:**
+```
+Tenant Admin
+    ↓
+NO tenant_id (plain /field-assessment)
+    ↓
+BFF sees ordinary field-assessment path (not in isTenantAdminCorePath)
+    ↓
+resolveAuthorizedTenant: raw === null → resolveConfiguredOperatorTenant()
+    ↓
+session/tenant validation bypassed — CORE_TENANT_ID returned
+    ↓
+operator tenant API key used → operator tenant's engagements served
+```
+
+**Correct model (after fix):**
+```
+Tenant Admin
+    ↓
+own tenant_id supplied as requested context (?tenant_id=${tenant.tenant_id})
+    ↓
+Console BFF resolveAuthorizedTenant()
+    ↓
+canonical session tenant == requested tenant?
+    ├── YES → request allowed, tenant-scoped credential used
+    └── NO  → 403 Forbidden (line 403 of [...path]/route.ts)
+    ↓
+Core
+```
+
+**Root cause:** P-62 initial commit changed `assessmentUrl` to `/field-assessment` (no `?tenant_id`) for tenant admin sessions on the assumption that the BFF derived tenant context from canonical session authority when the parameter was absent. This assumption was false. `resolveAuthorizedTenant()` in `/api/core/[...path]/route.ts` has two authority-resolution modes: (1) explicit `tenant_id` provided → validate against session; (2) no `tenant_id` → fall back to `resolveConfiguredOperatorTenant()` (returns `CORE_TENANT_ID`). `field-assessment/engagements` is not in `isTenantAdminCorePath()`, so mode (2) activated. The session/tenant validation at line 399 was completely bypassed. A tenant admin clicking "Assessments" would receive — and could mutate — the FrostGate operator tenant's engagements.
+
+**Fix:** `assessmentUrl = /field-assessment?tenant_id=${tenant.tenant_id}` unconditionally for all authority classes. Safe because `TenantCard` for a tenant admin renders only their own single org (enforced by #704 — `/api/tenants` returns exactly one entry for tenant admin sessions). Supplying the tenant_id triggers the line 399 path: `claims.tenantId === tenantId` → authorized.
+
+**Regression guard — T-22 updated to assert:**
+- `assessmentUrl` must always be `/field-assessment?tenant_id=${tenant.tenant_id}`
+- Must NOT branch on `isPlatformAdmin` for assessment URL (conditional omission resurrects the vulnerability)
+
+**Architectural footgun documented for #706:** `resolveAuthorizedTenant()` has a missing-tenant fallback to `CORE_TENANT_ID` that is appropriate for operator/service workflows but dangerous if a tenant-admin request reaches it without a tenant identifier. This fallback deserves systematic enumeration across every BFF/Core route. #706 must audit: for every tenant-scoped Console BFF route — correct own tenant_id / foreign tenant_id / nonexistent / missing / empty / malformed / duplicate / query vs body disagreement / query vs header disagreement — across all session authority classes. The critical assertion: **a missing tenant identifier must never cause a tenant-scoped human request to inherit configured operator authority.**
+
+**Files changed:** `apps/console/app/admin/tenants/page.tsx` (2 lines), `apps/console/tests/tenant-console-shell.test.js` (T-22 rewritten)
+**Result:** PASS.
+
+---
+
 ## P-61 — fix(console): enforce authority-aware client administration — branch `security/authority-aware-client-administration`
 
 - **PR/Branch:** `security/authority-aware-client-administration`

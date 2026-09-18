@@ -312,7 +312,12 @@ function TenantCard({ tenant, isPlatformAdmin, onRegenKey }: { tenant: TenantEnt
     : tenant.tenant_id.includes('law') ? '⚖️'
     : '🏢';
 
-  const consoleUrl = `/field-assessment?tenant_id=${tenant.tenant_id}`;
+  // tenant_id must be in the URL for both authority classes.
+  // Without it the BFF /api/core/[...path] resolveAuthorizedTenant() falls through
+  // to CORE_TENANT_ID (operator tenant) — a cross-tenant data access violation for
+  // tenant admins whose card already only shows their own tenant (enforced by #704).
+  const assessmentUrl = `/field-assessment?tenant_id=${tenant.tenant_id}`;
+  // Portal link only meaningful for Platform Admin (cross-tenant management).
   const portalBase = typeof window !== 'undefined' ? window.location.origin.replace('console.', 'app.') : '';
 
   return (
@@ -330,12 +335,14 @@ function TenantCard({ tenant, isPlatformAdmin, onRegenKey }: { tenant: TenantEnt
         <Link href={`/admin/tenants/${tenant.tenant_id}`} style={s.manageBtn}>
           <Users size={13} style={{ marginRight: 4 }} />Manage users
         </Link>
-        <a href={consoleUrl} style={s.viewBtn}>
+        <a href={assessmentUrl} style={s.viewBtn}>
           <ShieldCheck size={13} style={{ marginRight: 4 }} />Assessments
         </a>
-        <a href={`${portalBase}/login?tenant_id=${tenant.tenant_id}`} target="_blank" rel="noopener noreferrer" style={s.externalBtn}>
-          <ExternalLink size={12} style={{ marginRight: 4 }} />Portal
-        </a>
+        {isPlatformAdmin && (
+          <a href={`${portalBase}/login?tenant_id=${tenant.tenant_id}`} target="_blank" rel="noopener noreferrer" style={s.externalBtn}>
+            <ExternalLink size={12} style={{ marginRight: 4 }} />Portal
+          </a>
+        )}
         {isPlatformAdmin && !tenant.is_default && (
           <button style={s.regenBtn} onClick={() => onRegenKey(tenant)} title="Generate a new API key for this tenant">
             Regen key
