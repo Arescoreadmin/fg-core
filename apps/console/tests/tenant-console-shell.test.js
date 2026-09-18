@@ -334,18 +334,26 @@ test('T-21: malformed tenantId (path traversal) in session is denied', () => {
   assert.strictEqual(result.status, 403, 'malformed tenantId must fail closed');
 });
 
-// T-22: browser-provided tenant does not override canonical authority
-test('T-22: assessments link uses non-oracle URL for tenant admin (no tenant_id param)', () => {
-  // The TenantCard must route tenant admin to /field-assessment without tenant_id query param
+// T-22: assessment link includes tenant_id for ALL authority classes
+// P1 regression guard: without ?tenant_id the BFF resolveAuthorizedTenant() falls through to
+// CORE_TENANT_ID (operator tenant) because field-assessment/engagements is not in
+// isTenantAdminCorePath(). A tenant admin would then see/mutate the operator tenant's
+// engagements — cross-tenant data access. The TenantCard for a tenant admin only renders
+// their own tenant (#704), so tenant.tenant_id IS their session-bound tenant.
+test('T-22: assessment link always includes ?tenant_id to prevent BFF operator-tenant fallthrough', () => {
   const tenantsPage = readTenantsPage();
-  // The assessmentUrl variable must be used (not consoleUrl with raw tenant_id)
-  assert.match(tenantsPage, /assessmentUrl/, 'must use assessmentUrl variable (not raw tenant_id consoleUrl)');
-  // Platform admin gets tenant-scoped URL; tenant admin gets clean URL
-  assert.match(tenantsPage, /isPlatformAdmin/, 'must branch on isPlatformAdmin for assessment URL');
-  // Tenant admin branch must be clean /field-assessment without tenant_id
-  assert.match(tenantsPage, /['"]\/field-assessment['"]/, "tenant admin assessment link must be '/field-assessment' without query param");
-  // Platform admin branch must include tenant_id
-  assert.match(tenantsPage, /field-assessment\?tenant_id=/, 'platform admin assessment link must include tenant_id');
+  // assessmentUrl must always include the tenant_id query param
+  assert.match(
+    tenantsPage,
+    /assessmentUrl\s*=\s*`\/field-assessment\?tenant_id=\$\{tenant\.tenant_id\}`/,
+    'P1: assessmentUrl must always be /field-assessment?tenant_id=${tenant.tenant_id} — no authority branching',
+  );
+  // Must NOT conditionally omit the tenant_id for tenant admin sessions
+  assert.doesNotMatch(
+    tenantsPage,
+    /isPlatformAdmin\s*\?\s*`\/field-assessment/,
+    'P1: assessment URL must not branch on isPlatformAdmin — omitting tenant_id causes operator-tenant exposure',
+  );
 });
 
 // ─── Tests 23–28: Platform Admin ─────────────────────────────────────────────

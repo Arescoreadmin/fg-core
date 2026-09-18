@@ -312,12 +312,11 @@ function TenantCard({ tenant, isPlatformAdmin, onRegenKey }: { tenant: TenantEnt
     : tenant.tenant_id.includes('law') ? '⚖️'
     : '🏢';
 
-  // Platform Admin: tenant-scoped assessment link (operator cross-tenant use).
-  // Tenant Admin: plain /field-assessment — their tenant context comes from canonical
-  // session authority on the server, not from a browser-visible query parameter.
-  const assessmentUrl = isPlatformAdmin
-    ? `/field-assessment?tenant_id=${tenant.tenant_id}`
-    : '/field-assessment';
+  // tenant_id must be in the URL for both authority classes.
+  // Without it the BFF /api/core/[...path] resolveAuthorizedTenant() falls through
+  // to CORE_TENANT_ID (operator tenant) — a cross-tenant data access violation for
+  // tenant admins whose card already only shows their own tenant (enforced by #704).
+  const assessmentUrl = `/field-assessment?tenant_id=${tenant.tenant_id}`;
   // Portal link only meaningful for Platform Admin (cross-tenant management).
   const portalBase = typeof window !== 'undefined' ? window.location.origin.replace('console.', 'app.') : '';
 
