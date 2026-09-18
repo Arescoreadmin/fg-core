@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccessConsoleRoute, isTenantAdminSession } from '@/lib/consoleAccess';
+import { canAccessConsoleRoute, isPlatformAdminSession } from '@/lib/consoleAccess';
 import { upsertTenantInRegistry, isRegistryConfigured, upsertTenantInUpstash } from '@/lib/tenant-registry';
 import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 import Redis from 'ioredis';
@@ -268,10 +268,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden', request_id: requestId }, { status: 403, headers: { 'x-request-id': requestId } });
   }
 
-  // Tenant creation is a Platform Admin operation only — tenant admins manage their
-  // own organisation but may never create new tenants (privilege escalation vector).
-  if (isTenantAdminSession(session)) {
-    logEvent('warn', 'provision.tenant_admin_denied', { request_id: requestId });
+  // Tenant creation is Platform Admin (Support/Administrator) only.
+  // Use an allowlist rather than a denylist so that any future CLIENT_ADMIN_ROLES
+  // expansion does not silently grant provisioning authority to new roles.
+  if (!isPlatformAdminSession(session)) {
+    logEvent('warn', 'provision.non_platform_admin_denied', { request_id: requestId });
     return NextResponse.json(
       { error: 'Forbidden', detail: 'Tenant creation requires Platform Admin authority.', request_id: requestId },
       { status: 403, headers: { 'x-request-id': requestId } },

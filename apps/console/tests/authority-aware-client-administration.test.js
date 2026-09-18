@@ -345,6 +345,39 @@ function test_platform_admin_roles_does_not_include_tenant_admin() {
   assert.ok(!PLATFORM_ADMIN_ROLES.includes('tenant_admin'), 'PLATFORM_ADMIN_ROLES must NOT include tenant_admin');
 }
 
+// P1 regression guard (Issue 1): CLIENT_ADMIN_ROLES must NOT include non-admin internal roles.
+// Before the fix, spreading INTERNAL_CONSOLE_ROLES gave Developer/Operator/FieldAssessor/etc.
+// access to the global registry via the platform_admin fallthrough.
+function test_client_admin_roles_does_not_include_developer() {
+  assert.ok(!CLIENT_ADMIN_ROLES.includes('Developer'), 'P1: CLIENT_ADMIN_ROLES must NOT include Developer');
+}
+
+function test_client_admin_roles_does_not_include_operator() {
+  assert.ok(!CLIENT_ADMIN_ROLES.includes('Operator'), 'P1: CLIENT_ADMIN_ROLES must NOT include Operator');
+}
+
+function test_client_admin_roles_does_not_include_field_assessor() {
+  assert.ok(!CLIENT_ADMIN_ROLES.includes('FieldAssessor'), 'P1: CLIENT_ADMIN_ROLES must NOT include FieldAssessor');
+}
+
+function test_internal_developer_cannot_access_admin_tenants_route() {
+  // P1 regression: Developer must not reach /admin/tenants after CLIENT_ADMIN_ROLES fix.
+  const session = makeInternalSession(); // role: Developer
+  assert.strictEqual(
+    canAccessConsoleRoute('/admin/tenants', session),
+    false,
+    'P1: Developer must not pass canAccessConsoleRoute for /admin/tenants',
+  );
+}
+
+function test_internal_developer_blocked_at_bff() {
+  // P1 regression: even if admitted, Developer must not fall through to global registry.
+  // resolveAuthorizedTenant mirrors /api/tenants; Developer is denied at canAccessConsoleRoute.
+  const session = makeInternalSession();
+  const result = resolveAuthorizedTenant(session, null);
+  assert.strictEqual(result.status, 403, 'P1: Developer must not receive global tenant registry');
+}
+
 // ─── Section 6: Route Audit Inventory ─────────────────────────────────────────
 
 const { CONSOLE_ROUTE_AUDITS } = require('../lib/consoleAccess');
@@ -410,6 +443,11 @@ const tests = [
   test_client_admin_roles_includes_administrator,
   test_client_admin_roles_includes_support,
   test_platform_admin_roles_does_not_include_tenant_admin,
+  test_client_admin_roles_does_not_include_developer,
+  test_client_admin_roles_does_not_include_operator,
+  test_client_admin_roles_does_not_include_field_assessor,
+  test_internal_developer_cannot_access_admin_tenants_route,
+  test_internal_developer_blocked_at_bff,
   test_clients_route_audience_is_tenant_admin_console,
   test_clients_route_allowed_roles_includes_tenant_admin,
   test_client_detail_route_tenant_scoped,

@@ -52,8 +52,10 @@ const CLIENT_CONSOLE_ALLOWED_ROLES = [...CLIENT_CONSOLE_ROLES, ...INTERNAL_CONSO
 const INTERNAL_ONLY_ROLES = [...INTERNAL_CONSOLE_ROLES];
 const SUPPORT_LIMITED_ROLES = ['Support', 'Administrator'];
 const PLATFORM_ADMIN_ROLES = ['Support', 'Administrator'];
-// CLIENT_ADMIN_ROLES: tenant_admin gets their own org workspace; all internal roles retain global access.
-const CLIENT_ADMIN_ROLES = ['tenant_admin', ...INTERNAL_CONSOLE_ROLES];
+// CLIENT_ADMIN_ROLES: tenant_admin gets their own org workspace; Platform Admin (Support/Administrator)
+// retains global access. Other internal roles (Developer, Auditor, etc.) are NOT admitted — this
+// preserves the pre-PR access boundary and prevents non-admin roles from reaching the global registry.
+const CLIENT_ADMIN_ROLES = ['tenant_admin', ...PLATFORM_ADMIN_ROLES];
 const TENANT_ADMIN_CONSOLE_ROLES = ['tenant_admin', 'client_remediation_owner', ...INTERNAL_CONSOLE_ROLES];
 
 function routeAudit({

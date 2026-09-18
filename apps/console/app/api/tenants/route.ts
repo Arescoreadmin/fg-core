@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccessConsoleRoute, getSessionClaims, isTenantAdminSession } from '@/lib/consoleAccess';
+import { canAccessConsoleRoute, getSessionClaims, isPlatformAdminSession, isTenantAdminSession } from '@/lib/consoleAccess';
 import { getTenantRegistry } from '@/lib/tenant-registry';
 
 export interface TenantEntry {
@@ -88,7 +88,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ tenants, authority: 'tenant_admin' });
   }
 
-  // PLATFORM ADMIN path: return full registry excluding the operator tenant.
+  // PLATFORM ADMIN path: defense-in-depth — require explicit Platform Admin authority
+  // before the global registry is touched. This catches any future CLIENT_ADMIN_ROLES
+  // drift that would otherwise let a non-admin internal session reach global data.
+  if (!isPlatformAdminSession(session)) {
+    console.warn(`[tenants] FORBIDDEN non-platform-admin-fallthrough request_id=${requestId}`);
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const operatorTenant = resolveConfiguredOperatorTenant(requestId);
   if (operatorTenant instanceof NextResponse) return operatorTenant;
 
