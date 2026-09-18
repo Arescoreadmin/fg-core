@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Building2, ExternalLink, Users, ShieldCheck, Plus } from 'lucide-react';
 
+type AuthorityClass = 'platform_admin' | 'tenant_admin' | null;
+
 interface TenantEntry {
   tenant_id: string;
   label: string;
@@ -175,12 +177,16 @@ export default function ClientRosterPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
   const [regenLoading, setRegenLoading] = useState<string | null>(null);
+  const [authorityClass, setAuthorityClass] = useState<AuthorityClass>(null);
 
   function loadTenants() {
     setLoading(true);
     fetch('/api/tenants')
       .then(r => r.json())
-      .then(d => setTenants(d.tenants ?? []))
+      .then(d => {
+        setTenants(d.tenants ?? []);
+        setAuthorityClass(d.authority ?? null);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }
@@ -220,6 +226,38 @@ export default function ClientRosterPage() {
     }
   }
 
+  const isPlatformAdmin = authorityClass === 'platform_admin';
+
+  // Tenant Admin workspace: own organisation only, no global list, no tenant creation.
+  if (!loading && authorityClass === 'tenant_admin') {
+    return (
+      <main style={s.main}>
+        <div style={s.header}>
+          <div>
+            <h1 style={s.title}>Client Administration</h1>
+            <p style={s.subtitle}>Your organisation workspace. Manage users and portal access for your tenant.</p>
+          </div>
+        </div>
+
+        {error && <div style={s.errorBanner}>{error}</div>}
+
+        <div style={s.grid}>
+          {tenants.map(t => (
+            <TenantCard
+              key={t.tenant_id}
+              tenant={t}
+              isPlatformAdmin={false}
+              onRegenKey={() => {}}
+            />
+          ))}
+        </div>
+
+        {provisionResult && <ProvisionResultModal result={provisionResult} onClose={() => setProvisionResult(null)} />}
+      </main>
+    );
+  }
+
+  // Platform Admin workspace: full global client portfolio with create + regen capabilities.
   return (
     <main style={s.main}>
       <div style={s.header}>
@@ -227,10 +265,12 @@ export default function ClientRosterPage() {
           <h1 style={s.title}>Clients</h1>
           <p style={s.subtitle}>All tenants accessible from this console. Select a client to manage their users and portal access.</p>
         </div>
-        <button style={s.primaryBtn} onClick={() => setShowCreate(true)}>
-          <Plus size={14} style={{ marginRight: 5 }} />
-          Create client
-        </button>
+        {isPlatformAdmin && (
+          <button style={s.primaryBtn} onClick={() => setShowCreate(true)}>
+            <Plus size={14} style={{ marginRight: 5 }} />
+            Create client
+          </button>
+        )}
       </div>
 
       {error && <div style={s.errorBanner}>{error}</div>}
@@ -243,6 +283,7 @@ export default function ClientRosterPage() {
             <TenantCard
               key={t.tenant_id}
               tenant={t}
+              isPlatformAdmin={isPlatformAdmin}
               onRegenKey={regenLoading ? () => {} : handleRegenKey}
             />
           ))}
@@ -250,12 +291,14 @@ export default function ClientRosterPage() {
       )}
       {regenLoading && <p style={s.muted}>Regenerating key for {regenLoading}…</p>}
 
-      <div style={s.hint}>
-        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-          Click <strong>Create client</strong> to provision a new tenant — it registers immediately with no Vercel redeployment required.
-          Use <strong>Regen key</strong> on any card to rotate a compromised or stale API key.
-        </p>
-      </div>
+      {isPlatformAdmin && (
+        <div style={s.hint}>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+            Click <strong>Create client</strong> to provision a new tenant — it registers immediately with no Vercel redeployment required.
+            Use <strong>Regen key</strong> on any card to rotate a compromised or stale API key.
+          </p>
+        </div>
+      )}
 
       {showCreate && <CreateClientModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />}
       {provisionResult && <ProvisionResultModal result={provisionResult} onClose={() => setProvisionResult(null)} />}
@@ -263,7 +306,7 @@ export default function ClientRosterPage() {
   );
 }
 
-function TenantCard({ tenant, onRegenKey }: { tenant: TenantEntry; onRegenKey: (t: TenantEntry) => void }) {
+function TenantCard({ tenant, isPlatformAdmin, onRegenKey }: { tenant: TenantEntry; isPlatformAdmin: boolean; onRegenKey: (t: TenantEntry) => void }) {
   const sectorIcon = tenant.tenant_id.includes('bank') ? '🏦'
     : tenant.tenant_id.includes('health') ? '🏥'
     : tenant.tenant_id.includes('law') ? '⚖️'
@@ -278,7 +321,8 @@ function TenantCard({ tenant, onRegenKey }: { tenant: TenantEntry; onRegenKey: (
         <span style={s.icon}>{sectorIcon}</span>
         <div style={{ flex: 1 }}>
           <div style={s.cardTitle}>{tenant.label}</div>
-          <code style={s.cardId}>{tenant.tenant_id}</code>
+          {/* Only expose raw tenant_id to Platform Admins — tenant admins need no oracle */}
+          {isPlatformAdmin && <code style={s.cardId}>{tenant.tenant_id}</code>}
         </div>
         {tenant.is_default && <span style={s.defaultBadge}>default</span>}
       </div>
@@ -292,7 +336,7 @@ function TenantCard({ tenant, onRegenKey }: { tenant: TenantEntry; onRegenKey: (
         <a href={`${portalBase}/login?tenant_id=${tenant.tenant_id}`} target="_blank" rel="noopener noreferrer" style={s.externalBtn}>
           <ExternalLink size={12} style={{ marginRight: 4 }} />Portal
         </a>
-        {!tenant.is_default && (
+        {isPlatformAdmin && !tenant.is_default && (
           <button style={s.regenBtn} onClick={() => onRegenKey(tenant)} title="Generate a new API key for this tenant">
             Regen key
           </button>

@@ -51,6 +51,9 @@ const TENANT_CLAIM_KEYS = [
 const CLIENT_CONSOLE_ALLOWED_ROLES = [...CLIENT_CONSOLE_ROLES, ...INTERNAL_CONSOLE_ROLES];
 const INTERNAL_ONLY_ROLES = [...INTERNAL_CONSOLE_ROLES];
 const SUPPORT_LIMITED_ROLES = ['Support', 'Administrator'];
+const PLATFORM_ADMIN_ROLES = ['Support', 'Administrator'];
+// CLIENT_ADMIN_ROLES: tenant_admin gets their own org workspace; all internal roles retain global access.
+const CLIENT_ADMIN_ROLES = ['tenant_admin', ...INTERNAL_CONSOLE_ROLES];
 const TENANT_ADMIN_CONSOLE_ROLES = ['tenant_admin', 'client_remediation_owner', ...INTERNAL_CONSOLE_ROLES];
 
 function routeAudit({
@@ -415,8 +418,10 @@ const CONSOLE_ROUTE_AUDITS = [
     id: 'clients',
     title: 'Clients',
     routePattern: '/admin/tenants',
-    audience: 'support_limited',
-    allowedRoles: SUPPORT_LIMITED_ROLES,
+    // Platform Admin sees global client portfolio; Tenant Admin sees own org workspace.
+    // Server-side authority branching in /api/tenants enforces the boundary.
+    audience: 'tenant_admin_console',
+    allowedRoles: CLIENT_ADMIN_ROLES,
     backendApis: ['/api/tenants', '/api/admin/provision-tenant'],
     tenantScoped: false,
     clientSafe: false,
@@ -428,10 +433,10 @@ const CONSOLE_ROUTE_AUDITS = [
     id: 'client-detail',
     title: 'Client Detail',
     routePattern: '/admin/tenants/[tenantId]',
-    audience: 'support_limited',
-    allowedRoles: SUPPORT_LIMITED_ROLES,
+    audience: 'tenant_admin_console',
+    allowedRoles: CLIENT_ADMIN_ROLES,
     backendApis: ['/api/email', '/api/core/admin/identity/*'],
-    tenantScoped: false,
+    tenantScoped: true,
     clientSafe: false,
     exposesInternalMetadata: true,
     readOnly: false,
@@ -918,19 +923,41 @@ function getSessionClaims(source) {
   };
 }
 
+// isPlatformAdminSession: true only for internal_console sessions with Administrator or Support role.
+// Used by BFF routes that must distinguish global Platform Admin from tenant-scoped Tenant Admin.
+function isPlatformAdminSession(source) {
+  const principal = resolveConsolePrincipal(source);
+  if (principal.experienceClass !== 'internal_console') return false;
+  return principal.roles.some((r) => PLATFORM_ADMIN_ROLES.includes(r));
+}
+
+// isTenantAdminSession: true only for console_enabled_client sessions with the tenant_admin role.
+// A tenant admin is always bound to exactly one tenantId (their own organisation).
+function isTenantAdminSession(source) {
+  const principal = resolveConsolePrincipal(source);
+  return (
+    principal.experienceClass === 'console_enabled_client' &&
+    principal.roles.includes('tenant_admin')
+  );
+}
+
 module.exports = {
+  CLIENT_ADMIN_ROLES,
   CLIENT_CONSOLE_ROLES,
   CLIENT_MUTATION_ROLES,
   CONSOLE_ROUTE_AUDITS,
   CORE_API_POLICIES,
   INTERNAL_CONSOLE_ROLES,
   LEGACY_INTERNAL_ROLE,
+  PLATFORM_ADMIN_ROLES,
   canAccessConsoleRoute,
   canAccessCoreApiPath,
   getConsoleRouteAudit,
   getCoreApiPolicy,
   getNavigationItemsForPrincipal,
   getSessionClaims,
+  isPlatformAdminSession,
+  isTenantAdminSession,
   matchRoutePattern,
   normalizePathname,
   resolveConsolePrincipal,

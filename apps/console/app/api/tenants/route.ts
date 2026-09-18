@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccessConsoleRoute } from '@/lib/consoleAccess';
+import { canAccessConsoleRoute, getSessionClaims, isTenantAdminSession } from '@/lib/consoleAccess';
 import { getTenantRegistry } from '@/lib/tenant-registry';
 
 export interface TenantEntry {
@@ -67,6 +67,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // TENANT-ADMIN authority path: tenant_admin may only see their own tenant.
+  // The session tenantId is the canonical authority — it was proved by Core
+  // during authentication (DB-canonical membership + active state).
+  // We do NOT retrieve the global registry and then filter in the browser —
+  // the tenant_admin path never loads global tenant data at all.
+  if (isTenantAdminSession(session)) {
+    const claims = getSessionClaims(session);
+    const tenantId = claims.tenantId;
+    if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
+      // Tenant admin without a bound tenant ID — fail closed.
+      console.warn(`[tenants] TENANT_CONTEXT_MISSING tenant_admin has no session tenantId request_id=${requestId}`);
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    // Return only the session-bound tenant. Label is derived from the ID
+    // (the registry is Platform Admin infrastructure; tenant admins do not
+    // have access to registry metadata about other tenants).
+    const tenantLabel = tenantId.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const tenants: TenantEntry[] = [{ tenant_id: tenantId, label: tenantLabel, is_default: false }];
+    return NextResponse.json({ tenants, authority: 'tenant_admin' });
+  }
+
+  // PLATFORM ADMIN path: return full registry excluding the operator tenant.
   const operatorTenant = resolveConfiguredOperatorTenant(requestId);
   if (operatorTenant instanceof NextResponse) return operatorTenant;
 
@@ -77,5 +99,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter(([id]) => id !== operatorTenantId)
     .map(([id, rec]) => ({ tenant_id: id, label: rec.label, is_default: false }));
 
-  return NextResponse.json({ tenants });
+  return NextResponse.json({ tenants, authority: 'platform_admin' });
 }

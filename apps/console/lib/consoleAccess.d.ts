@@ -42,12 +42,14 @@ export interface CoreApiPolicy {
   mutationRoles?: string[];
 }
 
+export const CLIENT_ADMIN_ROLES: string[];
 export const CLIENT_CONSOLE_ROLES: string[];
 export const CLIENT_MUTATION_ROLES: string[];
 export const CONSOLE_ROUTE_AUDITS: ConsoleRouteAudit[];
 export const CORE_API_POLICIES: CoreApiPolicy[];
 export const INTERNAL_CONSOLE_ROLES: string[];
 export const LEGACY_INTERNAL_ROLE: string;
+export const PLATFORM_ADMIN_ROLES: string[];
 
 export function canAccessConsoleRoute(pathname: string, source: unknown): boolean;
 export function canAccessCoreApiPath(
@@ -66,6 +68,8 @@ export function getSessionClaims(source: unknown): {
   tenantId: string | null;
   experienceClass: string;
 };
+export function isPlatformAdminSession(source: unknown): boolean;
+export function isTenantAdminSession(source: unknown): boolean;
 export function matchRoutePattern(pattern: string, pathname: string): boolean;
 export function normalizePathname(pathname: string): string;
 export function resolveConsolePrincipal(source: unknown): ConsolePrincipal;
