@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import type { Session } from 'next-auth';
 import { createHmac } from 'crypto';
-import { canAccessCoreApiPath, getSessionClaims } from '@/lib/consoleAccess';
+import {
+  canAccessCoreApiPath,
+  isPlatformAdminSession,
+  isTenantAdminSession,
+  resolveConsolePrincipal,
+  resolveTenantRequestAuthority,
+} from '@/lib/consoleAccess';
 import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 import { getTenantApiKey } from '@/lib/tenant-registry';
 import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
@@ -347,8 +353,13 @@ function isTenantAdminCorePath(path: string[]): boolean {
   );
 }
 
-function isOperatorDefaultTenantAdminCorePath(path: string[]): boolean {
-  return path.join('/').startsWith('workforce/users');
+function isPlatformAdminOnlyTenantPath(path: string[]): boolean {
+  return (
+    path.length >= 4 &&
+    path[0] === 'admin' &&
+    path[1] === 'tenants' &&
+    (path[3] === 'invite-initial-admin' || path[3] === 'bootstrap-admin')
+  );
 }
 
 function resolveAuthorizedTenant(
@@ -358,49 +369,35 @@ function resolveAuthorizedTenant(
   requestId: string,
 ): { tenantId: string } | NextResponse {
   const url = new URL(request.url);
-  const queryTenantId = url.searchParams.get('tenant_id');
   const pathTenantId = tenantIdFromCorePath(path);
-  const raw = queryTenantId ?? pathTenantId;
+  const resolution = resolveTenantRequestAuthority(session, {
+    queryTenantIds: url.searchParams.getAll('tenant_id'),
+    pathTenantId,
+    // Only the explicitly classified internal_console authority may select the
+    // configured operator tenant. Human client sessions derive their canonical
+    // session tenant when context is absent and can never enter this fallback.
+    allowOperatorFallback: true,
+  });
 
-  if (queryTenantId !== null && pathTenantId !== null && queryTenantId.trim() !== pathTenantId.trim()) {
-    return jsonError('Forbidden: tenant_id does not match route tenant', 403, requestId);
-  }
-
-  if (raw === null && isTenantAdminCorePath(path)) {
-    const claims = getSessionClaims(session);
-    if (
-      isOperatorDefaultTenantAdminCorePath(path) &&
-      claims.experienceClass === 'internal_console'
-    ) {
-      return resolveConfiguredOperatorTenant(requestId);
-    }
-    return jsonError('tenant_id is required for tenant-admin Core routes', 422, requestId);
-  }
-
-  if (raw === null) {
-    return resolveConfiguredOperatorTenant(requestId);
-  }
-
-  const tenantId = raw.trim();
-  if (!TENANT_ID_RE.test(tenantId)) {
-    return jsonError(
-      'tenant_id is malformed — must be 1–128 characters: letters, numbers, hyphens, underscores',
-      422,
-      requestId,
+  if (!resolution.ok) {
+    return NextResponse.json(
+      {
+        error: resolution.code,
+        detail: resolution.message,
+        request_id: requestId,
+      },
+      {
+        status: resolution.status,
+        headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId },
+      },
     );
   }
 
-  const claims = getSessionClaims(session);
-
-  if (claims.experienceClass === 'internal_console') {
-    return { tenantId };
+  if (resolution.operatorFallback) {
+    return resolveConfiguredOperatorTenant(requestId);
   }
 
-  if (claims.experienceClass === 'console_enabled_client' && claims.tenantId === tenantId) {
-    return { tenantId };
-  }
-
-  return jsonError('Forbidden: not authorized to act on behalf of this tenant', 403, requestId);
+  return { tenantId: resolution.tenantId as string };
 }
 
 type CoreAuthResolution =
@@ -538,9 +535,11 @@ function isAlignmentArtifact(path: string[]) {
   return path.length === 1 && path[0] === 'alignment-artifact';
 }
 
-function buildAdminUrl(path: string[], request: NextRequest): string {
+function buildAdminUrl(path: string[], request: NextRequest, tenantId: string): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
+  query.delete('tenant_id');
+  if (tenantId) query.set('tenant_id', tenantId);
   const qs = query.toString();
   return `${CORE_API_URL}/${path.join('/')}${qs ? `?${qs}` : ''}`;
 }
@@ -576,7 +575,7 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 type DelegationProof = {
-  version: 'v1' | 'v2';
+  version: 'v1' | 'v2' | 'v3';
   issuedAt: number;
   expiresAt: number;
   proof: string;
@@ -589,18 +588,28 @@ function createDelegationProof(
   method: string,
   canonicalPath: string,
   actorSubject?: string,
+  actorAuthority?: 'tenant_human' | 'internal_console',
 ): DelegationProof {
   const issuedAt = Math.floor(Date.now() / 1000);
   const expiresAt = issuedAt + 60;
-  const version = actorSubject ? 'v2' : 'v1';
-  const canonical = actorSubject
+  const version = actorSubject && actorAuthority ? 'v3' : actorSubject ? 'v2' : 'v1';
+  const canonical = version === 'v3'
+    ? `v3\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}\n${actorAuthority}`
+    : actorSubject
     ? `v2\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}`
     : `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
   const proof = createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
   return { version, issuedAt, expiresAt, proof };
 }
 
-async function proxyToCore(request: NextRequest, path: string[], requestId: string, tenantId: string, namedUserSub?: string): Promise<NextResponse> {
+async function proxyToCore(
+  request: NextRequest,
+  path: string[],
+  requestId: string,
+  tenantId: string,
+  namedUserSub?: string,
+  actorAuthority?: 'tenant_human' | 'internal_console',
+): Promise<NextResponse> {
   const isTenantAdminPath = isTenantAdminCorePath(path);
   const isInvitationPath = isInvitationAcceptancePath(path);
 
@@ -613,6 +622,9 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
 
   if (isTenantAdminPath) {
     if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
+    if (!namedUserSub || !actorAuthority) {
+      return jsonError('Delegated named actor authority required', 403, requestId);
+    }
     // P-113.6: In CANONICAL mode, X-API-Key carries the platform_admin credential
     // (FG_PLATFORM_ADMIN_KEY) and X-FG-Internal-Token carries the gateway secret
     // (FG_INTERNAL_GATEWAY_SECRET).  In COMPATIBILITY mode both headers carry the
@@ -627,7 +639,8 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     // Forward the named user's Auth0 subject so Core can satisfy require_tenant_admin().
     // The ADMIN_GATEWAY_TOKEN + delegation proof establish machine-level authority;
     // this header resolves which named user is acting for DB-canonical checks.
-    if (namedUserSub) headers.set('X-FG-Named-User-Sub', namedUserSub);
+    headers.set('X-FG-Named-User-Sub', namedUserSub);
+    headers.set('X-FG-Actor-Authority', actorAuthority);
     if (DELEGATION_SECRET_CURRENT) {
       const canonicalPath = '/' + path.join('/');
       const delegation = createDelegationProof(
@@ -637,6 +650,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
         request.method,
         canonicalPath,
         namedUserSub,
+        actorAuthority,
       );
       headers.set('X-FG-Delegation-Version', delegation.version);
       headers.set('X-FG-Delegation-Issued-At', String(delegation.issuedAt));
@@ -731,7 +745,11 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
       } else if (contentType?.toLowerCase().includes('application/json')) {
         const payload = await request.json();
         if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-          const { tenant_id: _ignoredTenantId, ...safePayload } = payload as Record<string, unknown>;
+          const {
+            tenant_id: _ignoredTenantId,
+            tenantId: _ignoredCamelTenantId,
+            ...safePayload
+          } = payload as Record<string, unknown>;
           init.body = JSON.stringify(safePayload);
         } else {
           init.body = JSON.stringify(payload);
@@ -742,7 +760,9 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
     }
   }
 
-  const target = isTenantAdminPath ? buildAdminUrl(path, request) : buildCoreUrl(path, request, tenantId);
+  const target = isTenantAdminPath
+    ? buildAdminUrl(path, request, tenantId)
+    : buildCoreUrl(path, request, tenantId);
   console.info(
     `[core-proxy] request_id=${requestId} method=${request.method} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'}`,
   );
@@ -888,6 +908,26 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     return jsonError('Forbidden for this console role', 403, requestId);
   }
 
+  // Internal is not synonymous with Platform Admin. Gateway-backed human
+  // administration is limited to an own-tenant Tenant Admin or the canonical
+  // Support/Administrator allowlist. Developer, Operator, FieldAssessor, and
+  // future internal roles must not inherit the gateway credential's authority.
+  if (
+    isTenantAdminCorePath(path) &&
+    !isTenantAdminSession(session) &&
+    !isPlatformAdminSession(session)
+  ) {
+    return jsonError('Tenant Admin or Platform Admin authority required', 403, requestId);
+  }
+
+  // Platform bootstrap/initial-admin operations are never tenant-admin
+  // capabilities. The broad admin/tenants policy admits the own-tenant
+  // administration families, so these two hidden subroutes need an explicit
+  // positive Platform Admin check before gateway authority is attached.
+  if (isPlatformAdminOnlyTenantPath(path) && !isPlatformAdminSession(session)) {
+    return jsonError('Platform Admin authority required', 403, requestId);
+  }
+
   if (!path.length) return jsonError('Missing path', 400, requestId);
   if (isAlignmentArtifact(path) && request.method === 'GET') {
     const rate = await enforceRateLimit(
@@ -898,6 +938,16 @@ async function handle(request: NextRequest, { params }: { params: { path: string
     );
     if (rate) return rate;
     return getAlignmentArtifact(requestId);
+  }
+
+  // Invitation authority is the signed one-time token plus the authenticated
+  // named user. It is tenant-independent at the BFF and must never borrow the
+  // configured operator tenant merely because no tenant_id is present.
+  if (isInvitationAcceptancePath(path)) {
+    const rate = await enforceRateLimit(request, requestId, routeGroup, 'invitation');
+    if (rate) return rate;
+    const namedUserSub = (session.user as { id?: string })?.id ?? undefined;
+    return proxyToCore(request, path, requestId, '', namedUserSub);
   }
   const tenantResolution = resolveAuthorizedTenant(request, path, session, requestId);
   if (tenantResolution instanceof NextResponse) return tenantResolution;
@@ -919,7 +969,13 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   }
 
   const namedUserSub = (session.user as { id?: string })?.id ?? undefined;
-  return proxyToCore(request, path, requestId, tenantId, namedUserSub);
+  const experienceClass = resolveConsolePrincipal(session).experienceClass;
+  const actorAuthority = experienceClass === 'console_enabled_client'
+    ? 'tenant_human'
+    : experienceClass === 'internal_console'
+      ? 'internal_console'
+      : undefined;
+  return proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority);
 }
 
 export async function GET(request: NextRequest, context: { params: { path: string[] } }) {

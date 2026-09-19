@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { put } from '@vercel/blob';
 import { auth } from '@/auth';
+import { canAccessConsoleRoute } from '@/lib/consoleAccess';
+import { resolveTenantCredentialForConsoleRequest } from '@/lib/tenantRequestAuthority';
 
 // Whisper on long recordings can take 10-20 s; default is 10 s on Vercel Hobby.
 export const maxDuration = 60;
@@ -9,8 +11,6 @@ export const maxDuration = 60;
 const MAX_BYTES = 25 * 1024 * 1024; // Whisper hard limit is 25 MB
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
-const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 
 // Opaque 12-char hex derived from a string — used to namespace blob paths
 // without exposing raw user identifiers.
@@ -74,21 +74,22 @@ ${transcript.slice(0, 3000)}
  */
 async function registerArtifact(opts: {
   engagementId: string;
+  tenantId: string;
+  apiKey: string;
   storageKey: string;
   sha256: string | null;
   sizeBytes: number;
   contentType: string;
 }): Promise<string | null> {
-  if (!CORE_API_KEY || !CORE_TENANT_ID) return null;
-
   try {
     const res = await fetch(
-      `${CORE_API_URL}/field-assessment/engagements/${encodeURIComponent(opts.engagementId)}/artifacts?tenant_id=${encodeURIComponent(CORE_TENANT_ID)}`,
+      `${CORE_API_URL}/field-assessment/engagements/${encodeURIComponent(opts.engagementId)}/artifacts?tenant_id=${encodeURIComponent(opts.tenantId)}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': CORE_API_KEY,
+          'X-API-Key': opts.apiKey,
+          'X-Tenant-ID': opts.tenantId,
         },
         body: JSON.stringify({
           artifact_type: 'audio',
@@ -116,6 +117,20 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!canAccessConsoleRoute('/field-assessment', session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const tenantAuthority = await resolveTenantCredentialForConsoleRequest(
+    session,
+    req.nextUrl.searchParams.getAll('tenant_id'),
+  );
+  if (!tenantAuthority.ok) {
+    return NextResponse.json(
+      { error: tenantAuthority.code },
+      { status: tenantAuthority.status, headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 
   let form: FormData;
@@ -188,6 +203,8 @@ export async function POST(req: NextRequest) {
   if (blobUrl && typeof engagementId === 'string' && engagementId !== 'unknown') {
     artifact_id = await registerArtifact({
       engagementId,
+      tenantId: tenantAuthority.tenantId,
+      apiKey: tenantAuthority.apiKey,
       storageKey: blobUrl,
       sha256: typeof audioHash === 'string' ? audioHash : null,
       sizeBytes: audioFile.size,

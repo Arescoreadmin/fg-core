@@ -727,8 +727,9 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
     """Verify the short-lived HMAC delegation proof from the admin gateway BFF.
 
     Binds: version, request_id, tenant_id, HTTP method, canonical path,
-    issued_at, expires_at. All six fields must match what Core independently
-    derives from the live request.
+    issued_at, and expires_at. Version 2 also binds the named actor subject;
+    version 3 binds both the named actor subject and authority class. Request
+    fields must match what Core independently derives from the live request.
 
     Non-prod bypass: if FG_GATEWAY_DELEGATION_SECRET_CURRENT is not configured,
     the check is skipped in non-prod/non-strict environments so local dev works.
@@ -752,6 +753,7 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
 
     version = (request.headers.get("x-fg-delegation-version") or "").strip()
     actor_subject = (request.headers.get("x-fg-named-user-sub") or "").strip()
+    actor_authority = (request.headers.get("x-fg-actor-authority") or "").strip()
     issued_at_str = (request.headers.get("x-fg-delegation-issued-at") or "").strip()
     expires_at_str = (request.headers.get("x-fg-delegation-expires-at") or "").strip()
     proof = (request.headers.get("x-fg-delegation-proof") or "").strip().lower()
@@ -766,7 +768,7 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
             detail=redact_detail("delegation proof required", generic="forbidden"),
         )
 
-    if version not in {"v1", "v2"}:
+    if version not in {"v1", "v2", "v3"}:
         log.warning("delegation_proof.unknown_version", extra={"version": version})
         raise HTTPException(
             status_code=403,
@@ -825,15 +827,27 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
     method = (request.method or "").upper()
     path = str(request.url.path) if request.url else ""
 
-    if version == "v2" and not actor_subject:
+    if version in {"v2", "v3"} and not actor_subject:
         raise HTTPException(
             status_code=403,
             detail=redact_detail("delegated actor required", generic="forbidden"),
         )
 
+    if version == "v3" and actor_authority not in {
+        "tenant_human",
+        "internal_console",
+    }:
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail(
+                "delegated actor authority required", generic="forbidden"
+            ),
+        )
+
     canonical = (
         f"{version}\n{req_id}\n{tenant_id}\n{method}\n{path}\n{issued_at}\n{expires_at}"
-        + (f"\n{actor_subject}" if version == "v2" else "")
+        + (f"\n{actor_subject}" if version in {"v2", "v3"} else "")
+        + (f"\n{actor_authority}" if version == "v3" else "")
     )
 
     for secret in secrets:
@@ -841,8 +855,10 @@ def _verify_delegation_proof(request: Request, tenant_id: str) -> None:
             secret.encode(), canonical.encode(), hashlib.sha256
         ).hexdigest()
         if hmac.compare_digest(expected, proof):
-            if version == "v2":
+            if version in {"v2", "v3"}:
                 request.state._delegated_actor_subject = actor_subject
+            if version == "v3":
+                request.state._delegated_actor_authority = actor_authority
             return
 
     log.warning(
@@ -909,6 +925,86 @@ def _verify_admin_gateway_tenant(tenant_id: str) -> None:
                 f"tenant {tenant_id} lifecycle={record.lifecycle_state}",
                 generic="forbidden",
             ),
+        )
+
+
+def _verify_delegated_tenant_human_authority(request: Request, tenant_id: str) -> None:
+    """Require a unique active canonical tenant_admin for tenant-human proofs."""
+    authority = (
+        getattr(request.state, "_delegated_actor_authority", None) or ""
+    ).strip()
+    if authority != "tenant_human":
+        return
+
+    subject = (getattr(request.state, "_delegated_actor_subject", None) or "").strip()
+    if not subject:
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("tenant authority denied", generic="forbidden"),
+        )
+
+    try:
+        from api.db import get_engine as _get_engine  # noqa: PLC0415
+        from sqlalchemy import text as _text  # noqa: PLC0415
+
+        engine = _get_engine()
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    _text("SELECT pg_catalog.set_config('app.tenant_id', :tid, true)"),
+                    {"tid": tenant_id},
+                )
+            rows = conn.execute(
+                _text(
+                    """
+                    SELECT tu.id, tu.role, tu.active,
+                           tu.identity_binding_status, tu.principal_id,
+                           p.lifecycle_state AS principal_lifecycle_state
+                    FROM tenant_users AS tu
+                    JOIN fg_principals AS p ON p.id = tu.principal_id
+                    WHERE tu.tenant_id = :tid
+                      AND tu.identity_subject = :subject
+                    LIMIT 2
+                    """
+                ),
+                {"tid": tenant_id, "subject": subject},
+            ).fetchall()
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception(
+            "delegated_tenant_human.authority_lookup_failed",
+            extra={"tenant_id": tenant_id},
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=redact_detail(
+                "tenant authority unavailable", generic="service unavailable"
+            ),
+        )
+
+    valid = False
+    if len(rows) == 1:
+        row = rows[0]._mapping
+        valid = (
+            str(row["role"]) == "tenant_admin"
+            and bool(row["active"])
+            and str(row["identity_binding_status"]) == "bound"
+            and bool(row["principal_id"])
+            and str(row["principal_lifecycle_state"]) == "active"
+        )
+    if not valid:
+        log.info(
+            "delegated_tenant_human.authority_denied",
+            extra={
+                "tenant_id": tenant_id,
+                "actor_subject_prefix": subject[:16],
+                "membership_rows": len(rows),
+            },
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=redact_detail("tenant authority denied", generic="forbidden"),
         )
 
 
@@ -1029,6 +1125,7 @@ def bind_tenant_id(
                 detail=redact_detail("invalid tenant_id", generic="invalid request"),
             )
         _verify_delegation_proof(request, requested)
+        _verify_delegated_tenant_human_authority(request, requested)
         _verify_admin_gateway_tenant(requested)
         request.state.tenant_id = requested
         request.state.tenant_is_key_bound = True

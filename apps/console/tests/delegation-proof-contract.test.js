@@ -28,9 +28,11 @@ const GOLDEN_EXP = 1786992060;
 // If you change the canonical format, update BOTH implementations and this pin.
 const GOLDEN_DIGEST = '3a46a692f025f3a8a968c59ea1dc45f90eb155e916235b651260c1c26e0b3b33';
 
-function computeProof(secret, requestId, tenantId, method, canonicalPath, issuedAt, expiresAt, actorSubject) {
-  const version = actorSubject ? 'v2' : 'v1';
-  const canonical = actorSubject
+function computeProof(secret, requestId, tenantId, method, canonicalPath, issuedAt, expiresAt, actorSubject, actorAuthority) {
+  const version = actorSubject && actorAuthority ? 'v3' : actorSubject ? 'v2' : 'v1';
+  const canonical = version === 'v3'
+    ? `v3\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}\n${actorAuthority}`
+    : actorSubject
     ? `v2\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}\n${actorSubject}`
     : `v1\n${requestId}\n${tenantId}\n${method.toUpperCase()}\n${canonicalPath}\n${issuedAt}\n${expiresAt}`;
   return createHmac('sha256', secret).update(canonical, 'utf8').digest('hex');
@@ -73,10 +75,17 @@ test('actor-bound v2 proof changes when the actor changes', () => {
   assert.notStrictEqual(alice, mallory);
 });
 
+test('authority-bound v3 proof changes when the authority class changes', () => {
+  const tenantHuman = computeProof(GOLDEN_SECRET, GOLDEN_REQUEST_ID, GOLDEN_TENANT_ID, GOLDEN_METHOD, GOLDEN_PATH, GOLDEN_IAT, GOLDEN_EXP, 'auth0|alice', 'tenant_human');
+  const internal = computeProof(GOLDEN_SECRET, GOLDEN_REQUEST_ID, GOLDEN_TENANT_ID, GOLDEN_METHOD, GOLDEN_PATH, GOLDEN_IAT, GOLDEN_EXP, 'auth0|alice', 'internal_console');
+  assert.notStrictEqual(tenantHuman, internal);
+});
+
 test('route binds named actor into delegation proof', () => {
   const src = readRoute();
   assert.match(src, /canonicalPath,\n        namedUserSub,/);
-  assert.match(src, /actorSubject \? 'v2' : 'v1'/);
+  assert.match(src, /actorSubject && actorAuthority \? 'v3'/);
+  assert.match(src, /headers\.set\('X-FG-Actor-Authority', actorAuthority\)/);
 });
 
 test('changing tenant_id changes the digest', () => {

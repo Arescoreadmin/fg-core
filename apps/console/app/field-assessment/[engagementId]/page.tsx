@@ -97,18 +97,20 @@ function formatDate(iso: string) {
 function extractProxyAudioUrl(
   payload: Record<string, unknown>,
   engagementId: string,
+  tenantId?: string,
 ): string | null {
   const artifactId = payload['_audio_artifact_id'];
   if (typeof artifactId === 'string' && artifactId.length > 0) {
-    return `/api/field-assessment/audio-url?artifact_id=${encodeURIComponent(artifactId)}&engagement_id=${encodeURIComponent(engagementId)}`;
+    const tenantQuery = tenantId ? `&tenant_id=${encodeURIComponent(tenantId)}` : '';
+    return `/api/field-assessment/audio-url?artifact_id=${encodeURIComponent(artifactId)}&engagement_id=${encodeURIComponent(engagementId)}${tenantQuery}`;
   }
   // Legacy observations stored _audio_url directly. The proxy no longer accepts
   // raw blob URLs — audio will be absent for these records until re-recorded.
   return null;
 }
 
-function AuditEventModal({ event, engagementId, onClose }: { event: AuditEvent; engagementId: string; onClose: () => void }) {
-  const audioUrl = extractProxyAudioUrl(event.payload, engagementId);
+function AuditEventModal({ event, engagementId, tenantId, onClose }: { event: AuditEvent; engagementId: string; tenantId?: string; onClose: () => void }) {
+  const audioUrl = extractProxyAudioUrl(event.payload, engagementId, tenantId);
   const jsonText = JSON.stringify(event.payload, null, 2);
 
   useEffect(() => {
@@ -203,7 +205,8 @@ function EngagementWorkspaceContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  setFieldAssessmentTenant(searchParams.get('tenant_id') ?? undefined);
+  const tenantId = searchParams.get('tenant_id') ?? undefined;
+  setFieldAssessmentTenant(tenantId);
   const engagementId = params.engagementId as string;
 
   const [engagement, setEngagement] = useState<Engagement | null>(null);
@@ -1047,6 +1050,7 @@ function EngagementWorkspaceContent() {
                   <CardContent className="px-4 pb-4">
                     <InterviewForm
                       engagementId={engagementId}
+                      tenantId={tenantId}
                       prefill={interviewPrefill}
                       assessmentType={engagement?.assessment_type ?? undefined}
                       onSuccess={(obs) => {
@@ -1069,6 +1073,7 @@ function EngagementWorkspaceContent() {
                         const audioUrl = extractProxyAudioUrl(
                           (o.structured_evidence ?? {}) as Record<string, unknown>,
                           engagementId,
+                          tenantId,
                         );
                         const audioDuration = typeof o.structured_evidence?.['_audio_duration_sec'] === 'string' || typeof o.structured_evidence?.['_audio_duration_sec'] === 'number'
                           ? String(o.structured_evidence['_audio_duration_sec'])
@@ -1223,7 +1228,7 @@ function EngagementWorkspaceContent() {
                     {!auditLoading && auditEvents.length > 0 && (
                       <div className="space-y-2" aria-label="audit-event-list">
                         {auditEvents.map((ev) => {
-                          const audioUrl = extractProxyAudioUrl(ev.payload, engagementId);
+                          const audioUrl = extractProxyAudioUrl(ev.payload, engagementId, tenantId);
                           return (
                             <div
                               key={ev.id}
@@ -1262,6 +1267,7 @@ function EngagementWorkspaceContent() {
                   <AuditEventModal
                     event={selectedAuditEvent}
                     engagementId={engagementId}
+                    tenantId={tenantId}
                     onClose={() => setSelectedAuditEvent(null)}
                   />
                 )}

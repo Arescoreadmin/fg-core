@@ -53,10 +53,12 @@ type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
 
 function RecordingWidget({
   engagementId,
+  tenantId,
   onAudioReady,
   onUseTranscript,
 }: {
   engagementId: string;
+  tenantId?: string;
   onAudioReady: (info: { hash: string; sizeKb: number; durationSec: number; blobUrl: string; blob: Blob; artifactId: string | null }) => void;
   onUseTranscript: (text: string) => void;
 }) {
@@ -167,7 +169,8 @@ function RecordingWidget({
       form.append('audio', blobRef.current, 'interview.webm');
       form.append('engagement_id', engagementId);
       form.append('audio_hash', audioInfo.hash);
-      const res = await fetch('/api/field-assessment/transcribe', { method: 'POST', body: form });
+      const tenantQuery = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : '';
+      const res = await fetch(`/api/field-assessment/transcribe${tenantQuery}`, { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Transcription failed');
       const artifactId = (data.artifact_id as string | null) ?? null;
@@ -409,12 +412,13 @@ interface InterviewPrefill {
 
 interface Props {
   engagementId: string;
+  tenantId?: string;
   prefill?: InterviewPrefill | null;
   assessmentType?: string;
   onSuccess: (obs: Observation) => void;
 }
 
-export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess }: Props) {
+export function InterviewForm({ engagementId, tenantId, prefill, assessmentType, onSuccess }: Props) {
   const [interviewRole, setInterviewRole] = useState('');
   const [businessFunction, setBusinessFunction] = useState('');
   const [domain, setDomain] = useState<ObservationDomain | ''>('');
@@ -613,6 +617,7 @@ export function InterviewForm({ engagementId, prefill, assessmentType, onSuccess
       {/* Recording widget */}
       <RecordingWidget
         engagementId={engagementId}
+        tenantId={tenantId}
         onAudioReady={(info) => {
           if (info.hash) {
             setAudioArtifact({ hash: info.hash, sizeKb: info.sizeKb, durationSec: info.durationSec, artifactId: info.artifactId });

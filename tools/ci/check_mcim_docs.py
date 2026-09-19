@@ -258,6 +258,20 @@ ALLOWED_CHANGED_PATHS = {
     "tests/test_internal_platform_authority.py",
     "docs/ai/PR_FIX_LOG.md",
     "tools/ci/topology.sha256",
+    # PR 706 — Tenant Isolation & Console End-to-End Authority Proof
+    "apps/console/app/api/field-assessment/audio-url/route.ts",
+    "apps/console/app/api/field-assessment/transcribe/route.ts",
+    "apps/console/app/field-assessment/[engagementId]/page.tsx",
+    "apps/console/components/common/TenantSwitcher.tsx",
+    "apps/console/components/field-assessment/InterviewForm.tsx",
+    "apps/console/lib/consoleAccess.d.ts",
+    "apps/console/lib/consoleAccess.js",
+    "apps/console/lib/tenantRequestAuthority.ts",
+    "apps/console/tests/console-access-policy.test.js",
+    "apps/console/tests/tenant-isolation-e2e.test.js",
+    "apps/console/tests/workforce-invitation-authority.test.js",
+    "docs/security/TENANT_ISOLATION_E2E_001.md",
+    "tests/security/test_tenant_isolation_e2e.py",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.

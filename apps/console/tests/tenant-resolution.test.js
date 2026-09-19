@@ -65,7 +65,16 @@ function resolveConfiguredOperatorTenant(env = {}) {
 function resolveAuthorizedTenant(rawTenantIdParam, claims, env = {}) {
   // rawTenantIdParam: value from url.searchParams.get('tenant_id') — null if absent
   if (rawTenantIdParam === null) {
-    return resolveConfiguredOperatorTenant(env);
+    if (claims.experienceClass === 'console_enabled_client') {
+      if (!claims.tenantId || !TENANT_ID_RE.test(claims.tenantId)) {
+        return fakeJsonError('Canonical tenant authority missing', 403);
+      }
+      return { tenantId: claims.tenantId };
+    }
+    if (claims.experienceClass === 'internal_console') {
+      return resolveConfiguredOperatorTenant(env);
+    }
+    return fakeJsonError('Forbidden', 403);
   }
 
   const tenantId = rawTenantIdParam.trim();
@@ -147,17 +156,18 @@ test('unauthorized_client_cannot_access_other_tenant', () => {
 
 // ─── Test 4: missing_tenant_id_uses_operator_fallback ────────────────────────
 
-test('missing_tenant_id_uses_configured_operator_tenant', () => {
-  // null means the URL param was absent; this PR intentionally keeps operator fallback
-  // authority on CORE_TENANT_ID instead of switching to session tenant authority.
+test('missing_tenant_id_is_session_bound_for_client_and_operator_bound_for_internal', () => {
+  // Internal operator workflows retain the explicit configured fallback.
   const env = { NODE_ENV: 'production', CORE_TENANT_ID: 'fg-internal-operator' };
   const result = resolveAuthorizedTenant(null, internalClaims(), env);
   assert.ok(!result.__error, 'valid configured operator tenant must not error');
   assert.equal(result.tenantId, 'fg-internal-operator');
 
+  // P-62a: missing client context derives canonical session authority and can
+  // never inherit the stronger configured operator tenant.
   const result2 = resolveAuthorizedTenant(null, clientClaims('acme-corp'), env);
   assert.ok(!result2.__error);
-  assert.equal(result2.tenantId, 'fg-internal-operator');
+  assert.equal(result2.tenantId, 'acme-corp');
 });
 
 test('production_missing_core_tenant_id_fails_closed', () => {
@@ -266,7 +276,7 @@ test('tenant_resolution_runs_before_proxy_call', () => {
   assert.ok(handleFn, 'handle() must exist');
 
   const resolvePos = handleFn.indexOf('resolveAuthorizedTenant');
-  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)');
+  const tenantScopedProxyPos = handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority)');
   assert.ok(resolvePos > -1, 'resolveAuthorizedTenant must be called in handle()');
   assert.ok(tenantScopedProxyPos > -1, 'tenant-scoped proxyToCore call must be in handle()');
   assert.ok(resolvePos < tenantScopedProxyPos, 'resolveAuthorizedTenant must precede tenant-scoped proxyToCore');
@@ -302,10 +312,10 @@ test('production_core_tenant_id_default_is_rejected_before_core_fetch', () => {
   assert.match(routeSrc, /TENANT_CONTEXT_INVALID/);
   assert.match(routeSrc, /CORE_TENANT_ID=default/);
 
-  const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId, namedUserSub\);/)?.[0] ?? '';
+  const handleFn = routeSrc.match(/async function handle[\s\S]*?return proxyToCore\(request, path, requestId, tenantId, namedUserSub, actorAuthority\);/)?.[0] ?? '';
   assert.ok(handleFn, 'handle() must include tenant resolution and tenant-scoped proxy call');
   assert.ok(
-    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)'),
+    handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority)'),
     'tenant context validation must happen before tenant-scoped Core proxying',
   );
 });
@@ -384,16 +394,16 @@ test('customer tenant fixture is not normalized as operator authority', () => {
 
 test('route.ts contains no legacy_internal authority branch', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
+  const accessSrc = read('lib/consoleAccess.js');
   assert.doesNotMatch(
     routeSrc,
     /experienceClass === 'legacy_internal'/,
     'legacy_internal must not appear in any BFF authority check',
   );
-  assert.match(
-    routeSrc,
-    /experienceClass === 'internal_console'/,
-    'internal_console must remain as the authorized operator experienceClass',
-  );
+  assert.match(accessSrc, /experienceClass === 'internal_console'/,
+    'shared resolver must retain internal_console as the operator authority class');
+  assert.match(routeSrc, /resolveTenantRequestAuthority/,
+    'route must delegate to the production shared authority resolver');
 });
 
 test('stale legacy_internal session is denied any-tenant BFF authority', () => {

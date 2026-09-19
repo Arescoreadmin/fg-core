@@ -316,13 +316,14 @@ test('PR-SEC-003: isTenantAdminCorePath is narrowed to delegated subroutes only'
   assert.match(src, /path\.length\s*>=\s*4/);
 });
 
-test('source regression: field-assessment handlers rely on middleware guard for role enforcement', () => {
-  // These handlers only check session?.user — no role classification of their own.
-  // The middleware unsupported guard is what blocks no-role sessions.
-  // If the guard is ever removed, these handlers must add their own role checks.
+test('source regression: field-assessment handlers enforce role and tenant authority locally', () => {
+  // Middleware remains defense in depth; handlers independently classify role
+  // and resolve a tenant-bound credential before reaching Core.
   const audioUrl = read('app/api/field-assessment/audio-url/route.ts');
   const transcribe = read('app/api/field-assessment/transcribe/route.ts');
-  assert.doesNotMatch(audioUrl, /canAccessConsoleRoute|canAccessCoreApiPath|resolveConsolePrincipal/);
-  assert.doesNotMatch(transcribe, /canAccessConsoleRoute|canAccessCoreApiPath|resolveConsolePrincipal/);
+  assert.match(audioUrl, /canAccessConsoleRoute/);
+  assert.match(transcribe, /canAccessConsoleRoute/);
+  assert.match(audioUrl, /resolveTenantCredentialForConsoleRequest/);
+  assert.match(transcribe, /resolveTenantCredentialForConsoleRequest/);
   assert.match(read('middleware.ts'), /experienceClass === 'unsupported'/);
 });

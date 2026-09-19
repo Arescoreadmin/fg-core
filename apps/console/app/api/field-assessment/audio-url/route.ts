@@ -1,13 +1,13 @@
 import { NextRequest } from 'next/server';
 import { issueSignedToken, presignUrl } from '@vercel/blob';
 import { auth } from '@/auth';
+import { canAccessConsoleRoute } from '@/lib/consoleAccess';
+import { resolveTenantCredentialForConsoleRequest } from '@/lib/tenantRequestAuthority';
 
 // Private blob audio can be large (up to 25 MB); allow enough time to stream.
 export const maxDuration = 30;
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const CORE_API_KEY = process.env.FG_CORE_API_KEY ?? process.env.CORE_API_KEY;
-const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 
 // BLOB_DELEGATION_TOKEN is used only to issue a short-lived, path-scoped signed
 // URL via issueSignedToken + presignUrl. The actual blob fetch uses the presigned
@@ -59,15 +59,16 @@ interface ArtifactRecord {
 async function resolveArtifact(
   artifactId: string,
   engagementId: string,
+  tenantId: string,
+  apiKey: string,
 ): Promise<ArtifactRecord | null> {
-  if (!CORE_API_KEY || !CORE_TENANT_ID) return null;
-
   let res: Response;
   try {
     res = await fetch(
-      `${CORE_API_URL}/field-assessment/engagements/${encodeURIComponent(engagementId)}/artifacts/${encodeURIComponent(artifactId)}?tenant_id=${encodeURIComponent(CORE_TENANT_ID)}`,
+      `${CORE_API_URL}/field-assessment/engagements/${encodeURIComponent(engagementId)}/artifacts/${encodeURIComponent(artifactId)}?tenant_id=${encodeURIComponent(tenantId)}`,
       {
-        headers: { 'X-API-Key': CORE_API_KEY },
+        headers: { 'X-API-Key': apiKey, 'X-Tenant-ID': tenantId },
+        cache: 'no-store',
       },
     );
   } catch {
@@ -115,6 +116,22 @@ export async function GET(req: NextRequest) {
     metric('denied.unauthenticated', {});
     return new Response('Unauthorized', { status: 401 });
   }
+  if (!canAccessConsoleRoute('/field-assessment', session)) {
+    metric('denied.role', {});
+    return new Response('Forbidden', { status: 403 });
+  }
+
+  const tenantAuthority = await resolveTenantCredentialForConsoleRequest(
+    session,
+    req.nextUrl.searchParams.getAll('tenant_id'),
+  );
+  if (!tenantAuthority.ok) {
+    metric('denied.tenant_authority', { reason: tenantAuthority.code });
+    return Response.json(
+      { error: tenantAuthority.code },
+      { status: tenantAuthority.status, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   const artifactId = req.nextUrl.searchParams.get('artifact_id');
   const engagementId = req.nextUrl.searchParams.get('engagement_id');
@@ -129,14 +146,14 @@ export async function GET(req: NextRequest) {
     return new Response('Invalid engagement_id', { status: 400 });
   }
 
-  if (!CORE_API_KEY || !CORE_TENANT_ID) {
-    metric('denied.misconfigured', { reason: 'missing_backend_config' });
-    return new Response('Backend not configured', { status: 503 });
-  }
-
   // Resolve artifact from trusted backend. Backend enforces tenant/engagement
   // ownership and emits audit events; we trust its response unconditionally.
-  const artifact = await resolveArtifact(artifactId, engagementId);
+  const artifact = await resolveArtifact(
+    artifactId,
+    engagementId,
+    tenantAuthority.tenantId,
+    tenantAuthority.apiKey,
+  );
   if (!artifact) {
     metric('denied.artifact_not_found', { artifact_id: artifactId, engagement_id: engagementId });
     return new Response('Artifact not found', { status: 404 });
