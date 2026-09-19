@@ -2,8 +2,9 @@
 
 After PR-CORE-002 / #645 / #646 / #647, every admin-gateway request that binds a
 caller-supplied X-Tenant-ID must carry a valid HMAC delegation proof. This helper
-generates the four required headers using the same canonical format Core verifies
-in ``api.auth_scopes.resolution._verify_delegation_proof``:
+generates the required headers using the same canonical format Core verifies in
+``api.auth_scopes.resolution._verify_delegation_proof``. Version 3 extends the
+base canonical form with the named actor subject and authority class:
 
     v1\\n{request_id}\\n{tenant_id}\\n{METHOD}\\n{path}\\n{iat}\\n{exp}
 
@@ -54,28 +55,40 @@ def delegation_headers(
     lifetime: int = 60,
     offset_seconds: int = 0,
     actor_subject: str | None = None,
+    actor_authority: str | None = None,
 ) -> dict[str, str]:
-    """Return the four X-FG-Delegation-* headers for a canonical request.
+    """Return the X-FG-Delegation-* headers for a canonical request.
 
     The generated proof binds (version, request_id, tenant_id, method, path,
-    issued_at, expires_at). Callers must send the same request_id in
+    issued_at, and expires_at). V2 additionally binds ``actor_subject``; v3
+    binds both ``actor_subject`` and ``actor_authority``. Callers must send the
+    same request_id in
     ``X-Request-ID`` and the same tenant_id in ``X-Tenant-ID`` (or the
     request's URL path) for Core's verifier to accept the proof.
     """
     resolved_secret = (secret or _resolve_secret()).strip()
     issued_at = int(time.time()) + offset_seconds
     expires_at = issued_at + lifetime
-    version = "v2" if actor_subject else "v1"
+    version = (
+        "v3" if actor_subject and actor_authority else "v2" if actor_subject else "v1"
+    )
     canonical = (
         f"{version}\n{request_id}\n{tenant_id}\n{method.upper()}\n{path}"
-        f"\n{issued_at}\n{expires_at}" + (f"\n{actor_subject}" if actor_subject else "")
+        f"\n{issued_at}\n{expires_at}"
+        + (f"\n{actor_subject}" if actor_subject else "")
+        + (f"\n{actor_authority}" if version == "v3" else "")
     )
     proof = hmac.new(
         resolved_secret.encode(), canonical.encode(), hashlib.sha256
     ).hexdigest()
-    return {
+    headers = {
         "X-FG-Delegation-Version": version,
         "X-FG-Delegation-Issued-At": str(issued_at),
         "X-FG-Delegation-Expires-At": str(expires_at),
         "X-FG-Delegation-Proof": proof,
     }
+    if actor_subject:
+        headers["X-FG-Named-User-Sub"] = actor_subject
+    if actor_authority:
+        headers["X-FG-Actor-Authority"] = actor_authority
+    return headers

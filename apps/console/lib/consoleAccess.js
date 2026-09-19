@@ -48,6 +48,8 @@ const TENANT_CLAIM_KEYS = [
   'https://frostgate.dev/tenant_id',
 ];
 
+const TENANT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
 const CLIENT_CONSOLE_ALLOWED_ROLES = [...CLIENT_CONSOLE_ROLES, ...INTERNAL_CONSOLE_ROLES];
 const INTERNAL_ONLY_ROLES = [...INTERNAL_CONSOLE_ROLES];
 const SUPPORT_LIMITED_ROLES = ['Support', 'Administrator'];
@@ -925,6 +927,125 @@ function getSessionClaims(source) {
   };
 }
 
+/**
+ * Resolve browser-supplied tenant context against the authenticated Console
+ * principal. This is the shared human-authority decision used by tenant-aware
+ * BFF routes; callers remain responsible for resolving the configured operator
+ * tenant when (and only when) this function explicitly returns operatorFallback.
+ *
+ * Security properties:
+ *   - duplicate query keys are rejected, including equal duplicates;
+ *   - path/query disagreement is rejected before role evaluation;
+ *   - console-enabled clients are always bound to their session tenant;
+ *   - missing client context derives the session tenant, never operator state;
+ *   - configured operator fallback is available only to internal_console.
+ */
+function resolveTenantRequestAuthority(source, input = {}) {
+  const queryTenantIds = Array.isArray(input.queryTenantIds)
+    ? input.queryTenantIds.map((value) => String(value))
+    : [];
+  const pathTenantId = input.pathTenantId == null ? null : String(input.pathTenantId);
+  const allowOperatorFallback = input.allowOperatorFallback === true;
+
+  if (queryTenantIds.length > 1) {
+    return {
+      ok: false,
+      status: 422,
+      code: 'TENANT_CONTEXT_AMBIGUOUS',
+      message: 'tenant_id must be supplied at most once',
+    };
+  }
+
+  const queryTenantId = queryTenantIds.length === 1 ? queryTenantIds[0] : null;
+  if (
+    queryTenantId !== null &&
+    pathTenantId !== null &&
+    queryTenantId.trim() !== pathTenantId.trim()
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'TENANT_CONTEXT_MISMATCH',
+      message: 'tenant_id does not match route tenant',
+    };
+  }
+
+  const rawTenantId = queryTenantId ?? pathTenantId;
+  let requestedTenantId = null;
+  if (rawTenantId !== null) {
+    requestedTenantId = rawTenantId.trim();
+    if (!TENANT_ID_RE.test(requestedTenantId)) {
+      return {
+        ok: false,
+        status: 422,
+        code: 'TENANT_CONTEXT_INVALID',
+        message: 'tenant_id is malformed',
+      };
+    }
+  }
+
+  const claims = getSessionClaims(source);
+
+  if (claims.experienceClass === 'console_enabled_client') {
+    const sessionTenantId = claims.tenantId;
+    if (!sessionTenantId || !TENANT_ID_RE.test(sessionTenantId)) {
+      return {
+        ok: false,
+        status: 403,
+        code: 'TENANT_AUTHORITY_MISSING',
+        message: 'canonical session tenant authority is missing or invalid',
+      };
+    }
+    if (requestedTenantId !== null && requestedTenantId !== sessionTenantId) {
+      return {
+        ok: false,
+        status: 403,
+        code: 'TENANT_AUTHORITY_DENIED',
+        message: 'not authorized to act on behalf of this tenant',
+      };
+    }
+    return {
+      ok: true,
+      tenantId: sessionTenantId,
+      authority: 'tenant_human',
+      source: requestedTenantId === null ? 'session' : 'requested',
+    };
+  }
+
+  if (claims.experienceClass === 'internal_console') {
+    if (requestedTenantId !== null) {
+      return {
+        ok: true,
+        tenantId: requestedTenantId,
+        authority: 'internal_console',
+        source: 'requested',
+      };
+    }
+    if (allowOperatorFallback) {
+      return {
+        ok: true,
+        tenantId: null,
+        authority: 'internal_console',
+        source: 'configured_operator',
+        operatorFallback: true,
+      };
+    }
+    return {
+      ok: false,
+      status: 422,
+      code: 'TENANT_CONTEXT_MISSING',
+      message: 'tenant_id is required',
+    };
+  }
+
+  return {
+    ok: false,
+    status: 403,
+    code: 'TENANT_AUTHORITY_DENIED',
+    message: 'unsupported Console authority class',
+  };
+}
+
 // isPlatformAdminSession: true only for internal_console sessions with Administrator or Support role.
 // Used by BFF routes that must distinguish global Platform Admin from tenant-scoped Tenant Admin.
 function isPlatformAdminSession(source) {
@@ -958,6 +1079,7 @@ module.exports = {
   getCoreApiPolicy,
   getNavigationItemsForPrincipal,
   getSessionClaims,
+  resolveTenantRequestAuthority,
   isPlatformAdminSession,
   isTenantAdminSession,
   matchRoutePattern,

@@ -68,6 +68,34 @@ export function getSessionClaims(source: unknown): {
   tenantId: string | null;
   experienceClass: string;
 };
+export type TenantRequestAuthorityResolution =
+  | {
+      ok: true;
+      tenantId: string | null;
+      authority: 'tenant_human' | 'internal_console';
+      source: 'session' | 'requested' | 'configured_operator';
+      operatorFallback?: true;
+    }
+  | {
+      ok: false;
+      status: number;
+      code:
+        | 'TENANT_CONTEXT_AMBIGUOUS'
+        | 'TENANT_CONTEXT_MISMATCH'
+        | 'TENANT_CONTEXT_INVALID'
+        | 'TENANT_CONTEXT_MISSING'
+        | 'TENANT_AUTHORITY_MISSING'
+        | 'TENANT_AUTHORITY_DENIED';
+      message: string;
+    };
+export function resolveTenantRequestAuthority(
+  source: unknown,
+  input?: {
+    queryTenantIds?: string[];
+    pathTenantId?: string | null;
+    allowOperatorFallback?: boolean;
+  },
+): TenantRequestAuthorityResolution;
 export function isPlatformAdminSession(source: unknown): boolean;
 export function isTenantAdminSession(source: unknown): boolean;
 export function matchRoutePattern(pattern: string, pathname: string): boolean;

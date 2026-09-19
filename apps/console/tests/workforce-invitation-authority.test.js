@@ -23,6 +23,10 @@ const IDENTITY_API_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'lib/identityApi.ts'),
   'utf8',
 );
+const CONSOLE_ACCESS_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'lib/consoleAccess.js'),
+  'utf8',
+);
 
 function extractFunction(src, name) {
   const start = src.indexOf(`function ${name}(`);
@@ -81,23 +85,19 @@ test('tenant-admin helper source includes all protected prefixes', () => {
   }
 });
 
-test('workforce dashboard internal fallback is scoped to workforce user routes', () => {
-  const helper = extractFunction(ROUTE_SRC, 'isOperatorDefaultTenantAdminCorePath');
-  assert.match(helper, /workforce\/users/);
-  assert.doesNotMatch(helper, /portal\/grants/);
-  assert.doesNotMatch(helper, /admin\/identity/);
-
-  const resolverStart = ROUTE_SRC.indexOf('function resolveAuthorizedTenant(');
-  const resolverEnd = ROUTE_SRC.indexOf('const tenantId = raw.trim();', resolverStart);
-  const rawNullBranch = ROUTE_SRC.slice(resolverStart, resolverEnd);
-  assert.match(rawNullBranch, /isOperatorDefaultTenantAdminCorePath\(path\)/);
-  assert.match(rawNullBranch, /claims\.experienceClass === 'internal_console'/);
-  assert.doesNotMatch(rawNullBranch, /claims\.experienceClass === 'legacy_internal'/);
-  assert.match(rawNullBranch, /return resolveConfiguredOperatorTenant\(requestId\)/);
-  assert.ok(
-    rawNullBranch.indexOf('return resolveConfiguredOperatorTenant(requestId)') <
-      rawNullBranch.indexOf("return jsonError('tenant_id is required for tenant-admin Core routes'"),
-  );
+test('missing tenant fallback is explicit and unavailable to client humans', () => {
+  const start = CONSOLE_ACCESS_SRC.indexOf('function resolveTenantRequestAuthority');
+  const end = CONSOLE_ACCESS_SRC.indexOf('// isPlatformAdminSession', start);
+  const helper = CONSOLE_ACCESS_SRC.slice(start, end);
+  const clientBranch = helper.indexOf("claims.experienceClass === 'console_enabled_client'");
+  const internalBranch = helper.indexOf("claims.experienceClass === 'internal_console'");
+  const fallback = helper.indexOf('operatorFallback: true');
+  assert.ok(clientBranch > -1);
+  assert.ok(internalBranch > clientBranch);
+  assert.ok(fallback > internalBranch);
+  assert.match(helper, /source: requestedTenantId === null \? 'session' : 'requested'/);
+  assert.doesNotMatch(helper.slice(clientBranch, internalBranch), /operatorFallback/);
+  assert.doesNotMatch(helper, /legacy_internal/);
 });
 
 test('tenant resolution runs before every tenant-admin proxy call', () => {
@@ -106,7 +106,7 @@ test('tenant resolution runs before every tenant-admin proxy call', () => {
   const handleBody = ROUTE_SRC.slice(handleStart, handleEnd);
 
   assert.ok(handleBody.includes('resolveAuthorizedTenant(request, path, session, requestId)'));
-  assert.ok(handleBody.indexOf('resolveAuthorizedTenant(request, path, session, requestId)') < handleBody.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)'));
+  assert.ok(handleBody.indexOf('resolveAuthorizedTenant(request, path, session, requestId)') < handleBody.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority)'));
   assert.doesNotMatch(handleBody, /isAdminPath/);
   assert.doesNotMatch(handleBody, /return proxyToCore\(request, path, requestId, ''\)/);
 });

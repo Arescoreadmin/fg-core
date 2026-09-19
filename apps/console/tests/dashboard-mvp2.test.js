@@ -67,14 +67,16 @@ test('proxy has strict route allowlist and blocks wildcard patterns', () => {
 
 test('tenant query parameter cannot override server tenant authority', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
+  const access = read('lib/consoleAccess.js');
   // Must not allow arbitrary tenant switching via undocumented env flags
   assert.doesNotMatch(proxy, /FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE/);
   assert.doesNotMatch(proxy, /DEMO_TENANT_ALLOWLIST/);
   // Tenant param from URL must go through session-based authorization, not blind trust
   assert.match(proxy, /resolveAuthorizedTenant/);
-  assert.match(proxy, /getSessionClaims/);
+  assert.match(proxy, /resolveTenantRequestAuthority/);
+  assert.match(access, /const claims = getSessionClaims\(source\)/);
   // Unauthorized cross-tenant access must be rejected
-  assert.match(proxy, /Forbidden: not authorized to act on behalf of this tenant/);
+  assert.match(access, /code: 'TENANT_AUTHORITY_DENIED'/);
 });
 
 test('demo tenant selection cannot bypass server tenant authority', () => {
@@ -98,7 +100,7 @@ test('rate limit and API key tenant authority are server resolved', () => {
   assert.match(proxy, /resolveAuthorizedTenant/);
   // tenantId is threaded through to both rate limiting and API key lookup
   assert.match(proxy, /enforceRateLimit\(request, requestId, routeGroup, tenantId\)/);
-  assert.match(proxy, /proxyToCore\(request, path, requestId, tenantId, namedUserSub\)/);
+  assert.match(proxy, /proxyToCore\(request, path, requestId, tenantId, namedUserSub, actorAuthority\)/);
   // API key lookup uses the server-resolved tenant and request_id
   assert.match(proxy, /resolveCoreAuth\(tenantId, requestId\)/);
   assert.match(proxy, /getTenantApiKey\(tenantId\)/);
@@ -174,7 +176,7 @@ test('tenant-admin gateway paths require tenant validation after access policy',
   const proxy = read('app/api/core/[...path]/route.ts');
   const handleFn = proxy.match(/async function handle[\s\S]*?\nexport async function/)?.[0] ?? '';
   assert.ok(handleFn.indexOf('canAccessCoreApiPath') < handleFn.indexOf('resolveAuthorizedTenant'));
-  assert.ok(handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub)'));
+  assert.ok(handleFn.indexOf('resolveAuthorizedTenant') < handleFn.indexOf('proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority)'));
   assert.doesNotMatch(handleFn, /if \(isAdminPath\)/);
   assert.doesNotMatch(handleFn, /return proxyToCore\(request, path, requestId, ''\);/);
   assert.match(proxy, /function isTenantAdminCorePath\(/);
