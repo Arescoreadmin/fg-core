@@ -272,6 +272,10 @@ ALLOWED_CHANGED_PATHS = {
     "apps/console/tests/workforce-invitation-authority.test.js",
     "docs/security/TENANT_ISOLATION_E2E_001.md",
     "tests/security/test_tenant_isolation_e2e.py",
+    # PR 707 — Client Readiness & Billable Assessment Golden-Path Audit
+    "docs/readiness/",
+    "docs/readiness/CLIENT_READINESS_001.md",
+    "tests/test_client_readiness_001.py",
 }
 
 # The repo currently uses untracked audit notes as source material for MCIM.
