@@ -310,10 +310,11 @@ enterprise deliverable.
 
 ## 17. Result Truth
 
-**PROVEN for the tested synthetic path.** A legitimate scan result produced a
-report whose result-truth decision was `PASS`, without direct database writes,
-fabricated evidence, or mocked gate logic. The report contained one eligible
-evidence item. Delivery then reached the next gate.
+**PROVEN for the tested synthetic path.** An internally consistent Microsoft
+Graph-shaped scan containing one clearly synthetic user and `object_count=1`
+produced a report whose result-truth decision was `PASS`, without direct
+database writes, fabricated evidence, or mocked gate logic. The report
+contained one eligible evidence item. Delivery then reached the next gate.
 
 The four historical report-delivery tests still construct reports that do not
 satisfy current result-truth requirements and fail with
@@ -880,19 +881,26 @@ not promise a completed paid enterprise deliverable.
 - Backup/report reliability batch: **313 passed in 5.88s**.
 - #706 Core: **5 passed in 10.95s**.
 - #706 Console: **81/81**; #704: **45/45**; #705: **66/66**.
-- New #707 vertical boundary proof final rerun: **1 passed in 6.04s**.
+- Review-corrected #707 vertical boundary proof: **1 passed in 5.97s**. The
+  payload contains one synthetic Graph user matching `object_count=1`.
 
 ### Strict and repository gates
 
-No production code changed. Per #707 instructions, `fg-fast`, `fg-security`,
-`fg-contract`, and the three-hour strict suite are not rerun merely for
-ceremony. The inherited #706 strict result remains red: ruff, format, and mypy
-passed; pytest reported **5 failed, 22592 passed, 92 skipped**, comprising the
-four known truth-gate failures plus an MCIM registration issue fixed after that
-run. #707 does not describe strict as green.
+No production code changed. The review correction exposed a CI metadata policy
+failure, so the exact Guard command `make fg-fast-full` was run and **PASSED**:
+**496 passed, 2 skipped, 22192 deselected in 370.70s**; all contract,
+production-profile, SOC, RLS, route, audit, formatting, and budget checks in the
+lane passed. `fg-security`, standalone `fg-contract`, and the three-hour strict
+suite were not rerun. The inherited #706 strict result remains red: ruff,
+format, and mypy passed; pytest reported **5 failed, 22592 passed, 92 skipped**,
+comprising the four known truth-gate failures plus an MCIM registration issue
+fixed after that run. #707 does not describe strict as green.
 
 - Ruff lint: **PASS** for the changed Python files.
 - Ruff format check: **PASS** (2 files already formatted).
 - Audit-document Markdown lint: **PASS**.
 - MCIM changed-path governance final rerun: **5 passed in 3.46s**.
+- MCIM + SOC sync tests after review correction: **24 passed in 3.61s**.
+- `make soc-review-sync`: **PASS**.
+- `make fg-fast-full`: **PASS** (496 passed, 2 skipped).
 - `git diff --check`: **PASS**.

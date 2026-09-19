@@ -4464,3 +4464,30 @@ is recorded in `docs/security/TENANT_ISOLATION_E2E_001.md` and the #706 PR log.
 Console, test, and architecture-evidence paths in the existing changed-path
 allowlist. This is CI metadata only; it does not change runtime authority or
 MCIM document validation.
+
+## 2026-09-19 — SOC-HIGH-002 — CLIENT-READINESS-001 MCIM registration
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical CI metadata:
+`tools/ci/check_mcim_docs.py`).
+
+**Change:** Registers the exact #707 audit report and focused test paths in the
+existing MCIM changed-path allowlist. The checker logic, required MCIM
+documents, required sections, machine-readable blocks, status handling, and
+failure behavior are unchanged.
+
+**Security review:** This is CI metadata only. It does not alter runtime code,
+authentication, tenant authority, permissions, routes, persistence, evidence
+truth, production qualification, or delivery gates. The allowlist remains
+closed-world and admits only the two named #707 artifacts plus the untracked
+directory spelling emitted by `git status` before the report is staged.
+
+**Evidence quality correction:** The #707 synthetic Microsoft Graph payload
+now contains one clearly synthetic user matching `object_count=1`. The focused
+proof therefore cannot obtain its result-truth `PASS` from an internally empty
+collection disguised by a nonzero caller count.
+
+**Validation:** CLIENT-READINESS-001 focused test passed; changed-file Ruff
+checks passed; MCIM + SOC sync tests passed (24); `make soc-review-sync` passed;
+audit-document Markdown lint and diff check passed; the exact CI Guard command
+`make fg-fast-full` passed with 496 passed and 2 skipped. No production
+qualification state was created and no delivery gate was bypassed.

@@ -66,7 +66,14 @@ def test_legitimate_assessment_stops_at_production_qualification(
             "raw_payload": {
                 "source": "synthetic-client-readiness-audit",
                 "sentinel": HIGH_TABLE_SENTINEL,
-                "users": [],
+                "users": [
+                    {
+                        "id": "synthetic-user-707",
+                        "displayName": "Synthetic User 707",
+                        "userPrincipalName": "synthetic-user-707@high-table.example",
+                        "accountEnabled": True,
+                    }
+                ],
             },
             "object_count": 1,
         },
