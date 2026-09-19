@@ -4419,3 +4419,48 @@ Combined, these paths let a JWT carrying `roles=["platform_admin"]` in the confi
 **Security review:** A gateway credential or forged actor header cannot manufacture human tenant-admin authority. Core still performs canonical membership, role, active-state, and tenant-scope checks. No permissions, credentials, tenant defaults, or platform-admin boundaries were widened.
 
 **Validation:** Focused tenant-admin/delegation suites passed; Console delegation contract tests passed; Ruff, format, mypy, and diff checks passed.
+
+## 2026-09-19 — SOC-HIGH-002 — Tenant-human delegation authority and membership
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical auth file:
+`api/auth_scopes/resolution.py`; Console BFF route:
+`apps/console/app/api/core/[...path]/route.ts`).
+
+**Change:** TENANT-ISOLATION-E2E-001 introduces delegation proof v3. The HMAC
+now binds a narrow authority class (`tenant_human` or `internal_console`) in
+addition to the v2 subject and request fields. The Console BFF requires both a
+named subject and authority class on every gateway-backed administrative call.
+Core accepts the authority class only after proof verification.
+
+**Tenant-human canonical check:** Before binding a requested tenant, Core sets
+the PostgreSQL tenant RLS context and joins `tenant_users` to `fg_principals`.
+Exactly one matching subject must be an active, bound `tenant_admin`, have a
+non-null canonical principal, and that principal must be active. Missing,
+foreign, nonexistent, inactive, unbound, wrong-role, duplicate, or
+inactive-principal results receive the same 403. This check precedes tenant
+existence validation so an unauthorized client human cannot use the response as
+a tenant-existence oracle.
+
+**Internal policy:** Existing v1/v2 machine compatibility is unchanged. For
+Console v3 human administration, only Tenant Admin or the canonical Platform
+Admin allowlist (Support/Administrator) reaches the gateway branch. Developer,
+Operator, FieldAssessor, unknown, and future internal roles cannot inherit the
+platform credential's authority. Support/operator semantics outside the
+gateway-backed administration families are unchanged.
+
+**Security review:** This is a strict narrowing. No new permission, credential,
+tenant default, or public route is introduced. Actor subject, authority class,
+tenant, method, path, request ID, and expiry are tamper-evident. Tenant-human
+requests cannot downgrade missing tenant context into configured operator
+authority. Error bodies are uniform for protected foreign/nonexistent cases.
+
+**Validation:** Real Core integration tests exercise middleware, HMAC proof,
+canonical membership/principal lookup, identity route, and mutation persistence.
+Actor and authority substitution both fail. A manual mutation weakening the
+role predicate caused the new suite to fail and was restored. Full validation
+is recorded in `docs/security/TENANT_ISOLATION_E2E_001.md` and the #706 PR log.
+
+**MCIM registration:** `tools/ci/check_mcim_docs.py` registers the exact #706
+Console, test, and architecture-evidence paths in the existing changed-path
+allowlist. This is CI metadata only; it does not change runtime authority or
+MCIM document validation.
