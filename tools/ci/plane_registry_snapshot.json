@@ -1025,14 +1025,6 @@
         {
           "class_name": "auth_exempt",
           "expires_at": "",
-          "justification": "Invite-token exchange: the invite token IS the credential. SHA-256 hash comparison enforced; single-use replay protection. No prior auth credential exists for a new invitee.",
-          "method": "POST",
-          "path": "/identity/invitations/accept",
-          "permanent": true
-        },
-        {
-          "class_name": "auth_exempt",
-          "expires_at": "",
           "justification": "P-113.8 canonical invitation acceptance: uses platform-admin gateway auth (require_internal_admin_gateway) + fgwi1.* HMAC token authority. Not gated by identity: scope — authority is the locked invitation record + gateway credential.",
           "method": "POST",
           "path": "/identity/invitations/{token}/accept",
@@ -1342,7 +1334,7 @@
       ]
     }
   ],
-  "generated_at": "2026-09-06T18:57:06.957223+00:00",
+  "generated_at": "2026-09-20T14:27:43.414435+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

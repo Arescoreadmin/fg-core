@@ -26,7 +26,6 @@ All endpoints live under `/identity`.
 | `/identity/admin/groups/{id}`               | DELETE   | `tenant.configure`    |
 | `/identity/admin/groups/{id}/members`       | POST     | `tenant.configure`    |
 | `/identity/admin/groups/{id}/members/{sub}` | DELETE   | `tenant.configure`    |
-| `/identity/invitations/accept`              | POST     | *Public (no auth)*    |
 | `/identity/me`                              | GET      | `assessment.read`     |
 | `/identity/me`                              | PATCH    | `assessment.read`     |
 | `/identity/me/devices`                      | GET      | `assessment.read`     |
@@ -50,17 +49,14 @@ List endpoints accept:
 
 Response includes `total` count for all list endpoints.
 
-## Invitation Acceptance (Public Endpoint)
+## Invitation Acceptance (Canonical P-113.8 Endpoint)
 
-`POST /identity/invitations/accept` does not require authentication. It accepts:
-```json
-{
-  "token": "<raw_token>",
-  "accepted_by": "<subject of accepting user>"
-}
-```
+`POST /identity/invitations/{token}/accept` is the only workforce invitation
+acceptance authority. It requires the internal admin gateway and verified
+named-user identity headers; the actor is resolved canonically from that
+identity and the invitation email. Caller-supplied actor attribution is not
+accepted.
 
-Error codes:
-- `409 Conflict` — invitation already accepted (replay attempt)
-- `410 Gone` — invitation expired or revoked
+Error codes include `IDENTITY_UNVERIFIED`, `INVITATION_EMAIL_MISMATCH`, and
+replay/expired invitation failures.
 - `404 Not Found` — invalid token

@@ -29,13 +29,15 @@ blocked. Even after qualification, the current delivery handler records a
 generic `downloaded` event and timestamp; it does not record a recipient,
 delivery channel, receipt, or actual artifact transfer.
 
-The audit also found one external identity-integrity blocker: the mounted
-legacy `POST /identity/invitations/accept` endpoint is public and accepts a
-caller-supplied `accepted_by`. Possession of a valid invitation token is still
-required and the invited identity is established earlier, so this is not a
-proven arbitrary tenant takeover. It does permit invitation consumption and
-forged acceptance attribution. The canonical newer invitation route already
-requires the admin gateway and a verified named user; the legacy route should
+The audit found one external identity-integrity blocker, CR-707-001: the
+legacy `POST /identity/invitations/accept` endpoint was public and accepted a
+caller-supplied `accepted_by`. IDENTITY-ACCEPT-002 removed that route after
+confirming no production consumers. Possession of a valid invitation token was
+still required and the invited identity was established earlier, so this was
+not a proven arbitrary tenant takeover; it did permit invitation consumption
+and forged acceptance attribution. The canonical route remains protected by
+the admin gateway and a verified named user; regression proof now records the
+legacy authority as retired.
 be retired or brought under that authority.
 
 **Disposition of product readiness:** first managed paid client **BLOCKED**.
@@ -101,7 +103,7 @@ rechecked only where the golden path crosses them.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Provision client | Console tenant administration | `/api/admin/provision-tenant` | tenant create, identity binding, credential issue, initial role | Core DB + Auth0 + Redis/Upstash registry | Platform Admin only | 110 Python + 24 Node focused | Auth0 M2M, Core, Redis/Upstash, secrets | TESTED |
 | Activate tenant admin | invitation UI | Console Core proxy; canonical `/identity/invitations/{token}/accept` | invitation flow, principal/membership binding, projection outbox | identity, tenant users, audit, outbox | named human + admin gateway | invitation and identity suites | Auth0, email, projection worker | TESTED |
-| Legacy invite acceptance | none required | public `/identity/invitations/accept` | legacy invitation service | invitation + identity record | token only; caller controls `accepted_by` | existing route test proves anonymous mutation | token secrecy | BLOCKED |
+| Legacy invite acceptance | none required | retired `/identity/invitations/accept` | none (route removed) | none | no authority | IDENTITY-ACCEPT-002 regression suite | none | PROVEN (retired) |
 | Tenant workspace | Console | tenant-aware BFF | tenant admin/lifecycle/credential services | tenant, identity, credential, portal tables | #703–#706 canonical authority | #704 45; #705 66; #706 81 + 5 | session, Core, tenant credential | PROVEN |
 | Engagement | Field Assessment Console | `/api/core/field-assessment/*` | Field Assessment store/routes | `fa_engagements` + audit | tenant credential scopes/permissions | focused FA suites | Core DB | TESTED |
 | Scope | Field Assessment metadata/playbooks/targets | Field Assessment routes | engagement metadata, verified targets, questionnaires | `fa_*` | tenant scope | component tests | operator judgment | PARTIAL |
@@ -447,10 +449,10 @@ and are not part of a safe golden path.
 
 ### CR-707-001 — Legacy public invitation acceptance trusts caller attribution
 
-- **Severity / category / status:** P1 / External Safety Blocker / OPEN
-- **Affected component:** `api/identity_administration/routes/invitations.py`
-- **Observed:** mounted public `POST /identity/invitations/accept` accepts a valid
-  token plus caller-controlled `accepted_by`; the existing route test performs
+- **Severity / category / status:** P1 / External Safety Blocker / REMEDIATED by IDENTITY-ACCEPT-002
+- **Affected component:** retired `api/identity_administration/routes/invitations.py`
+- **Observed (audit baseline):** mounted public `POST /identity/invitations/accept` accepted a valid
+  token plus caller-controlled `accepted_by`; the legacy route test performed
   the mutation without authentication.
 - **Expected:** acceptance actor must be the verified named identity bound to
   the invite, as in the newer canonical route.
@@ -460,11 +462,14 @@ and are not part of a safe golden path.
   attribution; arbitrary tenant takeover was not demonstrated.
 - **Commercial impact:** identity/audit integrity is not defensible for an
   external onboarding path.
-- **Evidence / reproduction:** source trace, public-path allowlist, and
-  `tests/identity_administration/test_routes_admin.py` acceptance tests.
-- **Remediation / proposed PR / dependencies:** retire the legacy route or bind
-  it to canonical verified subject authority; `IDENTITY-ACCEPT-002`; depends on
-  confirming all consumers have migrated.
+- **Evidence / reproduction:** source trace, public-path allowlist, and the
+  former route tests. No production consumer was found.
+- **Remediation / proposed PR / dependencies:** IDENTITY-ACCEPT-002 removed the
+  route registration and exact public-path entry, removed its route tests, and
+  retained only `POST /identity/invitations/{token}/accept` from
+  `api/identity_acceptance.py`. Dedicated regression tests prove no lookup,
+  mutation, binding, or caller-attributed acceptance is possible through the
+  retired path; canonical verified named-user checks remain covered by P-113.8.
 
 ### CR-707-002 — Native production qualification authority is absent
 

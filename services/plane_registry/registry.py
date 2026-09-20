@@ -892,15 +892,6 @@ PLANE_REGISTRY: list[PlaneDef] = [
         auth_exempt_routes=(
             ex(
                 "POST",
-                "/identity/invitations/accept",
-                "auth_exempt",
-                "Invite-token exchange: the invite token IS the credential. "
-                "SHA-256 hash comparison enforced; single-use replay protection. "
-                "No prior auth credential exists for a new invitee.",
-                permanent=True,
-            ),
-            ex(
-                "POST",
                 "/identity/invitations/{token}/accept",
                 "auth_exempt",
                 "P-113.8 canonical invitation acceptance: uses platform-admin gateway "

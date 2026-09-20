@@ -4465,6 +4465,29 @@ Console, test, and architecture-evidence paths in the existing changed-path
 allowlist. This is CI metadata only; it does not change runtime authority or
 MCIM document validation.
 
+## 2026-09-20 — SOC-HIGH-002 — IDENTITY-ACCEPT-002 legacy authority retirement
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical security
+surface: `api/security/public_paths.py`; generated route/contract inventories).
+
+**Change:** Removed the unused caller-attributed workforce mutation route
+`POST /identity/invitations/accept`, its exact public-path exemption, and its
+route registration. The canonical P-113.8
+`POST /identity/invitations/{token}/accept` route remains mounted and retains
+gateway plus verified named-user authority checks. No portal invitation path,
+role, capability, database schema, or authentication behavior was broadened.
+
+**Security review:** This is a strict narrowing. The retired path performs no
+lookup, mutation, token-state disclosure, or caller-supplied actor binding.
+Dedicated regression tests prove invitation lifecycle and identity binding are
+unchanged after a legacy request; canonical unverified and email-mismatch
+requests remain denied. Generated route and OpenAPI inventories were refreshed
+to remove the obsolete operation while preserving the canonical prefix.
+
+**Validation:** IDENTITY-ACCEPT-002 focused suite passed; P-113.8 and identity
+administration regressions passed; `make fg-contract` passed. No migration or
+production qualification/delivery behavior changed.
+
 ## 2026-09-19 — SOC-HIGH-002 — CLIENT-READINESS-001 MCIM registration
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical CI metadata:

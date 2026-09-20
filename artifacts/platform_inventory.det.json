@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1023,
+    "contract_count": 1022,
     "contract_only": [],
-    "runtime_count": 1236,
+    "runtime_count": 1235,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/credential-administration/{credential_id}",
@@ -227,7 +227,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "966f27fd933fd47d9d784460f0599bb28137a0c02b740a3effcf09fa742533aa",
+  "governance_fingerprint": "8eec1b57f186f6b661fe0ada87f2e94c0399165a780f80460289ada7cbfdb6a3",
   "planes": [
     {
       "compat": {
@@ -1609,7 +1609,6 @@
       "POST /identity/admin/groups/{group_id}/members",
       "POST /identity/admin/invitations/{invitation_id}/reissue",
       "POST /identity/admin/users/invite",
-      "POST /identity/invitations/accept",
       "POST /identity/invitations/{token}/accept",
       "POST /identity/invitations/{token}/request-resend"
     ],
