@@ -24,32 +24,53 @@ work_classes:
     description: "Work of unknown classification — fail-closed, treated as blocked"
     gate: BLOCKED
 
-next_sequence:
-  - id: "FG_RESULT_TRUTH_GATE"
-    title: "FG_RESULT_TRUTH_GATE — Expert-Approved Result Truth Release Authority"
-    files:
-      - "services/governance/report/engine.py"
-      - "services/governance/report/epistemic.py"
-      - "services/governance/report/grounded.py"
-      - "tests/test_fga028_grounded_reporting.py"
-    blocker_closed: >
-      FGA-025 through FGA-028 now provide semantic directionality, epistemic
-      states, complete evidence population, and grounded material-claim lineage.
-      The remaining Customer-One blocker is promotion of those invariants into
-      an expert-approved golden/metamorphic release gate that blocks issuance
-      when deterministic result truth is not proven.
-    status: NEXT
-    required_gates:
-      - "PRODUCTION_DEPENDENCY_SECURITY"
-      - "PRODUCTION_SCHEMA_AND_RLS"
-      - "CANONICAL_ASSESSMENT_PROOF"
-      - "DURABLE_EXECUTION_AND_RECOVERY"
-    gate_policy: >
-      The named production gates remain mandatory acceptance gates within the
-      FG_RESULT_TRUTH_GATE path and must pass before Customer-One data access,
-      report issuance, or L14 closure. They are not independently authorized
-      feature work.
+active_objective:
+  id: "FG_RESULT_TRUTH_GATE"
+  title: "FG_RESULT_TRUTH_GATE — Expert-Approved Result Truth Release Authority"
+  implementation_status: "COMPLETE"
+  operational_acceptance: "OPEN"
+  status: "BLOCKED_PENDING_PREREQUISITE"
+  immediate_prerequisite: "FA-ACTOR-001"
+  prerequisites:
+    - "FA-ACTOR-001"
+  required_gates:
+    - "PRODUCTION_DEPENDENCY_SECURITY"
+    - "PRODUCTION_SCHEMA_AND_RLS"
+    - "CANONICAL_ASSESSMENT_PROOF"
+    - "DURABLE_EXECUTION_AND_RECOVERY"
+  gate_policy: >
+    These production gates remain mandatory acceptance gates within the
+    FG_RESULT_TRUTH_GATE path. They are not independently authorized feature
+    work and must pass before customer data access, report issuance, or L14
+    closure.
+  note: >
+    FGA-025 through FGA-028 and the FG_RESULT_TRUTH_GATE implementation are
+    complete and proven. Operational acceptance remains open pending the
+    downstream authority and production-acceptance evidence required for a
+    defensible customer-facing release.
 
+next_sequence:
+  - id: "FA-ACTOR-001"
+    title: "FA-ACTOR-001 — Bind Field Assessment actions to canonical human actors"
+    role: "IMMEDIATE_PREREQUISITE"
+    parent_objective: "FG_RESULT_TRUTH_GATE"
+    blocker_closed: >
+      Material Field Assessment mutations cannot support defensible QA and
+      production-qualification evidence unless the authoritative human actor
+      is canonical, current, tenant-bound, engagement-scoped, and retained in
+      audit and persistence.
+    freeze_law_justification: >
+      This closes a concrete Customer-One blocker in the authenticated human
+      authority chain; it is required before downstream QA and qualification
+      evidence can be defensibly attributed. It is not speculative capability.
+    status: NEXT
+    forbidden_scope:
+      - "REPORT-QA-001"
+      - "PROD-QUAL-001"
+      - "GOV-DELIVERY-001"
+      - "FG_RESULT_TRUTH_GATE implementation changes"
+      - "new RBAC or identity architecture"
+      - "invitation, SSO, SAML, SCIM, passkey, or Temporal work"
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []

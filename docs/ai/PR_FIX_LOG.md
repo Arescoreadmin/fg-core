@@ -1,5 +1,22 @@
 # PR Fix Log (Strict)
 
+## ROADMAP-RECONCILE-001 — authorize FA-ACTOR-001 prerequisite
+
+- **Date / base:** 2026-09-20 / `367f3f14b59b5fd7ce563baef8e9e18c35f4dde7`.
+- **Scope:** Documentation and machine-readable roadmap-governance reconciliation only.
+  `FG_RESULT_TRUTH_GATE` implementation remains complete but operational acceptance is
+  open; `FA-ACTOR-001` is now the single authorized engineering prerequisite. No
+  production, Field Assessment, truth-gate, qualification, delivery, or test behavior
+  changed.
+- **Authority model:** The parent acceptance objective is represented separately from
+  `next_sequence`. The checker fails closed for the open parent and authorizes only its
+  explicit prerequisite; `REPORT-QA-001`, `PROD-QUAL-001`, and `GOV-DELIVERY-001` remain
+  blocked. The Freeze Law basis is the missing canonical human attribution required for
+  defensible QA and qualification evidence.
+- **Validation:** Roadmap checker regression tests and focused positive/negative checker
+  commands are required evidence for this reconciliation. The parent is not marked
+  complete and no production acceptance evidence is fabricated.
+
 ## P-65 — fix(identity): retire legacy caller-attributed invitation acceptance — branch `security/identity-accept-002`
 
 - **Identifier:** IDENTITY-ACCEPT-002 / CR-707-001.
