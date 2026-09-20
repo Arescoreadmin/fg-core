@@ -2,9 +2,11 @@
 """Deterministic Customer-One roadmap authority checker.
 
 Derives authorization from the authority file — the caller cannot self-declare
-a work class and bypass the Freeze Law.  Authorization is determined by looking
+a work class and bypass the Freeze Law. Authorization is determined by looking
 up the proposed work item in next_sequence (authorized) or deferred (blocked).
-Items not listed in either are fail-closed (blocked).
+Items not listed in either are fail-closed (blocked). An active objective is
+reported separately as an open parent acceptance objective; its explicit
+prerequisite is the authorized engineering item.
 
 Usage:
     # Specific work item — authorization derived from authority file:
@@ -78,6 +80,19 @@ def _check_item(authority: dict, work_item: str) -> bool:
     completed_ids = {
         entry["id"] for entry in authority.get("completed", []) if "id" in entry
     }
+
+    active_objective = authority.get("active_objective")
+    if isinstance(active_objective, dict) and active_objective.get("id") == work_item:
+        status = active_objective.get("operational_acceptance", "OPEN")
+        prerequisite = active_objective.get("immediate_prerequisite")
+        suffix = f"; immediate prerequisite: {prerequisite}" if prerequisite else ""
+        print(
+            f"BLOCKED: '{work_item}' is an open parent acceptance objective "
+            f"(operational_acceptance={status}){suffix}; authorize its prerequisite "
+            "rather than reimplementing the parent",
+            file=sys.stderr,
+        )
+        return False
 
     if work_item in completed_ids:
         prs: list[str] = next(

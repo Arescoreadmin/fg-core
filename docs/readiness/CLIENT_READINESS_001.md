@@ -690,6 +690,12 @@ worker/runtime proof, manual billing, and fragmented parallel product stacks.
 
 ### Must have before first paid client
 
+Roadmap authority now represents `FG_RESULT_TRUTH_GATE` as an open parent
+operational-acceptance objective and authorizes `FA-ACTOR-001` as its immediate
+engineering prerequisite. This is a governance reconciliation only; no Field
+Assessment implementation or truth/qualification gate was changed. `REPORT-QA-001`,
+`PROD-QUAL-001`, and `GOV-DELIVERY-001` remain downstream and unauthorized.
+
 | PR ID | Title | Goal / root cause | Exact scope | Dependencies | Security impact | Commercial impact | Complexity | Why now |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | IDENTITY-ACCEPT-002 | Retire legacy caller-attributed invitation acceptance | eliminate parallel public mutation authority | migrate consumers; disable legacy route; canonical subject/token tests | none | closes identity/audit P1 | safe onboarding | S–M | external safety |

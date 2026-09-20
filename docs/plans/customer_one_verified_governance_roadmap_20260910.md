@@ -79,15 +79,16 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | FG_RESULT_TRUTH_GATE (NEXT) |
+| Open engineering work | FA-ACTOR-001 (immediate prerequisite for FG_RESULT_TRUTH_GATE operational acceptance) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
-The path to Customer-One is now gated by:
-- Completing FG_RESULT_TRUTH_GATE — the FGA-025–028 deterministic truth chain must be
-  promoted into a release-blocking authority with expert-approved golden and metamorphic
-  outcomes before a Verified AI Governance Baseline is issued.
-- Executing the commercial track (L14) in parallel.
+The FG_RESULT_TRUTH_GATE implementation and truth invariants are complete, but its
+operational acceptance remains open. The immediate authorized prerequisite is
+FA-ACTOR-001: material Field Assessment mutations must retain canonical human authority
+before QA and production-qualification evidence can be defensibly attributed. The
+production acceptance gates and expert-approved Customer-Zero evidence remain required;
+REPORT-QA-001, PROD-QUAL-001, and GOV-DELIVERY-001 remain downstream and unauthorized.
 
 ---
 
@@ -99,8 +100,12 @@ can be added.
 
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
-| FG_RESULT_TRUTH_GATE | Expert-Approved Result Truth Release Authority | NEXT | FGA-025–028 now provide the deterministic truth chain; the remaining blocker is promoting golden/metamorphic invariants into a release-blocking gate before issuing a Verified AI Governance Baseline |
+| FA-ACTOR-001 | Bind Field Assessment actions to canonical human actors | NEXT — immediate prerequisite | Material Field Assessment mutations need canonical, current, tenant-bound, engagement-scoped human attribution before downstream QA/qualification evidence is defensible |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE and all mandatory production gates pass |
+
+`FG_RESULT_TRUTH_GATE` remains the open parent acceptance objective. Its implementation
+is complete, but operational acceptance is `OPEN` pending the production acceptance
+evidence and downstream authorities described below.
 
 ### FGA-028 — Grounded Determination & Executive Reporting Authority
 
@@ -120,10 +125,13 @@ can be added.
 
 ### FG_RESULT_TRUTH_GATE — Expert-Approved Result Truth Release Authority
 
-- **Status:** NEXT — authorized after FGA-028 completion.
-- **Blocker:** Promote the FGA-025–028 deterministic truth chain into a release-blocking
-  authority with expert-approved golden and metamorphic outcomes before issuing a Verified AI
-  Governance Baseline.
+- **Implementation status:** COMPLETE — FGA-025 through FGA-028 and the result-truth
+  implementation are proven by focused semantic, epistemic, complete-evidence, lineage,
+  replay, and release-boundary tests.
+- **Operational acceptance:** OPEN — this is the parent acceptance objective, not an
+  authorized implementation item. Its immediate prerequisite is `FA-ACTOR-001`.
+- **Current blocker:** Material Field Assessment actions still require canonical named
+  human attribution so later QA and production-qualification evidence is defensible.
 - **Mandatory acceptance gates:** Production dependency security, production schema
   authority/closed-world RLS, canonical assessment proof, durable execution, and
   recovery/retention. All must pass before customer data access, report issuance, or L14
@@ -137,12 +145,13 @@ can be added.
 
 ### Next-item determination
 
-**Selected next authority: `FG_RESULT_TRUTH_GATE` — Expert-Approved Result Truth Release Authority.** This is the single authorized engineering item because the preceding four authorities are now implemented and validated, while repository evidence still shows no release-blocking promotion gate for golden/metamorphic result truth.
+**Selected next authority: `FA-ACTOR-001` — Bind Field Assessment actions to canonical human actors.** This is the single authorized engineering prerequisite because the result-truth implementation is complete but operational acceptance cannot proceed without authenticated, tenant-bound human attribution for material assessment mutations. The parent acceptance objective remains open; downstream QA, production qualification, and governed delivery remain blocked.
 
 | Candidate | Repository evidence | Disposition |
 |---|---|---|
 | FGA-028 — Grounded Determination & Executive Reporting Authority | PR #695/#696 are merged and strict post-merge validated; grounded claims and executive-report truth boundary are implemented. | **COMPLETED** — reconciled after strict validation. |
-| `FG_RESULT_TRUTH_GATE` promotion | FGA-025–028 now provide semantic, epistemic, complete-evidence, and grounded-claim authorities; repository tests prove the invariants but no release-blocking promotion gate exists. | **NEXT** — immediate Customer-One truth blocker. |
+| `FG_RESULT_TRUTH_GATE` operational acceptance | Truth implementation and invariants are complete; current-SHA production acceptance evidence and downstream authority chain remain open. | **OPEN PARENT OBJECTIVE** — not independently authorized implementation work. |
+| `FA-ACTOR-001` | Material Field Assessment mutations need canonical, current, tenant-bound, engagement-scoped human attribution for defensible QA and qualification evidence. | **NEXT** — immediate authorized prerequisite under the Freeze Law. |
 | Artifact ownership & evidence storage | Existing report/export manifests and storage-key validation provide foundations; no current evidence shows this is the immediate blocker ahead of result truth. | Deferred until result truth is release-gated. |
 | Production dependency security closure | Forensic audit records critical/high dependency advisories as mandatory before external access. | **MANDATORY FG_RESULT_TRUTH_GATE ACCEPTANCE GATE** — must pass before customer data access, report issuance, or L14 closure; no independent feature authorization. |
 | Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as mandatory production prerequisites. | **MANDATORY FG_RESULT_TRUTH_GATE ACCEPTANCE GATE** — migrations-only schema authority and tenant RLS proof required before L14 closure. |
