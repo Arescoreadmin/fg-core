@@ -38,11 +38,14 @@ def test_legacy_endpoint_cannot_mutate_or_bind(build_app):
         )
         assert invitation.status_code == 201
         subject = invitation.json()["subject"]
+        token = invitation.json()["invitation_token"]
+        assert token.startswith("fgwi1.")
+        assert client.get(f"/identity/invitations/{token}").status_code == 200
 
         response = client.post(
             "/identity/invitations/accept",
             json={
-                "token": invitation.json()["invitation_token"],
+                "token": token,
                 "accepted_by": "forged",
             },
         )

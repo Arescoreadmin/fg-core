@@ -4,8 +4,8 @@
 
 - **Identifier:** IDENTITY-ACCEPT-002 / CR-707-001.
 - **Date / base:** 2026-09-20 / `26a990279ed1a61c963da47a5f96d3c8bd165bc9`.
-- **Scope:** Removed the unused legacy `POST /identity/invitations/accept` mutation authority, its exact public-path exemption, route registration, and successful acceptance tests. The canonical P-113.8 `POST /identity/invitations/{token}/accept` flow was not modified. No database migration, role, capability, portal authority, or qualification behavior changed.
-- **Evidence:** `tests/test_identity_accept_002.py` proves the retired route cannot mutate or bind an invitation, caller-supplied `accepted_by` is not authoritative, the canonical route remains mounted and rejects unverified/mismatched named identities, the exact public path is not restored, and the existing workforce legacy endpoint remains a non-mutating 410 tombstone.
+- **Scope:** Removed the unused legacy `POST /identity/invitations/accept` mutation authority, its exact public-path exemption, route registration, and successful acceptance tests. Migrated the still-supported admin invite, reissue, and revoke operations to issue/manage canonical `fgwi1.*` records consumed by P-113.8. The canonical acceptance handler itself was not modified. No database migration, role, capability, portal authority, or qualification behavior changed.
+- **Evidence:** `tests/test_identity_accept_002.py` proves admin-issued tokens use canonical `fgwi1.*` storage and preflight, the retired route cannot mutate or bind an invitation, caller-supplied `accepted_by` is not authoritative, the canonical route remains mounted and rejects unverified/mismatched named identities, the exact public path is not restored, and the existing workforce legacy endpoint remains a non-mutating 410 tombstone.
 - **Finding status:** CR-707-001 is REMEDIATED. No production consumer was found; tests and legacy implementation references were not treated as consumers.
 
 ## P-64 — audit(readiness): prove billable enterprise assessment golden path — branch `audit/client-readiness-billable-assessment`
