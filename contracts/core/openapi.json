@@ -139,78 +139,6 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
-      "AcceptInvitationRequest": {
-        "properties": {
-          "accepted_by": {
-            "title": "Accepted By",
-            "type": "string"
-          },
-          "token": {
-            "title": "Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token",
-          "accepted_by"
-        ],
-        "title": "AcceptInvitationRequest",
-        "type": "object"
-      },
-      "AcceptInvitationResponse": {
-        "properties": {
-          "accepted_at": {
-            "title": "Accepted At",
-            "type": "string"
-          },
-          "accepted_by": {
-            "title": "Accepted By",
-            "type": "string"
-          },
-          "assigned_capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Assigned Capabilities",
-            "type": "array"
-          },
-          "assigned_roles": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Assigned Roles",
-            "type": "array"
-          },
-          "email": {
-            "title": "Email",
-            "type": "string"
-          },
-          "invitation_id": {
-            "title": "Invitation Id",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "invitation_id",
-          "tenant_id",
-          "email",
-          "status",
-          "accepted_at",
-          "accepted_by",
-          "assigned_roles",
-          "assigned_capabilities"
-        ],
-        "title": "AcceptInvitationResponse",
-        "type": "object"
-      },
       "AcceptRecommendationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -98660,48 +98588,6 @@
           }
         },
         "summary": "List Group Members",
-        "tags": [
-          "identity-administration"
-        ]
-      }
-    },
-    "/identity/invitations/accept": {
-      "post": {
-        "description": "Accept an invitation using the raw token. Public endpoint \u2014 no auth required.\n\nToken is validated cryptographically (SHA-256 hash comparison).\nReplay protection: once accepted, the token cannot be reused.",
-        "operationId": "accept_invitation_identity_invitations_accept_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AcceptInvitationRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AcceptInvitationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Accept Invitation",
         "tags": [
           "identity-administration"
         ]

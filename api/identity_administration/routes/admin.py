@@ -7,6 +7,8 @@ Tenant isolation: actor.tenant_id must be non-None and match resource tenant.
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +19,11 @@ from api.auth_dispatch import require_permission
 from api.auth_scopes import authz_scope
 from api.identity_administration.services import get_admin_services
 from api.identity_governance.models import IdentityLifecycleState as LifecycleState
+from api.db import get_sessionmaker, set_tenant_context
+from api.db_models import TenantUser
+from api.db_models_identity import TenantInvitation
+from api.identity.store import TenantIdentityStore
+from api.identity.workforce_token import generate as generate_workforce_token
 
 router = APIRouter(
     prefix="/identity/admin",
@@ -198,6 +205,65 @@ def _require_tenant(actor: ActorContext) -> str:
     return actor.tenant_id
 
 
+def _issue_canonical_invitation(
+    *,
+    tenant_id: str,
+    email: str,
+    display_name: str,
+    role: str,
+    invited_by: str,
+    expiry_days: int,
+):
+    """Issue an invitation consumed by canonical P-113.8 acceptance."""
+    raw_token, fingerprint = generate_workforce_token()
+    now = datetime.now(timezone.utc)
+    db = get_sessionmaker()()
+    try:
+        set_tenant_context(db, tenant_id)
+        user = (
+            db.query(TenantUser)
+            .filter(
+                TenantUser.tenant_id == tenant_id, TenantUser.email == email.strip()
+            )
+            .first()
+        )
+        if user is None:
+            db.add(
+                TenantUser(
+                    id=str(uuid.uuid4()),
+                    tenant_id=tenant_id,
+                    email=email.strip(),
+                    display_name=display_name or email.strip(),
+                    role=role,
+                    identity_type="human",
+                    identity_binding_status="unbound",
+                    active=True,
+                )
+            )
+        elif user.identity_binding_status == "bound" or not user.active:
+            raise HTTPException(
+                status_code=409, detail="User already has an active identity"
+            )
+        invitation = TenantIdentityStore().create_invitation(
+            db,
+            tenant_id=tenant_id,
+            email=email,
+            role=role,
+            created_by_user_id=invited_by,
+            expires_at=now + timedelta(days=min(expiry_days, 30)),
+            identity_mode_at_invite="managed",
+            required_provider="auth0",
+            acceptance_token_hash=fingerprint,
+        )
+        db.commit()
+        return invitation.id, raw_token, invitation.created_at
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # User administration endpoints
 # ---------------------------------------------------------------------------
@@ -210,7 +276,7 @@ def invite_user(
 ) -> InviteUserResponse:
     tenant_id = _require_tenant(actor)
     svc = get_admin_services()
-    identity, invitation, raw_token = svc.administration_service.invite_user(
+    identity, _, _ = svc.administration_service.invite_user(
         tenant_id=tenant_id,
         email=body.email,
         actor=actor.subject,
@@ -220,13 +286,22 @@ def invite_user(
         assigned_capabilities=tuple(body.assigned_capabilities),
         expiry_days=body.expiry_days,
     )
+    role = body.assigned_roles[0] if body.assigned_roles else "user"
+    canonical_id, canonical_token, canonical_created_at = _issue_canonical_invitation(
+        tenant_id=tenant_id,
+        email=body.email,
+        display_name=body.display_name,
+        role=role,
+        invited_by=actor.subject,
+        expiry_days=body.expiry_days,
+    )
     return InviteUserResponse(
         subject=identity.subject,
         email=identity.email,
         lifecycle_state=identity.lifecycle_state.value,
-        invitation_id=invitation.invitation_id,
-        invitation_token=raw_token,
-        invited_at=invitation.invited_at.isoformat(),
+        invitation_id=canonical_id,
+        invitation_token=canonical_token,
+        invited_at=canonical_created_at.isoformat(),
     )
 
 
@@ -480,15 +555,31 @@ def revoke_invitation(
     actor: ActorContext = Depends(require_permission("tenant.configure")),
 ) -> None:
     tenant_id = _require_tenant(actor)
-    svc = get_admin_services()
+    db = get_sessionmaker()()
     try:
-        svc.invitation_service.revoke_invitation(
-            tenant_id=tenant_id,
-            invitation_id=invitation_id,
-            revoked_by=actor.subject,
+        set_tenant_context(db, tenant_id)
+        invitation = (
+            db.query(TenantInvitation)
+            .filter(
+                TenantInvitation.id == invitation_id,
+                TenantInvitation.tenant_id == tenant_id,
+            )
+            .with_for_update()
+            .first()
         )
+        if invitation is None or invitation.status != "pending":
+            raise HTTPException(status_code=400, detail="Invitation is not pending")
+        invitation.status = "revoked"
+        invitation.revoked_at = datetime.now(timezone.utc)
+        invitation.revoked_by_user_id = actor.subject
+        db.commit()
     except Exception as exc:
+        db.rollback()
+        if isinstance(exc, HTTPException):
+            raise
         raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        db.close()
 
 
 @router.post("/invitations/{invitation_id}/reissue", status_code=201)
@@ -498,23 +589,53 @@ def reissue_invitation(
     actor: ActorContext = Depends(require_permission("user.invite")),
 ) -> InviteUserResponse:
     tenant_id = _require_tenant(actor)
-    svc = get_admin_services()
     try:
-        new_invitation, raw_token = svc.invitation_service.reissue_invitation(
-            tenant_id=tenant_id,
-            invitation_id=invitation_id,
-            reissued_by=actor.subject,
-            expiry_days=body.expiry_days,
-        )
+        db = get_sessionmaker()()
+        try:
+            set_tenant_context(db, tenant_id)
+            old = (
+                db.query(TenantInvitation)
+                .filter(
+                    TenantInvitation.id == invitation_id,
+                    TenantInvitation.tenant_id == tenant_id,
+                )
+                .with_for_update()
+                .first()
+            )
+            if old is None or old.status not in ("pending", "expired"):
+                raise HTTPException(
+                    status_code=400, detail="Invitation cannot be reissued"
+                )
+            old.status = "revoked"
+            old.revoked_at = datetime.now(timezone.utc)
+            old.revoked_by_user_id = actor.subject
+            raw_token, fingerprint = generate_workforce_token()
+            now = datetime.now(timezone.utc)
+            new_invitation = TenantIdentityStore().create_invitation(
+                db,
+                tenant_id=tenant_id,
+                email=old.email,
+                role=old.role,
+                created_by_user_id=actor.subject,
+                expires_at=now + timedelta(days=min(body.expiry_days, 30)),
+                identity_mode_at_invite=old.identity_mode_at_invite or "managed",
+                required_provider=old.required_provider or "auth0",
+                acceptance_token_hash=fingerprint,
+            )
+            db.commit()
+        finally:
+            db.close()
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
         raise HTTPException(status_code=400, detail=str(exc))
     return InviteUserResponse(
         subject="",
         email=new_invitation.email,
         lifecycle_state="INVITED",
-        invitation_id=new_invitation.invitation_id,
+        invitation_id=new_invitation.id,
         invitation_token=raw_token,
-        invited_at=new_invitation.invited_at.isoformat(),
+        invited_at=new_invitation.created_at.isoformat(),
     )
 
 

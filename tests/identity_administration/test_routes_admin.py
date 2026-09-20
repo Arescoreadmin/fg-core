@@ -117,26 +117,6 @@ class TestInvitationRevoke:
         assert resp.status_code == 204
 
 
-class TestAcceptInvitation:
-    def test_accept_with_valid_token_returns_200(self, client: TestClient) -> None:
-        invite_resp = client.post(
-            "/identity/admin/users/invite",
-            json={"email": "accept@example.com"},
-        )
-        token = invite_resp.json()["invitation_token"]
-        # Accept endpoint is public — no auth headers needed
-        resp = client.post(
-            "/identity/invitations/accept",
-            json={"token": token, "accepted_by": "user-subject-001"},
-            headers=dict[
-                str, str
-            ](),  # override default key headers for public endpoint
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "ACCEPTED"
-
-
 class TestOwnProfile:
     def test_get_me_returns_404_if_no_profile(self, client: TestClient) -> None:
         # The minted key's subject won't have an identity record
@@ -158,30 +138,6 @@ class TestDeleteUser:
     def test_delete_missing_user_returns_404(self, client: TestClient) -> None:
         resp = client.delete("/identity/admin/users/no-such-subject-xyz")
         assert resp.status_code == 404
-
-
-class TestAcceptInvitationTransitionsLifecycle:
-    def test_accept_transitions_identity_to_accepted(self, client: TestClient) -> None:
-        invite_resp = client.post(
-            "/identity/admin/users/invite",
-            json={"email": "lifecycle-accept@example.com"},
-        )
-        assert invite_resp.status_code == 201
-        data = invite_resp.json()
-        token = data["invitation_token"]
-        subject = data["subject"]
-
-        resp = client.post(
-            "/identity/invitations/accept",
-            json={"token": token, "accepted_by": subject},
-            headers=dict[str, str](),
-        )
-        assert resp.status_code == 200
-
-        # Identity must now be in ACCEPTED state.
-        identity_resp = client.get(f"/identity/admin/users/{subject}")
-        assert identity_resp.status_code == 200
-        assert identity_resp.json()["lifecycle_state"] == "ACCEPTED"
 
 
 class TestDeviceOwnershipEnforcement:
