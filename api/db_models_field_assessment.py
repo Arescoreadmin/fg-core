@@ -45,7 +45,16 @@ Tables:
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Float, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Float,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event as sa_event,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -761,6 +770,57 @@ class FaReportVersion(Base):
             "status",
         ),
     )
+
+
+class FaReportQaDecision(Base):
+    """Append-only, version-bound evidence for a material report QA decision."""
+
+    __tablename__ = "fa_report_qa_decisions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    report_version_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    report_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    qa_stage: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    reviewer_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_report_qa_decisions_tenant_engagement", "tenant_id", "engagement_id"
+        ),
+        Index(
+            "ix_fa_report_qa_decisions_version_stage", "report_version_id", "qa_stage"
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "report_version_id",
+            "qa_stage",
+            name="uq_fa_report_qa_decisions_version_stage",
+        ),
+    )
+
+
+@sa_event.listens_for(FaReportQaDecision, "before_update")
+def _block_report_qa_decision_update(mapper, connection, target):
+    raise RuntimeError("fa_report_qa_decisions is append-only — updates are forbidden")
+
+
+@sa_event.listens_for(FaReportQaDecision, "before_delete")
+def _block_report_qa_decision_delete(mapper, connection, target):
+    raise RuntimeError("fa_report_qa_decisions is append-only — deletes are forbidden")
 
 
 class FaReportDeliveryEvent(Base):

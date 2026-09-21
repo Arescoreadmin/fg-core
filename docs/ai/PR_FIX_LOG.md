@@ -22840,3 +22840,12 @@ returns the tenant — filesystem can be empty and tenants resolve.
 - **Fix:** Added actor-bound delegation proof version `v2` in the Console BFF and Core verifier. Core records the named subject only after v2 proof verification; unverified raw actor headers are ignored. v1 remains for non-human machine paths.
 - **Tests:** Added actor-binding and forged/missing actor proof coverage, Console cross-language contract checks, and raw-header spoof denial regression.
 - **Security impact:** Service authentication remains distinct from human authorization; canonical tenant membership and tenant scope remain mandatory.
+
+## REPORT-QA-001 — canonical report QA authority
+
+Implemented on `security/report-qa-001`: added append-only, tenant/engagement/
+report/version-bound QA decision evidence; canonical reviewer attribution;
+explicit rejection of platform service-principal actors for version-bound human
+QA; and replay-safe immutable version approval. No result-truth, production
+qualification, or governed-delivery semantics changed. Focused proof is in
+`tests/test_report_qa_001.py`.

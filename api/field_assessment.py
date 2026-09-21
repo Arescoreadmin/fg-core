@@ -175,6 +175,7 @@ from api.db_models_field_assessment import (
     FaFieldObservation,
     FaNormalizedFinding,
     FaReportDeliveryEvent,
+    FaReportQaDecision,
     FaReportVersion,
     FaScanResult,
     FaScanAuditEvent,
@@ -7636,6 +7637,22 @@ def qa_approve_report_route(
         },
     )
 
+    _record_report_qa_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=None,
+        report_version=int(report.version or 1),
+        report_hash=_compute_report_hash(report.report_json or {}),
+        manifest_hash=report.manifest_hash,
+        qa_stage="governance",
+        decision="approved",
+        reviewer_id=actor,
+        actor_type=_actor_type_from_context(actor_ctx),
+        reason=body.decision_notes,
+    )
+
     try:
         from services.trust_arc.orchestrator import persist_decision_memory  # noqa: PLC0415
 
@@ -12478,6 +12495,114 @@ def _record_delivery_event(
     db.flush()
 
 
+def _require_human_qa_actor(actor_ctx: ActorContext) -> str:
+    """Require a canonical named human for version-bound QA decisions.
+
+    Platform service principals are explicit machine actors and cannot be
+    promoted to human reviewers by request metadata. Delegated human requests
+    retain the canonical subject resolved by FA-ACTOR-001.
+    """
+    actor = _actor_from_context(actor_ctx)
+    if actor_ctx.service_principal_id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "HUMAN_REVIEWER_REQUIRED",
+                "A service principal cannot make a human QA decision.",
+            ),
+        )
+    return actor
+
+
+def _enforce_report_qa_independence(
+    actor_ctx: ActorContext, *, generated_by: str | None, reviewer_id: str
+) -> None:
+    """Enforce the repository's existing assessor/QA separation for humans.
+
+    Legacy API-key automation is retained as an explicitly service-attributed
+    compatibility path; canonical human/delegated requests cannot self-review.
+    """
+    if (
+        actor_ctx.auth_source != "api_key"
+        and generated_by
+        and generated_by == reviewer_id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_QA_CONFLICT",
+                "The report author cannot approve the same report version.",
+            ),
+        )
+
+
+def _record_report_qa_decision(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+    report_version_id: str | None,
+    report_version: int,
+    report_hash: str | None,
+    manifest_hash: str | None,
+    qa_stage: str,
+    decision: str,
+    reviewer_id: str,
+    actor_type: str,
+    reason: str | None,
+) -> FaReportQaDecision:
+    """Insert append-only QA evidence and reject contradictory replays."""
+    if report_version_id:
+        existing = db.execute(
+            select(FaReportQaDecision).where(
+                FaReportQaDecision.tenant_id == tenant_id,
+                FaReportQaDecision.engagement_id == engagement_id,
+                FaReportQaDecision.report_version_id == report_version_id,
+                FaReportQaDecision.qa_stage == qa_stage,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "REPORT_QA_DECISION_REPLAY",
+                    "This report version already has a QA decision.",
+                ),
+            )
+    decision_id = _uuid_module.uuid4().hex
+    row = FaReportQaDecision(
+        id=decision_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=report_version_id,
+        report_version=report_version,
+        report_hash=report_hash,
+        manifest_hash=manifest_hash,
+        qa_stage=qa_stage,
+        decision=decision,
+        reviewer_id=reviewer_id,
+        actor_type=actor_type,
+        reason=reason,
+        created_at=utc_iso8601_z_now(),
+        schema_version="1.0",
+    )
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_QA_DECISION_REPLAY",
+                "This report version already has a QA decision.",
+            ),
+        ) from exc
+    return row
+
+
 def _guard_mutable(rv: FaReportVersion) -> None:
     if rv.status in _REPORT_VERSION_IMMUTABLE_STATUSES:
         raise HTTPException(
@@ -12808,7 +12933,7 @@ def approve_report_version_route(
     Sets approved_at/approved_by, reviewer metadata, and freezes the version.
     """
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
-    actor = _actor_from_context(actor_ctx)
+    actor = _require_human_qa_actor(actor_ctx)
     # Reviewer role supplied by the caller is display metadata only; audit
     # attribution must never fall back to an untrusted request field.
     actor_role = actor_ctx.primary_role() or _actor_type_from_context(actor_ctx)
@@ -12828,6 +12953,9 @@ def approve_report_version_route(
         version_id=version_id,
     )
     _guard_mutable(rv)
+    _enforce_report_qa_independence(
+        actor_ctx, generated_by=rv.generated_by, reviewer_id=actor
+    )
     if rv.status != "internal_review":
         raise HTTPException(
             status_code=409,
@@ -12847,6 +12975,21 @@ def approve_report_version_route(
     rv.reviewer_role = body.reviewer_role.strip()
     rv.approval_notes = body.approval_notes.strip() if body.approval_notes else None
     rv.signature_placeholder = body.signature_placeholder
+    _record_report_qa_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_version=rv.version,
+        report_hash=rv.report_hash,
+        manifest_hash=rv.manifest_hash,
+        qa_stage="report",
+        decision="approved",
+        reviewer_id=actor,
+        actor_type="human",
+        reason=rv.approval_notes,
+    )
     db.flush()
     _record_delivery_event(
         db, rv=rv, event_type="approved", actor=actor, actor_role=actor_role
