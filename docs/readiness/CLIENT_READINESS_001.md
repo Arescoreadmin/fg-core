@@ -927,3 +927,21 @@ fixed after that run. #707 does not describe strict as green.
 - `make soc-review-sync`: **PASS**.
 - `make fg-fast-full`: **PASS** (496 passed, 2 skipped).
 - `git diff --check`: **PASS**.
+
+## REPORT-QA-001 — canonical report QA authority
+
+REPORT-QA-001 establishes version-bound QA evidence for the enterprise report
+version workflow. Approval evidence is append-only and records the canonical
+reviewer subject, actor type, tenant, engagement, report, exact version,
+report/manifest hashes, QA stage, decision, and timestamp. The version approval
+route rejects explicit platform service-principal actors; request reviewer
+names, roles, and notes remain descriptive metadata only. Replays of an approved
+immutable version fail closed, and the existing production-qualification and
+delivery gates are unchanged.
+
+The legacy engagement `qa-approve` workflow remains an explicitly attributed
+service-compatible automation path for existing clients; it now writes the
+same immutable QA evidence ledger with its canonical actor and exact report
+version/hash. Reviewer independence beyond the repository's existing
+permission separation, production qualification, and governed delivery remain
+out of scope and blocked by their respective roadmap authorities.
