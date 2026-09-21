@@ -22849,3 +22849,11 @@ explicit rejection of platform service-principal actors for version-bound human
 QA; and replay-safe immutable version approval. No result-truth, production
 qualification, or governed-delivery semantics changed. Focused proof is in
 `tests/test_report_qa_001.py`.
+
+
+## CUSTOMER-ZERO-ACCEPT-001 — production acceptance evidence
+
+- **Decision:** REPORT-QA-001 is complete (#713, merged `b803b71af1eb7f64fcbc976432ac48e318962825`).
+- **Next prerequisite:** authorize one Customer-Zero operation to produce current-SHA, replayable acceptance evidence.
+- **Required outputs:** versioned/fingerprinted synthetic corpus; complete evidence-to-report-to-QA proof bundle; durable execution and recovery evidence; dependency-security and schema/RLS attestations; deterministic replay result.
+- **Boundary:** this does not implement PROD-QUAL-001 or GOV-DELIVERY-001 and does not alter truth semantics.

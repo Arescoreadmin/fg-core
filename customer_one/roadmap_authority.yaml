@@ -30,7 +30,7 @@ active_objective:
   implementation_status: "COMPLETE"
   operational_acceptance: "OPEN"
   status: "BLOCKED_PENDING_PREREQUISITE"
-  immediate_prerequisite: "REPORT-QA-001"
+  immediate_prerequisite: "CUSTOMER-ZERO-ACCEPT-001"
   prerequisites:
     - "FA-ACTOR-001"
     - "REPORT-QA-001"
@@ -51,20 +51,29 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "REPORT-QA-001"
-    title: "REPORT-QA-001 — Version-bound independent report QA authority"
+  - id: "CUSTOMER-ZERO-ACCEPT-001"
+    title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     role: "IMMEDIATE_PREREQUISITE"
     parent_objective: "FG_RESULT_TRUTH_GATE"
     blocker_closed: >
-      Production acceptance and qualification evidence cannot be defensibly
-      attributed until technical and governance QA decisions are bound to a
-      canonical reviewer, report version, tenant, engagement, and separation
-      of duties.
+      Production qualification cannot be defensibly requested until a complete,
+      replayable Customer-Zero assessment proves evidence lineage, durable
+      execution/recovery, production dependency security, schema/RLS, and the
+      exact current-SHA report proof chain.
     freeze_law_justification: >
-      This closes the next concrete Customer-One blocker after FA-ACTOR-001:
-      reviewer authority and independence are required before production
-      acceptance evidence and qualification can be defensibly established.
+      This closes the next concrete Customer-One blocker after REPORT-QA-001:
+      the four production acceptance authorities and current-SHA end-to-end
+      proof must exist before PROD-QUAL-001 can be implemented or customer
+      data can be accepted for a billable Verified AI Governance Baseline.
     status: NEXT
+    work_class: "CUSTOMER_ZERO_OPERATION"
+    completion_evidence:
+      - "current source/build/deployment SHA"
+      - "versioned, fingerprinted synthetic Customer-Zero corpus"
+      - "complete evidence-to-report-to-QA proof bundle"
+      - "durable execution and recovery evidence"
+      - "production dependency-security and schema/RLS attestations"
+      - "deterministic replay result"
     forbidden_scope:
       - "PROD-QUAL-001"
       - "GOV-DELIVERY-001"
@@ -121,6 +130,19 @@ completed:
       transport credential tenant. Post-merge proof: FA actor regression 92
       passed; roadmap 18 passed; fg-fast 496 passed/2 skipped; fg-security
       1239 passed/1 skipped; fg-contract PASS; diff-check PASS.
+  - id: "REPORT-QA-001"
+    title: "Canonical Report QA Authority"
+    prs: ["#713"]
+    merged_sha: "b803b71af1eb7f64fcbc976432ac48e318962825"
+    note: >
+      Exact report-version QA decisions now require canonical reviewer
+      authority, current tenant/engagement scope, explicit QA stage, report
+      and manifest hashes, append-only application and database evidence, and
+      replay-safe uniqueness. Production qualification and governed delivery
+      remain separate blocked authorities. Completion proof: focused authority
+      stack 67 passed; #713 post-merge report QA 3 passed and FA/report
+      regression 102 passed; roadmap 19 passed; fg-fast 496 passed/2 skipped;
+      diff-check PASS.
   - id: "FGA-028"
     title: "Grounded Determination & Executive Reporting Authority"
     prs: ["#695", "#696"]

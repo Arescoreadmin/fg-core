@@ -701,12 +701,12 @@ worker/runtime proof, manual billing, and fragmented parallel product stacks.
 
 Roadmap authority represents `FG_RESULT_TRUTH_GATE` as an open parent operational-acceptance
 objective. `FA-ACTOR-001` is complete through #710/#711 and post-merge proof; the canonical
-actor chain now protects material Field Assessment mutations. `REPORT-QA-001` is the sole
-immediate engineering prerequisite. This reconciliation changes governance state only; it
-does not implement reviewer independence, production qualification, delivery, or truth-gate
+actor chain now protects material Field Assessment mutations. `REPORT-QA-001` is complete (#713). `CUSTOMER-ZERO-ACCEPT-001` is the sole
+immediate Customer-One prerequisite. This reconciliation changes governance state only; it
+does not implement production acceptance, production qualification, delivery, or truth-gate
 semantics. `PROD-QUAL-001` and `GOV-DELIVERY-001` remain blocked.
 
-FA-ACTOR-001 completion evidence: #710 and #711 are merged at `49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522`; focused actor/Field Assessment proof is 92 passed, with fg-fast 496/2, fg-security 1239/1, fg-contract PASS, and diff-check PASS. The next bounded authority is REPORT-QA-001; no reviewer-independence claim is made here.
+FA-ACTOR-001 completion evidence: #710 and #711 are merged at `49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522`; focused actor/Field Assessment proof is 92 passed, with fg-fast 496/2, fg-security 1239/1, fg-contract PASS, and diff-check PASS. REPORT-QA-001 completion is recorded below; no reviewer-independence claim beyond its implemented policy is made here.
 
 | PR ID | Title | Goal / root cause | Exact scope | Dependencies | Security impact | Commercial impact | Complexity | Why now |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -945,3 +945,15 @@ same immutable QA evidence ledger with its canonical actor and exact report
 version/hash. Reviewer independence beyond the repository's existing
 permission separation, production qualification, and governed delivery remain
 out of scope and blocked by their respective roadmap authorities.
+
+
+## CUSTOMER-ZERO-ACCEPT-001 — current-SHA production acceptance evidence
+
+REPORT-QA-001 is complete through #713. The next blocker is operational production
+acceptance evidence, not another report-QA implementation. A synthetic or anonymized
+Customer-Zero corpus must be versioned and fingerprinted, executed against the exact
+source/build/deployment SHA, and produce a replayable chain from complete evidence
+through deterministic truth, signed report proof, and canonical QA. The run must also
+record durable execution/recovery evidence plus production dependency-security and
+schema/RLS attestations. PROD-QUAL-001 remains blocked until these evidence producers
+exist; GOV-DELIVERY-001 remains downstream and blocked.

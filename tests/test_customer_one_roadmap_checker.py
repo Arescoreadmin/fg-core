@@ -44,10 +44,16 @@ def _run_class(
 
 
 class TestAuthorizedItems:
-    def test_report_qa_prerequisite_authorized(self) -> None:
-        # REPORT-QA-001 is the sole authorized engineering prerequisite.
-        result = _run_item("REPORT-QA-001")
+    def test_customer_zero_acceptance_prerequisite_authorized(self) -> None:
+        # Current-SHA Customer-Zero evidence is the sole authorized prerequisite.
+        result = _run_item("CUSTOMER-ZERO-ACCEPT-001")
         assert result.returncode == 0, result.stderr
+
+    def test_report_qa_completed_blocked(self) -> None:
+        result = _run_item("REPORT-QA-001")
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+        assert "#713" in result.stderr
 
     def test_fa_actor_completed_blocked(self) -> None:
         result = _run_item("FA-ACTOR-001")
@@ -59,7 +65,7 @@ class TestAuthorizedItems:
         result = _run_item("FG_RESULT_TRUTH_GATE")
         assert result.returncode == 1
         assert "open parent acceptance objective" in result.stderr
-        assert "REPORT-QA-001" in result.stderr
+        assert "CUSTOMER-ZERO-ACCEPT-001" in result.stderr
 
     def test_fga_028_completed_blocked(self) -> None:
         result = _run_item("FGA-028")
