@@ -44,16 +44,22 @@ def _run_class(
 
 
 class TestAuthorizedItems:
-    def test_fa_actor_prerequisite_authorized(self) -> None:
-        # FA-ACTOR-001 is the sole authorized engineering prerequisite.
-        result = _run_item("FA-ACTOR-001")
+    def test_report_qa_prerequisite_authorized(self) -> None:
+        # REPORT-QA-001 is the sole authorized engineering prerequisite.
+        result = _run_item("REPORT-QA-001")
         assert result.returncode == 0, result.stderr
+
+    def test_fa_actor_completed_blocked(self) -> None:
+        result = _run_item("FA-ACTOR-001")
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+        assert "#710" in result.stderr
 
     def test_fg_result_truth_gate_remains_open_parent_objective(self) -> None:
         result = _run_item("FG_RESULT_TRUTH_GATE")
         assert result.returncode == 1
         assert "open parent acceptance objective" in result.stderr
-        assert "FA-ACTOR-001" in result.stderr
+        assert "REPORT-QA-001" in result.stderr
 
     def test_fga_028_completed_blocked(self) -> None:
         result = _run_item("FGA-028")
@@ -71,7 +77,7 @@ class TestAuthorizedItems:
         assert result.returncode == 0, result.stderr
 
     def test_downstream_authorities_remain_blocked(self) -> None:
-        for item in ("REPORT-QA-001", "PROD-QUAL-001", "GOV-DELIVERY-001"):
+        for item in ("PROD-QUAL-001", "GOV-DELIVERY-001"):
             result = _run_item(item)
             assert result.returncode == 1, (item, result.stderr)
 

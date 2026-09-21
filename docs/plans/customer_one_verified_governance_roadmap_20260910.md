@@ -79,16 +79,17 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | FA-ACTOR-001 (immediate prerequisite for FG_RESULT_TRUTH_GATE operational acceptance) |
+| Open engineering work | REPORT-QA-001 (immediate prerequisite for FG_RESULT_TRUTH_GATE operational acceptance) |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
 The FG_RESULT_TRUTH_GATE implementation and truth invariants are complete, but its
-operational acceptance remains open. The immediate authorized prerequisite is
-FA-ACTOR-001: material Field Assessment mutations must retain canonical human authority
-before QA and production-qualification evidence can be defensibly attributed. The
-production acceptance gates and expert-approved Customer-Zero evidence remain required;
-REPORT-QA-001, PROD-QUAL-001, and GOV-DELIVERY-001 remain downstream and unauthorized.
+operational acceptance remains open. FA-ACTOR-001 is complete through #710 and #711:
+material Field Assessment mutations retain canonical human authority, current capability,
+tenant/engagement binding, and shared persistence/audit attribution. The immediate authorized
+prerequisite is now REPORT-QA-001, required to bind technical/governance QA to a canonical,
+independent reviewer and report version. Production acceptance gates and expert-approved
+Customer-Zero evidence remain required; PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.
 
 ---
 
@@ -100,7 +101,8 @@ can be added.
 
 | ID | Title | Status | Blocker Closed |
 |----|-------|--------|----------------|
-| FA-ACTOR-001 | Bind Field Assessment actions to canonical human actors | NEXT — immediate prerequisite | Material Field Assessment mutations need canonical, current, tenant-bound, engagement-scoped human attribution before downstream QA/qualification evidence is defensible |
+| FA-ACTOR-001 | Bind Field Assessment actions to canonical human actors | COMPLETED — #710/#711 | Canonical human actor authority proven for material Field Assessment mutations |
+| REPORT-QA-001 | Version-bound independent report QA authority | NEXT — immediate prerequisite | QA and separation-of-duties evidence must be canonically attributable before production qualification |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE and all mandatory production gates pass |
 
 `FG_RESULT_TRUTH_GATE` remains the open parent acceptance objective. Its implementation
@@ -145,7 +147,7 @@ evidence and downstream authorities described below.
 
 ### Next-item determination
 
-**Selected next authority: `FA-ACTOR-001` — Bind Field Assessment actions to canonical human actors.** This is the single authorized engineering prerequisite because the result-truth implementation is complete but operational acceptance cannot proceed without authenticated, tenant-bound human attribution for material assessment mutations. The parent acceptance objective remains open; downstream QA, production qualification, and governed delivery remain blocked.
+**Selected next authority: `REPORT-QA-001` — Version-bound independent report QA authority.** FA-ACTOR-001 is complete through #710/#711 and post-merge validation. REPORT-QA-001 is now the single authorized engineering prerequisite because production acceptance cannot proceed until technical/governance QA decisions are bound to a canonical reviewer, report version, tenant, engagement, and separation of duties. The parent acceptance objective remains open; PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.
 
 | Candidate | Repository evidence | Disposition |
 |---|---|---|
