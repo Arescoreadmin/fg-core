@@ -259,7 +259,7 @@ test('tenant_admin_routes_use_gateway_authority_after_resolution', () => {
   const proxyFn = routeSrc.match(/async function proxyToCore[\s\S]*?\nasync function getAlignmentArtifact/)?.[0] ?? '';
   assert.ok(proxyFn, 'proxyToCore must exist');
 
-  assert.match(proxyFn, /if \(isTenantAdminPath\)/);
+  assert.match(proxyFn, /if \(requiresDelegatedActor\)/);
   assert.match(proxyFn, /X-Admin-Gateway-Internal/);
   assert.match(proxyFn, /X-FG-Internal-Token/);
   assert.match(proxyFn, /X-Tenant-ID/);

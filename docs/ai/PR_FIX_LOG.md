@@ -1,5 +1,11 @@
 # PR Fix Log (Strict)
 
+## FA-ACTOR-001 follow-up — delegated capability boundary
+
+- **Scope:** Corrected the shared `api/identity_providers/api_key.py` delegation adapter so the platform-admin transport credential is never copied to a delegated Field Assessment actor. Current active, bound canonical membership roles resolve the actor permissions; unbound internal actors remain denied for Field Assessment mutations while existing internal-console policy remains unchanged elsewhere.
+- **Evidence:** Delegation/identity, tenant-isolation, and FA actor regressions pass; `make fg-fast`, `make fg-security`, and `make fg-contract` pass.
+- **Boundary:** No REPORT-QA-001, PROD-QUAL-001, GOV-DELIVERY-001, or truth-gate changes.
+
 ## FA-ACTOR-001 — canonical Field Assessment human actor authority
 
 - **Scope:** Material Field Assessment mutations now use the canonical

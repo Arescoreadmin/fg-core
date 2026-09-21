@@ -67,3 +67,64 @@ def test_tenant_context_cannot_override_canonical_actor_tenant() -> None:
         _resolve_caller_tenant(request, _context(tenant_id="tenant-a"))
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["code"] == "ACTOR_TENANT_MISMATCH"
+
+
+def test_delegated_actor_roles_do_not_inherit_gateway_platform_admin() -> None:
+    from types import SimpleNamespace
+
+    from api.identity_providers.api_key import _resolve_delegated_actor_roles
+
+    request = SimpleNamespace(
+        headers={"X-Tenant-ID": "tenant-a"},
+        state=SimpleNamespace(_delegated_actor_authority="internal_console"),
+    )
+
+    class _Result:
+        def fetchall(self):
+            return [("FieldAssessor",)]
+
+    class _Conn:
+        def execute(self, _statement, _params):
+            return _Result()
+
+    roles = _resolve_delegated_actor_roles(request, _Conn(), "auth0|assessor")
+    assert roles == ["assessor"]
+
+    from api.actor_context import ALL_PERMISSIONS, roles_to_permissions
+
+    assert roles_to_permissions(roles) != ALL_PERMISSIONS
+    assert "report.qa_approve" not in roles_to_permissions(roles)
+
+
+def test_unbound_internal_actor_cannot_mutate_field_assessment() -> None:
+    from api.auth_scopes.definitions import AuthResult
+    from api.identity_providers.api_key import extract_api_key_actor
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/field-assessment/engagements/e1/observations",
+            "headers": [(b"x-tenant-id", b"tenant-a")],
+        }
+    )
+    request.state.auth = AuthResult(
+        valid=True,
+        reason="canonical_platform_admin",
+        key_prefix="gateway",
+        tenant_id="frostgate-internal",
+    )
+    request.state._delegated_actor_subject = "auth0|unbound"
+    request.state._delegated_actor_authority = "internal_console"
+
+    class _Result:
+        def fetchall(self):
+            return []
+
+    class _Conn:
+        def execute(self, _statement, _params):
+            return _Result()
+
+    actor = extract_api_key_actor(request, _Conn())
+    assert actor is not None
+    assert actor.permissions == frozenset()
