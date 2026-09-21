@@ -30,9 +30,10 @@ active_objective:
   implementation_status: "COMPLETE"
   operational_acceptance: "OPEN"
   status: "BLOCKED_PENDING_PREREQUISITE"
-  immediate_prerequisite: "FA-ACTOR-001"
+  immediate_prerequisite: "REPORT-QA-001"
   prerequisites:
     - "FA-ACTOR-001"
+    - "REPORT-QA-001"
   required_gates:
     - "PRODUCTION_DEPENDENCY_SECURITY"
     - "PRODUCTION_SCHEMA_AND_RLS"
@@ -50,22 +51,21 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "FA-ACTOR-001"
-    title: "FA-ACTOR-001 — Bind Field Assessment actions to canonical human actors"
+  - id: "REPORT-QA-001"
+    title: "REPORT-QA-001 — Version-bound independent report QA authority"
     role: "IMMEDIATE_PREREQUISITE"
     parent_objective: "FG_RESULT_TRUTH_GATE"
     blocker_closed: >
-      Material Field Assessment mutations cannot support defensible QA and
-      production-qualification evidence unless the authoritative human actor
-      is canonical, current, tenant-bound, engagement-scoped, and retained in
-      audit and persistence.
+      Production acceptance and qualification evidence cannot be defensibly
+      attributed until technical and governance QA decisions are bound to a
+      canonical reviewer, report version, tenant, engagement, and separation
+      of duties.
     freeze_law_justification: >
-      This closes a concrete Customer-One blocker in the authenticated human
-      authority chain; it is required before downstream QA and qualification
-      evidence can be defensibly attributed. It is not speculative capability.
+      This closes the next concrete Customer-One blocker after FA-ACTOR-001:
+      reviewer authority and independence are required before production
+      acceptance evidence and qualification can be defensibly established.
     status: NEXT
     forbidden_scope:
-      - "REPORT-QA-001"
       - "PROD-QUAL-001"
       - "GOV-DELIVERY-001"
       - "FG_RESULT_TRUTH_GATE implementation changes"
@@ -108,6 +108,19 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "FA-ACTOR-001"
+    title: "Canonical Field Assessment Human Actor Authority"
+    prs: ["#710", "#711"]
+    merged_sha: "49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522"
+    note: >
+      Material Field Assessment mutations now require canonical authenticated
+      human authority, current active membership and capability, tenant and
+      engagement binding, and canonical actor persistence/audit attribution.
+      #711 additionally preserves delegated capabilities, requires an active
+      canonical principal, and binds the signed target tenant ahead of the
+      transport credential tenant. Post-merge proof: FA actor regression 92
+      passed; roadmap 18 passed; fg-fast 496 passed/2 skipped; fg-security
+      1239 passed/1 skipped; fg-contract PASS; diff-check PASS.
   - id: "FGA-028"
     title: "Grounded Determination & Executive Reporting Authority"
     prs: ["#695", "#696"]

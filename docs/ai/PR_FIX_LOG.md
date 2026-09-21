@@ -1,3 +1,10 @@
+## ROADMAP-RECONCILE-002 — complete FA-ACTOR-001 and authorize REPORT-QA-001
+
+- **Date / base:** 2026-09-21 / `49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522`.
+- **Scope:** Documentation and machine-readable roadmap-governance reconciliation only. #710 and #711 jointly prove FA-ACTOR-001 complete; `FG_RESULT_TRUTH_GATE` remains an open operational-acceptance parent objective. `REPORT-QA-001` is authorized as the sole immediate engineering prerequisite; `PROD-QUAL-001` and `GOV-DELIVERY-001` remain blocked.
+- **Evidence:** Focused FA actor/Field Assessment proof 92 passed; roadmap regression 18 passed before reconciliation; `make fg-fast` 496 passed/2 skipped; `make fg-security` 1239 passed/1 skipped; `make fg-contract` PASS; `git diff --check` PASS. No production code changed.
+- **Boundary:** This does not implement REPORT-QA-001, reviewer independence, production qualification, governed delivery, or truth-gate semantics.
+
 # PR Fix Log (Strict)
 
 ## FA-ACTOR-001 follow-up — delegated capability boundary

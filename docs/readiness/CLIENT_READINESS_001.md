@@ -699,11 +699,14 @@ worker/runtime proof, manual billing, and fragmented parallel product stacks.
 
 ### Must have before first paid client
 
-Roadmap authority now represents `FG_RESULT_TRUTH_GATE` as an open parent
-operational-acceptance objective and authorizes `FA-ACTOR-001` as its immediate
-engineering prerequisite. This is a governance reconciliation only; no Field
-Assessment implementation or truth/qualification gate was changed. `REPORT-QA-001`,
-`PROD-QUAL-001`, and `GOV-DELIVERY-001` remain downstream and unauthorized.
+Roadmap authority represents `FG_RESULT_TRUTH_GATE` as an open parent operational-acceptance
+objective. `FA-ACTOR-001` is complete through #710/#711 and post-merge proof; the canonical
+actor chain now protects material Field Assessment mutations. `REPORT-QA-001` is the sole
+immediate engineering prerequisite. This reconciliation changes governance state only; it
+does not implement reviewer independence, production qualification, delivery, or truth-gate
+semantics. `PROD-QUAL-001` and `GOV-DELIVERY-001` remain blocked.
+
+FA-ACTOR-001 completion evidence: #710 and #711 are merged at `49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522`; focused actor/Field Assessment proof is 92 passed, with fg-fast 496/2, fg-security 1239/1, fg-contract PASS, and diff-check PASS. The next bounded authority is REPORT-QA-001; no reviewer-independence claim is made here.
 
 | PR ID | Title | Goal / root cause | Exact scope | Dependencies | Security impact | Commercial impact | Complexity | Why now |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
