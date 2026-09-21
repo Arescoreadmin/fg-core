@@ -353,6 +353,16 @@ function isTenantAdminCorePath(path: string[]): boolean {
   );
 }
 
+function isFieldAssessmentMutationPath(path: string[], method: string): boolean {
+  return (
+    method !== 'GET' &&
+    method !== 'HEAD' &&
+    path.length >= 2 &&
+    path[0] === 'field-assessment' &&
+    path[1] === 'engagements'
+  );
+}
+
 function isPlatformAdminOnlyTenantPath(path: string[]): boolean {
   return (
     path.length >= 4 &&
@@ -611,6 +621,8 @@ async function proxyToCore(
   actorAuthority?: 'tenant_human' | 'internal_console',
 ): Promise<NextResponse> {
   const isTenantAdminPath = isTenantAdminCorePath(path);
+  const isFieldAssessmentMutation = isFieldAssessmentMutationPath(path, request.method);
+  const requiresDelegatedActor = isTenantAdminPath || isFieldAssessmentMutation;
   const isInvitationPath = isInvitationAcceptancePath(path);
 
   if (!isProxyPathAllowed(path, request.method)) {
@@ -620,7 +632,7 @@ async function proxyToCore(
   const headers = new Headers();
   headers.set('X-Request-ID', requestId);
 
-  if (isTenantAdminPath) {
+  if (requiresDelegatedActor) {
     if (!ADMIN_GATEWAY_TOKEN) return jsonError('Admin gateway token is not configured', 503, requestId);
     if (!namedUserSub || !actorAuthority) {
       return jsonError('Delegated named actor authority required', 403, requestId);

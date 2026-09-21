@@ -50,7 +50,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import authz_scope, require_bound_tenant
+from api.auth_scopes import authz_scope
 from api.auth_dispatch import require_permission
 from api.actor_context import ActorContext
 from api.deps import auth_ctx_db_session
@@ -244,7 +244,9 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_caller_tenant(request: Request) -> str:
+def _resolve_caller_tenant(
+    request: Request, actor_ctx: ActorContext | None = None
+) -> str:
     auth = getattr(getattr(request, "state", None), "auth", None)
     tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
         auth, "tenant_id", None
@@ -254,13 +256,48 @@ def _resolve_caller_tenant(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="tenant context required",
         )
-    return str(tenant_id)
+    resolved = str(tenant_id)
+    if actor_ctx is not None and actor_ctx.tenant_id:
+        canonical = str(actor_ctx.tenant_id)
+        if canonical != resolved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=api_error(
+                    "ACTOR_TENANT_MISMATCH",
+                    "actor authority does not match requested tenant",
+                ),
+            )
+    return resolved
 
 
-def _actor_from_request(request: Request) -> str:
-    auth = getattr(getattr(request, "state", None), "auth", None)
-    prefix = getattr(auth, "key_prefix", None)
-    return str(prefix) if prefix else "unknown"
+def _actor_from_context(actor_ctx: ActorContext) -> str:
+    """Return the canonical authenticated actor subject for a mutation.
+
+    Field Assessment must never attribute a mutation from a caller-controlled
+    body/header value or from the gateway key prefix.  ``ActorContext`` is the
+    output of the repository's canonical authentication, membership, and
+    permission chain, so its subject is the only authoritative actor value.
+    """
+    subject = (actor_ctx.subject or "").strip()
+    if not subject or subject in {"anonymous", "unknown"}:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=api_error(
+                "CANONICAL_ACTOR_REQUIRED", "authenticated actor required"
+            ),
+        )
+    return subject
+
+
+def _actor_type_from_context(actor_ctx: ActorContext) -> str:
+    """Classify the already-authenticated actor without inventing identity."""
+    if actor_ctx.auth_source == "dev_bypass" or actor_ctx.auth_source.startswith(
+        "oidc_"
+    ):
+        return "human"
+    if actor_ctx.auth_source == "api_key":
+        return "service"
+    return "unknown"
 
 
 def _assert_engagement_accepts_evidence(eng: FaEngagement) -> None:
@@ -1252,7 +1289,7 @@ def list_engagements_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementListResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     rows = list_engagements(
         db,
         tenant_id=tenant_id,
@@ -1284,9 +1321,8 @@ def create_engagement_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     eng = create_engagement(
         db,
         tenant_id=tenant_id,
@@ -1367,7 +1403,7 @@ def get_engagement_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1394,8 +1430,8 @@ def patch_engagement_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
     """Shallow-merge engagement_metadata fields. Other top-level fields are immutable here."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1417,7 +1453,7 @@ def patch_engagement_route(
         engagement_id=engagement_id,
         event_type="engagement.metadata_updated",
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason_code="ENGAGEMENT_METADATA_UPDATED",
         entity_type="engagement",
         entity_id=engagement_id,
@@ -1440,8 +1476,8 @@ def transition_engagement_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     # Resolve engagement first so gate evaluation has the eng object.
     try:
@@ -1567,8 +1603,8 @@ def ingest_scan_result_route(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ScanResultResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     # Verify engagement belongs to tenant
     try:
@@ -1765,7 +1801,7 @@ def list_scan_results_route(
     actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ScanResultSummaryResponse]:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1790,7 +1826,7 @@ def get_scan_result_route(
     actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ScanResultResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1829,8 +1865,8 @@ def register_document_analysis_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DocumentAnalysisResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1846,7 +1882,9 @@ def register_document_analysis_route(
         document_classification=body.document_classification.value,
         document_hash=body.document_hash,
         version_label=body.version_label,
-        approved_by=body.approved_by,
+        # ``approved_by`` is compatibility metadata only; authoritative
+        # registration actor is the canonical authenticated subject.
+        approved_by=actor,
         approval_date=body.approval_date,
         freshness_date=body.freshness_date,
         analysis_findings=body.analysis_findings,
@@ -1891,7 +1929,7 @@ def list_document_analyses_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[DocumentAnalysisResponse]:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1922,8 +1960,8 @@ def capture_observation_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ObservationResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -1994,8 +2032,8 @@ def bulk_import_observations_route(
 ) -> BulkObservationImportResult:
     """Import multiple observations in a single call. Processes each row independently —
     invalid rows are collected in errors and skipped; valid rows are committed atomically."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2083,7 +2121,7 @@ def list_observations_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ObservationResponse]:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2116,7 +2154,7 @@ def list_interview_templates_route(
 ) -> list[ObservationResponse]:
     """Return recent interview observations across the tenant's engagements.
     Useful for seeding new interviews from prior assessment notes."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     stmt = (
         select(FaFieldObservation)
         .where(
@@ -2169,8 +2207,8 @@ def update_observation_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ObservationResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     obs = db.execute(
         select(FaFieldObservation).where(
             FaFieldObservation.id == observation_id,
@@ -2268,8 +2306,8 @@ def delete_observation_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     obs = db.execute(
         select(FaFieldObservation).where(
             FaFieldObservation.id == observation_id,
@@ -2357,7 +2395,7 @@ def list_findings_route(
     actor_ctx: ActorContext = Depends(require_permission("finding.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingListResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2400,7 +2438,7 @@ def get_finding_route(
     actor_ctx: ActorContext = Depends(require_permission("finding.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> FindingResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2459,8 +2497,8 @@ def patch_finding_status_route(
         normalize_nist_control,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -2608,8 +2646,8 @@ def patch_finding_remediation_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Set remediation_hint on a finding to satisfy the readiness gate."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -2639,7 +2677,7 @@ def patch_finding_remediation_route(
         engagement_id=engagement_id,
         event_type="finding.remediation_hint_updated",
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason_code="FINDING_REMEDIATION_HINT_UPDATED",
         entity_type="finding",
         entity_id=finding_id,
@@ -2655,9 +2693,9 @@ def patch_finding_remediation_route(
         entity_type="finding",
         entity_id=finding_id,
         actor_id=actor,
-        actor_name=body.actor_name,
-        actor_email=body.actor_email,
-        actor_role=body.actor_role,
+        actor_name=actor_ctx.name or actor,
+        actor_email=actor_ctx.email or None,
+        actor_role=actor_ctx.primary_role(),
         decision_reason=(
             body.decision_reason
             or f"Finding remediation: {body.remediation_hint[:200]}"
@@ -2692,8 +2730,8 @@ def create_evidence_link_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EvidenceLinkResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2830,7 +2868,7 @@ def list_evidence_links_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[EvidenceLinkResponse]:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -2863,7 +2901,7 @@ def get_engagement_summary_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementSummaryResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -3096,7 +3134,7 @@ def get_engagement_execution_state_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ExecutionStateResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -3123,7 +3161,7 @@ def get_engagement_next_actions_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> PlaybookProgressResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -3181,8 +3219,8 @@ def import_msgraph_connector_run_route(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ConnectorImportResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -3524,8 +3562,8 @@ def initiate_msgraph_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -3801,8 +3839,8 @@ def initiate_oauth_inventory_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -4051,8 +4089,8 @@ def initiate_endpoint_inventory_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -4491,8 +4529,8 @@ def initiate_network_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> NetworkScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -4766,8 +4804,8 @@ def initiate_dns_email_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> DnsEmailScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -4976,8 +5014,8 @@ def initiate_web_headers_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> WebHeadersScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -5273,8 +5311,8 @@ def initiate_entra_governance_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -5529,8 +5567,8 @@ def initiate_sharepoint_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -5785,8 +5823,8 @@ def initiate_oauth_risk_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6045,8 +6083,8 @@ def initiate_ai_tool_discovery_scan(
     actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphScanInitiateResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6144,7 +6182,7 @@ def get_msgraph_run_status(
     actor_ctx: ActorContext = Depends(require_permission("scan.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> MsgraphRunStatusResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6210,7 +6248,7 @@ def create_risk_acceptance_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Record a formal risk acceptance with owner, justification, and mandatory expiry."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -6271,7 +6309,7 @@ def list_risk_acceptances_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6299,7 +6337,7 @@ def get_risk_acceptance_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     acceptance = governance_decision_svc.get_risk_acceptance(
         db, acceptance_id=acceptance_id, tenant_id=tenant_id
     )
@@ -6343,7 +6381,7 @@ def create_governance_exception_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Record a governance exception with owner, justification, and mandatory expiry."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -6392,7 +6430,7 @@ def list_governance_exceptions_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6418,7 +6456,7 @@ def get_governance_exception_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     exception = governance_decision_svc.get_exception(
         db, exception_id=exception_id, tenant_id=tenant_id
     )
@@ -6443,7 +6481,7 @@ def list_governance_decisions_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6472,7 +6510,7 @@ def get_governance_decision_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     decision = governance_decision_svc.get_decision(
         db, decision_id=decision_id, tenant_id=tenant_id
     )
@@ -6501,7 +6539,7 @@ def list_scan_jobs(
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """List scan jobs for an engagement.  Supports optional ?status= filter."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6526,7 +6564,7 @@ def get_scan_job(
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict:
     """Get a single scan job by ID.  Tenant-isolated: returns 404 for cross-tenant IDs."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6579,8 +6617,8 @@ def promote_connector_run_assets(
     dry_run=true performs no writes and returns the projected outcome.
     Tenant isolation: only candidates belonging to the caller's tenant are processed.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -6706,7 +6744,7 @@ def list_audit_events_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AuditEventResponse]:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6770,8 +6808,8 @@ def pin_baseline(
     Drift reports always compute against the active baseline — never auto-select.
     Pinning de-activates the previous baseline and emits an audit event.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -6905,7 +6943,7 @@ def get_drift_report(
     and chained scan signatures for independent auditability.
     Requires a pinned baseline — returns 409 when none exists.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7155,8 +7193,8 @@ def create_connector_schedule(
     One active schedule per (engagement_id, source_type). Providing a new
     cron expression for an existing source_type replaces the prior schedule.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7213,7 +7251,7 @@ def list_connector_schedules(
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ConnectorScheduleResponse]:
     """List all connector schedules for an engagement."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7275,7 +7313,7 @@ def get_drift_correlation(
     that were derived between baseline_collected_at and current_collected_at.
     Returns empty list when no correlations are found — not an error.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7334,7 +7372,7 @@ def get_drift_velocity(
     Returns new_per_day rate, MTTR, and regression rate.
     Returns 404 when fewer than 2 scans exist for the engagement.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7458,8 +7496,8 @@ def qa_approve_report_route(
     the report.qa.approved readiness gate transitions to passed, unblocking
     the engagement from transitioning to 'delivered'.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -7551,14 +7589,12 @@ def qa_approve_report_route(
         ) from _te
 
     now = utc_iso8601_z_now()
-    # reviewer_name is the human-readable display name (e.g. "Jane Smith, Senior Assessor").
-    # The JWT actor is always recorded in the audit event for non-repudiation.
+    # Caller-supplied reviewer_name is display metadata only.  The persisted
+    # approval authority is always the canonical ActorContext subject.
     display_name = (
-        body.reviewer_name.strip()
-        if body.reviewer_name and body.reviewer_name.strip()
-        else None
-    ) or actor
-    report.qa_approved_by = display_name
+        actor_ctx.name.strip() if actor_ctx.name and actor_ctx.name.strip() else actor
+    )
+    report.qa_approved_by = actor
     report.qa_approved_at = now
     db.flush()
 
@@ -7571,9 +7607,9 @@ def qa_approve_report_route(
         reason_code="REPORT_QA_APPROVED",
         payload={
             "report_id": report_id,
-            "qa_approved_by": display_name,
+            "qa_approved_by": actor,
             "qa_approved_at": now,
-            "jwt_actor": actor,
+            "requested_reviewer_name": body.reviewer_name,
         },
     )
 
@@ -7590,10 +7626,14 @@ def qa_approve_report_route(
         actor_name=actor_ctx.name or display_name or None,
         actor_email=actor_ctx.email or None,
         actor_role=actor_ctx.primary_role(),
-        decision_reason=f"Report QA-approved for client delivery by {display_name}",
+        decision_reason=f"Report QA-approved for client delivery by {actor}",
         decision_notes=body.decision_notes,
         related_finding_ids=None,
-        decision_metadata={"qa_approved_by": display_name, "report_id": report_id},
+        decision_metadata={
+            "qa_approved_by": actor,
+            "requested_reviewer_name": body.reviewer_name,
+            "report_id": report_id,
+        },
     )
 
     try:
@@ -7605,7 +7645,7 @@ def qa_approve_report_route(
             decision_type="report_approved",
             entity_type="human",
             reasoning=[
-                f"Report QA-approved for client delivery by {display_name}",
+                f"Report QA-approved for client delivery by {actor}",
                 body.decision_notes or "",
             ],
             supporting_evidence_ids=[report_id],
@@ -7721,7 +7761,7 @@ def qa_approve_report_route(
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason=f"QA approval of report {report_id}",
     )
     # Capture eng.status before commit to avoid post-commit expiry (D-T6-002).
@@ -7730,7 +7770,7 @@ def qa_approve_report_route(
 
     return ReportQaApproveResponse(
         report_id=report_id,
-        qa_approved_by=display_name,
+        qa_approved_by=actor,
         qa_approved_at=now,
         engagement_status=_eng_status,
         portal_grant_id=portal_grant_id,
@@ -7805,8 +7845,8 @@ def create_portal_grant(
     db: Session = Depends(auth_ctx_db_session),
 ) -> CreatePortalGrantResponse:
     """Create a portal grant for client delivery access. Raw secret shown once — not stored."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -7836,7 +7876,7 @@ def create_portal_grant(
         engagement_id=engagement_id,
         event_type="portal_grant.created",
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason_code="PORTAL_GRANT_CREATED",
         entity_type="portal_grant",
         entity_id=result.credential_id,
@@ -7872,7 +7912,7 @@ def list_portal_grants(
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[PortalGrantResponse]:
     """List portal grants for an engagement (no secrets exposed)."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -7898,8 +7938,8 @@ def revoke_portal_grant(
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
     """Revoke a portal grant immediately. All active sessions for this engagement become invalid."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     found = _portal_grant_svc.revoke_grant(
         db, grant_id=grant_id, tenant_id=tenant_id, revoked_by=actor
     )
@@ -7914,7 +7954,7 @@ def revoke_portal_grant(
         engagement_id=engagement_id,
         event_type="portal_grant.revoked",
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason_code="PORTAL_GRANT_REVOKED",
         entity_type="portal_grant",
         entity_id=grant_id,
@@ -7937,8 +7977,8 @@ def rotate_portal_grant(
     db: Session = Depends(auth_ctx_db_session),
 ) -> RotatePortalGrantResponse:
     """Rotate a portal grant. Old secret is immediately invalid; new secret returned once."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     result = _portal_grant_svc.rotate_grant(
         db, grant_id=grant_id, tenant_id=tenant_id, rotated_by=actor
     )
@@ -7955,7 +7995,7 @@ def rotate_portal_grant(
         engagement_id=engagement_id,
         event_type="portal_grant.rotated",
         actor=actor,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
         reason_code="PORTAL_GRANT_ROTATED",
         entity_type="portal_grant",
         entity_id=grant_id,
@@ -8042,7 +8082,7 @@ def promote_engagement_route(
     Primary trigger is automatic on 'delivered' transition — this route is
     for operator retries and promotion status inspection.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -8110,7 +8150,7 @@ def get_readiness_drift_route(
     """
     from services.field_assessment.promotion_drift import detect_readiness_drift
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -8815,8 +8855,8 @@ def create_engagement_report_route(
             ),
         )
 
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         eng = get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -8909,7 +8949,7 @@ def create_engagement_report_route(
             engagement_id=engagement_id,
             event_type="engagement_report_created",
             actor=actor,
-            actor_type="human_operator",
+            actor_type=_actor_type_from_context(actor_ctx),
             reason_code="ENGAGEMENT_REPORT_CREATED",
             entity_type="report",
             entity_id=record.id,
@@ -8955,7 +8995,7 @@ def list_engagement_reports_route(
     """
     from services.governance.report.versioning import list_versions
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -9010,7 +9050,7 @@ def get_engagement_report_route(
     """
     from services.governance.report.versioning import get_version
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -9068,7 +9108,7 @@ def export_engagement_report_route(
         export_pdf_bytes,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         engagement = get_engagement(
@@ -9254,7 +9294,7 @@ def verify_engagement_report_route(
     from services.governance.report.versioning import get_version
     from services.governance.report.signing import ReportSigningKeyError, verify_report
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -9324,7 +9364,7 @@ def get_finding_explanation_route(
     Tenant-isolated: resolves caller tenant and enforces it through
     the explain_finding service. Returns 404 for unknown or cross-tenant findings.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         exp = explain_finding(
             db,
@@ -9603,8 +9643,8 @@ def create_or_get_questionnaire(
     Creates a new questionnaire pre-seeded with all framework controls.
     If one already exists for this engagement+framework, returns it unchanged.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -9664,7 +9704,7 @@ def get_questionnaire_route(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -9707,8 +9747,8 @@ def patch_questionnaire_response(
     actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> UpdateResponseResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -9930,8 +9970,8 @@ def submit_questionnaire_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireResponse:
     """Finalize questionnaire and create evidence links to matching findings."""
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -10001,7 +10041,7 @@ def get_questionnaire_coverage(
     actor_ctx: ActorContext = Depends(require_permission("assessment.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> QuestionnaireCoverageResponse:
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -10040,7 +10080,7 @@ def list_questionnaires_route(
     Returns questionnaire responses augmented with scan finding counts per control
     so callers can show a confidence-weighted coverage matrix without a second request.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -10102,7 +10142,7 @@ def get_remediation_roadmap(
         NIST_TOTAL_CONTROLS,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
     except EngagementNotFound as exc:
@@ -10353,8 +10393,8 @@ def register_artifact_route(
     actor_ctx: ActorContext = Depends(require_permission("evidence.upload")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ArtifactResponse:
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     eng = db.execute(
         select(FaEngagement).where(
@@ -10441,8 +10481,8 @@ def upload_artifact_route(
     on mismatch. The server-computed digest is persisted as the authoritative
     content hash and is bound to the provenance record.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     # Validate artifact_type against the known allowlist.
     if artifact_type not in _ALLOWED_ARTIFACT_MIME_TYPES:
@@ -10643,8 +10683,8 @@ def get_artifact_route(
     Emits an audit event on every access (success and denial) so that the
     immutable audit trail records who retrieved each artifact and when.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     artifact = db.execute(
         select(FaArtifact).where(
@@ -10761,8 +10801,8 @@ def run_ai_data_access_mapping(
     H13: scan.initiated and scan.completed audit events emitted directly in this route (H13.5 compliant).
     H15: FaScanResult enters collected lifecycle state automatically on creation.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11017,8 +11057,8 @@ def generate_verification_bundle_route(
     risk acceptances, exceptions, audit trail, report), hashes each, runs
     tamper detection, and persists the bundle record. Emits an audit event.
     """
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11070,7 +11110,7 @@ def get_verification_bundle_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerificationBundleResponse:
     """Retrieve the latest verification bundle for an engagement."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11105,7 +11145,7 @@ def get_verification_bundle_manifest_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> VerificationBundleManifestResponse:
     """Retrieve the manifest from the latest verification bundle."""
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11158,7 +11198,7 @@ def download_verification_bundle_route(
     Returns a ZIP containing manifest.json, bundle.json, and
     verification_report.json suitable for auditor-side offline verification.
     """
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11489,8 +11529,8 @@ def run_ai_vendor_governance(
         generate_governance_records,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11679,7 +11719,7 @@ def list_ai_vendor_governance(
     from api.db_models_ai_vendor_governance import FaAiVendorGovernanceRecord
     from services.connectors.ai_vendor_governance.governance_engine import build_summary
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11778,8 +11818,8 @@ def patch_ai_vendor_governance(
         compute_governance_readiness,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11902,8 +11942,8 @@ def transition_ai_vendor_governance(
         validate_transition,
     )
 
-    tenant_id = _resolve_caller_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -11959,9 +11999,9 @@ def transition_ai_vendor_governance(
         reason=body.reason,
         previous_state=previous_state,
         new_state=body.new_state,
-        actor_id=None,
-        actor_name=body.actor_name,
-        actor_email=body.actor_email,
+        actor_id=actor,
+        actor_name=actor_ctx.name or actor,
+        actor_email=actor_ctx.email or None,
         evidence_refs=body.evidence_refs,
         notes=body.notes,
         exception_expiration=body.exception_expiration,
@@ -12007,7 +12047,7 @@ def list_ai_vendor_governance_decisions(
     """Read-only paginated governance decision ledger."""
     from api.db_models_ai_vendor_governance import FaAiVendorGovernanceDecision
 
-    tenant_id = _resolve_caller_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -12480,8 +12520,8 @@ def create_report_version_route(
     Computes report_hash + manifest_hash immediately and emits a 'generated'
     delivery event. Tenant is bound to the auth context.
     """
-    tenant_id = require_bound_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     actor_role = actor_ctx.primary_role()
 
     try:
@@ -12603,7 +12643,7 @@ def create_report_version_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
     )
     db.commit()
     db.refresh(rv)
@@ -12623,7 +12663,7 @@ def list_report_versions_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ReportVersionResponse]:
     """List all versions for a report scoped to the caller's tenant."""
-    tenant_id = require_bound_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -12662,7 +12702,7 @@ def get_report_version_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportVersionResponse:
     """Return a single report version by its ID."""
-    tenant_id = require_bound_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -12695,8 +12735,8 @@ def submit_report_version_for_review_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportVersionResponse:
     """Transition a draft version to internal_review and record the event."""
-    tenant_id = require_bound_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     actor_role = actor_ctx.primary_role()
 
     try:
@@ -12742,7 +12782,7 @@ def submit_report_version_for_review_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
     )
     db.commit()
     db.refresh(rv)
@@ -12767,9 +12807,11 @@ def approve_report_version_route(
 
     Sets approved_at/approved_by, reviewer metadata, and freezes the version.
     """
-    tenant_id = require_bound_tenant(request)
-    actor = _actor_from_request(request)
-    actor_role = actor_ctx.primary_role() or body.reviewer_role
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    # Reviewer role supplied by the caller is display metadata only; audit
+    # attribution must never fall back to an untrusted request field.
+    actor_role = actor_ctx.primary_role() or _actor_type_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -12799,6 +12841,8 @@ def approve_report_version_route(
     rv.status = "approved"
     rv.approved_at = now
     rv.approved_by = actor
+    # Reviewer display metadata is retained for compatibility, but approval
+    # authority is the canonical actor persisted in approved_by and audit.
     rv.reviewer_name = body.reviewer_name.strip()
     rv.reviewer_role = body.reviewer_role.strip()
     rv.approval_notes = body.approval_notes.strip() if body.approval_notes else None
@@ -12823,7 +12867,7 @@ def approve_report_version_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
     )
     db.commit()
     db.refresh(rv)
@@ -12844,8 +12888,8 @@ def deliver_report_version_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportVersionResponse:
     """Mark an approved version as delivered and stamp delivered_at."""
-    tenant_id = require_bound_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     actor_role = actor_ctx.primary_role()
 
     try:
@@ -12899,7 +12943,7 @@ def deliver_report_version_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
     )
     db.commit()
     db.refresh(rv)
@@ -12921,8 +12965,8 @@ def supersede_report_version_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportVersionResponse:
     """Mark a delivered version as superseded by a newer approved version."""
-    tenant_id = require_bound_tenant(request)
-    actor = _actor_from_request(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
     actor_role = actor_ctx.primary_role()
 
     try:
@@ -13005,7 +13049,7 @@ def supersede_report_version_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type="human_operator",
+        actor_type=_actor_type_from_context(actor_ctx),
     )
     db.commit()
     db.refresh(rv)
@@ -13026,7 +13070,7 @@ def get_report_version_manifest_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportManifest:
     """Return the deterministic manifest for a report version."""
-    tenant_id = require_bound_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -13088,7 +13132,7 @@ def get_report_version_history_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[ReportDeliveryEventResponse]:
     """Return the ordered append-only delivery history for a report version."""
-    tenant_id = require_bound_tenant(request)
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)

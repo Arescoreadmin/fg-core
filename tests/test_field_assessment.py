@@ -1361,7 +1361,7 @@ def test_qa_approve_second_call_rejected_with_409(qa_client: TestClient) -> None
 
 
 def test_qa_approve_response_uses_reviewer_name(qa_client: TestClient) -> None:
-    """Response qa_approved_by must reflect the supplied reviewer_name, not the JWT actor."""
+    """Caller reviewer metadata cannot replace the canonical authenticated actor."""
     eng_id = _create_engagement(qa_client)["id"]
     report_id = _create_finalized_report(qa_client, eng_id)
 
@@ -1370,7 +1370,8 @@ def test_qa_approve_response_uses_reviewer_name(qa_client: TestClient) -> None:
         json={"reviewer_name": "Jane Smith, Senior Assessor"},
     )
     assert resp.status_code == 200
-    assert resp.json()["qa_approved_by"] == "Jane Smith, Senior Assessor"
+    assert resp.json()["qa_approved_by"] == "fgk"
+    assert resp.json()["qa_approved_by"] != "Jane Smith, Senior Assessor"
 
 
 def test_qa_approve_response_falls_back_to_actor_when_no_name(
