@@ -219,11 +219,22 @@ def _resolve_delegated_actor_roles(
     try:
         rows = conn.execute(
             text(
-                "SELECT role FROM tenant_users WHERE identity_subject = :subject AND active = TRUE AND identity_binding_status = :bound AND (:tenant_id = :empty OR tenant_id = :tenant_id)"
+                """
+                SELECT tu.role
+                FROM tenant_users AS tu
+                JOIN fg_principals AS p ON p.id = tu.principal_id
+                WHERE tu.identity_subject = :subject
+                  AND tu.active = TRUE
+                  AND tu.identity_binding_status = :bound
+                  AND tu.principal_id IS NOT NULL
+                  AND p.lifecycle_state = :active
+                  AND (:tenant_id = :empty OR tu.tenant_id = :tenant_id)
+                """
             ),
             {
                 "subject": subject,
                 "bound": "bound",
+                "active": "active",
                 "tenant_id": query_tenant,
                 "empty": "",
             },
@@ -306,9 +317,10 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
             else:
                 scopes: set[str] = getattr(auth, "scopes", set()) or set()
                 perms = _permissions_from_legacy_scopes(scopes)
-            delegated_tenant = getattr(
-                getattr(request, "state", None), "tenant_id", None
-            ) or (request.headers.get("X-Tenant-ID") if request.headers else None)
+            # The signed delegation target outranks the transport key tenant.
+            delegated_tenant = (
+                request.headers.get("X-Tenant-ID") if request.headers else None
+            ) or getattr(getattr(request, "state", None), "tenant_id", None)
             return ActorContext(
                 subject=named_sub,
                 email="",
