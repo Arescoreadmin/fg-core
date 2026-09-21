@@ -1,5 +1,23 @@
 # PR Fix Log (Strict)
 
+## FA-ACTOR-001 — canonical Field Assessment human actor authority
+
+- **Scope:** Material Field Assessment mutations now use the canonical
+  `ActorContext.subject` for persistence and audit attribution. The BFF routes
+  Field Assessment mutations through the existing delegation-v3 proof path,
+  binding named subject, authority class, tenant, method, path, and request.
+  Core rejects missing canonical actors and fails closed on actor/tenant
+  disagreement. Verified human and service actors remain explicitly distinct.
+- **Caller identity:** `reviewer_name`, `approved_by`, `actor_name`, and
+  `actor_email` request fields cannot replace canonical authority; compatibility
+  display/metadata is retained only where needed.
+- **Evidence:** `tests/test_fa_actor_001.py`, affected Field Assessment
+  regressions, and `apps/console/tests/fa-actor-001.test.js` cover canonical
+  subject selection, anonymous denial, human/service classification, BFF proof
+  binding, tenant consistency, and caller-attribution resistance.
+- **Boundary:** This does not implement REPORT-QA-001 reviewer independence,
+  PROD-QUAL-001, GOV-DELIVERY-001, or change FG_RESULT_TRUTH_GATE semantics.
+
 ## ROADMAP-RECONCILE-001 — authorize FA-ACTOR-001 prerequisite
 
 - **Date / base:** 2026-09-20 / `367f3f14b59b5fd7ce563baef8e9e18c35f4dde7`.

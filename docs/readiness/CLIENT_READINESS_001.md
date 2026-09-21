@@ -491,12 +491,11 @@ and are not part of a safe golden path.
 
 ### CR-707-003 — Field Assessment Console loses named-human attribution
 
-- **Severity / category / status:** P1 / Billable Workflow Integrity / OPEN
+- **Severity / category / status:** P1 / Billable Workflow Integrity / REMEDIATED — FA-ACTOR-001
 - **Affected component:** Console Core proxy and Field Assessment audit events.
-- **Observed:** ordinary Field Assessment paths use a tenant service credential;
-  unlike administrative paths, they do not attach delegation-v3 named-human
-  proof. Core labels some events `human_operator` while the actor may be the
-  service credential.
+- **Observed:** ordinary Field Assessment paths previously used a tenant service
+  credential without attaching delegation-v3 named-human proof. Core labeled
+  some events `human_operator` while the actor could be the service credential.
 - **Expected:** every material assessment, evidence, QA, and delivery action
   retains the canonical human actor while tenant/service authentication remains
   independently verified.
@@ -506,11 +505,16 @@ and are not part of a safe golden path.
   non-repudiation are incomplete.
 - **Commercial impact:** audit reconstruction and reviewer accountability are
   insufficient for a defensible paid engagement.
-- **Evidence / reproduction:** traced `apps/console/app/api/core/[...path]/route.ts`
-  and Field Assessment `_actor_from_request()` callers.
-- **Remediation / proposed PR / dependencies:** `FA-ACTOR-001`, extend v3 with
-  route/tenant/action binding while preserving the tenant credential boundary;
-  depends on #703/#706 protocol invariants.
+- **Evidence / reproduction:** `apps/console/app/api/core/[...path]/route.ts`
+  now sends Field Assessment mutations through the existing v3 proof path;
+  Core derives mutation/audit actors from `ActorContext.subject`, binds tenant
+  context to that authority, and classifies verified human/service actors
+  explicitly. Caller-supplied reviewer/approval identity remains metadata.
+- **Remediation:** `fix(field-assessment): enforce canonical human actor authority`.
+  Focused FA-ACTOR-001 tests prove canonical subject selection, fail-closed
+  anonymous actors, tenant consistency, BFF delegation, and non-authoritative
+  caller attribution. REPORT-QA-001 remains responsible for reviewer
+  independence and separation-of-duties policy.
 
 ### CR-707-004 — Delivery is a state flag, not a customer receipt
 

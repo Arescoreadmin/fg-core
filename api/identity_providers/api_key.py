@@ -243,6 +243,9 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
                 # reason=canonical_platform_admin proves RBAC already validated
                 # platform_admin — use that directly.
                 perms = roles_to_permissions(["platform_admin"])
+            delegated_authority = (
+                getattr(request.state, "_delegated_actor_authority", None) or ""
+            ).strip()
             return ActorContext(
                 subject=named_sub,
                 email="",
@@ -251,7 +254,15 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
                 roles=["platform_admin"]
                 if getattr(auth, "reason", None) == "canonical_platform_admin"
                 else [],
-                auth_source="api_key",
+                # A verified delegation proof preserves the named human
+                # authority even though the gateway credential authenticates
+                # the transport. Without this explicit marker, downstream FA
+                # audit would misclassify a human action as a service action.
+                auth_source=(
+                    "oidc_delegated"
+                    if delegated_authority in {"tenant_human", "internal_console"}
+                    else "api_key"
+                ),
                 tenant_id=None,
             )
 
