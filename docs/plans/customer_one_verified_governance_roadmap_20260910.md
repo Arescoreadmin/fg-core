@@ -131,9 +131,9 @@ evidence and downstream authorities described below.
   implementation are proven by focused semantic, epistemic, complete-evidence, lineage,
   replay, and release-boundary tests.
 - **Operational acceptance:** OPEN — this is the parent acceptance objective, not an
-  authorized implementation item. Its immediate prerequisite is `FA-ACTOR-001`.
-- **Current blocker:** Material Field Assessment actions still require canonical named
-  human attribution so later QA and production-qualification evidence is defensible.
+  authorized implementation item. Its immediate prerequisite is `REPORT-QA-001`.
+- **Current blocker:** Technical and governance QA decisions still require canonical,
+  version-bound reviewer authority and separation-of-duties evidence.
 - **Mandatory acceptance gates:** Production dependency security, production schema
   authority/closed-world RLS, canonical assessment proof, durable execution, and
   recovery/retention. All must pass before customer data access, report issuance, or L14
@@ -153,7 +153,7 @@ evidence and downstream authorities described below.
 |---|---|---|
 | FGA-028 — Grounded Determination & Executive Reporting Authority | PR #695/#696 are merged and strict post-merge validated; grounded claims and executive-report truth boundary are implemented. | **COMPLETED** — reconciled after strict validation. |
 | `FG_RESULT_TRUTH_GATE` operational acceptance | Truth implementation and invariants are complete; current-SHA production acceptance evidence and downstream authority chain remain open. | **OPEN PARENT OBJECTIVE** — not independently authorized implementation work. |
-| `FA-ACTOR-001` | Material Field Assessment mutations need canonical, current, tenant-bound, engagement-scoped human attribution for defensible QA and qualification evidence. | **NEXT** — immediate authorized prerequisite under the Freeze Law. |
+| `FA-ACTOR-001` | #710/#711 prove canonical, current, tenant-bound, engagement-scoped human attribution for material Field Assessment mutations. | **COMPLETED** — implementation and post-merge evidence reconciled. |
 | Artifact ownership & evidence storage | Existing report/export manifests and storage-key validation provide foundations; no current evidence shows this is the immediate blocker ahead of result truth. | Deferred until result truth is release-gated. |
 | Production dependency security closure | Forensic audit records critical/high dependency advisories as mandatory before external access. | **MANDATORY FG_RESULT_TRUTH_GATE ACCEPTANCE GATE** — must pass before customer data access, report issuance, or L14 closure; no independent feature authorization. |
 | Production schema authority / closed-world RLS | Audit identifies `create_all()` and migration/RLS census gaps as mandatory production prerequisites. | **MANDATORY FG_RESULT_TRUTH_GATE ACCEPTANCE GATE** — migrations-only schema authority and tenant RLS proof required before L14 closure. |
