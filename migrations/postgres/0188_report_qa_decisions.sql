@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS fa_report_qa_decisions (
 );
 CREATE INDEX IF NOT EXISTS ix_fa_report_qa_decisions_tenant_engagement ON fa_report_qa_decisions (tenant_id, engagement_id);
 CREATE INDEX IF NOT EXISTS ix_fa_report_qa_decisions_version_stage ON fa_report_qa_decisions (report_version_id, qa_stage);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_fa_report_qa_decisions_version_stage
+    ON fa_report_qa_decisions (tenant_id, report_version_id, qa_stage);
 ALTER TABLE fa_report_qa_decisions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS fa_report_qa_decisions_tenant_isolation ON fa_report_qa_decisions;
 CREATE POLICY fa_report_qa_decisions_tenant_isolation ON fa_report_qa_decisions USING (tenant_id = current_setting('app.tenant_id', true));

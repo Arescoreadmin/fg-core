@@ -12589,7 +12589,17 @@ def _record_report_qa_decision(
         schema_version="1.0",
     )
     db.add(row)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_QA_DECISION_REPLAY",
+                "This report version already has a QA decision.",
+            ),
+        ) from exc
     return row
 
 

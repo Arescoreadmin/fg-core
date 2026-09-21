@@ -804,6 +804,12 @@ class FaReportQaDecision(Base):
         Index(
             "ix_fa_report_qa_decisions_version_stage", "report_version_id", "qa_stage"
         ),
+        UniqueConstraint(
+            "tenant_id",
+            "report_version_id",
+            "qa_stage",
+            name="uq_fa_report_qa_decisions_version_stage",
+        ),
     )
 
 
