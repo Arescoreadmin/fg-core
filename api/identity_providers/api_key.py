@@ -192,6 +192,53 @@ def _permissions_from_legacy_scopes(scopes: set[str]) -> frozenset[str]:
     return frozenset(result)
 
 
+_DELEGATED_ROLE_MAP = {
+    "Administrator": "platform_admin",
+    "Support": "platform_admin",
+    "FieldAssessor": "assessor",
+    "tenant_admin": "tenant_admin",
+    "compliance_reviewer": "compliance_reviewer",
+    "qa_reviewer": "qa_reviewer",
+    "assessor": "assessor",
+    "viewer": "viewer",
+}
+
+
+def _resolve_delegated_actor_roles(
+    request: Request, conn: Session, subject: str
+) -> list[str]:
+    """Resolve delegated human roles from active canonical memberships."""
+    authority = (
+        getattr(request.state, "_delegated_actor_authority", None) or ""
+    ).strip()
+    requested_tenant = (
+        request.headers.get("X-Tenant-ID") if request.headers else None
+    ) or getattr(getattr(request, "state", None), "tenant_id", None)
+    requested_tenant = str(requested_tenant).strip() if requested_tenant else ""
+    query_tenant = requested_tenant if authority == "tenant_human" else ""
+    try:
+        rows = conn.execute(
+            text(
+                "SELECT role FROM tenant_users WHERE identity_subject = :subject AND active = TRUE AND identity_binding_status = :bound AND (:tenant_id = :empty OR tenant_id = :tenant_id)"
+            ),
+            {
+                "subject": subject,
+                "bound": "bound",
+                "tenant_id": query_tenant,
+                "empty": "",
+            },
+        ).fetchall()
+    except Exception as exc:
+        log.warning(
+            "delegated_actor.role_lookup_failed",
+            extra={"subject_prefix": subject[:16], "exc": str(exc)},
+        )
+        return []
+    if authority == "tenant_human" and requested_tenant and not rows:
+        return []
+    return sorted({_DELEGATED_ROLE_MAP.get(str(row[0]), "") for row in rows} - {""})
+
+
 def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorContext]:
     """Build an ActorContext from an authenticated API key.
 
@@ -234,26 +281,40 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
             getattr(request.state, "_delegated_actor_subject", None) or ""
         ).strip()
         if named_sub:
-            if getattr(auth, "reason", None) == "admin_internal_token":
-                # Legacy path: permissions from scope strings (unchanged).
-                scopes: set[str] = getattr(auth, "scopes", set()) or set()
-                perms = _permissions_from_legacy_scopes(scopes)
-            else:
-                # Canonical path: permissions from canonical RBAC, not legacy scopes.
-                # reason=canonical_platform_admin proves RBAC already validated
-                # platform_admin — use that directly.
-                perms = roles_to_permissions(["platform_admin"])
             delegated_authority = (
                 getattr(request.state, "_delegated_actor_authority", None) or ""
             ).strip()
+            delegated_roles = _resolve_delegated_actor_roles(request, conn, named_sub)
+            perms: frozenset[str]
+            if delegated_authority in {"tenant_human", "internal_console"}:
+                # The gateway credential is transport authentication only.
+                # Never copy its platform_admin role to the delegated human.
+                # An internal actor with no canonical role cannot mutate FA,
+                # even though the transport key itself is platform-admin.
+                is_fa_mutation = request.method.upper() not in {
+                    "GET",
+                    "HEAD",
+                } and request.url.path.startswith("/field-assessment/")
+                if is_fa_mutation and not delegated_roles:
+                    perms = frozenset()
+                elif not delegated_roles and delegated_authority == "internal_console":
+                    # Preserve the existing internal-console policy for
+                    # non-Field-Assessment routes; FA mutations remain fail-closed.
+                    perms = roles_to_permissions(["platform_admin"])
+                else:
+                    perms = roles_to_permissions(delegated_roles)
+            else:
+                scopes: set[str] = getattr(auth, "scopes", set()) or set()
+                perms = _permissions_from_legacy_scopes(scopes)
+            delegated_tenant = getattr(
+                getattr(request, "state", None), "tenant_id", None
+            ) or (request.headers.get("X-Tenant-ID") if request.headers else None)
             return ActorContext(
                 subject=named_sub,
                 email="",
                 name="",
                 permissions=perms,
-                roles=["platform_admin"]
-                if getattr(auth, "reason", None) == "canonical_platform_admin"
-                else [],
+                roles=delegated_roles,
                 # A verified delegation proof preserves the named human
                 # authority even though the gateway credential authenticates
                 # the transport. Without this explicit marker, downstream FA
@@ -263,7 +324,7 @@ def extract_api_key_actor(request: Request, conn: Session) -> Optional[ActorCont
                     if delegated_authority in {"tenant_human", "internal_console"}
                     else "api_key"
                 ),
-                tenant_id=None,
+                tenant_id=str(delegated_tenant).strip() if delegated_tenant else None,
             )
 
         # canonical_platform_admin without named_sub: the reason is assigned only

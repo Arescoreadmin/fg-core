@@ -515,6 +515,11 @@ and are not part of a safe golden path.
   anonymous actors, tenant consistency, BFF delegation, and non-authoritative
   caller attribution. REPORT-QA-001 remains responsible for reviewer
   independence and separation-of-duties policy.
+- **Follow-up correction:** delegated transport credentials no longer grant
+  platform-admin capabilities to Field Assessment actors. Core resolves current
+  bound canonical membership roles; unbound internal actors cannot mutate Field
+  Assessment. Existing internal-console behavior on non-Field-Assessment routes
+  remains covered by the security suite.
 
 ### CR-707-004 — Delivery is a state flag, not a customer receipt
 
