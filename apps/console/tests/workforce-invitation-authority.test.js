@@ -111,11 +111,11 @@ test('tenant resolution runs before every tenant-admin proxy call', () => {
   assert.doesNotMatch(handleBody, /return proxyToCore\(request, path, requestId, ''\)/);
 });
 
-test('tenant-admin branch uses admin gateway authority with explicit tenant binding', () => {
+test('delegated tenant-admin/Field Assessment branch uses admin gateway authority with explicit tenant binding', () => {
   const proxyStart = ROUTE_SRC.indexOf('async function proxyToCore');
   const proxyEnd = ROUTE_SRC.indexOf('\nasync function getAlignmentArtifact', proxyStart);
   const proxyBody = ROUTE_SRC.slice(proxyStart, proxyEnd);
-  const branchStart = proxyBody.indexOf('if (isTenantAdminPath)');
+  const branchStart = proxyBody.indexOf('if (requiresDelegatedActor)');
   const elseStart = proxyBody.indexOf('} else {', branchStart);
   const branch = proxyBody.slice(branchStart, elseStart);
 
