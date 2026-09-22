@@ -22863,3 +22863,12 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Finding:** Customer-Zero approval cannot proceed defensibly because no production-capable identity issuer, bounded acceptance-entitlement issuer, or non-exportable approval signer is operationally provisioned; existing providers are test-only or stubs.
 - **Correction:** Added `CUSTOMER-ZERO-TRUST-001` as the single authorized internal prerequisite, blocked `CUSTOMER-ZERO-ACCEPT-001` behind it, and extended the roadmap checker with explicit fail-closed blocked-item semantics.
 - **Scope:** Roadmap/checker governance only. No cryptographic keys, managed signer, production identity/RBAC changes, Customer-Zero artifacts, PROD-QUAL-001, or GOV-DELIVERY-001 implementation.
+
+
+## CUSTOMER-ZERO-TRUST-001 — bounded Vault Transit trust adapter
+
+- **Finding:** Customer-Zero approval lacked a production-capable non-exportable signing path with independent identity, acceptance, and approval trust roles.
+- **Correction:** Added a bounded HashiCorp Vault Transit adapter using Ed25519, distinct role/key IDs, key-version-aware signatures, configured public trust anchors, fingerprint verification, and fail-closed operational configuration.
+- **Tests:** Added role-separation, missing-configuration, unknown-anchor, CGIN regression, `fg-fast`, `fg-security`, and `fg-contract` coverage.
+- **Operational boundary:** No Vault resources, credentials, keys, identity assertions, entitlements, or approval records were provisioned. Customer-Zero acceptance remains blocked pending external provisioning and ceremony.
+- **Scope:** No AWS/Azure/GCP/PKCS#11 provider, no PKI/IAM/RBAC redesign, no corpus/outcome changes, no PROD-QUAL-001, and no GOV-DELIVERY-001.
