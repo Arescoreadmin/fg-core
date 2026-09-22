@@ -1,3 +1,15 @@
+## 2026-09-22 — CUSTOMER-ZERO-TRUST-001 roadmap authority reconciliation
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI authority checker and roadmap test update).
+
+**Scope:** Governance-only reconciliation authorizing the bounded CUSTOMER-ZERO-TRUST-001 prerequisite and explicitly blocking CUSTOMER-ZERO-ACCEPT-001 until operational trust infrastructure exists. `tools/ci/check_customer_one_roadmap.py` now recognizes an explicit blocked authority set; no production authentication, cryptography, signing, identity, RBAC, tenant, corpus, expected-outcome, migration, or deployment behavior changed.
+
+**Security posture:** This change does not issue keys, grant capabilities, sign artifacts, or alter runtime authority. PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.
+
+**Validation:** Roadmap checker suite 21 passed; Ruff, format, mypy, and diff-check passed.
+
+---
+
 ## 2026-09-03 — P-113.6.2 Canonical Platform Admin Delegation — fix/platform-admin-canonical-delegation-p1136-2
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (auth resolution: `api/auth_scopes/resolution.py`; middleware: `api/middleware/auth_gate.py`; identity provider: `api/identity_providers/api_key.py`; entitlements: `api/entitlements.py`).
