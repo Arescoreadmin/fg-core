@@ -5,9 +5,20 @@
 
 from __future__ import annotations
 
+import base64
 import pytest
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
+)
+
+from services.cgin.key_management.vault_transit import (
+    TrustAnchor,
+    TrustAnchorRegistry,
+    TrustRole,
+    VaultCustomerZeroConfig,
+    VaultCustomerZeroSigner,
+    public_key_fingerprint,
 )
 
 from services.cgin.key_management import (
@@ -1253,3 +1264,76 @@ class TestProviderDeterminism:
         p = MemoryKeyProvider(_PRIV)
         sigs = [p.sign(_DATA, SigningAlgorithm.ED25519_V1) for _ in range(10)]
         assert all(s == sigs[0] for s in sigs)
+
+
+def test_customer_zero_vault_roles_are_distinct():
+    with pytest.raises(ValueError, match="distinct"):
+        VaultCustomerZeroSigner(object(), {role: "same" for role in TrustRole})
+
+
+def test_customer_zero_vault_config_requires_key_ids(monkeypatch):
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "https://vault.example")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_IDENTITY_KEY_ID", "identity")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_ACCEPTANCE_KEY_ID", "acceptance")
+    monkeypatch.delenv("FG_CUSTOMER_ZERO_APPROVAL_KEY_ID", raising=False)
+    with pytest.raises(ValueError, match="key IDs"):
+        VaultCustomerZeroConfig.from_environment()
+
+
+def test_customer_zero_public_anchor_rejects_unknown_role():
+    key = Ed25519PrivateKey.generate()
+    public = base64.b64encode(
+        key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    anchor = TrustAnchor(
+        "vault-transit",
+        TrustRole.IDENTITY,
+        "identity",
+        1,
+        "ed25519",
+        public,
+        public_key_fingerprint(public),
+    )
+    registry = TrustAnchorRegistry([anchor])
+    with pytest.raises(ValueError, match="unknown"):
+        registry.resolve("vault-transit", TrustRole.APPROVAL, "identity", 1)
+
+
+def test_customer_zero_revoked_anchor_cannot_verify():
+    key = Ed25519PrivateKey.generate()
+    public = base64.b64encode(
+        key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    anchor = TrustAnchor(
+        "vault-transit",
+        TrustRole.IDENTITY,
+        "identity",
+        1,
+        "ed25519",
+        public,
+        public_key_fingerprint(public),
+        status="revoked",
+    )
+    signature = "vault:v1:" + base64.b64encode(key.sign(b"payload")).decode()
+    assert not TrustAnchorRegistry([anchor]).verify(
+        "vault-transit", TrustRole.IDENTITY, "identity", 1, b"payload", signature
+    )
+
+
+def test_customer_zero_anchor_issuer_is_part_of_lookup():
+    key = Ed25519PrivateKey.generate()
+    public = base64.b64encode(
+        key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    anchor = TrustAnchor(
+        "trusted-issuer",
+        TrustRole.IDENTITY,
+        "identity",
+        1,
+        "ed25519",
+        public,
+        public_key_fingerprint(public),
+    )
+    registry = TrustAnchorRegistry([anchor])
+    with pytest.raises(ValueError, match="unknown"):
+        registry.resolve("other-issuer", TrustRole.IDENTITY, "identity", 1)
