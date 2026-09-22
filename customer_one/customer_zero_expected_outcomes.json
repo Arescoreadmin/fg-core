@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "expected_outcome_id": "customer-zero-expected-outcomes",
+  "expected_outcome_version": "1.0.0",
+  "corpus_id": "customer-zero-acceptance",
+  "corpus_version": "1.0.0",
+  "corpus_fingerprint": "8382d822937c6e70efb1a4018093b98d022f93c62de00e5694e894b9234dfe4c",
+  "methodology_version": "fga-customer-one-1",
+  "assertions": [
+    {"scenario_id": "effective-evidence", "epistemic_state": "VERIFIED_EFFECTIVE", "truth_release": "eligible"},
+    {"scenario_id": "deficient-evidence", "epistemic_state": "VERIFIED_DEFICIENT", "truth_release": "eligible"},
+    {"scenario_id": "missing-evidence", "epistemic_state": "NOT_PROVEN", "truth_release": "blocked"},
+    {"scenario_id": "stale-evidence", "epistemic_state": "STALE", "truth_release": "blocked"},
+    {"scenario_id": "contradictory-evidence", "epistemic_state": "CONTRADICTORY", "truth_release": "blocked"},
+    {"scenario_id": "partial-support", "epistemic_state": "PARTIALLY_SUPPORTED", "truth_release": "blocked"},
+    {"scenario_id": "malformed-evidence", "epistemic_state": "NOT_PROVEN", "truth_release": "blocked"}
+  ],
+  "fingerprint": "3e05fc2f166bd3f0a840a2ce6747c9ddd4e6877d3c52e9436abeed9fbbf053e2"
+}

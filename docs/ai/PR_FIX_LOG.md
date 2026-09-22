@@ -22857,3 +22857,9 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Next prerequisite:** authorize one Customer-Zero operation to produce current-SHA, replayable acceptance evidence.
 - **Required outputs:** versioned/fingerprinted synthetic corpus; complete evidence-to-report-to-QA proof bundle; durable execution and recovery evidence; dependency-security and schema/RLS attestations; deterministic replay result.
 - **Boundary:** this does not implement PROD-QUAL-001 or GOV-DELIVERY-001 and does not alter truth semantics.
+
+### Continuation — corpus authority and proof runner
+
+- **Scope:** bounded synthetic Customer-Zero corpus, independently authored expected outcomes, deterministic fingerprints, approval binding contract, and fail-closed PASS/FAIL/NOT_PROVEN aggregation.
+- **Human approval:** no approval is fabricated or committed. A legitimate operator must approve the exact corpus and expected-outcome fingerprints before acceptance can pass.
+- **Boundary:** no production qualification, governed delivery, truth-gate changes, parallel QA/signing system, or `CUSTOMER_ONE_VALIDATED` claim.

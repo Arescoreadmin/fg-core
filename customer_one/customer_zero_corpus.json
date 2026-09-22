@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "corpus_id": "customer-zero-acceptance",
+  "corpus_version": "1.0.0",
+  "methodology_version": "fga-customer-one-1",
+  "synthetic": true,
+  "scenarios": [
+    {"scenario_id": "effective-evidence", "evidence_state": "VERIFIED_EFFECTIVE", "description": "Synthetic evidence supports the control claim."},
+    {"scenario_id": "deficient-evidence", "evidence_state": "VERIFIED_DEFICIENT", "description": "Synthetic evidence demonstrates a material deficiency."},
+    {"scenario_id": "missing-evidence", "evidence_state": "NOT_PROVEN", "description": "No evidence is present; truth must fail closed."},
+    {"scenario_id": "stale-evidence", "evidence_state": "STALE", "description": "Evidence freshness is outside the allowed window."},
+    {"scenario_id": "contradictory-evidence", "evidence_state": "CONTRADICTORY", "description": "Synthetic evidence contains a contradiction."},
+    {"scenario_id": "partial-support", "evidence_state": "PARTIALLY_SUPPORTED", "description": "Evidence supports only part of the claim."},
+    {"scenario_id": "malformed-evidence", "evidence_state": "NOT_PROVEN", "description": "Malformed evidence cannot become compliance evidence."}
+  ],
+  "fingerprint": "8382d822937c6e70efb1a4018093b98d022f93c62de00e5694e894b9234dfe4c"
+}

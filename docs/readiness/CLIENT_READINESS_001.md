@@ -957,3 +957,15 @@ through deterministic truth, signed report proof, and canonical QA. The run must
 record durable execution/recovery evidence plus production dependency-security and
 schema/RLS attestations. PROD-QUAL-001 remains blocked until these evidence producers
 exist; GOV-DELIVERY-001 remains downstream and blocked.
+
+### Acceptance contract and runner
+
+The bounded acceptance contract lives in `customer_one/acceptance.py` with
+synthetic corpus and independently versioned expected outcomes in
+`customer_one/customer_zero_corpus.json` and
+`customer_one/customer_zero_expected_outcomes.json`. Both artifacts use
+deterministic SHA-256 fingerprints. A human approval record must bind both
+fingerprints before a run can proceed. Missing approval or runtime evidence
+produces `NOT_PROVEN`; a deterministic mismatch produces `FAIL`; only all
+mandatory `PASS` dimensions aggregate to `PASS`. This infrastructure does not
+declare `CUSTOMER_ONE_VALIDATED`, production qualification, or governed delivery.
