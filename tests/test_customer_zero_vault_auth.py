@@ -128,6 +128,7 @@ def test_static_token_requires_explicit_nonproduction_mode(
     monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "https://vault.example")
     monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_TOKEN", "dev-token")
     monkeypatch.delenv("FG_CUSTOMER_ZERO_VAULT_AUTH_MODE", raising=False)
+    monkeypatch.delenv("FG_CUSTOMER_ZERO_ENVIRONMENT", raising=False)
     with pytest.raises(ValueError, match="test/development"):
         VaultTransitClient.from_environment()
     monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_AUTH_MODE", "static_token")
@@ -197,3 +198,26 @@ def test_key_path_validation_rejects_traversal():
     )
     with pytest.raises(ValueError, match="key ID"):
         client.sign("../approval", b"payload", TrustRole.APPROVAL)
+
+
+def test_injected_clients_must_disable_redirects():
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: response(request)),
+        follow_redirects=True,
+    )
+    with pytest.raises(ValueError, match="disable redirects"):
+        AppRoleAuthenticator(
+            "https://vault.example", roles(), secrets(), http_client=client
+        )
+    provider = type(
+        "Provider",
+        (),
+        {"session": lambda self, role: VaultSession("safe", 60, True, 0, 9999999999)},
+    )()
+    with pytest.raises(ValueError, match="disable redirects"):
+        VaultTransitClient(
+            "https://vault.example",
+            session_provider=provider,
+            http_client=client,
+            operational=True,
+        )

@@ -194,6 +194,14 @@ def _timeout(value: float) -> httpx.Timeout:
     return httpx.Timeout(value)
 
 
+def _client(http_client: httpx.Client | None, timeout: float) -> httpx.Client:
+    if http_client is not None:
+        if getattr(http_client, "follow_redirects", None) is not False:
+            raise ValueError("Vault HTTP clients must disable redirects")
+        return http_client
+    return httpx.Client(timeout=_timeout(timeout), follow_redirects=False)
+
+
 class AppRoleAuthenticator:
     """Role-specific short-lived Vault AppRole sessions."""
 
@@ -219,9 +227,7 @@ class AppRoleAuthenticator:
         self._secret_ids = dict(secret_ids)
         self.mount = _validate_identifier(mount, "auth mount")
         self.namespace = _validate_namespace(namespace) if namespace else None
-        self.client = http_client or httpx.Client(
-            timeout=_timeout(timeout), follow_redirects=False
-        )
+        self.client = _client(http_client, timeout)
         self._sessions: dict[TrustRole, VaultSession] = {}
         self._locks = {r: threading.Lock() for r in TrustRole}
 
@@ -333,16 +339,14 @@ class VaultTransitClient:
             (_validate_namespace(namespace) if namespace else None),
             operational,
         )
-        self._client = http_client or httpx.Client(
-            timeout=_timeout(timeout), follow_redirects=False
-        )
+        self._client = _client(http_client, timeout)
 
     @classmethod
     def from_environment(
         cls, *, http_client: httpx.Client | None = None
     ) -> "VaultTransitClient":
         mode = os.getenv("FG_CUSTOMER_ZERO_VAULT_AUTH_MODE", "")
-        environment = os.getenv("FG_CUSTOMER_ZERO_ENVIRONMENT", "development").lower()
+        environment = os.getenv("FG_CUSTOMER_ZERO_ENVIRONMENT", "").lower()
         if mode != "static_token" or environment not in {
             "test",
             "development",

@@ -22881,3 +22881,10 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Tests:** Added focused session lifecycle, role mapping, expiry, denial, address, namespace, redirect, correlation, and path-safety coverage; existing key-management suite remains green.
 - **Operational boundary:** No Vault resources, credentials, keys, Railway changes, or Customer-Zero approval were provisioned. HCP authentication remains an external operational prerequisite.
 - **Scope:** Bounded repair under CUSTOMER-ZERO-TRUST-001/REPAIR; no roadmap, corpus, expected-outcome, truth, PROD-QUAL-001, or GOV-DELIVERY-001 changes.
+
+
+## CUSTOMER-ZERO-TRUST-001 review follow-up — redirect and environment fail-closed
+
+- **Finding:** Caller-injected HTTP clients could enable redirects, risking credential replay; unset environment markers could permit static-token compatibility by default.
+- **Correction:** Reject injected clients unless `follow_redirects` is explicitly disabled, and require an explicit non-production environment value for static-token mode.
+- **Scope:** Bounded Vault authentication repair only; no provisioning, secrets, corpus/outcome, roadmap, or downstream authority changes.
