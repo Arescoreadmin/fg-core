@@ -3,8 +3,8 @@
 
 Derives authorization from the authority file — the caller cannot self-declare
 a work class and bypass the Freeze Law. Authorization is determined by looking
-up the proposed work item in next_sequence (authorized) or deferred (blocked).
-Items not listed in either are fail-closed (blocked). An active objective is
+up the proposed work item in next_sequence (authorized), blocked (blocked), or deferred (blocked).
+Items not listed in any known set are fail-closed (blocked). An active objective is
 reported separately as an open parent acceptance objective; its explicit
 prerequisite is the authorized engineering item.
 
@@ -77,6 +77,9 @@ def _check_item(authority: dict, work_item: str) -> bool:
     deferred_ids = {
         entry["id"] for entry in authority.get("deferred", []) if "id" in entry
     }
+    blocked_ids = {
+        entry["id"] for entry in authority.get("blocked", []) if "id" in entry
+    }
     completed_ids = {
         entry["id"] for entry in authority.get("completed", []) if "id" in entry
     }
@@ -128,6 +131,21 @@ def _check_item(authority: dict, work_item: str) -> bool:
             "",
         )
         msg = f"BLOCKED: '{work_item}' is explicitly DEFERRED under the Freeze Law"
+        if reason:
+            msg += f" — {reason}"
+        print(msg, file=sys.stderr)
+        return False
+
+    if work_item in blocked_ids:
+        reason = next(
+            (
+                e.get("reason", "")
+                for e in authority.get("blocked", [])
+                if e.get("id") == work_item
+            ),
+            "",
+        )
+        msg = f"BLOCKED: '{work_item}' is explicitly BLOCKED"
         if reason:
             msg += f" — {reason}"
         print(msg, file=sys.stderr)

@@ -79,14 +79,14 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | CUSTOMER-ZERO-ACCEPT-001 (current-SHA production acceptance evidence) |
+| Open engineering work | CUSTOMER-ZERO-TRUST-001 (bounded operational trust infrastructure) → CUSTOMER-ZERO-ACCEPT-001 |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
 The FG_RESULT_TRUTH_GATE implementation and truth invariants are complete, but its
 operational acceptance remains open. FA-ACTOR-001 is complete through #710 and #711:
 material Field Assessment mutations retain canonical human authority, current capability,
-tenant/engagement binding, and shared persistence/audit attribution. REPORT-QA-001 is complete (#713); the next prerequisite is CUSTOMER-ZERO-ACCEPT-001, required to produce current-SHA
+tenant/engagement binding, and shared persistence/audit attribution. REPORT-QA-001 is complete (#713); CUSTOMER-ZERO-ACCEPT-001 remains the open acceptance parent, but its next executable prerequisite is CUSTOMER-ZERO-TRUST-001, required to establish the operational trust chain for current-SHA
 production acceptance evidence. QA decisions are now bound to a canonical reviewer and exact report version. Production acceptance gates and expert-approved
 Customer-Zero evidence remain required; PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.
 
@@ -102,7 +102,8 @@ can be added.
 |----|-------|--------|----------------|
 | FA-ACTOR-001 | Bind Field Assessment actions to canonical human actors | COMPLETED — #710/#711 | Canonical human actor authority proven for material Field Assessment mutations |
 | REPORT-QA-001 | Version-bound independent report QA authority | COMPLETED — #713 | QA decisions are canonically attributable to exact report versions |
-| CUSTOMER-ZERO-ACCEPT-001 | Current-SHA production acceptance evidence | NEXT — Customer-Zero operation | Current-SHA proof, durable recovery, dependency security, and schema/RLS evidence must exist before production qualification |
+| CUSTOMER-ZERO-TRUST-001 | Bounded operational trust infrastructure | NEXT — internal prerequisite | Separate non-exportable identity, entitlement, and approval trust required before Customer-Zero approval |
+| CUSTOMER-ZERO-ACCEPT-001 | Current-SHA production acceptance evidence | OPEN — blocked on CUSTOMER-ZERO-TRUST-001 | Current-SHA proof, durable recovery, dependency security, and schema/RLS evidence must exist before production qualification |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE and all mandatory production gates pass |
 
 `FG_RESULT_TRUTH_GATE` remains the open parent acceptance objective. Its implementation
@@ -147,7 +148,7 @@ evidence and downstream authorities described below.
 
 ### Next-item determination
 
-**Selected next authority: `CUSTOMER-ZERO-ACCEPT-001` — Current-SHA production acceptance evidence. REPORT-QA-001 is complete through #713 and focused/post-merge validation. A complete, replayable Customer-Zero run and current-SHA production acceptance evidence are now required before PROD-QUAL-001 can be authorized; GOV-DELIVERY-001 remains blocked.
+**Selected next authority: `CUSTOMER-ZERO-TRUST-001` — Bounded operational trust infrastructure. CUSTOMER-ZERO-ACCEPT-001 remains the open acceptance parent and cannot execute approval or runtime evidence until this prerequisite closes. PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.** REPORT-QA-001 is complete through #713 and focused/post-merge validation. A complete, replayable Customer-Zero run and current-SHA production acceptance evidence are now required before PROD-QUAL-001 can be authorized; GOV-DELIVERY-001 remains blocked.
 
 | Candidate | Repository evidence | Disposition |
 |---|---|---|

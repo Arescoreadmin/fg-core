@@ -45,8 +45,13 @@ def _run_class(
 
 class TestAuthorizedItems:
     def test_customer_zero_acceptance_prerequisite_authorized(self) -> None:
-        # Current-SHA Customer-Zero evidence is the sole authorized prerequisite.
+        # Customer-Zero remains blocked pending its trust prerequisite.
         result = _run_item("CUSTOMER-ZERO-ACCEPT-001")
+        assert result.returncode == 1
+        assert "BLOCKED" in result.stderr
+
+    def test_customer_zero_trust_repair_authorized(self) -> None:
+        result = _run_item("CUSTOMER-ZERO-TRUST-001")
         assert result.returncode == 0, result.stderr
 
     def test_report_qa_completed_blocked(self) -> None:
