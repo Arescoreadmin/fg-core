@@ -236,6 +236,10 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
         )
     secret_reason = _contains_secret_field(manifest)
     fp = fingerprint_manifest(manifest)
+    if manifest.get("evidence_fingerprint") not in (None, fp):
+        return ValidationResult(
+            EvidenceState.FAIL, {}, ("evidence fingerprint mismatch",), fp
+        )
     if secret_reason:
         return ValidationResult(EvidenceState.FAIL, {}, (secret_reason,), fp)
     reasons: list[str] = []

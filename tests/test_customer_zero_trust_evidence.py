@@ -82,6 +82,12 @@ def test_reordering_roles_preserves_fingerprint():
     assert fingerprint_manifest(value) == fingerprint_manifest(reordered)
 
 
+def test_supplied_fingerprint_mismatch_fails_closed():
+    value = manifest()
+    value["evidence_fingerprint"] = "0" * 64
+    assert validate_manifest(value).state is EvidenceState.FAIL
+
+
 def test_material_mutation_changes_fingerprint():
     value = manifest()
     original = fingerprint_manifest(value)
