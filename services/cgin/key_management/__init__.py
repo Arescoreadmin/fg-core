@@ -14,6 +14,18 @@ from services.cgin.key_management.provider import (
     SigningAlgorithm,
 )
 from services.cgin.key_management.providers.memory import MemoryKeyProvider
+from services.cgin.key_management.vault_transit import (
+    ManagedSignature,
+    TrustAnchor,
+    TrustAnchorRegistry,
+    TrustRole,
+    VaultCustomerZeroConfig,
+    VaultCustomerZeroSigner,
+    VaultTransitClient,
+    VaultTransitError,
+    public_key_fingerprint,
+    signer_from_environment,
+)
 from services.cgin.key_management.registry import (
     ACTIVE_PROVIDER_REGISTRY,
     ProviderRegistry,
@@ -38,5 +50,15 @@ __all__ = [
     "ProviderRegistry",
     "ACTIVE_PROVIDER_REGISTRY",
     "MemoryKeyProvider",
+    "ManagedSignature",
+    "TrustAnchor",
+    "TrustAnchorRegistry",
+    "TrustRole",
+    "VaultCustomerZeroConfig",
+    "VaultCustomerZeroSigner",
+    "VaultTransitClient",
+    "VaultTransitError",
+    "public_key_fingerprint",
+    "signer_from_environment",
     "as_provider",
 ]
