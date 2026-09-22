@@ -22872,3 +22872,12 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Tests:** Added role-separation, missing-configuration, unknown-anchor, CGIN regression, `fg-fast`, `fg-security`, and `fg-contract` coverage.
 - **Operational boundary:** No Vault resources, credentials, keys, identity assertions, entitlements, or approval records were provisioned. Customer-Zero acceptance remains blocked pending external provisioning and ceremony.
 - **Scope:** No AWS/Azure/GCP/PKCS#11 provider, no PKI/IAM/RBAC redesign, no corpus/outcome changes, no PROD-QUAL-001, and no GOV-DELIVERY-001.
+
+
+## CUSTOMER-ZERO-TRUST-001 — bounded Vault runtime authentication repair
+
+- **Finding:** The Transit adapter relied on a static token, had no session renewal, namespace support, or explicit production transport hardening.
+- **Correction:** Added role-specific short-lived AppRole sessions with renewal/re-authentication, explicit non-production static-token compatibility, HTTPS/address and key-ID validation, bounded timeouts, redirect rejection, namespace and safe correlation headers, and sanitized fail-closed errors.
+- **Tests:** Added focused session lifecycle, role mapping, expiry, denial, address, namespace, redirect, correlation, and path-safety coverage; existing key-management suite remains green.
+- **Operational boundary:** No Vault resources, credentials, keys, Railway changes, or Customer-Zero approval were provisioned. HCP authentication remains an external operational prerequisite.
+- **Scope:** Bounded repair under CUSTOMER-ZERO-TRUST-001/REPAIR; no roadmap, corpus, expected-outcome, truth, PROD-QUAL-001, or GOV-DELIVERY-001 changes.
