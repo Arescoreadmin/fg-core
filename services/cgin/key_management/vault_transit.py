@@ -53,6 +53,8 @@ class TrustAnchor:
     status: str = "active"
 
     def verify(self, payload: bytes, signature: str) -> bool:
+        if self.status != "active":
+            return False
         if self.algorithm != "ed25519" or not signature.startswith("vault:v"):
             return False
         try:
@@ -90,23 +92,30 @@ class TrustAnchorRegistry:
     """Explicit trust anchors; caller-supplied keys are never trusted."""
 
     def __init__(self, anchors: list[TrustAnchor]) -> None:
-        self._anchors = {(a.trust_role, a.key_id, a.key_version): a for a in anchors}
+        self._anchors = {
+            (a.issuer, a.trust_role, a.key_id, a.key_version): a for a in anchors
+        }
 
-    def resolve(self, role: TrustRole, key_id: str, key_version: int) -> TrustAnchor:
+    def resolve(
+        self, issuer: str, role: TrustRole, key_id: str, key_version: int
+    ) -> TrustAnchor:
         try:
-            return self._anchors[(role, key_id, key_version)]
+            return self._anchors[(issuer, role, key_id, key_version)]
         except KeyError as exc:
             raise ValueError("unknown Vault trust anchor") from exc
 
     def verify(
         self,
+        issuer: str,
         role: TrustRole,
         key_id: str,
         key_version: int,
         payload: bytes,
         signature: str,
     ) -> bool:
-        return self.resolve(role, key_id, key_version).verify(payload, signature)
+        return self.resolve(issuer, role, key_id, key_version).verify(
+            payload, signature
+        )
 
 
 class VaultTransitError(RuntimeError):

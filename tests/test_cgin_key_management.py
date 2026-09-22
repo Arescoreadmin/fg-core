@@ -1296,4 +1296,44 @@ def test_customer_zero_public_anchor_rejects_unknown_role():
     )
     registry = TrustAnchorRegistry([anchor])
     with pytest.raises(ValueError, match="unknown"):
-        registry.resolve(TrustRole.APPROVAL, "identity", 1)
+        registry.resolve("vault-transit", TrustRole.APPROVAL, "identity", 1)
+
+
+def test_customer_zero_revoked_anchor_cannot_verify():
+    key = Ed25519PrivateKey.generate()
+    public = base64.b64encode(
+        key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    anchor = TrustAnchor(
+        "vault-transit",
+        TrustRole.IDENTITY,
+        "identity",
+        1,
+        "ed25519",
+        public,
+        public_key_fingerprint(public),
+        status="revoked",
+    )
+    signature = "vault:v1:" + base64.b64encode(key.sign(b"payload")).decode()
+    assert not TrustAnchorRegistry([anchor]).verify(
+        "vault-transit", TrustRole.IDENTITY, "identity", 1, b"payload", signature
+    )
+
+
+def test_customer_zero_anchor_issuer_is_part_of_lookup():
+    key = Ed25519PrivateKey.generate()
+    public = base64.b64encode(
+        key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    anchor = TrustAnchor(
+        "trusted-issuer",
+        TrustRole.IDENTITY,
+        "identity",
+        1,
+        "ed25519",
+        public,
+        public_key_fingerprint(public),
+    )
+    registry = TrustAnchorRegistry([anchor])
+    with pytest.raises(ValueError, match="unknown"):
+        registry.resolve("other-issuer", TrustRole.IDENTITY, "identity", 1)
