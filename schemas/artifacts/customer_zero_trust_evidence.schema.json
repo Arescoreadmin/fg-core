@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.local/schemas/customer-zero-trust-evidence.schema.json",
+  "title": "Customer-Zero operational trust evidence",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "work_item",
+    "ceremony_id",
+    "environment",
+    "generated_at",
+    "source_sha",
+    "tested_sha",
+    "vault_deployment",
+    "trust_roles",
+    "dimensions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0"
+      ]
+    },
+    "work_item": {
+      "const": "CUSTOMER-ZERO-TRUST-001"
+    },
+    "ceremony_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "Z$"
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "tested_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "deployed_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evidence_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "vault_deployment": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "trust_roles": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "dimensions": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}
