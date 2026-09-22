@@ -160,6 +160,28 @@ class TestCompletedOverlapRejected:
         assert "COMPLETED" in result.stderr
 
 
+class TestBlockedOverlapRejected:
+    def test_item_in_both_blocked_and_next_sequence_is_blocked(
+        self, tmp_path: Path
+    ) -> None:
+        """Blocked classification takes precedence over next_sequence."""
+        overlap = tmp_path / "blocked-overlap.yaml"
+        overlap.write_text(
+            "schema_version: '1.0'\n"
+            "next_sequence:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    title: 'accidentally left in next'\n"
+            "blocked:\n"
+            "  - id: 'DOUBLE-LISTED'\n"
+            "    reason: 'blocked prerequisite'\n"
+            "deferred: []\n"
+            "completed: []\n"
+        )
+        result = _run_item("DOUBLE-LISTED", authority=str(overlap))
+        assert result.returncode == 1
+        assert "explicitly BLOCKED" in result.stderr
+
+
 class TestAuthorityFileErrors:
     def test_path_mismatch_blocked(self) -> None:
         result = _run_item("FGA-027", authority="nonexistent_authority.yaml")

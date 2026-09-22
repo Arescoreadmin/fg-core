@@ -114,6 +114,21 @@ def _check_item(authority: dict, work_item: str) -> bool:
         )
         return False
 
+    if work_item in blocked_ids:
+        reason = next(
+            (
+                e.get("reason", "")
+                for e in authority.get("blocked", [])
+                if e.get("id") == work_item
+            ),
+            "",
+        )
+        msg = f"BLOCKED: '{work_item}' is explicitly BLOCKED"
+        if reason:
+            msg += f" — {reason}"
+        print(msg, file=sys.stderr)
+        return False
+
     if work_item in next_ids:
         print(
             f"AUTHORIZED: '{work_item}' is in next_sequence — on Customer-One critical path"
@@ -131,21 +146,6 @@ def _check_item(authority: dict, work_item: str) -> bool:
             "",
         )
         msg = f"BLOCKED: '{work_item}' is explicitly DEFERRED under the Freeze Law"
-        if reason:
-            msg += f" — {reason}"
-        print(msg, file=sys.stderr)
-        return False
-
-    if work_item in blocked_ids:
-        reason = next(
-            (
-                e.get("reason", "")
-                for e in authority.get("blocked", [])
-                if e.get("id") == work_item
-            ),
-            "",
-        )
-        msg = f"BLOCKED: '{work_item}' is explicitly BLOCKED"
         if reason:
             msg += f" — {reason}"
         print(msg, file=sys.stderr)
