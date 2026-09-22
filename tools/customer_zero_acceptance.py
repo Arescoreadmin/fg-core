@@ -80,10 +80,11 @@ def _write_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) -
 def _approval(args: argparse.Namespace) -> int:
     corpus = _read_json(args.corpus)
     outcomes = _read_json(args.expected_outcomes)
-    assertion = _read_json(args.actor_assertion)
+    assertion = _read_json(args.identity_assertion)
+    grant = _read_json(args.authority_grant)
     validate_corpus(corpus)
     validate_expected_outcomes(outcomes, corpus)
-    validate_actor_assertion(assertion)
+    validate_actor_assertion(assertion, grant)
     try:
         provenance_bytes = args.provenance.read_bytes()
     except OSError as exc:
@@ -93,14 +94,11 @@ def _approval(args: argparse.Namespace) -> int:
         "fingerprint": hashlib.sha256(provenance_bytes).hexdigest(),
     }
     approver = {
-        field: assertion[field]
-        for field in (
-            "subject",
-            "principal_id",
-            "actor_kind",
-            "capability",
-            "authority",
-        )
+        "subject": assertion["subject"],
+        "principal_id": assertion["principal_id"],
+        "actor_kind": assertion["actor_kind"],
+        "capability": grant["capability"],
+        "authority": grant["authority"],
     }
     approval = {
         "schema_version": ACCEPTANCE_SCHEMA_VERSION,
@@ -114,7 +112,8 @@ def _approval(args: argparse.Namespace) -> int:
         "expected_outcome_version": outcomes["expected_outcome_version"],
         "expected_outcome_fingerprint": outcomes["fingerprint"],
         "approver": approver,
-        "actor_assertion": assertion,
+        "identity_assertion": assertion,
+        "authority_grant": grant,
         "approved_at": datetime.now(UTC)
         .replace(microsecond=0)
         .isoformat()
@@ -204,7 +203,8 @@ def _parser() -> argparse.ArgumentParser:
     approve.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     approve.add_argument("--expected-outcomes", type=Path, default=DEFAULT_OUTCOMES)
     approve.add_argument("--output", type=Path, required=True)
-    approve.add_argument("--actor-assertion", type=Path, required=True)
+    approve.add_argument("--identity-assertion", type=Path, required=True)
+    approve.add_argument("--authority-grant", type=Path, required=True)
     approve.add_argument("--provenance", type=Path, required=True)
     approve.set_defaults(handler=_approval)
     review = subparsers.add_parser("review", help="print the human review packet")

@@ -64,35 +64,61 @@ def _verify_ed25519(payload: str, signature: str, public_key_hex: str) -> None:
         raise AcceptanceContractError("APPROVAL_ASSERTION_SIGNATURE_INVALID") from exc
 
 
+def _verify_key_env(name: str, payload: str, signature: str) -> None:
+    public_key = os.getenv(name, "").strip()
+    if not public_key:
+        raise AcceptanceContractError("APPROVAL_TRUST_ANCHOR_UNAVAILABLE")
+    _verify_ed25519(payload, signature, public_key)
+
+
 def validate_actor_assertion(
     assertion: Mapping[str, Any],
+    authority_grant: Mapping[str, Any],
     *,
     now: datetime | None = None,
     check_current: bool = True,
 ) -> None:
-    required = (
+    identity_required = (
         "subject",
         "principal_id",
         "actor_kind",
-        "capability",
-        "authority",
         "issued_at",
         "expires_at",
         "assertion_fingerprint",
         "signature",
     )
-    if any(key not in assertion for key in required):
+    grant_required = (
+        "grant_id",
+        "subject",
+        "principal_id",
+        "capability",
+        "authority",
+        "issued_at",
+        "expires_at",
+        "grant_fingerprint",
+        "signature",
+    )
+    if any(key not in assertion for key in identity_required):
         raise AcceptanceContractError("ACTOR_ASSERTION_SCHEMA_INVALID")
+    if any(key not in authority_grant for key in grant_required):
+        raise AcceptanceContractError("AUTHORITY_GRANT_SCHEMA_INVALID")
     if assertion["actor_kind"] not in {"human", "operator"}:
         raise AcceptanceContractError("ACTOR_KIND_NOT_ALLOWED")
     if (
-        assertion["capability"] != ACCEPTANCE_APPROVAL_CAPABILITY
-        or assertion["authority"] != ACCEPTANCE_APPROVAL_AUTHORITY
+        authority_grant["capability"] != ACCEPTANCE_APPROVAL_CAPABILITY
+        or authority_grant["authority"] != ACCEPTANCE_APPROVAL_AUTHORITY
     ):
         raise AcceptanceContractError("ACCEPTANCE_AUTHORITY_INVALID")
+    if (
+        authority_grant["subject"] != assertion["subject"]
+        or authority_grant["principal_id"] != assertion["principal_id"]
+    ):
+        raise AcceptanceContractError("AUTHORITY_GRANT_SUBJECT_MISMATCH")
     issued = _timestamp(assertion["issued_at"])
     expires = _timestamp(assertion["expires_at"])
-    if expires <= issued:
+    grant_issued = _timestamp(authority_grant["issued_at"])
+    grant_expires = _timestamp(authority_grant["expires_at"])
+    if expires <= issued or grant_expires <= grant_issued:
         raise AcceptanceContractError("ACTOR_ASSERTION_EXPIRY_INVALID")
     unsigned = dict(assertion)
     unsigned.pop("assertion_fingerprint", None)
@@ -100,13 +126,30 @@ def validate_actor_assertion(
     fingerprint = canonical_fingerprint(unsigned)
     if assertion["assertion_fingerprint"] != fingerprint:
         raise AcceptanceContractError("ACTOR_ASSERTION_FINGERPRINT_MISMATCH")
-    public_key = os.getenv("FG_CUSTOMER_ZERO_APPROVAL_PUBLIC_KEY_HEX", "").strip()
-    if not public_key:
-        raise AcceptanceContractError("APPROVAL_AUTHORITY_KEY_UNAVAILABLE")
-    _verify_ed25519(fingerprint, str(assertion["signature"]), public_key)
+    unsigned_grant = dict(authority_grant)
+    unsigned_grant.pop("grant_fingerprint", None)
+    unsigned_grant.pop("signature", None)
+    grant_fingerprint = canonical_fingerprint(unsigned_grant)
+    if authority_grant["grant_fingerprint"] != grant_fingerprint:
+        raise AcceptanceContractError("AUTHORITY_GRANT_FINGERPRINT_MISMATCH")
+    _verify_key_env(
+        "FG_CUSTOMER_ZERO_IDENTITY_PUBLIC_KEY_HEX",
+        fingerprint,
+        str(assertion["signature"]),
+    )
+    _verify_key_env(
+        "FG_CUSTOMER_ZERO_AUTHORITY_PUBLIC_KEY_HEX",
+        grant_fingerprint,
+        str(authority_grant["signature"]),
+    )
     if check_current:
         current = (now or datetime.now(UTC)).astimezone(UTC)
-        if current < issued or current >= expires:
+        if (
+            current < issued
+            or current >= expires
+            or current < grant_issued
+            or current >= grant_expires
+        ):
             raise AcceptanceContractError("ACTOR_ASSERTION_EXPIRED")
 
 
@@ -173,7 +216,8 @@ def validate_approval(
         "expected_outcome_version",
         "expected_outcome_fingerprint",
         "approver",
-        "actor_assertion",
+        "identity_assertion",
+        "authority_grant",
         "approved_at",
         "provenance",
         "record_fingerprint",
@@ -201,12 +245,24 @@ def validate_approval(
         raise AcceptanceContractError("APPROVED_EXPECTED_OUTCOME_BINDING_MISMATCH")
     _timestamp(approval["approved_at"])
     approver = approval["approver"]
-    assertion = approval["actor_assertion"]
-    if not isinstance(approver, Mapping) or not isinstance(assertion, Mapping):
+    assertion = approval["identity_assertion"]
+    grant = approval["authority_grant"]
+    if (
+        not isinstance(approver, Mapping)
+        or not isinstance(assertion, Mapping)
+        or not isinstance(grant, Mapping)
+    ):
         raise AcceptanceContractError("APPROVER_ASSERTION_INVALID")
-    validate_actor_assertion(assertion, check_current=False)
-    for field in ("subject", "principal_id", "actor_kind", "capability", "authority"):
-        if approver.get(field) != assertion.get(field):
+    validate_actor_assertion(assertion, grant, check_current=False)
+    expected_approver = {
+        "subject": assertion["subject"],
+        "principal_id": assertion["principal_id"],
+        "actor_kind": assertion["actor_kind"],
+        "capability": grant["capability"],
+        "authority": grant["authority"],
+    }
+    for field, expected in expected_approver.items():
+        if approver.get(field) != expected:
             raise AcceptanceContractError("APPROVER_ASSERTION_MISMATCH")
     provenance = approval["provenance"]
     if (

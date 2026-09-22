@@ -973,13 +973,14 @@ declare `CUSTOMER_ONE_VALIDATED`, production qualification, or governed delivery
 ### Canonical Customer-Zero approval authority
 
 Customer-Zero approval is not accepted from free-form names, roles, timestamps,
-or provenance notes. The approval command requires a cryptographically verified
-canonical actor assertion carrying the bounded `customer_zero.acceptance.approve`
-authority, restricted to human/operator actors. Approval time is generated as
-UTC, provenance is a content-hashed review artifact, the record is fingerprinted
-and signed with FrostGate's existing Ed25519 runtime signing primitive, and output
-creation is exclusive to prevent silent overwrite. Historical verification checks
-the signed issuance assertion and exact corpus/outcome bindings; it does not
-re-authorize a historical decision from a later role change. This authority is
-operational acceptance only and does not grant report QA, production qualification,
-or governed delivery.
+or provenance notes. A signed canonical identity assertion is separate from a
+signed acceptance-capability grant carrying `customer_zero.acceptance.approve`;
+both must bind the same principal, and human/operator actors are required.
+Identity issuance, acceptance entitlement, and approval-record signing use
+separate Ed25519 trust anchors. Approval time is generated as UTC, provenance is
+a content-hashed review artifact, the record is fingerprinted and signed with
+FrostGate's existing runtime signing primitive, and output creation is exclusive
+to prevent silent overwrite. Historical verification checks signed issuance and
+exact corpus/outcome bindings; it does not re-authorize a historical decision
+from a later role change. This authority is operational acceptance only and does
+not grant report QA, production qualification, or governed delivery.

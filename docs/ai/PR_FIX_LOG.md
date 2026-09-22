@@ -22873,3 +22873,12 @@ canonical human/operator assertion with `customer_zero.acceptance.approve`, exac
 corpus and expected-outcome fingerprints, generated UTC approval time, hashed
 review provenance, signed record fingerprint, and exclusive output creation. No
 real human approval is performed by automation.
+
+
+### Trust-chain audit repair
+
+The first repair still embedded `customer_zero.acceptance.approve` inside the
+identity assertion and reused one key for assertion and approval evidence. The
+final bounded repair separates signed canonical identity, signed acceptance
+capability entitlement, and signed approval-record evidence, requiring matching
+subject/principal bindings and separate trust anchors.
