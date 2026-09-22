@@ -22863,3 +22863,13 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Scope:** bounded synthetic Customer-Zero corpus, independently authored expected outcomes, deterministic fingerprints, approval binding contract, and fail-closed PASS/FAIL/NOT_PROVEN aggregation.
 - **Human approval:** no approval is fabricated or committed. A legitimate operator must approve the exact corpus and expected-outcome fingerprints before acceptance can pass.
 - **Boundary:** no production qualification, governed delivery, truth-gate changes, parallel QA/signing system, or `CUSTOMER_ONE_VALIDATED` claim.
+
+
+### Continuation repair — canonical Customer-Zero approval authority
+
+The initial approval CLI accepted arbitrary identity, authority, timestamp, and
+provenance strings; that path was rejected. The bounded repair requires a signed
+canonical human/operator assertion with `customer_zero.acceptance.approve`, exact
+corpus and expected-outcome fingerprints, generated UTC approval time, hashed
+review provenance, signed record fingerprint, and exclusive output creation. No
+real human approval is performed by automation.

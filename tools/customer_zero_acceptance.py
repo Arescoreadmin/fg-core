@@ -9,10 +9,13 @@ runtime evidence or human approval: omitted dimensions remain NOT_PROVEN.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,11 +23,15 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
+from tools.testing.runtime_intelligence.signing import Ed25519KeyProvider  # noqa: E402
+
 from customer_one.acceptance import (  # noqa: E402
     ACCEPTANCE_SCHEMA_VERSION,
     AcceptanceContractError,
     AcceptanceDimension,
     build_acceptance_bundle,
+    canonical_fingerprint,
+    validate_actor_assertion,
     validate_corpus,
     validate_expected_outcomes,
 )
@@ -60,35 +67,96 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _write_json(path: Path, value: dict[str, Any]) -> None:
+def _write_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
-        encoding="utf-8",
-    )
+    rendered = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True) + "\n"
+    if exclusive:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(rendered)
+    else:
+        path.write_text(rendered, encoding="utf-8")
 
 
 def _approval(args: argparse.Namespace) -> int:
     corpus = _read_json(args.corpus)
     outcomes = _read_json(args.expected_outcomes)
+    assertion = _read_json(args.actor_assertion)
     validate_corpus(corpus)
     validate_expected_outcomes(outcomes, corpus)
+    validate_actor_assertion(assertion)
+    try:
+        provenance_bytes = args.provenance.read_bytes()
+    except OSError as exc:
+        raise AcceptanceContractError("APPROVAL_PROVENANCE_READ_FAILED") from exc
+    provenance = {
+        "reference": str(args.provenance),
+        "fingerprint": hashlib.sha256(provenance_bytes).hexdigest(),
+    }
+    approver = {
+        field: assertion[field]
+        for field in (
+            "subject",
+            "principal_id",
+            "actor_kind",
+            "capability",
+            "authority",
+        )
+    }
     approval = {
         "schema_version": ACCEPTANCE_SCHEMA_VERSION,
+        "approval_id": str(uuid.uuid4()),
         "status": "APPROVED",
+        "work_item": "CUSTOMER-ZERO-ACCEPT-001",
         "corpus_id": corpus["corpus_id"],
         "corpus_version": corpus["corpus_version"],
         "corpus_fingerprint": corpus["fingerprint"],
         "expected_outcome_id": outcomes["expected_outcome_id"],
         "expected_outcome_version": outcomes["expected_outcome_version"],
         "expected_outcome_fingerprint": outcomes["fingerprint"],
-        "approver": args.approver,
-        "approver_authority": args.authority,
-        "approved_at": args.approved_at,
-        "provenance": args.provenance,
+        "approver": approver,
+        "actor_assertion": assertion,
+        "approved_at": datetime.now(UTC)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "provenance": provenance,
     }
-    _write_json(args.output, approval)
+    approval["record_fingerprint"] = canonical_fingerprint(approval)
+    private_key = os.getenv("FG_CUSTOMER_ZERO_APPROVAL_PRIVATE_KEY_HEX", "").strip()
+    if not private_key:
+        raise AcceptanceContractError("APPROVAL_SIGNING_KEY_UNAVAILABLE")
+    approval["record_signature"] = (
+        Ed25519KeyProvider(private_key_hex=private_key)
+        .sign(approval["record_fingerprint"].encode("ascii"))
+        .hex()
+    )
+    _write_json(args.output, approval, exclusive=True)
     print(json.dumps(approval, indent=2, sort_keys=True))
+    return 0
+
+
+def _review(args: argparse.Namespace) -> int:
+    corpus = _read_json(args.corpus)
+    outcomes = _read_json(args.expected_outcomes)
+    validate_corpus(corpus)
+    validate_expected_outcomes(outcomes, corpus)
+    assertions = {item["scenario_id"]: item for item in outcomes["assertions"]}
+    print(f"Customer-Zero corpus: {corpus['corpus_id']} v{corpus['corpus_version']}")
+    print(f"Corpus fingerprint: {corpus['fingerprint']}")
+    print(
+        f"Expected outcomes: {outcomes['expected_outcome_id']} v{outcomes['expected_outcome_version']}"
+    )
+    print(f"Expected-outcome fingerprint: {outcomes['fingerprint']}")
+    print("Approval authority: customer_zero.acceptance.approve")
+    print("Allowed actor kinds: human, operator")
+    print("Scenarios:")
+    for scenario in corpus["scenarios"]:
+        expected = assertions.get(scenario["scenario_id"], {})
+        print(
+            f"- {scenario['scenario_id']}: {scenario.get('description', '')} "
+            f"=> {expected.get('epistemic_state', 'MISSING')} / "
+            f"{expected.get('truth_release', 'MISSING')}"
+        )
     return 0
 
 
@@ -136,11 +204,13 @@ def _parser() -> argparse.ArgumentParser:
     approve.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     approve.add_argument("--expected-outcomes", type=Path, default=DEFAULT_OUTCOMES)
     approve.add_argument("--output", type=Path, required=True)
-    approve.add_argument("--approver", required=True)
-    approve.add_argument("--authority", required=True)
-    approve.add_argument("--approved-at", required=True)
-    approve.add_argument("--provenance", required=True)
+    approve.add_argument("--actor-assertion", type=Path, required=True)
+    approve.add_argument("--provenance", type=Path, required=True)
     approve.set_defaults(handler=_approval)
+    review = subparsers.add_parser("review", help="print the human review packet")
+    review.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
+    review.add_argument("--expected-outcomes", type=Path, default=DEFAULT_OUTCOMES)
+    review.set_defaults(handler=_review)
     run = subparsers.add_parser("run", help="evaluate the acceptance contract")
     run.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     run.add_argument("--expected-outcomes", type=Path, default=DEFAULT_OUTCOMES)
