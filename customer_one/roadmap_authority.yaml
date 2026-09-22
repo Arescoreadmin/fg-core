@@ -51,35 +51,30 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "CUSTOMER-ZERO-ACCEPT-001"
-    title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
-    role: "IMMEDIATE_PREREQUISITE"
-    parent_objective: "FG_RESULT_TRUTH_GATE"
+  - id: "CUSTOMER-ZERO-TRUST-001"
+    title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
+    role: "INTERNAL_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-ACCEPT-001"
     blocker_closed: >
-      Production qualification cannot be defensibly requested until a complete,
-      replayable Customer-Zero assessment proves evidence lineage, durable
-      execution/recovery, production dependency security, schema/RLS, and the
-      exact current-SHA report proof chain.
+      Customer-Zero approval cannot be defensibly issued until identity,
+      acceptance entitlement, and approval evidence each have separate,
+      non-exportable operational signing authorities with public verification.
     freeze_law_justification: >
-      This closes the next concrete Customer-One blocker after REPORT-QA-001:
-      the four production acceptance authorities and current-SHA end-to-end
-      proof must exist before PROD-QUAL-001 can be implemented or customer
-      data can be accepted for a billable Verified AI Governance Baseline.
+      This is the smallest proven blocker preventing completion of the already
+      authorized Customer-Zero acceptance operation. Existing providers are
+      test-only or stubs; no production-capable issuer or managed signer exists.
     status: NEXT
-    work_class: "CUSTOMER_ZERO_OPERATION"
+    work_class: "REPAIR"
     completion_evidence:
-      - "current source/build/deployment SHA"
-      - "versioned, fingerprinted synthetic Customer-Zero corpus"
-      - "complete evidence-to-report-to-QA proof bundle"
-      - "durable execution and recovery evidence"
-      - "production dependency-security and schema/RLS attestations"
-      - "deterministic replay result"
+      - "three distinct managed trust roles and stable key IDs"
+      - "canonical identity assertion and bounded acceptance entitlement issuance"
+      - "non-exportable approval signing and public-only verification"
+      - "historical verification, durable provenance, and operational fail-closed tests"
     forbidden_scope:
       - "PROD-QUAL-001"
       - "GOV-DELIVERY-001"
-      - "FG_RESULT_TRUTH_GATE implementation changes"
-      - "new RBAC or identity architecture"
-      - "invitation, SSO, SAML, SCIM, passkey, or Temporal work"
+      - "generalized PKI, IAM, RBAC, or secrets-platform redesign"
+      - "Customer-Zero corpus or expected-outcome changes"
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -89,6 +84,11 @@ next_sequence:
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
+
+blocked:
+  - id: "CUSTOMER-ZERO-ACCEPT-001"
+    title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
+    reason: "Open acceptance parent, blocked pending CUSTOMER-ZERO-TRUST-001 operational trust infrastructure; do not execute approval or runtime acceptance before that prerequisite closes."
 
 deferred:
   - id: "RAG-RETRY"

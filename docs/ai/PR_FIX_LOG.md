@@ -22857,3 +22857,9 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Next prerequisite:** authorize one Customer-Zero operation to produce current-SHA, replayable acceptance evidence.
 - **Required outputs:** versioned/fingerprinted synthetic corpus; complete evidence-to-report-to-QA proof bundle; durable execution and recovery evidence; dependency-security and schema/RLS attestations; deterministic replay result.
 - **Boundary:** this does not implement PROD-QUAL-001 or GOV-DELIVERY-001 and does not alter truth semantics.
+
+## CUSTOMER-ZERO-TRUST-001 roadmap authorization
+
+- **Finding:** Customer-Zero approval cannot proceed defensibly because no production-capable identity issuer, bounded acceptance-entitlement issuer, or non-exportable approval signer is operationally provisioned; existing providers are test-only or stubs.
+- **Correction:** Added `CUSTOMER-ZERO-TRUST-001` as the single authorized internal prerequisite, blocked `CUSTOMER-ZERO-ACCEPT-001` behind it, and extended the roadmap checker with explicit fail-closed blocked-item semantics.
+- **Scope:** Roadmap/checker governance only. No cryptographic keys, managed signer, production identity/RBAC changes, Customer-Zero artifacts, PROD-QUAL-001, or GOV-DELIVERY-001 implementation.
