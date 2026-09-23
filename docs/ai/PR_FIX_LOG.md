@@ -22908,3 +22908,11 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Findings:** PASS dimensions could omit backing audit/rotation/failure records; anchor fingerprints were manifest-asserted rather than recomputed; unsafe key flags and anchor status were weakly typed; required metadata and deployed provenance could be warnings; the registered schema under-specified role records.
 - **Correction:** Require backing records, recompute Ed25519 fingerprints, enforce exact boolean false safety flags and active anchors, downgrade missing metadata, aggregate source/deployed provenance, and strengthen the JSON schema.
 - **Scope:** Validator/evidence contract only; no Vault provisioning, credentials, Customer-Zero execution, corpus/outcome, roadmap, PROD-QUAL, or GOV-DELIVERY changes.
+
+
+## Development trust environment — local Vault dev lifecycle
+
+- **Finding:** No local development trust environment existed; every Vault integration test required a live HCP cluster or mock transports, blocking integration development at zero cost.
+- **Correction:** Added `make trust-dev-up/status/test/down` lifecycle targets backed by `vault server -dev`. Configures three Ed25519 Transit keys, three scoped policies, and three AppRole roles matching the production Customer-Zero architecture. Ten `@pytest.mark.integration` tests verify key existence, signing, verifiable signatures, cross-role policy isolation, wrong-credential rejection, and fail-closed behavior. `trust-dev-test` derives the listen address from `VAULT_DEV_ADDR`, validates vault reachability before pytest, and passes `TRUST_DEV_REQUIRE_VAULT=1` so an unreachable vault causes test failure rather than silent skip.
+- **Operational boundary:** No HCP resources, AWS resources, credentials, keys, Railway changes, or Customer-Zero approval/acceptance were provisioned. `CUSTOMER-ZERO-TRUST-001` remains open; production ceremony (HCP Vault Dedicated) is still required.
+- **Scope:** Development infrastructure only. Same FrostGate Vault adapter and signing contracts as production. `CUSTOMER-ZERO-ACCEPT-001` remains blocked. No roadmap, corpus, expected-outcome, PROD-QUAL-001, or GOV-DELIVERY-001 changes.
