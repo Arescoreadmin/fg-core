@@ -54,6 +54,17 @@
       "id": "jsonschema.testing.control_tower_run_trigger_request.v1.0.0",
       "type": "jsonschema",
       "path": "schemas/testing/control_tower_run_trigger_request.schema.json"
+    },
+    {
+      "id": "artifacts.customer_zero_trust_evidence.v1.0",
+      "type": "artifacts",
+      "path": "schemas/artifacts/customer_zero_trust_evidence.schema.json",
+      "code_refs": [
+        {
+          "path": "services/cgin/key_management/trust_evidence.py",
+          "pattern": "SCHEMA_VERSION = \"1.0\""
+        }
+      ]
     }
   ]
 }

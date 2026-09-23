@@ -22888,3 +22888,17 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Finding:** Caller-injected HTTP clients could enable redirects, risking credential replay; unset environment markers could permit static-token compatibility by default.
 - **Correction:** Reject injected clients unless `follow_redirects` is explicitly disabled, and require an explicit non-production environment value for static-token mode.
 - **Scope:** Bounded Vault authentication repair only; no provisioning, secrets, corpus/outcome, roadmap, or downstream authority changes.
+
+
+## CUSTOMER-ZERO-TRUST-001 — operational trust evidence authority
+
+- **Finding:** The Vault adapter was code-ready, but external provisioning had no deterministic, offline-verifiable evidence contract for role separation, anchors, provenance, rotation, failure behavior, or recovery.
+- **Correction:** Added a bounded manifest schema, canonical SHA-256 fingerprinting, fail-closed PASS/FAIL/NOT_PROVEN validation, secret-bearing field rejection, evidence-gated ceremony states, and a non-mutating operator CLI.
+- **Boundary:** No Vault API mutation, credentials, keys, Railway changes, Customer-Zero approval/acceptance, roadmap advancement, PROD-QUAL-001, or GOV-DELIVERY-001 implementation.
+
+
+## CUSTOMER-ZERO-TRUST-001 evidence fingerprint verification repair
+
+- **Finding:** The validator computed a canonical manifest fingerprint but did not reject a supplied self-reported fingerprint that differed from the computed value.
+- **Correction:** Supplied `evidence_fingerprint` values are now checked fail-closed against canonical serialization; mismatch evidence is `FAIL`.
+- **Tests:** Added regression coverage; no external provisioning or Customer-Zero execution performed.

@@ -29,6 +29,14 @@ from services.cgin.key_management.vault_transit import (
     public_key_fingerprint,
     signer_from_environment,
 )
+from services.cgin.key_management.trust_evidence import (
+    CeremonyStateMachine,
+    EvidenceState,
+    ValidationResult,
+    canonical_manifest_bytes,
+    fingerprint_manifest,
+    validate_manifest,
+)
 from services.cgin.key_management.registry import (
     ACTIVE_PROVIDER_REGISTRY,
     ProviderRegistry,
@@ -67,4 +75,10 @@ __all__ = [
     "public_key_fingerprint",
     "signer_from_environment",
     "as_provider",
+    "CeremonyStateMachine",
+    "EvidenceState",
+    "ValidationResult",
+    "canonical_manifest_bytes",
+    "fingerprint_manifest",
+    "validate_manifest",
 ]
