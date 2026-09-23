@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Mapping
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    PublicFormat,
+    load_pem_public_key,
+)
 
 from services.canonical import canonical_json_bytes
 
@@ -129,12 +137,24 @@ def _state(value: Any) -> EvidenceState | None:
         return None
 
 
-def _aggregate(states: Mapping[str, EvidenceState]) -> EvidenceState:
+def aggregate_states(states: Mapping[str, EvidenceState]) -> EvidenceState:
     if any(value is EvidenceState.FAIL for value in states.values()):
         return EvidenceState.FAIL
     if any(value is EvidenceState.NOT_PROVEN for value in states.values()):
         return EvidenceState.NOT_PROVEN
     return EvidenceState.PASS
+
+
+def _public_key_fingerprint(value: str) -> str:
+    raw = value.encode("ascii")
+    if value.startswith("-----BEGIN"):
+        loaded = load_pem_public_key(raw)
+        if not isinstance(loaded, Ed25519PublicKey):
+            raise ValueError("public anchor is not Ed25519")
+        key = loaded
+    else:
+        key = Ed25519PublicKey.from_public_bytes(base64.b64decode(raw, validate=True))
+    return hashlib.sha256(key.public_bytes(Encoding.Raw, PublicFormat.Raw)).hexdigest()
 
 
 def _role_reasons(manifest: Mapping[str, Any]) -> tuple[list[str], EvidenceState]:
@@ -184,8 +204,15 @@ def _role_reasons(manifest: Mapping[str, Any]) -> tuple[list[str], EvidenceState
         if record.get("algorithm") not in (None, "ed25519"):
             reasons.append(f"{role} uses unsupported algorithm")
             result = EvidenceState.FAIL
-        if record.get("exportable") is True or record.get("deletion_allowed") is True:
-            reasons.append(f"{role} has unsafe key configuration")
+        for safety_field in ("exportable", "deletion_allowed"):
+            if safety_field in record and type(record[safety_field]) is not bool:
+                reasons.append(f"{role} has non-boolean {safety_field}")
+                result = EvidenceState.FAIL
+            elif record.get(safety_field) is True:
+                reasons.append(f"{role} has unsafe key configuration")
+                result = EvidenceState.FAIL
+        if "anchor_status" in record and record.get("anchor_status") != "active":
+            reasons.append(f"{role} anchor is not active")
             result = EvidenceState.FAIL
         if (
             not isinstance(record.get("key_version"), int)
@@ -223,6 +250,16 @@ def _role_reasons(manifest: Mapping[str, Any]) -> tuple[list[str], EvidenceState
         ):
             reasons.append(f"{role} anchor fingerprint mismatch")
             result = EvidenceState.FAIL
+        else:
+            try:
+                derived = _public_key_fingerprint(str(record.get("public_key")))
+            except (TypeError, ValueError):
+                reasons.append(f"{role} public key is not valid Ed25519 material")
+                result = EvidenceState.FAIL
+            else:
+                if derived != record.get("public_key_fingerprint"):
+                    reasons.append(f"{role} public key fingerprint is incorrect")
+                    result = EvidenceState.FAIL
     if seen != set(ROLES):
         reasons.append("all three canonical trust roles are required")
         result = EvidenceState.FAIL
@@ -248,6 +285,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
         return ValidationResult(EvidenceState.FAIL, {}, ("unknown schema version",), fp)
     if manifest.get("work_item") != WORK_ITEM:
         return ValidationResult(EvidenceState.FAIL, {}, ("wrong work item",), fp)
+    metadata_missing = False
     for field in (
         "ceremony_id",
         "environment",
@@ -258,27 +296,30 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
     ):
         if not manifest.get(field):
             reasons.append(f"missing {field}")
-    if not isinstance(manifest.get("source_sha"), str) or not _SHA.fullmatch(
-        str(manifest.get("source_sha", ""))
+            metadata_missing = True
+    if not manifest.get("source_sha") or not manifest.get("tested_sha"):
+        dimensions["SOURCE_IDENTITY"] = EvidenceState.NOT_PROVEN
+    elif (
+        not isinstance(manifest.get("source_sha"), str)
+        or not _SHA.fullmatch(str(manifest.get("source_sha")))
+        or not isinstance(manifest.get("tested_sha"), str)
+        or not _SHA.fullmatch(str(manifest.get("tested_sha")))
     ):
-        reasons.append("invalid source SHA")
+        reasons.append("invalid source/tested SHA")
         dimensions["SOURCE_IDENTITY"] = EvidenceState.FAIL
     elif manifest.get("tested_sha") != manifest.get("source_sha"):
-        dimensions["SOURCE_IDENTITY"] = (
-            EvidenceState.FAIL
-            if manifest.get("tested_sha")
-            else EvidenceState.NOT_PROVEN
-        )
-        reasons.append(
-            "tested SHA does not match source SHA"
-            if manifest.get("tested_sha")
-            else "tested SHA unavailable"
-        )
+        dimensions["SOURCE_IDENTITY"] = EvidenceState.FAIL
+        reasons.append("tested SHA does not match source SHA")
     else:
         dimensions["SOURCE_IDENTITY"] = EvidenceState.PASS
-    dimensions["DEPLOYMENT_IDENTITY"] = (
-        EvidenceState.PASS if manifest.get("deployed_sha") else EvidenceState.NOT_PROVEN
-    )
+    deployed = manifest.get("deployed_sha")
+    if not deployed:
+        dimensions["DEPLOYMENT_IDENTITY"] = EvidenceState.NOT_PROVEN
+    elif not isinstance(deployed, str) or not _SHA.fullmatch(deployed):
+        dimensions["DEPLOYMENT_IDENTITY"] = EvidenceState.FAIL
+        reasons.append("invalid deployed SHA")
+    else:
+        dimensions["DEPLOYMENT_IDENTITY"] = EvidenceState.PASS
     role_reasons, role_state = _role_reasons(manifest)
     reasons.extend(role_reasons)
     dimensions["ROLE_SEPARATION"] = role_state
@@ -309,6 +350,22 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
     if not isinstance(raw_dimensions, Mapping):
         reasons.append("dimension evidence missing")
         raw_dimensions = {}
+    backing_records = {
+        "AUDITABILITY": "audit_evidence",
+        "ROTATION_HISTORY": "rotation_history",
+        "FAILURE_BEHAVIOR": "failure_evidence",
+    }
+    for dimension, field_name in backing_records.items():
+        if raw_dimensions.get(dimension) == EvidenceState.PASS.value and not isinstance(
+            manifest.get(field_name), list
+        ):
+            dimensions[dimension] = EvidenceState.NOT_PROVEN
+            reasons.append(f"{dimension} backing records unavailable")
+    if (
+        metadata_missing
+        and dimensions.get("VAULT_DEPLOYMENT") is not EvidenceState.FAIL
+    ):
+        dimensions["VAULT_DEPLOYMENT"] = EvidenceState.NOT_PROVEN
     for dimension in DIMENSIONS:
         if dimension in dimensions:
             continue
@@ -328,7 +385,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
     ):
         dimensions["RECOVERY"] = EvidenceState.NOT_PROVEN
         reasons.append("recovery evidence reference missing")
-    overall = _aggregate(dimensions)
+    overall = aggregate_states(dimensions)
     return ValidationResult(overall, dimensions, tuple(sorted(set(reasons))), fp)
 
 

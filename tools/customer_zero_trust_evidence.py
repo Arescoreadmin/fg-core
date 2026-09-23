@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from services.cgin.key_management.trust_evidence import (  # noqa: E402
     EvidenceState,
+    aggregate_states,
     fingerprint_manifest,
     load_manifest,
     validate_manifest,
@@ -79,12 +80,17 @@ def main(argv: list[str] | None = None) -> int:
             "reasons": list(result.reasons),
         }
     elif args.command == "verify-provenance":
-        output = {
-            "state": result.dimensions.get(
-                "SOURCE_IDENTITY", EvidenceState.NOT_PROVEN
-            ).value,
-            "reasons": list(result.reasons),
-        }
+        provenance_state = aggregate_states(
+            {
+                "SOURCE_IDENTITY": result.dimensions.get(
+                    "SOURCE_IDENTITY", EvidenceState.NOT_PROVEN
+                ),
+                "DEPLOYMENT_IDENTITY": result.dimensions.get(
+                    "DEPLOYMENT_IDENTITY", EvidenceState.NOT_PROVEN
+                ),
+            }
+        )
+        output = {"state": provenance_state.value, "reasons": list(result.reasons)}
     else:
         output = result.as_dict()
     print(
