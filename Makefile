@@ -511,6 +511,78 @@ enforcement-mode-matrix: venv
 trust-enforcement-inputs: venv
 	@$(PY) tools/ci/check_trust_enforcement_inputs.py
 
+# =============================================================================
+# Development Trust Environment — local Vault dev server lifecycle
+#
+# DEVELOPMENT ONLY. Does NOT produce CUSTOMER-ZERO-TRUST-001 evidence.
+# Requires vault CLI in PATH (vault v2.x). No HCP account required.
+# =============================================================================
+
+VAULT_DEV_ADDR    ?= http://127.0.0.1:8200
+VAULT_DEV_TOKEN   ?= dev-only-trust-token
+VAULT_DEV_PIDFILE := .vault-dev.pid
+VAULT_DEV_LOG     := .vault-dev.log
+
+.PHONY: trust-dev-up trust-dev-status trust-dev-test trust-dev-down
+
+trust-dev-up:
+	@command -v vault > /dev/null 2>&1 || (echo "❌ vault CLI not found in PATH"; exit 1)
+	@if [ -f "$(VAULT_DEV_PIDFILE)" ] && kill -0 "$$(cat $(VAULT_DEV_PIDFILE))" 2>/dev/null; then \
+		echo "✅ Vault dev server already running (pid=$$(cat $(VAULT_DEV_PIDFILE)))"; \
+	else \
+		echo "==> Starting Vault dev server ($(VAULT_DEV_ADDR)) ..."; \
+		VAULT_DEV_ROOT_TOKEN_ID=$(VAULT_DEV_TOKEN) vault server -dev \
+			-dev-listen-address=127.0.0.1:8200 \
+			> $(VAULT_DEV_LOG) 2>&1 & \
+		echo $$! > $(VAULT_DEV_PIDFILE); \
+		echo "    pid=$$(cat $(VAULT_DEV_PIDFILE)) log=$(VAULT_DEV_LOG)"; \
+		for i in 1 2 3 4 5; do \
+			sleep 1; \
+			VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
+				vault status > /dev/null 2>&1 && break; \
+		done; \
+		echo "==> Configuring trust keys, policies, and AppRole roles ..."; \
+	fi
+	@VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
+		bash tools/trust/trust_dev_setup.sh
+	@echo ""
+	@echo "✅ trust-dev-up: ready"
+	@echo "   Env vars to export for manual testing (see .env.trust-dev.example):"
+	@echo "   export VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN)"
+
+trust-dev-status:
+	@if [ -f "$(VAULT_DEV_PIDFILE)" ] && kill -0 "$$(cat $(VAULT_DEV_PIDFILE))" 2>/dev/null; then \
+		echo "✅ Vault dev server: running (pid=$$(cat $(VAULT_DEV_PIDFILE)))"; \
+		VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) vault status 2>/dev/null | grep -E 'Sealed|Version|HA Mode' || true; \
+		echo "   Keys:"; \
+		VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
+			vault list transit/keys 2>/dev/null | grep customer-zero || echo "   (run trust-dev-up to configure)"; \
+	else \
+		echo "⚠️  Vault dev server: not running (run: make trust-dev-up)"; \
+	fi
+
+trust-dev-test: venv
+	@if [ ! -f "$(VAULT_DEV_PIDFILE)" ] || ! kill -0 "$$(cat $(VAULT_DEV_PIDFILE))" 2>/dev/null; then \
+		echo "❌ Vault dev server not running. Run: make trust-dev-up"; exit 1; \
+	fi
+	@echo "==> Running trust dev integration tests ..."
+	@VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
+		$(PYTEST) tests/test_vault_trust_dev_integration.py -v -m integration
+
+trust-dev-down:
+	@if [ -f "$(VAULT_DEV_PIDFILE)" ]; then \
+		PID=$$(cat $(VAULT_DEV_PIDFILE)); \
+		if kill -0 "$$PID" 2>/dev/null; then \
+			kill "$$PID" && echo "✅ Vault dev server stopped (pid=$$PID)"; \
+		else \
+			echo "⚠️  Vault dev server was not running (stale pid=$$PID)"; \
+		fi; \
+		rm -f $(VAULT_DEV_PIDFILE); \
+	else \
+		echo "⚠️  No vault dev pidfile found (already stopped?)"; \
+	fi
+	@rm -f $(VAULT_DEV_LOG)
+
 route-inventory-generate: venv
 	@$(PY) tools/ci/check_route_inventory.py --write
 

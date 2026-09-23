@@ -18,6 +18,11 @@ supervisor-sidecar/supervisor-sidecar
 docker-compose.override.yml
 # Python
 .venv/
+
+# Trust dev server process files (created by make trust-dev-up)
+.vault-dev.pid
+.vault-dev.log
+.env.trust-dev
 __pycache__/
 *.pyc
 
@@ -216,6 +221,7 @@ tools/ci/topology.sha256
 .env*
 !.env.example
 !**/.env.example
+!.env.trust-dev.example
 
 # Local Vercel linkage
 .vercel/
