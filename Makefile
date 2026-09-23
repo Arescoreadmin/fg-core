@@ -522,17 +522,22 @@ VAULT_DEV_ADDR    ?= http://127.0.0.1:8200
 VAULT_DEV_TOKEN   ?= dev-only-trust-token
 VAULT_DEV_PIDFILE := .vault-dev.pid
 VAULT_DEV_LOG     := .vault-dev.log
+# Derive the host:port listen address from VAULT_DEV_ADDR by stripping the scheme.
+# vault server -dev only supports HTTP; https:// is rejected at startup.
+VAULT_DEV_LISTEN  := $(subst http://,,$(VAULT_DEV_ADDR))
 
 .PHONY: trust-dev-up trust-dev-status trust-dev-test trust-dev-down
 
 trust-dev-up:
 	@command -v vault > /dev/null 2>&1 || (echo "❌ vault CLI not found in PATH"; exit 1)
+	@echo "$(VAULT_DEV_ADDR)" | grep -q '^http://' || \
+		(echo "❌ VAULT_DEV_ADDR must use http:// scheme (vault dev server only supports HTTP)"; exit 1)
 	@if [ -f "$(VAULT_DEV_PIDFILE)" ] && kill -0 "$$(cat $(VAULT_DEV_PIDFILE))" 2>/dev/null; then \
 		echo "✅ Vault dev server already running (pid=$$(cat $(VAULT_DEV_PIDFILE)))"; \
 	else \
 		echo "==> Starting Vault dev server ($(VAULT_DEV_ADDR)) ..."; \
 		VAULT_DEV_ROOT_TOKEN_ID=$(VAULT_DEV_TOKEN) vault server -dev \
-			-dev-listen-address=127.0.0.1:8200 \
+			-dev-listen-address=$(VAULT_DEV_LISTEN) \
 			> $(VAULT_DEV_LOG) 2>&1 & \
 		echo $$! > $(VAULT_DEV_PIDFILE); \
 		echo "    pid=$$(cat $(VAULT_DEV_PIDFILE)) log=$(VAULT_DEV_LOG)"; \
@@ -565,8 +570,11 @@ trust-dev-test: venv
 	@if [ ! -f "$(VAULT_DEV_PIDFILE)" ] || ! kill -0 "$$(cat $(VAULT_DEV_PIDFILE))" 2>/dev/null; then \
 		echo "❌ Vault dev server not running. Run: make trust-dev-up"; exit 1; \
 	fi
+	@VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) vault status > /dev/null 2>&1 || \
+		(echo "❌ Vault process is running (pid=$$(cat $(VAULT_DEV_PIDFILE))) but unreachable at $(VAULT_DEV_ADDR)"; \
+		 echo "   Possible address mismatch — check VAULT_DEV_ADDR or restart with: make trust-dev-down trust-dev-up"; exit 1)
 	@echo "==> Running trust dev integration tests ..."
-	@VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
+	@TRUST_DEV_REQUIRE_VAULT=1 VAULT_ADDR=$(VAULT_DEV_ADDR) VAULT_TOKEN=$(VAULT_DEV_TOKEN) \
 		$(PYTEST) tests/test_vault_trust_dev_integration.py -v -m integration
 
 trust-dev-down:

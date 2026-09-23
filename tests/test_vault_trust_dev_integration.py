@@ -27,6 +27,8 @@ from services.cgin.key_management.vault_transit import (
 
 DEV_VAULT_ADDR = os.getenv("VAULT_ADDR", "http://127.0.0.1:8200")
 DEV_VAULT_TOKEN = os.getenv("VAULT_TOKEN", "dev-only-trust-token")
+# Set by `make trust-dev-test` — causes unreachable Vault to fail rather than skip.
+_REQUIRE_VAULT = os.getenv("TRUST_DEV_REQUIRE_VAULT", "") == "1"
 
 KEY_IDS = {
     TrustRole.IDENTITY: "customer-zero-identity",
@@ -50,6 +52,15 @@ def _vault_reachable() -> bool:
 
 
 pytestmark = pytest.mark.integration
+
+# When called from `make trust-dev-test` (TRUST_DEV_REQUIRE_VAULT=1), fail at collection
+# rather than silently skipping live tests if Vault is unreachable (e.g. address mismatch).
+if _REQUIRE_VAULT and not _vault_reachable():
+    pytest.exit(
+        f"TRUST_DEV_REQUIRE_VAULT=1 but Vault is unreachable at {DEV_VAULT_ADDR}. "
+        "Address mismatch or server not started — run `make trust-dev-up`.",
+        returncode=1,
+    )
 
 skip_no_vault = pytest.mark.skipif(
     not _vault_reachable(),
