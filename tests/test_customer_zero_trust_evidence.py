@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 
@@ -17,12 +18,16 @@ from services.cgin.key_management.trust_evidence import (
 
 def manifest() -> dict:
     roles = []
-    for role, suffix in (
-        ("customer-zero-identity", "identity"),
-        ("customer-zero-acceptance", "acceptance"),
-        ("customer-zero-approval", "approval"),
+    for index, (role, suffix) in enumerate(
+        (
+            ("customer-zero-identity", "identity"),
+            ("customer-zero-acceptance", "acceptance"),
+            ("customer-zero-approval", "approval"),
+        ),
+        start=1,
     ):
-        public = f"public-{suffix}"
+        public = base64.b64encode(bytes([index]) * 32).decode()
+        fingerprint = hashlib.sha256(base64.b64decode(public)).hexdigest()
         roles.append(
             {
                 "trust_role": role,
@@ -38,16 +43,14 @@ def manifest() -> dict:
                 "exportable": False,
                 "deletion_allowed": False,
                 "public_key": public,
-                "public_key_fingerprint": hashlib.sha256(public.encode()).hexdigest(),
+                "public_key_fingerprint": fingerprint,
                 "anchor_status": "active",
                 "audit_evidence_ref": f"audit-{suffix}",
                 "public_anchor": {
                     "trust_role": role,
                     "key_id": f"key-{suffix}",
                     "key_version": 1,
-                    "public_key_fingerprint": hashlib.sha256(
-                        public.encode()
-                    ).hexdigest(),
+                    "public_key_fingerprint": fingerprint,
                 },
             }
         )
@@ -64,6 +67,9 @@ def manifest() -> dict:
         "trust_roles": roles,
         "dimensions": {dimension: "PASS" for dimension in DIMENSIONS},
         "recovery_evidence_ref": "recovery-001",
+        "audit_evidence": [{"id": "audit-001"}],
+        "rotation_history": [{"id": "rotation-001"}],
+        "failure_evidence": [{"id": "failure-001"}],
     }
 
 
@@ -131,6 +137,42 @@ def test_anchor_mismatch_fails():
     assert validate_manifest(value).state is EvidenceState.FAIL
 
 
+def test_pass_dimensions_require_backing_records():
+    value = manifest()
+    value.pop("audit_evidence")
+    value.pop("rotation_history")
+    value.pop("failure_evidence")
+    result = validate_manifest(value)
+    assert result.dimensions["AUDITABILITY"] is EvidenceState.NOT_PROVEN
+    assert result.dimensions["ROTATION_HISTORY"] is EvidenceState.NOT_PROVEN
+    assert result.dimensions["FAILURE_BEHAVIOR"] is EvidenceState.NOT_PROVEN
+
+
+def test_non_boolean_safety_flags_fail_closed():
+    value = manifest()
+    value["trust_roles"][0]["exportable"] = "false"
+    assert validate_manifest(value).state is EvidenceState.FAIL
+
+
+def test_inactive_anchor_fails_closed():
+    value = manifest()
+    value["trust_roles"][0]["anchor_status"] = "revoked"
+    assert validate_manifest(value).state is EvidenceState.FAIL
+
+
+def test_public_anchor_fingerprint_is_recomputed():
+    value = manifest()
+    value["trust_roles"][0]["public_key_fingerprint"] = "0" * 64
+    value["trust_roles"][0]["public_anchor"]["public_key_fingerprint"] = "0" * 64
+    assert validate_manifest(value).state is EvidenceState.FAIL
+
+
+def test_required_metadata_missing_is_not_proven():
+    value = manifest()
+    value.pop("ceremony_id")
+    assert validate_manifest(value).state is EvidenceState.NOT_PROVEN
+
+
 def test_missing_anchor_or_audit_is_not_proven():
     value = manifest()
     value["trust_roles"][0].pop("public_anchor")
@@ -184,7 +226,7 @@ def test_secret_bearing_fields_are_rejected(field):
 
 def test_public_key_is_allowed():
     value = manifest()
-    value["public_key"] = "public-material"
+    value["public_key"] = value["trust_roles"][0]["public_key"]
     assert validate_manifest(value).state is EvidenceState.PASS
 
 

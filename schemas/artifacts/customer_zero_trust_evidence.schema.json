@@ -60,10 +60,244 @@
     "trust_roles": {
       "type": "array",
       "minItems": 3,
-      "maxItems": 3
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "trust_role",
+          "issuer",
+          "auth_role_id",
+          "policy_id",
+          "policy_fingerprint",
+          "key_id",
+          "key_version",
+          "algorithm",
+          "exportable",
+          "deletion_allowed",
+          "public_key",
+          "public_key_fingerprint",
+          "anchor_status",
+          "audit_evidence_ref",
+          "public_anchor"
+        ],
+        "properties": {
+          "trust_role": {
+            "type": "string",
+            "enum": [
+              "customer-zero-identity",
+              "customer-zero-acceptance",
+              "customer-zero-approval"
+            ]
+          },
+          "issuer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "auth_role_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "policy_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "policy_fingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "key_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "algorithm": {
+            "const": "ed25519"
+          },
+          "exportable": {
+            "const": false
+          },
+          "deletion_allowed": {
+            "const": false
+          },
+          "public_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "public_key_fingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "anchor_status": {
+            "const": "active"
+          },
+          "audit_evidence_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "public_anchor": {
+            "type": "object",
+            "required": [
+              "trust_role",
+              "key_id",
+              "key_version",
+              "public_key_fingerprint"
+            ],
+            "properties": {
+              "trust_role": {
+                "type": "string",
+                "enum": [
+                  "customer-zero-identity",
+                  "customer-zero-acceptance",
+                  "customer-zero-approval"
+                ]
+              },
+              "key_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "key_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "public_key_fingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
     },
     "dimensions": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SOURCE_IDENTITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "DEPLOYMENT_IDENTITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "VAULT_DEPLOYMENT": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "VAULT_AUTHENTICATION": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "ROLE_SEPARATION": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "IDENTITY_AUTHORITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "ACCEPTANCE_AUTHORITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "APPROVAL_AUTHORITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "KEY_CONFIGURATION": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "PUBLIC_ANCHORS": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "AUDITABILITY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "ROTATION_HISTORY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "FAILURE_BEHAVIOR": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "RECOVERY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        },
+        "SECRET_BOUNDARY": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_PROVEN"
+          ]
+        }
+      }
     }
   },
   "additionalProperties": true

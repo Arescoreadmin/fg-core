@@ -22902,3 +22902,9 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **Finding:** The validator computed a canonical manifest fingerprint but did not reject a supplied self-reported fingerprint that differed from the computed value.
 - **Correction:** Supplied `evidence_fingerprint` values are now checked fail-closed against canonical serialization; mismatch evidence is `FAIL`.
 - **Tests:** Added regression coverage; no external provisioning or Customer-Zero execution performed.
+
+## CUSTOMER-ZERO-TRUST-001 evidence validator fail-closed review repair
+
+- **Findings:** PASS dimensions could omit backing audit/rotation/failure records; anchor fingerprints were manifest-asserted rather than recomputed; unsafe key flags and anchor status were weakly typed; required metadata and deployed provenance could be warnings; the registered schema under-specified role records.
+- **Correction:** Require backing records, recompute Ed25519 fingerprints, enforce exact boolean false safety flags and active anchors, downgrade missing metadata, aggregate source/deployed provenance, and strengthen the JSON schema.
+- **Scope:** Validator/evidence contract only; no Vault provisioning, credentials, Customer-Zero execution, corpus/outcome, roadmap, PROD-QUAL, or GOV-DELIVERY changes.
