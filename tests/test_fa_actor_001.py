@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -15,7 +17,7 @@ from api.field_assessment import (
 
 
 def _context(**overrides: object) -> ActorContext:
-    values: dict[str, object] = {
+    values: dict[str, Any] = {
         "subject": "auth0|alice-706",
         "email": "alice@example.test",
         "name": "Alice Example",
@@ -39,7 +41,10 @@ def test_missing_or_anonymous_actor_fails_closed() -> None:
         with pytest.raises(HTTPException) as exc_info:
             _actor_from_context(_context(subject=subject))
         assert exc_info.value.status_code == 401
-        assert exc_info.value.detail["code"] == "CANONICAL_ACTOR_REQUIRED"
+        assert (
+            cast(dict[str, object], exc_info.value.detail)["code"]
+            == "CANONICAL_ACTOR_REQUIRED"
+        )
 
 
 def test_actor_type_preserves_human_service_boundary() -> None:
@@ -61,17 +66,21 @@ def test_unknown_auth_source_is_not_promoted_to_human() -> None:
 
 
 def test_tenant_context_cannot_override_canonical_actor_tenant() -> None:
-    request = Request({"type": "http", "headers": []})
+    request: Request = Request({"type": "http", "headers": []})
     request.state.tenant_id = "tenant-b"
     with pytest.raises(HTTPException) as exc_info:
         _resolve_caller_tenant(request, _context(tenant_id="tenant-a"))
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["code"] == "ACTOR_TENANT_MISMATCH"
+    assert (
+        cast(dict[str, object], exc_info.value.detail)["code"]
+        == "ACTOR_TENANT_MISMATCH"
+    )
 
 
 def test_delegated_actor_roles_do_not_inherit_gateway_platform_admin() -> None:
     from types import SimpleNamespace
 
+    from sqlalchemy.orm import Session
     from api.identity_providers.api_key import _resolve_delegated_actor_roles
 
     request = SimpleNamespace(
@@ -87,7 +96,9 @@ def test_delegated_actor_roles_do_not_inherit_gateway_platform_admin() -> None:
         def execute(self, _statement, _params):
             return _Result()
 
-    roles = _resolve_delegated_actor_roles(request, _Conn(), "auth0|assessor")
+    roles = _resolve_delegated_actor_roles(
+        cast(Request, request), cast(Session, _Conn()), "auth0|assessor"
+    )
     assert roles == ["assessor"]
 
     from api.actor_context import ALL_PERMISSIONS, roles_to_permissions
@@ -97,10 +108,11 @@ def test_delegated_actor_roles_do_not_inherit_gateway_platform_admin() -> None:
 
 
 def test_unbound_internal_actor_cannot_mutate_field_assessment() -> None:
+    from sqlalchemy.orm import Session
     from api.auth_scopes.definitions import AuthResult
     from api.identity_providers.api_key import extract_api_key_actor
 
-    request = Request(
+    request: Request = Request(
         {
             "type": "http",
             "method": "POST",
@@ -125,6 +137,6 @@ def test_unbound_internal_actor_cannot_mutate_field_assessment() -> None:
         def execute(self, _statement, _params):
             return _Result()
 
-    actor = extract_api_key_actor(request, _Conn())
+    actor = extract_api_key_actor(request, cast(Session, _Conn()))
     assert actor is not None
     assert actor.permissions == frozenset()
