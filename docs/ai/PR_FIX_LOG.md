@@ -1,3 +1,11 @@
+## FA-ACTOR-001 test typing regression repair
+
+- **Finding:** 12 mypy strict errors in `tests/test_fa_actor_001.py` caused by: `dict[str, object]` blocking `ActorContext(**values)` dataclass unpacking; untyped `HTTPException.detail["code"]` subscripts (Starlette types `detail` as `str`); unannotated local `request` variables; and `SimpleNamespace`/stub objects passed to production functions typed as `Request`/`Session`.
+- **Correction:** `dict[str, Any]` in `_context()` helper; `cast(dict[str, object], exc_info.value.detail)["code"]` for detail accesses; `: Request` annotations on two local variables; `cast(Request, ...)` and `cast(Session, ...)` at two call sites; local `from sqlalchemy.orm import Session` imports added.
+- **Tests:** 7/7 FA actor tests pass; 111 related delegation tests pass; `mypy` strict — `Success: no issues found in 2136 source files`; `fg-fast` rc=0 (496 passed); `fg-security` rc=0 (1239 passed, 1 skipped); `fg-contract` rc=0.
+- **Scope:** `tests/test_fa_actor_001.py` only. TEST_TYPING_ONLY — zero production code changes, zero assertion semantic changes, zero roadmap advancement. No PROD-QUAL-001 or GOV-DELIVERY-001 changes.
+
+
 ## ROADMAP-RECONCILE-002 — complete FA-ACTOR-001 and authorize REPORT-QA-001
 
 - **Date / base:** 2026-09-21 / `49fe1fcf32a2d28cb74f40523dc2f1cd0c5f4522`.
