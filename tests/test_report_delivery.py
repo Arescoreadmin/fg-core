@@ -193,6 +193,53 @@ def _assert_delivery_rejected_without_mutation(
     assert delivered_audit_id is None
 
 
+def _qualify_report_for_delivery(engagement_id: str, report_id: str) -> None:
+    """Patch report_json to satisfy _require_production_qualified.
+
+    This models the DB state that the production qualification workflow would
+    produce. The gate logic itself is unchanged — this fixture establishes the
+    legitimate prerequisite so delivery lifecycle tests can exercise the full
+    success path.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from api.db import get_sessionmaker
+    from api.db_models_governance_report import GovernanceReportRecord
+
+    SM = get_sessionmaker()
+    with SM() as db:
+        record = db.execute(
+            select(GovernanceReportRecord).where(
+                GovernanceReportRecord.id == report_id,
+            )
+        ).scalar_one()
+        report_json = dict(record.report_json or {})
+        report_json["result_truth_gate"] = {
+            "authority_version": "1.0",
+            "decision": "PASS",
+            "tenant_id": _TENANT_A,
+            "engagement_id": engagement_id,
+            "evidence_state_hash": "fixture-hash",
+            "grounded_claims_fingerprint": "fixture-fp",
+            "result_fingerprint": "fixture-rfp",
+            "failure_reasons": [],
+        }
+        report_json["production_qualification"] = {
+            "status": "QUALIFIED",
+            "qualified": True,
+            "attestations": {
+                "PRODUCTION_DEPENDENCY_SECURITY": True,
+                "PRODUCTION_SCHEMA_AND_RLS": True,
+                "CANONICAL_ASSESSMENT_PROOF": True,
+                "DURABLE_EXECUTION_AND_RECOVERY": True,
+            },
+        }
+        record.report_json = report_json
+        flag_modified(record, "report_json")
+        db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -266,6 +313,7 @@ def test_delivered_version_is_immutable(client: TestClient) -> None:
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
     _approve(client, eid, rid, v["id"])
+    _qualify_report_for_delivery(eid, rid)
     _deliver(client, eid, rid, v["id"])
 
     # Re-approving a delivered version must be rejected
@@ -288,6 +336,7 @@ def test_deliver_report(client: TestClient) -> None:
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
     _approve(client, eid, rid, v["id"])
+    _qualify_report_for_delivery(eid, rid)
     delivered = _deliver(client, eid, rid, v["id"])
     assert delivered["status"] == "delivered"
     assert delivered["delivered_at"] is not None
@@ -330,6 +379,7 @@ def test_supersede_creates_lineage(client: TestClient) -> None:
     v1 = _create_version(client, eid, rid)
     _submit(client, eid, rid, v1["id"])
     _approve(client, eid, rid, v1["id"])
+    _qualify_report_for_delivery(eid, rid)
     _deliver(client, eid, rid, v1["id"])
 
     v2 = _create_version(client, eid, rid)
@@ -407,6 +457,7 @@ def test_delivery_history_records_events(client: TestClient) -> None:
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
     _approve(client, eid, rid, v["id"])
+    _qualify_report_for_delivery(eid, rid)
     _deliver(client, eid, rid, v["id"])
 
     resp = client.get(
