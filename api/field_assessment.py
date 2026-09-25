@@ -174,6 +174,9 @@ from api.db_models_field_assessment import (
     FaEvidenceReportLink,
     FaFieldObservation,
     FaNormalizedFinding,
+    FaProductionAttestation,
+    FaProductionQualRequest,
+    FaQualificationDecision,
     FaReportDeliveryEvent,
     FaReportQaDecision,
     FaReportVersion,
@@ -194,6 +197,10 @@ from api.db_models_governance_asset_candidates import GaAssetCandidate
 from api.db_models_governance_assets import GaAsset
 from api.db_models_governance_promotion import GovernancePromotion
 from api.db_models_governance_report import GovernanceReportRecord
+from services.governance.report.qualification_authority import (
+    VALID_GATE_NAMES,
+    check_finalization_readiness,
+)
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.promotion import promote_engagement_to_governance
 from services.field_assessment.promotion_store import get_promotion
@@ -7433,17 +7440,35 @@ class ReportQaApproveBody(BaseModel):
     decision_notes: str | None = None
 
 
-def _require_production_qualified(report_json: Mapping[str, Any]) -> None:
-    """Require explicit production qualification before client-facing release."""
-    qualification = report_json.get("production_qualification")
-    if not isinstance(qualification, Mapping):
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                "PRODUCTION_QUALIFICATION_BLOCKED",
-                "Production qualification is missing; report remains internal-only.",
-            ),
-        )
+class ProductionAttestBody(BaseModel):
+    gate_name: str
+    attested: bool
+    notes: str | None = None
+
+
+class ProductionFinalizeBody(BaseModel):
+    reason: str | None = None
+
+
+def _require_production_qualified(
+    report_json: Mapping[str, Any],
+    db: "Session",
+    *,
+    report_id: str,
+    tenant_id: str,
+    report_version_id: str,
+) -> None:
+    """Require an explicit DB-backed QUALIFIED decision before client-facing release.
+
+    Checks two independent authorities:
+    1. result_truth_gate — baked into the signed report_json at generation time
+    2. fa_qualification_decisions — the canonical production qualification authority
+       (PROD-QUAL-001); must have a QUALIFIED row bound to this exact
+       (tenant, report, version, fingerprint) tuple
+
+    Binding prevents a QUALIFIED decision for V1 from authorizing delivery of V2
+    or a report whose content fingerprint has changed since qualification.
+    """
     truth_gate = report_json.get("result_truth_gate")
     if not isinstance(truth_gate, Mapping) or truth_gate.get("decision") != "PASS":
         raise HTTPException(
@@ -7453,26 +7478,26 @@ def _require_production_qualified(report_json: Mapping[str, Any]) -> None:
                 "A passing result truth gate is required before client delivery.",
             ),
         )
-    required = (
-        "PRODUCTION_DEPENDENCY_SECURITY",
-        "PRODUCTION_SCHEMA_AND_RLS",
-        "CANONICAL_ASSESSMENT_PROOF",
-        "DURABLE_EXECUTION_AND_RECOVERY",
-    )
-    attestations = qualification.get("attestations") or qualification.get(
-        "production_gates"
-    )
-    if (
-        qualification.get("status") != "QUALIFIED"
-        or qualification.get("qualified") is not True
-        or not isinstance(attestations, Mapping)
-        or any(attestations.get(name) is not True for name in required)
-    ):
+
+    report_fingerprint = truth_gate.get("result_fingerprint") or ""
+
+    decision = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.report_id == report_id,
+            FaQualificationDecision.report_version_id == report_version_id,
+            FaQualificationDecision.report_fingerprint == report_fingerprint,
+            FaQualificationDecision.decision == "QUALIFIED",
+        )
+    ).scalar_one_or_none()
+
+    if decision is None:
         raise HTTPException(
             status_code=422,
             detail=api_error(
                 "PRODUCTION_QUALIFICATION_BLOCKED",
-                "All required production authorities must pass before client delivery.",
+                "A QUALIFIED production qualification decision is required before "
+                "client delivery. Use POST /qualify/request to begin.",
             ),
         )
 
@@ -7694,7 +7719,13 @@ def qa_approve_report_route(
 
     if eng.status == "in_progress":
         try:
-            _require_production_qualified(report.report_json or {})
+            _require_production_qualified(
+                report.report_json or {},
+                db,
+                report_id=report.id,
+                tenant_id=tenant_id,
+                report_version_id="",
+            )
         except HTTPException:
             delivery_blocked = True
             delivery_blockers = [
@@ -7795,6 +7826,513 @@ def qa_approve_report_route(
         portal_expires_at=portal_expires_at,
         delivery_blocked=delivery_blocked,
         delivery_blockers=delivery_blockers,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Production qualification authority (PROD-QUAL-001)
+# ---------------------------------------------------------------------------
+
+
+class QualRequestResponse(BaseModel):
+    id: str
+    tenant_id: str
+    engagement_id: str
+    report_id: str
+    requested_by: str
+    requested_at: str
+
+
+class AttestationResponse(BaseModel):
+    id: str
+    qual_request_id: str
+    gate_name: str
+    attested: bool
+    attested_by: str
+    attested_at: str
+    notes: str | None = None
+
+
+class QualDecisionResponse(BaseModel):
+    id: str
+    qual_request_id: str
+    decision: str
+    decided_by: str
+    decided_at: str
+    reason: str | None = None
+
+
+class QualStatusResponse(BaseModel):
+    report_id: str
+    qual_request_id: str | None = None
+    qualified: bool
+    attestations: list[AttestationResponse] = []
+    decision: QualDecisionResponse | None = None
+
+
+def _compute_report_hash_for_qual(report_json: Mapping[str, Any]) -> str:
+    import hashlib
+    import json as _json
+
+    raw = _json.dumps(report_json, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_active_qual_request(
+    db: Session,
+    *,
+    tenant_id: str,
+    report_id: str,
+    qual_request_id: str,
+) -> FaProductionQualRequest:
+    row = db.execute(
+        select(FaProductionQualRequest).where(
+            FaProductionQualRequest.tenant_id == tenant_id,
+            FaProductionQualRequest.report_id == report_id,
+            FaProductionQualRequest.id == qual_request_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "QUAL_REQUEST_NOT_FOUND",
+                f"qualification request '{qual_request_id}' not found",
+            ),
+        )
+    return row
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/qualify/request",
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def qualify_report_request_route(
+    engagement_id: str,
+    report_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qualify")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> QualRequestResponse:
+    """Initiate a production qualification request for a finalized, QA-approved report.
+
+    The report must be finalized (is_finalized=True) and QA-approved before a
+    qualification request can be created. Callers then submit attestations for
+    each of the four production gates and call /qualify/{id}/finalize to produce
+    the QUALIFIED decision that unlocks client delivery.
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    report = db.execute(
+        select(GovernanceReportRecord).where(
+            GovernanceReportRecord.id == report_id,
+            GovernanceReportRecord.assessment_id == engagement_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_NOT_FOUND", f"report '{report_id}' not found"),
+        )
+    if not report.is_finalized:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_NOT_FINALIZED",
+                "Report must be finalized before a qualification request can be created.",
+            ),
+        )
+    if report.qa_approved_by is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_NOT_QA_APPROVED",
+                "Report must be QA-approved before a qualification request can be created.",
+            ),
+        )
+
+    existing_qualified = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.report_id == report_id,
+            FaQualificationDecision.decision == "QUALIFIED",
+        )
+    ).scalar_one_or_none()
+    if existing_qualified is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_ALREADY_QUALIFIED",
+                "This report already has a QUALIFIED decision; "
+                f"qualification request '{existing_qualified.qual_request_id}' "
+                "produced the active qualification.",
+            ),
+        )
+
+    approved_rv = db.execute(
+        select(FaReportVersion)
+        .where(
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.report_id == report_id,
+            FaReportVersion.status == "approved",
+        )
+        .order_by(FaReportVersion.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    req_id = _uuid_module.uuid4().hex
+    row = FaProductionQualRequest(
+        id=req_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=approved_rv.id if approved_rv else None,
+        report_hash=_compute_report_hash_for_qual(report.report_json or {}),
+        requested_by=actor,
+        actor_type=_actor_type_from_context(actor_ctx),
+        requested_at=utc_iso8601_z_now(),
+        schema_version="1.0",
+    )
+    db.add(row)
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="production_qual_requested",
+        actor=actor,
+        reason_code="PRODUCTION_QUAL_REQUESTED",
+        payload={"report_id": report_id, "qual_request_id": req_id},
+        entity_type="report",
+        entity_id=report_id,
+        actor_type=_actor_type_from_context(actor_ctx),
+    )
+    db.commit()
+    return QualRequestResponse(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        engagement_id=row.engagement_id,
+        report_id=row.report_id,
+        requested_by=row.requested_by,
+        requested_at=row.requested_at,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/attest",
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def qualify_report_attest_route(
+    engagement_id: str,
+    report_id: str,
+    qual_request_id: str,
+    body: ProductionAttestBody,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qualify")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> AttestationResponse:
+    """Submit a gate attestation for a production qualification request.
+
+    Each of the four production gates must be attested exactly once per request.
+    Duplicate attestations for the same gate are rejected with 409. Actor identity
+    is always derived from the authenticated context — never from the request body.
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+
+    if body.gate_name not in VALID_GATE_NAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "UNKNOWN_GATE_NAME",
+                f"unknown gate '{body.gate_name}'; recognized gates: "
+                f"{sorted(VALID_GATE_NAMES)}",
+            ),
+        )
+
+    _load_active_qual_request(
+        db, tenant_id=tenant_id, report_id=report_id, qual_request_id=qual_request_id
+    )
+
+    existing = db.execute(
+        select(FaProductionAttestation).where(
+            FaProductionAttestation.tenant_id == tenant_id,
+            FaProductionAttestation.qual_request_id == qual_request_id,
+            FaProductionAttestation.gate_name == body.gate_name,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "ATTESTATION_ALREADY_RECORDED",
+                f"gate '{body.gate_name}' already attested for this request; "
+                "attestations are append-only",
+            ),
+        )
+
+    attest_id = _uuid_module.uuid4().hex
+    row = FaProductionAttestation(
+        id=attest_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        qual_request_id=qual_request_id,
+        gate_name=body.gate_name,
+        attested=body.attested,
+        attested_by=actor,
+        actor_type=_actor_type_from_context(actor_ctx),
+        notes=body.notes,
+        attested_at=utc_iso8601_z_now(),
+        schema_version="1.0",
+    )
+    db.add(row)
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="production_gate_attested",
+        actor=actor,
+        reason_code="PRODUCTION_GATE_ATTESTED",
+        payload={
+            "report_id": report_id,
+            "qual_request_id": qual_request_id,
+            "gate_name": body.gate_name,
+            "attested": body.attested,
+        },
+        entity_type="report",
+        entity_id=report_id,
+        actor_type=_actor_type_from_context(actor_ctx),
+    )
+    db.commit()
+    return AttestationResponse(
+        id=row.id,
+        qual_request_id=row.qual_request_id,
+        gate_name=row.gate_name,
+        attested=row.attested,
+        attested_by=row.attested_by,
+        attested_at=row.attested_at,
+        notes=row.notes,
+    )
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/finalize",
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def qualify_report_finalize_route(
+    engagement_id: str,
+    report_id: str,
+    qual_request_id: str,
+    body: ProductionFinalizeBody,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qualify")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> QualDecisionResponse:
+    """Finalize the production qualification, producing a QUALIFIED or REJECTED decision.
+
+    QUALIFIED requires:
+    - All four production gates attested=True in this request
+    - result_truth_gate.decision == "PASS" in the signed report_json
+
+    If either condition is not met, the route returns 422 with blocking reasons.
+    A finalized qualification request cannot be re-finalized (append-only decision).
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+
+    qual_request_row = _load_active_qual_request(
+        db, tenant_id=tenant_id, report_id=report_id, qual_request_id=qual_request_id
+    )
+
+    existing_decision = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.qual_request_id == qual_request_id,
+        )
+    ).scalar_one_or_none()
+    if existing_decision is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "QUALIFICATION_ALREADY_FINALIZED",
+                f"qualification request '{qual_request_id}' already has a "
+                f"'{existing_decision.decision}' decision; create a new request to retry",
+            ),
+        )
+
+    report = db.execute(
+        select(GovernanceReportRecord).where(
+            GovernanceReportRecord.id == report_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_NOT_FOUND", f"report '{report_id}' not found"),
+        )
+
+    attestation_rows = (
+        db.execute(
+            select(FaProductionAttestation).where(
+                FaProductionAttestation.tenant_id == tenant_id,
+                FaProductionAttestation.qual_request_id == qual_request_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    attestation_map = {row.gate_name: row.attested for row in attestation_rows}
+
+    truth_gate = (report.report_json or {}).get("result_truth_gate") or {}
+    truth_gate_decision = truth_gate.get("decision", "MISSING")
+
+    blocking_reasons = check_finalization_readiness(
+        attestations=attestation_map,
+        truth_gate_decision=truth_gate_decision,
+    )
+
+    if blocking_reasons:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "QUALIFICATION_BLOCKED",
+                "Cannot issue QUALIFIED decision: " + "; ".join(blocking_reasons),
+            ),
+        )
+
+    dec_id = _uuid_module.uuid4().hex
+    decision_row = FaQualificationDecision(
+        id=dec_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        qual_request_id=qual_request_id,
+        report_version_id=qual_request_row.report_version_id or "",
+        report_fingerprint=truth_gate.get("result_fingerprint") or "",
+        decision="QUALIFIED",
+        decided_by=actor,
+        actor_type=_actor_type_from_context(actor_ctx),
+        reason=body.reason,
+        decided_at=utc_iso8601_z_now(),
+        schema_version="1.0",
+    )
+    db.add(decision_row)
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="production_qualified",
+        actor=actor,
+        reason_code="PRODUCTION_QUALIFIED",
+        payload={
+            "report_id": report_id,
+            "qual_request_id": qual_request_id,
+            "decision": "QUALIFIED",
+        },
+        entity_type="report",
+        entity_id=report_id,
+        actor_type=_actor_type_from_context(actor_ctx),
+    )
+    db.commit()
+    return QualDecisionResponse(
+        id=decision_row.id,
+        qual_request_id=decision_row.qual_request_id,
+        decision=decision_row.decision,
+        decided_by=decision_row.decided_by,
+        decided_at=decision_row.decided_at,
+        reason=decision_row.reason,
+    )
+
+
+@router.get(
+    "/engagements/{engagement_id}/reports/{report_id}/qualify",
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_qual_status_route(
+    engagement_id: str,
+    report_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> QualStatusResponse:
+    """Return the current production qualification status for a report."""
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+
+    latest_request = db.execute(
+        select(FaProductionQualRequest)
+        .where(
+            FaProductionQualRequest.tenant_id == tenant_id,
+            FaProductionQualRequest.report_id == report_id,
+        )
+        .order_by(FaProductionQualRequest.requested_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if latest_request is None:
+        return QualStatusResponse(
+            report_id=report_id,
+            qualified=False,
+        )
+
+    attestations = (
+        db.execute(
+            select(FaProductionAttestation).where(
+                FaProductionAttestation.tenant_id == tenant_id,
+                FaProductionAttestation.qual_request_id == latest_request.id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    decision = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.qual_request_id == latest_request.id,
+        )
+    ).scalar_one_or_none()
+
+    return QualStatusResponse(
+        report_id=report_id,
+        qual_request_id=latest_request.id,
+        qualified=(decision is not None and decision.decision == "QUALIFIED"),
+        attestations=[
+            AttestationResponse(
+                id=a.id,
+                qual_request_id=a.qual_request_id,
+                gate_name=a.gate_name,
+                attested=a.attested,
+                attested_by=a.attested_by,
+                attested_at=a.attested_at,
+                notes=a.notes,
+            )
+            for a in attestations
+        ],
+        decision=(
+            QualDecisionResponse(
+                id=decision.id,
+                qual_request_id=decision.qual_request_id,
+                decision=decision.decision,
+                decided_by=decision.decided_by,
+                decided_at=decision.decided_at,
+                reason=decision.reason,
+            )
+            if decision is not None
+            else None
+        ),
     )
 
 
@@ -13064,7 +13602,13 @@ def deliver_report_version_route(
             ),
         )
 
-    _require_production_qualified(report_record.report_json or {})
+    _require_production_qualified(
+        report_record.report_json or {},
+        db,
+        report_id=report_id,
+        tenant_id=tenant_id,
+        report_version_id=rv.id,
+    )
 
     rv.status = "delivered"
     rv.delivered_at = utc_iso8601_z_now()

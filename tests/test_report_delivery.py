@@ -267,7 +267,7 @@ def test_delivered_version_is_immutable(
     # These tests exercise delivery lifecycle (immutability, lineage, audit),
     # not the gate itself. Gate behaviour is proven by test_approved_truth_failing_report_cannot_deliver.
     monkeypatch.setattr(
-        "api.field_assessment._require_production_qualified", lambda *_: None
+        "api.field_assessment._require_production_qualified", lambda *_, **__: None
     )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)
@@ -292,7 +292,7 @@ def test_delivered_version_is_immutable(
 
 def test_deliver_report(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "api.field_assessment._require_production_qualified", lambda *_: None
+        "api.field_assessment._require_production_qualified", lambda *_, **__: None
     )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)
@@ -338,7 +338,7 @@ def test_supersede_creates_lineage(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "api.field_assessment._require_production_qualified", lambda *_: None
+        "api.field_assessment._require_production_qualified", lambda *_, **__: None
     )
     eid, rid = _bootstrap(client)
 
@@ -421,7 +421,7 @@ def test_delivery_history_records_events(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "api.field_assessment._require_production_qualified", lambda *_: None
+        "api.field_assessment._require_production_qualified", lambda *_, **__: None
     )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)

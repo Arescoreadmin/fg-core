@@ -41,6 +41,9 @@ Tables:
   fa_evidence_report_links       — PR 1.4: append-only evidence-to-report link authority
   fa_report_versions             — Enterprise Report Delivery: report lifecycle version rows
   fa_report_delivery_events      — Enterprise Report Delivery: append-only delivery audit trail
+  fa_production_qual_requests    — PROD-QUAL-001: qualification initiation records (append-only)
+  fa_production_attestations     — PROD-QUAL-001: individual gate attestations (append-only)
+  fa_qualification_decisions     — PROD-QUAL-001: finalized qualification decisions (append-only)
 """
 
 from __future__ import annotations
@@ -862,4 +865,170 @@ class FaReportDeliveryEvent(Base):
             "tenant_id",
             "event_type",
         ),
+    )
+
+
+class FaProductionQualRequest(Base):
+    """Append-only qualification initiation record (PROD-QUAL-001).
+
+    One row is created per qualification attempt on a report. Subsequent attempts
+    after a REJECTED decision each produce a new row with a new id. The DB-backed
+    authority is read by _require_production_qualified() at delivery time.
+    """
+
+    __tablename__ = "fa_production_qual_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    report_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    requested_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    requested_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_production_qual_requests_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        Index(
+            "ix_fa_production_qual_requests_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+    )
+
+
+@sa_event.listens_for(FaProductionQualRequest, "before_update")
+def _block_qual_request_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_production_qual_requests is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaProductionQualRequest, "before_delete")
+def _block_qual_request_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_production_qual_requests is append-only — deletes are forbidden"
+    )
+
+
+class FaProductionAttestation(Base):
+    """Append-only gate attestation record (PROD-QUAL-001).
+
+    One row per gate per qualification request. The unique constraint on
+    (tenant_id, qual_request_id, gate_name) enforces one attestation per gate.
+    """
+
+    __tablename__ = "fa_production_attestations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    qual_request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    gate_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    attested: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    attested_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attested_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_production_attestations_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "qual_request_id",
+            "gate_name",
+            name="uq_fa_production_attestations_request_gate",
+        ),
+    )
+
+
+@sa_event.listens_for(FaProductionAttestation, "before_update")
+def _block_attestation_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_production_attestations is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaProductionAttestation, "before_delete")
+def _block_attestation_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_production_attestations is append-only — deletes are forbidden"
+    )
+
+
+class FaQualificationDecision(Base):
+    """Append-only finalized qualification decision (PROD-QUAL-001).
+
+    One row per qualification request. Decision is either QUALIFIED or REJECTED.
+    The unique constraint on (tenant_id, qual_request_id) makes replay-rejection
+    enforceable at the DB level. The delivery gate queries this table for a
+    QUALIFIED decision on the report.
+    """
+
+    __tablename__ = "fa_qualification_decisions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    qual_request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    report_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    decided_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_qualification_decisions_tenant_report",
+            "tenant_id",
+            "report_id",
+        ),
+        Index(
+            "ix_fa_qualification_decisions_version_binding",
+            "tenant_id",
+            "report_id",
+            "report_version_id",
+            "report_fingerprint",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "qual_request_id",
+            name="uq_fa_qualification_decisions_request",
+        ),
+    )
+
+
+@sa_event.listens_for(FaQualificationDecision, "before_update")
+def _block_qualification_decision_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_qualification_decisions is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaQualificationDecision, "before_delete")
+def _block_qualification_decision_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_qualification_decisions is append-only — deletes are forbidden"
     )
