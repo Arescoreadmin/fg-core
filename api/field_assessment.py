@@ -7456,13 +7456,18 @@ def _require_production_qualified(
     *,
     report_id: str,
     tenant_id: str,
+    report_version_id: str,
 ) -> None:
     """Require an explicit DB-backed QUALIFIED decision before client-facing release.
 
     Checks two independent authorities:
     1. result_truth_gate — baked into the signed report_json at generation time
     2. fa_qualification_decisions — the canonical production qualification authority
-       (PROD-QUAL-001); must have a QUALIFIED row for this tenant + report
+       (PROD-QUAL-001); must have a QUALIFIED row bound to this exact
+       (tenant, report, version, fingerprint) tuple
+
+    Binding prevents a QUALIFIED decision for V1 from authorizing delivery of V2
+    or a report whose content fingerprint has changed since qualification.
     """
     truth_gate = report_json.get("result_truth_gate")
     if not isinstance(truth_gate, Mapping) or truth_gate.get("decision") != "PASS":
@@ -7474,10 +7479,14 @@ def _require_production_qualified(
             ),
         )
 
+    report_fingerprint = truth_gate.get("result_fingerprint") or ""
+
     decision = db.execute(
         select(FaQualificationDecision).where(
             FaQualificationDecision.tenant_id == tenant_id,
             FaQualificationDecision.report_id == report_id,
+            FaQualificationDecision.report_version_id == report_version_id,
+            FaQualificationDecision.report_fingerprint == report_fingerprint,
             FaQualificationDecision.decision == "QUALIFIED",
         )
     ).scalar_one_or_none()
@@ -7715,6 +7724,7 @@ def qa_approve_report_route(
                 db,
                 report_id=report.id,
                 tenant_id=tenant_id,
+                report_version_id="",
             )
         except HTTPException:
             delivery_blocked = True
@@ -7969,12 +7979,24 @@ def qualify_report_request_route(
             ),
         )
 
+    approved_rv = db.execute(
+        select(FaReportVersion)
+        .where(
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.report_id == report_id,
+            FaReportVersion.status == "approved",
+        )
+        .order_by(FaReportVersion.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
     req_id = _uuid_module.uuid4().hex
     row = FaProductionQualRequest(
         id=req_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         report_id=report_id,
+        report_version_id=approved_rv.id if approved_rv else None,
         report_hash=_compute_report_hash_for_qual(report.report_json or {}),
         requested_by=actor,
         actor_type=_actor_type_from_context(actor_ctx),
@@ -8130,7 +8152,7 @@ def qualify_report_finalize_route(
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
 
-    _load_active_qual_request(
+    qual_request_row = _load_active_qual_request(
         db, tenant_id=tenant_id, report_id=report_id, qual_request_id=qual_request_id
     )
 
@@ -8198,6 +8220,8 @@ def qualify_report_finalize_route(
         engagement_id=engagement_id,
         report_id=report_id,
         qual_request_id=qual_request_id,
+        report_version_id=qual_request_row.report_version_id or "",
+        report_fingerprint=truth_gate.get("result_fingerprint") or "",
         decision="QUALIFIED",
         decided_by=actor,
         actor_type=_actor_type_from_context(actor_ctx),
@@ -13583,6 +13607,7 @@ def deliver_report_version_route(
         db,
         report_id=report_id,
         tenant_id=tenant_id,
+        report_version_id=rv.id,
     )
 
     rv.status = "delivered"

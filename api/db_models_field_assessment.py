@@ -988,6 +988,8 @@ class FaQualificationDecision(Base):
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     report_id: Mapped[str] = mapped_column(String(255), nullable=False)
     qual_request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    report_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
     decided_by: Mapped[str] = mapped_column(String(255), nullable=False)
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -1002,6 +1004,13 @@ class FaQualificationDecision(Base):
             "ix_fa_qualification_decisions_tenant_report",
             "tenant_id",
             "report_id",
+        ),
+        Index(
+            "ix_fa_qualification_decisions_version_binding",
+            "tenant_id",
+            "report_id",
+            "report_version_id",
+            "report_fingerprint",
         ),
         UniqueConstraint(
             "tenant_id",

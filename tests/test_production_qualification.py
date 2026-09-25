@@ -525,6 +525,8 @@ def test_i1_finalized_request_cannot_be_re_finalized(
                 engagement_id=eid,
                 report_id=rid,
                 qual_request_id=qid,
+                report_version_id="",
+                report_fingerprint="",
                 decision="QUALIFIED",
                 decided_by="test-actor",
                 actor_type="service",
@@ -585,6 +587,8 @@ def test_j1_second_request_blocked_when_already_qualified(
             engagement_id=eid,
             report_id=rid,
             qual_request_id=qid,
+            report_version_id="",
+            report_fingerprint="",
             decision="QUALIFIED",
             decided_by="test-actor",
             actor_type="service",
@@ -665,6 +669,8 @@ def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
             engagement_id=eid,
             report_id=rid,
             qual_request_id=qid,
+            report_version_id=vid,
+            report_fingerprint="",
             decision="QUALIFIED",
             decided_by="test-actor",
             actor_type="service",
@@ -678,7 +684,7 @@ def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
         sm.close()
 
     # Monkeypatch only the truth gate portion so the DB check runs unimpeded
-    def _patched_require(report_json, db, *, report_id, tenant_id):
+    def _patched_require(report_json, db, *, report_id, tenant_id, report_version_id):
         # Skip truth_gate check (always FAIL in tests); let DB authority run
         from sqlalchemy import select as _select
         from api.db_models_field_assessment import FaQualificationDecision as _FQD
@@ -689,6 +695,7 @@ def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
             _select(_FQD).where(
                 _FQD.tenant_id == tenant_id,
                 _FQD.report_id == report_id,
+                _FQD.report_version_id == report_version_id,
                 _FQD.decision == "QUALIFIED",
             )
         ).scalar_one_or_none()
@@ -745,6 +752,8 @@ def test_k2_get_qual_status_returns_qualified_true_after_decision(
             engagement_id=eid,
             report_id=rid,
             qual_request_id=qid,
+            report_version_id="",
+            report_fingerprint="",
             decision="QUALIFIED",
             decided_by="test-actor",
             actor_type="service",
@@ -810,3 +819,230 @@ def test_k4_qual_workflow_happy_path_creates_request_and_attestations(
     # Decision not yet issued
     assert status["decision"] is None
     assert status["qualified"] is False
+
+
+# ---------------------------------------------------------------------------
+# Category L — version binding: QUALIFIED for V1 does not authorize V2 delivery
+# ---------------------------------------------------------------------------
+
+
+def _binding_only_require(report_json, db, *, report_id, tenant_id, report_version_id):
+    """Monkeypatch that skips the truth_gate check but enforces version+fingerprint binding.
+
+    Used in L and M tests to isolate binding correctness from truth_gate (always FAIL
+    in tests because synthetic evidence never produces a PASS decision).
+    """
+    from sqlalchemy import select as _sel
+    from api.db_models_field_assessment import FaQualificationDecision as _FQD
+    from fastapi import HTTPException
+    from api.error_contracts import api_error
+
+    truth_gate = (report_json or {}).get("result_truth_gate") or {}
+    fp = truth_gate.get("result_fingerprint") or ""
+
+    decision = db.execute(
+        _sel(_FQD).where(
+            _FQD.tenant_id == tenant_id,
+            _FQD.report_id == report_id,
+            _FQD.report_version_id == report_version_id,
+            _FQD.report_fingerprint == fp,
+            _FQD.decision == "QUALIFIED",
+        )
+    ).scalar_one_or_none()
+    if decision is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("PRODUCTION_QUALIFICATION_BLOCKED", "binding check failed"),
+        )
+
+
+def test_l1_qualified_v1_does_not_authorize_v2_delivery(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A QUALIFIED decision for V1 must not authorize delivery of V2.
+
+    Steps:
+    - Create report, QA-approve (sets up the report-level approval)
+    - Create and approve V1; inject QUALIFIED decision bound to V1 with real fingerprint
+    - Create and approve V2 (different version_id)
+    - Monkeypatch to skip truth_gate but keep version+fingerprint binding
+    - Deliver V2 → 422 PRODUCTION_QUALIFICATION_BLOCKED (wrong version_id)
+    - Deliver V1 → 200 (correct version_id + fingerprint match)
+    """
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaProductionQualRequest, FaQualificationDecision
+    from api.db_models_governance_report import GovernanceReportRecord
+    from sqlalchemy import select as _sel
+    import uuid
+
+    eid, rid = _bootstrap_approved(client)
+
+    # Create and approve V1
+    resp = client.post(f"/field-assessment/engagements/{eid}/reports/{rid}/versions")
+    assert resp.status_code == 201
+    vid1 = resp.json()["id"]
+    client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/submit-for-review"
+    )
+    approve_resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/approve",
+        json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+    )
+    assert approve_resp.status_code == 200
+
+    # Resolve the real report_fingerprint from the immutable report_json
+    sm = get_sessionmaker()()
+    try:
+        report_record = sm.execute(
+            _sel(GovernanceReportRecord).where(GovernanceReportRecord.id == rid)
+        ).scalar_one()
+        truth_gate = (report_record.report_json or {}).get("result_truth_gate") or {}
+        actual_fp = truth_gate.get("result_fingerprint") or ""
+
+        qid = uuid.uuid4().hex
+        req_row = FaProductionQualRequest(
+            id=qid,
+            tenant_id=_TENANT_A,
+            engagement_id=eid,
+            report_id=rid,
+            report_version_id=vid1,
+            requested_by="test-actor",
+            actor_type="service",
+            requested_at="2026-09-24T00:00:00Z",
+            schema_version="1.0",
+        )
+        sm.add(req_row)
+        sm.flush()
+        dec_row = FaQualificationDecision(
+            id=uuid.uuid4().hex,
+            tenant_id=_TENANT_A,
+            engagement_id=eid,
+            report_id=rid,
+            qual_request_id=qid,
+            report_version_id=vid1,
+            report_fingerprint=actual_fp,
+            decision="QUALIFIED",
+            decided_by="test-actor",
+            actor_type="service",
+            reason=None,
+            decided_at="2026-09-24T00:00:00Z",
+            schema_version="1.0",
+        )
+        sm.add(dec_row)
+        sm.commit()
+    finally:
+        sm.close()
+
+    # Create and approve V2
+    resp2 = client.post(f"/field-assessment/engagements/{eid}/reports/{rid}/versions")
+    assert resp2.status_code == 201
+    vid2 = resp2.json()["id"]
+    client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/submit-for-review"
+    )
+    approve2 = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/approve",
+        json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+    )
+    assert approve2.status_code == 200
+
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", _binding_only_require
+    )
+
+    # V2 delivery must be denied — QUALIFIED is bound to V1
+    deny_resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/deliver"
+    )
+    assert deny_resp.status_code == 422
+    assert _err(deny_resp) == "PRODUCTION_QUALIFICATION_BLOCKED"
+
+    # V1 delivery must succeed — QUALIFIED is bound to V1 with correct fingerprint
+    allow_resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/deliver"
+    )
+    assert allow_resp.status_code == 200
+    assert allow_resp.json()["status"] == "delivered"
+
+
+# ---------------------------------------------------------------------------
+# Category M — fingerprint binding: wrong fingerprint in QUALIFIED row is denied
+# ---------------------------------------------------------------------------
+
+
+def test_m1_wrong_fingerprint_in_qualified_row_denies_delivery(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A QUALIFIED decision whose report_fingerprint does not match the current
+    report content fingerprint must be rejected at delivery time.
+
+    This proves that a QUALIFIED decision cannot be replayed against a report
+    whose content has changed (different result_fingerprint) even if the
+    version_id matches.
+    """
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import (
+        FaProductionQualRequest,
+        FaQualificationDecision,
+    )
+    import uuid
+
+    eid, rid = _bootstrap_approved(client)
+
+    resp = client.post(f"/field-assessment/engagements/{eid}/reports/{rid}/versions")
+    assert resp.status_code == 201
+    vid = resp.json()["id"]
+    client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/submit-for-review"
+    )
+    approve_resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
+        json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+    )
+    assert approve_resp.status_code == 200
+
+    sm = get_sessionmaker()()
+    try:
+        qid = uuid.uuid4().hex
+        req_row = FaProductionQualRequest(
+            id=qid,
+            tenant_id=_TENANT_A,
+            engagement_id=eid,
+            report_id=rid,
+            report_version_id=vid,
+            requested_by="test-actor",
+            actor_type="service",
+            requested_at="2026-09-24T00:00:00Z",
+            schema_version="1.0",
+        )
+        sm.add(req_row)
+        sm.flush()
+        dec_row = FaQualificationDecision(
+            id=uuid.uuid4().hex,
+            tenant_id=_TENANT_A,
+            engagement_id=eid,
+            report_id=rid,
+            qual_request_id=qid,
+            report_version_id=vid,
+            report_fingerprint="deliberately-wrong-fingerprint-does-not-match",
+            decision="QUALIFIED",
+            decided_by="test-actor",
+            actor_type="service",
+            reason=None,
+            decided_at="2026-09-24T00:00:00Z",
+            schema_version="1.0",
+        )
+        sm.add(dec_row)
+        sm.commit()
+    finally:
+        sm.close()
+
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", _binding_only_require
+    )
+
+    deny_resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/deliver"
+    )
+    assert deny_resp.status_code == 422
+    assert _err(deny_resp) == "PRODUCTION_QUALIFICATION_BLOCKED"

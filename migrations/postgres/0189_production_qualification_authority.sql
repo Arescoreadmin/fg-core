@@ -82,6 +82,10 @@ CREATE TABLE IF NOT EXISTS fa_qualification_decisions (
     engagement_id VARCHAR(64) NOT NULL,
     report_id VARCHAR(255) NOT NULL,
     qual_request_id VARCHAR(64) NOT NULL,
+    -- Binding fields: QUALIFIED is bound to the exact version + content fingerprint
+    -- that was evaluated. A decision for V1 cannot authorize V2 or a mutated report.
+    report_version_id VARCHAR(64) NOT NULL DEFAULT '',
+    report_fingerprint VARCHAR(64) NOT NULL DEFAULT '',
     decision VARCHAR(32) NOT NULL,
     decided_by VARCHAR(255) NOT NULL,
     actor_type VARCHAR(32) NOT NULL,
@@ -93,6 +97,8 @@ CREATE INDEX IF NOT EXISTS ix_fa_qualification_decisions_tenant_report
     ON fa_qualification_decisions (tenant_id, report_id);
 CREATE INDEX IF NOT EXISTS ix_fa_qualification_decisions_request
     ON fa_qualification_decisions (qual_request_id);
+CREATE INDEX IF NOT EXISTS ix_fa_qualification_decisions_version_binding
+    ON fa_qualification_decisions (tenant_id, report_id, report_version_id, report_fingerprint);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_fa_qualification_decisions_request
     ON fa_qualification_decisions (tenant_id, qual_request_id);
 ALTER TABLE fa_qualification_decisions ENABLE ROW LEVEL SECURITY;
