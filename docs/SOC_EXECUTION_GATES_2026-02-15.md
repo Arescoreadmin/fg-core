@@ -6879,3 +6879,32 @@ Validation evidence before this SOC acknowledgement:
 - `make fg-fast` progressed through production profile, contracts, security regression, OpenAPI security diff, artifact policy, trust enforcement, and SOC invariants before stopping solely because this SOC-HIGH-002 acknowledgement was not yet present.
 
 SOC review outcome: APPROVED. This repair narrows static typing only and preserves the existing fail-closed Customer-One roadmap authority boundary.
+
+---
+
+## SOC-HIGH-002: AUDIT-AUTHORITY-001 — H13.5 gate: canonical portal audit delegation (#723)
+
+**Date:** 2026-09-24
+
+**Critical files changed:** `tools/ci/check_audit_coverage.py`, `tools/ci/audit_exceptions.yaml`
+
+**Change summary:** Extends the H13.5 audit coverage gate to recognize and verify FrostGate's canonical portal identity audit delegation path. Adds canonical UTC clock, explicit delegate allowlist with parse-time sink verification (scope-restricted to the delegate's direct body), and spoofing guard. Removes five expired exceptions (EXC-PORTAL-004–008). Adds 23 gate unit tests.
+
+**Security analysis:**
+
+1. **Gate logic only.** No production API code, authentication, authorization, tenant isolation, or session handling changed.
+2. **Fail-closed on regression.** If any approved delegate (`find_or_create_portal_user`, `create_invitation`, `accept_invitation`, `create_session`, `revoke_session`, `revoke_session_by_token`, `validate_session`) loses its direct `_emit_audit()` call, `_verify_pua_delegates()` returns errors and `run()` returns 2 (CONFIG ERROR). The gate never silently passes a route with a broken audit chain.
+3. **Scope restriction.** `_iter_direct_scope()` walks only the delegate's own function body, not nested `FunctionDef`, `AsyncFunctionDef`, or `Lambda` nodes. A dead nested function containing `_emit_audit` does not satisfy the check (T4 test: `test_t4_emit_audit_only_in_nested_function_is_rejected`, `test_t4_emit_audit_only_in_lambda_is_rejected`).
+4. **Module alias guard.** `_has_pua_delegate_call()` requires the receiver to be the literal module alias `pua` (from `import api.portal_user_authority as pua`). Same-named methods on other objects are rejected (T3 tests).
+5. **UTC clock.** `_policy_date()` uses `datetime.now(timezone.utc).date()`. Host timezone cannot affect exception expiry decisions (T7 test).
+6. **Exception retirement.** EXC-PORTAL-004–008 are removed. No extensions granted. The five portal routes are recognized as audited via verified delegates; coverage remains 100%.
+7. **No portal authentication changes.** No duplicate engagement audit events introduced. No portal authorization semantics altered.
+
+**Validation evidence:**
+
+- `python tools/ci/check_audit_coverage.py --no-report` → `60 mutation routes | audited=50 excepted=10 expired=0 violations=0 | coverage=100.0%`
+- `pytest tests/tools/test_audit_coverage.py -q` → 23 passed
+- `ruff check tools/ci/check_audit_coverage.py tests/tools/test_audit_coverage.py` → all checks passed
+- `ruff format --check` → both files formatted
+
+SOC review outcome: APPROVED. Gate hardening only; no authority weakening; sink verification is scope-restricted and fail-closed.

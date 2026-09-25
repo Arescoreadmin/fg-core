@@ -10,6 +10,14 @@ Auto-discovers mutation routes via AST and checks each function body for a
 direct call to one of the recognized audit functions. Routes without a direct
 call must appear in the exceptions registry (tools/ci/audit_exceptions.yaml)
 with a non-expired expiration_date and all required fields present.
+
+Portal authority delegation
+---------------------------
+Routes in api/portal.py that delegate audit to portal_user_authority (pua)
+are recognized as audited when they call pua.<delegate>() and the delegate
+is verified — at parse time — to call the canonical _emit_audit() sink.
+Verification fails closed: if any approved delegate loses its _emit_audit
+call the gate exits 2 (configuration error), never silently passes the route.
 """
 
 from __future__ import annotations
@@ -17,9 +25,9 @@ from __future__ import annotations
 import ast
 import json
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml  # PyYAML — already in dev deps
 
@@ -65,10 +73,58 @@ EXCEPTION_REQUIRED_FIELDS = frozenset(
     }
 )
 
+# ---------------------------------------------------------------------------
+# Portal user authority — canonical delegated audit recognition
+# ---------------------------------------------------------------------------
+
+PORTAL_AUTHORITY_FILE = "api/portal_user_authority.py"
+PORTAL_AUTHORITY_MODULE_ALIAS = "pua"
+PORTAL_AUDIT_SINK = "_emit_audit"
+
+# Explicitly approved delegates in portal_user_authority that are known to call
+# _emit_audit(). Routes calling pua.<delegate>() count as audited ONLY when the
+# delegate is in this set AND its implementation is verified at parse time.
+# Adding a name here without the implementation having _emit_audit() → gate error 2.
+PORTAL_AUTHORITY_APPROVED_DELEGATES: frozenset[str] = frozenset(
+    {
+        "find_or_create_portal_user",
+        "create_invitation",
+        "accept_invitation",
+        "create_session",
+        "revoke_session",
+        "revoke_session_by_token",
+        "validate_session",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Canonical policy clock — host TZ cannot affect expiry decisions
+# ---------------------------------------------------------------------------
+
+
+def _policy_date() -> date:
+    """Return the current UTC date. Host local timezone is never consulted."""
+    return datetime.now(timezone.utc).date()
+
 
 # ---------------------------------------------------------------------------
 # AST helpers
 # ---------------------------------------------------------------------------
+
+
+def _iter_direct_scope(node: ast.AST) -> "Iterator[ast.AST]":
+    """Yield AST nodes reachable from *node* without crossing nested scopes.
+
+    Nested FunctionDef, AsyncFunctionDef, and Lambda are skipped entirely so
+    that _emit_audit() calls inside a helper or dead nested function do not
+    satisfy the sink-presence check for the outer delegate.
+    """
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        yield from _iter_direct_scope(child)
 
 
 def _has_audit_call(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -86,7 +142,95 @@ def _has_audit_call(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
-def _scan_mutation_routes(rel_path: str) -> list[dict[str, Any]]:
+def _has_pua_delegate_call(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    verified_delegates: frozenset[str],
+) -> bool:
+    """Return True iff the function calls pua.<verified_delegate>().
+
+    Both conditions must hold:
+    - The method name is in verified_delegates (functions confirmed to call _emit_audit)
+    - The receiver is the literal module alias 'pua' (import api.portal_user_authority as pua)
+
+    Same-named methods on other objects are rejected.
+    """
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr not in verified_delegates:
+            continue
+        if (
+            isinstance(func.value, ast.Name)
+            and func.value.id == PORTAL_AUTHORITY_MODULE_ALIAS
+        ):
+            return True
+    return False
+
+
+def _verify_pua_delegates(
+    authority_file: Path | None = None,
+) -> list[str]:
+    """Verify that every PORTAL_AUTHORITY_APPROVED_DELEGATE calls _emit_audit().
+
+    Returns a list of error strings (empty list = all OK). Does NOT sys.exit —
+    callers decide how to handle errors. Pass authority_file to override the
+    default path (useful in tests).
+    """
+    path = authority_file or (REPO / PORTAL_AUTHORITY_FILE)
+    if not path.exists():
+        return [f"portal authority file not found: {path}"]
+
+    src = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(src, filename=str(path))
+    except SyntaxError as exc:
+        return [f"syntax error in portal authority file: {exc}"]
+
+    func_nodes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_nodes[node.name] = node
+
+    errors: list[str] = []
+    for delegate in sorted(PORTAL_AUTHORITY_APPROVED_DELEGATES):
+        func_node = func_nodes.get(delegate)
+        if func_node is None:
+            errors.append(
+                f"approved delegate '{delegate}' not found in {PORTAL_AUTHORITY_FILE}"
+            )
+            continue
+        calls_sink = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == PORTAL_AUDIT_SINK
+            for node in _iter_direct_scope(func_node)
+        )
+        if not calls_sink:
+            errors.append(
+                f"approved delegate '{delegate}' does not call {PORTAL_AUDIT_SINK}() "
+                f"— canonical audit sink bypassed; update PORTAL_AUTHORITY_APPROVED_DELEGATES "
+                f"or restore the audit call"
+            )
+    return errors
+
+
+def _build_verified_pua_delegates() -> frozenset[str]:
+    """Return verified delegates or exit 2 if the canonical sink is broken."""
+    errors = _verify_pua_delegates()
+    if errors:
+        for err in errors:
+            print(f"[audit-coverage] CONFIG ERROR: {err}", file=sys.stderr)
+        sys.exit(2)
+    return PORTAL_AUTHORITY_APPROVED_DELEGATES
+
+
+def _scan_mutation_routes(
+    rel_path: str,
+    pua_delegates: frozenset[str],
+) -> list[dict[str, Any]]:
     path = REPO / rel_path
     src = path.read_text(encoding="utf-8")
     tree = ast.parse(src, filename=rel_path)
@@ -109,7 +253,10 @@ def _scan_mutation_routes(rel_path: str) -> list[dict[str, Any]]:
                     "function_name": node.name,
                     "method": func.attr.upper(),
                     "line": node.lineno,
-                    "audited": _has_audit_call(node),
+                    "audited": (
+                        _has_audit_call(node)
+                        or _has_pua_delegate_call(node, pua_delegates)
+                    ),
                 }
             )
     return routes
@@ -137,7 +284,7 @@ def _load_exceptions() -> tuple[dict[str, dict[str, Any]], list[str]]:
         return {}, errors
 
     registry: dict[str, dict[str, Any]] = {}
-    today = date.today()
+    today = _policy_date()
 
     for entry in raw["exceptions"]:
         missing = EXCEPTION_REQUIRED_FIELDS - set(entry.keys())
@@ -176,10 +323,18 @@ def _load_exceptions() -> tuple[dict[str, dict[str, Any]], list[str]]:
 
 
 def run(*, write_report: bool = True) -> int:
+    # Verify portal authority delegates before scanning — fail closed on broken sink.
+    delegate_errors = _verify_pua_delegates()
+    if delegate_errors:
+        for err in delegate_errors:
+            print(f"[audit-coverage] CONFIG ERROR: {err}", file=sys.stderr)
+        return 2
+    pua_delegates = PORTAL_AUTHORITY_APPROVED_DELEGATES
+
     all_routes: list[dict[str, Any]] = []
     for rel_path in SCANNED_FILES:
         try:
-            all_routes.extend(_scan_mutation_routes(rel_path))
+            all_routes.extend(_scan_mutation_routes(rel_path, pua_delegates))
         except FileNotFoundError:
             print(f"[audit-coverage] SKIP (not found): {rel_path}", file=sys.stderr)
         except SyntaxError as exc:
@@ -217,8 +372,9 @@ def run(*, write_report: bool = True) -> int:
     audited_count = len(covered) + len(excepted)
     coverage_pct = round(100 * audited_count / total, 1) if total else 0.0
 
+    today = _policy_date()
     report: dict[str, Any] = {
-        "generated_at": date.today().isoformat(),
+        "generated_at": today.isoformat(),
         "total_mutation_routes": total,
         "audited": len(covered),
         "excepted": len(excepted),
@@ -248,7 +404,7 @@ def run(*, write_report: bool = True) -> int:
 def _generate_exception_report(
     registry: dict[str, dict[str, Any]], *, write_report: bool = True
 ) -> dict[str, Any]:
-    today = date.today()
+    today = _policy_date()
     entries = []
     for exc in registry.values():
         exp_date = exc["expiration_date"]
