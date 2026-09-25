@@ -546,8 +546,13 @@ def test_g9_finding_remediation_creates_finding_closed_decision(
         d = decisions[-1]
         assert d.entity_type == "finding"
         assert d.entity_id == finding_id  # G32 covered here
-        assert d.actor_name == "Bob Ops"
-        assert d.actor_email == "bob@example.com"
+        # FA-ACTOR-001: canonical identity must win over caller-supplied request body.
+        # The request sent actor_name="Bob Ops" and actor_email="bob@example.com",
+        # but these are non-authoritative; actor identity comes from ActorContext.
+        assert d.actor_name != "Bob Ops"  # spoofed name NOT persisted
+        assert d.actor_email != "bob@example.com"  # spoofed email NOT persisted
+        assert d.actor_id == "fgk"  # canonical authenticated subject (api_key prefix)
+        assert d.actor_auth_source == "api_key"  # canonical auth source
         assert d.related_finding_ids is not None
     finally:
         db.close()

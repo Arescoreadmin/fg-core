@@ -9,7 +9,7 @@ Covers all 12 mandatory security control layers:
   L6  transaction_id populated — unique per operation, non-null on v2.0 events
   L7  correlation_id supported — optional cross-service identifier
   L8  compute_entity_hash — deterministic SHA-256, order-independent
-  L9  actor_type populated — human_operator / portal_client / api_key / system
+  L9  actor_type populated — service (api_key auth), human (oidc/dev), or unknown
   L10 AuditAtomicityService abstraction — importable singleton, emit() returns tx_id
   L11 Append-only enforcement — no update/delete route for audit events
   L12 Coverage — every previously-unaudited mutation path now emits FA audit event
@@ -563,7 +563,7 @@ def test_l8_compute_entity_hash_sensitive_to_change() -> None:
 
 
 def test_l9_patch_engagement_actor_type(client: TestClient) -> None:
-    """engagement.metadata_updated emits actor_type='human_operator'."""
+    """engagement.metadata_updated emits actor_type='service' for api_key auth (FA-ACTOR-001)."""
     eng_id = _create_engagement(client)
     client.patch(
         f"/field-assessment/engagements/{eng_id}",
@@ -575,11 +575,13 @@ def test_l9_patch_engagement_actor_type(client: TestClient) -> None:
         (r for r in rows if r["event_type"] == "engagement.metadata_updated"), None
     )
     assert event is not None
-    assert event["actor_type"] == "human_operator"
+    # The fixture uses mint_key() which creates an API key credential (auth_source="api_key").
+    # _actor_type_from_context maps api_key → "service" per FA-ACTOR-001 canonical semantics.
+    assert event["actor_type"] == "service"
 
 
 def test_l9_portal_grant_events_actor_type(client: TestClient) -> None:
-    """Portal grant create/rotate/revoke emit actor_type='human_operator'."""
+    """Portal grant create/rotate/revoke emit actor_type='service' for api_key auth (FA-ACTOR-001)."""
     eng_id = _create_engagement(client)
 
     # Create
@@ -595,7 +597,8 @@ def test_l9_portal_grant_events_actor_type(client: TestClient) -> None:
         (r for r in rows if r["event_type"] == "portal_grant.created"), None
     )
     assert grant_event is not None
-    assert grant_event["actor_type"] == "human_operator"
+    # mint_key() produces auth_source="api_key" → _actor_type_from_context → "service"
+    assert grant_event["actor_type"] == "service"
 
     # Rotate
     rot = client.post(
@@ -609,7 +612,7 @@ def test_l9_portal_grant_events_actor_type(client: TestClient) -> None:
         (r for r in rows if r["event_type"] == "portal_grant.rotated"), None
     )
     assert rotate_event is not None
-    assert rotate_event["actor_type"] == "human_operator"
+    assert rotate_event["actor_type"] == "service"
 
     # Revoke
     rev = client.delete(
@@ -622,11 +625,11 @@ def test_l9_portal_grant_events_actor_type(client: TestClient) -> None:
         (r for r in rows if r["event_type"] == "portal_grant.revoked"), None
     )
     assert revoke_event is not None
-    assert revoke_event["actor_type"] == "human_operator"
+    assert revoke_event["actor_type"] == "service"
 
 
 def test_l9_report_creation_actor_type(client: TestClient) -> None:
-    """engagement_report_created emits actor_type='human_operator'."""
+    """engagement_report_created emits actor_type='service' for api_key auth (FA-ACTOR-001)."""
     eng_id = _create_engagement(client)
     resp = client.post(
         f"/field-assessment/engagements/{eng_id}/reports",
@@ -639,7 +642,8 @@ def test_l9_report_creation_actor_type(client: TestClient) -> None:
         (r for r in rows if r["event_type"] == "engagement_report_created"), None
     )
     assert event is not None
-    assert event["actor_type"] == "human_operator"
+    # mint_key() produces auth_source="api_key" → _actor_type_from_context → "service"
+    assert event["actor_type"] == "service"
 
 
 # ===========================================================================

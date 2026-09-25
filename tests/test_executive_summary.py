@@ -400,7 +400,7 @@ def test_report_includes_executive_summary_section():
             return_value=_TENANT,
         ),
         _patch(
-            "api.field_assessment._actor_from_request",
+            "api.field_assessment._actor_from_context",
             return_value="test-actor",
         ),
         _patch(

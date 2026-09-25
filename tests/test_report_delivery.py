@@ -261,7 +261,14 @@ def test_approve_records_approval_timestamp(client: TestClient) -> None:
     assert approved["approved_by"] is not None
 
 
-def test_delivered_version_is_immutable(client: TestClient) -> None:
+def test_delivered_version_is_immutable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # These tests exercise delivery lifecycle (immutability, lineage, audit),
+    # not the gate itself. Gate behaviour is proven by test_approved_truth_failing_report_cannot_deliver.
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", lambda *_: None
+    )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
@@ -283,7 +290,10 @@ def test_delivered_version_is_immutable(client: TestClient) -> None:
     assert resp2.status_code == 409, resp2.text
 
 
-def test_deliver_report(client: TestClient) -> None:
+def test_deliver_report(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", lambda *_: None
+    )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
@@ -324,7 +334,12 @@ def test_approved_truth_failing_report_cannot_deliver(client: TestClient) -> Non
     )
 
 
-def test_supersede_creates_lineage(client: TestClient) -> None:
+def test_supersede_creates_lineage(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", lambda *_: None
+    )
     eid, rid = _bootstrap(client)
 
     v1 = _create_version(client, eid, rid)
@@ -402,7 +417,12 @@ def test_manifest_contains_evidence_hashes(client: TestClient) -> None:
     assert "sha256" in entry
 
 
-def test_delivery_history_records_events(client: TestClient) -> None:
+def test_delivery_history_records_events(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "api.field_assessment._require_production_qualified", lambda *_: None
+    )
     eid, rid = _bootstrap(client)
     v = _create_version(client, eid, rid)
     _submit(client, eid, rid, v["id"])
