@@ -1046,3 +1046,75 @@ def test_m1_wrong_fingerprint_in_qualified_row_denies_delivery(
     )
     assert deny_resp.status_code == 422
     assert _err(deny_resp) == "PRODUCTION_QUALIFICATION_BLOCKED"
+
+
+# ---------------------------------------------------------------------------
+# Category N — SoD: qa_reviewer cannot qualify; compliance_reviewer cannot qa-approve
+#
+# The role-level SoD is enforced by the scope→role mapping:
+#   governance:write → compliance_reviewer (has report.qualify, not report.qa_approve)
+#   governance:qa_approve → qa_reviewer (has report.qa_approve, not report.qualify)
+#
+# An entity with only one scope cannot perform the other's gated action.
+# Note: this test validates role-level SoD only. Preventing the SAME human from
+# holding both roles simultaneously requires IdP/membership-layer enforcement
+# outside the scope of this module.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def qualify_only_client(build_app, monkeypatch):
+    """Client with governance:write only — has report.qualify, not report.qa_approve."""
+    from api.auth_scopes import mint_key
+
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    key = mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+@pytest.fixture()
+def qa_only_client(build_app, monkeypatch):
+    """Client with governance:qa_approve only — has report.qa_approve, not report.qualify."""
+    from api.auth_scopes import mint_key
+
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    key = mint_key("governance:read", "governance:qa_approve", tenant_id=_TENANT_A)
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+def test_n1_qa_reviewer_cannot_call_qualify_request(
+    client: TestClient,
+    qa_only_client: TestClient,
+) -> None:
+    """An actor with only the qa_reviewer role (report.qa_approve) cannot start a
+    production qualification request — proving the qualify/qa_approve SoD at the
+    route authorization layer.
+    """
+    eid = _create_engagement(client)
+    rid = _create_report(client, eid)
+    _qa_approve(client, eid, rid)
+
+    resp = qa_only_client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/qualify/request"
+    )
+    assert resp.status_code == 403
+
+
+def test_n2_compliance_reviewer_cannot_call_qa_approve(
+    client: TestClient,
+    qualify_only_client: TestClient,
+) -> None:
+    """An actor with only the compliance_reviewer role (report.qualify) cannot
+    QA-approve a report — proving the qualify/qa_approve SoD at the route
+    authorization layer.
+    """
+    eid = _create_engagement(qualify_only_client)
+    rid = _create_report(qualify_only_client, eid)
+
+    resp = qualify_only_client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/qa-approve",
+        json=_APPROVAL_BODY,
+    )
+    assert resp.status_code == 403

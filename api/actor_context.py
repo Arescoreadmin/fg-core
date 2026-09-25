@@ -179,7 +179,7 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
     "report.qualify": {
         "display_name": "Production Qualify Report",
         "description": "Submit production gate attestations and finalize qualification (SoD: not qa_reviewer)",
-        "risk_level": "critical",
+        "risk_level": "high",
     },
     # Verification bundles
     "bundle.generate": {
