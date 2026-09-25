@@ -27,7 +27,7 @@ import json
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml  # PyYAML — already in dev deps
 
@@ -113,6 +113,20 @@ def _policy_date() -> date:
 # ---------------------------------------------------------------------------
 
 
+def _iter_direct_scope(node: ast.AST) -> "Iterator[ast.AST]":
+    """Yield AST nodes reachable from *node* without crossing nested scopes.
+
+    Nested FunctionDef, AsyncFunctionDef, and Lambda are skipped entirely so
+    that _emit_audit() calls inside a helper or dead nested function do not
+    satisfy the sink-presence check for the outer delegate.
+    """
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        yield from _iter_direct_scope(child)
+
+
 def _has_audit_call(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     for node in ast.walk(func_node):
         if not isinstance(node, ast.Call):
@@ -148,7 +162,10 @@ def _has_pua_delegate_call(
             continue
         if func.attr not in verified_delegates:
             continue
-        if isinstance(func.value, ast.Name) and func.value.id == PORTAL_AUTHORITY_MODULE_ALIAS:
+        if (
+            isinstance(func.value, ast.Name)
+            and func.value.id == PORTAL_AUTHORITY_MODULE_ALIAS
+        ):
             return True
     return False
 
@@ -189,7 +206,7 @@ def _verify_pua_delegates(
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == PORTAL_AUDIT_SINK
-            for node in ast.walk(func_node)
+            for node in _iter_direct_scope(func_node)
         )
         if not calls_sink:
             errors.append(

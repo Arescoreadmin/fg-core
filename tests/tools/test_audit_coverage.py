@@ -205,6 +205,58 @@ def test_t4_missing_delegate_function_is_a_config_error(tmp_path: Path) -> None:
     assert len(errors) == len(PORTAL_AUTHORITY_APPROVED_DELEGATES)
 
 
+def test_t4_emit_audit_only_in_nested_function_is_rejected(tmp_path: Path) -> None:
+    """_emit_audit in a dead nested helper does NOT satisfy the sink check.
+
+    This is the reviewer-identified bypass: a delegate removes its real
+    _emit_audit call but keeps a nested def that calls it. ast.walk would have
+    found the nested call and falsely passed; _iter_direct_scope does not
+    descend into nested scopes so the regression is detected.
+    """
+    # create_session has _emit_audit only inside a nested function — not in its own scope
+    delegates = sorted(PORTAL_AUTHORITY_APPROVED_DELEGATES)
+    func_bodies = []
+    for name in delegates:
+        if name == "create_session":
+            func_bodies.append(
+                f"def {name}(db):\n"
+                f"    def _dead_helper():\n"
+                f"        _emit_audit(db)  # unreachable; must not satisfy sink check\n"
+                f"    return None"
+            )
+        else:
+            func_bodies.append(f"def {name}(db): _emit_audit(db)")
+
+    authority_file = tmp_path / "portal_user_authority.py"
+    authority_file.write_text("\n".join(func_bodies), encoding="utf-8")
+
+    errors = _verify_pua_delegates(authority_file=authority_file)
+    assert errors, "nested-only _emit_audit must not satisfy the sink check"
+    assert any("create_session" in e for e in errors)
+
+
+def test_t4_emit_audit_only_in_lambda_is_rejected(tmp_path: Path) -> None:
+    """_emit_audit inside a lambda body does not satisfy the direct-scope check."""
+    delegates = sorted(PORTAL_AUTHORITY_APPROVED_DELEGATES)
+    func_bodies = []
+    for name in delegates:
+        if name == "create_session":
+            func_bodies.append(
+                f"def {name}(db):\n"
+                f"    fn = lambda: _emit_audit(db)  # inside lambda\n"
+                f"    return None"
+            )
+        else:
+            func_bodies.append(f"def {name}(db): _emit_audit(db)")
+
+    authority_file = tmp_path / "portal_user_authority.py"
+    authority_file.write_text("\n".join(func_bodies), encoding="utf-8")
+
+    errors = _verify_pua_delegates(authority_file=authority_file)
+    assert errors, "lambda-only _emit_audit must not satisfy the sink check"
+    assert any("create_session" in e for e in errors)
+
+
 def test_t4_missing_authority_file_is_a_config_error(tmp_path: Path) -> None:
     """Non-existent authority file reports a config error."""
     missing = tmp_path / "does_not_exist.py"
