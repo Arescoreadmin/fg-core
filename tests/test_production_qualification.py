@@ -17,6 +17,10 @@ Adversarial categories:
   I — already-finalized request cannot be re-finalized
   J — already-QUALIFIED report cannot spawn a second QUALIFIED request
   K — canonical QUALIFIED decision enables delivery gate (DB authority proven)
+  L — version binding: V1 qualification does not authorize V2 delivery
+  M — fingerprint binding: wrong fingerprint in QUALIFIED row denies delivery
+  N — role-level SoD: qa_reviewer/compliance_reviewer cannot cross roles
+  O — actor-level SoD, engagement path binding, concurrent finalize guard
 """
 
 from __future__ import annotations
@@ -67,12 +71,11 @@ def _err(resp) -> str:
 
 @pytest.fixture()
 def client(build_app, monkeypatch):
-    """Tenant A client — has governance:write + governance:qa_approve + governance:qualify.
+    """Tenant A qualification actor — governance:write only (compliance_reviewer perms).
 
-    Because we use API key scope-based auth (no RBAC role), we grant all needed
-    scopes directly. In production, report.qualify is gated to compliance_reviewer
-    (SoD with qa_reviewer), but tests exercise the qualification logic path
-    independently of role enforcement.
+    Deliberately excludes governance:qa_approve so this actor satisfies the
+    actor-level SoD gate added in PROD-QUAL-001 hardening: a credential holding
+    report.qa_approve is rejected by the qualify/request route.
     """
     from api.auth_scopes import mint_key
 
@@ -81,7 +84,6 @@ def client(build_app, monkeypatch):
     key = mint_key(
         "governance:read",
         "governance:write",
-        "governance:qa_approve",
         tenant_id=_TENANT_A,
     )
     return TestClient(app, headers={"X-API-Key": key})
@@ -178,10 +180,22 @@ def _finalize(
     )
 
 
-def _bootstrap_approved(client: TestClient) -> tuple[str, str]:
+def _bootstrap_approved(
+    client: TestClient, qa_client: "TestClient | None" = None
+) -> tuple[str, str]:
+    from api.auth_scopes import mint_key
+
     eid = _create_engagement(client)
     rid = _create_report(client, eid)
-    _qa_approve(client, eid, rid)
+    if qa_client is None:
+        key = mint_key(
+            "governance:read",
+            "governance:write",
+            "governance:qa_approve",
+            tenant_id=_TENANT_A,
+        )
+        qa_client = TestClient(client.app, headers={"X-API-Key": key})
+    _qa_approve(qa_client, eid, rid)
     return eid, rid
 
 
@@ -191,12 +205,12 @@ def _bootstrap_approved(client: TestClient) -> tuple[str, str]:
 
 
 def test_a1_delivery_blocked_without_qualified_decision(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, qa_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Delivery is blocked when no QUALIFIED decision exists."""
     eid = _create_engagement(client)
     rid = _create_report(client, eid)
-    _qa_approve(client, eid, rid)
+    _qa_approve(qa_client, eid, rid)
 
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions",
@@ -207,7 +221,7 @@ def test_a1_delivery_blocked_without_qualified_decision(
     client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/submit-for-review"
     )
-    client.post(
+    qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead"},
     )
@@ -614,7 +628,7 @@ def test_j1_second_request_blocked_when_already_qualified(
 
 
 def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, qa_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A QUALIFIED row in fa_qualification_decisions is sufficient to pass the gate.
 
@@ -642,7 +656,7 @@ def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/submit-for-review"
     )
     assert submit_resp.status_code == 200, submit_resp.text
-    approve_resp = client.post(
+    approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
     )
@@ -859,7 +873,7 @@ def _binding_only_require(report_json, db, *, report_id, tenant_id, report_versi
 
 
 def test_l1_qualified_v1_does_not_authorize_v2_delivery(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, qa_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A QUALIFIED decision for V1 must not authorize delivery of V2.
 
@@ -889,7 +903,7 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
     client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/submit-for-review"
     )
-    approve_resp = client.post(
+    approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
     )
@@ -945,7 +959,7 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
     client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/submit-for-review"
     )
-    approve2 = client.post(
+    approve2 = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
     )
@@ -976,7 +990,7 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
 
 
 def test_m1_wrong_fingerprint_in_qualified_row_denies_delivery(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, qa_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A QUALIFIED decision whose report_fingerprint does not match the current
     report content fingerprint must be rejected at delivery time.
@@ -1000,7 +1014,7 @@ def test_m1_wrong_fingerprint_in_qualified_row_denies_delivery(
     client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/submit-for-review"
     )
-    approve_resp = client.post(
+    approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
     )
@@ -1091,6 +1105,7 @@ def qa_only_client(build_app, monkeypatch):
 
 def test_n1_qa_reviewer_cannot_call_qualify_request(
     client: TestClient,
+    qa_client: TestClient,
     qa_only_client: TestClient,
 ) -> None:
     """An actor with only the qa_reviewer role (report.qa_approve) cannot start a
@@ -1099,7 +1114,7 @@ def test_n1_qa_reviewer_cannot_call_qualify_request(
     """
     eid = _create_engagement(client)
     rid = _create_report(client, eid)
-    _qa_approve(client, eid, rid)
+    _qa_approve(qa_client, eid, rid)
 
     resp = qa_only_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qualify/request"
@@ -1123,3 +1138,158 @@ def test_n2_compliance_reviewer_cannot_call_qa_approve(
         json=_APPROVAL_BODY,
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Category O — actor-level SoD, engagement binding, and multi-QUALIFIED guard
+#
+# O1: the same authenticated subject cannot QA-approve and then qualify
+#     (role-level SoD is insufficient when one identity holds both roles)
+# O2: attest and finalize reject a qual_request_id presented under the wrong
+#     engagement path (engagement_id column is now verified in the lookup)
+# O3: finalize is blocked when a QUALIFIED decision already exists for the
+#     report (defense-in-depth against concurrent request finalization)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def qa_client(build_app, monkeypatch):
+    """Separate QA approval actor. Fresh API key ⟹ different subject from the
+    main `client` fixture, satisfying the actor-level SoD enforced by the
+    qualify/request route."""
+    from api.auth_scopes import mint_key
+
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    key = mint_key(
+        "governance:read",
+        "governance:write",
+        "governance:qa_approve",
+        tenant_id=_TENANT_A,
+    )
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+def test_o1_dual_role_actor_cannot_qualify(qa_client: TestClient) -> None:
+    """An actor holding report.qa_approve cannot initiate qualification.
+
+    This proves capability-level SoD: any identity that CAN qa-approve (including
+    platform_admin or a dual-role service key) is blocked from the qualification
+    path — regardless of whether they actually performed the QA approval.
+    """
+    eid = _create_engagement(qa_client)
+    rid = _create_report(qa_client, eid)
+    _qa_approve(qa_client, eid, rid)
+
+    resp = qa_client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/qualify/request"
+    )
+    assert resp.status_code == 403
+    assert "SOD_VIOLATION" in _err(resp)
+
+
+def test_o2_wrong_engagement_rejected_at_attest(
+    client: TestClient, qa_client: TestClient
+) -> None:
+    """A qual_request_id presented under a different engagement_id returns 404.
+
+    The attest route verifies that engagement_id in the URL matches the stored
+    engagement on the qual request — cross-engagement path injection is blocked.
+    """
+    eid, rid = _bootstrap_approved(client, qa_client)
+    qid = _qual_request(client, eid, rid)
+
+    eid2 = _create_engagement(client)
+    rid2 = _create_report(client, eid2)
+    _qa_approve(qa_client, eid2, rid2)
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eid2}/reports/{rid}/qualify/{qid}/attest",
+        json={"gate_name": _ALL_GATES[0], "attested": True},
+    )
+    assert resp.status_code == 404
+    assert "QUAL_REQUEST_NOT_FOUND" in _err(resp)
+
+
+def test_o3_finalize_blocked_when_report_already_qualified(
+    client: TestClient, qa_client: TestClient
+) -> None:
+    """Finalize returns 409 when a QUALIFIED decision already exists for the report.
+
+    Guards against two pending requests racing to finalize: the second finalize
+    is rejected at the application layer before the DB partial-unique-index fires.
+    """
+    import uuid
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import (
+        FaProductionQualRequest,
+        FaQualificationDecision,
+    )
+
+    eid, rid = _bootstrap_approved(client, qa_client)
+
+    sm = get_sessionmaker()()
+    try:
+        qid = uuid.uuid4().hex
+        req_row = FaProductionQualRequest(
+            id=qid,
+            tenant_id=_TENANT_A,
+            engagement_id=eid,
+            report_id=rid,
+            requested_by="test-actor-existing",
+            actor_type="service",
+            requested_at="2026-09-27T00:00:00Z",
+            schema_version="1.0",
+        )
+        sm.add(req_row)
+        sm.flush()
+        sm.add(
+            FaQualificationDecision(
+                id=uuid.uuid4().hex,
+                tenant_id=_TENANT_A,
+                engagement_id=eid,
+                report_id=rid,
+                qual_request_id=qid,
+                report_version_id="",
+                report_fingerprint="",
+                decision="QUALIFIED",
+                decided_by="test-actor-existing",
+                actor_type="service",
+                reason=None,
+                decided_at="2026-09-27T00:00:00Z",
+                schema_version="1.0",
+            )
+        )
+        sm.commit()
+    finally:
+        sm.close()
+
+    second_qid = uuid.uuid4().hex
+    sm2 = get_sessionmaker()()
+    try:
+        sm2.add(
+            FaProductionQualRequest(
+                id=second_qid,
+                tenant_id=_TENANT_A,
+                engagement_id=eid,
+                report_id=rid,
+                requested_by="test-actor-second",
+                actor_type="service",
+                requested_at="2026-09-27T00:01:00Z",
+                schema_version="1.0",
+            )
+        )
+        sm2.commit()
+    finally:
+        sm2.close()
+
+    for gate in _ALL_GATES:
+        client.post(
+            f"/field-assessment/engagements/{eid}/reports/{rid}/qualify/{second_qid}/attest",
+            json={"gate_name": gate, "attested": True},
+        )
+
+    resp = _finalize(client, eid, rid, second_qid)
+    assert resp.status_code == 409
+    assert "ALREADY_QUALIFIED" in _err(resp).upper()

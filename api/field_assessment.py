@@ -7882,12 +7882,14 @@ def _load_active_qual_request(
     db: Session,
     *,
     tenant_id: str,
+    engagement_id: str,
     report_id: str,
     qual_request_id: str,
 ) -> FaProductionQualRequest:
     row = db.execute(
         select(FaProductionQualRequest).where(
             FaProductionQualRequest.tenant_id == tenant_id,
+            FaProductionQualRequest.engagement_id == engagement_id,
             FaProductionQualRequest.report_id == report_id,
             FaProductionQualRequest.id == qual_request_id,
         )
@@ -7950,6 +7952,15 @@ def qualify_report_request_route(
             detail=api_error(
                 "REPORT_NOT_FINALIZED",
                 "Report must be finalized before a qualification request can be created.",
+            ),
+        )
+    if "report.qa_approve" in actor_ctx.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "SOD_VIOLATION",
+                "Separation of duties: an actor holding the report.qa_approve "
+                "capability cannot initiate production qualification.",
             ),
         )
     if report.qa_approved_by is None:
@@ -8061,7 +8072,11 @@ def qualify_report_attest_route(
         )
 
     _load_active_qual_request(
-        db, tenant_id=tenant_id, report_id=report_id, qual_request_id=qual_request_id
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        qual_request_id=qual_request_id,
     )
 
     existing = db.execute(
@@ -8153,7 +8168,11 @@ def qualify_report_finalize_route(
     actor = _actor_from_context(actor_ctx)
 
     qual_request_row = _load_active_qual_request(
-        db, tenant_id=tenant_id, report_id=report_id, qual_request_id=qual_request_id
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        qual_request_id=qual_request_id,
     )
 
     existing_decision = db.execute(
@@ -8169,6 +8188,24 @@ def qualify_report_finalize_route(
                 "QUALIFICATION_ALREADY_FINALIZED",
                 f"qualification request '{qual_request_id}' already has a "
                 f"'{existing_decision.decision}' decision; create a new request to retry",
+            ),
+        )
+
+    existing_report_qualified = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.report_id == report_id,
+            FaQualificationDecision.decision == "QUALIFIED",
+        )
+    ).scalars().first()
+    if existing_report_qualified is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_ALREADY_QUALIFIED",
+                "This report already has a QUALIFIED decision; "
+                f"qualification request '{existing_report_qualified.qual_request_id}' "
+                "produced the active qualification.",
             ),
         )
 
