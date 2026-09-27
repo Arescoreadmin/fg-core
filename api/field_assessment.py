@@ -8191,13 +8191,17 @@ def qualify_report_finalize_route(
             ),
         )
 
-    existing_report_qualified = db.execute(
-        select(FaQualificationDecision).where(
-            FaQualificationDecision.tenant_id == tenant_id,
-            FaQualificationDecision.report_id == report_id,
-            FaQualificationDecision.decision == "QUALIFIED",
+    existing_report_qualified = (
+        db.execute(
+            select(FaQualificationDecision).where(
+                FaQualificationDecision.tenant_id == tenant_id,
+                FaQualificationDecision.report_id == report_id,
+                FaQualificationDecision.decision == "QUALIFIED",
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing_report_qualified is not None:
         raise HTTPException(
             status_code=409,
