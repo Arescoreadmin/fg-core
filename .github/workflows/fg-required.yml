@@ -17,7 +17,7 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 80
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -123,8 +123,15 @@ jobs:
           # total. Lane timed out at exactly 1500s. 2400s gives 25% headroom
           # over worst-case 1920s (1320s hard_max + 600s pre/post overhead).
           # Global budget raised from 2800s → 3200s proportionally.
+          #
+          # Global budget raised from 3200s → 4400s, job timeout 55→80min
+          # (PR #724 follow-up): fg-fast consumed 1495s + fg-contract 39s on
+          # slow runners, leaving only 1656s for fg-security which timed out.
+          # Observed fg-security needs >1655s on slow runners (422s normal ×
+          # ~4x variance). 4400s gives fg-security min(2400, 2856) = 2400s —
+          # well above any observed fg-security-pytest duration.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 3200 \
+            --global-budget-seconds 4400 \
             --lane-timeout-seconds 2400 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 
