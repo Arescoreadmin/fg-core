@@ -114,9 +114,18 @@ jobs:
           # fg-fast-pytest hard_max raised to 930s; make fg-fast total
           # (pre-checks + pytest + lint) now needs ~1200s in CI.
           # Global budget raised from 2400s → 2800s proportionally.
+          #
+          # Lane timeout raised from 1500s → 2400s (PR #724 / PROD-QUAL-001):
+          # fg-fast-pytest hard_max raised to 1320s (GH Actions runner variance
+          # on an already near-budget suite; 496 tests, 0 new fg-fast tests).
+          # Two consecutive fg-fast runs observed at 1056s and 1186s (pytest
+          # wall time), plus ~300s for make fg-fast pre/post checks = ~1470s
+          # total. Lane timed out at exactly 1500s. 2400s gives 25% headroom
+          # over worst-case 1920s (1320s hard_max + 600s pre/post overhead).
+          # Global budget raised from 2800s → 3200s proportionally.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 2800 \
-            --lane-timeout-seconds 1500 \
+            --global-budget-seconds 3200 \
+            --lane-timeout-seconds 2400 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 
       - name: Prepare fallback artifact notices
