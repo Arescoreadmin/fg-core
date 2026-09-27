@@ -2690,6 +2690,30 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/request",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/attest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/finalize",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
       "scopes": [],
       "source": "contract"
@@ -6133,7 +6157,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-09-20T14:27:43.423468+00:00",
+  "generated_at": "2026-09-27T15:11:39.482591+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
