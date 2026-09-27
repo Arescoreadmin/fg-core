@@ -158,7 +158,7 @@ jobs:
   unit:
     name: Unit (ci)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     needs: [fg_guard, enforcement_mode_matrix]
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     permissions:

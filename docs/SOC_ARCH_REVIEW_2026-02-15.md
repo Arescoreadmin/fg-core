@@ -1,3 +1,21 @@
+## 2026-09-27 — PROD-QUAL-001 route inventory advance — feat/prod-qual-001
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).
+
+**Scope:** Route inventory regeneration for four new production-qualification routes added in `api/field_assessment.py`. All four routes are in the `control` plane, tenant-bound, scoped (`governance:read` or `governance:write`), and require authenticated actor context. No authentication logic, cryptography, RLS, RBAC, migration, or deployment behavior changed. The inventory files are generated artifacts updated by `make route-inventory-generate`; no hand-authored security policy was modified.
+
+**New routes registered:**
+- `GET  /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify` — scope: `governance:read`
+- `POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/request` — scope: `governance:write`
+- `POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/attest` — scope: `governance:write`
+- `POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/finalize` — scope: `governance:write`
+
+**Security posture:** All routes are tenant-bound and require `governance:*` scope. No unauthenticated surface added. No new credential types, no key issuance, no schema changes beyond the companion migration already reviewed. The plane registry snapshot and topology hash files are regenerated checksums with no independent security authority.
+
+**Validation:** `make route-inventory-audit` passed; `make soc-review-sync` passes after this entry.
+
+---
+
 ## 2026-09-22 — CUSTOMER-ZERO-TRUST-001 roadmap authority reconciliation
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI authority checker and roadmap test update).

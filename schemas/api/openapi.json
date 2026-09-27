@@ -30650,6 +30650,52 @@
         "title": "PrioritiesResponse",
         "type": "object"
       },
+      "ProductionAttestBody": {
+        "properties": {
+          "attested": {
+            "title": "Attested",
+            "type": "boolean"
+          },
+          "gate_name": {
+            "title": "Gate Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "gate_name",
+          "attested"
+        ],
+        "title": "ProductionAttestBody",
+        "type": "object"
+      },
+      "ProductionFinalizeBody": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "ProductionFinalizeBody",
+        "type": "object"
+      },
       "ProfileResponse": {
         "properties": {
           "created_at": {
@@ -31150,6 +31196,135 @@
           "reason"
         ],
         "title": "PublishReportRequest",
+        "type": "object"
+      },
+      "QualDecisionResponse": {
+        "properties": {
+          "decided_at": {
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decided_by": {
+            "title": "Decided By",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "qual_request_id": {
+            "title": "Qual Request Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "id",
+          "qual_request_id",
+          "decision",
+          "decided_by",
+          "decided_at"
+        ],
+        "title": "QualDecisionResponse",
+        "type": "object"
+      },
+      "QualRequestResponse": {
+        "properties": {
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "report_id",
+          "requested_by",
+          "requested_at"
+        ],
+        "title": "QualRequestResponse",
+        "type": "object"
+      },
+      "QualStatusResponse": {
+        "properties": {
+          "attestations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/api__field_assessment__AttestationResponse"
+            },
+            "title": "Attestations",
+            "type": "array"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualDecisionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "qual_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qual Request Id"
+          },
+          "qualified": {
+            "title": "Qualified",
+            "type": "boolean"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "qualified"
+        ],
+        "title": "QualStatusResponse",
         "type": "object"
       },
       "QualityScoreListResponse": {
@@ -44860,6 +45035,55 @@
           "region"
         ],
         "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "api__field_assessment__AttestationResponse": {
+        "properties": {
+          "attested": {
+            "title": "Attested",
+            "type": "boolean"
+          },
+          "attested_at": {
+            "title": "Attested At",
+            "type": "string"
+          },
+          "attested_by": {
+            "title": "Attested By",
+            "type": "string"
+          },
+          "gate_name": {
+            "title": "Gate Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "qual_request_id": {
+            "title": "Qual Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "qual_request_id",
+          "gate_name",
+          "attested",
+          "attested_by",
+          "attested_at"
+        ],
+        "title": "AttestationResponse",
         "type": "object"
       },
       "api__field_assessment__AuditEventResponse": {
@@ -82173,6 +82397,252 @@
           }
         },
         "summary": "Qa Approve Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify": {
+      "get": {
+        "description": "Return the current production qualification status for a report.",
+        "operationId": "get_qual_status_route_field_assessment_engagements__engagement_id__reports__report_id__qualify_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Qual Status Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/request": {
+      "post": {
+        "description": "Initiate a production qualification request for a finalized, QA-approved report.\n\nThe report must be finalized (is_finalized=True) and QA-approved before a\nqualification request can be created. Callers then submit attestations for\neach of the four production gates and call /qualify/{id}/finalize to produce\nthe QUALIFIED decision that unlocks client delivery.",
+        "operationId": "qualify_report_request_route_field_assessment_engagements__engagement_id__reports__report_id__qualify_request_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qualify Report Request Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/attest": {
+      "post": {
+        "description": "Submit a gate attestation for a production qualification request.\n\nEach of the four production gates must be attested exactly once per request.\nDuplicate attestations for the same gate are rejected with 409. Actor identity\nis always derived from the authenticated context \u2014 never from the request body.",
+        "operationId": "qualify_report_attest_route_field_assessment_engagements__engagement_id__reports__report_id__qualify__qual_request_id__attest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "qual_request_id",
+            "required": true,
+            "schema": {
+              "title": "Qual Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductionAttestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__field_assessment__AttestationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qualify Report Attest Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/finalize": {
+      "post": {
+        "description": "Finalize the production qualification, producing a QUALIFIED or REJECTED decision.\n\nQUALIFIED requires:\n- All four production gates attested=True in this request\n- result_truth_gate.decision == \"PASS\" in the signed report_json\n\nIf either condition is not met, the route returns 422 with blocking reasons.\nA finalized qualification request cannot be re-finalized (append-only decision).",
+        "operationId": "qualify_report_finalize_route_field_assessment_engagements__engagement_id__reports__report_id__qualify__qual_request_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "qual_request_id",
+            "required": true,
+            "schema": {
+              "title": "Qual Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductionFinalizeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qualify Report Finalize Route",
         "tags": [
           "field-assessment"
         ]

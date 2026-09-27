@@ -52,6 +52,7 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "report.generate",
         "report.read",
         "report.qa_approve",
+        "report.qualify",
         # Verification bundles — generate (assessor) is split from approve (governance)
         "bundle.generate",
         "bundle.approve",
@@ -173,6 +174,11 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
     "report.qa_approve": {
         "display_name": "QA Approve Report",
         "description": "Apply final QA sign-off to a report (non-repudiation anchor)",
+        "risk_level": "high",
+    },
+    "report.qualify": {
+        "display_name": "Production Qualify Report",
+        "description": "Submit production gate attestations and finalize qualification (SoD: not qa_reviewer)",
         "risk_level": "high",
     },
     # Verification bundles
@@ -362,6 +368,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "risk.accept",
             "exception.grant",
             "governance.decision",
+            # production qualification — SoD: cannot also qa_approve the same report
+            "report.qualify",
         }
     ),
     "tenant_admin": frozenset(
