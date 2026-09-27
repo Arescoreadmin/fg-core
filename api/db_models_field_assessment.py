@@ -988,8 +988,12 @@ class FaQualificationDecision(Base):
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     report_id: Mapped[str] = mapped_column(String(255), nullable=False)
     qual_request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    report_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    report_version_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    report_fingerprint: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
     decided_by: Mapped[str] = mapped_column(String(255), nullable=False)
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)

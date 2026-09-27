@@ -26,6 +26,7 @@ import os
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -167,15 +168,14 @@ def _attest_all(
 
 def _finalize(
     client: TestClient, eid: str, rid: str, qid: str, reason: str | None = None
-) -> dict:
+) -> httpx.Response:
     body = {}
     if reason:
         body["reason"] = reason
-    resp = client.post(
+    return client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qualify/{qid}/finalize",
         json=body,
     )
-    return resp
 
 
 def _bootstrap_approved(client: TestClient) -> tuple[str, str]:
@@ -852,7 +852,9 @@ def _binding_only_require(report_json, db, *, report_id, tenant_id, report_versi
     if decision is None:
         raise HTTPException(
             status_code=422,
-            detail=api_error("PRODUCTION_QUALIFICATION_BLOCKED", "binding check failed"),
+            detail=api_error(
+                "PRODUCTION_QUALIFICATION_BLOCKED", "binding check failed"
+            ),
         )
 
 
@@ -870,7 +872,10 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
     - Deliver V1 → 200 (correct version_id + fingerprint match)
     """
     from api.db import get_sessionmaker
-    from api.db_models_field_assessment import FaProductionQualRequest, FaQualificationDecision
+    from api.db_models_field_assessment import (
+        FaProductionQualRequest,
+        FaQualificationDecision,
+    )
     from api.db_models_governance_report import GovernanceReportRecord
     from sqlalchemy import select as _sel
     import uuid

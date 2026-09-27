@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 from pathlib import Path
 
@@ -58,6 +59,7 @@ def _restore_env():
     yield
     os.environ.clear()
     os.environ.update(before)
+    gc.collect()
 
 
 _CI_TEST_KEY = "ci-test-key-00000000000000000000000000000000"
