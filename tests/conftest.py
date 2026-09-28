@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import gc
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 # Set deterministic, writable defaults before importing modules that may touch DB paths.
@@ -20,10 +20,10 @@ import pytest
 
 def _load_app_modules():
     try:
-        from api.db import init_db, reset_engine_cache
+        from api.db import dispose_engine_cache, init_db, reset_engine_cache
         from api.main import build_app as _build_app
 
-        return init_db, reset_engine_cache, _build_app
+        return init_db, reset_engine_cache, _build_app, dispose_engine_cache
     except Exception:
         return None
 
@@ -59,7 +59,6 @@ def _restore_env():
     yield
     os.environ.clear()
     os.environ.update(before)
-    gc.collect()
 
 
 _CI_TEST_KEY = "ci-test-key-00000000000000000000000000000000"
@@ -90,7 +89,7 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
         yield
         return
 
-    init_db, reset_engine_cache, _ = loaded
+    init_db, reset_engine_cache, _, _ = loaded
     reset_engine_cache()
     init_db(sqlite_path=db_path)
 
@@ -144,17 +143,28 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         loaded = _load_app_modules()
         if loaded is None:
             pytest.skip("app/db dependencies unavailable in this environment")
-        init_db, reset_engine_cache, _build_app = loaded
+        init_db, reset_engine_cache, _build_app, _ = loaded
         reset_engine_cache()
         init_db(sqlite_path=db_path)
 
         return _build_app()
 
-    return _factory
+    yield _factory
+
+    # Dispose pool connections without clearing _ENGINE/_SessionLocal.
+    # This closes DBAPI connections (preventing __del__ races under
+    # filterwarnings=error) while leaving the engine reference intact so
+    # fixture-less tests that call _sessionmaker() directly can inherit
+    # the last valid engine rather than creating a new one against a
+    # potentially stale or deleted FG_SQLITE_PATH.
+    loaded = _load_app_modules()
+    if loaded is not None:
+        _, _, _, dispose_engine_cache = loaded
+        dispose_engine_cache()
 
 
 @pytest.fixture
-def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """
     Compatibility fixture for tests that expect `fresh_db` to be a sqlite DB path (str).
     These tests insert rows via sqlite3 directly, so we must create schema in that file.
@@ -174,11 +184,17 @@ def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     loaded = _load_app_modules()
     if loaded is None:
         pytest.skip("app/db dependencies unavailable in this environment")
-    init_db, reset_engine_cache, _ = loaded
+    init_db, reset_engine_cache, _, _ = loaded
     reset_engine_cache()
     init_db(sqlite_path=db_path)
 
-    return db_path
+    yield db_path
+
+    # Dispose pool connections — same rationale as build_app teardown.
+    loaded = _load_app_modules()
+    if loaded is not None:
+        _, _, _, dispose_engine_cache = loaded
+        dispose_engine_cache()
 
 
 @pytest.fixture

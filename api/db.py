@@ -159,6 +159,21 @@ def reset_engine_cache() -> None:
     _SessionLocal = None
 
 
+def dispose_engine_cache() -> None:
+    """Close pool connections without clearing the engine reference.
+
+    Use in fixture teardowns that need to prevent SQLAlchemy __del__ races
+    but must leave _ENGINE and _SessionLocal intact so that fixture-less tests
+    which call _sessionmaker() directly can inherit the last valid engine.
+    """
+    global _ENGINE
+    if _ENGINE is not None:
+        try:
+            _ENGINE.dispose()
+        except Exception:
+            pass
+
+
 def _register_test_sqlite_pragmas(engine: Engine) -> None:
     """Register a connect-time listener that applies test-only SQLite write pragmas.
 
