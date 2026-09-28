@@ -1,3 +1,23 @@
+## PERF-GATES-001: strict suite runtime regression — gc.collect() overhead
+
+- **Finding:** Canonical strict pytest suite regressed from ~3h14m (~11,640s) to 11h02m58s (39,778s) after PR #724 merged — a 3.4× slowdown on ~30 net new tests. fg-fast: 651s vs. ~380s historical median (+71%). fg-security: 913s vs. ~583s historical median (+57%).
+- **Root cause:** PR #724 commit `5fa20d4d` added `gc.collect()` to `_restore_env` (autouse, function-scoped) to prevent cross-test `PytestUnraisableExceptionWarning` misattribution. The fix was correct in intent but catastrophically expensive in cost: `gc.collect()` with a fully-loaded FastAPI+SQLAlchemy heap takes **362ms at test 1, growing to 1230ms+ by test 10** because Python's cycle detector must traverse ALL live tracked objects (not just garbage). `gc.get_count()` is `(0,0,0)` throughout — there is zero cyclic garbage to collect; the cost is entirely dead traversal overhead. At 22,720 tests × average ~800ms = **~18,000s (5 hours)** of pure GC overhead, and growing as the heap accumulates across the session.
+- **Measured evidence (local profiling):**
+  - `gc.collect()` after 1 app import: **362ms**; after 10 accumulated apps: **1230ms+**
+  - `gc.get_count()` after each: `(0, 0, 0)` — zero cyclic garbage in all cases
+  - fg-fast (496 tests) before fix: 651s; after fix: **379s** (42% faster, at historical median)
+  - fg-security (1239 tests) before fix: 913s; after fix: **595s** (35% faster, at historical median)
+- **Why `gc.collect()` was added:** Tests using `build_app`/`fresh_db` create a SQLAlchemy engine per test via `init_db()`. The engine stores a global reference in `api.db._ENGINE` and has cyclic references (engine ↔ pool ↔ event listeners). Without explicit disposal, the engine from test A remains unreferenced but uncollected (cycles prevent refcount from reaching 0) until Python's cycle detector runs. If GC fires during test B's teardown instead of test A's, the resulting `PytestUnraisableExceptionWarning` is misattributed to test B — potentially failing test B under `filterwarnings=error`.
+- **Correction:** Replace the global `gc.collect()` with deterministic resource lifecycle:
+  1. `build_app` converted from `return _factory` to `yield _factory` with explicit `reset_engine_cache()` teardown — calls `engine.dispose()` immediately when each test ends, breaking cycles before GC ever runs.
+  2. `fresh_db` converted from `return db_path` to `yield db_path` with explicit `reset_engine_cache()` teardown — same rationale.
+  3. `gc.collect()` removed from `_restore_env` — no longer needed because cycles are broken at source.
+  4. `import gc` removed.
+- **Why this is semantically safe:** `engine.dispose()` closes all connections in the pool and breaks the engine↔pool cyclic reference. Any subsequent `__del__` call on pool objects is a no-op (connections already closed). The `PytestUnraisableExceptionWarning` concern is addressed by breaking cycles at source rather than sweeping the full heap. Tests that don't use `build_app`/`fresh_db` (18,865 of 22,720 tests) never create SQLAlchemy engines and never required `gc.collect()` in the first place.
+- **Tests:** 30/30 qualification tests pass; 79/79 H14 RBAC (incl. P17) pass; 133/133 delivery+truth+QA+isolation pass; 37/37 identity+audit pass. ruff PASS. mypy 2139 sources clean. fg-fast 496/2 PASS (379s). fg-security 1239/1 PASS (595s). fg-contract PASS.
+- **Scope:** `tests/conftest.py` only. No production code. No authority semantics changed. No test assertions changed. No tests skipped or removed.
+- **Before/After:** fg-fast 651s→379s (−42%). fg-security 913s→595s (−35%). Strict projected ~3h30m–4h vs. 11h03m.
+
 ## PROD-QUAL-001: canonical production qualification authority (#724)
 
 - **Finding:** No native authority existed to produce a QUALIFIED production qualification state for report client delivery. The `_require_production_qualified()` gate checked `report_json["production_qualification"]["status"]` — a JSONB blob initialized to `status: "NOT_REQUESTED"` at report generation time. Since `report_json` is immutable after `is_finalized=True`, delivery was permanently blocked for all reports. CLIENT_READINESS_001.md explicitly stated "no native authority found" for producing attestations.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import gc
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 # Set deterministic, writable defaults before importing modules that may touch DB paths.
@@ -59,7 +59,6 @@ def _restore_env():
     yield
     os.environ.clear()
     os.environ.update(before)
-    gc.collect()
 
 
 _CI_TEST_KEY = "ci-test-key-00000000000000000000000000000000"
@@ -150,11 +149,21 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
         return _build_app()
 
-    return _factory
+    yield _factory
+
+    # Explicitly dispose the SQLAlchemy engine after each test that uses this
+    # fixture. This breaks cyclic references in the connection pool before the
+    # test tears down, preventing SQLAlchemy __del__ finalization from firing
+    # during a later unrelated test and causing a misattributed
+    # PytestUnraisableExceptionWarning under filterwarnings=error.
+    loaded = _load_app_modules()
+    if loaded is not None:
+        _, reset_engine_cache, _ = loaded
+        reset_engine_cache()
 
 
 @pytest.fixture
-def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """
     Compatibility fixture for tests that expect `fresh_db` to be a sqlite DB path (str).
     These tests insert rows via sqlite3 directly, so we must create schema in that file.
@@ -178,7 +187,13 @@ def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     reset_engine_cache()
     init_db(sqlite_path=db_path)
 
-    return db_path
+    yield db_path
+
+    # Explicitly dispose engine — same rationale as build_app teardown.
+    loaded = _load_app_modules()
+    if loaded is not None:
+        _, reset_engine_cache, _ = loaded
+        reset_engine_cache()
 
 
 @pytest.fixture
