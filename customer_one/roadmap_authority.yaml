@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-09-11"
+authority_date: "2026-09-29"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -210,6 +210,39 @@ completed:
     title: "Runtime Identity Authority Cutover"
     prs: ["HARD-001 #657", "HARD-002"]
     note: "invitation_flow.py:553-564 assigns principal_id before identity_binding_status=bound; migration 0183 adds chk_bound_requires_principal_id; production-proven per artifacts/identity/hard-002-production-proof.json"
+  - id: "AUDIT-AUTHORITY-001"
+    title: "Canonical Portal Identity Audit Authority"
+    prs: ["#723"]
+    merged_sha: "f30b9e188246445c1b2c01d43c81869dc6ed8014"
+    note: >
+      Portal identity operations (invitation creation, acceptance, revocation,
+      credential grant/revoke) now produce append-only, tenant-scoped audit
+      records with canonical actor attribution and immutable outcome evidence.
+      Post-merge proof: fg-fast 496/2 pass/skip; fg-security clean; mypy clean.
+  - id: "PROD-QUAL-001"
+    title: "Canonical Production Qualification Authority"
+    prs: ["#724"]
+    merged_sha: "f87b8ed40d3828220c9747863beb13af4496aea2"
+    note: >
+      Production qualification of governance reports now requires canonical
+      reviewer authority, current tenant/engagement scope, exact report-version
+      + fingerprint binding, and append-only qualification decision persistence.
+      Qualification decisions are the sole downstream authorization input for
+      governed delivery. Post-merge proof: 30 focused tests pass; fg-fast 496/2;
+      fg-security clean; mypy clean; strict 22720/0. Operational acceptance
+      remains OPEN pending CUSTOMER-ZERO-ACCEPT-001.
+  - id: "GOV-DELIVERY-001"
+    title: "Canonical Governed Client Delivery Authority"
+    prs: ["#726"]
+    merged_sha: "dfccd3ff3f7d0ba3e216df1753680ea0e581d482"
+    note: >
+      Governed delivery authorization now requires a QUALIFIED decision bound by
+      exact (tenant, engagement, report, version, fingerprint) tuple, canonical
+      operator authority, and immutable append-only authorization records.
+      Outcome is AUTHORIZED (authorization proved); DELIVERED requires a separate
+      transport authority not yet implemented. 26 adversarial tests pass (19 core
+      + 7 epistemic remediation); fg-fast 496/2; mypy clean. Transport layer and
+      operational acceptance remain OPEN.
   - id: "REVENUE-GATE-1"
     title: "Revenue Gate 1 — all 12 items cleared"
     prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]
