@@ -15,9 +15,9 @@
 
 Three concrete blockers, in strict prerequisite order:
 
-1. **No production trust anchor exists.** Migration 0191, service `governed_delivery_service.py`, and the qualification/QA authorities are all implemented in code, but every signature and every "trusted actor" the audit inventoried is either (a) local Vault dev mode, (b) a test-mode static token, or (c) unbound. `CUSTOMER-ZERO-TRUST-001` is `NEXT` and unclosed on `customer_one/roadmap_authority.yaml`. There is no HCP Vault Dedicated cluster, no populated `customer_zero_trust_evidence` manifest under `artifacts/`, and no ceremony evidence. Until this closes, all downstream signatures (qualification decisions, governed delivery authorizations, report signatures) are cryptographically inauthentic under the very trust model the roadmap requires.
-2. **The Customer-Zero acceptance run has not been executed against the current SHA.** `CUSTOMER-ZERO-ACCEPT-001` is `BLOCKED` on the trust prerequisite. There is no on-current-SHA replayable proof of a complete evidence → deterministic truth → canonical QA → qualification → governed authorization chain. The `2026-08-06` restore drill was at migration 0172; current head is 0191. Nothing has been restored, replayed, or independently verified against the current schema, current authorities, or the newly-shipped `fa_governed_delivery_*` tables and `fa_qualification_*` tables. The FG_RESULT_TRUTH_GATE operational-acceptance parent objective remains OPEN.
-3. **The "governed delivery" authority does not include transport.** PR #726 ships an authorization ledger, not a transport. `FaGovernedDeliveryAuthorization.outcome` is `AUTHORIZED`, never `DELIVERED`. The DB model's own docstring (line 1117) states: *"AUTHORIZED means the request was validated and authorized for transport. No transport has occurred."* There is no `fa_governed_delivery_attempts` table, no provider integration, no artifact-fingerprint receipt from an external transport, and no gate binding the existing PDF export route (`GET /engagements/{eid}/reports/{v}/export?format=pdf`) to a governed authorization. Any actor with `report.read` + `governance:read` scope in the correct tenant can pull the PDF today with no governed authorization required. That means the CR-707-004 root cause ("delivery is a state flag, not a customer receipt") is only *partially* remediated: a receipt object now exists, but the receipt still asserts authorization, not delivery.
+1. **No production trust anchor exists.** Migration 0191, service `governed_delivery_service.py`, and the qualification/QA authorities are all implemented in code, but every signature and every "trusted actor" the audit inventoried is either (a) local Vault dev mode, (b) a test-mode static token, or (c) unbound. `CUSTOMER-ZERO-TRUST-001` is `NEXT` and unclosed on `customer_one/roadmap_authority.yaml`. There is no HCP Vault Dedicated cluster, no populated `customer_zero_trust_evidence` manifest under `artifacts/` (searched — none present), and no ceremony evidence. Until this closes, no downstream signature (qualification decisions, governed delivery authorizations, report signatures) can be produced against a production trust anchor. See §8 for the classification of "future signing capability" vs "verifiability of already-issued signatures" — these are separate concerns.
+2. **The Customer-Zero acceptance run has not been executed against the current SHA.** `CUSTOMER-ZERO-ACCEPT-001` is `BLOCKED` on the trust prerequisite. There is no on-current-SHA replayable proof of a complete evidence → deterministic truth → canonical QA → qualification → governed authorization chain. The `2026-08-06` restore drill was at migration 0172; current head is 0191 (delta = 19 migrations). Nothing has been restored, replayed, or independently verified against the current schema, current authorities, or the newly-shipped `fa_governed_delivery_*` tables and `fa_qualification_*` tables. The `origin/test/customer-zero-accept-001` branch merge-base with current HEAD is `cb261717` (before PR #713), so the acceptance runner is stale by 13 commits including all REPORT-QA, PROD-QUAL, and GOV-DELIVERY code. The FG_RESULT_TRUTH_GATE operational-acceptance parent objective remains OPEN. Acceptance PREPARATION work (branch reconciliation, runner wiring, corpus review, current-schema restore drill) can proceed at $0 in parallel with trust; acceptance COMPLETION requires the trust anchor. See §8A/§8B for the split.
+3. **The "governed delivery" authority does not include transport.** PR #726 ships an authorization ledger, not a transport. `FaGovernedDeliveryAuthorization.outcome` is `AUTHORIZED`, never `DELIVERED`. The DB model's own docstring (`api/db_models_field_assessment.py:1117`) states: *"AUTHORIZED means the request was validated and authorized for transport. No transport has occurred."* There is no `fa_governed_delivery_attempts` table (zero grep matches across `migrations/`, `api/`, `services/`), no provider integration, no artifact-fingerprint receipt from an external transport, and no gate binding the existing PDF export route (`GET /engagements/{eid}/reports/{version}/export?format=pdf` at `api/field_assessment.py:9700-9707`) to a governed authorization. That route requires only `report.read` permission plus `governance:read` scope, so any authorized tenant member can pull the PDF today without any governed delivery row ever existing. That means the CR-707-004 root cause ("delivery is a state flag, not a customer receipt") is only *partially* remediated: an authorization receipt object now exists, but no transport receipt does. See §7 (`GOV-DELIVERY-TRANSPORT-001`) for the sharpened finding.
 
 **Bottom-line verdict:** `NOT_READY_BOUNDED_BLOCKERS`. FrostGate has cleared the code-authoring dimension of the CR-707-002 → CR-707-005 findings. It has not cleared the operational-proof dimension of any of them, and the transport dimension of CR-707-004 remains uncleared. There are no unbounded structural blockers.
 
@@ -212,40 +212,45 @@ Idempotency for the AUTHORIZATION operation is durable. Idempotency for TRANSPOR
 
 ---
 
-## 7. Real Transport Audit — TRANSPORT_PROVEN Question
+## 7. GOV-DELIVERY-TRANSPORT-001 — Sharpened Transport Blocker Findings
 
-**Verdict:** `TRANSPORT_NOT_PROVEN`.
+**Verdict:** `TRANSPORT_NOT_PROVEN`. Elevated to a first-order P1 blocker (see §15).
 
-Search results across `api/` and `services/`:
+### 7.A — Direct evidence table
 
-- No SMTP, SendGrid, SES, Twilio, S3 put_object, or blob upload code path invoked from any governed-delivery, report, or delivery-linked route.
-- Portal invitation email uses `api/notifications/email.py` via Resend — but this delivers the *invitation*, not the report artifact.
-- `download_url` references in `api/ui.py:875`, `api/ui_dashboards.py:127,894` are audit-packet download URLs for an audit UI, not report delivery.
-- Report artifact bytes are served synchronously from two endpoints:
-  - `api/field_assessment.py:9703` `GET /engagements/{eid}/reports/{version}/export?format=pdf` — requires `report.read` permission + `governance:read` scope. **Does NOT check for a governed delivery authorization row.**
-  - `api/report_authority.py:332` `GET /reports/{report_id}/download/pdf` — separate report authority path.
-- No presigned URL, no signed cookie, no fingerprinted external transfer receipt anywhere in the delivery chain.
+| # | Finding | Evidence (file:line) |
+|---|---|---|
+| 7.A.1 | `fa_governed_delivery_attempts` table does not exist | Zero grep matches across `migrations/`, `api/`, `services/`. The actual second table in migration 0191 is `fa_governed_delivery_authorizations`. |
+| 7.A.2 | PR #726 body claimed `fa_governed_delivery_attempts` exists — description-to-implementation drift | PR #726 description text (source: PR merge commit `dfccd3ff`) named a non-existent table |
+| 7.A.3 | PDF/JSON export route requires only `report.read` + `governance:read` — no governed delivery authorization check | `api/field_assessment.py:9700-9711` — decorator `dependencies=[Depends(authz_scope("governance:read"))]`; parameter `actor_ctx: ActorContext = Depends(require_permission("report.read"))`; no `_load_governed_delivery_authorization` call anywhere in function body 9703-9880 |
+| 7.A.4 | `FaReportVersion.status = 'delivered'` written BEFORE any transport occurs | `api/field_assessment.py:14007` (`deliver_report_version_route` — legacy path) and `api/field_assessment.py:14228` (`governed_delivery_route` — new path). In both cases the state flip precedes the (non-existent) transport step. |
+| 7.A.5 | `GovernedDeliveryReceipt` returns `delivery_authorization_id`, not a transport receipt | `api/field_assessment.py:12833-12851` — schema fields include `delivery_request_id`, `delivery_authorization_id`, `outcome`, `authorized_at`. No `attempted_at`, `artifact_sha256`, `bytes_transferred`, or `provider_reference` fields exist. |
+| 7.A.6 | DB model docstring self-declares "No transport has occurred" | `api/db_models_field_assessment.py:1117` docstring on `FaGovernedDeliveryAuthorization` |
+| 7.A.7 | `services/governance/report/governed_delivery_service.py` `ALLOWED_OUTCOMES` = `{"AUTHORIZED", "REJECTED"}` — no delivered/succeeded state | `services/governance/report/governed_delivery_service.py:31-36` |
 
-**End-to-end transport question:** Can a governed authorization → exact artifact → exact recipient → transport invocation → provider evidence → durable receipt path be reconstructed on the current SHA?
+### 7.B — Transport-capable machinery present in the codebase
 
-- Governed authorization: YES (§6)
-- Exact artifact: YES (report_version_id, report_fingerprint)
-- Exact recipient: YES (recipient_type + recipient_id resolved with tenant+engagement)
-- Transport invocation: **NO** — no code path invokes any transport
-- Provider evidence: **NO** — no provider is called
-- Durable receipt: PARTIAL — an authorization record is retained, but it does not evidence transport
+| Component | Purpose | Used for report artifact delivery? |
+|---|---|---|
+| `api/notifications/email.py` (Resend, `https://api.resend.com/emails`) | Portal invitation delivery | **NO** — the only send call in this module is the portal invitation email (line 131); no attachment/report delivery |
+| `operator_direct` recipient type | Enumerated in `ALLOWED_RECIPIENT_TYPES` (`services/governance/report/governed_delivery_service.py:15-22`) | Semantic-only — declares the operator takes direct responsibility; no code path streams bytes to the operator as a governed transport |
+| `download_url` references in `api/ui.py:875`, `api/ui_dashboards.py:127,894` | Audit-packet UI links | **NO** — unrelated to FA report delivery |
+| Presigned URL / S3 / SES / SendGrid / Twilio | — | **NONE** present in the delivery chain |
 
-### Smallest bounded first-customer transport requirement (design specification, not implementation)
+### 7.C — Customer consequence
 
-For a first paid engagement using `operator_direct` recipient type:
+Any authorized tenant member holding `report.read` + `governance:read` (roles including `platform_admin`, `governance_reviewer`, and effectively any workflow role with reader permission on the tenant) can pull the PDF today directly from `GET /engagements/{eid}/reports/{version}/export?format=pdf` with **no governed delivery authorization row required, no attempt logged, and no cryptographic receipt of the transferred bytes**. The `governed_delivery_route` at `api/field_assessment.py:14060` and the legacy `deliver_report_version_route` at `api/field_assessment.py:13934` create authorization/state records, but neither is a prerequisite for downloading the artifact. The governed delivery authorization trail therefore provides authorization evidence to the operator, not delivery assurance to the customer.
 
-1. Extend `FaGovernedDeliveryAuthorization` (or add `fa_governed_delivery_attempts` table matching PR #726's own description) with columns: `attempt_id`, `transport_type` (`operator_download`), `artifact_sha256`, `artifact_bytes_length`, `attempted_at`, `outcome` (`SUCCEEDED`/`FAILED`), `evidence_ref` (WORM audit chain reference).
-2. Gate the artifact-serving endpoints on the existence of an AUTHORIZED row for the requesting subject.
-3. On successful stream completion, insert an `attempts` row with SUCCEEDED + artifact SHA-256 tied to the exact bytes served.
-4. `FaReportVersion.status = 'delivered'` transition happens ONLY after step 3.
-5. Optional (recommended before first client): capture an operator-signed acknowledgement of receipt (Ed25519 over `(attempt_id, artifact_sha256, delivered_at)`).
+### 7.D — Closure requirements (design specification only — NOT implemented in this audit)
 
-This scope is bounded (~150-250 LOC + one migration + tests) and does not require any paid infrastructure for the `operator_direct` path.
+A. **Migration** creating `fa_governed_delivery_attempts` (append-only, tenant-RLS-protected) with at minimum: `attempt_id PK`, `tenant_id`, `engagement_id`, `delivery_authorization_id FK`, `report_version_id`, `report_fingerprint`, `artifact_sha256`, `artifact_bytes_length`, `transport_type` (`operator_download` | `portal_grant_download` | `email_attachment` | `presigned_url`), `attempted_at`, `outcome` (`SUCCEEDED` | `FAILED` | `IN_PROGRESS`), `failure_reason_code`, `evidence_ref` (WORM/audit chain reference), plus append-only triggers matching the pattern in migration 0191.
+B. **Route authority gate**: `GET /engagements/{eid}/reports/{v}/export` (and `GET /reports/{report_id}/download/pdf` at `api/report_authority.py:332`) must verify an AUTHORIZED `FaGovernedDeliveryAuthorization` row exists for the requesting subject with matching `(tenant_id, engagement_id, report_version_id, recipient_id)` before streaming bytes.
+C. **Attempt-row insertion**: on successful stream completion, insert one `fa_governed_delivery_attempts` row with `outcome=SUCCEEDED`, `artifact_sha256` computed from the exact bytes served (or from the manifest hash if the artifact is deterministic), and `attempted_at`.
+D. **Status transition correction**: move `FaReportVersion.status = 'delivered'` and `delivered_at` write to AFTER the attempt row insert with `SUCCEEDED`. Remove the pre-transport flip at lines 14007 and 14228.
+E. **Lifecycle states** the DB must express: `AUTHORIZED_FOR_DELIVERY` → `TRANSPORT_ATTEMPTED` → `PROVIDER_ACCEPTED` (optional, per transport) → `DELIVERED` → `RECEIPT_ACKNOWLEDGED` (optional, if operator signs receipt). Extend `ALLOWED_OUTCOMES` in `services/governance/report/governed_delivery_service.py:31-36` accordingly OR use the new attempts-table state machine as the authoritative post-authorization ledger.
+F. **Optional but recommended**: capture an operator-signed acknowledgement of receipt (Ed25519 over `(attempt_id, artifact_sha256, delivered_at)`) signed by the customer-zero-approval trust role once CUSTOMER-ZERO-TRUST-001 closes.
+
+This scope is bounded (~200 LOC + one migration + ~15 tests) and requires **no paid infrastructure** for the `operator_direct` / direct-download path. It does not depend on CUSTOMER-ZERO-TRUST-001 unless step F is included.
 
 ---
 
@@ -275,6 +280,27 @@ The evidence contract at `docs/deployment/customer_zero_trust_evidence.md` expli
 | 16 | Independent verification chain | `verify-complete` validator subcommand | Zero prod manifests | HCP_REQUIRED |
 
 **Summary:** 0 PROVEN, 2 LOCAL_ONLY, 14 HCP_REQUIRED. No production trust evidence exists. This is the single largest unclosed blocker on the roadmap.
+
+### 8.z — Historical signature verifiability after cluster destruction (`HISTORICAL_VERIFICATION_AFTER_KEY_DESTRUCTION`)
+
+**Classification: PARTIAL — verification is offline-capable BY DESIGN, but is currently NOT_PROVEN because no production manifest exists to persist the anchor material.**
+
+The evidence schema at `schemas/artifacts/customer_zero_trust_evidence.schema.json` explicitly requires, per trust role: `public_key`, `public_key_fingerprint`, `algorithm=ed25519`, `key_id`, `key_version`, and a nested `public_anchor` object with `key_id + key_version + public_key_fingerprint`. This material, once persisted to `artifacts/customer_zero_trust_evidence*.json` under source control, is sufficient to verify already-issued signatures offline.
+
+The trust adapter at `services/cgin/key_management/vault_transit.py:59-76` implements verification purely from the persisted `TrustAnchor` (`public_key`, `key_version`, `public_key_fingerprint`) — it decodes the Ed25519 public key locally, re-derives the fingerprint from the raw bytes (`services/cgin/key_management/vault_transit.py:89-91`), and invokes `key.verify(raw_signature, payload)` on the local `cryptography` primitive. **No live Vault call is required for verification.** The signature format `vault:v<N>:<base64-sig>` embeds the key version so the correct anchor can be resolved deterministically.
+
+Therefore the three distinct concerns must be separated:
+
+| Concern | State after Vault cluster destruction |
+|---|---|
+| Future signing capability (mint new signatures) | DESTROYED — private key is non-exportable in Vault Transit and is not held anywhere else |
+| Provider-hosted key history / rotation metadata | DESTROYED — Vault Transit ledger and audit stream are cluster-scoped |
+| Cryptographic verifiability of already-issued signatures | PRESERVED — provided the public anchor material (public_key + fingerprint + key_version) has been persisted to `artifacts/` under source control before destruction |
+| Non-repudiation attributed to the Vault issuer identity | DEGRADED — verification against the public key still succeeds, but the chain-of-custody attestation that the key was issued by a specific Vault role cluster relies on the audit stream, which may be lost with the cluster |
+
+**Sub-finding CR-002-D (P1 dependency, HCP_REQUIRED):** No manifest has been produced (§8 table, requirement 8). Therefore no anchor material has been persisted. FrostGate must ensure that the first production ceremony writes a fully-populated `customer_zero_trust_evidence*.json` (and any subsequent rotation manifests) under `artifacts/` and commits it to source control BEFORE any cluster-destroy action, or historical verifiability will collapse from PARTIAL to NOT_PROVEN.
+
+**Correction of prior audit language:** Any statement that destroying the Vault cluster "invalidates all historical signatures" is overstated. Destroying the private signing key prevents FUTURE signatures. Existing signatures remain cryptographically verifiable against retained public anchor material. What the cluster-destroy would collapse is (a) the provider-side rotation history and (b) the Vault audit stream — not the mathematics of Ed25519 verification.
 
 **External-repo verification:** `/home/jcosat/Projects/frostgate-infra` on `main` clean at `8121d24252dd1e7e3945424fcdacc5a320611fea`. Contains: `hcp_cluster.tf` (Vault Dedicated `standard_small`), `vault_transit.tf` (three keys, `prevent_destroy=true`), `vault_approle.tf` (three roles, distinct policies, `bind_secret_id=true`), `vault_policies.tf`, `aws_audit.tf` (CloudWatch), `terraform.tf` (HCP Terraform remote state, org `Frostgate`, workspace `frostgate-customer-zero`), `providers.tf` (no committed credentials). IaC is prod-shaped. NEVER APPLIED. No confirmation was performed here that HCP workspace binding is live; DO NOT run `terraform plan/apply` from this audit.
 
@@ -382,43 +408,47 @@ Strict `codex_gates.sh` was NOT run — this is a read-only audit and PERF-GATES
 
 ### P1 (must close before delivering result to first paid client)
 
-1. **P1-CR002-TRUST — Customer-Zero-Trust-001 production ceremony**
-   - Domain: cryptographic trust anchor
-   - Exact problem: All application-layer signatures (qualification decisions, governed authorizations, report signatures) depend on trust roles whose production identities do not exist. Local Vault dev cannot serve as production evidence per `docs/deployment/customer_zero_trust_evidence.md`.
-   - Evidence: `roadmap_authority.yaml` `active_objective.status = BLOCKED_PENDING_PREREQUISITE`; no manifest under `artifacts/customer_zero_trust_evidence*.json`; `frostgate-infra` HCP Terraform never applied.
-   - Affected authority: All downstream signing; ability to make any cryptographic claim to a customer.
-   - Customer consequence: Report signature verification against a public anchor fails because no public anchor exists.
-   - Minimum closure: Provision HCP Vault Dedicated cluster; create three Transit keys; enroll three AppRoles; produce fully-populated evidence manifest passing `tools/customer_zero_trust_evidence.py verify-complete`; enroll public anchors; record rotation/failure tests; retain manifest under source control.
-   - Requires paid infrastructure: **YES** (HCP Vault Dedicated Essentials/Small + AWS CloudWatch audit stream; ~$0.03/hr HCP + minimal CloudWatch = <$25/mo)
+1. **CUSTOMER-ZERO-TRUST-001 — Production trust anchor ceremony (`HCP_REQUIRED`)**
+   - Domain: cryptographic trust anchor (future-signing capability)
+   - Exact problem: No production Ed25519 signing keys exist. All application-layer signatures (qualification decisions, governed authorizations, report signatures) currently reference roles bound to local Vault dev mode per `docs/deployment/customer_zero_trust_evidence.md`.
+   - Evidence: `roadmap_authority.yaml` `active_objective.status = BLOCKED_PENDING_PREREQUISITE`; zero files matching `artifacts/customer_zero_trust_evidence*.json`; `frostgate-infra` HCP Terraform never applied (state: NEVER APPLIED per §9).
+   - Affected authority: All downstream signing produced after this closes; verification of already-issued signatures is a separate concern (see §8.z — verifiability is offline-capable given retained public anchor material).
+   - Customer consequence: Cannot mint any production-authority signature. Cannot enroll a public anchor for external verification.
+   - Minimum closure: Provision HCP Vault Dedicated cluster; create three Transit keys; enroll three AppRoles; produce fully-populated evidence manifest passing `tools/customer_zero_trust_evidence.py verify-complete`; enroll public anchors; record rotation/failure tests; **commit manifest under `artifacts/` in source control BEFORE any subsequent cluster-destroy would occur** (see §8.z, sub-finding CR-002-D).
+   - Requires paid infrastructure: **YES** (HCP Vault Dedicated `standard_small` + AWS CloudWatch audit stream). See §16 for the pricing classification — the audit's prior "~$22/mo" figure was materially inaccurate; publicly-referenced third-party estimates put the standard tier well above $1000/mo, and exact live pricing is `EXACT_LIVE_PRICE=NOT_PROVEN` from this audit. Confirm against `https://portal.cloud.hashicorp.com/` before provisioning.
    - Estimated scope: 1–2 days of operator ceremony + evidence collection
-   - Sequence: 1st
+   - Sequence: 1st (strict prerequisite)
 
-2. **P1-CR002-ACCEPT — Customer-Zero-Accept-001 current-SHA run**
+2. **CUSTOMER-ZERO-ACCEPT-001 — Customer-Zero acceptance current-SHA run** *(completion blocked on P1-1; PREPARATION unblocked)*
    - Domain: operational acceptance
    - Exact problem: No replayable current-SHA end-to-end run producing the four required attestations tied to a specific report/version/fingerprint tuple.
-   - Evidence: `roadmap_authority.yaml` `blocked` list contains CUSTOMER-ZERO-ACCEPT-001 pending trust prerequisite.
+   - Evidence: `roadmap_authority.yaml` `blocked` list contains CUSTOMER-ZERO-ACCEPT-001 pending trust prerequisite; `origin/test/customer-zero-accept-001` merge-base with current HEAD is `cb261717` (before PR #713) — the runner is stale by 13 commits; current migration head is 0191 vs the branch's baseline.
    - Affected authority: `PRODUCTION_DEPENDENCY_SECURITY`, `PRODUCTION_SCHEMA_AND_RLS`, `CANONICAL_ASSESSMENT_PROOF`, `DURABLE_EXECUTION_AND_RECOVERY` attestations
-   - Customer consequence: `PROD-QUAL-001` cannot produce a QUALIFIED decision for any real customer report because no attestation-producing operator has valid trust credentials.
-   - Minimum closure: Execute Customer-Zero acceptance corpus against current SHA post-trust; record all four attestations; produce QUALIFIED qualification decision; validate replay determinism.
-   - Requires paid infrastructure: partial (needs trust closed first; then $0 operational work)
-   - Estimated scope: 1 day of ceremony + validation
-   - Sequence: 2nd
+   - Customer consequence: `PROD-QUAL-001` cannot produce a QUALIFIED decision under production trust for any real customer report until closure.
+   - **PREPARATION (can be done at $0, before trust closes):** branch reconciliation of `test/customer-zero-accept-001` to current main; current-schema restore drill at migration 0191; runner wiring for production trust anchor injection (config-only, no live calls); corpus/expected-outcomes review.
+   - **COMPLETION (blocked on CUSTOMER-ZERO-TRUST-001):** live production trust anchor signatures for the four gates; current-SHA attestations produced against real trust roles; independent public verification against the enrolled public anchors; signed provenance chain end-to-end.
+   - Requires paid infrastructure: partial (needs trust closed first for COMPLETION; PREPARATION is $0)
+   - Estimated scope: 1–2 days of PREPARATION + 1 day of COMPLETION ceremony (after trust closes)
+   - Sequence: 2nd for COMPLETION; PREPARATION can start immediately
 
-3. **P1-CR002-TRANSPORT — Governed delivery TRANSPORT completion**
+3. **GOV-DELIVERY-TRANSPORT-001 — Governed delivery TRANSPORT completion**
    - Domain: artifact transport binding
-   - Exact problem: `FaGovernedDeliveryAuthorization` is authorization-only. No `fa_governed_delivery_attempts` table exists despite PR #726's description. PDF export routes serve bytes without checking for an authorization record.
-   - Evidence: `api/db_models_field_assessment.py:1117` docstring; missing table verified against `migrations/postgres/0191_governed_delivery_authority.sql`; `api/field_assessment.py:9703-9879` export route requires only `report.read` + `governance:read`.
-   - Affected authority: GOV-DELIVERY-001 (partial)
-   - Customer consequence: FrostGate cannot truthfully assert that "the customer received the report artifact" — only that "the operator was authorized to deliver".
-   - Minimum closure: Add `fa_governed_delivery_attempts` table with `artifact_sha256`, `attempted_at`, `outcome`, `evidence_ref`; gate the artifact-bytes-serving endpoints on an AUTHORIZED delivery row for the requesting subject; write attempts row on successful stream with SHA-256 of served bytes; move `FaReportVersion.status = delivered` after attempt SUCCEEDED.
-   - Requires paid infrastructure: NO — `operator_direct` transport type completes this without external services
+   - Exact problem: `FaGovernedDeliveryAuthorization` is authorization-only. No `fa_governed_delivery_attempts` table exists (despite PR #726's description drift claiming otherwise). PDF export routes serve bytes without checking for an authorization record.
+   - Evidence: `api/db_models_field_assessment.py:1117` docstring; `api/field_assessment.py:9700-9711` export route decorator requires only `report.read` + `governance:read`; `api/field_assessment.py:14007` and `api/field_assessment.py:14228` set `rv.status = 'delivered'` before any transport; `services/governance/report/governed_delivery_service.py:31-36` `ALLOWED_OUTCOMES = {AUTHORIZED, REJECTED}`; `GovernedDeliveryReceipt` at `api/field_assessment.py:12833-12851` has no transport-attempt fields.
+   - Affected authority: GOV-DELIVERY-001 (currently PARTIAL — authorization only, not transport)
+   - Customer consequence: FrostGate cannot truthfully assert that "the customer received the report artifact" — only that "the operator was authorized to deliver". Any tenant member with `report.read` + `governance:read` can pull the PDF today without a governed delivery row.
+   - Minimum closure: See §7.D closure requirements A–E (attempts table + route gate + attempt row + status transition correction + lifecycle states).
+   - Requires paid infrastructure: NO — `operator_direct` / `direct_download` transport completes this without external services
    - Estimated scope: ~200 LOC + 1 migration + ~15 tests; 4–8 hours
-   - Sequence: 3rd (unblocks CR-707-004 closure)
+   - Sequence: 3rd (unblocks CR-707-004 closure). Can be executed independently of P1-1 and P1-2.
 
-### P2 (controlled workaround acceptable for first client)
+### P2 (controlled workaround acceptable for first client — MUST be documented in first-client operating conditions)
 
-4. **P2-CR002-QA-SoD — Report QA API-key self-approval exemption**
-   - `_enforce_report_qa_independence` at `api/field_assessment.py:13174` exempts `auth_source == "api_key"` from the different-person rule. For a first paid client, workaround: require the operator to review-approve as a distinct verified human, not via the API-key path. Document this in the playbook.
+4. **P2-CR002-QA-SoD — Report QA API-key self-approval exemption (first-client operating condition)**
+   - **Exact code location:** `api/field_assessment.py:13174` — function `_enforce_report_qa_independence(actor_ctx, *, generated_by, reviewer_id)`.
+   - **Exact bypass condition:** the SoD check runs only when `actor_ctx.auth_source != "api_key"`. If the caller authenticated via API key, the different-person rule is skipped and the same subject that generated the report can approve it.
+   - **Disposition:** P2 with **mandatory first-client operating requirement** (elevated from appendix). For any paid engagement, QA MUST be performed by a distinct verified human identity holding `compliance_reviewer` (or explicitly QA-authorized) role — NOT via the API-key path. This is not sufficient as a permanent structural control (a follow-up PR should extend the SoD enforcement to cover the API-key path or require an alternate cross-actor role check for machine authors), but it is sufficient as a controlled workaround for the first paid engagement provided the operator playbook makes this an explicit, verified precondition per report.
+   - **Documentation requirement:** `docs/operators/FIRST_CLIENT_PLAYBOOK.md` must be updated (not tracked by this audit; recommended as a same-cycle P2 PR) to include a per-report checklist item: "QA reviewer authenticated as a distinct human identity via canonical session, not via API key. Confirm `_enforce_report_qa_independence` code path executed by inspecting the `fa_report_qa_decisions` row's actor_type."
 
 5. **P2-CR002-SCOPE — Report scope/methodology/limitations content**
    - CR-707-006 NOT_PROVEN. First-client workaround: the operator manually appends a scope/methodology/limitations page as a fixed cover addendum to the exported PDF, retained alongside the report artifact.
@@ -451,37 +481,55 @@ Strict `codex_gates.sh` was NOT run — this is a read-only audit and PERF-GATES
 ## 16. Remaining Critical Path to First Paid Client
 
 ```
-1. CUSTOMER-ZERO-TRUST-001 closure   ── HCP Vault ceremony + evidence manifest
+Parallelizable now (require no dependency):
+  A. GOV-DELIVERY-TRANSPORT-001 code closure (P1-3)
+  B. CUSTOMER-ZERO-ACCEPT-001 PREPARATION ($0):
+      - branch reconciliation, runner wiring, corpus review, migration-0191 restore drill
+  C. P2 documentation + reconciliation PRs (playbook workarounds, roadmap YAML sync)
+
+Strict serial chain:
+  1. CUSTOMER-ZERO-TRUST-001 closure   ── HCP Vault ceremony + evidence manifest (COST-BEARING)
         ↓
-2. CUSTOMER-ZERO-ACCEPT-001 execution ── current-SHA run + 4 attestations + QUALIFIED decision
+  2. CUSTOMER-ZERO-ACCEPT-001 COMPLETION ── current-SHA run + 4 attestations + QUALIFIED decision
         ↓
-3. GOV-DELIVERY-TRANSPORT closure     ── attempts table + artifact-bytes gate + SUCCEEDED transition
+  3. Restore drill re-run against migration 0191 with production trust (evidence file)
         ↓
-4. P2 workarounds documented in playbook, or short-repair PRs merged
+  4. L14 commercial execution (design partner scheduled → invoice → payment → portal access → roadmap review)
         ↓
-5. Restore drill against migration 0191 (evidence file)
-        ↓
-6. L14 commercial execution (design partner scheduled → invoice → payment → portal access → roadmap review)
-        ↓
-   CUSTOMER-ONE VALIDATED → FIRST PAID CUSTOMER
+     CUSTOMER-ONE VALIDATED → FIRST PAID CUSTOMER
 ```
 
-### $0 remaining engineering work
+### $0 remaining engineering work (can proceed in parallel with the trust ceremony)
 
-- P1-CR002-TRANSPORT (3rd critical-path step): ~4–8h engineering; ~200 LOC + 1 migration + tests; zero infrastructure cost
-- P2-CR002-QA-SoD tightening (optional): enforce different-person rule for API-key path too, if a compliance_reviewer role can be minted for the first client
+- GOV-DELIVERY-TRANSPORT-001 closure (§7.D): ~4–8h engineering; ~200 LOC + 1 migration + tests; zero infrastructure cost
+- CUSTOMER-ZERO-ACCEPT-001 PREPARATION: branch reconciliation of `test/customer-zero-accept-001` (currently 13 commits behind); current-schema restore drill at migration 0191; runner wiring for trust-anchor injection
+- P2-CR002-QA-SoD playbook mandate (§15, item 4): document distinct-human-QA requirement in `docs/operators/FIRST_CLIENT_PLAYBOOK.md`
 - P2-CR002-SCOPE report addendum: manual PDF cover for first client; codified in playbook
 - P2-CR002-ROADMAP-DRIFT: single YAML+MD PR to reconcile roadmap authority
 - P2-CR002-BACKUP: run drill; retain evidence file
 - P2-CR002-EVIDENCE-ECHO / EXPORT-TENANT: documented workaround in playbook
 
-### Paid-infrastructure requirements
+### Paid-infrastructure requirements (`EXACT_LIVE_PRICE=NOT_PROVEN`)
 
-- **HCP Vault Dedicated Essentials/Small** — approximately $0.03/hr (~$22/mo) plus HVN + minimal CloudWatch charges
-- **AWS CloudWatch audit stream** — <$5/mo at bounded log volume
-- **Total incremental cost to close P1-CR002-TRUST:** <$30/mo recurring + one-time ceremony cost
+The prior audit revision stated "HCP Vault Dedicated Essentials/Small — approximately $0.03/hr (~$22/mo)". That figure could not be reproduced from any current HashiCorp source and is inconsistent with third-party pricing summaries observed during this audit. It is retracted and re-classified as `NOT_PROVEN`.
+
+- **PRODUCT:** HCP Vault Dedicated
+- **TIER (per `frostgate-infra/hcp_cluster.tf` + `variables.tf`):** `standard_small` (this is the smallest **production-grade** tier; `dev` and (formerly) `starter_small` are non-production. The IaC comment explicitly notes `starter_small` was disabled in hcp provider `v0.102.0`.)
+- **CLUSTER HOURLY RATE:** `NOT_PROVEN` from this audit. Third-party summaries (envmanager.com, infisical.com, costbench.com) cite Standard tier ranges of approximately $1.15k–$5.5k/month for the cluster fee depending on size, with `standard_small` at the low end. These are historical / third-party figures and MUST be re-verified against `https://portal.cloud.hashicorp.com/` before provisioning.
+- **CLIENT BILLING MODEL:** HCP Vault Standard tier applies a per-Vault-client monthly fee in addition to the cluster hourly rate. Third-party summaries cite figures around $70–$115/client/month. `NOT_PROVEN` from this audit; verify at portal.
+- **ESTIMATED CLIENT COUNT for first paid engagement:** `0` for FrostGate operator use during the ceremony (three AppRoles authenticate but they are FrostGate-internal roles, not customer clients per HCP's billing definition — this requires operator confirmation at the HCP portal). First paid customer adds an operational workload against the Vault cluster whose client count depends on runtime behavior — `NOT_PROVEN` here.
+- **CREDITS:** `NOT_PROVEN` (cannot verify without HCP account access)
+- **8-HOUR COST:** `NOT_PROVEN`
+- **12-HOUR COST:** `NOT_PROVEN`
+- **24-HOUR COST:** `NOT_PROVEN`
+- **30-DAY COST:** `NOT_PROVEN`
+- **AWS CloudWatch audit stream:** small at bounded log volume; not separately priced here (`NOT_PROVEN`)
+- **HVN:** no direct line-item charge per HashiCorp docs; billed through the Vault cluster
+- **Source of historical estimate:** the prior audit's "$22/mo" figure — treated as a **historical estimate to be re-verified at HCP portal before provisioning**, not as a load-bearing budget figure. Do NOT budget from this audit; the founder-operator must retrieve a live quote from `https://portal.cloud.hashicorp.com/` and update the ceremony CHECKPOINT with the actual hourly + per-client rates before running `terraform apply`.
 - **Railway (production DB):** already provisioned (per audit references); not audited here
 - **Stripe:** ready for L14 (documented as an L14 task, not a blocker)
+
+**Explicit cost checkpoint gate:** Before any `terraform apply` in `frostgate-infra`, the operator MUST record (a) the exact hourly cluster rate quoted by HCP portal for `standard_small` in AWS us-east-1, (b) the exact per-client monthly fee, and (c) the projected first-30-day burn, in a signed pre-provisioning artifact under `docs/governance/ceremony/`. This audit does not authorize any spend and does not assert a specific dollar figure.
 
 ### Operational ceremony (non-code)
 
@@ -511,9 +559,15 @@ Strict `codex_gates.sh` was NOT run — this is a read-only audit and PERF-GATES
 
 **`NOT_READY_BOUNDED_BLOCKERS`**
 
-FrostGate has no P0 blockers and no structural (architectural) blockers. The three P1 items are all bounded — trust ceremony (operational), acceptance run (operational), and transport completion (~1 day of engineering). Total time-to-ready is estimated 3–5 working days assuming HCP Vault provisioning completes without delay. No customer contract should be executed for delivery until the three P1 items close; contracting itself may proceed under the L14 commercial track if the founder-operator wishes.
+FrostGate has no P0 blockers and no structural (architectural) blockers. The three P1 items are all bounded:
 
-**Explicit statement:** No production behavior was changed by this audit. No production secrets were read or written. No infrastructure was applied. No preserved worktree was touched. No existing test, invariant, authority, or gate was weakened. The only writes were this audit document at `docs/audits/client_readiness_002_first_paid_client.md` and (if required by policy) an entry in `docs/ai/PR_FIX_LOG.md`.
+1. `CUSTOMER-ZERO-TRUST-001` — operator ceremony. `HCP_REQUIRED` (cost is `EXACT_LIVE_PRICE=NOT_PROVEN`; retrieve live quote before provisioning).
+2. `CUSTOMER-ZERO-ACCEPT-001` — split into PREPARATION ($0, unblocked, can start immediately) and COMPLETION (blocked on P1-1).
+3. `GOV-DELIVERY-TRANSPORT-001` — ~4–8h of engineering; unblocked; can proceed in parallel with the trust ceremony.
+
+Total wall-clock time-to-ready depends on how quickly the operator can complete the HCP ceremony after provisioning; P1-2 PREPARATION and P1-3 can be sequenced in parallel to remove them from the critical path. No customer contract should be executed for delivery until all three P1 items close; contracting itself may proceed under the L14 commercial track if the founder-operator wishes.
+
+**Explicit statement:** No production behavior was changed by this audit. No production secrets were read or written. No infrastructure was applied. No preserved worktree was touched. No existing test, invariant, authority, or gate was weakened. The only writes are (a) this audit document at `docs/audits/client_readiness_002_first_paid_client.md` and (b) if required by policy, an entry in `docs/ai/PR_FIX_LOG.md`.
 
 ---
 
