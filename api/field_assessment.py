@@ -13724,7 +13724,9 @@ def _resolve_delivery_recipient(
         )
 
     if recipient_type == "portal_grant":
-        row = db.execute(
+        # Try legacy portal_grants table first; canonical grants live in
+        # tenant_credentials and have no portal_grants row.
+        legacy_row = db.execute(
             select(PortalGrant).where(
                 PortalGrant.tenant_id == tenant_id,
                 PortalGrant.engagement_id == engagement_id,
@@ -13732,7 +13734,22 @@ def _resolve_delivery_recipient(
                 PortalGrant.status == "active",
             )
         ).scalar_one_or_none()
-        if row is None:
+        if legacy_row is not None:
+            return recipient_id
+
+        # Canonical path: grant_id == credential_id in tenant_credentials.
+        import api.credential_authority as _ca
+        from api.db import get_engine as _get_engine
+
+        try:
+            cred = _ca.get_credential(_get_engine(), recipient_id, tenant_id)
+            cred_meta = cred.metadata or {}
+            if (
+                cred.status != "active"
+                or cred_meta.get("engagement_id") != engagement_id
+            ):
+                raise _ca.CredentialNotFoundError(recipient_id)
+        except _ca.CredentialNotFoundError:
             raise HTTPException(
                 status_code=403,
                 detail=api_error(
@@ -13779,6 +13796,7 @@ def _resolve_delivery_recipient(
                   AND tenant_id = :tid
                   AND engagement_id = :eid
                   AND status NOT IN ('revoked', 'expired')
+                  AND (expires_at IS NULL OR expires_at > NOW())
                 LIMIT 1
                 """
             ),
@@ -14157,6 +14175,23 @@ def governed_delivery_route(
     ).scalar_one_or_none()
 
     if existing_req is not None:
+        # Binding conflict: same key reused for a different delivery → 409
+        if (
+            existing_req.engagement_id != engagement_id
+            or existing_req.report_id != report_id
+            or existing_req.report_version_id != rv.id
+            or existing_req.recipient_type != body.recipient_type
+            or existing_req.recipient_id != body.recipient_id
+            or existing_req.channel != body.channel
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "IDEMPOTENCY_KEY_CONFLICT",
+                    "The provided idempotency_key is already bound to a different "
+                    "delivery request. Use a unique key for each distinct delivery.",
+                ),
+            )
         # Return existing receipt
         existing_auth = db.execute(
             select(FaGovernedDeliveryAuthorization).where(
