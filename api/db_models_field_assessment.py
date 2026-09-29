@@ -44,6 +44,8 @@ Tables:
   fa_production_qual_requests    — PROD-QUAL-001: qualification initiation records (append-only)
   fa_production_attestations     — PROD-QUAL-001: individual gate attestations (append-only)
   fa_qualification_decisions     — PROD-QUAL-001: finalized qualification decisions (append-only)
+  fa_governed_delivery_requests  — GOV-DELIVERY-001: governed delivery request records (append-only)
+  fa_governed_delivery_authorizations — GOV-DELIVERY-001: governed delivery authorization records (append-only)
 """
 
 from __future__ import annotations
@@ -1035,4 +1037,144 @@ def _block_qualification_decision_update(mapper, connection, target):
 def _block_qualification_decision_delete(mapper, connection, target):
     raise RuntimeError(
         "fa_qualification_decisions is append-only — deletes are forbidden"
+    )
+
+
+class FaGovernedDeliveryRequest(Base):
+    """Append-only governed delivery request (GOV-DELIVERY-001).
+
+    One row per delivery operation. Bound to a specific qualification decision
+    and report version. The idempotency_key prevents duplicate delivery records
+    for the same (tenant, engagement, version, recipient, channel) tuple.
+    """
+
+    __tablename__ = "fa_governed_delivery_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_fingerprint: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    qualification_decision_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    requested_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    recipient_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    channel: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="direct_download"
+    )
+    idempotency_key: Mapped[str] = mapped_column(
+        String(128), nullable=False, default=""
+    )
+    requested_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_governed_delivery_requests_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_governed_delivery_requests_tenant_version",
+            "tenant_id",
+            "report_version_id",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "idempotency_key",
+            name="uq_fa_governed_delivery_requests_idempotency",
+        ),
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryRequest, "before_update")
+def _block_governed_delivery_request_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_requests is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryRequest, "before_delete")
+def _block_governed_delivery_request_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_requests is append-only — deletes are forbidden"
+    )
+
+
+class FaGovernedDeliveryAuthorization(Base):
+    """Append-only governed delivery authorization record (GOV-DELIVERY-001).
+
+    One row per delivery request, recording the authorization decision.
+    outcome is AUTHORIZED or REJECTED; AUTHORIZED means the request was
+    validated and authorized for transport. No transport has occurred.
+    The unique constraint on (tenant_id, delivery_request_id) enforces one
+    authorization per request.
+    """
+
+    __tablename__ = "fa_governed_delivery_authorizations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    delivery_request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_fingerprint: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    qualification_decision_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    recipient_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorized_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    rejection_reason_code: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    authorized_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_governed_delivery_authorizations_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_governed_delivery_authorizations_tenant_version",
+            "tenant_id",
+            "report_version_id",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "delivery_request_id",
+            name="uq_fa_governed_delivery_authorizations_request",
+        ),
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryAuthorization, "before_update")
+def _block_governed_delivery_authorization_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_authorizations is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryAuthorization, "before_delete")
+def _block_governed_delivery_authorization_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_authorizations is append-only — deletes are forbidden"
     )

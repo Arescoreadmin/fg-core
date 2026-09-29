@@ -173,6 +173,8 @@ from api.db_models_field_assessment import (
     FaEvidenceProvenance,
     FaEvidenceReportLink,
     FaFieldObservation,
+    FaGovernedDeliveryAuthorization,
+    FaGovernedDeliveryRequest,
     FaNormalizedFinding,
     FaProductionAttestation,
     FaProductionQualRequest,
@@ -200,6 +202,11 @@ from api.db_models_governance_report import GovernanceReportRecord
 from services.governance.report.qualification_authority import (
     VALID_GATE_NAMES,
     check_finalization_readiness,
+)
+from services.governance.report.governed_delivery_service import (
+    build_idempotency_key as _build_idempotency_key,
+    validate_recipient_type as _validate_recipient_type,
+    validate_channel as _validate_channel,
 )
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.promotion import promote_engagement_to_governance
@@ -8254,6 +8261,17 @@ def qualify_report_finalize_route(
             ),
         )
 
+    report_fingerprint_for_qual = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint_for_qual:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "A non-empty report fingerprint is required to issue a QUALIFIED "
+                "decision. Regenerate the report to produce a canonical fingerprint.",
+            ),
+        )
+
     dec_id = _uuid_module.uuid4().hex
     decision_row = FaQualificationDecision(
         id=dec_id,
@@ -8262,7 +8280,7 @@ def qualify_report_finalize_route(
         report_id=report_id,
         qual_request_id=qual_request_id,
         report_version_id=qual_request_row.report_version_id or "",
-        report_fingerprint=truth_gate.get("result_fingerprint") or "",
+        report_fingerprint=report_fingerprint_for_qual,
         decision="QUALIFIED",
         decided_by=actor,
         actor_type=_actor_type_from_context(actor_ctx),
@@ -12780,6 +12798,66 @@ class ReportDeliveryEventResponse(BaseModel):
     created_at: str
 
 
+class GovernedDeliveryBody(BaseModel):
+    """Optional governed delivery metadata.
+
+    When recipient_type and recipient_id are supplied, the delivery is bound
+    to a canonical recipient authority. When omitted, the delivery is recorded
+    as operator_direct (the operator asserts delivery on behalf of the client).
+    """
+
+    recipient_type: str | None = (
+        None  # 'portal_membership' | 'portal_invitation' | 'portal_grant' | 'operator_direct'
+    )
+    recipient_id: str | None = None  # canonical ID in the recipient_type authority
+    channel: str | None = None  # 'portal_grant' | 'direct_download'
+    idempotency_key: str | None = (
+        None  # caller-supplied; if absent, derived deterministically
+    )
+
+
+class GovernedDeliveryBodyFull(BaseModel):
+    """Governed delivery body for the standalone governed-delivery endpoint.
+
+    recipient_type is required here. report_version_id is required in the body
+    because it is not in the path for this endpoint.
+    """
+
+    report_version_id: str
+    recipient_type: str
+    recipient_id: str | None = None
+    channel: str = "direct_download"
+    idempotency_key: str | None = None
+
+
+class GovernedDeliveryReceipt(BaseModel):
+    """Immutable evidence of a governed delivery authorization."""
+
+    delivery_request_id: str
+    delivery_authorization_id: str
+    tenant_id: str
+    engagement_id: str
+    report_id: str
+    report_version_id: str
+    report_fingerprint: str
+    qualification_decision_id: str
+    recipient_type: str
+    recipient_id: str | None
+    channel: str
+    authorized_by: str
+    outcome: str
+    authorized_at: str
+    schema_version: str = "1.0"
+
+
+class GovernedDeliveryResponse(BaseModel):
+    """Response for governed delivery — version state plus immutable receipt."""
+
+    model_config = ConfigDict(from_attributes=True)
+    version: ReportVersionResponse
+    receipt: GovernedDeliveryReceipt
+
+
 class ReportManifest(BaseModel):
     manifest_version: str
     schema_version: str
@@ -13596,6 +13674,250 @@ def approve_report_version_route(
     return _report_version_to_response(rv)
 
 
+def _resolve_delivery_recipient(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    recipient_type: str,
+    recipient_id: str | None,
+) -> str | None:
+    """Validate recipient authority for delivery.
+
+    Returns a canonical identity string (the recipient_id) on success, or None
+    for operator_direct. Raises HTTPException 403 if the recipient is not found
+    or unauthorized. Raises HTTPException 422 if recipient_type is unknown.
+
+    CRITICAL: Always requires tenant_id + engagement_id in the lookup to prevent
+    cross-tenant oracle attacks.
+    """
+    errors = _validate_recipient_type(recipient_type)
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("INVALID_RECIPIENT_TYPE", errors[0]),
+        )
+
+    if recipient_type == "operator_direct":
+        # operator_direct declares that the authenticated operator takes direct
+        # custody of the artifact. Authority is proven by the require_permission
+        # ("report.generate") dependency — only tenant-scoped operator actors
+        # hold this permission. No external address is accepted.
+        if recipient_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "INVALID_RECIPIENT_ID",
+                    "operator_direct delivery does not accept recipient_id; "
+                    "the authenticated operator is the delivery target.",
+                ),
+            )
+        return None
+
+    if not recipient_id:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "RECIPIENT_ID_REQUIRED",
+                f"recipient_id is required for recipient_type '{recipient_type}'.",
+            ),
+        )
+
+    if recipient_type == "portal_grant":
+        # Try legacy portal_grants table first; canonical grants live in
+        # tenant_credentials and have no portal_grants row.
+        legacy_row = db.execute(
+            select(PortalGrant).where(
+                PortalGrant.tenant_id == tenant_id,
+                PortalGrant.engagement_id == engagement_id,
+                PortalGrant.id == recipient_id,
+                PortalGrant.status == "active",
+            )
+        ).scalar_one_or_none()
+        if legacy_row is not None:
+            return recipient_id
+
+        # Canonical path: grant_id == credential_id in tenant_credentials.
+        import api.credential_authority as _ca
+        from api.db import get_engine as _get_engine
+
+        try:
+            cred = _ca.get_credential(_get_engine(), recipient_id, tenant_id)
+            cred_meta = cred.metadata or {}
+            if (
+                cred.status != "active"
+                or cred_meta.get("engagement_id") != engagement_id
+            ):
+                raise _ca.CredentialNotFoundError(recipient_id)
+        except _ca.CredentialNotFoundError:
+            raise HTTPException(
+                status_code=403,
+                detail=api_error(
+                    "RECIPIENT_NOT_AUTHORIZED",
+                    "Portal grant not found or not authorized for this engagement.",
+                ),
+            )
+        return recipient_id
+
+    if recipient_type == "portal_membership":
+        from sqlalchemy import text as _text
+
+        row = db.execute(
+            _text(
+                """
+                SELECT id FROM portal_user_memberships
+                WHERE id = :rid
+                  AND tenant_id = :tid
+                  AND engagement_id = :eid
+                  AND active = true
+                LIMIT 1
+                """
+            ),
+            {"rid": recipient_id, "tid": tenant_id, "eid": engagement_id},
+        ).fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=403,
+                detail=api_error(
+                    "RECIPIENT_NOT_AUTHORIZED",
+                    "Portal membership not found or not authorized for this engagement.",
+                ),
+            )
+        return recipient_id
+
+    if recipient_type == "portal_invitation":
+        from sqlalchemy import text as _text
+
+        row = db.execute(
+            _text(
+                """
+                SELECT id FROM portal_user_invitations
+                WHERE id = :rid
+                  AND tenant_id = :tid
+                  AND engagement_id = :eid
+                  AND status NOT IN ('revoked', 'expired')
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                LIMIT 1
+                """
+            ),
+            {"rid": recipient_id, "tid": tenant_id, "eid": engagement_id},
+        ).fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=403,
+                detail=api_error(
+                    "RECIPIENT_NOT_AUTHORIZED",
+                    "Portal invitation not found or not authorized for this engagement.",
+                ),
+            )
+        return recipient_id
+
+    # Should not be reached given validate_recipient_type above
+    raise HTTPException(
+        status_code=422,
+        detail=api_error(
+            "INVALID_RECIPIENT_TYPE", f"Unhandled recipient_type '{recipient_type}'."
+        ),
+    )
+
+
+def _create_governed_delivery_records(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_id: str,
+    report_version_id: str,
+    report_fingerprint: str,
+    qualification_decision_id: str,
+    actor: str,
+    actor_type: str,
+    recipient_type: str,
+    recipient_id: str | None,
+    channel: str,
+    idempotency_key: str,
+) -> tuple[FaGovernedDeliveryRequest, FaGovernedDeliveryAuthorization]:
+    """Create FaGovernedDeliveryRequest + FaGovernedDeliveryAuthorization rows.
+
+    Caller is responsible for calling db.flush() / db.commit() after this.
+    Returns the (request_row, auth_row) tuple.
+    """
+    import uuid as _uuid_impl
+
+    now = utc_iso8601_z_now()
+    req_id = _uuid_impl.uuid4().hex
+    auth_id = _uuid_impl.uuid4().hex
+
+    req_row = FaGovernedDeliveryRequest(
+        id=req_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=report_version_id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        requested_by=actor,
+        actor_type=actor_type,
+        recipient_type=recipient_type,
+        recipient_id=recipient_id,
+        channel=channel,
+        idempotency_key=idempotency_key,
+        requested_at=now,
+        schema_version="1.0",
+    )
+    db.add(req_row)
+    db.flush()
+
+    auth_row = FaGovernedDeliveryAuthorization(
+        id=auth_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        delivery_request_id=req_id,
+        report_id=report_id,
+        report_version_id=report_version_id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        recipient_type=recipient_type,
+        recipient_id=recipient_id,
+        channel=channel,
+        authorized_by=actor,
+        actor_type=actor_type,
+        outcome="AUTHORIZED",
+        rejection_reason_code=None,
+        authorized_at=now,
+        schema_version="1.0",
+    )
+    db.add(auth_row)
+    db.flush()
+
+    return req_row, auth_row
+
+
+def _load_qualification_decision(
+    db: Session,
+    *,
+    tenant_id: str,
+    report_id: str,
+    report_version_id: str,
+    report_fingerprint: str,
+) -> FaQualificationDecision | None:
+    """Return the QUALIFIED decision row for the given version and fingerprint, or None.
+
+    Exact fingerprint match is required. An empty or mismatched fingerprint returns
+    None, which causes the caller to reject the delivery with PRODUCTION_QUALIFICATION_BLOCKED.
+    """
+    decision = db.execute(
+        select(FaQualificationDecision).where(
+            FaQualificationDecision.tenant_id == tenant_id,
+            FaQualificationDecision.report_id == report_id,
+            FaQualificationDecision.report_version_id == report_version_id,
+            FaQualificationDecision.report_fingerprint == report_fingerprint,
+            FaQualificationDecision.decision == "QUALIFIED",
+        )
+    ).scalar_one_or_none()
+    return decision
+
+
 @router.post(
     "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/deliver",
     response_model=ReportVersionResponse,
@@ -13609,10 +13931,15 @@ def deliver_report_version_route(
     actor_ctx: ActorContext = Depends(require_permission("report.generate")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> ReportVersionResponse:
-    """Mark an approved version as delivered and stamp delivered_at."""
+    """Mark an approved version as delivered and stamp delivered_at.
+
+    Creates governed delivery records (operator_direct) as a side effect.
+    Backward-compatible: returns ReportVersionResponse unchanged.
+    """
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
     actor_role = actor_ctx.primary_role()
+    actor_type = _actor_type_from_context(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -13651,12 +13978,56 @@ def deliver_report_version_route(
         report_version_id=rv.id,
     )
 
+    # Resolve the qualification decision row for the delivery receipt
+    report_json = report_record.report_json or {}
+    truth_gate = report_json.get("result_truth_gate") or {}
+    report_fingerprint = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "Report fingerprint is required for governed delivery authorization.",
+            ),
+        )
+    qual_decision = _load_qualification_decision(
+        db,
+        tenant_id=tenant_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+    )
+    qualification_decision_id = qual_decision.id if qual_decision else ""
+
+    # Build idempotency key for operator_direct delivery
+    idempotency_key = _build_idempotency_key(
+        tenant_id, engagement_id, rv.id, None, "direct_download"
+    )
+
     rv.status = "delivered"
     rv.delivered_at = utc_iso8601_z_now()
     db.flush()
     _record_delivery_event(
         db, rv=rv, event_type="downloaded", actor=actor, actor_role=actor_role
     )
+
+    # Governed delivery side effect — operator_direct
+    _create_governed_delivery_records(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        actor=actor,
+        actor_type=actor_type,
+        recipient_type="operator_direct",
+        recipient_id=None,
+        channel="direct_download",
+        idempotency_key=idempotency_key,
+    )
+
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -13671,11 +14042,255 @@ def deliver_report_version_route(
         },
         entity_type="report_version",
         entity_id=rv.id,
-        actor_type=_actor_type_from_context(actor_ctx),
+        actor_type=actor_type,
     )
     db.commit()
     db.refresh(rv)
     return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/governed-delivery",
+    response_model=GovernedDeliveryResponse,
+    status_code=200,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def governed_delivery_route(
+    engagement_id: str,
+    report_id: str,
+    body: GovernedDeliveryBodyFull,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> GovernedDeliveryResponse:
+    """Governed client delivery — full receipt with recipient binding.
+
+    Transitions an approved version to 'delivered' (idempotent if already
+    delivered) and creates an immutable GovernedDeliveryReceipt. The receipt
+    binds the delivery to a canonical recipient authority and a specific
+    qualification decision.
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    actor_type = _actor_type_from_context(actor_ctx)
+    actor_role = actor_ctx.primary_role()
+
+    # Validate channel
+    channel_errors = _validate_channel(body.channel)
+    if channel_errors:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error("INVALID_CHANNEL", channel_errors[0]),
+        )
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=body.report_version_id,
+    )
+    report_record = _load_report_record(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+    )
+
+    if rv.status not in ("approved", "delivered"):
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                "Only approved (or already delivered) versions can be delivered.",
+            ),
+        )
+
+    # Validate recipient authority
+    _resolve_delivery_recipient(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        recipient_type=body.recipient_type,
+        recipient_id=body.recipient_id,
+    )
+
+    # Require qualification for all governed delivery
+    _require_production_qualified(
+        report_record.report_json or {},
+        db,
+        report_id=report_id,
+        tenant_id=tenant_id,
+        report_version_id=rv.id,
+    )
+
+    # Resolve fingerprint and qualification decision
+    report_json = report_record.report_json or {}
+    truth_gate = report_json.get("result_truth_gate") or {}
+    report_fingerprint = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "Report fingerprint is required for governed delivery authorization.",
+            ),
+        )
+    qual_decision = _load_qualification_decision(
+        db,
+        tenant_id=tenant_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+    )
+    qualification_decision_id = qual_decision.id if qual_decision else ""
+    if not qualification_decision_id:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "PRODUCTION_QUALIFICATION_BLOCKED",
+                "No QUALIFIED production qualification decision found for this "
+                "report version and fingerprint.",
+            ),
+        )
+
+    # Build idempotency key
+    idem_key = body.idempotency_key or _build_idempotency_key(
+        tenant_id, engagement_id, rv.id, body.recipient_id, body.channel
+    )
+
+    # Idempotency guard — return existing authorization for this idempotency key
+    existing_req = db.execute(
+        select(FaGovernedDeliveryRequest).where(
+            FaGovernedDeliveryRequest.tenant_id == tenant_id,
+            FaGovernedDeliveryRequest.idempotency_key == idem_key,
+        )
+    ).scalar_one_or_none()
+
+    if existing_req is not None:
+        # Binding conflict: same key reused for a different delivery → 409
+        if (
+            existing_req.engagement_id != engagement_id
+            or existing_req.report_id != report_id
+            or existing_req.report_version_id != rv.id
+            or existing_req.recipient_type != body.recipient_type
+            or existing_req.recipient_id != body.recipient_id
+            or existing_req.channel != body.channel
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "IDEMPOTENCY_KEY_CONFLICT",
+                    "The provided idempotency_key is already bound to a different "
+                    "delivery request. Use a unique key for each distinct delivery.",
+                ),
+            )
+        # Return existing receipt
+        existing_auth = db.execute(
+            select(FaGovernedDeliveryAuthorization).where(
+                FaGovernedDeliveryAuthorization.tenant_id == tenant_id,
+                FaGovernedDeliveryAuthorization.delivery_request_id == existing_req.id,
+            )
+        ).scalar_one_or_none()
+        if existing_auth is not None:
+            db.refresh(rv)
+            receipt = GovernedDeliveryReceipt(
+                delivery_request_id=existing_req.id,
+                delivery_authorization_id=existing_auth.id,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                report_id=report_id,
+                report_version_id=rv.id,
+                report_fingerprint=existing_req.report_fingerprint,
+                qualification_decision_id=existing_req.qualification_decision_id,
+                recipient_type=existing_req.recipient_type,
+                recipient_id=existing_req.recipient_id,
+                channel=existing_req.channel,
+                authorized_by=existing_auth.authorized_by,
+                outcome=existing_auth.outcome,
+                authorized_at=existing_auth.authorized_at,
+                schema_version="1.0",
+            )
+            return GovernedDeliveryResponse(
+                version=_report_version_to_response(rv),
+                receipt=receipt,
+            )
+
+    # Transition version to delivered if not already
+    if rv.status == "approved":
+        rv.status = "delivered"
+        rv.delivered_at = utc_iso8601_z_now()
+        db.flush()
+        _record_delivery_event(
+            db, rv=rv, event_type="downloaded", actor=actor, actor_role=actor_role
+        )
+
+    # Create governed delivery records
+    req_row, auth_row = _create_governed_delivery_records(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        actor=actor,
+        actor_type=actor_type,
+        recipient_type=body.recipient_type,
+        recipient_id=body.recipient_id,
+        channel=body.channel,
+        idempotency_key=idem_key,
+    )
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_governed_delivery",
+        actor=actor,
+        reason_code="REPORT_VERSION_GOVERNED_DELIVERY",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+            "recipient_type": body.recipient_type,
+            "channel": body.channel,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type=actor_type,
+    )
+    db.commit()
+    db.refresh(rv)
+
+    receipt = GovernedDeliveryReceipt(
+        delivery_request_id=req_row.id,
+        delivery_authorization_id=auth_row.id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        recipient_type=body.recipient_type,
+        recipient_id=body.recipient_id,
+        channel=body.channel,
+        authorized_by=actor,
+        outcome="AUTHORIZED",
+        authorized_at=auth_row.authorized_at,
+        schema_version="1.0",
+    )
+    return GovernedDeliveryResponse(
+        version=_report_version_to_response(rv),
+        receipt=receipt,
+    )
 
 
 @router.post(

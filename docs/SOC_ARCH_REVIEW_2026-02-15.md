@@ -4544,3 +4544,53 @@ checks passed; MCIM + SOC sync tests passed (24); `make soc-review-sync` passed;
 audit-document Markdown lint and diff check passed; the exact CI Guard command
 `make fg-fast-full` passed with 496 passed and 2 skipped. No production
 qualification state was created and no delivery gate was bypassed.
+
+## 2026-09-29 — SOC-HIGH-002 — GOV-DELIVERY-001 canonical governed client delivery authority
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (critical CI metadata:
+`tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`,
+`tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`,
+`tools/ci/topology.sha256`).
+
+**Change:** Added GOV-DELIVERY-001 — canonical governed client delivery authority.
+New elements:
+
+- `migrations/postgres/0191_governed_delivery_authority.sql`: two new append-only,
+  tenant-RLS-protected tables (`fa_governed_delivery_requests`,
+  `fa_governed_delivery_attempts`). Both tables use `append_only_guard()` triggers
+  (no UPDATE, no DELETE). Tenant isolation enforced at the DB layer.
+- `api/db_models_field_assessment.py`: two new ORM models with SA `before_update` /
+  `before_delete` guards; no existing model mutated.
+- `services/governance/report/governed_delivery_service.py`: new pure-stateless
+  validation module; no HTTP imports, no DB writes.
+- `api/field_assessment.py`: new `POST /field-assessment/engagements/{eid}/reports/{rid}/governed-delivery`
+  endpoint returning `GovernedDeliveryResponse` (version + immutable receipt);
+  existing `deliver_report_version_route` extended with operator-direct governed
+  delivery records as a backward-compatible side effect (response type unchanged).
+- `tests/test_governed_delivery.py`: 19 adversarial tests covering happy path,
+  state machine, recipient authority, idempotency, artifact binding, and tenant
+  isolation.
+- Generated CI artifacts: `tools/ci/route_inventory.json`,
+  `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`,
+  `tools/ci/topology.sha256`, `tools/ci/contract_routes.json` — regenerated via
+  `make route-inventory-generate` and `scripts/refresh_contract_authority.py`.
+
+**Security review:** The new endpoint is governed by `governance:write` scope +
+`report.generate` permission — the same authority as the existing delivery route.
+Recipient authority is validated against canonical stored relationships
+(`portal_grants`, `portal_user_memberships`, `portal_user_invitations`) scoped by
+both `tenant_id` AND `engagement_id` before any delivery record is written; a
+cross-tenant `recipient_id` is invisible and returns a uniform 403, providing no
+existence oracle. Idempotency uses a deterministic SHA-256 key over
+`(tenant_id, engagement_id, report_version_id, recipient_id, channel)`; the DB
+partial unique index on DELIVERED outcomes provides concurrency safety at the
+DB layer. The qualification revalidation path reuses the existing
+`_require_production_qualified` gate — no qualification logic was duplicated.
+The delivery receipt is append-only and cannot be mutated post-creation. No
+credential, secret, migration backfill, or prior delivery state was altered.
+
+**Validation:** `tests/test_governed_delivery.py` 19/19 passed;
+`tests/test_report_delivery.py` 19/19 passed (no regressions);
+`tests/test_production_qualification.py` 30/30 passed; Ruff clean; mypy clean.
+`make fg-fast` gates passed after `make route-inventory-generate` and
+`scripts/refresh_contract_authority.py`.
