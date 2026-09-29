@@ -149,19 +149,45 @@ def _bootstrap_approved_version(
     return eid, rid, vid
 
 
+def _get_report_fingerprint(rid: str) -> str:
+    """Read the canonical result_fingerprint from the report's truth_gate."""
+    from api.db import get_sessionmaker
+    from api.db_models_governance_report import GovernanceReportRecord
+    from sqlalchemy import select as _sel
+
+    sm = get_sessionmaker()()
+    try:
+        record = sm.execute(
+            _sel(GovernanceReportRecord).where(GovernanceReportRecord.id == rid)
+        ).scalar_one()
+        truth_gate = (record.report_json or {}).get("result_truth_gate") or {}
+        fp = truth_gate.get("result_fingerprint") or ""
+        assert fp, f"Report {rid} has no result_fingerprint in truth_gate"
+        return fp
+    finally:
+        sm.close()
+
+
 def _inject_qualification(
     tenant_id: str,
     eid: str,
     rid: str,
     vid: str,
-    report_fingerprint: str = "",
+    report_fingerprint: str | None = None,
 ) -> str:
-    """Directly inject a QUALIFIED decision row. Returns qualification_decision_id."""
+    """Directly inject a QUALIFIED decision row. Returns qualification_decision_id.
+
+    When report_fingerprint is None (default), reads the real fingerprint from the
+    report's truth_gate so that the exact-match delivery gate passes.
+    """
     from api.db import get_sessionmaker
     from api.db_models_field_assessment import (
         FaProductionQualRequest,
         FaQualificationDecision,
     )
+
+    if report_fingerprint is None:
+        report_fingerprint = _get_report_fingerprint(rid)
 
     sm = get_sessionmaker()()
     try:
@@ -202,7 +228,11 @@ def _inject_qualification(
 
 
 def _monkeypatch_require_qualified(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Patch _require_production_qualified to bypass truth gate check."""
+    """Patch _require_production_qualified to bypass truth gate check.
+
+    Still validates that a QUALIFIED decision exists with exact fingerprint binding
+    so that fingerprint-enforcement tests work correctly.
+    """
 
     def _patched(report_json, db, *, report_id, tenant_id, report_version_id):
         from sqlalchemy import select as _select
@@ -210,11 +240,14 @@ def _monkeypatch_require_qualified(monkeypatch: pytest.MonkeyPatch) -> None:
         from fastapi import HTTPException
         from api.error_contracts import api_error
 
+        truth_gate = (report_json or {}).get("result_truth_gate") or {}
+        fp = truth_gate.get("result_fingerprint") or ""
         decision = db.execute(
             _select(_FQD).where(
                 _FQD.tenant_id == tenant_id,
                 _FQD.report_id == report_id,
                 _FQD.report_version_id == report_version_id,
+                _FQD.report_fingerprint == fp,
                 _FQD.decision == "QUALIFIED",
             )
         ).scalar_one_or_none()
@@ -279,7 +312,7 @@ def test_a1_governed_delivery_operator_direct_returns_receipt(
     assert "receipt" in data
     assert data["version"]["status"] == "delivered"
     receipt = data["receipt"]
-    assert receipt["outcome"] == "DELIVERED"
+    assert receipt["outcome"] == "AUTHORIZED"
     assert receipt["recipient_type"] == "operator_direct"
     assert receipt["recipient_id"] is None
     assert receipt["channel"] == "direct_download"
@@ -288,9 +321,9 @@ def test_a1_governed_delivery_operator_direct_returns_receipt(
     assert receipt["engagement_id"] == eid
     assert receipt["report_id"] == rid
     assert receipt["delivery_request_id"]
-    assert receipt["delivery_attempt_id"]
-    assert receipt["attempted_by"]
-    assert receipt["attempted_at"]
+    assert receipt["delivery_authorization_id"]
+    assert receipt["authorized_by"]
+    assert receipt["authorized_at"]
     assert receipt["schema_version"] == "1.0"
 
 
@@ -339,7 +372,7 @@ def test_a2_governed_delivery_with_portal_grant_recipient(
     assert receipt["recipient_type"] == "portal_grant"
     assert receipt["recipient_id"] == grant_id
     assert receipt["channel"] == "portal_grant"
-    assert receipt["outcome"] == "DELIVERED"
+    assert receipt["outcome"] == "AUTHORIZED"
 
 
 def test_a3_governed_delivery_receipt_fingerprint_and_qual_id(
@@ -347,7 +380,7 @@ def test_a3_governed_delivery_receipt_fingerprint_and_qual_id(
 ) -> None:
     """Receipt records qualification_decision_id when decision exists."""
     eid, rid, vid = _bootstrap_approved_version(client)
-    dec_id = _inject_qualification(_TENANT_A, eid, rid, vid, report_fingerprint="")
+    dec_id = _inject_qualification(_TENANT_A, eid, rid, vid)
     _monkeypatch_require_qualified(monkeypatch)
 
     resp = _governed_delivery(client, eid, rid, vid)
@@ -553,9 +586,11 @@ def test_d1_governed_delivery_idempotency_same_key_no_duplicate(
     assert resp2.status_code == 200, resp2.text
     receipt2 = resp2.json()["receipt"]
 
-    # Same request + attempt IDs — no duplicate created
+    # Same request + authorization IDs — no duplicate created
     assert receipt1["delivery_request_id"] == receipt2["delivery_request_id"]
-    assert receipt1["delivery_attempt_id"] == receipt2["delivery_attempt_id"]
+    assert (
+        receipt1["delivery_authorization_id"] == receipt2["delivery_authorization_id"]
+    )
 
     # Exactly one row with this idempotency key
     sm = get_sessionmaker()()
@@ -619,14 +654,16 @@ def test_e1_governed_delivery_receipt_contains_fingerprint(
 ) -> None:
     """Delivered receipt records report_fingerprint from qualification decision."""
     eid, rid, vid = _bootstrap_approved_version(client)
-    _inject_qualification(_TENANT_A, eid, rid, vid, report_fingerprint="")
+    _inject_qualification(_TENANT_A, eid, rid, vid)
     _monkeypatch_require_qualified(monkeypatch)
 
     resp = _governed_delivery(client, eid, rid, vid)
     assert resp.status_code == 200, resp.text
     receipt = resp.json()["receipt"]
-    # report_fingerprint is a string (may be empty for test injection with empty fp)
     assert "report_fingerprint" in receipt
+    assert receipt[
+        "report_fingerprint"
+    ]  # must be non-empty with exact-match enforcement
 
 
 def test_e2_governed_delivery_receipt_contains_qualification_id(
@@ -643,13 +680,13 @@ def test_e2_governed_delivery_receipt_contains_qualification_id(
     assert receipt["qualification_decision_id"] == dec_id
 
 
-def test_e3_governed_delivery_attempt_stored_in_db(
+def test_e3_governed_delivery_authorization_stored_in_db(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """FaGovernedDeliveryAttempt row is persisted in the DB after delivery."""
+    """FaGovernedDeliveryAuthorization row is persisted in the DB after delivery."""
     from api.db import get_sessionmaker
     from sqlalchemy import select as _select
-    from api.db_models_field_assessment import FaGovernedDeliveryAttempt
+    from api.db_models_field_assessment import FaGovernedDeliveryAuthorization
 
     eid, rid, vid = _bootstrap_approved_version(client)
     _inject_qualification(_TENANT_A, eid, rid, vid)
@@ -658,19 +695,19 @@ def test_e3_governed_delivery_attempt_stored_in_db(
     resp = _governed_delivery(client, eid, rid, vid)
     assert resp.status_code == 200, resp.text
     receipt = resp.json()["receipt"]
-    attempt_id = receipt["delivery_attempt_id"]
+    authorization_id = receipt["delivery_authorization_id"]
 
     sm = get_sessionmaker()()
     try:
         row = sm.execute(
-            _select(FaGovernedDeliveryAttempt).where(
-                FaGovernedDeliveryAttempt.id == attempt_id,
+            _select(FaGovernedDeliveryAuthorization).where(
+                FaGovernedDeliveryAuthorization.id == authorization_id,
             )
         ).scalar_one_or_none()
         assert row is not None
         assert row.tenant_id == _TENANT_A
         assert row.report_version_id == vid
-        assert row.outcome == "DELIVERED"
+        assert row.outcome == "AUTHORIZED"
     finally:
         sm.close()
 
@@ -731,3 +768,207 @@ def test_f3_governed_delivery_tenant_b_cannot_see_tenant_a_qualification(
     resp = _governed_delivery(client_b, eid_b, rid_b, vid_b)
     # Tenant B cannot use tenant A's qualification
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Category E (extended) — fingerprint enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_e4_empty_qualification_fingerprint_blocked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qualification injected with empty fingerprint cannot authorize delivery.
+
+    The delivery route extracts the real fingerprint from the report's truth_gate
+    and looks up QUALIFIED by exact match. A qualification row with empty fingerprint
+    does not match → 422 (no QUALIFIED decision found).
+    """
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid, report_fingerprint="")
+    _monkeypatch_require_qualified(monkeypatch)
+
+    resp = _governed_delivery(client, eid, rid, vid)
+    assert resp.status_code == 422, resp.text
+
+
+def test_e5_empty_report_fingerprint_blocked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report whose truth_gate has an empty fingerprint cannot be delivered.
+
+    The delivery route fails closed with MISSING_REPORT_FINGERPRINT before
+    any qualification lookup when the report's canonical fingerprint is absent.
+    """
+    from api.db import get_sessionmaker
+    from api.db_models_governance_report import GovernanceReportRecord
+    from sqlalchemy import select as _sel
+    import copy
+
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    # Overwrite the report's truth_gate fingerprint with empty string
+    sm = get_sessionmaker()()
+    try:
+        record = sm.execute(
+            _sel(GovernanceReportRecord).where(GovernanceReportRecord.id == rid)
+        ).scalar_one()
+        patched_json = copy.deepcopy(record.report_json or {})
+        if "result_truth_gate" in patched_json:
+            patched_json["result_truth_gate"]["result_fingerprint"] = ""
+        record.report_json = patched_json
+        sm.commit()
+    finally:
+        sm.close()
+
+    _inject_qualification(_TENANT_A, eid, rid, vid, report_fingerprint="")
+
+    resp = _governed_delivery(client, eid, rid, vid)
+    assert resp.status_code == 422, resp.text
+    assert "FINGERPRINT" in _err(resp).upper() or "QUALIFICATION" in _err(resp).upper()
+
+
+def test_e6_fingerprint_mismatch_blocked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qualification with wrong fingerprint cannot authorize delivery.
+
+    The report's real fingerprint does not match the qualification row's fingerprint.
+    _load_qualification_decision finds no exact match → 422.
+    """
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid, report_fingerprint="deadbeef" * 8)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    resp = _governed_delivery(client, eid, rid, vid)
+    assert resp.status_code == 422, resp.text
+
+
+def test_e7_exact_fingerprint_match_authorized(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Correct non-empty fingerprint produces AUTHORIZED outcome."""
+    eid, rid, vid = _bootstrap_approved_version(client)
+    dec_id = _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    resp = _governed_delivery(client, eid, rid, vid)
+    assert resp.status_code == 200, resp.text
+    receipt = resp.json()["receipt"]
+    assert receipt["outcome"] == "AUTHORIZED"
+    assert receipt["qualification_decision_id"] == dec_id
+    fp = _get_report_fingerprint(rid)
+    assert receipt["report_fingerprint"] == fp
+
+
+# ---------------------------------------------------------------------------
+# Category C (extended) — recipient authority
+# ---------------------------------------------------------------------------
+
+
+def test_c6_operator_direct_rejects_recipient_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """operator_direct with a recipient_id → 422.
+
+    operator_direct takes no external recipient; a supplied recipient_id
+    would allow caller-controlled address injection.
+    """
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    body = {
+        "report_version_id": vid,
+        "recipient_type": "operator_direct",
+        "recipient_id": "attacker@example.com",
+        "channel": "direct_download",
+    }
+    resp = client.post(
+        f"/field-assessment/engagements/{eid}/reports/{rid}/governed-delivery",
+        json=body,
+    )
+    assert resp.status_code == 422
+
+
+def test_c7_revoked_portal_grant_blocked(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """portal_grant with status='revoked' cannot authorize delivery → 403."""
+    from api.db import get_sessionmaker
+    from api.db_models_portal import PortalGrant
+
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    sm = get_sessionmaker()()
+    try:
+        grant_id = uuid.uuid4().hex
+        grant = PortalGrant(
+            id=grant_id,
+            tenant_id=_TENANT_A,
+            client_id="revoked-corp",
+            engagement_id=eid,
+            grant_hash="revokedhash",
+            created_by="test-actor",
+            created_at="2026-09-24T00:00:00Z",
+            expires_at="2027-09-24T00:00:00Z",
+            status="revoked",
+        )
+        sm.add(grant)
+        sm.commit()
+    finally:
+        sm.close()
+
+    resp = _governed_delivery(
+        client,
+        eid,
+        rid,
+        vid,
+        recipient_type="portal_grant",
+        recipient_id=grant_id,
+        channel="portal_grant",
+    )
+    assert resp.status_code in (403, 404)
+
+
+# ---------------------------------------------------------------------------
+# Category D (extended) — delivery authorization is not delivery
+# ---------------------------------------------------------------------------
+
+
+def test_d3_outcome_is_authorized_not_delivered(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The authorization record stores AUTHORIZED, never DELIVERED.
+
+    Confirms that GOV-DELIVERY-001 records authority proof, not delivery fact.
+    The system must not claim DELIVERED without evidence a transport boundary
+    was crossed.
+    """
+    from api.db import get_sessionmaker
+    from sqlalchemy import select as _sel
+    from api.db_models_field_assessment import FaGovernedDeliveryAuthorization
+
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    resp = _governed_delivery(client, eid, rid, vid)
+    assert resp.status_code == 200, resp.text
+    auth_id = resp.json()["receipt"]["delivery_authorization_id"]
+
+    sm = get_sessionmaker()()
+    try:
+        row = sm.execute(
+            _sel(FaGovernedDeliveryAuthorization).where(
+                FaGovernedDeliveryAuthorization.id == auth_id
+            )
+        ).scalar_one_or_none()
+        assert row is not None
+        assert row.outcome == "AUTHORIZED"
+        assert row.outcome != "DELIVERED"
+    finally:
+        sm.close()

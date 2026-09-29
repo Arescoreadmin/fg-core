@@ -30,8 +30,7 @@ ALLOWED_CHANNELS: frozenset[str] = frozenset(
 
 ALLOWED_OUTCOMES: frozenset[str] = frozenset(
     {
-        "DELIVERED",
-        "FAILED",
+        "AUTHORIZED",
         "REJECTED",
     }
 )

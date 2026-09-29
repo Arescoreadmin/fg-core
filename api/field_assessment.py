@@ -173,7 +173,7 @@ from api.db_models_field_assessment import (
     FaEvidenceProvenance,
     FaEvidenceReportLink,
     FaFieldObservation,
-    FaGovernedDeliveryAttempt,
+    FaGovernedDeliveryAuthorization,
     FaGovernedDeliveryRequest,
     FaNormalizedFinding,
     FaProductionAttestation,
@@ -8261,6 +8261,17 @@ def qualify_report_finalize_route(
             ),
         )
 
+    report_fingerprint_for_qual = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint_for_qual:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "A non-empty report fingerprint is required to issue a QUALIFIED "
+                "decision. Regenerate the report to produce a canonical fingerprint.",
+            ),
+        )
+
     dec_id = _uuid_module.uuid4().hex
     decision_row = FaQualificationDecision(
         id=dec_id,
@@ -8269,7 +8280,7 @@ def qualify_report_finalize_route(
         report_id=report_id,
         qual_request_id=qual_request_id,
         report_version_id=qual_request_row.report_version_id or "",
-        report_fingerprint=truth_gate.get("result_fingerprint") or "",
+        report_fingerprint=report_fingerprint_for_qual,
         decision="QUALIFIED",
         decided_by=actor,
         actor_type=_actor_type_from_context(actor_ctx),
@@ -12820,10 +12831,10 @@ class GovernedDeliveryBodyFull(BaseModel):
 
 
 class GovernedDeliveryReceipt(BaseModel):
-    """Immutable evidence of a governed delivery attempt."""
+    """Immutable evidence of a governed delivery authorization."""
 
     delivery_request_id: str
-    delivery_attempt_id: str
+    delivery_authorization_id: str
     tenant_id: str
     engagement_id: str
     report_id: str
@@ -12833,9 +12844,9 @@ class GovernedDeliveryReceipt(BaseModel):
     recipient_type: str
     recipient_id: str | None
     channel: str
-    attempted_by: str
+    authorized_by: str
     outcome: str
-    attempted_at: str
+    authorized_at: str
     schema_version: str = "1.0"
 
 
@@ -13688,6 +13699,19 @@ def _resolve_delivery_recipient(
         )
 
     if recipient_type == "operator_direct":
+        # operator_direct declares that the authenticated operator takes direct
+        # custody of the artifact. Authority is proven by the require_permission
+        # ("report.generate") dependency — only tenant-scoped operator actors
+        # hold this permission. No external address is accepted.
+        if recipient_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "INVALID_RECIPIENT_ID",
+                    "operator_direct delivery does not accept recipient_id; "
+                    "the authenticated operator is the delivery target.",
+                ),
+            )
         return None
 
     if not recipient_id:
@@ -13794,17 +13818,17 @@ def _create_governed_delivery_records(
     recipient_id: str | None,
     channel: str,
     idempotency_key: str,
-) -> tuple[FaGovernedDeliveryRequest, FaGovernedDeliveryAttempt]:
-    """Create FaGovernedDeliveryRequest + FaGovernedDeliveryAttempt rows.
+) -> tuple[FaGovernedDeliveryRequest, FaGovernedDeliveryAuthorization]:
+    """Create FaGovernedDeliveryRequest + FaGovernedDeliveryAuthorization rows.
 
     Caller is responsible for calling db.flush() / db.commit() after this.
-    Returns the (request_row, attempt_row) tuple.
+    Returns the (request_row, auth_row) tuple.
     """
     import uuid as _uuid_impl
 
     now = utc_iso8601_z_now()
     req_id = _uuid_impl.uuid4().hex
-    attempt_id = _uuid_impl.uuid4().hex
+    auth_id = _uuid_impl.uuid4().hex
 
     req_row = FaGovernedDeliveryRequest(
         id=req_id,
@@ -13826,8 +13850,8 @@ def _create_governed_delivery_records(
     db.add(req_row)
     db.flush()
 
-    attempt_row = FaGovernedDeliveryAttempt(
-        id=attempt_id,
+    auth_row = FaGovernedDeliveryAuthorization(
+        id=auth_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         delivery_request_id=req_id,
@@ -13838,18 +13862,17 @@ def _create_governed_delivery_records(
         recipient_type=recipient_type,
         recipient_id=recipient_id,
         channel=channel,
-        attempted_by=actor,
+        authorized_by=actor,
         actor_type=actor_type,
-        outcome="DELIVERED",
+        outcome="AUTHORIZED",
         rejection_reason_code=None,
-        provider_ref=None,
-        attempted_at=now,
+        authorized_at=now,
         schema_version="1.0",
     )
-    db.add(attempt_row)
+    db.add(auth_row)
     db.flush()
 
-    return req_row, attempt_row
+    return req_row, auth_row
 
 
 def _load_qualification_decision(
@@ -13860,14 +13883,11 @@ def _load_qualification_decision(
     report_version_id: str,
     report_fingerprint: str,
 ) -> FaQualificationDecision | None:
-    """Return the QUALIFIED decision row for the given version, or None.
+    """Return the QUALIFIED decision row for the given version and fingerprint, or None.
 
-    Called after _require_production_qualified already validated the binding.
-    First tries exact fingerprint match; falls back to version-only match so that
-    test injections (which use empty fingerprint) are found when the truth gate
-    is monkeypatched. In production the exact-match branch always succeeds.
+    Exact fingerprint match is required. An empty or mismatched fingerprint returns
+    None, which causes the caller to reject the delivery with PRODUCTION_QUALIFICATION_BLOCKED.
     """
-    # Exact match (production path)
     decision = db.execute(
         select(FaQualificationDecision).where(
             FaQualificationDecision.tenant_id == tenant_id,
@@ -13877,17 +13897,7 @@ def _load_qualification_decision(
             FaQualificationDecision.decision == "QUALIFIED",
         )
     ).scalar_one_or_none()
-    if decision is not None:
-        return decision
-    # Fallback: version-only match (covers injected test rows with empty fingerprint)
-    return db.execute(
-        select(FaQualificationDecision).where(
-            FaQualificationDecision.tenant_id == tenant_id,
-            FaQualificationDecision.report_id == report_id,
-            FaQualificationDecision.report_version_id == report_version_id,
-            FaQualificationDecision.decision == "QUALIFIED",
-        )
-    ).scalar_one_or_none()
+    return decision
 
 
 @router.post(
@@ -13954,6 +13964,14 @@ def deliver_report_version_route(
     report_json = report_record.report_json or {}
     truth_gate = report_json.get("result_truth_gate") or {}
     report_fingerprint = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "Report fingerprint is required for governed delivery authorization.",
+            ),
+        )
     qual_decision = _load_qualification_decision(
         db,
         tenant_id=tenant_id,
@@ -14099,6 +14117,14 @@ def governed_delivery_route(
     report_json = report_record.report_json or {}
     truth_gate = report_json.get("result_truth_gate") or {}
     report_fingerprint = truth_gate.get("result_fingerprint") or ""
+    if not report_fingerprint:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "Report fingerprint is required for governed delivery authorization.",
+            ),
+        )
     qual_decision = _load_qualification_decision(
         db,
         tenant_id=tenant_id,
@@ -14107,13 +14133,22 @@ def governed_delivery_route(
         report_fingerprint=report_fingerprint,
     )
     qualification_decision_id = qual_decision.id if qual_decision else ""
+    if not qualification_decision_id:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "PRODUCTION_QUALIFICATION_BLOCKED",
+                "No QUALIFIED production qualification decision found for this "
+                "report version and fingerprint.",
+            ),
+        )
 
     # Build idempotency key
     idem_key = body.idempotency_key or _build_idempotency_key(
         tenant_id, engagement_id, rv.id, body.recipient_id, body.channel
     )
 
-    # Idempotency guard — check for existing DELIVERED attempt with this key
+    # Idempotency guard — return existing authorization for this idempotency key
     existing_req = db.execute(
         select(FaGovernedDeliveryRequest).where(
             FaGovernedDeliveryRequest.tenant_id == tenant_id,
@@ -14123,17 +14158,17 @@ def governed_delivery_route(
 
     if existing_req is not None:
         # Return existing receipt
-        existing_attempt = db.execute(
-            select(FaGovernedDeliveryAttempt).where(
-                FaGovernedDeliveryAttempt.tenant_id == tenant_id,
-                FaGovernedDeliveryAttempt.delivery_request_id == existing_req.id,
+        existing_auth = db.execute(
+            select(FaGovernedDeliveryAuthorization).where(
+                FaGovernedDeliveryAuthorization.tenant_id == tenant_id,
+                FaGovernedDeliveryAuthorization.delivery_request_id == existing_req.id,
             )
         ).scalar_one_or_none()
-        if existing_attempt is not None:
+        if existing_auth is not None:
             db.refresh(rv)
             receipt = GovernedDeliveryReceipt(
                 delivery_request_id=existing_req.id,
-                delivery_attempt_id=existing_attempt.id,
+                delivery_authorization_id=existing_auth.id,
                 tenant_id=tenant_id,
                 engagement_id=engagement_id,
                 report_id=report_id,
@@ -14143,9 +14178,9 @@ def governed_delivery_route(
                 recipient_type=existing_req.recipient_type,
                 recipient_id=existing_req.recipient_id,
                 channel=existing_req.channel,
-                attempted_by=existing_attempt.attempted_by,
-                outcome=existing_attempt.outcome,
-                attempted_at=existing_attempt.attempted_at,
+                authorized_by=existing_auth.authorized_by,
+                outcome=existing_auth.outcome,
+                authorized_at=existing_auth.authorized_at,
                 schema_version="1.0",
             )
             return GovernedDeliveryResponse(
@@ -14163,7 +14198,7 @@ def governed_delivery_route(
         )
 
     # Create governed delivery records
-    req_row, attempt_row = _create_governed_delivery_records(
+    req_row, auth_row = _create_governed_delivery_records(
         db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
@@ -14202,7 +14237,7 @@ def governed_delivery_route(
 
     receipt = GovernedDeliveryReceipt(
         delivery_request_id=req_row.id,
-        delivery_attempt_id=attempt_row.id,
+        delivery_authorization_id=auth_row.id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         report_id=report_id,
@@ -14212,9 +14247,9 @@ def governed_delivery_route(
         recipient_type=body.recipient_type,
         recipient_id=body.recipient_id,
         channel=body.channel,
-        attempted_by=actor,
-        outcome="DELIVERED",
-        attempted_at=attempt_row.attempted_at,
+        authorized_by=actor,
+        outcome="AUTHORIZED",
+        authorized_at=auth_row.authorized_at,
         schema_version="1.0",
     )
     return GovernedDeliveryResponse(

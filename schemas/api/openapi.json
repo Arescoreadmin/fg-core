@@ -22521,22 +22521,22 @@
         "type": "object"
       },
       "GovernedDeliveryReceipt": {
-        "description": "Immutable evidence of a governed delivery attempt.",
+        "description": "Immutable evidence of a governed delivery authorization.",
         "properties": {
-          "attempted_at": {
-            "title": "Attempted At",
+          "authorized_at": {
+            "title": "Authorized At",
             "type": "string"
           },
-          "attempted_by": {
-            "title": "Attempted By",
+          "authorized_by": {
+            "title": "Authorized By",
             "type": "string"
           },
           "channel": {
             "title": "Channel",
             "type": "string"
           },
-          "delivery_attempt_id": {
-            "title": "Delivery Attempt Id",
+          "delivery_authorization_id": {
+            "title": "Delivery Authorization Id",
             "type": "string"
           },
           "delivery_request_id": {
@@ -22594,7 +22594,7 @@
         },
         "required": [
           "delivery_request_id",
-          "delivery_attempt_id",
+          "delivery_authorization_id",
           "tenant_id",
           "engagement_id",
           "report_id",
@@ -22604,9 +22604,9 @@
           "recipient_type",
           "recipient_id",
           "channel",
-          "attempted_by",
+          "authorized_by",
           "outcome",
-          "attempted_at"
+          "authorized_at"
         ],
         "title": "GovernedDeliveryReceipt",
         "type": "object"

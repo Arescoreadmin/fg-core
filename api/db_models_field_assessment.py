@@ -45,7 +45,7 @@ Tables:
   fa_production_attestations     — PROD-QUAL-001: individual gate attestations (append-only)
   fa_qualification_decisions     — PROD-QUAL-001: finalized qualification decisions (append-only)
   fa_governed_delivery_requests  — GOV-DELIVERY-001: governed delivery request records (append-only)
-  fa_governed_delivery_attempts  — GOV-DELIVERY-001: governed delivery attempt receipts (append-only)
+  fa_governed_delivery_authorizations — GOV-DELIVERY-001: governed delivery authorization records (append-only)
 """
 
 from __future__ import annotations
@@ -1109,16 +1109,17 @@ def _block_governed_delivery_request_delete(mapper, connection, target):
     )
 
 
-class FaGovernedDeliveryAttempt(Base):
-    """Append-only governed delivery attempt and receipt (GOV-DELIVERY-001).
+class FaGovernedDeliveryAuthorization(Base):
+    """Append-only governed delivery authorization record (GOV-DELIVERY-001).
 
-    One row per delivery request attempt. The unique constraint on
-    (tenant_id, delivery_request_id) enforces one attempt per request.
-    A partial unique index on DELIVERED outcomes prevents duplicate deliveries
-    to the same recipient for the same version via the same channel.
+    One row per delivery request, recording the authorization decision.
+    outcome is AUTHORIZED or REJECTED; AUTHORIZED means the request was
+    validated and authorized for transport. No transport has occurred.
+    The unique constraint on (tenant_id, delivery_request_id) enforces one
+    authorization per request.
     """
 
-    __tablename__ = "fa_governed_delivery_attempts"
+    __tablename__ = "fa_governed_delivery_authorizations"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -1135,46 +1136,45 @@ class FaGovernedDeliveryAttempt(Base):
     recipient_type: Mapped[str] = mapped_column(String(64), nullable=False)
     recipient_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     channel: Mapped[str] = mapped_column(String(64), nullable=False)
-    attempted_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    authorized_by: Mapped[str] = mapped_column(String(255), nullable=False)
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     rejection_reason_code: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
-    provider_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    attempted_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorized_at: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
 
     __table_args__ = (
         Index(
-            "ix_fa_governed_delivery_attempts_tenant_engagement",
+            "ix_fa_governed_delivery_authorizations_tenant_engagement",
             "tenant_id",
             "engagement_id",
         ),
         Index(
-            "ix_fa_governed_delivery_attempts_tenant_version",
+            "ix_fa_governed_delivery_authorizations_tenant_version",
             "tenant_id",
             "report_version_id",
         ),
         UniqueConstraint(
             "tenant_id",
             "delivery_request_id",
-            name="uq_fa_governed_delivery_attempts_request",
+            name="uq_fa_governed_delivery_authorizations_request",
         ),
     )
 
 
-@sa_event.listens_for(FaGovernedDeliveryAttempt, "before_update")
-def _block_governed_delivery_attempt_update(mapper, connection, target):
+@sa_event.listens_for(FaGovernedDeliveryAuthorization, "before_update")
+def _block_governed_delivery_authorization_update(mapper, connection, target):
     raise RuntimeError(
-        "fa_governed_delivery_attempts is append-only — updates are forbidden"
+        "fa_governed_delivery_authorizations is append-only — updates are forbidden"
     )
 
 
-@sa_event.listens_for(FaGovernedDeliveryAttempt, "before_delete")
-def _block_governed_delivery_attempt_delete(mapper, connection, target):
+@sa_event.listens_for(FaGovernedDeliveryAuthorization, "before_delete")
+def _block_governed_delivery_authorization_delete(mapper, connection, target):
     raise RuntimeError(
-        "fa_governed_delivery_attempts is append-only — deletes are forbidden"
+        "fa_governed_delivery_authorizations is append-only — deletes are forbidden"
     )
