@@ -43,6 +43,15 @@ CREATE INDEX IF NOT EXISTS ix_fa_governed_delivery_attempts_tenant_version
 CREATE INDEX IF NOT EXISTS ix_fa_governed_delivery_attempts_tenant_engagement
     ON fa_governed_delivery_attempts (tenant_id, engagement_id);
 
+-- Concurrency guard: at most one SUCCEEDED attempt per (tenant, authorization).
+-- Two concurrent /execute callers must not both write SUCCEEDED rows for the
+-- same authorization; the loser sees a unique-violation and is handled at the
+-- service layer as an idempotent success (existing receipt returned).
+-- Partial index because FAILED attempts may reoccur.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_fa_governed_delivery_attempts_succeeded
+    ON fa_governed_delivery_attempts (tenant_id, authorization_id)
+    WHERE outcome = 'SUCCEEDED';
+
 -- Tenant isolation via RLS
 ALTER TABLE fa_governed_delivery_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS fa_governed_delivery_attempts_tenant_isolation ON fa_governed_delivery_attempts;

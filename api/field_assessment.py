@@ -14648,6 +14648,13 @@ def governed_delivery_execute_route(
         )
 
     # 8. Persist SUCCEEDED attempt row.
+    #
+    # Concurrency: a UNIQUE partial index on
+    # (tenant_id, authorization_id) WHERE outcome = 'SUCCEEDED' enforces at
+    # most one SUCCEEDED attempt per authorization.  If a concurrent /execute
+    # writer beat us to it, IntegrityError is raised on flush; we roll back,
+    # re-read the existing SUCCEEDED row, and return it as an idempotent
+    # success. No 500, no duplicate delivered-status write.
     attempt_row = FaGovernedDeliveryAttempt(
         id=attempt_id,
         tenant_id=tenant_id,
@@ -14671,7 +14678,31 @@ def governed_delivery_execute_route(
         schema_version="1.0",
     )
     db.add(attempt_row)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = db.execute(
+            select(FaGovernedDeliveryAttempt).where(
+                FaGovernedDeliveryAttempt.tenant_id == tenant_id,
+                FaGovernedDeliveryAttempt.authorization_id == auth_row.id,
+                FaGovernedDeliveryAttempt.outcome == "SUCCEEDED",
+            )
+        ).scalar_one_or_none()
+        if winner is None:
+            # Constraint fired but no winning row visible — surface a 409 rather
+            # than a 500 so the caller can retry deterministically.
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "DELIVERY_ATTEMPT_CONFLICT",
+                    "A concurrent transport attempt is in progress for this "
+                    "authorization. Retry.",
+                ),
+            )
+        return _governed_delivery_attempt_to_receipt(
+            winner, delivery_request_id=req_row.id
+        )
 
     # 9. Only after the SUCCEEDED attempt row is written do we transition the
     # report version state to 'delivered'.
