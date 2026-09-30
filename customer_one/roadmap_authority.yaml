@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-09-29"
+authority_date: "2026-09-30"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,37 +51,59 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "GOV-DELIVERY-TRANSPORT-001"
-    title: "GOV-DELIVERY-TRANSPORT-001 — Bind governed authorization to real transport evidence"
-    role: "PREREQUISITE"
-    parent_objective: "FG_RESULT_TRUTH_GATE"
+  - id: "TRUST-BINDING-001"
+    title: "TRUST-BINDING-001 — Bind governance artifacts to canonical non-exportable trust authority"
+    role: "INTERNAL_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-ACCEPT-001"
     blocker_closed: >
-      Governed delivery authorization (GOV-DELIVERY-001) shipped an AUTHORIZED
-      record but no bound transport evidence. The report version could not move
-      through 'delivered' with any proof that the artifact actually left the
-      operator boundary. This work introduces the append-only transport-attempt
-      authority (fa_governed_delivery_attempts) that binds each attempt to the
-      exact (tenant, engagement, report, version, fingerprint, authorization)
-      tuple with SHA-256 over the served bytes, and gates the version status
-      transition on a SUCCEEDED attempt row.
+      CLIENT-READINESS-002 identified and current-main inspection at
+      302173ed (2026-09-30) confirmed: governance artifacts on the Customer-One
+      proof chain are not cryptographically bound to the canonical non-exportable
+      Vault Transit trust authority. (A) services/governance/report/signing.py:30
+      signs reports via FG_REPORT_SIGNING_KEY (env-var Ed25519 seed); the Vault
+      Transit adapter at services/cgin/key_management/vault_transit.py is not
+      referenced from signing.py, qualification_authority.py, or
+      governed_delivery_service.py. (B) FaQualificationDecision and
+      FaGovernedDeliveryAuthorization (api/db_models_field_assessment.py:978,1113)
+      have no signature, signing_key_id, or key_version columns; qualify_report_attest_route
+      records attested=body.attested as an unsigned boolean. (C) Therefore, even
+      after CUSTOMER-ZERO-TRUST-001 provisions the operational trust authority, all
+      three artifact types will continue to use the env-var key or carry no
+      cryptographic provenance. Trust infrastructure existing is not the same as
+      governance artifacts being cryptographically bound to it.
     freeze_law_justification: >
-      Customer-One cannot issue a defensible delivery to the first paying client
-      without append-only evidence that the qualified artifact actually left the
-      operator boundary. This is the smallest work that turns GOV-DELIVERY-001
-      from authorization-only into transport-bound delivery. Repair scope of
-      GOV-DELIVERY-001 delivery lifecycle.
+      CLIENT-READINESS-002 (PR #727) recorded this as P1-2. Current-main
+      inspection of signing.py, db_models_field_assessment.py, and
+      api/field_assessment.py at HEAD 302173ed reconfirms the gap. The
+      Customer-One first-client claim — "the exact governance artifact relied upon
+      was issued by the exact authorized trust authority and can be independently
+      verified" — cannot be satisfied under the current code. This is not platform
+      expansion, generalized PKI, a Trust Console, autonomous governance, or AGI
+      governance. It is the smallest bounded work that closes the composition gap
+      between the existing Vault Transit trust infrastructure and the existing
+      governance artifact issuance paths on the Customer-One proof chain. Code
+      implementation can proceed at $0 against the existing local/test Vault
+      boundary (PR #720); live production proof requires CUSTOMER-ZERO-TRUST-001
+      operational ceremony.
     status: NEXT
     work_class: "REPAIR"
     completion_evidence:
-      - "fa_governed_delivery_attempts table (append-only, RLS-enforced, unique-succeeded partial index)"
-      - "governed delivery /execute route binds authorization to artifact bytes SHA-256"
-      - "FaReportVersion.status='delivered' set only after SUCCEEDED attempt persists"
-      - "13 adversarial transport tests pass (T1-T13)"
+      - "report signing path invokes Vault Transit sign() for the identity trust role; FG_REPORT_SIGNING_KEY env-var path retired for production signing"
+      - "FaQualificationDecision persists signing_key_id, key_version, and vault_signature for each finalized decision"
+      - "FaGovernedDeliveryAuthorization persists signing_key_id, key_version, and vault_signature for each authorization"
+      - "TrustAnchor.verify() confirms round-trip signature validity for at least one qualification and one delivery authorization"
+      - "qualify_report_finalize_route produces a Vault-signed qualification decision row"
+      - "governed_delivery_route produces a Vault-signed authorization row"
+      - "migration adds signature columns to fa_qualification_decisions and fa_governed_delivery_authorizations"
+      - "adversarial tests prove that records without valid vault signatures are rejected at qualification and delivery boundaries"
     forbidden_scope:
-      - "generalized notification/messaging infrastructure"
-      - "multi-provider transport abstraction"
-      - "customer portal receipt confirmation (separate authority)"
-      - "portal_grant / portal_membership transport (returns 501; separate work item)"
+      - "CUSTOMER-ZERO-TRUST-001 operational ceremony or HCP provisioning"
+      - "CUSTOMER-ZERO-ACCEPT-001 execution or acceptance run"
+      - "new Vault trust roles beyond the three already defined in CUSTOMER-ZERO-TRUST-001"
+      - "generalized PKI, IAM, RBAC, or secrets-platform redesign"
+      - "Trust Console, audit dashboard, or governance product UI changes"
+      - "autonomous governance, AGI governance, or unrelated platform expansion"
+      - "migration content beyond signature columns for qualification and delivery authorization tables"
   - id: "CUSTOMER-ZERO-TRUST-001"
     title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
     role: "INTERNAL_PREREQUISITE"
@@ -119,7 +141,14 @@ next_sequence:
 blocked:
   - id: "CUSTOMER-ZERO-ACCEPT-001"
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
-    reason: "Open acceptance parent, blocked pending CUSTOMER-ZERO-TRUST-001 operational trust infrastructure; do not execute approval or runtime acceptance before that prerequisite closes."
+    reason: >
+      Open acceptance parent, blocked pending two open prerequisites:
+      (1) CUSTOMER-ZERO-TRUST-001 — no HCP Vault Dedicated cluster provisioned;
+      no artifacts/ evidence manifest; production trust ceremony not yet executed;
+      (2) TRUST-BINDING-001 — governance artifacts (report signatures,
+      qualification decisions, governed-delivery authorizations) not yet
+      cryptographically bound to the canonical Vault Transit trust authority.
+      Do not execute approval or runtime acceptance before both prerequisites close.
 
 deferred:
   - id: "RAG-RETRY"
@@ -270,10 +299,37 @@ completed:
       Governed delivery authorization now requires a QUALIFIED decision bound by
       exact (tenant, engagement, report, version, fingerprint) tuple, canonical
       operator authority, and immutable append-only authorization records.
-      Outcome is AUTHORIZED (authorization proved); DELIVERED requires a separate
-      transport authority not yet implemented. 26 adversarial tests pass (19 core
-      + 7 epistemic remediation); fg-fast 496/2; mypy clean. Transport layer and
-      operational acceptance remain OPEN.
+      Outcome is AUTHORIZED (authorization proved); transport evidence is
+      provided by GOV-DELIVERY-TRANSPORT-001 (#728 + #729). 26 adversarial tests
+      pass (19 core + 7 epistemic remediation); fg-fast 496/2; mypy clean.
+      Operational acceptance remains OPEN pending CUSTOMER-ZERO-ACCEPT-001.
+  - id: "GOV-DELIVERY-TRANSPORT-001"
+    title: "Governed Delivery Transport Authority"
+    prs: ["#728", "#729"]
+    merged_sha: "302173ed1ae809ce786bc720bc12e72ebd896f09"
+    note: >
+      PR #728 (31c35d68) introduced the governed delivery execution authority:
+      fa_governed_delivery_attempts append-only table (tenant RLS, unique-succeeded
+      partial index, append-only triggers), new /execute route that re-verifies
+      the full authorization binding, renders artifact bytes, SHA-256s the served
+      bytes, writes a SUCCEEDED attempt row, and only then transitions the report
+      version to 'delivered'. PR #729 (302173ed) repaired the HTTP boundary defect:
+      the /execute route now returns Response(content=artifact_bytes) so the exact
+      bytes hashed and recorded by the SUCCEEDED attempt are the bytes that cross
+      the operator boundary; headers are built before db.commit() so a serialization
+      failure rolls back the SUCCEEDED row rather than leaving the operator
+      permanently locked out. Merged-state validation: 44 focused transport tests
+      pass (T1-T18 transport + 26 base delivery); fg-fast 496/2; fg-security 1239/1;
+      fg-contract clean; mypy clean; git diff --check clean.
+      SCOPE BOUNDARY: this item proves operator-direct custody (operator_direct
+      recipient type only). The portal-recipient delivery paths
+      (portal_membership / portal_invitation / portal_grant) return 501 and
+      are separate scope; customer-boundary receipt evidence (fa_governed_delivery_attempts
+      row written by a customer-authenticated session) is an operational requirement
+      for CUSTOMER-ZERO-ACCEPT-001, not a completion criterion here. The legacy
+      export route (api/field_assessment.py:9700) is also outside this item's scope.
+      Work on those gaps proceeds under REPAIR classification and does not require
+      reopening this item.
   - id: "REVENUE-GATE-1"
     title: "Revenue Gate 1 — all 12 items cleared"
     prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]

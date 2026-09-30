@@ -92,6 +92,20 @@ class TestAuthorizedItems:
             result = _run_item(item)
             assert result.returncode == 1, (item, result.stderr)
 
+    def test_gov_delivery_transport_completed_blocked(self) -> None:
+        # GOV-DELIVERY-TRANSPORT-001 completed via #728 + #729 — must return COMPLETED
+        result = _run_item("GOV-DELIVERY-TRANSPORT-001")
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+        assert "#728" in result.stderr
+        assert "#729" in result.stderr
+
+    def test_trust_binding_001_authorized(self) -> None:
+        # TRUST-BINDING-001 is the evidence-backed next Customer-One critical-path item
+        result = _run_item("TRUST-BINDING-001")
+        assert result.returncode == 0, result.stderr
+        assert "AUTHORIZED" in result.stdout
+
     def test_repair_class_authorized(self) -> None:
         # REPAIR is a class-level authorization — always open, no item ID needed
         result = _run_class("REPAIR")
