@@ -219,6 +219,29 @@ class CORSConfig:
             "X-RateLimit-Limit",
             "X-RateLimit-Remaining",
             "X-RateLimit-Reset",
+            # Governed delivery transport (GOV-DELIVERY-TRANSPORT-001):
+            # the /execute route's body IS the artifact bytes, and the
+            # attempt/authorization/request identity metadata is projected
+            # via these X-FG-* headers. Browser JS clients cannot bind the
+            # received bytes to the SUCCEEDED attempt row unless these
+            # names are explicitly exposed here.
+            "x-fg-delivery-attempt-id",
+            "x-fg-delivery-authorization-id",
+            "x-fg-delivery-request-id",
+            "x-fg-tenant-id",
+            "x-fg-engagement-id",
+            "x-fg-report-id",
+            "x-fg-report-version-id",
+            "x-fg-report-fingerprint",
+            "x-fg-recipient-type",
+            "x-fg-channel",
+            "x-fg-transport-type",
+            "x-fg-artifact-sha256",
+            "x-fg-artifact-bytes",
+            "x-fg-attempted-by",
+            "x-fg-attempted-at",
+            "x-fg-outcome",
+            "x-fg-schema-version",
         ]
     )
     max_age: int = 600  # 10 minutes

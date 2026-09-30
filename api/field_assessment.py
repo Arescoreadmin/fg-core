@@ -14378,6 +14378,24 @@ def _governed_delivery_attempt_to_receipt(
     )
 
 
+def _ascii_safe_header(value: str) -> str:
+    """Encode an HTTP header value to ASCII, replacing non-encodable characters.
+
+    HTTP/1.1 header values are Latin-1 encoded and Starlette enforces this
+    when building the response. Actor subjects, especially OIDC ``sub`` claims,
+    may legitimately contain non-Latin-1 Unicode characters. Attempting to
+    place such a value in a response header raises ``UnicodeEncodeError`` and
+    yields a 500 — which would occur AFTER the SUCCEEDED attempt row is
+    committed, permanently locking the operator out of the artifact via a
+    subsequent ``DELIVERY_ALREADY_EXECUTED`` response.
+
+    Forcing an ASCII-safe projection here keeps the header envelope
+    transport-safe. Auditability is preserved via the persisted attempt row,
+    which stores the actor subject in its original Unicode form.
+    """
+    return (value or "").encode("ascii", errors="replace").decode("ascii")
+
+
 def _governed_delivery_attempt_to_headers(
     attempt: FaGovernedDeliveryAttempt,
     *,
@@ -14389,6 +14407,12 @@ def _governed_delivery_attempt_to_headers(
     bytes themselves — the metadata that used to live in the JSON receipt is
     surfaced through these headers so the operator can still bind the received
     bytes to their governing attempt-id/authorization-id/request-id.
+
+    Any header value that could carry non-ASCII input (notably
+    ``attempted_by`` — an OIDC subject — and ``transport_type``) is passed
+    through :func:`_ascii_safe_header` to guarantee the response can be
+    serialized. Fields that are UUID hex, SHA-256 hex, or integer strings are
+    already ASCII-safe by construction and do not need re-encoding.
     """
     return {
         "x-fg-delivery-attempt-id": attempt.id,
@@ -14399,12 +14423,12 @@ def _governed_delivery_attempt_to_headers(
         "x-fg-report-id": attempt.report_id,
         "x-fg-report-version-id": attempt.report_version_id,
         "x-fg-report-fingerprint": attempt.report_fingerprint,
-        "x-fg-recipient-type": attempt.recipient_type,
-        "x-fg-channel": attempt.channel,
-        "x-fg-transport-type": attempt.transport_type,
+        "x-fg-recipient-type": _ascii_safe_header(attempt.recipient_type),
+        "x-fg-channel": _ascii_safe_header(attempt.channel),
+        "x-fg-transport-type": _ascii_safe_header(attempt.transport_type),
         "x-fg-artifact-sha256": attempt.artifact_sha256 or "",
         "x-fg-artifact-bytes": str(attempt.artifact_bytes_length or 0),
-        "x-fg-attempted-by": attempt.attempted_by,
+        "x-fg-attempted-by": _ascii_safe_header(attempt.attempted_by),
         "x-fg-attempted-at": attempt.attempted_at,
         "x-fg-outcome": attempt.outcome,
         "x-fg-schema-version": "1.0",
@@ -14412,15 +14436,18 @@ def _governed_delivery_attempt_to_headers(
 
 
 def _governed_delivery_content_type_for_channel(channel: str) -> str:
-    """Return the correct HTTP ``Content-Type`` for an ``operator_direct`` transport.
+    """Return the HTTP ``Content-Type`` for an ``operator_direct`` transport.
 
-    Mirrors the branching in :func:`_render_operator_direct_artifact_bytes`:
-      - ``channel == 'pdf'`` → ``application/pdf``
-      - all other channels (``direct_download`` / ``portal_grant`` / …) →
-        ``application/json`` (canonical JSON serialization of the report).
+    Mirrors :func:`_render_operator_direct_artifact_bytes`, which produces a
+    canonical JSON serialization of the report record for every reachable
+    channel in :data:`services.governance.report.governed_delivery_service.ALLOWED_CHANNELS`
+    (``direct_download`` and ``portal_grant``). A previously advertised
+    ``application/pdf`` branch keyed on ``channel == 'pdf'`` was dead code —
+    ``'pdf'`` is not a valid channel — and is deliberately not represented
+    here. If PDF export is later reintroduced as a first-class channel,
+    both this helper and the OpenAPI ``content`` map on the ``/execute``
+    route must be updated together with the renderer.
     """
-    if channel == "pdf":
-        return "application/pdf"
     return "application/json"
 
 
@@ -14439,37 +14466,21 @@ def _render_operator_direct_artifact_bytes(
     channel == 'portal_grant' → the same JSON canonicalization for now;
     portal_grant surfaces the same artifact bytes at the transport boundary.
 
-    Raises RuntimeError if PDF export was requested but reportlab is missing.
+    PDF export is not currently reachable through governed delivery: no
+    ``'pdf'`` channel is present in
+    :data:`services.governance.report.governed_delivery_service.ALLOWED_CHANNELS`.
+    Reintroducing a PDF export path requires (1) adding ``'pdf'`` to
+    ``ALLOWED_CHANNELS``, (2) restoring an explicit branch here that
+    invokes ``export_pdf_bytes``, and (3) updating both the
+    ``/execute`` OpenAPI ``content`` map and
+    :func:`_governed_delivery_content_type_for_channel` in lockstep so
+    the advertised content-type matches the produced bytes.
     """
     import json as _json
 
     report_json = report_record.report_json or {}
-    if channel == "pdf":
-        from services.governance.report import (  # noqa: PLC0415
-            ExportUnavailableError as _ExportUnavailableError,
-            deserialize_report as _deserialize_report,
-            export_pdf_bytes as _export_pdf_bytes,
-        )
-
-        try:
-            gov_report = _deserialize_report(report_json)
-        except (ValueError, KeyError) as exc:
-            raise RuntimeError(f"report_deserialize_error: {exc}") from exc
-        try:
-            return _export_pdf_bytes(
-                gov_report,
-                executive_summary=(
-                    report_json.get("executive_summary")
-                    if isinstance(report_json.get("executive_summary"), dict)
-                    else None
-                ),
-                engagement_name=engagement_name,
-                data_disclosure=None,
-            )
-        except _ExportUnavailableError as exc:
-            raise RuntimeError("pdf_export_unavailable") from exc
-
-    # Default: canonical JSON serialization of the stored report record.
+    # All currently-allowed channels serialize as canonical JSON of the
+    # stored report record. The content-type helper mirrors this.
     canonical = _json.dumps(
         report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
@@ -14488,8 +14499,106 @@ def _render_operator_direct_artifact_bytes(
                 "is returned in X-FG-* response headers."
             ),
             "content": {
-                "application/pdf": {},
+                # Every currently-reachable channel serializes as canonical
+                # JSON. See _render_operator_direct_artifact_bytes and
+                # _governed_delivery_content_type_for_channel. When PDF
+                # export is reintroduced, update all three sites together.
                 "application/json": {},
+            },
+            "headers": {
+                "x-fg-delivery-attempt-id": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Unique ID of the persisted delivery attempt row "
+                        "for this SUCCEEDED transport."
+                    ),
+                },
+                "x-fg-delivery-authorization-id": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Governed delivery authorization ID that this "
+                        "transport binds to."
+                    ),
+                },
+                "x-fg-delivery-request-id": {
+                    "schema": {"type": "string"},
+                    "description": "Governed delivery request ID.",
+                },
+                "x-fg-tenant-id": {
+                    "schema": {"type": "string"},
+                    "description": "Tenant of the persisted attempt row.",
+                },
+                "x-fg-engagement-id": {
+                    "schema": {"type": "string"},
+                    "description": "Engagement of the persisted attempt row.",
+                },
+                "x-fg-report-id": {
+                    "schema": {"type": "string"},
+                    "description": "Report of the persisted attempt row.",
+                },
+                "x-fg-report-version-id": {
+                    "schema": {"type": "string"},
+                    "description": "Report version of the persisted attempt row.",
+                },
+                "x-fg-report-fingerprint": {
+                    "schema": {"type": "string"},
+                    "description": ("Result fingerprint bound to this transport."),
+                },
+                "x-fg-recipient-type": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Recipient type of the delivery request "
+                        "(ASCII-safe projection)."
+                    ),
+                },
+                "x-fg-channel": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Delivery channel of the request (ASCII-safe projection)."
+                    ),
+                },
+                "x-fg-transport-type": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Transport type actually used to deliver the "
+                        "artifact (ASCII-safe projection)."
+                    ),
+                },
+                "x-fg-artifact-sha256": {
+                    "schema": {"type": "string"},
+                    "description": ("SHA-256 hex digest of the served artifact bytes."),
+                },
+                "x-fg-artifact-bytes": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Byte count of the served artifact as a decimal string integer."
+                    ),
+                },
+                "x-fg-attempted-by": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "ASCII-safe projection of the actor subject that "
+                        "executed the transport. The persisted attempt "
+                        "row retains the original Unicode subject; this "
+                        "header is transport-safe only."
+                    ),
+                },
+                "x-fg-attempted-at": {
+                    "schema": {"type": "string"},
+                    "description": ("ISO 8601 UTC timestamp of the transport attempt."),
+                },
+                "x-fg-outcome": {
+                    "schema": {"type": "string", "enum": ["SUCCEEDED"]},
+                    "description": (
+                        "Transport outcome (always ``SUCCEEDED`` on a 200)."
+                    ),
+                },
+                "x-fg-schema-version": {
+                    "schema": {"type": "string"},
+                    "description": (
+                        "Schema version tag of the governed delivery attempt authority."
+                    ),
+                },
             },
         },
         409: {
@@ -14855,6 +14964,20 @@ def governed_delivery_execute_route(
         entity_id=rv.id,
         actor_type=actor_type,
     )
+
+    # Build the X-FG-* response headers BEFORE committing.
+    #
+    # If header serialization raises (e.g. a non-Latin-1 actor subject
+    # despite our ASCII-safe projection, or any future header field that
+    # cannot be encoded), the exception must propagate before ``db.commit()``
+    # so the SUCCEEDED attempt row rolls back with the session and the
+    # operator can retry cleanly. Committing first would persist SUCCEEDED
+    # and then 500 the response, permanently locking the operator out via
+    # the idempotency guard (``DELIVERY_ALREADY_EXECUTED`` on the next call).
+    headers = _governed_delivery_attempt_to_headers(
+        attempt_row, delivery_request_id=req_row.id
+    )
+
     # Attempt row + version transition + audit event MUST be committed before
     # the artifact bytes leave the process. If this commit fails, the operator
     # never sees a SUCCEEDED response — a 500 propagates instead.
@@ -14867,9 +14990,7 @@ def governed_delivery_execute_route(
     return Response(
         content=artifact_bytes,
         media_type=_governed_delivery_content_type_for_channel(req_row.channel),
-        headers=_governed_delivery_attempt_to_headers(
-            attempt_row, delivery_request_id=req_row.id
-        ),
+        headers=headers,
         status_code=200,
     )
 

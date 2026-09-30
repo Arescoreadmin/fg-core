@@ -82592,10 +82592,116 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {},
-              "application/pdf": {}
+              "application/json": {}
             },
-            "description": "SUCCEEDED transport \u2014 the response body IS the artifact bytes actually served to the operator. Attempt metadata is returned in X-FG-* response headers."
+            "description": "SUCCEEDED transport \u2014 the response body IS the artifact bytes actually served to the operator. Attempt metadata is returned in X-FG-* response headers.",
+            "headers": {
+              "x-fg-artifact-bytes": {
+                "description": "Byte count of the served artifact as a decimal string integer.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-artifact-sha256": {
+                "description": "SHA-256 hex digest of the served artifact bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-attempted-at": {
+                "description": "ISO 8601 UTC timestamp of the transport attempt.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-attempted-by": {
+                "description": "ASCII-safe projection of the actor subject that executed the transport. The persisted attempt row retains the original Unicode subject; this header is transport-safe only.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-channel": {
+                "description": "Delivery channel of the request (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-attempt-id": {
+                "description": "Unique ID of the persisted delivery attempt row for this SUCCEEDED transport.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-authorization-id": {
+                "description": "Governed delivery authorization ID that this transport binds to.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-request-id": {
+                "description": "Governed delivery request ID.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-engagement-id": {
+                "description": "Engagement of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-outcome": {
+                "description": "Transport outcome (always ``SUCCEEDED`` on a 200).",
+                "schema": {
+                  "enum": [
+                    "SUCCEEDED"
+                  ],
+                  "type": "string"
+                }
+              },
+              "x-fg-recipient-type": {
+                "description": "Recipient type of the delivery request (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-fingerprint": {
+                "description": "Result fingerprint bound to this transport.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-id": {
+                "description": "Report of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-version-id": {
+                "description": "Report version of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-schema-version": {
+                "description": "Schema version tag of the governed delivery attempt authority.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-tenant-id": {
+                "description": "Tenant of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-transport-type": {
+                "description": "Transport type actually used to deliver the artifact (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "409": {
             "description": "Delivery already executed (idempotent re-read attempt) or concurrent attempt in flight \u2014 artifact bytes are NOT re-served."

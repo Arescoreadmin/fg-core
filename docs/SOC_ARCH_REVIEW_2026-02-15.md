@@ -4667,3 +4667,84 @@ clean; mypy clean on `api/field_assessment.py`,
 `services/governance/report/governed_delivery_service.py`.
 `make fg-fast` gates passed after `make route-inventory-generate` and
 `scripts/refresh_contract_authority.py`.
+
+## PR #729 Bot-Review Repairs — Header Safety, CORS Exposure, OpenAPI, PDF Channel (2026-09-29)
+
+**Scope:** Post-merge follow-through on `GOV-DELIVERY-TRANSPORT-001`. Bot review
+of PR #729 (`fix/gov-delivery-transport-bytes-in-response`) surfaced one P1 and
+three P2 findings on the `/execute` response path. This section records the
+security-relevant portion (P1 lock-out repair + CORS envelope) alongside the
+non-security-relevant OpenAPI and dead-code cleanups.
+
+**P1 — Header-safety lock-out (repaired):**
+- Bug: `_governed_delivery_attempt_to_headers(attempt_row)` was invoked AFTER
+  `db.commit()`. A non-Latin-1 actor subject (a valid OIDC `sub` shape) caused
+  Starlette to raise `UnicodeEncodeError` while serializing the response. The
+  SUCCEEDED attempt row was already committed and `FaReportVersion.status`
+  had already been transitioned to `'delivered'`, so every subsequent
+  `/execute` call returned `409 DELIVERY_ALREADY_EXECUTED` — a permanent
+  lock-out from the artifact.
+- Fix, part A: response header dict is now constructed BEFORE `db.commit()`.
+  Any encoding failure now propagates as an exception before the transaction
+  is committed; the session's rollback-on-close discards the SUCCEEDED row
+  cleanly. The caller receives a 5xx and can retry.
+- Fix, part B: new helper `api.field_assessment._ascii_safe_header(value)`
+  projects string header values to ASCII with `errors="replace"`. It is
+  applied to `attempted_by`, `transport_type`, `recipient_type`, `channel` —
+  every string header field derived from user-influenced input. UUID/hex/ISO
+  timestamp fields are ASCII-safe by construction and pass through unchanged.
+- Audit invariant preserved: the *persisted* `attempted_by` column keeps the
+  original Unicode subject byte-for-byte. Only the transport envelope is
+  ASCII-projected.
+- New adversarial test: `test_governed_delivery_transport.py::test_t18_non_ascii_actor_subject_does_not_lock_out`
+  proves (200, not 500) + ASCII-safe `x-fg-attempted-by` header + Unicode
+  preserved in `FaGovernedDeliveryAttempt.attempted_by` + idempotent 409 on
+  the second call.
+
+**P2 — Browser CORS exposure of transport metadata:**
+- `api/middleware/security_headers.py::CORSConfig.expose_headers` extended to
+  list every `x-fg-*` transport header (`x-fg-delivery-attempt-id`,
+  `x-fg-delivery-authorization-id`, `x-fg-delivery-request-id`,
+  `x-fg-tenant-id`, `x-fg-engagement-id`, `x-fg-report-id`,
+  `x-fg-report-version-id`, `x-fg-report-fingerprint`, `x-fg-recipient-type`,
+  `x-fg-channel`, `x-fg-transport-type`, `x-fg-artifact-sha256`,
+  `x-fg-artifact-bytes`, `x-fg-attempted-by`, `x-fg-attempted-at`,
+  `x-fg-outcome`, `x-fg-schema-version`). Only `expose_headers` was
+  modified — `allow_headers`, `allow_origins`, and `allow_credentials`
+  defaults are untouched. Absent this list, browser JavaScript clients could
+  not bind the served artifact bytes to the SUCCEEDED attempt row, defeating
+  the transport-envelope purpose.
+
+**P2 — OpenAPI headers declared on 200 response:**
+- The `/execute` route decorator's `responses={200: ...}` map now declares
+  every `x-fg-*` header under `"headers": {...}` with `schema` + `description`.
+  Generated API clients now discover attempt/authorization/request IDs and
+  SHA-256 as first-class response shape, not opaque HTTP noise.
+
+**P2 — Dead PDF channel eliminated (unreachable-content-type cleanup):**
+- `_governed_delivery_content_type_for_channel` previously branched on
+  `channel == "pdf"` → `application/pdf`, but `"pdf"` is not in
+  `ALLOWED_CHANNELS = {"portal_grant", "direct_download"}`. The branch was
+  dead and the advertised `application/pdf` response was unreachable.
+- `_render_operator_direct_artifact_bytes` mirrored the same dead branch.
+- Both branches removed; helper now returns `application/json` for every
+  reachable channel, matching what the renderer actually produces (canonical
+  JSON of the report record). OpenAPI `content` map narrowed to
+  `application/json` only.
+- Docstring on both helpers records the concrete steps required to reintroduce
+  PDF export as a first-class channel (add `'pdf'` to `ALLOWED_CHANNELS`,
+  restore the renderer branch, and update the OpenAPI + content-type map in
+  lockstep).
+
+**Files changed (this section):**
+- `api/field_assessment.py`
+- `api/middleware/security_headers.py`
+- `tests/test_governed_delivery_transport.py`
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`
+  (regenerated via `make contract-authority-refresh`)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (authority markers refreshed)
+
+**Validation:** `tests/test_governed_delivery_transport.py` 18/18 passed;
+`tests/test_governed_delivery.py` 26/26 passed. Ruff clean; ruff format clean;
+mypy clean on the touched modules. `make fg-fast` and `make fg-contract`
+green after contract-authority refresh.

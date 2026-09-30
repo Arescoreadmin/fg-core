@@ -33,6 +33,7 @@ Coverage:
     T15 — response bytes hash matches the persisted attempt's artifact_sha256
     T16 — every X-FG-* response header matches the persisted attempt row
     T17 — no secret-bearing metadata appears in response headers
+    T18 — non-ASCII actor subject does not permanently lock out the operator
 """
 
 from __future__ import annotations
@@ -1172,3 +1173,108 @@ def test_t17_no_secret_bearing_headers(
             assert forbidden not in value.lower(), (
                 f"header value for '{name}' contains forbidden token '{forbidden}'"
             )
+
+
+# ---------------------------------------------------------------------------
+# T18 — non-ASCII actor subject does not permanently lock out the operator
+# ---------------------------------------------------------------------------
+
+
+def test_t18_non_ascii_actor_subject_does_not_lock_out(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR #729 bot-review P1 repair.
+
+    An OIDC ``sub`` claim may legitimately contain non-Latin-1 Unicode
+    characters. Before the header-safety repair, ``_ascii_safe_header``
+    did not exist and headers were constructed AFTER ``db.commit()``:
+    Starlette would raise ``UnicodeEncodeError`` while serializing the
+    response, but the SUCCEEDED attempt row had already been persisted.
+    Every subsequent ``/execute`` call would then return
+    ``409 DELIVERY_ALREADY_EXECUTED`` — a permanent lock-out from the
+    artifact.
+
+    This test proves the invariant:
+      1. A transport executed by an actor whose subject contains a
+         non-ASCII character returns 200 (not 500).
+      2. The ``x-fg-attempted-by`` response header contains only
+         ASCII characters (non-ASCII byte replaced with ``?``).
+      3. The SUCCEEDED attempt row is persisted with the *original*
+         Unicode subject preserved for audit.
+      4. A second call returns 409 (idempotent), confirming the
+         first call actually delivered the bytes rather than
+         leaving the authority in a corrupted "committed but never
+         served" state.
+    """
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaGovernedDeliveryAttempt
+    from sqlalchemy import select as _select
+
+    non_ascii_subject = "operätor-sub-001"
+    assert not non_ascii_subject.isascii(), (
+        "test fixture must actually contain non-ASCII to be meaningful"
+    )
+
+    # Patch the canonical actor resolver so the /execute route reads
+    # our non-Latin-1 subject. The bootstrap/authorize steps run before
+    # the patch is installed, so they still use the mint_key subject.
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    auth = _authorize(client, eid, rid, vid)
+    request_id = auth["receipt"]["delivery_request_id"]
+
+    # Only override the actor subject at the moment of /execute so that
+    # the earlier authorization step still uses the real credential
+    # subject. This mirrors production: the same actor may authorize
+    # and later execute, but the subject value we care about here is
+    # the one persisted into the attempt row's ``attempted_by`` column.
+    monkeypatch.setattr(
+        "api.field_assessment._actor_from_context",
+        lambda actor_ctx: non_ascii_subject,
+    )
+
+    resp = _execute(client, eid, rid, request_id)
+    assert resp.status_code == 200, (
+        f"non-ASCII subject must not 500 the /execute response: {resp.status_code} {resp.text}"
+    )
+
+    # (2) Response header is ASCII-safe.
+    attempted_by_header = resp.headers["x-fg-attempted-by"]
+    assert attempted_by_header.isascii(), (
+        f"x-fg-attempted-by must be ASCII-only, got: {attempted_by_header!r}"
+    )
+    assert "?" in attempted_by_header, (
+        "non-ASCII char must be replaced with '?' in the projected header, "
+        f"got: {attempted_by_header!r}"
+    )
+    # Prefix and suffix are preserved.
+    assert attempted_by_header.startswith("oper"), attempted_by_header
+    assert attempted_by_header.endswith("tor-sub-001"), attempted_by_header
+
+    # (3) Persisted attempt row keeps the ORIGINAL Unicode subject.
+    attempt_id = resp.headers["x-fg-delivery-attempt-id"]
+    sm = get_sessionmaker()()
+    try:
+        row = sm.execute(
+            _select(FaGovernedDeliveryAttempt).where(
+                FaGovernedDeliveryAttempt.id == attempt_id,
+            )
+        ).scalar_one()
+    finally:
+        sm.close()
+    assert row.outcome == "SUCCEEDED"
+    assert row.attempted_by == non_ascii_subject, (
+        "audit column must preserve the original Unicode subject; "
+        f"got {row.attempted_by!r}"
+    )
+
+    # (4) A second /execute returns 409 (not 500), confirming the
+    # first call really did land the transport rather than trapping
+    # the authority in a permanent inconsistent state.
+    second = _execute(client, eid, rid, request_id)
+    assert second.status_code == 409, (
+        f"second call must be idempotent 409, got {second.status_code} {second.text}"
+    )
+    assert _err(second) == "DELIVERY_ALREADY_EXECUTED", _err(second)
