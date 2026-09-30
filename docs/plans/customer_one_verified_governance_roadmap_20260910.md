@@ -79,7 +79,7 @@ records but do not authorize new work or reprioritize the sequence below.
 | MRR | $0 |
 | First invoice issued | Not yet |
 | Identity platform | P-113.10 + P1-01-PR1 + P1-01-PR2 complete (#690 merged df1fc85f) |
-| Open engineering work | CUSTOMER-ZERO-TRUST-001 (bounded operational trust infrastructure) → CUSTOMER-ZERO-ACCEPT-001 |
+| Open engineering work | TRUST-BINDING-001 ($0 code; parallel with CUSTOMER-ZERO-TRUST-001) + CUSTOMER-ZERO-TRUST-001 (operational ceremony) → CUSTOMER-ZERO-ACCEPT-001 |
 | Open commercial work | L14 — design partner, price, packet, Stripe, founder review |
 
 Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026-09-10).
@@ -102,8 +102,10 @@ can be added.
 |----|-------|--------|----------------|
 | FA-ACTOR-001 | Bind Field Assessment actions to canonical human actors | COMPLETED — #710/#711 | Canonical human actor authority proven for material Field Assessment mutations |
 | REPORT-QA-001 | Version-bound independent report QA authority | COMPLETED — #713 | QA decisions are canonically attributable to exact report versions |
-| CUSTOMER-ZERO-TRUST-001 | Bounded operational trust infrastructure | NEXT — internal prerequisite | Separate non-exportable identity, entitlement, and approval trust required before Customer-Zero approval |
-| CUSTOMER-ZERO-ACCEPT-001 | Current-SHA production acceptance evidence | OPEN — blocked on CUSTOMER-ZERO-TRUST-001 | Current-SHA proof, durable recovery, dependency security, and schema/RLS evidence must exist before production qualification |
+| GOV-DELIVERY-TRANSPORT-001 | Governed delivery transport evidence | COMPLETED — #728 (31c35d68) + #729 (302173ed) | Governed authorization is now bound to durable append-only transport-attempt evidence; exact artifact bytes cross the HTTP boundary; 44 adversarial tests pass |
+| TRUST-BINDING-001 | Bind governance artifacts to canonical trust authority | NEXT — internal prerequisite ($0) | Governance artifacts (report signatures, qualification decisions, governed-delivery authorizations) not yet cryptographically bound to Vault Transit; issuance cannot be independently verified until this closes |
+| CUSTOMER-ZERO-TRUST-001 | Bounded operational trust infrastructure | NEXT — internal prerequisite (operational ceremony) | Separate non-exportable identity, entitlement, and approval trust required before Customer-Zero approval; HCP provisioning required |
+| CUSTOMER-ZERO-ACCEPT-001 | Current-SHA production acceptance evidence | OPEN — blocked on TRUST-BINDING-001 + CUSTOMER-ZERO-TRUST-001 | Current-SHA proof, durable recovery, dependency security, and schema/RLS evidence must exist before production qualification; both upstream prerequisites must close first |
 | L14 | Customer-One Commercial Execution | NEXT (non-engineering) | No paying client; L14 cannot close until FG_RESULT_TRUTH_GATE and all mandatory production gates pass |
 
 `FG_RESULT_TRUTH_GATE` remains the open parent acceptance objective. Its implementation
@@ -148,7 +150,7 @@ evidence and downstream authorities described below.
 
 ### Next-item determination
 
-**Selected next authority: `CUSTOMER-ZERO-TRUST-001` — Bounded operational trust infrastructure. CUSTOMER-ZERO-ACCEPT-001 remains the open acceptance parent and cannot execute approval or runtime evidence until this prerequisite closes. PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.** REPORT-QA-001 is complete through #713 and focused/post-merge validation. A complete, replayable Customer-Zero run and current-SHA production acceptance evidence are now required before PROD-QUAL-001 can be authorized; GOV-DELIVERY-001 remains blocked.
+**Reconciled 2026-09-30 (HEAD 302173ed).** GOV-DELIVERY-TRANSPORT-001 is complete via #728 + #729: governed authorization is now bound to durable append-only transport-attempt evidence and exact artifact bytes cross the HTTP boundary. PROD-QUAL-001 (#724), GOV-DELIVERY-001 (#726), AUDIT-AUTHORITY-001 (#723), and GOV-DELIVERY-TRANSPORT-001 (#728/#729) are all completed. **Two parallel next items are now authorized:** (1) `TRUST-BINDING-001` — bind governance artifacts to Vault Transit at the code boundary ($0; code can proceed against local/test Vault from PR #720); (2) `CUSTOMER-ZERO-TRUST-001` — provision HCP Vault Dedicated and complete operational trust ceremony (requires cost authorization). `CUSTOMER-ZERO-ACCEPT-001` remains the open acceptance parent and cannot execute until both prerequisites close. Machine-readable authority: `customer_one/roadmap_authority.yaml`.
 
 | Candidate | Repository evidence | Disposition |
 |---|---|---|
