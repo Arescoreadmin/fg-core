@@ -86,9 +86,7 @@ Revenue Gate 1 is fully cleared. P1-01-PR2 merged and post-merge validated (2026
 The FG_RESULT_TRUTH_GATE implementation and truth invariants are complete, but its
 operational acceptance remains open. FA-ACTOR-001 is complete through #710 and #711:
 material Field Assessment mutations retain canonical human authority, current capability,
-tenant/engagement binding, and shared persistence/audit attribution. REPORT-QA-001 is complete (#713); CUSTOMER-ZERO-ACCEPT-001 remains the open acceptance parent, but its next executable prerequisite is CUSTOMER-ZERO-TRUST-001, required to establish the operational trust chain for current-SHA
-production acceptance evidence. QA decisions are now bound to a canonical reviewer and exact report version. Production acceptance gates and expert-approved
-Customer-Zero evidence remain required; PROD-QUAL-001 and GOV-DELIVERY-001 remain blocked.
+tenant/engagement binding, and shared persistence/audit attribution. REPORT-QA-001 is complete (#713); PROD-QUAL-001 is complete (#724); GOV-DELIVERY-001 is complete (#726); GOV-DELIVERY-TRANSPORT-001 is complete (#728 + #729). CUSTOMER-ZERO-ACCEPT-001 remains the open acceptance parent, blocked on two parallel open prerequisites: (1) TRUST-BINDING-001 — bind governance artifacts to the canonical Vault Transit trust authority ($0 code, NEXT); (2) CUSTOMER-ZERO-TRUST-001 — provision HCP Vault Dedicated and complete operational trust ceremony (NEXT). QA decisions are now bound to a canonical reviewer and exact report version. Production acceptance gates and expert-approved Customer-Zero evidence remain required; both prerequisites must close before CUSTOMER-ZERO-ACCEPT-001 can execute.
 
 ---
 

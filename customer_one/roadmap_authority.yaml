@@ -88,7 +88,7 @@ next_sequence:
     status: NEXT
     work_class: "REPAIR"
     completion_evidence:
-      - "report signing path invokes Vault Transit sign() for the APPROVAL trust role; FG_REPORT_SIGNING_KEY env-var path retired for production signing"
+      - "report signing path invokes Vault Transit sign() for the identity trust role; FG_REPORT_SIGNING_KEY env-var path retired for production signing"
       - "FaQualificationDecision persists signing_key_id, key_version, and vault_signature for each finalized decision"
       - "FaGovernedDeliveryAuthorization persists signing_key_id, key_version, and vault_signature for each authorization"
       - "TrustAnchor.verify() confirms round-trip signature validity for at least one qualification and one delivery authorization"
@@ -321,6 +321,15 @@ completed:
       permanently locked out. Merged-state validation: 44 focused transport tests
       pass (T1-T18 transport + 26 base delivery); fg-fast 496/2; fg-security 1239/1;
       fg-contract clean; mypy clean; git diff --check clean.
+      SCOPE BOUNDARY: this item proves operator-direct custody (operator_direct
+      recipient type only). The portal-recipient delivery paths
+      (portal_membership / portal_invitation / portal_grant) return 501 and
+      are separate scope; customer-boundary receipt evidence (fa_governed_delivery_attempts
+      row written by a customer-authenticated session) is an operational requirement
+      for CUSTOMER-ZERO-ACCEPT-001, not a completion criterion here. The legacy
+      export route (api/field_assessment.py:9700) is also outside this item's scope.
+      Work on those gaps proceeds under REPAIR classification and does not require
+      reopening this item.
   - id: "REVENUE-GATE-1"
     title: "Revenue Gate 1 — all 12 items cleared"
     prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]
