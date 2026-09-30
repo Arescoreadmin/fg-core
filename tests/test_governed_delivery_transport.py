@@ -29,6 +29,10 @@ Coverage:
     T11 — portal_membership recipient returns 501 TRANSPORT_NOT_IMPLEMENTED
     T12 — attempt rows are tenant-isolated
     T13 — authorization creation route does not mark 'delivered'
+    T14 — commit failure after SUCCEEDED row flush yields no artifact bytes
+    T15 — response bytes hash matches the persisted attempt's artifact_sha256
+    T16 — every X-FG-* response header matches the persisted attempt row
+    T17 — no secret-bearing metadata appears in response headers
 """
 
 from __future__ import annotations
@@ -912,3 +916,259 @@ def test_t13_authorization_required_not_attempt(
         assert rv.delivered_at in (None, "")
     finally:
         sm.close()
+
+
+# ---------------------------------------------------------------------------
+# T14 — commit failure after SUCCEEDED row flush yields no artifact bytes
+# ---------------------------------------------------------------------------
+
+
+def test_t14_commit_failure_no_bytes_returned(
+    build_app,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DB commit failure after the SUCCEEDED attempt row is flushed must
+    NOT produce a 200 with artifact bytes, and must NOT leave a committed
+    SUCCEEDED row behind.
+
+    This is the critical epistemic invariant of GOV-DELIVERY-TRANSPORT-001:
+    the operator can only observe a SUCCEEDED response after the attempt
+    row is durably persisted. If persistence fails, the operator sees a
+    5xx and the artifact bytes stay inside the process.
+    """
+    from api.auth_scopes import mint_key
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaGovernedDeliveryAttempt
+    from sqlalchemy import select as _select
+
+    # Rebuild the test client with raise_server_exceptions=False so the
+    # unhandled commit failure is observable as a 5xx response rather than
+    # re-raised into the test frame.
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    app = build_app(auth_enabled=True)
+    key = mint_key(
+        "governance:read",
+        "governance:write",
+        "governance:qa_approve",
+        tenant_id=_TENANT_A,
+    )
+    client_no_reraise = TestClient(
+        app,
+        headers={"X-API-Key": key},
+        raise_server_exceptions=False,
+    )
+
+    eid, rid, vid = _bootstrap_approved_version(client_no_reraise)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    auth = _authorize(client_no_reraise, eid, rid, vid)
+    request_id = auth["receipt"]["delivery_request_id"]
+    auth_id = auth["receipt"]["delivery_authorization_id"]
+
+    # Force the pre-response persistence path to fail after the attempt row
+    # has been added+flushed by the route. Raising here proves that any
+    # failure between the SUCCEEDED-row flush and the Response return
+    # prevents bytes from escaping — the same guarantee a commit failure
+    # provides, since db.commit() runs after this call.
+    def _boom_audit(*args, **kwargs):
+        raise RuntimeError("simulated commit-adjacent failure")
+
+    monkeypatch.setattr("api.field_assessment.emit_engagement_audit_event", _boom_audit)
+
+    resp = _execute(client_no_reraise, eid, rid, request_id)
+
+    # Non-2xx: no artifact bytes were served to the operator.
+    assert resp.status_code >= 500, resp.text
+    assert "x-fg-artifact-sha256" not in resp.headers
+    assert "x-fg-delivery-attempt-id" not in resp.headers
+
+    # No SUCCEEDED row committed: the transaction rolled back on close.
+    sm = get_sessionmaker()()
+    try:
+        rows = (
+            sm.execute(
+                _select(FaGovernedDeliveryAttempt).where(
+                    FaGovernedDeliveryAttempt.authorization_id == auth_id,
+                    FaGovernedDeliveryAttempt.outcome == "SUCCEEDED",
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert rows == [], (
+            "no SUCCEEDED attempt row may persist when the pre-response "
+            "commit path fails"
+        )
+    finally:
+        sm.close()
+
+
+# ---------------------------------------------------------------------------
+# T15 — response bytes hash matches the persisted attempt row
+# ---------------------------------------------------------------------------
+
+
+def test_t15_response_bytes_hash_matches_persisted_attempt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """sha256(response.content) MUST equal the persisted attempt's
+    artifact_sha256 — the same bytes hashed for the row are the bytes
+    returned to the operator.
+    """
+    import hashlib as _hashlib
+
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaGovernedDeliveryAttempt
+    from sqlalchemy import select as _select
+
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    auth = _authorize(client, eid, rid, vid)
+    request_id = auth["receipt"]["delivery_request_id"]
+
+    resp = _execute(client, eid, rid, request_id)
+    assert resp.status_code == 200, resp.text
+
+    body_sha = _hashlib.sha256(resp.content).hexdigest()
+    attempt_id = resp.headers["x-fg-delivery-attempt-id"]
+
+    sm = get_sessionmaker()()
+    try:
+        row = sm.execute(
+            _select(FaGovernedDeliveryAttempt).where(
+                FaGovernedDeliveryAttempt.id == attempt_id,
+            )
+        ).scalar_one()
+        assert row.artifact_sha256 == body_sha, (
+            "sha256(response.content) must equal the persisted attempt "
+            "row's artifact_sha256; a divergence proves the served bytes "
+            "are not the bytes that were hashed and committed."
+        )
+        assert row.artifact_bytes_length == len(resp.content)
+    finally:
+        sm.close()
+
+
+# ---------------------------------------------------------------------------
+# T16 — every X-FG-* response header matches the persisted attempt row
+# ---------------------------------------------------------------------------
+
+
+def test_t16_response_headers_match_persisted_attempt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every X-FG-* metadata header on the SUCCEEDED response must be a
+    byte-exact projection of the persisted attempt row + request id.
+    Divergence would let a caller be misled about what was actually
+    written to the append-only ledger.
+    """
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaGovernedDeliveryAttempt
+    from sqlalchemy import select as _select
+
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    auth = _authorize(client, eid, rid, vid)
+    request_id = auth["receipt"]["delivery_request_id"]
+
+    resp = _execute(client, eid, rid, request_id)
+    assert resp.status_code == 200, resp.text
+
+    attempt_id = resp.headers["x-fg-delivery-attempt-id"]
+
+    sm = get_sessionmaker()()
+    try:
+        row = sm.execute(
+            _select(FaGovernedDeliveryAttempt).where(
+                FaGovernedDeliveryAttempt.id == attempt_id,
+            )
+        ).scalar_one()
+    finally:
+        sm.close()
+
+    assert resp.headers["x-fg-delivery-attempt-id"] == row.id
+    assert resp.headers["x-fg-delivery-authorization-id"] == row.authorization_id
+    assert resp.headers["x-fg-delivery-request-id"] == request_id
+    assert resp.headers["x-fg-tenant-id"] == row.tenant_id
+    assert resp.headers["x-fg-engagement-id"] == row.engagement_id
+    assert resp.headers["x-fg-report-id"] == row.report_id
+    assert resp.headers["x-fg-report-version-id"] == row.report_version_id
+    assert resp.headers["x-fg-report-fingerprint"] == row.report_fingerprint
+    assert resp.headers["x-fg-recipient-type"] == row.recipient_type
+    assert resp.headers["x-fg-channel"] == row.channel
+    assert resp.headers["x-fg-transport-type"] == row.transport_type
+    assert resp.headers["x-fg-artifact-sha256"] == (row.artifact_sha256 or "")
+    assert int(resp.headers["x-fg-artifact-bytes"]) == (row.artifact_bytes_length or 0)
+    assert resp.headers["x-fg-attempted-by"] == row.attempted_by
+    assert resp.headers["x-fg-attempted-at"] == row.attempted_at
+    assert resp.headers["x-fg-outcome"] == row.outcome
+    assert resp.headers["x-fg-schema-version"] == "1.0"
+
+
+# ---------------------------------------------------------------------------
+# T17 — no secret-bearing metadata appears in response headers
+# ---------------------------------------------------------------------------
+
+
+def test_t17_no_secret_bearing_headers(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The X-FG-* header envelope MUST NOT contain names hinting at
+    secrets, tokens, keys, credentials, or private material. The
+    transport endpoint is a delivery boundary; headers must be
+    non-sensitive metadata only.
+    """
+    eid, rid, vid = _bootstrap_approved_version(client)
+    _inject_qualification(_TENANT_A, eid, rid, vid)
+    _monkeypatch_require_qualified(monkeypatch)
+
+    auth = _authorize(client, eid, rid, vid)
+    request_id = auth["receipt"]["delivery_request_id"]
+
+    resp = _execute(client, eid, rid, request_id)
+    assert resp.status_code == 200, resp.text
+
+    # Tokens that must never appear in an X-FG-* header name or value.
+    # 'authorization' is deliberately excluded from name-scan because the
+    # transport row's parent record is literally the delivery
+    # ``authorization_id`` — the forbidden concept is the HTTP
+    # ``Authorization`` header / bearer credential, not the noun in a
+    # governance authority id. Value-scan still applies (a credential
+    # would carry hex/token noise, not the substring 'authorization').
+    _forbidden_tokens = (
+        "secret",
+        "password",
+        "passwd",
+        "credential",
+        "private-key",
+        "privatekey",
+        "api-key",
+        "apikey",
+        "bearer",
+        "cookie",
+        "jwt",
+        "signing-key",
+        "session-key",
+        "session_key",
+    )
+    fg_headers = {
+        name.lower(): value
+        for name, value in resp.headers.items()
+        if name.lower().startswith("x-fg-")
+    }
+    assert fg_headers, "expected X-FG-* headers on SUCCEEDED transport"
+    for name, value in fg_headers.items():
+        for forbidden in _forbidden_tokens:
+            assert forbidden not in name, (
+                f"header name '{name}' contains forbidden token '{forbidden}'"
+            )
+            # Values are IDs, fingerprints, hex SHA-256, byte counts, timestamps,
+            # actor subjects — none should embed a credential-like keyword.
+            assert forbidden not in value.lower(), (
+                f"header value for '{name}' contains forbidden token '{forbidden}'"
+            )
