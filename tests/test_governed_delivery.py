@@ -310,7 +310,10 @@ def test_a1_governed_delivery_operator_direct_returns_receipt(
     data = resp.json()
     assert "version" in data
     assert "receipt" in data
-    assert data["version"]["status"] == "delivered"
+    # GOV-DELIVERY-TRANSPORT-001: authorization does not mark 'delivered'.
+    # The report remains 'approved' until the /execute endpoint records a
+    # SUCCEEDED transport attempt.
+    assert data["version"]["status"] == "approved"
     receipt = data["receipt"]
     assert receipt["outcome"] == "AUTHORIZED"
     assert receipt["recipient_type"] == "operator_direct"
