@@ -22474,112 +22474,6 @@
         "title": "GovernanceReportSummary",
         "type": "object"
       },
-      "GovernedDeliveryAttemptReceipt": {
-        "description": "Immutable evidence of a governed delivery transport attempt.\n\nGOV-DELIVERY-TRANSPORT-001. Represents one real transport attempt bound to\na governing authorization. ``outcome == 'SUCCEEDED'`` means the artifact\nbytes were actually served or transferred by the operator.  It does NOT\nmean the customer received the artifact \u2014 customer receipt requires a\nseparate portal access confirmation authority.",
-        "properties": {
-          "artifact_bytes_length": {
-            "title": "Artifact Bytes Length",
-            "type": "integer"
-          },
-          "artifact_sha256": {
-            "title": "Artifact Sha256",
-            "type": "string"
-          },
-          "attempted_at": {
-            "title": "Attempted At",
-            "type": "string"
-          },
-          "attempted_by": {
-            "title": "Attempted By",
-            "type": "string"
-          },
-          "channel": {
-            "title": "Channel",
-            "type": "string"
-          },
-          "delivery_attempt_id": {
-            "title": "Delivery Attempt Id",
-            "type": "string"
-          },
-          "delivery_authorization_id": {
-            "title": "Delivery Authorization Id",
-            "type": "string"
-          },
-          "delivery_request_id": {
-            "title": "Delivery Request Id",
-            "type": "string"
-          },
-          "engagement_id": {
-            "title": "Engagement Id",
-            "type": "string"
-          },
-          "outcome": {
-            "title": "Outcome",
-            "type": "string"
-          },
-          "recipient_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recipient Id"
-          },
-          "recipient_type": {
-            "title": "Recipient Type",
-            "type": "string"
-          },
-          "report_fingerprint": {
-            "title": "Report Fingerprint",
-            "type": "string"
-          },
-          "report_id": {
-            "title": "Report Id",
-            "type": "string"
-          },
-          "report_version_id": {
-            "title": "Report Version Id",
-            "type": "string"
-          },
-          "schema_version": {
-            "default": "1.0",
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "transport_type": {
-            "title": "Transport Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "delivery_attempt_id",
-          "delivery_authorization_id",
-          "delivery_request_id",
-          "tenant_id",
-          "engagement_id",
-          "report_id",
-          "report_version_id",
-          "report_fingerprint",
-          "recipient_type",
-          "recipient_id",
-          "channel",
-          "transport_type",
-          "artifact_sha256",
-          "artifact_bytes_length",
-          "attempted_by",
-          "attempted_at",
-          "outcome"
-        ],
-        "title": "GovernedDeliveryAttemptReceipt",
-        "type": "object"
-      },
       "GovernedDeliveryBodyFull": {
         "description": "Governed delivery body for the standalone governed-delivery endpoint.\n\nrecipient_type is required here. report_version_id is required in the body\nbecause it is not in the path for this endpoint.",
         "properties": {
@@ -82664,7 +82558,7 @@
     },
     "/field-assessment/engagements/{engagement_id}/reports/{report_id}/governed-delivery/{delivery_request_id}/execute": {
       "post": {
-        "description": "Execute the governed delivery \u2014 the real transport step.\n\nGOV-DELIVERY-TRANSPORT-001. Given an AUTHORIZED governed delivery request,\nre-verify the binding (qualification, recipient, report version), then\nperform the transport, then write the append-only attempt row, then (only\non SUCCEEDED) transition the report version to ``'delivered'``.\n\nInvariants:\n  - authorization is not transport\n  - transport attempt is not provider acceptance\n  - provider acceptance is not delivery\n  - delivery is not receipt",
+        "description": "Execute the governed delivery \u2014 the real transport step.\n\nGOV-DELIVERY-TRANSPORT-001. Given an AUTHORIZED governed delivery request,\nre-verify the binding (qualification, recipient, report version), then\nperform the transport, then write the append-only attempt row, then (only\non SUCCEEDED) transition the report version to ``'delivered'``.\n\nResponse contract:\n  - On SUCCEEDED, the HTTP body is the artifact bytes actually served to\n    the operator (``application/pdf`` for ``channel == 'pdf'``,\n    ``application/json`` for the canonical JSON serialization otherwise).\n    Attempt metadata is returned in ``X-FG-*`` response headers so the\n    operator can bind the bytes to their attempt/authorization/request id.\n  - Recording SUCCEEDED without the operator having received the bytes\n    would be epistemically false. The attempt row is inserted and\n    committed BEFORE the bytes are handed to the caller; if the commit\n    fails, a 500 is raised and no SUCCEEDED response is emitted.\n  - A repeat call on a previously SUCCEEDED authorization returns 409\n    ``DELIVERY_ALREADY_EXECUTED`` \u2014 bytes are NOT re-served, because\n    re-serving would let the transport authority be misused as a\n    download endpoint after the fact.\n\nInvariants:\n  - authorization is not transport\n  - transport attempt is not provider acceptance\n  - provider acceptance is not delivery\n  - delivery is not receipt",
         "operationId": "governed_delivery_execute_route_field_assessment_engagements__engagement_id__reports__report_id__governed_delivery__delivery_request_id__execute_post",
         "parameters": [
           {
@@ -82698,23 +82592,128 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/json": {}
+            },
+            "description": "SUCCEEDED transport \u2014 the response body IS the artifact bytes actually served to the operator. Attempt metadata is returned in X-FG-* response headers.",
+            "headers": {
+              "x-fg-artifact-bytes": {
+                "description": "Byte count of the served artifact as a decimal string integer.",
                 "schema": {
-                  "$ref": "#/components/schemas/GovernedDeliveryAttemptReceipt"
+                  "type": "string"
+                }
+              },
+              "x-fg-artifact-sha256": {
+                "description": "SHA-256 hex digest of the served artifact bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-attempted-at": {
+                "description": "ISO 8601 UTC timestamp of the transport attempt.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-attempted-by": {
+                "description": "ASCII-safe projection of the actor subject that executed the transport. The persisted attempt row retains the original Unicode subject; this header is transport-safe only.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-channel": {
+                "description": "Delivery channel of the request (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-attempt-id": {
+                "description": "Unique ID of the persisted delivery attempt row for this SUCCEEDED transport.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-authorization-id": {
+                "description": "Governed delivery authorization ID that this transport binds to.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-delivery-request-id": {
+                "description": "Governed delivery request ID.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-engagement-id": {
+                "description": "Engagement of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-outcome": {
+                "description": "Transport outcome (always ``SUCCEEDED`` on a 200).",
+                "schema": {
+                  "enum": [
+                    "SUCCEEDED"
+                  ],
+                  "type": "string"
+                }
+              },
+              "x-fg-recipient-type": {
+                "description": "Recipient type of the delivery request (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-fingerprint": {
+                "description": "Result fingerprint bound to this transport.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-id": {
+                "description": "Report of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-report-version-id": {
+                "description": "Report version of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-schema-version": {
+                "description": "Schema version tag of the governed delivery attempt authority.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-tenant-id": {
+                "description": "Tenant of the persisted attempt row.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-fg-transport-type": {
+                "description": "Transport type actually used to deliver the artifact (ASCII-safe projection).",
+                "schema": {
+                  "type": "string"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
+          },
+          "409": {
+            "description": "Delivery already executed (idempotent re-read attempt) or concurrent attempt in flight \u2014 artifact bytes are NOT re-served."
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Binding invariant violated (qualification / version / fingerprint)."
+          },
+          "501": {
+            "description": "Transport type not yet implemented."
+          },
+          "502": {
+            "description": "Transport failed while rendering the artifact."
           }
         },
         "summary": "Governed Delivery Execute Route",
