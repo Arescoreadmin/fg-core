@@ -14349,7 +14349,13 @@ def _governed_delivery_attempt_to_receipt(
     *,
     delivery_request_id: str,
 ) -> "GovernedDeliveryAttemptReceipt":
-    """Build a receipt Pydantic object from a SUCCEEDED attempt row."""
+    """Build a receipt Pydantic object from a SUCCEEDED attempt row.
+
+    Internal helper. As of GOV-DELIVERY-TRANSPORT-001 the receipt is no longer
+    the HTTP response body for ``/execute`` (the artifact bytes are). This
+    remains available for downstream authorities that need a typed record of
+    the transport evidence.
+    """
     return GovernedDeliveryAttemptReceipt(
         delivery_attempt_id=attempt.id,
         delivery_authorization_id=attempt.authorization_id,
@@ -14370,6 +14376,52 @@ def _governed_delivery_attempt_to_receipt(
         outcome=attempt.outcome,
         schema_version="1.0",
     )
+
+
+def _governed_delivery_attempt_to_headers(
+    attempt: FaGovernedDeliveryAttempt,
+    *,
+    delivery_request_id: str,
+) -> dict[str, str]:
+    """Build the ``X-FG-*`` response headers for a SUCCEEDED transport attempt.
+
+    The HTTP body for ``/execute`` on a SUCCEEDED transport is the artifact
+    bytes themselves — the metadata that used to live in the JSON receipt is
+    surfaced through these headers so the operator can still bind the received
+    bytes to their governing attempt-id/authorization-id/request-id.
+    """
+    return {
+        "x-fg-delivery-attempt-id": attempt.id,
+        "x-fg-delivery-authorization-id": attempt.authorization_id,
+        "x-fg-delivery-request-id": delivery_request_id,
+        "x-fg-tenant-id": attempt.tenant_id,
+        "x-fg-engagement-id": attempt.engagement_id,
+        "x-fg-report-id": attempt.report_id,
+        "x-fg-report-version-id": attempt.report_version_id,
+        "x-fg-report-fingerprint": attempt.report_fingerprint,
+        "x-fg-recipient-type": attempt.recipient_type,
+        "x-fg-channel": attempt.channel,
+        "x-fg-transport-type": attempt.transport_type,
+        "x-fg-artifact-sha256": attempt.artifact_sha256 or "",
+        "x-fg-artifact-bytes": str(attempt.artifact_bytes_length or 0),
+        "x-fg-attempted-by": attempt.attempted_by,
+        "x-fg-attempted-at": attempt.attempted_at,
+        "x-fg-outcome": attempt.outcome,
+        "x-fg-schema-version": "1.0",
+    }
+
+
+def _governed_delivery_content_type_for_channel(channel: str) -> str:
+    """Return the correct HTTP ``Content-Type`` for an ``operator_direct`` transport.
+
+    Mirrors the branching in :func:`_render_operator_direct_artifact_bytes`:
+      - ``channel == 'pdf'`` → ``application/pdf``
+      - all other channels (``direct_download`` / ``portal_grant`` / …) →
+        ``application/json`` (canonical JSON serialization of the report).
+    """
+    if channel == "pdf":
+        return "application/pdf"
+    return "application/json"
 
 
 def _render_operator_direct_artifact_bytes(
@@ -14426,8 +14478,33 @@ def _render_operator_direct_artifact_bytes(
 
 @router.post(
     "/engagements/{engagement_id}/reports/{report_id}/governed-delivery/{delivery_request_id}/execute",
-    response_model=GovernedDeliveryAttemptReceipt,
     status_code=200,
+    response_class=Response,
+    responses={
+        200: {
+            "description": (
+                "SUCCEEDED transport — the response body IS the artifact "
+                "bytes actually served to the operator. Attempt metadata "
+                "is returned in X-FG-* response headers."
+            ),
+            "content": {
+                "application/pdf": {},
+                "application/json": {},
+            },
+        },
+        409: {
+            "description": (
+                "Delivery already executed (idempotent re-read attempt) or "
+                "concurrent attempt in flight — artifact bytes are NOT "
+                "re-served."
+            ),
+        },
+        422: {
+            "description": "Binding invariant violated (qualification / version / fingerprint)."
+        },
+        502: {"description": "Transport failed while rendering the artifact."},
+        501: {"description": "Transport type not yet implemented."},
+    },
     dependencies=[Depends(authz_scope("governance:write"))],
 )
 def governed_delivery_execute_route(
@@ -14437,13 +14514,28 @@ def governed_delivery_execute_route(
     request: Request,
     actor_ctx: ActorContext = Depends(require_permission("report.generate")),
     db: Session = Depends(auth_ctx_db_session),
-) -> GovernedDeliveryAttemptReceipt:
+) -> Response:
     """Execute the governed delivery — the real transport step.
 
     GOV-DELIVERY-TRANSPORT-001. Given an AUTHORIZED governed delivery request,
     re-verify the binding (qualification, recipient, report version), then
     perform the transport, then write the append-only attempt row, then (only
     on SUCCEEDED) transition the report version to ``'delivered'``.
+
+    Response contract:
+      - On SUCCEEDED, the HTTP body is the artifact bytes actually served to
+        the operator (``application/pdf`` for ``channel == 'pdf'``,
+        ``application/json`` for the canonical JSON serialization otherwise).
+        Attempt metadata is returned in ``X-FG-*`` response headers so the
+        operator can bind the bytes to their attempt/authorization/request id.
+      - Recording SUCCEEDED without the operator having received the bytes
+        would be epistemically false. The attempt row is inserted and
+        committed BEFORE the bytes are handed to the caller; if the commit
+        fails, a 500 is raised and no SUCCEEDED response is emitted.
+      - A repeat call on a previously SUCCEEDED authorization returns 409
+        ``DELIVERY_ALREADY_EXECUTED`` — bytes are NOT re-served, because
+        re-serving would let the transport authority be misused as a
+        download endpoint after the fact.
 
     Invariants:
       - authorization is not transport
@@ -14567,8 +14659,12 @@ def governed_delivery_execute_route(
         recipient_id=req_row.recipient_id,
     )
 
-    # 6. Idempotency — return the existing SUCCEEDED attempt if one exists for
-    # this authorization.
+    # 6. Idempotency — if a SUCCEEDED attempt already exists for this
+    # authorization, the operator is returning to claim bytes they already
+    # received. Do NOT re-serve the bytes: that would let a caller replay the
+    # transport authority as a download endpoint. Return 409
+    # DELIVERY_ALREADY_EXECUTED with an actionable JSON error body naming the
+    # winning attempt id.
     existing_success = db.execute(
         select(FaGovernedDeliveryAttempt).where(
             FaGovernedDeliveryAttempt.tenant_id == tenant_id,
@@ -14577,8 +14673,17 @@ def governed_delivery_execute_route(
         )
     ).scalar_one_or_none()
     if existing_success is not None:
-        return _governed_delivery_attempt_to_receipt(
-            existing_success, delivery_request_id=req_row.id
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "DELIVERY_ALREADY_EXECUTED",
+                (
+                    "This governed delivery authorization has already been "
+                    f"executed by attempt {existing_success.id}. The artifact "
+                    "bytes are only served once, at the moment the SUCCEEDED "
+                    "attempt row is written."
+                ),
+            ),
         )
 
     # 7. Execute the transport.
@@ -14700,8 +14805,21 @@ def governed_delivery_execute_route(
                     "authorization. Retry.",
                 ),
             )
-        return _governed_delivery_attempt_to_receipt(
-            winner, delivery_request_id=req_row.id
+        # A concurrent /execute writer already served (or is committing) the
+        # bytes for this authorization. We do NOT re-serve the bytes here —
+        # only the winner of the race delivered them. Return 409 to make it
+        # explicit that this call was not the transport actor.
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "DELIVERY_ALREADY_EXECUTED",
+                (
+                    "This governed delivery authorization was executed by a "
+                    f"concurrent attempt {winner.id}. The artifact bytes are "
+                    "only served once, at the moment the SUCCEEDED attempt "
+                    "row is written."
+                ),
+            ),
         )
 
     # 9. Only after the SUCCEEDED attempt row is written do we transition the
@@ -14737,11 +14855,22 @@ def governed_delivery_execute_route(
         entity_id=rv.id,
         actor_type=actor_type,
     )
+    # Attempt row + version transition + audit event MUST be committed before
+    # the artifact bytes leave the process. If this commit fails, the operator
+    # never sees a SUCCEEDED response — a 500 propagates instead.
     db.commit()
     db.refresh(attempt_row)
 
-    return _governed_delivery_attempt_to_receipt(
-        attempt_row, delivery_request_id=req_row.id
+    # HTTP response: the body IS the artifact bytes. Metadata that used to be
+    # the JSON receipt is returned via X-FG-* response headers so the operator
+    # can bind the received bytes to attempt/authorization/request ids.
+    return Response(
+        content=artifact_bytes,
+        media_type=_governed_delivery_content_type_for_channel(req_row.channel),
+        headers=_governed_delivery_attempt_to_headers(
+            attempt_row, delivery_request_id=req_row.id
+        ),
+        status_code=200,
     )
 
 

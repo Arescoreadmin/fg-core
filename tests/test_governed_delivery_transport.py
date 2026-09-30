@@ -560,7 +560,15 @@ def test_t6_wrong_tenant_blocked(
 def test_t7_successful_operator_direct(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Happy path: authorize + execute yields SUCCEEDED attempt and delivered version."""
+    """Happy path: authorize + execute serves artifact bytes with receipt headers.
+
+    GOV-DELIVERY-TRANSPORT-001 correction: the /execute response body IS the
+    artifact bytes (not a JSON receipt). The receipt metadata is surfaced via
+    ``X-FG-*`` response headers so the operator can bind the received bytes
+    to the attempt/authorization/request ids.
+    """
+    import hashlib as _hashlib
+
     from api.db import get_sessionmaker
     from api.db_models_field_assessment import (
         FaGovernedDeliveryAttempt,
@@ -577,20 +585,33 @@ def test_t7_successful_operator_direct(
 
     resp = _execute(client, eid, rid, request_id)
     assert resp.status_code == 200, resp.text
-    receipt = resp.json()
-    assert receipt["outcome"] == "SUCCEEDED"
-    assert receipt["transport_type"] == "operator_direct"
-    assert receipt["artifact_sha256"]
-    assert len(receipt["artifact_sha256"]) == 64
-    assert receipt["artifact_bytes_length"] > 0
-    assert receipt["delivery_request_id"] == request_id
+
+    # Body is the actual artifact bytes.
+    assert resp.content, "operator_direct /execute must return non-empty bytes"
+    assert resp.headers["content-type"].startswith("application/json"), (
+        f"unexpected content-type: {resp.headers['content-type']}"
+    )
+
+    # Receipt metadata surfaced in X-FG-* headers.
+    assert resp.headers["x-fg-outcome"] == "SUCCEEDED"
+    assert resp.headers["x-fg-transport-type"] == "operator_direct"
+    assert resp.headers["x-fg-delivery-request-id"] == request_id
+    attempt_id = resp.headers["x-fg-delivery-attempt-id"]
+    assert attempt_id, "delivery attempt id header must be non-empty"
+    sha_header = resp.headers["x-fg-artifact-sha256"]
+    assert sha_header and len(sha_header) == 64
+    # Header sha256 must actually match the served bytes.
+    assert _hashlib.sha256(resp.content).hexdigest() == sha_header, (
+        "artifact bytes must hash to the sha256 declared in the receipt header"
+    )
+    assert int(resp.headers["x-fg-artifact-bytes"]) == len(resp.content)
 
     # Attempt row exists.
     sm = get_sessionmaker()()
     try:
         row = sm.execute(
             _select(FaGovernedDeliveryAttempt).where(
-                FaGovernedDeliveryAttempt.id == receipt["delivery_attempt_id"],
+                FaGovernedDeliveryAttempt.id == attempt_id,
             )
         ).scalar_one_or_none()
         assert row is not None
@@ -625,7 +646,7 @@ def test_t8_attempt_is_append_only(
     request_id = auth["receipt"]["delivery_request_id"]
     exec_resp = _execute(client, eid, rid, request_id)
     assert exec_resp.status_code == 200
-    attempt_id = exec_resp.json()["delivery_attempt_id"]
+    attempt_id = exec_resp.headers["x-fg-delivery-attempt-id"]
 
     sm = get_sessionmaker()()
     try:
@@ -654,7 +675,13 @@ def test_t8_attempt_is_append_only(
 def test_t9_duplicate_execute_idempotent(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two executes on the same authorization → one attempt row, same receipt."""
+    """Second execute on a SUCCEEDED authorization → 409, bytes are NOT re-served.
+
+    The transport authority serves the artifact bytes exactly once, at the
+    moment the SUCCEEDED attempt row is written. A repeat call must return
+    409 ``DELIVERY_ALREADY_EXECUTED`` (with a JSON error body) so the
+    transport endpoint cannot be replayed as a post-hoc download.
+    """
     from api.db import get_sessionmaker
     from api.db_models_field_assessment import FaGovernedDeliveryAttempt
     from sqlalchemy import select as _select
@@ -669,10 +696,15 @@ def test_t9_duplicate_execute_idempotent(
 
     resp1 = _execute(client, eid, rid, request_id)
     assert resp1.status_code == 200, resp1.text
-    resp2 = _execute(client, eid, rid, request_id)
-    assert resp2.status_code == 200, resp2.text
+    winning_attempt_id = resp1.headers["x-fg-delivery-attempt-id"]
 
-    assert resp1.json()["delivery_attempt_id"] == resp2.json()["delivery_attempt_id"]
+    resp2 = _execute(client, eid, rid, request_id)
+    assert resp2.status_code == 409, resp2.text
+    assert _err(resp2) == "DELIVERY_ALREADY_EXECUTED"
+    # The 409 body must name the winning attempt so the caller can bind their
+    # state; and must NOT re-serve the artifact bytes.
+    detail = (resp2.json().get("detail") or {}).get("message", "")
+    assert winning_attempt_id in detail
 
     sm = get_sessionmaker()()
     try:
@@ -687,6 +719,7 @@ def test_t9_duplicate_execute_idempotent(
             .all()
         )
         assert len(rows) == 1
+        assert rows[0].id == winning_attempt_id
     finally:
         sm.close()
 
@@ -822,7 +855,7 @@ def test_t12_attempt_rls_tenant_isolation(
     request_id = auth["receipt"]["delivery_request_id"]
     exec_resp = _execute(client, eid, rid, request_id)
     assert exec_resp.status_code == 200
-    attempt_id = exec_resp.json()["delivery_attempt_id"]
+    attempt_id = exec_resp.headers["x-fg-delivery-attempt-id"]
 
     sm = get_sessionmaker()()
     try:
