@@ -51,6 +51,37 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
+  - id: "GOV-DELIVERY-TRANSPORT-001"
+    title: "GOV-DELIVERY-TRANSPORT-001 — Bind governed authorization to real transport evidence"
+    role: "PREREQUISITE"
+    parent_objective: "FG_RESULT_TRUTH_GATE"
+    blocker_closed: >
+      Governed delivery authorization (GOV-DELIVERY-001) shipped an AUTHORIZED
+      record but no bound transport evidence. The report version could not move
+      through 'delivered' with any proof that the artifact actually left the
+      operator boundary. This work introduces the append-only transport-attempt
+      authority (fa_governed_delivery_attempts) that binds each attempt to the
+      exact (tenant, engagement, report, version, fingerprint, authorization)
+      tuple with SHA-256 over the served bytes, and gates the version status
+      transition on a SUCCEEDED attempt row.
+    freeze_law_justification: >
+      Customer-One cannot issue a defensible delivery to the first paying client
+      without append-only evidence that the qualified artifact actually left the
+      operator boundary. This is the smallest work that turns GOV-DELIVERY-001
+      from authorization-only into transport-bound delivery. Repair scope of
+      GOV-DELIVERY-001 delivery lifecycle.
+    status: NEXT
+    work_class: "REPAIR"
+    completion_evidence:
+      - "fa_governed_delivery_attempts table (append-only, RLS-enforced, unique-succeeded partial index)"
+      - "governed delivery /execute route binds authorization to artifact bytes SHA-256"
+      - "FaReportVersion.status='delivered' set only after SUCCEEDED attempt persists"
+      - "13 adversarial transport tests pass (T1-T13)"
+    forbidden_scope:
+      - "generalized notification/messaging infrastructure"
+      - "multi-provider transport abstraction"
+      - "customer portal receipt confirmation (separate authority)"
+      - "portal_grant / portal_membership transport (returns 501; separate work item)"
   - id: "CUSTOMER-ZERO-TRUST-001"
     title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
     role: "INTERNAL_PREREQUISITE"

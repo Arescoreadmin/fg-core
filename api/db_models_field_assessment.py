@@ -46,6 +46,7 @@ Tables:
   fa_qualification_decisions     — PROD-QUAL-001: finalized qualification decisions (append-only)
   fa_governed_delivery_requests  — GOV-DELIVERY-001: governed delivery request records (append-only)
   fa_governed_delivery_authorizations — GOV-DELIVERY-001: governed delivery authorization records (append-only)
+  fa_governed_delivery_attempts  — GOV-DELIVERY-TRANSPORT-001: transport attempt evidence (append-only)
 """
 
 from __future__ import annotations
@@ -1177,4 +1178,80 @@ def _block_governed_delivery_authorization_update(mapper, connection, target):
 def _block_governed_delivery_authorization_delete(mapper, connection, target):
     raise RuntimeError(
         "fa_governed_delivery_authorizations is append-only — deletes are forbidden"
+    )
+
+
+class FaGovernedDeliveryAttempt(Base):
+    """Append-only transport attempt evidence (GOV-DELIVERY-TRANSPORT-001).
+
+    Records one real transport attempt bound to a governing authorization.
+    outcome is SUCCEEDED or FAILED.
+
+    SUCCEEDED means the artifact bytes were actually served or transferred.
+    SUCCEEDED != customer receipt. Customer receipt evidence requires portal
+    access confirmation (a separate concern).
+
+    Non-empty ``report_fingerprint`` is required at the service layer before
+    insert; SUCCEEDED rows additionally carry ``artifact_sha256`` and
+    ``artifact_bytes_length`` computed over the served bytes.
+
+    This is NOT standalone. It is a component of the Field Assessment
+    Engagement Substrate and Governance Platform.
+    """
+
+    __tablename__ = "fa_governed_delivery_attempts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorization_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_version_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    channel: Mapped[str] = mapped_column(String(64), nullable=False)
+    transport_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    artifact_bytes_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempted_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempted_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fa_governed_delivery_attempts_tenant_auth",
+            "tenant_id",
+            "authorization_id",
+        ),
+        Index(
+            "ix_fa_governed_delivery_attempts_tenant_version",
+            "tenant_id",
+            "report_version_id",
+        ),
+        Index(
+            "ix_fa_governed_delivery_attempts_tenant_engagement",
+            "tenant_id",
+            "engagement_id",
+        ),
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryAttempt, "before_update")
+def _block_governed_delivery_attempt_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_attempts is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaGovernedDeliveryAttempt, "before_delete")
+def _block_governed_delivery_attempt_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_governed_delivery_attempts is append-only — deletes are forbidden"
     )

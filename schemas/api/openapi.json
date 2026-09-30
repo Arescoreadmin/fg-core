@@ -22474,6 +22474,112 @@
         "title": "GovernanceReportSummary",
         "type": "object"
       },
+      "GovernedDeliveryAttemptReceipt": {
+        "description": "Immutable evidence of a governed delivery transport attempt.\n\nGOV-DELIVERY-TRANSPORT-001. Represents one real transport attempt bound to\na governing authorization. ``outcome == 'SUCCEEDED'`` means the artifact\nbytes were actually served or transferred by the operator.  It does NOT\nmean the customer received the artifact \u2014 customer receipt requires a\nseparate portal access confirmation authority.",
+        "properties": {
+          "artifact_bytes_length": {
+            "title": "Artifact Bytes Length",
+            "type": "integer"
+          },
+          "artifact_sha256": {
+            "title": "Artifact Sha256",
+            "type": "string"
+          },
+          "attempted_at": {
+            "title": "Attempted At",
+            "type": "string"
+          },
+          "attempted_by": {
+            "title": "Attempted By",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "delivery_attempt_id": {
+            "title": "Delivery Attempt Id",
+            "type": "string"
+          },
+          "delivery_authorization_id": {
+            "title": "Delivery Authorization Id",
+            "type": "string"
+          },
+          "delivery_request_id": {
+            "title": "Delivery Request Id",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "recipient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Id"
+          },
+          "recipient_type": {
+            "title": "Recipient Type",
+            "type": "string"
+          },
+          "report_fingerprint": {
+            "title": "Report Fingerprint",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_version_id": {
+            "title": "Report Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "transport_type": {
+            "title": "Transport Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_attempt_id",
+          "delivery_authorization_id",
+          "delivery_request_id",
+          "tenant_id",
+          "engagement_id",
+          "report_id",
+          "report_version_id",
+          "report_fingerprint",
+          "recipient_type",
+          "recipient_id",
+          "channel",
+          "transport_type",
+          "artifact_sha256",
+          "artifact_bytes_length",
+          "attempted_by",
+          "attempted_at",
+          "outcome"
+        ],
+        "title": "GovernedDeliveryAttemptReceipt",
+        "type": "object"
+      },
       "GovernedDeliveryBodyFull": {
         "description": "Governed delivery body for the standalone governed-delivery endpoint.\n\nrecipient_type is required here. report_version_id is required in the body\nbecause it is not in the path for this endpoint.",
         "properties": {
@@ -82496,7 +82602,7 @@
     },
     "/field-assessment/engagements/{engagement_id}/reports/{report_id}/governed-delivery": {
       "post": {
-        "description": "Governed client delivery \u2014 full receipt with recipient binding.\n\nTransitions an approved version to 'delivered' (idempotent if already\ndelivered) and creates an immutable GovernedDeliveryReceipt. The receipt\nbinds the delivery to a canonical recipient authority and a specific\nqualification decision.",
+        "description": "Governed client delivery authorization \u2014 records the authority to deliver.\n\nCreates an immutable ``GovernedDeliveryReceipt`` binding the delivery to a\ncanonical recipient authority and a specific qualification decision.\n\nGOV-DELIVERY-TRANSPORT-001: this endpoint AUTHORIZES delivery. It does not\ntransport the artifact. The report version transitions to ``'delivered'``\nonly after a SUCCEEDED transport attempt is recorded by the ``/execute``\nendpoint. Authorization is not transport; transport attempt is not\ndelivery; delivery is not receipt.",
         "operationId": "governed_delivery_route_field_assessment_engagements__engagement_id__reports__report_id__governed_delivery_post",
         "parameters": [
           {
@@ -82551,6 +82657,67 @@
           }
         },
         "summary": "Governed Delivery Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/governed-delivery/{delivery_request_id}/execute": {
+      "post": {
+        "description": "Execute the governed delivery \u2014 the real transport step.\n\nGOV-DELIVERY-TRANSPORT-001. Given an AUTHORIZED governed delivery request,\nre-verify the binding (qualification, recipient, report version), then\nperform the transport, then write the append-only attempt row, then (only\non SUCCEEDED) transition the report version to ``'delivered'``.\n\nInvariants:\n  - authorization is not transport\n  - transport attempt is not provider acceptance\n  - provider acceptance is not delivery\n  - delivery is not receipt",
+        "operationId": "governed_delivery_execute_route_field_assessment_engagements__engagement_id__reports__report_id__governed_delivery__delivery_request_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_request_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernedDeliveryAttemptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Governed Delivery Execute Route",
         "tags": [
           "field-assessment"
         ]

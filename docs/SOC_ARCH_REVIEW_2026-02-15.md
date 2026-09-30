@@ -4594,3 +4594,76 @@ credential, secret, migration backfill, or prior delivery state was altered.
 `tests/test_production_qualification.py` 30/30 passed; Ruff clean; mypy clean.
 `make fg-fast` gates passed after `make route-inventory-generate` and
 `scripts/refresh_contract_authority.py`.
+
+
+## GOV-DELIVERY-TRANSPORT-001 — Governed Delivery Transport Authority (2026-09-29)
+
+**Scope:** Transport-closure PR that binds each governed delivery authorization to
+append-only transport-attempt evidence. This document previously recorded the
+authorization authority (`GOV-DELIVERY-001`); this section records the transport
+step that composes on top of it.
+
+**Additions:**
+- `migrations/postgres/0192_governed_delivery_attempts.sql`:
+  `fa_governed_delivery_attempts` append-only table with `outcome ∈ {SUCCEEDED,
+  FAILED}`, tenant RLS via `current_setting('app.tenant_id', true)`, and shared
+  `append_only_guard()` UPDATE/DELETE triggers.
+- `api/db_models_field_assessment.py::FaGovernedDeliveryAttempt` ORM class with
+  SQLAlchemy `before_update` / `before_delete` guards raising `RuntimeError`.
+- `api/field_assessment.py::governed_delivery_execute_route`:
+  `POST /field-assessment/engagements/{eid}/reports/{rid}/governed-delivery/{delivery_request_id}/execute`
+  → `GovernedDeliveryAttemptReceipt` with `artifact_sha256` +
+  `artifact_bytes_length`. Guarded by `governance:write` scope +
+  `report.generate` permission.
+- 13 adversarial tests in `tests/test_governed_delivery_transport.py` (T1–T13).
+- Generated CI artifacts regenerated via `make route-inventory-generate` and
+  `scripts/refresh_contract_authority.py`: `tools/ci/route_inventory.json`,
+  `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`,
+  `tools/ci/topology.sha256`, `tools/ci/contract_routes.json`,
+  `contracts/core/openapi.json`, `BLUEPRINT_STAGED.md`.
+
+**Security review — invariants enforced at the transport boundary:**
+- Authorization is not transport. `POST .../governed-delivery` no longer marks
+  the report version `delivered`; the `/execute` endpoint transitions to
+  `delivered` only AFTER a `SUCCEEDED` attempt row has been written.
+- Transport attempt is not delivery. `outcome=SUCCEEDED` (attempt) is distinct
+  from `outcome=AUTHORIZED` (authorization). SUCCEEDED means the operator
+  actually served the artifact bytes; it does NOT mean the customer received
+  them.
+- Re-verification at execute: the qualification decision must still be
+  QUALIFIED for the same `(tenant, report, version, fingerprint)` tuple
+  (`STALE_QUALIFICATION` → 422); the report version must still exist and not
+  be `superseded` (`SUPERSEDED_REPORT` → 422); the recipient authority is
+  re-resolved via `_resolve_delivery_recipient` (revoked recipient → 403);
+  cross-tenant probes return `404` uniformly (no oracle).
+- `report_fingerprint` is required non-empty at the attempt insert boundary.
+- Idempotency: a prior SUCCEEDED attempt on the same authorization returns
+  the existing receipt with no re-execution. Only one SUCCEEDED attempt row
+  per authorization.
+- Provider failure records a `FAILED` attempt row and returns `502
+  DELIVERY_TRANSPORT_FAILED`; the report version does not transition to
+  `delivered`.
+- Non-operator recipient types (`portal_grant`, `portal_membership`,
+  `portal_invitation`) return `501 TRANSPORT_NOT_IMPLEMENTED` for now; the
+  authorization authority remains valid for these recipients but transport
+  is deferred to a subsequent PR.
+- Append-only enforced at both the DB (RLS + UPDATE/DELETE triggers via
+  `append_only_guard()`) and the ORM (SA event listeners raising
+  `RuntimeError`).
+- No secret material anywhere in code, tests, logs, or receipts. Canonical
+  `ActorContext` only — no caller-supplied identity.
+
+**Boundary (not closed by this PR):**
+- Customer receipt evidence. `operator_direct` proves operator custody of the
+  artifact, not customer receipt. Portal recipient transport + customer
+  login-confirmation authority remains open.
+
+**Validation:** `tests/test_governed_delivery.py` 26/26 passed;
+`tests/test_governed_delivery_transport.py` 13/13 passed;
+`tests/test_report_delivery.py` 19/19 passed (no regressions);
+`tests/test_production_qualification.py` 30/30 passed; Ruff clean; Ruff format
+clean; mypy clean on `api/field_assessment.py`,
+`api/db_models_field_assessment.py`,
+`services/governance/report/governed_delivery_service.py`.
+`make fg-fast` gates passed after `make route-inventory-generate` and
+`scripts/refresh_contract_authority.py`.

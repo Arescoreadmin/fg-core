@@ -173,6 +173,7 @@ from api.db_models_field_assessment import (
     FaEvidenceProvenance,
     FaEvidenceReportLink,
     FaFieldObservation,
+    FaGovernedDeliveryAttempt,
     FaGovernedDeliveryAuthorization,
     FaGovernedDeliveryRequest,
     FaNormalizedFinding,
@@ -12858,6 +12859,36 @@ class GovernedDeliveryResponse(BaseModel):
     receipt: GovernedDeliveryReceipt
 
 
+class GovernedDeliveryAttemptReceipt(BaseModel):
+    """Immutable evidence of a governed delivery transport attempt.
+
+    GOV-DELIVERY-TRANSPORT-001. Represents one real transport attempt bound to
+    a governing authorization. ``outcome == 'SUCCEEDED'`` means the artifact
+    bytes were actually served or transferred by the operator.  It does NOT
+    mean the customer received the artifact — customer receipt requires a
+    separate portal access confirmation authority.
+    """
+
+    delivery_attempt_id: str
+    delivery_authorization_id: str
+    delivery_request_id: str
+    tenant_id: str
+    engagement_id: str
+    report_id: str
+    report_version_id: str
+    report_fingerprint: str
+    recipient_type: str
+    recipient_id: str | None
+    channel: str
+    transport_type: str
+    artifact_sha256: str
+    artifact_bytes_length: int
+    attempted_by: str
+    attempted_at: str
+    outcome: str  # SUCCEEDED
+    schema_version: str = "1.0"
+
+
 class ReportManifest(BaseModel):
     manifest_version: str
     schema_version: str
@@ -14063,17 +14094,20 @@ def governed_delivery_route(
     actor_ctx: ActorContext = Depends(require_permission("report.generate")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> GovernedDeliveryResponse:
-    """Governed client delivery — full receipt with recipient binding.
+    """Governed client delivery authorization — records the authority to deliver.
 
-    Transitions an approved version to 'delivered' (idempotent if already
-    delivered) and creates an immutable GovernedDeliveryReceipt. The receipt
-    binds the delivery to a canonical recipient authority and a specific
-    qualification decision.
+    Creates an immutable ``GovernedDeliveryReceipt`` binding the delivery to a
+    canonical recipient authority and a specific qualification decision.
+
+    GOV-DELIVERY-TRANSPORT-001: this endpoint AUTHORIZES delivery. It does not
+    transport the artifact. The report version transitions to ``'delivered'``
+    only after a SUCCEEDED transport attempt is recorded by the ``/execute``
+    endpoint. Authorization is not transport; transport attempt is not
+    delivery; delivery is not receipt.
     """
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
     actor_type = _actor_type_from_context(actor_ctx)
-    actor_role = actor_ctx.primary_role()
 
     # Validate channel
     channel_errors = _validate_channel(body.channel)
@@ -14223,14 +14257,10 @@ def governed_delivery_route(
                 receipt=receipt,
             )
 
-    # Transition version to delivered if not already
-    if rv.status == "approved":
-        rv.status = "delivered"
-        rv.delivered_at = utc_iso8601_z_now()
-        db.flush()
-        _record_delivery_event(
-            db, rv=rv, event_type="downloaded", actor=actor, actor_role=actor_role
-        )
+    # GOV-DELIVERY-TRANSPORT-001: authorization does not mark the report as
+    # delivered. The report version transitions to 'delivered' only after a
+    # SUCCEEDED transport attempt row is written by the /execute endpoint.
+    # Authorization is not transport; transport attempt is not delivery.
 
     # Create governed delivery records
     req_row, auth_row = _create_governed_delivery_records(
@@ -14290,6 +14320,428 @@ def governed_delivery_route(
     return GovernedDeliveryResponse(
         version=_report_version_to_response(rv),
         receipt=receipt,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GOV-DELIVERY-TRANSPORT-001 — governed delivery execution (transport)
+# ---------------------------------------------------------------------------
+#
+# Transport is a separate authority from authorization.  ``governed-delivery``
+# creates an AUTHORIZED record; ``governed-delivery/{id}/execute`` performs the
+# real transport (or reports FAILED) and writes append-only attempt evidence.
+#
+# Invariants enforced:
+#   - Authorization must exist and outcome == AUTHORIZED.
+#   - Qualification decision must still be present (STALE_QUALIFICATION → 422).
+#   - Report version must still exist (SUPERSEDED_REPORT → 422).
+#   - Recipient authority must still be active (mirrors _resolve_delivery_recipient).
+#   - Idempotency: a prior SUCCEEDED attempt on the same authorization returns
+#     the existing receipt (no re-execution).
+#   - report_fingerprint must be non-empty at the time of attempt insert.
+#   - Report version transitions to 'delivered' only AFTER a SUCCEEDED attempt
+#     row has been written.
+#   - Cross-tenant probes return 404 (indistinguishable from not-found).
+
+
+def _governed_delivery_attempt_to_receipt(
+    attempt: FaGovernedDeliveryAttempt,
+    *,
+    delivery_request_id: str,
+) -> "GovernedDeliveryAttemptReceipt":
+    """Build a receipt Pydantic object from a SUCCEEDED attempt row."""
+    return GovernedDeliveryAttemptReceipt(
+        delivery_attempt_id=attempt.id,
+        delivery_authorization_id=attempt.authorization_id,
+        delivery_request_id=delivery_request_id,
+        tenant_id=attempt.tenant_id,
+        engagement_id=attempt.engagement_id,
+        report_id=attempt.report_id,
+        report_version_id=attempt.report_version_id,
+        report_fingerprint=attempt.report_fingerprint,
+        recipient_type=attempt.recipient_type,
+        recipient_id=attempt.recipient_id,
+        channel=attempt.channel,
+        transport_type=attempt.transport_type,
+        artifact_sha256=attempt.artifact_sha256 or "",
+        artifact_bytes_length=attempt.artifact_bytes_length or 0,
+        attempted_by=attempt.attempted_by,
+        attempted_at=attempt.attempted_at,
+        outcome=attempt.outcome,
+        schema_version="1.0",
+    )
+
+
+def _render_operator_direct_artifact_bytes(
+    db: Session,
+    *,
+    report_record: GovernanceReportRecord,
+    channel: str,
+    engagement_name: str,
+    engagement_id: str,
+    tenant_id: str,
+) -> bytes:
+    """Render the operator_direct transport payload as bytes.
+
+    channel == 'direct_download' → canonical JSON of the report record.
+    channel == 'portal_grant' → the same JSON canonicalization for now;
+    portal_grant surfaces the same artifact bytes at the transport boundary.
+
+    Raises RuntimeError if PDF export was requested but reportlab is missing.
+    """
+    import json as _json
+
+    report_json = report_record.report_json or {}
+    if channel == "pdf":
+        from services.governance.report import (  # noqa: PLC0415
+            ExportUnavailableError as _ExportUnavailableError,
+            deserialize_report as _deserialize_report,
+            export_pdf_bytes as _export_pdf_bytes,
+        )
+
+        try:
+            gov_report = _deserialize_report(report_json)
+        except (ValueError, KeyError) as exc:
+            raise RuntimeError(f"report_deserialize_error: {exc}") from exc
+        try:
+            return _export_pdf_bytes(
+                gov_report,
+                executive_summary=(
+                    report_json.get("executive_summary")
+                    if isinstance(report_json.get("executive_summary"), dict)
+                    else None
+                ),
+                engagement_name=engagement_name,
+                data_disclosure=None,
+            )
+        except _ExportUnavailableError as exc:
+            raise RuntimeError("pdf_export_unavailable") from exc
+
+    # Default: canonical JSON serialization of the stored report record.
+    canonical = _json.dumps(
+        report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return canonical.encode("utf-8")
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/governed-delivery/{delivery_request_id}/execute",
+    response_model=GovernedDeliveryAttemptReceipt,
+    status_code=200,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def governed_delivery_execute_route(
+    engagement_id: str,
+    report_id: str,
+    delivery_request_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.generate")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> GovernedDeliveryAttemptReceipt:
+    """Execute the governed delivery — the real transport step.
+
+    GOV-DELIVERY-TRANSPORT-001. Given an AUTHORIZED governed delivery request,
+    re-verify the binding (qualification, recipient, report version), then
+    perform the transport, then write the append-only attempt row, then (only
+    on SUCCEEDED) transition the report version to ``'delivered'``.
+
+    Invariants:
+      - authorization is not transport
+      - transport attempt is not provider acceptance
+      - provider acceptance is not delivery
+      - delivery is not receipt
+    """
+    import hashlib as _hashlib
+    import uuid as _uuid
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    actor_type = _actor_type_from_context(actor_ctx)
+
+    # Engagement existence + tenant isolation
+    try:
+        engagement = get_engagement(
+            db, engagement_id=engagement_id, tenant_id=tenant_id
+        )
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # 1. Load the delivery request bound to this tenant + engagement + report.
+    req_row = db.execute(
+        select(FaGovernedDeliveryRequest).where(
+            FaGovernedDeliveryRequest.tenant_id == tenant_id,
+            FaGovernedDeliveryRequest.id == delivery_request_id,
+            FaGovernedDeliveryRequest.engagement_id == engagement_id,
+            FaGovernedDeliveryRequest.report_id == report_id,
+        )
+    ).scalar_one_or_none()
+    if req_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "DELIVERY_REQUEST_NOT_FOUND",
+                "Governed delivery request not found for this tenant/engagement/report.",
+            ),
+        )
+
+    # 2. Load the AUTHORIZED authorization for that request.
+    auth_row = db.execute(
+        select(FaGovernedDeliveryAuthorization).where(
+            FaGovernedDeliveryAuthorization.tenant_id == tenant_id,
+            FaGovernedDeliveryAuthorization.delivery_request_id == req_row.id,
+        )
+    ).scalar_one_or_none()
+    if auth_row is None or auth_row.outcome != "AUTHORIZED":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "DELIVERY_NOT_AUTHORIZED",
+                "No AUTHORIZED governed delivery record exists for this request.",
+            ),
+        )
+
+    # Non-empty fingerprint boundary (defensive — normal flow already enforces).
+    report_fingerprint = (req_row.report_fingerprint or "").strip()
+    if not report_fingerprint:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "MISSING_REPORT_FINGERPRINT",
+                "Governed delivery attempt requires a non-empty report fingerprint.",
+            ),
+        )
+
+    # 3. Re-verify qualification is still current.
+    qual = _load_qualification_decision(
+        db,
+        tenant_id=tenant_id,
+        report_id=req_row.report_id,
+        report_version_id=req_row.report_version_id,
+        report_fingerprint=report_fingerprint,
+    )
+    if qual is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "STALE_QUALIFICATION",
+                "The qualification decision bound to this authorization is no "
+                "longer QUALIFIED for the same fingerprint. Re-qualify before "
+                "executing delivery.",
+            ),
+        )
+
+    # 4. Re-verify report version still exists and has not been superseded.
+    rv = db.execute(
+        select(FaReportVersion).where(
+            FaReportVersion.id == req_row.report_version_id,
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.engagement_id == engagement_id,
+            FaReportVersion.report_id == report_id,
+        )
+    ).scalar_one_or_none()
+    if rv is None:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "SUPERSEDED_REPORT",
+                "The report version bound to this authorization no longer exists.",
+            ),
+        )
+    if rv.status == "superseded":
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "SUPERSEDED_REPORT",
+                "The report version bound to this authorization has been superseded.",
+            ),
+        )
+
+    # 5. Re-verify recipient authority is still active.
+    _resolve_delivery_recipient(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        recipient_type=req_row.recipient_type,
+        recipient_id=req_row.recipient_id,
+    )
+
+    # 6. Idempotency — return the existing SUCCEEDED attempt if one exists for
+    # this authorization.
+    existing_success = db.execute(
+        select(FaGovernedDeliveryAttempt).where(
+            FaGovernedDeliveryAttempt.tenant_id == tenant_id,
+            FaGovernedDeliveryAttempt.authorization_id == auth_row.id,
+            FaGovernedDeliveryAttempt.outcome == "SUCCEEDED",
+        )
+    ).scalar_one_or_none()
+    if existing_success is not None:
+        return _governed_delivery_attempt_to_receipt(
+            existing_success, delivery_request_id=req_row.id
+        )
+
+    # 7. Execute the transport.
+    transport_type = req_row.recipient_type
+    if transport_type != "operator_direct":
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=api_error(
+                "TRANSPORT_NOT_IMPLEMENTED",
+                f"Transport for recipient_type '{transport_type}' is not yet "
+                "available; use operator_direct for first-client delivery.",
+            ),
+        )
+
+    # Load the report record to render the artifact bytes.
+    report_record = _load_report_record(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+
+    attempt_id = _uuid.uuid4().hex
+    now = utc_iso8601_z_now()
+
+    try:
+        artifact_bytes = _render_operator_direct_artifact_bytes(
+            db,
+            report_record=report_record,
+            channel=req_row.channel,
+            engagement_name=engagement.client_name,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+        artifact_sha256 = _hashlib.sha256(artifact_bytes).hexdigest()
+        artifact_len = len(artifact_bytes)
+    except Exception as exc:  # noqa: BLE001 — record FAILED attempt, then raise
+        failure_code = "ARTIFACT_RENDER_ERROR"
+        message = str(exc) or exc.__class__.__name__
+        failed = FaGovernedDeliveryAttempt(
+            id=attempt_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            authorization_id=auth_row.id,
+            report_id=report_id,
+            report_version_id=rv.id,
+            report_fingerprint=report_fingerprint,
+            recipient_type=req_row.recipient_type,
+            recipient_id=req_row.recipient_id,
+            channel=req_row.channel,
+            transport_type=transport_type,
+            artifact_sha256=None,
+            artifact_bytes_length=None,
+            attempted_by=actor,
+            actor_type=actor_type,
+            attempted_at=now,
+            outcome="FAILED",
+            failure_code=failure_code,
+            provider_ref=None,
+            schema_version="1.0",
+        )
+        db.add(failed)
+        db.commit()
+        raise HTTPException(
+            status_code=502,
+            detail=api_error(
+                "DELIVERY_TRANSPORT_FAILED",
+                f"Transport failed while rendering the artifact: {message}",
+            ),
+        )
+
+    # 8. Persist SUCCEEDED attempt row.
+    #
+    # Concurrency: a UNIQUE partial index on
+    # (tenant_id, authorization_id) WHERE outcome = 'SUCCEEDED' enforces at
+    # most one SUCCEEDED attempt per authorization.  If a concurrent /execute
+    # writer beat us to it, IntegrityError is raised on flush; we roll back,
+    # re-read the existing SUCCEEDED row, and return it as an idempotent
+    # success. No 500, no duplicate delivered-status write.
+    attempt_row = FaGovernedDeliveryAttempt(
+        id=attempt_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        authorization_id=auth_row.id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        recipient_type=req_row.recipient_type,
+        recipient_id=req_row.recipient_id,
+        channel=req_row.channel,
+        transport_type=transport_type,
+        artifact_sha256=artifact_sha256,
+        artifact_bytes_length=artifact_len,
+        attempted_by=actor,
+        actor_type=actor_type,
+        attempted_at=now,
+        outcome="SUCCEEDED",
+        failure_code=None,
+        provider_ref=None,
+        schema_version="1.0",
+    )
+    db.add(attempt_row)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = db.execute(
+            select(FaGovernedDeliveryAttempt).where(
+                FaGovernedDeliveryAttempt.tenant_id == tenant_id,
+                FaGovernedDeliveryAttempt.authorization_id == auth_row.id,
+                FaGovernedDeliveryAttempt.outcome == "SUCCEEDED",
+            )
+        ).scalar_one_or_none()
+        if winner is None:
+            # Constraint fired but no winning row visible — surface a 409 rather
+            # than a 500 so the caller can retry deterministically.
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "DELIVERY_ATTEMPT_CONFLICT",
+                    "A concurrent transport attempt is in progress for this "
+                    "authorization. Retry.",
+                ),
+            )
+        return _governed_delivery_attempt_to_receipt(
+            winner, delivery_request_id=req_row.id
+        )
+
+    # 9. Only after the SUCCEEDED attempt row is written do we transition the
+    # report version state to 'delivered'.
+    if rv.status == "approved":
+        rv.status = "delivered"
+        rv.delivered_at = now
+        db.flush()
+        _record_delivery_event(
+            db,
+            rv=rv,
+            event_type="downloaded",
+            actor=actor,
+            actor_role=actor_ctx.primary_role(),
+        )
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_governed_delivery_transport",
+        actor=actor,
+        reason_code="GOVERNED_DELIVERY_TRANSPORT_SUCCEEDED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "delivery_authorization_id": auth_row.id,
+            "delivery_attempt_id": attempt_row.id,
+            "transport_type": transport_type,
+            "artifact_bytes_length": artifact_len,
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type=actor_type,
+    )
+    db.commit()
+    db.refresh(attempt_row)
+
+    return _governed_delivery_attempt_to_receipt(
+        attempt_row, delivery_request_id=req_row.id
     )
 
 
