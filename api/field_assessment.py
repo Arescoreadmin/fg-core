@@ -7629,6 +7629,7 @@ def qa_approve_report_route(
         from services.governance.trust_binding import (  # noqa: PLC0415
             build_report_signing_payload as _brsp,
         )
+
         _report_verify_payload = _brsp(
             tenant_id=report.tenant_id,
             engagement_id=report.engagement_id or engagement_id,
@@ -9866,6 +9867,7 @@ def export_engagement_report_route(
         from services.governance.trust_binding import (  # noqa: PLC0415
             build_report_signing_payload as _brsp,
         )
+
         _export_verify_payload = _brsp(
             tenant_id=record.tenant_id,
             engagement_id=record.engagement_id or engagement_id,
@@ -10053,6 +10055,7 @@ def verify_engagement_report_route(
         from services.governance.trust_binding import (  # noqa: PLC0415
             build_report_signing_payload as _brsp,
         )
+
         _verify_payload = _brsp(
             tenant_id=record.tenant_id,
             engagement_id=record.engagement_id or engagement_id,
