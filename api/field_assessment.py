@@ -14371,7 +14371,9 @@ def governed_delivery_route(
 
     # TRUST-BINDING-001: verify the qualification's APPROVAL trust binding before
     # signing the delivery authorization. Fail closed for unsigned qualifications.
-    assert qual_decision is not None  # guaranteed by qualification_decision_id check above
+    assert (
+        qual_decision is not None
+    )  # guaranteed by qualification_decision_id check above
     if not qual_decision.trust_signature:
         raise HTTPException(
             status_code=422,
@@ -14384,6 +14386,7 @@ def governed_delivery_route(
     from services.governance.trust_binding import (  # noqa: PLC0415
         build_qualification_signing_payload,
     )
+
     _qual_verify_authority = _get_trust_binding_authority()
     _qual_verify_payload = build_qualification_signing_payload(
         tenant_id=qual_decision.tenant_id,
@@ -14972,6 +14975,7 @@ def governed_delivery_execute_route(
         build_delivery_authorization_signing_payload,
         SignatureEnvelope as _SigEnvExec,
     )
+
     _exec_authority = _get_trust_binding_authority()
     _auth_payload = build_delivery_authorization_signing_payload(
         tenant_id=auth_row.tenant_id,

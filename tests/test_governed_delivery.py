@@ -213,6 +213,7 @@ def _inject_qualification(
         # Sign the qualification decision using the same authority singleton that
         # governed_delivery_route will use for verify_qualification().
         from api.field_assessment import _get_trust_binding_authority  # noqa: PLC0415
+
         _qual_authority = _get_trust_binding_authority()
         _qual_payload = build_qualification_signing_payload(
             tenant_id=tenant_id,
