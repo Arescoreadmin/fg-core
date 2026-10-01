@@ -286,3 +286,20 @@ def test_operator_identity_present_passes():
     result = validate_manifest(manifest())
     assert result.state is EvidenceState.PASS
     assert all(value is EvidenceState.PASS for value in result.dimensions.values())
+
+
+@pytest.mark.parametrize("subfield", ["name", "ref", "verification_method"])
+def test_operator_identity_whitespace_subfield_is_not_proven(subfield):
+    value = manifest()
+    value["operator_identity"][subfield] = "   "
+    result = validate_manifest(value)
+    assert result.state is EvidenceState.NOT_PROVEN
+    assert any(subfield in r for r in result.reasons)
+
+
+def test_operator_identity_non_object_is_not_proven():
+    value = manifest()
+    value["operator_identity"] = "Jane Operator"
+    result = validate_manifest(value)
+    assert result.state is EvidenceState.NOT_PROVEN
+    assert any("operator_identity" in r for r in result.reasons)

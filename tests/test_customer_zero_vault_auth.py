@@ -246,3 +246,15 @@ def test_vault_customer_zero_config_defaults_issuer_when_unset(
     monkeypatch.delenv("FG_CUSTOMER_ZERO_VAULT_ISSUER", raising=False)
     config = VaultCustomerZeroConfig.from_environment()
     assert config.issuer == "vault-transit"
+
+
+def test_vault_customer_zero_config_rejects_empty_issuer(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "http://vault.example:8200")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_IDENTITY_KEY_ID", "customer-zero-identity")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_ACCEPTANCE_KEY_ID", "customer-zero-acceptance")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_APPROVAL_KEY_ID", "customer-zero-approval")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ISSUER", "")
+    config = VaultCustomerZeroConfig.from_environment()
+    assert config.issuer == "vault-transit"
