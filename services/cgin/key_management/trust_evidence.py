@@ -290,6 +290,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
         "ceremony_id",
         "environment",
         "generated_at",
+        "operator_identity",
         "source_sha",
         "tested_sha",
         "vault_deployment",
@@ -297,6 +298,16 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
         if not manifest.get(field):
             reasons.append(f"missing {field}")
             metadata_missing = True
+    _op_id = manifest.get("operator_identity")
+    if isinstance(_op_id, dict):
+        for _subfield in ("name", "ref", "verification_method"):
+            _val = _op_id.get(_subfield)
+            if not isinstance(_val, str) or not _val.strip():
+                reasons.append(f"operator_identity.{_subfield} is absent or blank")
+                metadata_missing = True
+    elif _op_id is not None:
+        reasons.append("operator_identity must be an object")
+        metadata_missing = True
     if not manifest.get("source_sha") or not manifest.get("tested_sha"):
         dimensions["SOURCE_IDENTITY"] = EvidenceState.NOT_PROVEN
     elif (

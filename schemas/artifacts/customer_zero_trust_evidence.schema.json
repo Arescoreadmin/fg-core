@@ -9,6 +9,7 @@
     "ceremony_id",
     "environment",
     "generated_at",
+    "operator_identity",
     "source_sha",
     "tested_sha",
     "vault_deployment",
@@ -52,6 +53,24 @@
     "evidence_fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "operator_identity": {
+      "type": "object",
+      "required": ["name", "ref", "verification_method"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verification_method": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "vault_deployment": {
       "type": "object",
