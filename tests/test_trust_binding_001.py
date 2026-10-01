@@ -10,9 +10,9 @@ historical key version verification.
 Categories:
     A — Role Separation (6 tests)
     B — Report Binding (5 tests)
-    C — Qualification Binding (4 tests)
-    D — Delivery Authorization Binding (4 tests)
-    E — Failure Behavior (5 tests)
+    C — Qualification Binding (6 tests; +c5 unsigned blocks delivery, +c6 tampered blocks delivery)
+    D — Delivery Authorization Binding (6 tests; +d5 execute rejects unsigned, +d6 execute rejects tampered)
+    E — Failure Behavior (9 tests; +e6–e9 metadata guards)
     F — Production Safety (3 tests)
     G — Tenant Isolation (3 tests)
     H — Historical Verification (2 tests)
@@ -34,11 +34,13 @@ from services.governance.trust_binding import (
     DOMAIN_DELIVERY_AUTHORIZATION,
     DOMAIN_QUALIFICATION,
     DOMAIN_REPORT,
+    SCHEMA_VERSION,
     SignatureEnvelope,
     TrustBindingAuthority,
     _ROLE_DELIVERY_AUTHORIZATION,
     _ROLE_QUALIFICATION,
     _ROLE_REPORT,
+    _SUPPORTED_ALGORITHMS,
     build_delivery_authorization_signing_payload,
     build_qualification_signing_payload,
     build_report_signing_payload,
@@ -684,3 +686,162 @@ def test_signed_payload_sha256_matches_actual_bytes(authority, qual_payload):
     expected_bytes = f"{DOMAIN_QUALIFICATION}\n{payload_json}".encode("utf-8")
     expected_sha = hashlib.sha256(expected_bytes).hexdigest()
     assert env.signed_payload_sha256 == expected_sha
+
+
+# ---------------------------------------------------------------------------
+# C (cont.) — P1 #2: Qualification verification before delivery authorization
+# ---------------------------------------------------------------------------
+
+
+def test_c5_qualification_without_trust_binding_blocks_delivery_authorization(
+    authority, qual_payload
+):
+    """An envelope with empty signature must not pass verify_qualification.
+
+    Simulates a historical qualification row with no trust_signature — the
+    governed_delivery_route must reject it with QUALIFICATION_UNSIGNED.
+    verify_qualification returns False for an empty signature, which the route
+    interprets as an invalid binding.
+    """
+    env = authority.sign_qualification(qual_payload)
+    unsigned = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature="",  # no trust binding
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+    )
+    assert authority.verify_qualification(qual_payload, unsigned) is False
+
+
+def test_c6_tampered_qualification_blocks_delivery_authorization(
+    authority, qual_payload
+):
+    """A valid signature over a tampered payload must fail verify_qualification.
+
+    Simulates an attacker who replaces the qualification row's payload after
+    signing but re-uses the original signature.
+    """
+    env = authority.sign_qualification(qual_payload)
+    tampered_payload = dict(qual_payload)
+    tampered_payload["decision"] = "REJECTED"  # tamper after signing
+    # The sha256 will mismatch because we recompute from the tampered payload
+    assert authority.verify_qualification(tampered_payload, env) is False
+
+
+# ---------------------------------------------------------------------------
+# D (cont.) — P1 #4: Execute route trust verification
+# ---------------------------------------------------------------------------
+
+
+def test_d5_execute_route_rejects_unsigned_authorization(authority, delivery_payload):
+    """An envelope with empty signature must not pass verify_delivery_authorization.
+
+    Simulates an authorization row with no trust binding (NULL trust_signature)
+    — the execute route must reject it with DELIVERY_AUTHORIZATION_UNSIGNED.
+    """
+    env = authority.sign_delivery_authorization(delivery_payload)
+    unsigned = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature="",  # no trust binding
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+    )
+    assert authority.verify_delivery_authorization(delivery_payload, unsigned) is False
+
+
+def test_d6_execute_route_rejects_tampered_authorization_signature(
+    authority, delivery_payload
+):
+    """A valid signature over a different payload must fail verify_delivery_authorization.
+
+    Simulates an attacker who substitutes a delivery authorization row signed
+    for a different report version or recipient.
+    """
+    env = authority.sign_delivery_authorization(delivery_payload)
+    tampered_payload = dict(delivery_payload)
+    tampered_payload["recipient_type"] = "portal_membership"  # tamper after signing
+    assert authority.verify_delivery_authorization(tampered_payload, env) is False
+
+
+# ---------------------------------------------------------------------------
+# E (cont.) — P2 #5: Envelope metadata guards in verify_* methods
+# ---------------------------------------------------------------------------
+
+
+def test_e6_empty_key_id_fails_verification(authority, qual_payload):
+    """An envelope with an empty key_id must fail verification (pre-crypto guard)."""
+    env = authority.sign_qualification(qual_payload)
+    bad = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id="",  # empty key_id
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+    )
+    assert authority.verify_qualification(qual_payload, bad) is False
+
+
+def test_e7_invalid_schema_version_fails_verification(authority, qual_payload):
+    """An envelope with a wrong schema_version must fail verification."""
+    env = authority.sign_qualification(qual_payload)
+    bad = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+        schema_version="99",  # wrong schema version
+    )
+    assert authority.verify_qualification(qual_payload, bad) is False
+
+
+def test_e8_unsupported_algorithm_fails_verification(authority, qual_payload):
+    """An envelope claiming an unsupported algorithm must fail the pre-crypto guard."""
+    env = authority.sign_qualification(qual_payload)
+    bad = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm="rsa-pss",  # not in _SUPPORTED_ALGORITHMS
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+    )
+    assert authority.verify_qualification(qual_payload, bad) is False
+
+
+def test_e9_zero_key_version_fails_verification(authority, qual_payload):
+    """An envelope with key_version=0 must fail the pre-crypto guard."""
+    env = authority.sign_qualification(qual_payload)
+    bad = SignatureEnvelope(
+        issuer=env.issuer,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=0,  # invalid key version
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=env.domain,
+        signed_payload_sha256=env.signed_payload_sha256,
+    )
+    assert authority.verify_qualification(qual_payload, bad) is False

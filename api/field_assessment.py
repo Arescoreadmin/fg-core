@@ -1295,23 +1295,32 @@ def _create_report_links_for_report(
 # ---------------------------------------------------------------------------
 
 
+_TEST_TRUST_AUTHORITY: "_TrustBindingAuthority | None" = None
+
+
 def _get_trust_binding_authority() -> _TrustBindingAuthority:
     """Return a TrustBindingAuthority for the current environment.
 
     Test environments (FG_ENV=test) use the in-process TrustBindingFake so
-    that tests do not require a running Vault server.  Production and staging
-    environments use the real Vault-backed authority.
+    that tests do not require a running Vault server.  The test authority is
+    a module-level singleton so that rows signed in test helpers and verified
+    in route handlers share the same ephemeral key material within the process.
+
+    Production and staging environments use the real Vault-backed authority.
 
     Fail closed: if Vault env is not configured and we are not in a test
     environment, an exception is raised.
     """
+    global _TEST_TRUST_AUTHORITY  # noqa: PLW0603
     env = os.getenv("FG_ENV", "").lower()
     if env in {"test", "development", "local"}:
-        from services.governance.trust_binding_fake import (  # noqa: PLC0415
-            make_test_authority,
-        )
+        if _TEST_TRUST_AUTHORITY is None:
+            from services.governance.trust_binding_fake import (  # noqa: PLC0415
+                make_test_authority,
+            )
 
-        return make_test_authority()
+            _TEST_TRUST_AUTHORITY = make_test_authority()
+        return _TEST_TRUST_AUTHORITY
     return _TrustBindingAuthority.from_environment()
 
 
@@ -9516,7 +9525,6 @@ def create_engagement_report_route(
     import json
     import uuid
 
-    from services.governance.report.signing import ReportSigningKeyError, sign_report
     from services.governance.report.versioning import acquire_next_version
 
     if body.report_type not in _VALID_REPORT_TYPES:
@@ -9564,20 +9572,36 @@ def create_engagement_report_route(
         )
         manifest_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
-        try:
-            signature = sign_report(canonical_str)
-        except ReportSigningKeyError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=api_error("REPORT_SIGNING_KEY_MISSING", str(exc)),
-            )
-
+        # Pre-compute record_id before signing so the signed payload can bind it.
         record_id = (
             uuid.uuid4().hex[:16]
             + hashlib.sha256(
                 f"{tenant_id}:{engagement_id}:{version}".encode()
             ).hexdigest()[:16]
         )
+
+        # TRUST-BINDING-001: sign via IDENTITY trust role before writing DB rows.
+        from services.governance.trust_binding import build_report_signing_payload  # noqa: PLC0415
+        from services.cgin.key_management.vault_transit import VaultTransitError  # noqa: PLC0415
+
+        _report_trust_authority = _get_trust_binding_authority()
+        _report_payload = build_report_signing_payload(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            report_id=record_id,
+            report_version_id="",
+            report_fingerprint=manifest_hash,
+            report_schema_version="1.0",
+        )
+        try:
+            _report_envelope = _report_trust_authority.sign_report(_report_payload)
+        except VaultTransitError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=api_error("TRUST_BINDING_UNAVAILABLE", str(exc)),
+            )
+        signature = _report_envelope.signature  # keep existing field populated
+
         record = GovernanceReportRecord(
             id=record_id,
             assessment_id=engagement_id,
@@ -9598,6 +9622,14 @@ def create_engagement_report_route(
             signature=signature,
             generated_at=now,
             is_finalized=True,
+            trust_signature=_report_envelope.signature,
+            trust_signing_algorithm=_report_envelope.algorithm,
+            trust_signing_role=_report_envelope.trust_role,
+            trust_signing_key_id=_report_envelope.key_id,
+            trust_signing_key_version=_report_envelope.key_version,
+            trust_public_key_fingerprint=_report_envelope.public_key_fingerprint,
+            trust_signed_payload_sha256=_report_envelope.signed_payload_sha256,
+            trust_signature_schema_version=_report_envelope.schema_version,
         )
         db.add(record)
         db.flush()
@@ -9607,7 +9639,7 @@ def create_engagement_report_route(
             engagement_id=engagement_id,
             report_id=record.id,
             report_hash=manifest_hash,
-            report_signature=signature,
+            report_signature=_report_envelope.signature,
             report_json=report_json,
             linked_by=record.compiled_by,
             input_evidence_ids=scan_result_ids,
@@ -13910,6 +13942,29 @@ def _resolve_delivery_recipient(
     )
 
 
+def _envelope_from_qual_row(qual_row: "FaQualificationDecision") -> "Any":
+    """Reconstruct a SignatureEnvelope from a persisted FaQualificationDecision row.
+
+    TRUST-BINDING-001: used by governed_delivery_route to verify the APPROVAL
+    trust binding before signing the ACCEPTANCE delivery authorization.
+    The DB schema has no dedicated issuer column; key_id is used as a proxy.
+    """
+    from services.governance.trust_binding import SignatureEnvelope as _SigEnv  # noqa: PLC0415
+
+    return _SigEnv(
+        issuer=qual_row.trust_signing_key_id or "",
+        trust_role=qual_row.trust_signing_role or "",
+        key_id=qual_row.trust_signing_key_id or "",
+        key_version=qual_row.trust_signing_key_version or 0,
+        algorithm=qual_row.trust_signing_algorithm or "",
+        public_key_fingerprint=qual_row.trust_public_key_fingerprint or "",
+        signature=qual_row.trust_signature or "",
+        domain="frostgate.production-qualification.v1",
+        signed_payload_sha256=qual_row.trust_signed_payload_sha256 or "",
+        schema_version=qual_row.trust_signature_schema_version or "1",
+    )
+
+
 def _create_governed_delivery_records(
     db: Session,
     *,
@@ -14123,6 +14178,42 @@ def deliver_report_version_route(
         db, rv=rv, event_type="downloaded", actor=actor, actor_role=actor_role
     )
 
+    # TRUST-BINDING-001: sign the delivery authorization before writing records.
+    import uuid as _uuid_deliver_legacy  # noqa: PLC0415
+
+    from services.governance.trust_binding import (  # noqa: PLC0415
+        build_delivery_authorization_signing_payload,
+    )
+    from services.cgin.key_management.vault_transit import (  # noqa: PLC0415
+        VaultTransitError,
+    )
+
+    _legacy_del_req_id = _uuid_deliver_legacy.uuid4().hex
+    _legacy_trust_authority = _get_trust_binding_authority()
+    _legacy_del_payload = build_delivery_authorization_signing_payload(
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        delivery_request_id=_legacy_del_req_id,
+        recipient_type="operator_direct",
+        recipient_id=None,
+        channel="direct_download",
+        outcome="AUTHORIZED",
+        schema_version="1.0",
+    )
+    try:
+        _legacy_del_envelope = _legacy_trust_authority.sign_delivery_authorization(
+            _legacy_del_payload
+        )
+    except VaultTransitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=api_error("TRUST_BINDING_UNAVAILABLE", str(exc)),
+        )
+
     # Governed delivery side effect — operator_direct
     _create_governed_delivery_records(
         db,
@@ -14138,6 +14229,8 @@ def deliver_report_version_route(
         recipient_id=None,
         channel="direct_download",
         idempotency_key=idempotency_key,
+        req_id=_legacy_del_req_id,
+        auth_trust_envelope=_legacy_del_envelope,
     )
 
     emit_engagement_audit_event(
@@ -14273,6 +14366,46 @@ def governed_delivery_route(
                 "PRODUCTION_QUALIFICATION_BLOCKED",
                 "No QUALIFIED production qualification decision found for this "
                 "report version and fingerprint.",
+            ),
+        )
+
+    # TRUST-BINDING-001: verify the qualification's APPROVAL trust binding before
+    # signing the delivery authorization. Fail closed for unsigned qualifications.
+    assert qual_decision is not None  # guaranteed by qualification_decision_id check above
+    if not qual_decision.trust_signature:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "QUALIFICATION_UNSIGNED",
+                "The qualification decision does not have a trust binding. "
+                "Re-qualify under TRUST-BINDING-001 to authorize delivery.",
+            ),
+        )
+    from services.governance.trust_binding import (  # noqa: PLC0415
+        build_qualification_signing_payload,
+    )
+    _qual_verify_authority = _get_trust_binding_authority()
+    _qual_verify_payload = build_qualification_signing_payload(
+        tenant_id=qual_decision.tenant_id,
+        engagement_id=qual_decision.engagement_id,
+        report_id=qual_decision.report_id,
+        qual_request_id=qual_decision.qual_request_id,
+        report_version_id=qual_decision.report_version_id or "",
+        report_fingerprint=qual_decision.report_fingerprint or "",
+        decision=qual_decision.decision,
+        decided_by=qual_decision.decided_by,
+        schema_version=qual_decision.schema_version or "1.0",
+    )
+    _qual_verify_envelope = _envelope_from_qual_row(qual_decision)
+    if not _qual_verify_authority.verify_qualification(
+        _qual_verify_payload, _qual_verify_envelope
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "QUALIFICATION_TRUST_BINDING_INVALID",
+                "The qualification decision's APPROVAL trust signature cannot be "
+                "verified. Delivery authorization requires a valid APPROVAL binding.",
             ),
         )
 
@@ -14822,6 +14955,57 @@ def governed_delivery_execute_route(
             detail=api_error(
                 "MISSING_REPORT_FINGERPRINT",
                 "Governed delivery attempt requires a non-empty report fingerprint.",
+            ),
+        )
+
+    # TRUST-BINDING-001: verify ACCEPTANCE trust binding before transport.
+    if not auth_row.trust_signature:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "DELIVERY_AUTHORIZATION_UNSIGNED",
+                "Delivery authorization does not have a trust binding. "
+                "Re-authorize under TRUST-BINDING-001.",
+            ),
+        )
+    from services.governance.trust_binding import (  # noqa: PLC0415
+        build_delivery_authorization_signing_payload,
+        SignatureEnvelope as _SigEnvExec,
+    )
+    _exec_authority = _get_trust_binding_authority()
+    _auth_payload = build_delivery_authorization_signing_payload(
+        tenant_id=auth_row.tenant_id,
+        engagement_id=auth_row.engagement_id,
+        report_id=auth_row.report_id,
+        report_version_id=auth_row.report_version_id,
+        report_fingerprint=auth_row.report_fingerprint or "",
+        qualification_decision_id=auth_row.qualification_decision_id or "",
+        delivery_request_id=req_row.id,
+        recipient_type=auth_row.recipient_type,
+        recipient_id=auth_row.recipient_id,
+        channel=auth_row.channel,
+        outcome=auth_row.outcome,
+        schema_version=auth_row.schema_version or "1.0",
+    )
+    _auth_envelope = _SigEnvExec(
+        issuer=auth_row.trust_signing_key_id or "",
+        trust_role=auth_row.trust_signing_role or "",
+        key_id=auth_row.trust_signing_key_id or "",
+        key_version=auth_row.trust_signing_key_version or 0,
+        algorithm=auth_row.trust_signing_algorithm or "",
+        public_key_fingerprint=auth_row.trust_public_key_fingerprint or "",
+        signature=auth_row.trust_signature,
+        domain="frostgate.governed-delivery-authorization.v1",
+        signed_payload_sha256=auth_row.trust_signed_payload_sha256 or "",
+        schema_version=auth_row.trust_signature_schema_version or "1",
+    )
+    if not _exec_authority.verify_delivery_authorization(_auth_payload, _auth_envelope):
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "DELIVERY_AUTHORIZATION_TRUST_INVALID",
+                "The delivery authorization's ACCEPTANCE trust signature cannot be "
+                "verified. Authorization is not valid.",
             ),
         )
 

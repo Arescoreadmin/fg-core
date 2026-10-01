@@ -44,6 +44,9 @@ _ROLE_DELIVERY_AUTHORIZATION = TrustRole.ACCEPTANCE
 
 SCHEMA_VERSION = "1"
 
+# Supported signing algorithms — used in pre-crypto envelope metadata validation.
+_SUPPORTED_ALGORITHMS = frozenset({"ed25519"})
+
 
 @dataclass(frozen=True)
 class SignatureEnvelope:
@@ -149,6 +152,18 @@ class TrustBindingAuthority:
             return False
         if envelope.domain != DOMAIN_REPORT:
             return False
+        if envelope.algorithm not in _SUPPORTED_ALGORITHMS:
+            return False
+        if envelope.schema_version != SCHEMA_VERSION:
+            return False
+        if not envelope.key_id:
+            return False
+        if envelope.key_version < 1:
+            return False
+        if not envelope.public_key_fingerprint:
+            return False
+        if not envelope.issuer:
+            return False
         signing_bytes = _prepare_signing_bytes(DOMAIN_REPORT, canonical_payload)
         expected_sha = hashlib.sha256(signing_bytes).hexdigest()
         if envelope.signed_payload_sha256 != expected_sha:
@@ -174,6 +189,18 @@ class TrustBindingAuthority:
         if envelope.trust_role != _ROLE_QUALIFICATION.value:
             return False
         if envelope.domain != DOMAIN_QUALIFICATION:
+            return False
+        if envelope.algorithm not in _SUPPORTED_ALGORITHMS:
+            return False
+        if envelope.schema_version != SCHEMA_VERSION:
+            return False
+        if not envelope.key_id:
+            return False
+        if envelope.key_version < 1:
+            return False
+        if not envelope.public_key_fingerprint:
+            return False
+        if not envelope.issuer:
             return False
         signing_bytes = _prepare_signing_bytes(
             DOMAIN_QUALIFICATION, canonical_payload
@@ -206,6 +233,18 @@ class TrustBindingAuthority:
         if envelope.trust_role != _ROLE_DELIVERY_AUTHORIZATION.value:
             return False
         if envelope.domain != DOMAIN_DELIVERY_AUTHORIZATION:
+            return False
+        if envelope.algorithm not in _SUPPORTED_ALGORITHMS:
+            return False
+        if envelope.schema_version != SCHEMA_VERSION:
+            return False
+        if not envelope.key_id:
+            return False
+        if envelope.key_version < 1:
+            return False
+        if not envelope.public_key_fingerprint:
+            return False
+        if not envelope.issuer:
             return False
         signing_bytes = _prepare_signing_bytes(
             DOMAIN_DELIVERY_AUTHORIZATION, canonical_payload

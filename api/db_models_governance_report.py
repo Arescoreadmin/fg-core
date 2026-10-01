@@ -31,7 +31,15 @@ Schema:
     generated_at TEXT NOT NULL,
     is_finalized BOOLEAN DEFAULT FALSE,
     qa_approved_by TEXT,
-    qa_approved_at TEXT
+    qa_approved_at TEXT,
+    trust_signature TEXT,
+    trust_signing_algorithm TEXT,
+    trust_signing_role TEXT,
+    trust_signing_key_id TEXT,
+    trust_signing_key_version INTEGER,
+    trust_public_key_fingerprint TEXT,
+    trust_signed_payload_sha256 TEXT,
+    trust_signature_schema_version TEXT
   )
 """
 
@@ -78,6 +86,26 @@ class GovernanceReportRecord(Base):
     is_finalized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     qa_approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     qa_approved_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # TRUST-BINDING-001 — Vault Transit IDENTITY-role signature (nullable for
+    # backward compat with pre-binding rows; mandatory for new rows).
+    trust_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_signing_algorithm: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    trust_signing_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trust_signing_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trust_signing_key_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    trust_public_key_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signed_payload_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signature_schema_version: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
+    )
 
     __table_args__ = (
         Index(
