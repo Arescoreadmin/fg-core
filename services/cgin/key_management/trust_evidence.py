@@ -290,6 +290,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> ValidationResult:
         "ceremony_id",
         "environment",
         "generated_at",
+        "operator_identity",
         "source_sha",
         "tested_sha",
         "vault_deployment",

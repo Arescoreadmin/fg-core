@@ -7,6 +7,7 @@ import pytest
 from services.cgin.key_management.vault_transit import (
     AppRoleAuthenticator,
     TrustRole,
+    VaultCustomerZeroConfig,
     VaultSession,
     VaultTransitClient,
     VaultTransitError,
@@ -221,3 +222,27 @@ def test_injected_clients_must_disable_redirects():
             http_client=client,
             operational=True,
         )
+
+
+def test_vault_customer_zero_config_reads_issuer_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "http://vault.example:8200")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_IDENTITY_KEY_ID", "customer-zero-identity")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_ACCEPTANCE_KEY_ID", "customer-zero-acceptance")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_APPROVAL_KEY_ID", "customer-zero-approval")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ISSUER", "vault-transit-prod")
+    config = VaultCustomerZeroConfig.from_environment()
+    assert config.issuer == "vault-transit-prod"
+
+
+def test_vault_customer_zero_config_defaults_issuer_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "http://vault.example:8200")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_IDENTITY_KEY_ID", "customer-zero-identity")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_ACCEPTANCE_KEY_ID", "customer-zero-acceptance")
+    monkeypatch.setenv("FG_CUSTOMER_ZERO_APPROVAL_KEY_ID", "customer-zero-approval")
+    monkeypatch.delenv("FG_CUSTOMER_ZERO_VAULT_ISSUER", raising=False)
+    config = VaultCustomerZeroConfig.from_environment()
+    assert config.issuer == "vault-transit"

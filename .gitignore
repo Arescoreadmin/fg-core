@@ -195,6 +195,10 @@ artifacts/*
 !artifacts/t5/
 !artifacts/t5/**
 
+# Customer-Zero trust evidence is non-secret governance-level material — commit it
+!artifacts/trust/
+!artifacts/trust/**
+
 # Keep volatile evidence ignored
 artifacts/platform_inventory.json
 # Runtime evidence artifacts from live proof harnesses (never commit production output)

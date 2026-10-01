@@ -544,6 +544,7 @@ class VaultCustomerZeroConfig:
     @classmethod
     def from_environment(cls) -> "VaultCustomerZeroConfig":
         address = os.getenv("FG_CUSTOMER_ZERO_VAULT_ADDR", "")
+        issuer = os.getenv("FG_CUSTOMER_ZERO_VAULT_ISSUER", "vault-transit")
         values = {
             TrustRole.IDENTITY: os.getenv("FG_CUSTOMER_ZERO_IDENTITY_KEY_ID", ""),
             TrustRole.ACCEPTANCE: os.getenv("FG_CUSTOMER_ZERO_ACCEPTANCE_KEY_ID", ""),
@@ -558,7 +559,9 @@ class VaultCustomerZeroConfig:
         if len(set(values.values())) != len(values):
             raise ValueError("Customer-Zero trust roles require distinct Vault key IDs")
         return cls(
-            address=_validate_address(address, operational=False), key_ids=values
+            address=_validate_address(address, operational=False),
+            key_ids=values,
+            issuer=issuer,
         )
 
 

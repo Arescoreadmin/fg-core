@@ -60,6 +60,11 @@ def manifest() -> dict:
         "ceremony_id": "ceremony-001",
         "environment": "hcp-vault-dedicated",
         "generated_at": "2026-09-22T12:00:00Z",
+        "operator_identity": {
+            "name": "Jane Operator",
+            "ref": "jane@example.com",
+            "verification_method": "github-commit-signature",
+        },
         "source_sha": "a" * 64,
         "tested_sha": "a" * 64,
         "deployed_sha": "a" * 64,
@@ -267,3 +272,17 @@ def test_replay_validation_is_network_free_and_stable():
     first = validate_manifest(value).as_dict()
     second = validate_manifest(copy.deepcopy(value)).as_dict()
     assert first == second
+
+
+def test_operator_identity_missing_is_not_proven():
+    value = manifest()
+    value.pop("operator_identity")
+    result = validate_manifest(value)
+    assert result.state is EvidenceState.NOT_PROVEN
+    assert any("operator_identity" in r for r in result.reasons)
+
+
+def test_operator_identity_present_passes():
+    result = validate_manifest(manifest())
+    assert result.state is EvidenceState.PASS
+    assert all(value is EvidenceState.PASS for value in result.dimensions.values())
