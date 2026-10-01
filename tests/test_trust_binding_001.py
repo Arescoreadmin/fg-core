@@ -34,13 +34,11 @@ from services.governance.trust_binding import (
     DOMAIN_DELIVERY_AUTHORIZATION,
     DOMAIN_QUALIFICATION,
     DOMAIN_REPORT,
-    SCHEMA_VERSION,
     SignatureEnvelope,
     TrustBindingAuthority,
     _ROLE_DELIVERY_AUTHORIZATION,
     _ROLE_QUALIFICATION,
     _ROLE_REPORT,
-    _SUPPORTED_ALGORITHMS,
     build_delivery_authorization_signing_payload,
     build_qualification_signing_payload,
     build_report_signing_payload,
@@ -821,7 +819,7 @@ def test_e8_unsupported_algorithm_fails_verification(authority, qual_payload):
         trust_role=env.trust_role,
         key_id=env.key_id,
         key_version=env.key_version,
-        algorithm="rsa-pss",  # not in _SUPPORTED_ALGORITHMS
+        algorithm="rsa-pss",  # not a supported algorithm
         public_key_fingerprint=env.public_key_fingerprint,
         signature=env.signature,
         domain=env.domain,
