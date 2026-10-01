@@ -189,11 +189,17 @@ def _inject_qualification(
     vid: str,
     report_fingerprint: str | None = None,
 ) -> str:
+    """Directly inject a QUALIFIED decision row. Returns qualification_decision_id.
+
+    TRUST-BINDING-001: signs the qualification row with a TrustBindingFake so that
+    governed_delivery_route's APPROVAL binding verification passes.
+    """
     from api.db import get_sessionmaker
     from api.db_models_field_assessment import (
         FaProductionQualRequest,
         FaQualificationDecision,
     )
+    from services.governance.trust_binding import build_qualification_signing_payload
 
     if report_fingerprint is None:
         report_fingerprint = _get_report_fingerprint(rid)
@@ -214,6 +220,25 @@ def _inject_qualification(
         )
         sm.add(req_row)
         sm.flush()
+
+        # Sign the qualification decision using the same authority singleton that
+        # governed_delivery_route will use for verify_qualification().
+        from api.field_assessment import _get_trust_binding_authority  # noqa: PLC0415
+
+        _qual_authority = _get_trust_binding_authority()
+        _qual_payload = build_qualification_signing_payload(
+            tenant_id=tenant_id,
+            engagement_id=eid,
+            report_id=rid,
+            qual_request_id=qid,
+            report_version_id=vid,
+            report_fingerprint=report_fingerprint or "",
+            decision="QUALIFIED",
+            decided_by="test-injector",
+            schema_version="1.0",
+        )
+        _qual_env = _qual_authority.sign_qualification(_qual_payload)
+
         dec_row = FaQualificationDecision(
             id=dec_id,
             tenant_id=tenant_id,
@@ -228,6 +253,14 @@ def _inject_qualification(
             reason=None,
             decided_at="2026-09-29T00:00:00Z",
             schema_version="1.0",
+            trust_signature=_qual_env.signature,
+            trust_signing_algorithm=_qual_env.algorithm,
+            trust_signing_role=_qual_env.trust_role,
+            trust_signing_key_id=_qual_env.key_id,
+            trust_signing_key_version=_qual_env.key_version,
+            trust_public_key_fingerprint=_qual_env.public_key_fingerprint,
+            trust_signed_payload_sha256=_qual_env.signed_payload_sha256,
+            trust_signature_schema_version=_qual_env.schema_version,
         )
         sm.add(dec_row)
         sm.commit()

@@ -982,6 +982,10 @@ class FaQualificationDecision(Base):
     The unique constraint on (tenant_id, qual_request_id) makes replay-rejection
     enforceable at the DB level. The delivery gate queries this table for a
     QUALIFIED decision on the report.
+
+    TRUST-BINDING-001: trust_* columns record the Vault Transit APPROVAL-role
+    signature over the canonical qualification payload. New rows MUST be signed;
+    historical rows (pre-TRUST-BINDING-001) are nullable for backward compat.
     """
 
     __tablename__ = "fa_qualification_decisions"
@@ -1004,6 +1008,26 @@ class FaQualificationDecision(Base):
     decided_at: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
+    )
+    # TRUST-BINDING-001 — Vault Transit APPROVAL-role signature (nullable for
+    # backward compat with pre-binding rows; mandatory for new rows).
+    trust_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_signing_algorithm: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    trust_signing_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trust_signing_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trust_signing_key_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    trust_public_key_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signed_payload_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signature_schema_version: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
     )
 
     __table_args__ = (
@@ -1118,6 +1142,11 @@ class FaGovernedDeliveryAuthorization(Base):
     validated and authorized for transport. No transport has occurred.
     The unique constraint on (tenant_id, delivery_request_id) enforces one
     authorization per request.
+
+    TRUST-BINDING-001: trust_* columns record the Vault Transit ACCEPTANCE-role
+    signature over the canonical delivery authorization payload. New rows MUST
+    be signed; historical rows (pre-TRUST-BINDING-001) are nullable for backward
+    compat.
     """
 
     __tablename__ = "fa_governed_delivery_authorizations"
@@ -1146,6 +1175,26 @@ class FaGovernedDeliveryAuthorization(Base):
     authorized_at: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
+    )
+    # TRUST-BINDING-001 — Vault Transit ACCEPTANCE-role signature (nullable for
+    # backward compat with pre-binding rows; mandatory for new rows).
+    trust_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_signing_algorithm: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    trust_signing_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trust_signing_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trust_signing_key_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    trust_public_key_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signed_payload_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    trust_signature_schema_version: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
     )
 
     __table_args__ = (
