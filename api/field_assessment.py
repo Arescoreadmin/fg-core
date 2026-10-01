@@ -209,6 +209,9 @@ from services.governance.report.governed_delivery_service import (
     validate_recipient_type as _validate_recipient_type,
     validate_channel as _validate_channel,
 )
+from services.governance.trust_binding import (
+    TrustBindingAuthority as _TrustBindingAuthority,
+)
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.promotion import promote_engagement_to_governance
 from services.field_assessment.promotion_store import get_promotion
@@ -1285,6 +1288,31 @@ def _create_report_links_for_report(
         )
         created += 1
     return created
+
+
+# ---------------------------------------------------------------------------
+# TRUST-BINDING-001 — trust authority factory
+# ---------------------------------------------------------------------------
+
+
+def _get_trust_binding_authority() -> _TrustBindingAuthority:
+    """Return a TrustBindingAuthority for the current environment.
+
+    Test environments (FG_ENV=test) use the in-process TrustBindingFake so
+    that tests do not require a running Vault server.  Production and staging
+    environments use the real Vault-backed authority.
+
+    Fail closed: if Vault env is not configured and we are not in a test
+    environment, an exception is raised.
+    """
+    env = os.getenv("FG_ENV", "").lower()
+    if env in {"test", "development", "local"}:
+        from services.governance.trust_binding_fake import (  # noqa: PLC0415
+            make_test_authority,
+        )
+
+        return make_test_authority()
+    return _TrustBindingAuthority.from_environment()
 
 
 # ---------------------------------------------------------------------------
@@ -8274,13 +8302,35 @@ def qualify_report_finalize_route(
         )
 
     dec_id = _uuid_module.uuid4().hex
+    _report_version_id_for_qual = qual_request_row.report_version_id or ""
+
+    # TRUST-BINDING-001: sign the qualification decision via the APPROVAL trust role
+    # before writing the row. Vault unavailable → fail closed (exception propagates).
+    from services.governance.trust_binding import (  # noqa: PLC0415
+        build_qualification_signing_payload,
+    )
+
+    _trust_authority = _get_trust_binding_authority()
+    _qual_payload = build_qualification_signing_payload(
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        qual_request_id=qual_request_id,
+        report_version_id=_report_version_id_for_qual,
+        report_fingerprint=report_fingerprint_for_qual,
+        decision="QUALIFIED",
+        decided_by=actor,
+        schema_version="1.0",
+    )
+    _qual_envelope = _trust_authority.sign_qualification(_qual_payload)
+
     decision_row = FaQualificationDecision(
         id=dec_id,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         report_id=report_id,
         qual_request_id=qual_request_id,
-        report_version_id=qual_request_row.report_version_id or "",
+        report_version_id=_report_version_id_for_qual,
         report_fingerprint=report_fingerprint_for_qual,
         decision="QUALIFIED",
         decided_by=actor,
@@ -8288,6 +8338,14 @@ def qualify_report_finalize_route(
         reason=body.reason,
         decided_at=utc_iso8601_z_now(),
         schema_version="1.0",
+        trust_signature=_qual_envelope.signature,
+        trust_signing_algorithm=_qual_envelope.algorithm,
+        trust_signing_role=_qual_envelope.trust_role,
+        trust_signing_key_id=_qual_envelope.key_id,
+        trust_signing_key_version=_qual_envelope.key_version,
+        trust_public_key_fingerprint=_qual_envelope.public_key_fingerprint,
+        trust_signed_payload_sha256=_qual_envelope.signed_payload_sha256,
+        trust_signature_schema_version=_qual_envelope.schema_version,
     )
     db.add(decision_row)
     emit_engagement_audit_event(
@@ -13867,16 +13925,24 @@ def _create_governed_delivery_records(
     recipient_id: str | None,
     channel: str,
     idempotency_key: str,
+    req_id: str | None = None,
+    auth_trust_envelope: Any | None = None,
 ) -> tuple[FaGovernedDeliveryRequest, FaGovernedDeliveryAuthorization]:
     """Create FaGovernedDeliveryRequest + FaGovernedDeliveryAuthorization rows.
 
     Caller is responsible for calling db.flush() / db.commit() after this.
     Returns the (request_row, auth_row) tuple.
+
+    TRUST-BINDING-001: pass ``req_id`` and ``auth_trust_envelope`` (a SignatureEnvelope)
+    to persist a Vault-signed authorization. If auth_trust_envelope is None, the
+    trust_* columns are left NULL (backward-compat for pre-binding rows).
     """
     import uuid as _uuid_impl
 
+    from services.governance.trust_binding import SignatureEnvelope as _SigEnv  # noqa: PLC0415
+
     now = utc_iso8601_z_now()
-    req_id = _uuid_impl.uuid4().hex
+    req_id = req_id or _uuid_impl.uuid4().hex
     auth_id = _uuid_impl.uuid4().hex
 
     req_row = FaGovernedDeliveryRequest(
@@ -13899,6 +13965,9 @@ def _create_governed_delivery_records(
     db.add(req_row)
     db.flush()
 
+    envelope: _SigEnv | None = (
+        auth_trust_envelope if isinstance(auth_trust_envelope, _SigEnv) else None
+    )
     auth_row = FaGovernedDeliveryAuthorization(
         id=auth_id,
         tenant_id=tenant_id,
@@ -13917,6 +13986,18 @@ def _create_governed_delivery_records(
         rejection_reason_code=None,
         authorized_at=now,
         schema_version="1.0",
+        trust_signature=envelope.signature if envelope else None,
+        trust_signing_algorithm=envelope.algorithm if envelope else None,
+        trust_signing_role=envelope.trust_role if envelope else None,
+        trust_signing_key_id=envelope.key_id if envelope else None,
+        trust_signing_key_version=envelope.key_version if envelope else None,
+        trust_public_key_fingerprint=envelope.public_key_fingerprint
+        if envelope
+        else None,
+        trust_signed_payload_sha256=envelope.signed_payload_sha256
+        if envelope
+        else None,
+        trust_signature_schema_version=envelope.schema_version if envelope else None,
     )
     db.add(auth_row)
     db.flush()
@@ -14262,7 +14343,35 @@ def governed_delivery_route(
     # SUCCEEDED transport attempt row is written by the /execute endpoint.
     # Authorization is not transport; transport attempt is not delivery.
 
-    # Create governed delivery records
+    # TRUST-BINDING-001: pre-compute IDs and sign via ACCEPTANCE trust role BEFORE
+    # writing DB rows. If Vault is unavailable, the exception propagates and no rows
+    # are written (fail closed). The signed payload includes the pre-computed
+    # delivery_request_id so the signature is bound to the specific request row.
+    import uuid as _uuid_delivery  # noqa: PLC0415
+
+    from services.governance.trust_binding import (  # noqa: PLC0415
+        build_delivery_authorization_signing_payload,
+    )
+
+    _del_req_id = _uuid_delivery.uuid4().hex
+    _trust_authority_del = _get_trust_binding_authority()
+    _del_payload = build_delivery_authorization_signing_payload(
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_fingerprint=report_fingerprint,
+        qualification_decision_id=qualification_decision_id,
+        delivery_request_id=_del_req_id,
+        recipient_type=body.recipient_type,
+        recipient_id=body.recipient_id,
+        channel=body.channel,
+        outcome="AUTHORIZED",
+        schema_version="1.0",
+    )
+    _del_envelope = _trust_authority_del.sign_delivery_authorization(_del_payload)
+
+    # Create governed delivery records with pre-signed envelope
     req_row, auth_row = _create_governed_delivery_records(
         db,
         tenant_id=tenant_id,
@@ -14277,6 +14386,8 @@ def governed_delivery_route(
         recipient_id=body.recipient_id,
         channel=body.channel,
         idempotency_key=idem_key,
+        req_id=_del_req_id,
+        auth_trust_envelope=_del_envelope,
     )
 
     emit_engagement_audit_event(
