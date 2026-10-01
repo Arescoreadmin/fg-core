@@ -16,6 +16,7 @@ Categories:
     F — Production Safety (3 tests)
     G — Tenant Isolation (3 tests)
     H — Historical Verification (2 tests)
+    I — Report consumer route migration (3 tests; QA, export, verify route patterns)
 """
 
 from __future__ import annotations
@@ -843,3 +844,81 @@ def test_e9_zero_key_version_fails_verification(authority, qual_payload):
         signed_payload_sha256=env.signed_payload_sha256,
     )
     assert authority.verify_qualification(qual_payload, bad) is False
+
+
+# ---------------------------------------------------------------------------
+# I — Report consumer route migration (QA, export, verify routes)
+# ---------------------------------------------------------------------------
+# These tests prove the _envelope_from_report_row + verify_report pattern
+# used by qa_approve_report_route, export_engagement_report_route, and
+# verify_engagement_report_route.  They guard against regression where
+# vault:v... signatures get passed to the legacy bytes.fromhex() verifier.
+
+
+def test_i1_reconstructed_report_envelope_verifies(authority, report_payload):
+    """Sign → persist trust_* column values → reconstruct envelope → verify_report.
+
+    Simulates the exact consumer path in qa_approve_report_route,
+    export_engagement_report_route, and verify_engagement_report_route after
+    migration to TrustBindingAuthority.verify_report().
+    """
+    env = authority.sign_report(report_payload)
+    reconstructed = SignatureEnvelope(
+        issuer=env.key_id,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=DOMAIN_REPORT,
+        signed_payload_sha256=env.signed_payload_sha256,
+        schema_version=env.schema_version,
+    )
+    assert authority.verify_report(report_payload, reconstructed) is True
+
+
+def test_i2_tampered_payload_fails_reconstructed_envelope(authority, report_payload):
+    """Reconstructed envelope must not verify against a tampered payload.
+
+    Proves the QA/export/verify consumer cannot be fooled by a payload mutation
+    after the signing step — the sha256 check in verify_report rejects it.
+    """
+    env = authority.sign_report(report_payload)
+    reconstructed = SignatureEnvelope(
+        issuer=env.key_id,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature=env.signature,
+        domain=DOMAIN_REPORT,
+        signed_payload_sha256=env.signed_payload_sha256,
+        schema_version=env.schema_version,
+    )
+    tampered = dict(report_payload)
+    tampered["report_fingerprint"] = "bad" * 20
+    assert authority.verify_report(tampered, reconstructed) is False
+
+
+def test_i3_pre_binding_row_empty_trust_signature_fails(authority, report_payload):
+    """An envelope reconstructed from a pre-binding row (trust_signature=NULL) fails.
+
+    Simulates the consumer guard: the routes check 'if record.trust_signature'
+    before entering the Vault path.  An empty-string signature must not verify.
+    """
+    env = authority.sign_report(report_payload)
+    unsigned = SignatureEnvelope(
+        issuer=env.key_id,
+        trust_role=env.trust_role,
+        key_id=env.key_id,
+        key_version=env.key_version,
+        algorithm=env.algorithm,
+        public_key_fingerprint=env.public_key_fingerprint,
+        signature="",
+        domain=DOMAIN_REPORT,
+        signed_payload_sha256=env.signed_payload_sha256,
+        schema_version=env.schema_version,
+    )
+    assert authority.verify_report(report_payload, unsigned) is False

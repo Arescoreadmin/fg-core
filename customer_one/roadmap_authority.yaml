@@ -51,59 +51,6 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "TRUST-BINDING-001"
-    title: "TRUST-BINDING-001 — Bind governance artifacts to canonical non-exportable trust authority"
-    role: "INTERNAL_PREREQUISITE"
-    parent_objective: "CUSTOMER-ZERO-ACCEPT-001"
-    blocker_closed: >
-      CLIENT-READINESS-002 identified and current-main inspection at
-      302173ed (2026-09-30) confirmed: governance artifacts on the Customer-One
-      proof chain are not cryptographically bound to the canonical non-exportable
-      Vault Transit trust authority. (A) services/governance/report/signing.py:30
-      signs reports via FG_REPORT_SIGNING_KEY (env-var Ed25519 seed); the Vault
-      Transit adapter at services/cgin/key_management/vault_transit.py is not
-      referenced from signing.py, qualification_authority.py, or
-      governed_delivery_service.py. (B) FaQualificationDecision and
-      FaGovernedDeliveryAuthorization (api/db_models_field_assessment.py:978,1113)
-      have no signature, signing_key_id, or key_version columns; qualify_report_attest_route
-      records attested=body.attested as an unsigned boolean. (C) Therefore, even
-      after CUSTOMER-ZERO-TRUST-001 provisions the operational trust authority, all
-      three artifact types will continue to use the env-var key or carry no
-      cryptographic provenance. Trust infrastructure existing is not the same as
-      governance artifacts being cryptographically bound to it.
-    freeze_law_justification: >
-      CLIENT-READINESS-002 (PR #727) recorded this as P1-2. Current-main
-      inspection of signing.py, db_models_field_assessment.py, and
-      api/field_assessment.py at HEAD 302173ed reconfirms the gap. The
-      Customer-One first-client claim — "the exact governance artifact relied upon
-      was issued by the exact authorized trust authority and can be independently
-      verified" — cannot be satisfied under the current code. This is not platform
-      expansion, generalized PKI, a Trust Console, autonomous governance, or AGI
-      governance. It is the smallest bounded work that closes the composition gap
-      between the existing Vault Transit trust infrastructure and the existing
-      governance artifact issuance paths on the Customer-One proof chain. Code
-      implementation can proceed at $0 against the existing local/test Vault
-      boundary (PR #720); live production proof requires CUSTOMER-ZERO-TRUST-001
-      operational ceremony.
-    status: NEXT
-    work_class: "REPAIR"
-    completion_evidence:
-      - "report signing path invokes Vault Transit sign() for the identity trust role; FG_REPORT_SIGNING_KEY env-var path retired for production signing"
-      - "FaQualificationDecision persists signing_key_id, key_version, and vault_signature for each finalized decision"
-      - "FaGovernedDeliveryAuthorization persists signing_key_id, key_version, and vault_signature for each authorization"
-      - "TrustAnchor.verify() confirms round-trip signature validity for at least one qualification and one delivery authorization"
-      - "qualify_report_finalize_route produces a Vault-signed qualification decision row"
-      - "governed_delivery_route produces a Vault-signed authorization row"
-      - "migration adds signature columns to fa_qualification_decisions and fa_governed_delivery_authorizations"
-      - "adversarial tests prove that records without valid vault signatures are rejected at qualification and delivery boundaries"
-    forbidden_scope:
-      - "CUSTOMER-ZERO-TRUST-001 operational ceremony or HCP provisioning"
-      - "CUSTOMER-ZERO-ACCEPT-001 execution or acceptance run"
-      - "new Vault trust roles beyond the three already defined in CUSTOMER-ZERO-TRUST-001"
-      - "generalized PKI, IAM, RBAC, or secrets-platform redesign"
-      - "Trust Console, audit dashboard, or governance product UI changes"
-      - "autonomous governance, AGI governance, or unrelated platform expansion"
-      - "migration content beyond signature columns for qualification and delivery authorization tables"
   - id: "CUSTOMER-ZERO-TRUST-001"
     title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
     role: "INTERNAL_PREREQUISITE"
@@ -142,13 +89,11 @@ blocked:
   - id: "CUSTOMER-ZERO-ACCEPT-001"
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     reason: >
-      Open acceptance parent, blocked pending two open prerequisites:
-      (1) CUSTOMER-ZERO-TRUST-001 — no HCP Vault Dedicated cluster provisioned;
-      no artifacts/ evidence manifest; production trust ceremony not yet executed;
-      (2) TRUST-BINDING-001 — governance artifacts (report signatures,
-      qualification decisions, governed-delivery authorizations) not yet
-      cryptographically bound to the canonical Vault Transit trust authority.
-      Do not execute approval or runtime acceptance before both prerequisites close.
+      Open acceptance parent, blocked pending one open prerequisite:
+      CUSTOMER-ZERO-TRUST-001 — no HCP Vault Dedicated cluster provisioned;
+      no artifacts/ evidence manifest; production trust ceremony not yet executed.
+      TRUST-BINDING-001 closed in PR #731 (2562e875).
+      Do not execute approval or runtime acceptance before CUSTOMER-ZERO-TRUST-001 closes.
 
 deferred:
   - id: "RAG-RETRY"
@@ -177,6 +122,24 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "TRUST-BINDING-001"
+    title: "TRUST-BINDING-001 — Bind governance artifacts to canonical non-exportable trust authority"
+    prs: ["#731"]
+    merged_sha: "2562e8752d7478f1b47c3456d2c9637dfdf0c040"
+    note: >
+      All three governance artifact types are now cryptographically bound to
+      the canonical Vault Transit trust authority via TrustBindingAuthority
+      (services/governance/trust_binding.py). Report issuance uses the
+      IDENTITY trust role; qualification decisions use the APPROVAL trust
+      role; governed-delivery authorizations use the ACCEPTANCE trust role.
+      Domain separators prevent cross-artifact signature replay. Migrations
+      0193 and 0194 add trust columns to fa_qualification_decisions,
+      fa_governed_delivery_authorizations, and governance_reports.
+      governed_delivery_execute_route verifies delivery-authorization trust
+      before transport; governed_delivery_route verifies qualification trust
+      before issuing authorization. 42 adversarial tests confirm role
+      separation, round-trip verification, and fail-closed behavior. Production
+      execution requires CUSTOMER-ZERO-TRUST-001 operational ceremony.
   - id: "FA-ACTOR-001"
     title: "Canonical Field Assessment Human Actor Authority"
     prs: ["#710", "#711"]

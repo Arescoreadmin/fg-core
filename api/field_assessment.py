@@ -7625,10 +7625,23 @@ def qa_approve_report_route(
     )
 
     _sig_valid: bool | None
-    _signature = report.signature
-    if not _signature:
-        _sig_valid = None
-    else:
+    if report.trust_signature:
+        from services.governance.trust_binding import (  # noqa: PLC0415
+            build_report_signing_payload as _brsp,
+        )
+
+        _report_verify_payload = _brsp(
+            tenant_id=report.tenant_id,
+            engagement_id=report.engagement_id or engagement_id,
+            report_id=report.id,
+            report_version_id=report.id,
+            report_fingerprint=report.manifest_hash,
+            report_schema_version=report.schema_version,
+        )
+        _sig_valid = _get_trust_binding_authority().verify_report(
+            _report_verify_payload, _envelope_from_report_row(report)
+        )
+    elif report.signature:
         try:
             _canonical = json.dumps(
                 report.report_json,
@@ -7636,9 +7649,11 @@ def qa_approve_report_route(
                 separators=(",", ":"),
                 ensure_ascii=True,
             )
-            _sig_valid = verify_report(_canonical, _signature)
+            _sig_valid = verify_report(_canonical, report.signature)
         except ReportSigningKeyError:
             _sig_valid = None
+    else:
+        _sig_valid = None
     _trust = derive_engagement_trust_inputs(
         db, tenant_id=tenant_id, engagement_id=engagement_id
     )
@@ -9589,7 +9604,7 @@ def create_engagement_report_route(
             tenant_id=tenant_id,
             engagement_id=engagement_id,
             report_id=record_id,
-            report_version_id="",
+            report_version_id=record_id,
             report_fingerprint=manifest_hash,
             report_schema_version="1.0",
         )
@@ -9600,7 +9615,7 @@ def create_engagement_report_route(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=api_error("TRUST_BINDING_UNAVAILABLE", str(exc)),
             )
-        signature = _report_envelope.signature  # keep existing field populated
+        signature = None  # trust_* columns are authoritative; legacy hex field not used for Vault-signed reports
 
         record = GovernanceReportRecord(
             id=record_id,
@@ -9848,10 +9863,23 @@ def export_engagement_report_route(
     )
 
     _sig_valid: bool | None
-    _signature = record.signature
-    if not _signature:
-        _sig_valid = None
-    else:
+    if record.trust_signature:
+        from services.governance.trust_binding import (  # noqa: PLC0415
+            build_report_signing_payload as _brsp,
+        )
+
+        _export_verify_payload = _brsp(
+            tenant_id=record.tenant_id,
+            engagement_id=record.engagement_id or engagement_id,
+            report_id=record.id,
+            report_version_id=record.id,
+            report_fingerprint=record.manifest_hash,
+            report_schema_version=record.schema_version,
+        )
+        _sig_valid = _get_trust_binding_authority().verify_report(
+            _export_verify_payload, _envelope_from_report_row(record)
+        )
+    elif record.signature:
         try:
             _canonical = json.dumps(
                 record.report_json,
@@ -9859,9 +9887,11 @@ def export_engagement_report_route(
                 separators=(",", ":"),
                 ensure_ascii=True,
             )
-            _sig_valid = verify_report(_canonical, _signature)
+            _sig_valid = verify_report(_canonical, record.signature)
         except ReportSigningKeyError:
             _sig_valid = None
+    else:
+        _sig_valid = None
     _trust = derive_engagement_trust_inputs(
         db, tenant_id=tenant_id, engagement_id=engagement_id
     )
@@ -10021,27 +10051,42 @@ def verify_engagement_report_route(
         "services.canonical", fromlist=["utc_iso8601_z_now"]
     ).utc_iso8601_z_now()
 
-    if not record.signature:
+    if record.trust_signature:
+        from services.governance.trust_binding import (  # noqa: PLC0415
+            build_report_signing_payload as _brsp,
+        )
+
+        _verify_payload = _brsp(
+            tenant_id=record.tenant_id,
+            engagement_id=record.engagement_id or engagement_id,
+            report_id=record.id,
+            report_version_id=record.id,
+            report_fingerprint=record.manifest_hash,
+            report_schema_version=record.schema_version,
+        )
+        valid = _get_trust_binding_authority().verify_report(
+            _verify_payload, _envelope_from_report_row(record)
+        )
+    elif record.signature:
+        canonical_str = json.dumps(
+            record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        try:
+            valid = verify_report(canonical_str, record.signature)
+        except ReportSigningKeyError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=api_error(
+                    "REPORT_SIGNING_KEY_MISSING",
+                    "Signing key unavailable for verification.",
+                ),
+            )
+    else:
         return EngagementReportVerifyResponse(
             valid=False,
             manifest_hash=record.manifest_hash,
             signature=None,
             verified_at=now,
-        )
-
-    canonical_str = json.dumps(
-        record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-
-    try:
-        valid = verify_report(canonical_str, record.signature)
-    except ReportSigningKeyError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=api_error(
-                "REPORT_SIGNING_KEY_MISSING",
-                "Signing key unavailable for verification.",
-            ),
         )
 
     return EngagementReportVerifyResponse(
@@ -13962,6 +14007,29 @@ def _envelope_from_qual_row(qual_row: "FaQualificationDecision") -> "Any":
         domain="frostgate.production-qualification.v1",
         signed_payload_sha256=qual_row.trust_signed_payload_sha256 or "",
         schema_version=qual_row.trust_signature_schema_version or "1",
+    )
+
+
+def _envelope_from_report_row(report_row: "GovernanceReportRecord") -> "Any":
+    """Reconstruct a SignatureEnvelope from a persisted GovernanceReportRecord row.
+
+    TRUST-BINDING-001: used by qa_approve_report_route, export_engagement_report_route,
+    and verify_engagement_report_route to verify the IDENTITY trust binding.
+    The DB schema has no dedicated issuer column; key_id is used as a proxy.
+    """
+    from services.governance.trust_binding import SignatureEnvelope as _SigEnv  # noqa: PLC0415
+
+    return _SigEnv(
+        issuer=report_row.trust_signing_key_id or "",
+        trust_role=report_row.trust_signing_role or "",
+        key_id=report_row.trust_signing_key_id or "",
+        key_version=report_row.trust_signing_key_version or 0,
+        algorithm=report_row.trust_signing_algorithm or "",
+        public_key_fingerprint=report_row.trust_public_key_fingerprint or "",
+        signature=report_row.trust_signature or "",
+        domain="frostgate.report-proof.v1",
+        signed_payload_sha256=report_row.trust_signed_payload_sha256 or "",
+        schema_version=report_row.trust_signature_schema_version or "1",
     )
 
 
