@@ -100,11 +100,12 @@ class TestAuthorizedItems:
         assert "#728" in result.stderr
         assert "#729" in result.stderr
 
-    def test_trust_binding_001_authorized(self) -> None:
-        # TRUST-BINDING-001 is the evidence-backed next Customer-One critical-path item
+    def test_trust_binding_001_completed_blocked(self) -> None:
+        # TRUST-BINDING-001 completed in PR #731 — must return COMPLETED/BLOCKED
         result = _run_item("TRUST-BINDING-001")
-        assert result.returncode == 0, result.stderr
-        assert "AUTHORIZED" in result.stdout
+        assert result.returncode == 1
+        assert "COMPLETED" in result.stderr
+        assert "#731" in result.stderr
 
     def test_repair_class_authorized(self) -> None:
         # REPAIR is a class-level authorization — always open, no item ID needed
