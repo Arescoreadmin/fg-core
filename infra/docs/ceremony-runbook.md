@@ -1074,7 +1074,7 @@ and the cluster must remain running.
 echo "Ongoing operation authorized by: <operator name>"
 echo "Authorization date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Expected monthly cost: ~\$1,564–\$1,637"
-echo "Credits-exhausted date: approximately $(date -d '+4 days' +%Y-%m-%d)"
+echo "Credits-exhausted date: approximately $(date -d '+113 hours' +%Y-%m-%d)"
 ```
 
 **Expected result:** Operator has explicitly acknowledged ongoing cost and confirmed
