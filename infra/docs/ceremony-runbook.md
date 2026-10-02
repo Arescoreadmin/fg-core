@@ -2,7 +2,7 @@
 
 **Ceremony ID:** `customer-zero-trust-2026-10-02-001`
 **Work item:** CUSTOMER-ZERO-TRUST-001
-**fg-core source authority:** `45f9a8370b9cb1a6c354da290ad3b5cd3ef43104`
+**fg-core source authority:** `cc2775be2d5e9078213a97258995481f95d61088`
 **Note:** `Arescoreadmin/frostgate-infra` is archived (read-only). Infrastructure authority has moved permanently to `fg-core/infra/`. The standalone repo SHA `8121d24252dd1e7e3945424fcdacc5a320611fea` is retained as a historical record only.
 
 **Timebox targets:**
@@ -26,7 +26,7 @@
 cd ~/Projects/fg-core
 git status
 git branch --show-current        # must be: main
-git rev-parse HEAD               # must be: 45f9a8370b9cb1a6c354da290ad3b5cd3ef43104
+git rev-parse HEAD               # must be: cc2775be2d5e9078213a97258995481f95d61088
 git fetch origin --prune
 git rev-parse origin/main        # must equal HEAD
 
