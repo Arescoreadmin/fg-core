@@ -46,13 +46,13 @@ python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-TRUST-00
 AWS_PROFILE=frostgate-terraform aws sts get-caller-identity
 # Expected: ARN must NOT contain :root
 
-# A5. Confirm account summary
-AWS_DEFAULT_REGION=us-east-1 aws iam get-account-summary \
+# A5. Confirm account summary (run as operator profile — GetAccountSummary is in operator policy)
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-account-summary \
   | python3 -c "import sys,json; s=json.load(sys.stdin)['SummaryMap']; print('MFA:', s.get('AccountMFAEnabled')); print('RootKeys:', s.get('AccountAccessKeysPresent'))"
 # Expected: MFA: 1, RootKeys: 0
 
-# A6. Confirm stale IAM user absent
-AWS_DEFAULT_REGION=us-east-1 aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1
+# A6. Confirm stale IAM user absent (operator profile has iam:GetUser on audit user resource)
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1
 # Expected: NoSuchEntity error (user was deleted in operator hardening)
 ```
 
@@ -101,12 +101,12 @@ terraform login
 **Actions:**
 
 ```bash
-cd ~/Projects/frostgate-infra
-# Remove stale plan file (never apply the old one)
-rm -f stage1-review.tfplan
+cd ~/Projects/fg-core/infra
+# Remove stale plan files (never apply a plan from a previous run)
+rm -f ceremony-plan-phase1.tfplan ceremony-plan-phase2.tfplan
 
 AWS_PROFILE=frostgate-terraform terraform plan \
-  -out=ceremony-plan-2026-10-01.tfplan 2>&1 | tee /tmp/ceremony-plan-output.txt
+  -out=ceremony-plan-phase1.tfplan 2>&1 | tee /tmp/ceremony-plan-output.txt
 
 # Review plan summary
 tail -5 /tmp/ceremony-plan-output.txt
@@ -121,7 +121,7 @@ tail -5 /tmp/ceremony-plan-output.txt
 **Evidence:** Plan summary line (non-secret). Resource count and categories.
 
 **Secret boundary:** Plan file may contain provider responses. Do not `cat` the binary plan.
-Inspect via `terraform show ceremony-plan-2026-10-01.tfplan` (text output is safe).
+Inspect via `terraform show ceremony-plan-phase1.tfplan` (text output is safe).
 
 **Stop condition:** Unexpected destroys, replacements, or resources outside intended scope.
 
@@ -313,7 +313,7 @@ print(f'  latest_version: {d.get(\"latest_version\")}')
 keys = d.get('keys', {})
 latest = str(d.get('latest_version', 1))
 pub = keys.get(latest, {}).get('public_key', '')
-print(f'  public_key (v{latest}): {pub[:40]}...' if pub else '  public_key: MISSING')
+print(f'  public_key (v{latest}): {pub}' if pub else '  public_key: MISSING')
   "
 done
 ```
@@ -821,13 +821,13 @@ No FAIL. Full regression suite passes.
 ```bash
 cd ~/Projects/fg-core
 
-# T1. Commit evidence manifest
+# T1. Commit evidence manifest (capture exact infra SHA at ceremony time)
+CEREMONY_INFRA_SHA=$(git -C ~/Projects/fg-core rev-parse HEAD)
 git add artifacts/trust/customer_zero_trust_evidence.json
 git commit -m "feat(trust): CUSTOMER-ZERO-TRUST-001 production ceremony evidence
 
 Ceremony ID: customer-zero-trust-2026-10-02-001
-fg-core SHA: <current>
-frostgate-infra SHA: 8121d24252dd1e7e3945424fcdacc5a320611fea
+fg-core SHA: ${CEREMONY_INFRA_SHA}
 Operator: <operator name>
 
 All three Customer-Zero trust authorities provisioned and verified:

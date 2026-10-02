@@ -166,6 +166,12 @@ PERMISSIONS_POLICY=$(cat <<PERMS
       ]
     },
     {
+      "Sid": "IAMGetAccountSummary",
+      "Effect": "Allow",
+      "Action": "iam:GetAccountSummary",
+      "Resource": "*"
+    },
+    {
       "Sid": "STSGetCallerIdentity",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",
