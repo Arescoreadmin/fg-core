@@ -197,8 +197,21 @@ terraform plan \
   -target=aws_iam_user.vault_audit \
   -target=aws_iam_policy.vault_audit \
   -target=aws_iam_user_policy_attachment.vault_audit \
-  -out=ceremony-plan-phase1.tfplan
+  -out=ceremony-plan-phase1.tfplan \
+  2>&1 | tee /tmp/ceremony-plan-phase1-output.txt
+```
 
+**STOP — Review Phase 1 plan before applying:**
+
+```bash
+terraform show ceremony-plan-phase1.tfplan 2>&1 | grep -E '^\s*(#|[~+]|Plan:|resource )' | head -80
+echo "Phase 1 summary: $(tail -1 /tmp/ceremony-plan-phase1-output.txt)"
+```
+
+Expected: 6 resources to add (2 HCP + 4 AWS), 0 changes, 0 destroys. No unexpected
+resources. Confirm the output, then proceed to apply.
+
+```bash
 terraform apply ceremony-plan-phase1.tfplan
 ```
 
@@ -211,18 +224,42 @@ terraform output vault_address
 # Record this value — required for Phase 2 and Checkpoint G.
 ```
 
+---
+
+**HARD STOP — Complete Checkpoint G before Phase 2.**
+
+Phase 2 provisions Vault resources and requires both:
+- `VAULT_ADDR` exported from the Phase 1 `vault_address` output above
+- `VAULT_TOKEN` generated in the HCP portal (see Checkpoint G)
+- Vault cluster responding to `vault status`
+
+Complete Checkpoint G now, then return here for Phase 2.
+
+---
+
 ### Phase 2 — Vault resources
 
 ```bash
-# Set the Vault address from Phase 1 output
-export TF_VAR_vault_address="<vault_address from Phase 1>"
-
-# Vault token required — see Checkpoint G before running Phase 2
-# export VAULT_TOKEN=<admin token from HCP portal>
+# Both exports must already be set from Checkpoint G before running this block
+# export TF_VAR_vault_address="<vault_address from Phase 1>"   ← set in Checkpoint G
+# export VAULT_TOKEN=<admin token>                             ← set in Checkpoint G
 
 terraform plan \
-  -out=ceremony-plan-phase2.tfplan
+  -out=ceremony-plan-phase2.tfplan \
+  2>&1 | tee /tmp/ceremony-plan-phase2-output.txt
+```
 
+**STOP — Review Phase 2 plan before applying:**
+
+```bash
+terraform show ceremony-plan-phase2.tfplan 2>&1 | grep -E '^\s*(#|[~+]|Plan:|resource )' | head -80
+echo "Phase 2 summary: $(tail -1 /tmp/ceremony-plan-phase2-output.txt)"
+```
+
+Expected: 11 resources to add (Transit engine, 3 keys, 3 policies, AppRole auth backend,
+3 AppRoles), 0 changes, 0 destroys. Confirm the output, then proceed to apply.
+
+```bash
 terraform apply ceremony-plan-phase2.tfplan
 ```
 
@@ -255,7 +292,7 @@ terraform output -json | \
 
 ## CHECKPOINT G — Vault Bootstrap / Operator Authentication
 
-**Prerequisites:** Checkpoint F complete. Vault cluster endpoint available.
+**Prerequisites:** Checkpoint F Phase 1 complete. `vault_address` output collected. Vault cluster endpoint available. (Phase 2 of Checkpoint F runs after this checkpoint.)
 
 **Actions:**
 
@@ -487,68 +524,104 @@ After all 13 variables are set: **trigger a Railway redeploy** of the `api` serv
 
 ## CHECKPOINT M — Positive Signing Tests
 
-**Prerequisites:** Checkpoint G complete. VAULT_ADDR and VAULT_TOKEN set. All three Transit
-keys exist (confirmed at Checkpoint G).
+**Prerequisites:** Checkpoint G complete (admin VAULT_TOKEN set). Checkpoint L complete
+(Railway SecretIDs generated). VAULT_ADDR and VAULT_NAMESPACE=admin set.
+All three Transit keys exist (confirmed at Checkpoint H).
 
-**Actions — live Vault CLI signing probes (no mock transport):**
+**Actions — each probe authenticates via its runtime AppRole path, not the admin token:**
 
 ```bash
-# Requires: VAULT_ADDR, VAULT_TOKEN, VAULT_NAMESPACE=admin from Checkpoint G
+# Requires: VAULT_ADDR, VAULT_NAMESPACE=admin, VAULT_TOKEN (admin) from Checkpoint G
 
-# M1. Identity key — sign and confirm signature prefix
-PAYLOAD=$(echo -n "ceremony-probe-identity-$(date +%s)" | base64 -w0)
-vault write -format=json transit/sign/customer-zero-identity \
-  input="${PAYLOAD}" \
+# M1. Identity key — authenticate as frostgate-cz-identity AppRole, sign, confirm kv=1
+IDENTITY_ROLE_ID=$(vault read -format=json auth/approle/role/frostgate-cz-identity/role-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['role_id'])")
+# Admin generates one-time SecretID — do NOT echo or record this value
+IDENTITY_SID=$(vault write -format=json -f auth/approle/role/frostgate-cz-identity/secret-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])")
+IDENTITY_TOKEN=$(vault write -format=json auth/approle/login \
+  role_id="${IDENTITY_ROLE_ID}" secret_id="${IDENTITY_SID}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['auth']['client_token'])")
+unset IDENTITY_SID
+
+IDENTITY_PAYLOAD=$(echo -n "ceremony-probe-identity-$(date +%s)" | base64 -w0)
+VAULT_TOKEN="${IDENTITY_TOKEN}" vault write -format=json transit/sign/customer-zero-identity \
+  input="${IDENTITY_PAYLOAD}" \
   | python3 -c "
-import sys, json, re
+import sys, json
 r = json.load(sys.stdin)
 sig = r['data']['signature']
 kv  = r['data']['key_version']
-assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+assert kv == 1, f'expected key_version=1, got {kv}'
+assert sig.startswith('vault:v1:'), f'unexpected sig format: {sig[:20]}'
 print(f'identity  key_version={kv}  sig={sig[:30]}...')
 "
 echo "identity_sign_rc=$?"
+unset IDENTITY_TOKEN
 
-# M2. Acceptance key
-PAYLOAD=$(echo -n "ceremony-probe-acceptance-$(date +%s)" | base64 -w0)
-vault write -format=json transit/sign/customer-zero-acceptance \
-  input="${PAYLOAD}" \
+# M2. Acceptance key — authenticate as frostgate-cz-acceptance AppRole
+ACCEPTANCE_ROLE_ID=$(vault read -format=json auth/approle/role/frostgate-cz-acceptance/role-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['role_id'])")
+ACCEPTANCE_SID=$(vault write -format=json -f auth/approle/role/frostgate-cz-acceptance/secret-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])")
+ACCEPTANCE_TOKEN=$(vault write -format=json auth/approle/login \
+  role_id="${ACCEPTANCE_ROLE_ID}" secret_id="${ACCEPTANCE_SID}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['auth']['client_token'])")
+unset ACCEPTANCE_SID
+
+ACCEPTANCE_PAYLOAD=$(echo -n "ceremony-probe-acceptance-$(date +%s)" | base64 -w0)
+VAULT_TOKEN="${ACCEPTANCE_TOKEN}" vault write -format=json transit/sign/customer-zero-acceptance \
+  input="${ACCEPTANCE_PAYLOAD}" \
   | python3 -c "
-import sys, json, re
+import sys, json
 r = json.load(sys.stdin)
 sig = r['data']['signature']
 kv  = r['data']['key_version']
-assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+assert kv == 1, f'expected key_version=1, got {kv}'
+assert sig.startswith('vault:v1:'), f'unexpected sig format: {sig[:20]}'
 print(f'acceptance  key_version={kv}  sig={sig[:30]}...')
 "
 echo "acceptance_sign_rc=$?"
+unset ACCEPTANCE_TOKEN
 
-# M3. Approval key
-PAYLOAD=$(echo -n "ceremony-probe-approval-$(date +%s)" | base64 -w0)
-vault write -format=json transit/sign/customer-zero-approval \
-  input="${PAYLOAD}" \
+# M3. Approval key — authenticate as frostgate-cz-approval AppRole
+APPROVAL_ROLE_ID=$(vault read -format=json auth/approle/role/frostgate-cz-approval/role-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['role_id'])")
+APPROVAL_SID=$(vault write -format=json -f auth/approle/role/frostgate-cz-approval/secret-id \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])")
+APPROVAL_TOKEN=$(vault write -format=json auth/approle/login \
+  role_id="${APPROVAL_ROLE_ID}" secret_id="${APPROVAL_SID}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['auth']['client_token'])")
+unset APPROVAL_SID
+
+APPROVAL_PAYLOAD=$(echo -n "ceremony-probe-approval-$(date +%s)" | base64 -w0)
+VAULT_TOKEN="${APPROVAL_TOKEN}" vault write -format=json transit/sign/customer-zero-approval \
+  input="${APPROVAL_PAYLOAD}" \
   | python3 -c "
-import sys, json, re
+import sys, json
 r = json.load(sys.stdin)
 sig = r['data']['signature']
 kv  = r['data']['key_version']
-assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+assert kv == 1, f'expected key_version=1, got {kv}'
+assert sig.startswith('vault:v1:'), f'unexpected sig format: {sig[:20]}'
 print(f'approval  key_version={kv}  sig={sig[:30]}...')
 "
 echo "approval_sign_rc=$?"
+unset APPROVAL_TOKEN
 ```
 
 All three `*_sign_rc` values must be 0.
 
-**Expected result:** Three `vault:v1:` signatures produced. Key version is 1 for all three.
+**Expected result:** Three `vault:v1:` signatures produced via runtime AppRole paths.
+`key_version=1` for all three. Each AppRole can sign only its own key (enforced by policy).
 
-**Evidence:** Sign command output (non-secret — signatures and key version identifiers only).
+**Evidence:** Sign command output (non-secret — key_version and signature prefix only).
 Record `key_version`, `signature` prefix, and rc for each role in the evidence manifest.
 
-**Secret boundary:** Admin VAULT_TOKEN used for ceremony bootstrap only. Signatures are
-non-secret. No SecretIDs or AppRole credentials appear in this checkpoint.
+**Secret boundary:** Admin VAULT_TOKEN used only for SecretID generation. Runtime tokens
+and SecretIDs are unset immediately after use. No secret values appear in evidence output.
 
-**Stop condition:** Any sign rc != 0; signature format invalid; wrong key version.
+**Stop condition:** Any sign rc != 0; `key_version != 1`; signature format not `vault:v1:`.
 
 ---
 
@@ -634,6 +707,15 @@ print(sig)
 echo "pre_rotation_payload=${PROBE_PAYLOAD}"
 echo "pre_rotation_sig=${PROBE_SIG}"
 # Record both values in the evidence manifest; they are required for P3.
+
+# Guard: abort before the irreversible rotation if v1 capture failed.
+# A failed pipeline leaves PROBE_SIG empty; rotation after that makes P3 impossible.
+if [[ -z "${PROBE_SIG}" ]]; then
+  echo "[ABORT] PROBE_SIG is empty — P0 signature capture failed." >&2
+  echo "[ABORT] Do NOT rotate. Diagnose P0 before retrying." >&2
+  exit 1
+fi
+echo "P0 capture verified non-empty — proceeding to rotation"
 
 # P1. Rotate the identity key
 vault write -force transit/keys/customer-zero-identity/rotate
