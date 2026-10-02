@@ -175,42 +175,81 @@ The operator must state explicitly before proceeding:
 
 ---
 
-## CHECKPOINT F — Terraform Provisioning
+## CHECKPOINT F — Terraform Provisioning (Two Phases)
 
 **Prerequisites:** Checkpoint E explicit authorization received.
 
-**Actions:**
+**Why two phases:** The Vault provider (`providers.tf`) requires `vault_address`, which is
+only known after the HCP cluster is created. A single apply would attempt to configure
+Vault resources against an unreachable endpoint. Phase 1 provisions HCP + AWS; Phase 2
+provisions Vault resources once the address is available.
+
+### Phase 1 — HCP cluster + AWS resources
 
 ```bash
-cd ~/Projects/frostgate-infra
-AWS_PROFILE=frostgate-terraform terraform apply ceremony-plan-2026-10-01.tfplan
-# Apply the EXACT saved plan — do not regenerate
+cd ~/Projects/fg-core/infra
+export AWS_PROFILE=frostgate-terraform
+
+terraform plan \
+  -target=hcp_hvn.frostgate \
+  -target=hcp_vault_cluster.customer_zero \
+  -target=aws_cloudwatch_log_group.vault_audit \
+  -target=aws_iam_user.vault_audit \
+  -target=aws_iam_policy.vault_audit \
+  -target=aws_iam_user_policy_attachment.vault_audit \
+  -out=ceremony-plan-phase1.tfplan
+
+terraform apply ceremony-plan-phase1.tfplan
 ```
 
-**Expected result:** All 17 resources created. No errors. Terraform outputs available.
+**Expected result:** 6 resources created (2 HCP + 4 AWS). No errors.
 
-**Collect non-secret outputs:**
+**Collect vault_address immediately after Phase 1:**
 
 ```bash
-AWS_PROFILE=frostgate-terraform terraform output -json | \
+terraform output vault_address
+# Record this value — required for Phase 2 and Checkpoint G.
+```
+
+### Phase 2 — Vault resources
+
+```bash
+# Set the Vault address from Phase 1 output
+export TF_VAR_vault_address="<vault_address from Phase 1>"
+
+# Vault token required — see Checkpoint G before running Phase 2
+# export VAULT_TOKEN=<admin token from HCP portal>
+
+terraform plan \
+  -out=ceremony-plan-phase2.tfplan
+
+terraform apply ceremony-plan-phase2.tfplan
+```
+
+**Expected result:** Remaining 11 resources created (Transit engine, keys, policies, AppRoles).
+Total across both phases: 17 to add, 0 to change, 0 to destroy.
+
+**Collect all non-secret outputs after Phase 2:**
+
+```bash
+terraform output -json | \
   python3 -c "import sys,json; o=json.load(sys.stdin); [print(f'{k}: {v[\"value\"]}') for k,v in o.items()]"
 ```
 
 **Critical outputs to record in evidence manifest:**
-- `vault_address` (non-secret HTTPS endpoint)
-- `vault_cluster_id`
-- `vault_cluster_tier`
-- `transit_key_identity`, `transit_key_acceptance`, `transit_key_approval` (key names — non-secret)
-- `approle_role_id_identity`, `approle_role_id_acceptance`, `approle_role_id_approval` (role IDs — non-secret)
+- `vault_address` (non-secret HTTPS endpoint — from Phase 1)
+- `vault_cluster_id`, `vault_cluster_tier`
+- `transit_key_identity`, `transit_key_acceptance`, `transit_key_approval`
+- `approle_role_id_identity`, `approle_role_id_acceptance`, `approle_role_id_approval`
 - `policy_name_identity`, `policy_name_acceptance`, `policy_name_approval`
 - `cloudwatch_log_group_name`, `cloudwatch_log_group_arn`
 - `iam_audit_user_arn`
 
-**Evidence:** All outputs (non-secret).
+**Evidence:** All outputs (non-secret). Both plan files (gitignored; record SHA of applied commit).
 
 **Secret boundary:** No secret outputs exist. If Terraform produces unexpected sensitive output, stop.
 
-**Stop condition:** Any resource creation failure; unexpected sensitive output; plan diverges from saved plan.
+**Stop condition:** Any resource creation failure; unexpected sensitive output; vault_address empty after Phase 1.
 
 ---
 
@@ -448,30 +487,68 @@ After all 13 variables are set: **trigger a Railway redeploy** of the `api` serv
 
 ## CHECKPOINT M — Positive Signing Tests
 
-**Prerequisites:** Checkpoint L complete. Railway API running.
+**Prerequisites:** Checkpoint G complete. VAULT_ADDR and VAULT_TOKEN set. All three Transit
+keys exist (confirmed at Checkpoint G).
 
-**Actions:**
+**Actions — live Vault CLI signing probes (no mock transport):**
 
 ```bash
-cd ~/Projects/fg-core
-# Run focused trust-binding tests against the live Railway instance
-# (uses non-secret public verification only; no credentials in test runner)
-python -m pytest tests/test_trust_binding_vault_transit.py -v 2>&1 | tail -20
+# Requires: VAULT_ADDR, VAULT_TOKEN, VAULT_NAMESPACE=admin from Checkpoint G
 
-# Verify all three roles can sign
-python -m pytest tests/test_customer_zero_vault_auth.py -v 2>&1 | tail -20
+# M1. Identity key — sign and confirm signature prefix
+PAYLOAD=$(echo -n "ceremony-probe-identity-$(date +%s)" | base64 -w0)
+vault write -format=json transit/sign/customer-zero-identity \
+  input="${PAYLOAD}" \
+  | python3 -c "
+import sys, json, re
+r = json.load(sys.stdin)
+sig = r['data']['signature']
+kv  = r['data']['key_version']
+assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+print(f'identity  key_version={kv}  sig={sig[:30]}...')
+"
+echo "identity_sign_rc=$?"
 
-# Run full customer-zero trust test suite
-python -m pytest tests/test_customer_zero_trust_evidence.py -v 2>&1 | tail -20
+# M2. Acceptance key
+PAYLOAD=$(echo -n "ceremony-probe-acceptance-$(date +%s)" | base64 -w0)
+vault write -format=json transit/sign/customer-zero-acceptance \
+  input="${PAYLOAD}" \
+  | python3 -c "
+import sys, json, re
+r = json.load(sys.stdin)
+sig = r['data']['signature']
+kv  = r['data']['key_version']
+assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+print(f'acceptance  key_version={kv}  sig={sig[:30]}...')
+"
+echo "acceptance_sign_rc=$?"
+
+# M3. Approval key
+PAYLOAD=$(echo -n "ceremony-probe-approval-$(date +%s)" | base64 -w0)
+vault write -format=json transit/sign/customer-zero-approval \
+  input="${PAYLOAD}" \
+  | python3 -c "
+import sys, json, re
+r = json.load(sys.stdin)
+sig = r['data']['signature']
+kv  = r['data']['key_version']
+assert re.match(r'^vault:v\d+:', sig), f'unexpected signature format: {sig[:30]}'
+print(f'approval  key_version={kv}  sig={sig[:30]}...')
+"
+echo "approval_sign_rc=$?"
 ```
 
-**Expected result:** All tests PASS. Signatures from all three roles are valid.
+All three `*_sign_rc` values must be 0.
 
-**Evidence:** Test output (non-secret). Signing confirmed for IDENTITY, ACCEPTANCE, APPROVAL.
+**Expected result:** Three `vault:v1:` signatures produced. Key version is 1 for all three.
 
-**Secret boundary:** Test runner uses public verification. No SecretIDs pass through test code.
+**Evidence:** Sign command output (non-secret — signatures and key version identifiers only).
+Record `key_version`, `signature` prefix, and rc for each role in the evidence manifest.
 
-**Stop condition:** Any test FAIL; signing returns error; wrong role used.
+**Secret boundary:** Admin VAULT_TOKEN used for ceremony bootstrap only. Signatures are
+non-secret. No SecretIDs or AppRole credentials appear in this checkpoint.
+
+**Stop condition:** Any sign rc != 0; signature format invalid; wrong key version.
 
 ---
 
@@ -541,36 +618,81 @@ except ValueError as e:
 **Actions:**
 
 ```bash
-# P1. Rotate one key (test with identity key)
+# P0. Capture v1 signature BEFORE rotation (evidence anchor — must run before P1)
+PROBE_PAYLOAD=$(printf 'ceremony-rotation-probe-%s' "$(date +%s)" | base64 -w0)
+PROBE_SIG=$(vault write -format=json transit/sign/customer-zero-identity \
+  input="${PROBE_PAYLOAD}" \
+  | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+sig = r['data']['signature']
+kv  = r['data']['key_version']
+assert kv == 1, f'expected key_version=1 before rotation, got {kv}'
+assert sig.startswith('vault:v1:'), f'unexpected sig format: {sig[:20]}'
+print(sig)
+")
+echo "pre_rotation_payload=${PROBE_PAYLOAD}"
+echo "pre_rotation_sig=${PROBE_SIG}"
+# Record both values in the evidence manifest; they are required for P3.
+
+# P1. Rotate the identity key
 vault write -force transit/keys/customer-zero-identity/rotate
 
-# P2. Verify new key version
+# P2. Verify new key version and retained key history
 vault read -format=json transit/keys/customer-zero-identity | python3 -c "
 import sys, json
 d = json.load(sys.stdin)['data']
-print('latest_version:', d.get('latest_version'))
-keys = d.get('keys', {})
+latest = d.get('latest_version')
+keys   = d.get('keys', {})
+assert latest == 2, f'expected latest_version=2, got {latest}'
+assert '1' in keys and '2' in keys, f'expected both v1 and v2 in keys map, got: {list(keys)}'
+print('latest_version:', latest)
 for v, info in sorted(keys.items(), key=lambda x: int(x[0])):
     pub = info.get('public_key', '')
     print(f'  v{v}: {pub[:40]}...')
 "
+echo "key_version_check_rc=$?"
 # Expected: latest_version: 2, both v1 and v2 public keys present
 
-# P3. Verify v1 signature still verifiable with v1 public key (offline)
-cd ~/Projects/fg-core
-python -m pytest tests/ -v -k "rotation or key_version or historical" 2>&1 | tail -20
+# P3. Verify pre-rotation (v1) signature is still valid after rotation
+#     Uses transit/verify which accepts an explicit key_version in the signature tag.
+vault write -format=json transit/verify/customer-zero-identity \
+  input="${PROBE_PAYLOAD}" \
+  signature="${PROBE_SIG}" \
+  | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+valid = r['data']['valid']
+assert valid is True, f'pre-rotation signature FAILED verification: valid={valid}'
+print(f'historical_verify valid={valid}  (vault:v1: sig verifies against retained v1 public key)')
+"
+echo "historical_verify_rc=$?"
 
-# P4. Rotate back to confirm determinism (optional — key versions only increment)
-# Note: Vault Transit key versions never decrement. v2 is now the signing version.
-# v1 public key is retained for historical verification.
+# P4. Confirm post-rotation signing uses v2
+vault write -format=json transit/sign/customer-zero-identity \
+  input="${PROBE_PAYLOAD}" \
+  | python3 -c "
+import sys, json
+r = json.load(sys.stdin)
+sig = r['data']['signature']
+kv  = r['data']['key_version']
+assert kv == 2, f'expected key_version=2 after rotation, got {kv}'
+assert sig.startswith('vault:v2:'), f'unexpected format: {sig[:20]}'
+print(f'post_rotation key_version={kv}  sig={sig[:30]}...')
+"
+echo "post_rotation_sign_rc=$?"
 ```
 
-**Expected result:** Key version increments. Old signatures verifiable under old key version.
-New signatures use new key version. Both verify correctly.
+**Expected result:** Key version increments to 2. Pre-rotation (v1) signature passes
+`transit/verify`. Post-rotation signing produces `vault:v2:` signatures. Both key
+versions present in the key metadata map.
 
-**Evidence:** Key version metadata (non-secret). Test PASS.
+**Evidence:** `key_version_check_rc=0`, `historical_verify_rc=0`,
+`post_rotation_sign_rc=0`. Pre-rotation payload + signature recorded in evidence
+manifest (non-secret).
 
-**Stop condition:** Old signature fails to verify after rotation; key version metadata missing.
+**Stop condition:** `historical_verify_rc` non-zero; `valid=false` from `transit/verify`;
+latest_version not 2; v1 public key absent from key metadata.
 
 ---
 

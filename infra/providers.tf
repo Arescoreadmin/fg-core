@@ -16,6 +16,10 @@ provider "vault" {
   namespace = var.vault_namespace
   # Token supplied via VAULT_TOKEN env var or AppRole at runtime.
   # Never hardcode a token here.
+  #
+  # TWO-PHASE APPLY: vault_address is unknown until the HCP cluster exists.
+  # Phase 1 applies HCP + AWS resources only (-target flags; see ceremony-runbook.md §F).
+  # Phase 2 sets TF_VAR_vault_address from Phase 1 output, then applies Vault resources.
 }
 
 provider "aws" {
