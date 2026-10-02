@@ -132,6 +132,9 @@ PERMISSIONS_POLICY=$(cat <<PERMS
         "iam:UntagUser",
         "iam:ListUserTags",
         "iam:ListAccessKeys",
+        "iam:CreateAccessKey",
+        "iam:DeleteAccessKey",
+        "iam:UpdateAccessKey",
         "iam:ListAttachedUserPolicies",
         "iam:ListUserPolicies"
       ],
@@ -163,6 +166,12 @@ PERMISSIONS_POLICY=$(cat <<PERMS
       ]
     },
     {
+      "Sid": "IAMGetAccountSummary",
+      "Effect": "Allow",
+      "Action": "iam:GetAccountSummary",
+      "Resource": "*"
+    },
+    {
       "Sid": "STSGetCallerIdentity",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",
@@ -186,9 +195,22 @@ else
     --output text --query 'Role.Arn'
 fi
 
-echo "[A2] Creating operator permissions policy: ${OPERATOR_POLICY_NAME}..."
+echo "[A2] Creating/updating operator permissions policy: ${OPERATOR_POLICY_NAME}..."
 if aws --region "${REGION}" iam get-policy --policy-arn "$OPERATOR_POLICY_ARN" >/dev/null 2>&1; then
-  echo "[A2] Policy exists — skipping create"
+  echo "[A2] Policy exists — creating new default version (idempotent update)..."
+  # AWS limits managed policies to 5 versions; delete the oldest non-default before adding.
+  OLDEST=$(aws --region "${REGION}" iam list-policy-versions \
+    --policy-arn "$OPERATOR_POLICY_ARN" \
+    --query 'Versions[?!IsDefaultVersion].VersionId | sort(@) | [0]' --output text)
+  if [[ -n "$OLDEST" && "$OLDEST" != "None" ]]; then
+    aws --region "${REGION}" iam delete-policy-version \
+      --policy-arn "$OPERATOR_POLICY_ARN" --version-id "$OLDEST"
+  fi
+  aws --region "${REGION}" iam create-policy-version \
+    --policy-arn "$OPERATOR_POLICY_ARN" \
+    --policy-document "$PERMISSIONS_POLICY" \
+    --set-as-default \
+    --output text --query 'PolicyVersion.VersionId'
 else
   aws --region "${REGION}" iam create-policy \
     --policy-name "$OPERATOR_POLICY_NAME" \
