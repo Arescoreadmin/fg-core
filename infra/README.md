@@ -1,4 +1,4 @@
-# frostgate-infra
+# FrostGate Infrastructure
 
 Infrastructure-as-code authority for FrostGate production infrastructure.
 
