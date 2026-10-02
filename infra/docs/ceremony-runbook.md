@@ -944,7 +944,8 @@ gh pr create --title "feat(trust): CUSTOMER-ZERO-TRUST-001 production ceremony c
 
 **This checkpoint is MANDATORY.** The HCP Vault Dedicated cluster accrues hourly charges
 from creation until deletion. At $1.84299/hour the trial credit balance ($500.00) is
-exhausted approximately 152 cluster-hours after the first AppRole authentication, with
+exhausted approximately 113 cluster-hours after the first client authentication
+(conservative, 4-client model: $208.32 remaining ÷ $1.84299/h), with
 cash charges beginning automatically if no payment method is present. The operator must
 make an explicit disposition decision here — not after the session ends.
 
@@ -1057,8 +1058,8 @@ and the cluster must remain running.
 - Cluster: $1.84299/hour × 730h/month ≈ $1,345/month
 - 3–4 clients: $218.76–$291.68/month (flat, already locked for current period)
 - **Monthly total: ~$1,564–$1,637/month**
-- Trial credits ($500.00) will be exhausted approximately **6.4 days** after first
-  client authentication.
+- Trial credits ($500.00) will be exhausted approximately **~4.7 days** after first
+  client authentication (conservative, 4-client model: 113 cluster-hours ÷ 24).
 - After credits are exhausted: cash charges begin automatically IF a payment method
   is on file. If no payment method is present, HCP services terminate.
 
@@ -1073,7 +1074,7 @@ and the cluster must remain running.
 echo "Ongoing operation authorized by: <operator name>"
 echo "Authorization date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Expected monthly cost: ~\$1,564–\$1,637"
-echo "Credits-exhausted date: approximately $(date -d '+6 days' +%Y-%m-%d)"
+echo "Credits-exhausted date: approximately $(date -d '+4 days' +%Y-%m-%d)"
 ```
 
 **Expected result:** Operator has explicitly acknowledged ongoing cost and confirmed
