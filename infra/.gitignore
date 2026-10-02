@@ -1,0 +1,127 @@
+# =============================================================================
+# frostgate-infra — Terraform infrastructure-as-code
+# CRITICAL: Review every section before committing anything to this repository.
+# Committing any item in these exclusions is a security violation.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Terraform state — NEVER commit
+# ---------------------------------------------------------------------------
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# ---------------------------------------------------------------------------
+# Terraform working directory — contains downloaded providers and modules
+# ---------------------------------------------------------------------------
+.terraform/
+.terraform.lock.hcl.bak
+
+# ---------------------------------------------------------------------------
+# Terraform crash logs
+# ---------------------------------------------------------------------------
+crash.log
+crash.*.log
+
+# ---------------------------------------------------------------------------
+# Secret-bearing variable files — NEVER commit
+# Any .tfvars file that may contain secret values must not be committed.
+# Only commit .tfvars files that contain exclusively non-secret values
+# and have been explicitly reviewed.
+# ---------------------------------------------------------------------------
+*.tfvars
+*.auto.tfvars
+*.tfvars.json
+*.auto.tfvars.json
+
+# ---------------------------------------------------------------------------
+# Terraform plan files — may contain sensitive values from provider responses
+# ---------------------------------------------------------------------------
+*.tfplan
+*.plan
+
+# ---------------------------------------------------------------------------
+# HashiCorp Cloud Platform (HCP) credential material
+# ---------------------------------------------------------------------------
+.hcp/
+hcp-*.json
+hcp_credentials*
+hcp_token*
+*.hcp_token
+
+# ---------------------------------------------------------------------------
+# Vault credential material — NEVER commit
+# ---------------------------------------------------------------------------
+.vault-token
+vault-token*
+vault_token*
+*.vault-token
+vault-root-token*
+vault_root_token*
+approle-secret-id*
+secret_id*
+*.secret_id
+vault-unseal*
+vault_unseal*
+recovery-keys*
+recovery_keys*
+
+# ---------------------------------------------------------------------------
+# AWS credential material — NEVER commit
+# ---------------------------------------------------------------------------
+.aws/
+aws-credentials*
+aws_credentials*
+*.pem
+*.p12
+aws-access-key*
+aws_access_key*
+aws-secret-key*
+aws_secret_key*
+
+# ---------------------------------------------------------------------------
+# Private keys and certificates — NEVER commit
+# ---------------------------------------------------------------------------
+*.key
+*.rsa
+*.ed25519
+*.ecdsa
+*_private_key*
+*-private-key*
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.crt
+*.csr
+
+# ---------------------------------------------------------------------------
+# Generic secret file patterns
+# ---------------------------------------------------------------------------
+.env
+.env.*
+secrets/
+secrets.*
+*.secret
+*-secret
+*_secret
+credentials.json
+credentials.yaml
+credentials.yml
+*.credentials
+
+# ---------------------------------------------------------------------------
+# OS and editor artifacts
+# ---------------------------------------------------------------------------
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# ---------------------------------------------------------------------------
+# NOTE: .terraform.lock.hcl IS intentionally tracked (not excluded here).
+# It pins provider versions for reproducible builds.
+# Verify it contains no sensitive values before committing.
+# ---------------------------------------------------------------------------
