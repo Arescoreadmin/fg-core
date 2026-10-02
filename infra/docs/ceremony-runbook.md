@@ -2,8 +2,8 @@
 
 **Ceremony ID:** `customer-zero-trust-2026-10-02-001`
 **Work item:** CUSTOMER-ZERO-TRUST-001
-**fg-core source authority:** `45f9a8370b9cb1a6c354da290ad3b5cd3ef43104`
-**frostgate-infra source authority:** `8121d24252dd1e7e3945424fcdacc5a320611fea`
+**fg-core source authority:** `cc2775be2d5e9078213a97258995481f95d61088`
+**Note:** `Arescoreadmin/frostgate-infra` is archived (read-only). Infrastructure authority has moved permanently to `fg-core/infra/`. The standalone repo SHA `8121d24252dd1e7e3945424fcdacc5a320611fea` is retained as a historical record only.
 
 **Timebox targets:**
 - Target completion: 8 hours
@@ -26,16 +26,15 @@
 cd ~/Projects/fg-core
 git status
 git branch --show-current        # must be: main
-git rev-parse HEAD               # must be: 45f9a8370b9cb1a6c354da290ad3b5cd3ef43104
+git rev-parse HEAD               # must be: cc2775be2d5e9078213a97258995481f95d61088
 git fetch origin --prune
 git rev-parse origin/main        # must equal HEAD
 
-# A2. Verify frostgate-infra
-cd ~/Projects/frostgate-infra
-git status                       # must be: clean
-git branch --show-current        # must be: main (or ceremony branch if applicable)
-git rev-parse HEAD
-git fetch origin --prune
+# A2. Confirm infrastructure authority is fg-core/infra (standalone repo is archived)
+# Arescoreadmin/frostgate-infra is archived and read-only — do NOT use it as an apply source.
+# Canonical infrastructure path: ~/Projects/fg-core/infra
+ls ~/Projects/fg-core/infra/*.tf | head -5
+# Expected: fg-core/infra Terraform files present
 
 # A3. Confirm roadmap authority
 cd ~/Projects/fg-core
@@ -58,7 +57,7 @@ AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-user --
 
 **Expected result:** All checks pass, non-root identity confirmed.
 
-**Evidence:** fg-core SHA, frostgate-infra SHA, AUTHORIZED roadmap rc=0, operator ARN, MFA:1.
+**Evidence:** fg-core SHA, AUTHORIZED roadmap rc=0, operator ARN, MFA:1.
 
 **Secret boundary:** None.
 
@@ -74,7 +73,7 @@ AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-user --
 
 ```bash
 # B1. Confirm Terraform will use non-root identity
-cd ~/Projects/frostgate-infra
+cd ~/Projects/fg-core/infra
 AWS_PROFILE=frostgate-terraform terraform version
 AWS_PROFILE=frostgate-terraform aws sts get-caller-identity
 
