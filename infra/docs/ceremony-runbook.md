@@ -938,6 +938,157 @@ gh pr create --title "feat(trust): CUSTOMER-ZERO-TRUST-001 production ceremony c
 
 ---
 
+## CHECKPOINT U — Post-Ceremony Cluster Disposition
+
+**Prerequisites:** Checkpoint T complete. PR created. Evidence manifest committed and pushed.
+
+**This checkpoint is MANDATORY.** The HCP Vault Dedicated cluster accrues hourly charges
+from creation until deletion. At $1.84299/hour the trial credit balance ($500.00) is
+exhausted approximately 152 cluster-hours after the first AppRole authentication, with
+cash charges beginning automatically if no payment method is present. The operator must
+make an explicit disposition decision here — not after the session ends.
+
+**DECISION GATE — choose exactly one:**
+
+---
+
+### Option A — Teardown (cluster was ceremony-only)
+
+Choose this option if the cluster is not required for ongoing production signing.
+The signed evidence manifest and public trust anchors remain independently verifiable
+after cluster destruction. Future signing requires a new cluster.
+
+**Pre-destruction checklist:**
+```bash
+# U-A1. Confirm all three public keys are in the evidence manifest (non-secret)
+python tools/customer_zero_trust_evidence.py validate \
+  artifacts/trust/customer_zero_trust_evidence.json
+# Check: public_key fields for all three transit keys are non-empty
+
+# U-A2. Confirm evidence manifest is committed and pushed to origin
+git -C ~/Projects/fg-core log --oneline -3
+git -C ~/Projects/fg-core status
+# Must be: clean, no unpushed commits
+```
+
+**Override prevent_destroy and destroy:**
+
+> **HUMAN OPERATOR ACTION — irreversible. Read completely before proceeding.**
+>
+> The Terraform configuration uses `prevent_destroy = true` on all HCP and Vault
+> resources as protection against accidental destruction. Teardown requires a
+> deliberate one-time override of these guards.
+
+```bash
+cd ~/Projects/fg-core/infra
+
+# U-A3. In each of the following files, change every occurrence of
+#        prevent_destroy = true   →   prevent_destroy = false
+#   infra/hcp_cluster.tf      (hcp_hvn + hcp_vault_cluster)
+#   infra/vault_transit.tf    (vault_mount + all 3 transit keys)
+#   infra/vault_approle.tf    (vault_auth_backend + all 3 approle roles)
+#   infra/aws_audit.tf        (aws_cloudwatch_log_group)
+#
+# Verify the change:
+grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+# Expected: all show prevent_destroy = false
+
+# U-A4. Apply the lifecycle change (no resources created or destroyed — plan should show
+#        0 to add, 0 to change, 0 to destroy; only lifecycle metadata changes)
+AWS_PROFILE=frostgate-terraform terraform plan -out=teardown-lifecycle.tfplan
+terraform show teardown-lifecycle.tfplan | grep -E "Plan:|will be|must be"
+# Confirm: zero resource mutations — lifecycle metadata change only
+AWS_PROFILE=frostgate-terraform terraform apply teardown-lifecycle.tfplan
+
+# U-A5. Destroy all resources
+AWS_PROFILE=frostgate-terraform terraform destroy
+# Type "yes" when prompted.
+# Expected: all 17 resources destroyed.
+```
+
+**Post-destruction evidence:**
+```bash
+# U-A6. Record destruction timestamp
+echo "cluster_destroy_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# U-A7. Confirm HCP cluster is gone
+hcp --help  # No vault subcommand — verify via HCP portal: cluster list should be empty.
+
+# U-A8. Confirm AWS resources are gone
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1
+# Expected: NoSuchEntityException
+
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws logs describe-log-groups --log-group-name-prefix "/frostgate/customer-zero" 2>&1
+# Expected: empty or deleted
+# Note: log group has prevent_destroy = true; may need separate deletion after terraform destroy
+# if CloudWatch group is retained for 365-day audit evidence.
+```
+
+**Revert Terraform lifecycle guards:**
+```bash
+# U-A9. After destruction is confirmed, restore prevent_destroy = true in all files.
+#        This is required before the next plan/apply cycle (future cluster creation).
+#        Edit each file back: prevent_destroy = false  →  prevent_destroy = true
+grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+# Expected: all show prevent_destroy = true
+git add hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+git commit -m "chore(infra): restore prevent_destroy guards post-ceremony teardown"
+git push origin main
+```
+
+**Expected result:** All 17 resources destroyed. HCP billing stops. Audit logs retained
+for 365 days in CloudWatch (if log group retained separately). Evidence manifest and
+public trust anchors remain in fg-core permanently.
+
+**Evidence:** Destruction timestamp (non-secret). Final HCP billing summary from portal.
+
+**Stop condition:** Any resource fails to destroy; Terraform state shows orphaned resources.
+
+---
+
+### Option B — Authorize Ongoing Operation (cluster required for production signing)
+
+Choose this option if runtime AppRoles will sign production governance artifacts
+and the cluster must remain running.
+
+**Cost implications of ongoing operation:**
+- Cluster: $1.84299/hour × 730h/month ≈ $1,345/month
+- 3–4 clients: $218.76–$291.68/month (flat, already locked for current period)
+- **Monthly total: ~$1,564–$1,637/month**
+- Trial credits ($500.00) will be exhausted approximately **6.4 days** after first
+  client authentication.
+- After credits are exhausted: cash charges begin automatically IF a payment method
+  is on file. If no payment method is present, HCP services terminate.
+
+**Before authorizing ongoing operation, confirm:**
+```bash
+# U-B1. Confirm a valid payment method is on file
+# HCP portal → Billing → Payment Methods
+# Must show a valid credit card or other payment method.
+# DO NOT add a payment method without explicit business authorization.
+
+# U-B2. Record ongoing operation authorization
+echo "Ongoing operation authorized by: <operator name>"
+echo "Authorization date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "Expected monthly cost: ~\$1,564–\$1,637"
+echo "Credits-exhausted date: approximately $(date -d '+6 days' +%Y-%m-%d)"
+```
+
+**Expected result:** Operator has explicitly acknowledged ongoing cost and confirmed
+payment method. Cluster remains running. Periodic cost monitoring is in place.
+
+**Stop condition:** No payment method on file and credits approaching exhaustion
+without an explicit business decision to add one.
+
+---
+
+**Stop condition (either option):** Operator exits session without making a disposition
+decision and the cluster continues accruing charges.
+
+---
+
 ## Rollback procedure
 
 If the ceremony must be aborted after Checkpoint F (after `terraform apply`):
