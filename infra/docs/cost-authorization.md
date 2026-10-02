@@ -85,19 +85,30 @@ Standard Small is retained. No Terraform change required.
 | Same client, multiple authentications | Counted once per month | PROVIDER_DOCUMENTED |
 | Billing rate | $72.92/month/client (flat, not prorated) | LIVE_PROVEN |
 | Client count reductions before month end | Not possible | PROVIDER_DOCUMENTED |
-| Expected ceremony client count | 3 AppRole principals | ESTIMATED |
-| Client cost (3 clients) | $218.76 | DERIVED |
+| Admin token billable as client | Unknown — HCP does not publish explicit exclusion | NOT_PROVEN |
+| Expected ceremony client count | 4 (3 AppRole principals + admin token, conservative) | ESTIMATED |
+| Client cost (4 clients, conservative) | $291.68 | DERIVED |
 
 **Critical billing fact:** Client charges are flat-rate monthly, not prorated.
 A client that authenticates once in a billing period incurs the full
 $72.92/month charge regardless of when the cluster is destroyed.
 
 **Implication:** Destroying the cluster after 8 hours does not reduce the
-per-client charge. The $218.76 client cost is effectively locked in from the
-first AppRole authentication during the ceremony.
+per-client charge. The $291.68 client cost is effectively locked in from the
+first authentication during the ceremony.
 
-**Mitigation:** $218.76 falls well within the $500.00 trial credit balance
+**Admin token billing uncertainty:** Whether the ceremony admin token (Checkpoint G)
+counts as a billable Vault client is NOT_PROVEN. HCP publishes no explicit exclusion
+for admin tokens. The conservative budget treats the admin token as a 4th client
+(4 × $72.92 = $291.68). If the admin token is confirmed not billable, the actual
+client cost reverts to $218.76 (3 AppRole principals only).
+
+**Mitigation:** $291.68 falls well within the $500.00 trial credit balance
 at $0 net cash exposure, assuming credits apply as documented.
+
+**Teardown obligation:** See Checkpoint U in `ceremony-runbook.md` for the mandatory
+post-ceremony cluster disposition gate. The cluster must be explicitly torn down
+(Option A) or the operator must acknowledge ongoing cost implications (Option B).
 
 ---
 
@@ -118,9 +129,11 @@ AWS charges are negligible relative to HCP cost at ceremony scale.
 
 ---
 
-## Derived Ceremony Exposure — Standard Small, 3 clients
+## Derived Ceremony Exposure — Standard Small, 4 clients (conservative)
 
-All calculations use: cluster $1.84299/hour, clients 3 × $72.92 = $218.76 flat.
+All calculations use: cluster $1.84299/hour, clients 4 × $72.92 = $291.68 flat
+(conservative — includes potential admin token as 4th billable client).
+3-client floor (AppRole principals only): 3 × $72.92 = $218.76.
 
 ### Hourly cluster cost only (before client component)
 
@@ -135,27 +148,35 @@ All calculations use: cluster $1.84299/hour, clients 3 × $72.92 = $218.76 flat.
 | 7 days | $309.62328 |
 | 30 days | $1,327.75 |
 
-### Total gross (cluster + 3 clients flat + AWS negligible)
+### Total gross (cluster + 4 clients flat conservative + AWS negligible)
 
-| Duration | Cluster | Clients | Total gross | After $500 credits |
+| Duration | Cluster | Clients (4, conservative) | Total gross | After $500 credits |
+|---|---|---|---|---|
+| 3h | $5.53 | $291.68 | ~$297.21 | **$0** (credits cover) |
+| 5h | $9.21 | $291.68 | ~$300.89 | **$0** (credits cover) |
+| 8h | $14.74 | $291.68 | ~$306.42 | **$0** (credits cover) |
+| 10h | $18.43 | $291.68 | ~$310.11 | **$0** (credits cover) |
+| 12h | $22.12 | $291.68 | ~$313.80 | **$0** (credits cover) |
+| 24h | $44.23 | $291.68 | ~$335.91 | **$0** (credits cover) |
+| 7 days | $309.62 | $291.68 | ~$601.30 | **$101.30** (credits exhausted) |
+| 30 days | $1,327.75 | $291.68 | ~$1,619.43 | **$1,119.43** (credits exhausted) |
+
+### Total gross (cluster + 3 clients floor — AppRole principals only)
+
+| Duration | Cluster | Clients (3, floor) | Total gross | After $500 credits |
 |---|---|---|---|---|
 | 3h | $5.53 | $218.76 | ~$224.29 | **$0** (credits cover) |
-| 5h | $9.21 | $218.76 | ~$227.97 | **$0** (credits cover) |
 | 8h | $14.74 | $218.76 | ~$233.50 | **$0** (credits cover) |
-| 10h | $18.43 | $218.76 | ~$237.19 | **$0** (credits cover) |
 | 12h | $22.12 | $218.76 | ~$240.88 | **$0** (credits cover) |
-| 24h | $44.23 | $218.76 | ~$262.99 | **$0** (credits cover) |
-| 7 days | $309.62 | $218.76 | ~$528.38 | **$28.38** (credits exhausted) |
-| 30 days | $1,327.75 | $218.76 | ~$1,546.51 | **$1,046.51** (credits exhausted) |
 
-**Accidental-leave-running threshold:**
-Credits ($500) are exhausted at approximately **~$281 cluster runtime**
-beyond the $218.76 client floor. At $1.84299/hour that is approximately
-**152 cluster-hours** before credits run out (from first client auth).
-**At current pace with 3 clients authenticated: ~6.4 days before cash charges begin.**
+**Accidental-leave-running threshold (conservative, 4 clients):**
+Credits ($500) are exhausted at approximately **~$208 cluster runtime**
+beyond the $291.68 client floor. At $1.84299/hour that is approximately
+**113 cluster-hours** before credits run out (from first client auth).
+**At current pace with 4 clients authenticated: ~4.7 days before cash charges begin.**
 
-**For a standard 8-hour ceremony:** estimated gross $233.50, net $0 cash
-after credits, with $266.50 in credits remaining.
+**For a standard 8-hour ceremony (conservative):** estimated gross $306.42, net $0 cash
+after credits, with $193.58 in credits remaining.
 
 All figures DERIVED from LIVE_PROVEN pricing and ESTIMATED client count.
 
@@ -165,11 +186,13 @@ All figures DERIVED from LIVE_PROVEN pricing and ESTIMATED client count.
 
 | Item | Impact | Resolution |
 |---|---|---|
-| Credit expiration date | If credits expired, $233.50 becomes real cash | Operator reads from HCP portal Billing → Credits |
-| Exact client count | Could be >3 if admin token itself is billed as a client | Verify in HCP portal post-ceremony; unlikely to affect outcome |
-| Credit applicability to Vault Dedicated Standard specifically | If excluded, $233.50 becomes real cash | Confirmed via PROVIDER_DOCUMENTED Trial terms; Vault Dedicated is an HCP service eligible for trial credits |
+| Credit expiration date | If credits expired, $306.42 (conservative) becomes real cash | Operator reads from HCP portal Billing → Credits |
+| Admin token billable as client | If excluded: actual client cost $218.76; if included: $291.68 | Conservative budget already includes admin token; confirm in HCP portal post-ceremony |
+| Credit applicability to Vault Dedicated Standard specifically | If excluded, $306.42 becomes real cash | Confirmed via PROVIDER_DOCUMENTED Trial terms; Vault Dedicated is an HCP service eligible for trial credits |
 
-**Only the credit expiration date remains unconfirmed.** All other uncertainties are resolved or immaterial given the $500 balance.
+**Only the credit expiration date remains unconfirmed.** The admin token billing uncertainty is
+addressed conservatively (4-client budget). All other uncertainties are resolved or immaterial
+given the $500 balance.
 
 ---
 
@@ -191,8 +214,9 @@ HCP Cluster (Standard Small, us-east-1):
 Vault Client pricing:
   Per-client rate (LIVE_PROVEN): $72.92/month/client
   Billing period:                monthly (flat, not prorated)
-  Expected clients:              3 AppRole principals (ESTIMATED)
-  Expected client charge:        $218.76
+  Expected clients:              4 conservative (3 AppRole + admin token, ESTIMATED)
+                                 OR 3 floor (AppRole only, if admin token not billable)
+  Expected client charge:        $291.68 conservative / $218.76 floor
 
 Trial credits:
   Available balance (LIVE_PROVEN): $500.00
@@ -203,21 +227,23 @@ Ceremony exposure estimates:
   Expected runtime:              3–5 hours
   Operational ceiling:           8 hours
   Freeze/review threshold:       12 hours
-  8h gross (cluster + clients):  ~$233.50
+  8h gross conservative (4 clients): ~$306.42
+  8h gross floor (3 clients):        ~$233.50
   8h net (after credits):        ~$0.00 (assuming credits valid)
-  12h gross:                     ~$240.88
+  12h gross conservative:        ~$313.80
   12h net:                       ~$0.00 (assuming credits valid)
   Maximum authorized exposure:   $___________
 
 AUTHORIZATION:
   [ ] I have verified the above pricing from the HCP portal Billing → Pricing page.
   [ ] I confirm trial credits of $500.00 are available and have not expired.
-  [ ] I accept the maximum gross exposure of $__________ (suggest $275 for 8h + margin).
+  [ ] I accept the maximum gross exposure of $__________ (suggest $325 for 4-client
+      conservative 8h + margin; $275 is insufficient if admin token is billable).
   [ ] I authorize terraform apply for ceremony customer-zero-trust-2026-10-02-001.
-  [ ] I understand that once AppRole clients authenticate, $218.76 in client
-      charges is locked for the monthly billing period regardless of cluster lifetime.
+  [ ] I understand that once any client authenticates, client charges ($218.76–$291.68)
+      are locked for the monthly billing period regardless of cluster lifetime.
   [ ] I will destroy the cluster promptly after the ceremony is complete
-      or after the 12-hour freeze threshold is reached.
+      or after the 12-hour freeze threshold is reached (see Checkpoint U).
 
 Signature: ___________________  Date: ___________________
 ```
@@ -233,14 +259,17 @@ must read, fill, and sign the record above.)*
 > infrastructure for ceremony `customer-zero-trust-2026-10-02-001`, using
 > HCP Vault Dedicated Standard Small in AWS us-east-1, at the verified
 > account-applicable rate of **$1.84299/hour** for the cluster plus
-> **$72.92/month/client** flat (not prorated), with 3 expected AppRole
-> clients. Expected gross exposure: **~$233.50** for an 8-hour ceremony.
+> **$72.92/month/client** flat (not prorated), with a conservative client
+> count of **4** (3 AppRole principals + admin token; whether the admin
+> token is separately billable is NOT_PROVEN — budget covers both cases).
+> Expected gross exposure: **~$306.42** conservative / **~$233.50** floor
+> for an 8-hour ceremony.
 > Expected net cash cost: **$0**, covered by the $500.00 trial credit balance,
 > subject to credits being valid and not expired. Authorized maximum runtime:
 > **8 hours**. If the 12-hour freeze threshold is reached before all
 > checkpoints are complete, stop provisioning and do not proceed to
 > Checkpoint E without renewed explicit authorization. Destroy the cluster
-> promptly upon ceremony completion.
+> promptly upon ceremony completion per Checkpoint U.
 >
 > Ceremony ID: `customer-zero-trust-2026-10-02-001`
 > Operator: ___________________
