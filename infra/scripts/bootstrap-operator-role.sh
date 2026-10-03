@@ -110,7 +110,6 @@ PERMISSIONS_POLICY=$(cat <<PERMS
         "logs:DeleteLogGroup",
         "logs:ListTagsForResource",
         "logs:PutRetentionPolicy",
-        "logs:TagResource",
         "logs:UntagResource"
       ],
       "Resource": "arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:/frostgate/customer-zero/vault-audit"
@@ -120,6 +119,12 @@ PERMISSIONS_POLICY=$(cat <<PERMS
       "Effect": "Allow",
       "Action": "logs:DescribeLogGroups",
       "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogGroupTag",
+      "Effect": "Allow",
+      "Action": "logs:TagResource",
+      "Resource": "arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:*"
     },
     {
       "Sid": "IAMAuditUser",
