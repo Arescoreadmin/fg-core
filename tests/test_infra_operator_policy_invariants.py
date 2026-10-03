@@ -112,13 +112,13 @@ def test_cloudwatch_log_group_tag_action(
     action = stmt["Action"]
     # Accept both scalar and single-element list
     if isinstance(action, list):
-        assert action == [
-            "logs:TagResource"
-        ], f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
+        assert action == ["logs:TagResource"], (
+            f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
+        )
     else:
-        assert (
-            action == "logs:TagResource"
-        ), f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
+        assert action == "logs:TagResource", (
+            f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
+        )
 
 
 # ── C: CloudWatchLogGroupTag resource is account/region log-group wildcard ────
@@ -155,15 +155,15 @@ def test_cloudwatch_log_group_tag_conditions(
         "any log group in the account"
     )
     fixed = cond.get("StringEquals", {})
-    assert (
-        fixed.get("aws:RequestTag/Purpose") == "vault-audit"
-    ), "CloudWatchLogGroupTag must require aws:RequestTag/Purpose == vault-audit"
-    assert (
-        fixed.get("aws:RequestTag/ManagedBy") == "terraform"
-    ), "CloudWatchLogGroupTag must require aws:RequestTag/ManagedBy == terraform"
-    assert (
-        fixed.get("aws:RequestTag/WorkItem") == "CUSTOMER-ZERO-TRUST-001"
-    ), "CloudWatchLogGroupTag must require aws:RequestTag/WorkItem == CUSTOMER-ZERO-TRUST-001"
+    assert fixed.get("aws:RequestTag/Purpose") == "vault-audit", (
+        "CloudWatchLogGroupTag must require aws:RequestTag/Purpose == vault-audit"
+    )
+    assert fixed.get("aws:RequestTag/ManagedBy") == "terraform", (
+        "CloudWatchLogGroupTag must require aws:RequestTag/ManagedBy == terraform"
+    )
+    assert fixed.get("aws:RequestTag/WorkItem") == "CUSTOMER-ZERO-TRUST-001", (
+        "CloudWatchLogGroupTag must require aws:RequestTag/WorkItem == CUSTOMER-ZERO-TRUST-001"
+    )
 
 
 # ── E: CloudWatchLogGroup remains scoped to the exact audit log group ─────────
@@ -174,9 +174,9 @@ def test_cloudwatch_log_group_resource_is_specific(
 ) -> None:
     stmt = statements_by_sid["CloudWatchLogGroup"]
     resource = stmt["Resource"]
-    assert (
-        resource == SPECIFIC_LOG_GROUP_ARN
-    ), f"CloudWatchLogGroup Resource must remain {SPECIFIC_LOG_GROUP_ARN!r}, got {resource!r}"
+    assert resource == SPECIFIC_LOG_GROUP_ARN, (
+        f"CloudWatchLogGroup Resource must remain {SPECIFIC_LOG_GROUP_ARN!r}, got {resource!r}"
+    )
 
 
 # ── F: no CloudWatch statement uses a wildcard action (logs:*) ────────────────
@@ -189,12 +189,12 @@ def test_no_wildcard_cloudwatch_action(statements_by_sid: dict[str, dict]) -> No
         if isinstance(actions, str):
             actions = [actions]
         for action in actions:
-            assert (
-                action != "logs:*"
-            ), f"Statement {sid!r} grants logs:* — CloudWatch authority must be explicit"
-            assert not action.endswith(
-                ":*"
-            ), f"Statement {sid!r} grants wildcard action {action!r}"
+            assert action != "logs:*", (
+                f"Statement {sid!r} grants logs:* — CloudWatch authority must be explicit"
+            )
+            assert not action.endswith(":*"), (
+                f"Statement {sid!r} grants wildcard action {action!r}"
+            )
 
 
 # ── G: no CloudWatch tagging statement uses Resource:"*" ─────────────────────
@@ -235,6 +235,6 @@ def test_operator_role_trust_principal_is_human_user(
     stmt = final_trust_policy["Statement"][0]
     principal = stmt["Principal"]["AWS"]
     expected = f"arn:aws:iam::{ACCOUNT_ID}:user/frostgate/frostgate-terraform-human"
-    assert (
-        principal == expected
-    ), f"FINAL_TRUST principal must be {expected!r}, got {principal!r}"
+    assert principal == expected, (
+        f"FINAL_TRUST principal must be {expected!r}, got {principal!r}"
+    )
