@@ -87,6 +87,7 @@ def final_trust_policy() -> dict:
 
 # ── A: CloudWatchLogGroupTag statement exists ─────────────────────────────────
 
+
 def test_cloudwatch_log_group_tag_statement_exists(
     statements_by_sid: dict[str, dict],
 ) -> None:
@@ -98,6 +99,7 @@ def test_cloudwatch_log_group_tag_statement_exists(
 
 # ── B: CloudWatchLogGroupTag action is exactly logs:TagResource ───────────────
 
+
 def test_cloudwatch_log_group_tag_action(
     statements_by_sid: dict[str, dict],
 ) -> None:
@@ -105,16 +107,17 @@ def test_cloudwatch_log_group_tag_action(
     action = stmt["Action"]
     # Accept both scalar and single-element list
     if isinstance(action, list):
-        assert action == ["logs:TagResource"], (
-            f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
-        )
+        assert action == [
+            "logs:TagResource"
+        ], f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
     else:
-        assert action == "logs:TagResource", (
-            f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
-        )
+        assert (
+            action == "logs:TagResource"
+        ), f"CloudWatchLogGroupTag Action must be exactly logs:TagResource, got {action}"
 
 
 # ── C: CloudWatchLogGroupTag resource is account/region log-group wildcard ────
+
 
 def test_cloudwatch_log_group_tag_resource(
     statements_by_sid: dict[str, dict],
@@ -129,6 +132,7 @@ def test_cloudwatch_log_group_tag_resource(
 
 # ── D: logs:TagResource NOT in narrow CloudWatchLogGroup action list ──────────
 
+
 def test_tag_resource_absent_from_narrow_statement(
     statements_by_sid: dict[str, dict],
 ) -> None:
@@ -142,37 +146,37 @@ def test_tag_resource_absent_from_narrow_statement(
 
 # ── E: CloudWatchLogGroup remains scoped to the exact audit log group ─────────
 
+
 def test_cloudwatch_log_group_resource_is_specific(
     statements_by_sid: dict[str, dict],
 ) -> None:
     stmt = statements_by_sid["CloudWatchLogGroup"]
     resource = stmt["Resource"]
-    assert resource == SPECIFIC_LOG_GROUP_ARN, (
-        f"CloudWatchLogGroup Resource must remain {SPECIFIC_LOG_GROUP_ARN!r}, got {resource!r}"
-    )
+    assert (
+        resource == SPECIFIC_LOG_GROUP_ARN
+    ), f"CloudWatchLogGroup Resource must remain {SPECIFIC_LOG_GROUP_ARN!r}, got {resource!r}"
 
 
 # ── F: no CloudWatch statement uses a wildcard action (logs:*) ────────────────
 
+
 def test_no_wildcard_cloudwatch_action(statements_by_sid: dict[str, dict]) -> None:
-    cw_sids = {
-        k for k in statements_by_sid
-        if k.startswith("CloudWatch")
-    }
+    cw_sids = {k for k in statements_by_sid if k.startswith("CloudWatch")}
     for sid in cw_sids:
         actions = statements_by_sid[sid]["Action"]
         if isinstance(actions, str):
             actions = [actions]
         for action in actions:
-            assert action != "logs:*", (
-                f"Statement {sid!r} grants logs:* — CloudWatch authority must be explicit"
-            )
-            assert not action.endswith(":*"), (
-                f"Statement {sid!r} grants wildcard action {action!r}"
-            )
+            assert (
+                action != "logs:*"
+            ), f"Statement {sid!r} grants logs:* — CloudWatch authority must be explicit"
+            assert not action.endswith(
+                ":*"
+            ), f"Statement {sid!r} grants wildcard action {action!r}"
 
 
 # ── G: no CloudWatch tagging statement uses Resource:"*" ─────────────────────
+
 
 def test_no_tagging_resource_star(statements_by_sid: dict[str, dict]) -> None:
     for sid, stmt in statements_by_sid.items():
@@ -181,25 +185,26 @@ def test_no_tagging_resource_star(statements_by_sid: dict[str, dict]) -> None:
             actions = [actions]
         if "logs:TagResource" in actions:
             assert stmt["Resource"] != "*", (
-                f"Statement {sid!r} grants logs:TagResource on Resource:\"*\" — "
+                f'Statement {sid!r} grants logs:TagResource on Resource:"*" — '
                 "scope must be limited to account/region log-group ARN"
             )
 
 
 # ── H: operator role trust still requires MFA from exact human user ──────────
 
+
 def test_operator_role_trust_requires_mfa(final_trust_policy: dict) -> None:
     statements = final_trust_policy["Statement"]
     assert len(statements) == 1, "FINAL_TRUST must have exactly one statement"
     stmt = statements[0]
     condition = stmt.get("Condition", {})
-    mfa = (
-        condition.get("Bool", {}).get("aws:MultiFactorAuthPresent")
-        or condition.get("Bool", {}).get("aws:MultiFactorAuthPresent".lower())
-    )
-    assert mfa in ("true", True), (
-        "FrostGateTerraformOperator trust policy must require aws:MultiFactorAuthPresent"
-    )
+    mfa = condition.get("Bool", {}).get("aws:MultiFactorAuthPresent") or condition.get(
+        "Bool", {}
+    ).get("aws:MultiFactorAuthPresent".lower())
+    assert mfa in (
+        "true",
+        True,
+    ), "FrostGateTerraformOperator trust policy must require aws:MultiFactorAuthPresent"
 
 
 def test_operator_role_trust_principal_is_human_user(
@@ -208,6 +213,6 @@ def test_operator_role_trust_principal_is_human_user(
     stmt = final_trust_policy["Statement"][0]
     principal = stmt["Principal"]["AWS"]
     expected = f"arn:aws:iam::{ACCOUNT_ID}:user/frostgate/frostgate-terraform-human"
-    assert principal == expected, (
-        f"FINAL_TRUST principal must be {expected!r}, got {principal!r}"
-    )
+    assert (
+        principal == expected
+    ), f"FINAL_TRUST principal must be {expected!r}, got {principal!r}"
