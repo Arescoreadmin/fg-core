@@ -265,6 +265,7 @@ for the 4 ceremony Terraform resources:
 | Resource | Actions | Scope |
 |---|---|---|
 | `aws_cloudwatch_log_group` | CreateLogGroup, DeleteLogGroup, ListTagsForResource, PutRetentionPolicy, TagResource, UntagResource | Specific log group ARN |
+| (creation-time tagging) | TagResource | Account/region `log-group:*` with `ForAllValues:StringEquals aws:TagKeys` + `StringEquals aws:RequestTag/*` conditions scoped to the 4 ceremony tag keys |
 | (list support) | DescribeLogGroups | `*` — list-type API |
 | `aws_iam_user` | CreateUser, DeleteUser, GetUser, TagUser, UntagUser, ListUserTags, ListAccessKeys, ListAttachedUserPolicies, ListUserPolicies | Specific audit user ARN |
 | `aws_iam_policy` | CreatePolicy, DeletePolicy, GetPolicy, GetPolicyVersion, ListPolicyVersions, ListEntitiesForPolicy | Specific audit policy ARN |
