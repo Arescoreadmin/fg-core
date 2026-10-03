@@ -3,11 +3,16 @@ Regression tests for FrostGateTerraformOperatorPolicy in bootstrap-operator-role
 
 Live-proven defect: logs:TagResource scoped to a specific not-yet-existing log-group ARN
 cannot satisfy CreateLogGroup-with-Tags IAM evaluation (CUSTOMER-ZERO-TRUST-001, 2026-10-02).
-Fix: isolated CloudWatchLogGroupTag statement with account/region log-group wildcard scope.
+Fix: two-statement design —
+  CloudWatchLogGroup:    exact ARN, all lifecycle actions including TagResource (post-creation)
+  CloudWatchLogGroupTag: account/region log-group wildcard, TagResource only,
+                         constrained by ForAllValues:StringEquals on aws:TagKeys and
+                         StringEquals on aws:RequestTag/* for the 3 fixed ceremony values
 
 These tests fail if:
 - the creation-time tagging defect is reintroduced
 - log-group tagging authority is silently broadened to Resource:"*"
+- CloudWatchLogGroupTag wildcard conditions are removed or weakened
 - any CloudWatch action is replaced with a wildcard action
 - operator role trust or MFA requirement is weakened
 """
@@ -130,18 +135,35 @@ def test_cloudwatch_log_group_tag_resource(
     )
 
 
-# ── D: logs:TagResource NOT in narrow CloudWatchLogGroup action list ──────────
+# ── D: CloudWatchLogGroupTag wildcard is constrained by tag-key/value conditions ─
 
 
-def test_tag_resource_absent_from_narrow_statement(
+def test_cloudwatch_log_group_tag_conditions(
     statements_by_sid: dict[str, dict],
 ) -> None:
-    stmt = statements_by_sid["CloudWatchLogGroup"]
-    actions = stmt["Action"] if isinstance(stmt["Action"], list) else [stmt["Action"]]
-    assert "logs:TagResource" not in actions, (
-        "logs:TagResource must not appear in CloudWatchLogGroup — "
-        "it must live in CloudWatchLogGroupTag with the wider resource scope"
+    stmt = statements_by_sid["CloudWatchLogGroupTag"]
+    cond = stmt.get("Condition", {})
+    allowed_keys = cond.get("ForAllValues:StringEquals", {}).get("aws:TagKeys", [])
+    assert set(allowed_keys) == {
+        "Purpose",
+        "Ceremony",
+        "ManagedBy",
+        "WorkItem",
+    }, (
+        f"CloudWatchLogGroupTag must constrain aws:TagKeys to the 4 ceremony keys, "
+        f"got {allowed_keys!r} — wildcard resource without conditions allows tagging "
+        "any log group in the account"
     )
+    fixed = cond.get("StringEquals", {})
+    assert (
+        fixed.get("aws:RequestTag/Purpose") == "vault-audit"
+    ), "CloudWatchLogGroupTag must require aws:RequestTag/Purpose == vault-audit"
+    assert (
+        fixed.get("aws:RequestTag/ManagedBy") == "terraform"
+    ), "CloudWatchLogGroupTag must require aws:RequestTag/ManagedBy == terraform"
+    assert (
+        fixed.get("aws:RequestTag/WorkItem") == "CUSTOMER-ZERO-TRUST-001"
+    ), "CloudWatchLogGroupTag must require aws:RequestTag/WorkItem == CUSTOMER-ZERO-TRUST-001"
 
 
 # ── E: CloudWatchLogGroup remains scoped to the exact audit log group ─────────
