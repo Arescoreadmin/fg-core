@@ -2,7 +2,7 @@
 
 **Ceremony ID:** `customer-zero-trust-2026-10-02-001`
 **Work item:** CUSTOMER-ZERO-TRUST-001
-**fg-core source authority:** `cc2775be2d5e9078213a97258995481f95d61088`
+**fg-core source authority:** `3897642514528425ccf7851d56b904405e4d04d8`
 **Note:** `Arescoreadmin/frostgate-infra` is archived (read-only). Infrastructure authority has moved permanently to `fg-core/infra/`. The standalone repo SHA `8121d24252dd1e7e3945424fcdacc5a320611fea` is retained as a historical record only.
 
 **Timebox targets:**
@@ -26,7 +26,7 @@
 cd ~/Projects/fg-core
 git status
 git branch --show-current        # must be: main
-git rev-parse HEAD               # must be: cc2775be2d5e9078213a97258995481f95d61088
+git rev-parse HEAD               # must be: 3897642514528425ccf7851d56b904405e4d04d8
 git fetch origin --prune
 git rev-parse origin/main        # must equal HEAD
 
@@ -50,9 +50,12 @@ AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-account
   | python3 -c "import sys,json; s=json.load(sys.stdin)['SummaryMap']; print('MFA:', s.get('AccountMFAEnabled')); print('RootKeys:', s.get('AccountAccessKeysPresent'))"
 # Expected: MFA: 1, RootKeys: 0
 
-# A6. Confirm stale IAM user absent (operator profile has iam:GetUser on audit user resource)
+# A6. Confirm audit IAM user exists with no static access keys
+# (user was created by Phase-1 partial apply 2026-10-02 and is retained in Terraform state)
 AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1
-# Expected: NoSuchEntity error (user was deleted in operator hardening)
+# Expected: user exists, Path=/frostgate/vault/, UserName=frostgate-hcp-vault-audit
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam list-access-keys --user-name frostgate-hcp-vault-audit 2>&1
+# Expected: AccessKeyMetadata=[] (zero static keys; ceremony will create one transiently at CHECKPOINT Q)
 ```
 
 **Expected result:** All checks pass, non-root identity confirmed.
