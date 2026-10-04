@@ -2,7 +2,7 @@
 
 **Ceremony ID:** `customer-zero-trust-2026-10-02-001`
 **Work item:** CUSTOMER-ZERO-TRUST-001
-**fg-core source authority:** `3897642514528425ccf7851d56b904405e4d04d8`
+**fg-core source authority:** Run `git rev-parse HEAD` at Checkpoint A1. It must equal `git rev-parse origin/main`. Record the actual SHA in the ceremony evidence manifest. Do not hardcode an expected SHA here — the authority is HEAD == origin/main, not a fixed value.
 **Note:** `Arescoreadmin/frostgate-infra` is archived (read-only). Infrastructure authority has moved permanently to `fg-core/infra/`. The standalone repo SHA `8121d24252dd1e7e3945424fcdacc5a320611fea` is retained as a historical record only.
 
 **Timebox targets:**
@@ -116,9 +116,11 @@ tail -5 /tmp/ceremony-plan-output.txt
 
 **Expected result:**
 - Plan: 16 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
+- Breakdown: 5 Phase-1 resources (2 HCP + 3 AWS) + 11 Phase-2 Vault resources = 16 total
 - All 16 resources match the intended architecture
 - No replacements, no destroys, no sensitive outputs
 - Ceremony ID `customer-zero-trust-2026-10-02-001` appears in tags
+- **Note:** The Phase-1 targeted apply plan generated at Checkpoint F will show **5 to add** — this is expected and correct. Checkpoint C plans all 16 resources for architecture review; Checkpoint F plans only the 5 Phase-1 targets for the first apply.
 
 **Evidence:** Plan summary line (non-secret). Resource count and categories.
 
