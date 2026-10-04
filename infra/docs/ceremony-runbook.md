@@ -117,6 +117,7 @@ tail -5 /tmp/ceremony-plan-output.txt
 **Expected result:**
 - Plan: 16 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
 - Breakdown: 5 Phase-1 resources (2 HCP + 3 AWS) + 11 Phase-2 Vault resources = 16 total
+- **Prior-apply context:** The 2026-10-02 partial apply created the HCP HVN and Vault cluster before failing on `aws_cloudwatch_log_group.vault_audit`. Those HCP resources were subsequently destroyed to contain costs; only `aws_iam_user.vault_audit` was retained in Terraform state. The fresh ceremony recreates the 2 HCP resources as additions (hence 16, not 14, to add).
 - All 16 resources match the intended architecture
 - No replacements, no destroys, no sensitive outputs
 - Ceremony ID `customer-zero-trust-2026-10-02-001` appears in tags
