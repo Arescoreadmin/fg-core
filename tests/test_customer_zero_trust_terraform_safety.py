@@ -20,6 +20,7 @@ Invariants proven:
   T10 — Required providers pin HCP, Vault, and AWS to compatible versions
   T11 — Terraform remote state uses HCP Terraform (not a raw S3/local backend)
   T12 — IAM audit policy scopes write actions to the exact log-group ARN; list actions (DescribeLogGroups) may use *
+  T17 — Ceremony runbook phase plan counts are coherent and source-authority SHA is not hardcoded
 """
 
 from __future__ import annotations
@@ -458,4 +459,50 @@ def test_t16_evidence_schema_file_matches_python_validator():
     assert not errors, (
         "committed schema rejects the known-good sample manifest — schema has drifted "
         f"from the Python validator; errors: {[e.message for e in errors]}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T17 — Ceremony runbook phase plan counts are coherent; no hardcoded SHA
+# ---------------------------------------------------------------------------
+
+
+def test_t17_runbook_phase_plan_counts_coherent_and_sha_not_hardcoded():
+    """Runbook must document Phase-1=5, Phase-2=11, full=16, and must not
+    pin a hardcoded source SHA in the source-authority header line."""
+    runbook = (INFRA / "docs" / "ceremony-runbook.md").read_text(encoding="utf-8")
+
+    # Phase-1 targeted plan: exactly 5 resources (enforced at Checkpoint F)
+    assert "5 resources to add (2 HCP + 3 AWS)" in runbook, (
+        "Runbook Checkpoint F must specify the Phase-1 targeted plan expects "
+        "5 resources to add (2 HCP + 3 AWS)"
+    )
+
+    # Phase-2 plan: exactly 11 resources
+    assert "11 resources to add" in runbook, (
+        "Runbook Checkpoint F Phase-2 must specify 11 resources to add"
+    )
+
+    # Full architecture-review plan at Checkpoint C: 16 to add (5+11)
+    assert "16 to add" in runbook, (
+        "Runbook Checkpoint C must specify full plan = 16 to add (5 Phase-1 + 11 Phase-2)"
+    )
+
+    # Checkpoint C must distinguish itself from the Phase-1 targeted count
+    assert "5 Phase-1" in runbook or "Phase-1 targeted" in runbook, (
+        "Runbook Checkpoint C must clarify that 16 is the full-plan count and "
+        "the Phase-1 targeted apply plan will show 5 to add"
+    )
+
+    # Source-authority header must not hardcode a 40-char hex SHA
+    source_auth_line = next(
+        (line for line in runbook.splitlines() if "fg-core source authority" in line),
+        None,
+    )
+    assert source_auth_line is not None, (
+        "Runbook must contain an 'fg-core source authority' line"
+    )
+    assert not re.search(r"`[0-9a-f]{40}`", source_auth_line), (
+        "Runbook source-authority line must not pin a hardcoded 40-char SHA. "
+        "Authority is proven dynamically at Checkpoint A1 via HEAD == origin/main."
     )
