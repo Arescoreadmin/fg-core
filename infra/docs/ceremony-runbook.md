@@ -26,7 +26,7 @@
 cd ~/Projects/fg-core
 git status
 git branch --show-current        # must be: main
-git rev-parse HEAD               # must be: 3897642514528425ccf7851d56b904405e4d04d8
+git rev-parse HEAD               # record for evidence — must equal origin/main (see next line)
 git fetch origin --prune
 git rev-parse origin/main        # must equal HEAD
 
@@ -115,8 +115,8 @@ tail -5 /tmp/ceremony-plan-output.txt
 ```
 
 **Expected result:**
-- Plan: 17 to add, 0 to change, 0 to destroy (assuming stale IAM user was deleted)
-- All 17 resources match the intended architecture
+- Plan: 16 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
+- All 16 resources match the intended architecture
 - No replacements, no destroys, no sensitive outputs
 - Ceremony ID `customer-zero-trust-2026-10-02-001` appears in tags
 
@@ -210,14 +210,15 @@ terraform show ceremony-plan-phase1.tfplan 2>&1 | grep -E '^\s*(#|[~+]|Plan:|res
 echo "Phase 1 summary: $(tail -1 /tmp/ceremony-plan-phase1-output.txt)"
 ```
 
-Expected: 6 resources to add (2 HCP + 4 AWS), 0 changes, 0 destroys. No unexpected
+Expected: 5 resources to add (2 HCP + 3 AWS), 0 changes, 0 destroys. `aws_iam_user.vault_audit`
+is already in state from the 2026-10-02 partial apply and will show 0 changes. No unexpected
 resources. Confirm the output, then proceed to apply.
 
 ```bash
 terraform apply ceremony-plan-phase1.tfplan
 ```
 
-**Expected result:** 6 resources created (2 HCP + 4 AWS). No errors.
+**Expected result:** 5 resources created (2 HCP + 3 AWS). No errors. (`aws_iam_user.vault_audit` was already present — 0 changes.)
 
 **Collect vault_address immediately after Phase 1:**
 
@@ -266,7 +267,7 @@ terraform apply ceremony-plan-phase2.tfplan
 ```
 
 **Expected result:** Remaining 11 resources created (Transit engine, keys, policies, AppRoles).
-Total across both phases: 17 to add, 0 to change, 0 to destroy.
+Total across both phases: 16 to add, 0 to change, 0 to destroy.
 
 **Collect all non-secret outputs after Phase 2:**
 
