@@ -2,7 +2,7 @@
 
 **Ceremony ID:** `customer-zero-trust-2026-10-02-001`
 **Work item:** CUSTOMER-ZERO-TRUST-001
-**fg-core source authority:** `cc2775be2d5e9078213a97258995481f95d61088`
+**fg-core source authority:** `3897642514528425ccf7851d56b904405e4d04d8`
 **Note:** `Arescoreadmin/frostgate-infra` is archived (read-only). Infrastructure authority has moved permanently to `fg-core/infra/`. The standalone repo SHA `8121d24252dd1e7e3945424fcdacc5a320611fea` is retained as a historical record only.
 
 **Timebox targets:**
@@ -26,7 +26,7 @@
 cd ~/Projects/fg-core
 git status
 git branch --show-current        # must be: main
-git rev-parse HEAD               # must be: cc2775be2d5e9078213a97258995481f95d61088
+git rev-parse HEAD               # record for evidence — must equal origin/main (see next line)
 git fetch origin --prune
 git rev-parse origin/main        # must equal HEAD
 
@@ -50,9 +50,12 @@ AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-account
   | python3 -c "import sys,json; s=json.load(sys.stdin)['SummaryMap']; print('MFA:', s.get('AccountMFAEnabled')); print('RootKeys:', s.get('AccountAccessKeysPresent'))"
 # Expected: MFA: 1, RootKeys: 0
 
-# A6. Confirm stale IAM user absent (operator profile has iam:GetUser on audit user resource)
+# A6. Confirm audit IAM user exists with no static access keys
+# (user was created by Phase-1 partial apply 2026-10-02 and is retained in Terraform state)
 AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1
-# Expected: NoSuchEntity error (user was deleted in operator hardening)
+# Expected: user exists, Path=/frostgate/vault/, UserName=frostgate-hcp-vault-audit
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 aws iam list-access-keys --user-name frostgate-hcp-vault-audit 2>&1
+# Expected: AccessKeyMetadata=[] (zero static keys; ceremony will create one transiently at CHECKPOINT Q)
 ```
 
 **Expected result:** All checks pass, non-root identity confirmed.
@@ -112,8 +115,8 @@ tail -5 /tmp/ceremony-plan-output.txt
 ```
 
 **Expected result:**
-- Plan: 17 to add, 0 to change, 0 to destroy (assuming stale IAM user was deleted)
-- All 17 resources match the intended architecture
+- Plan: 16 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
+- All 16 resources match the intended architecture
 - No replacements, no destroys, no sensitive outputs
 - Ceremony ID `customer-zero-trust-2026-10-02-001` appears in tags
 
@@ -207,14 +210,15 @@ terraform show ceremony-plan-phase1.tfplan 2>&1 | grep -E '^\s*(#|[~+]|Plan:|res
 echo "Phase 1 summary: $(tail -1 /tmp/ceremony-plan-phase1-output.txt)"
 ```
 
-Expected: 6 resources to add (2 HCP + 4 AWS), 0 changes, 0 destroys. No unexpected
+Expected: 5 resources to add (2 HCP + 3 AWS), 0 changes, 0 destroys. `aws_iam_user.vault_audit`
+is already in state from the 2026-10-02 partial apply and will show 0 changes. No unexpected
 resources. Confirm the output, then proceed to apply.
 
 ```bash
 terraform apply ceremony-plan-phase1.tfplan
 ```
 
-**Expected result:** 6 resources created (2 HCP + 4 AWS). No errors.
+**Expected result:** 5 resources created (2 HCP + 3 AWS). No errors. (`aws_iam_user.vault_audit` was already present — 0 changes.)
 
 **Collect vault_address immediately after Phase 1:**
 
@@ -263,7 +267,7 @@ terraform apply ceremony-plan-phase2.tfplan
 ```
 
 **Expected result:** Remaining 11 resources created (Transit engine, keys, policies, AppRoles).
-Total across both phases: 17 to add, 0 to change, 0 to destroy.
+Total across both phases: 16 to add, 0 to change, 0 to destroy.
 
 **Collect all non-secret outputs after Phase 2:**
 
