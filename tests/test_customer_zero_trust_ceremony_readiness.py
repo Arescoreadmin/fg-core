@@ -37,6 +37,7 @@ ceremony runbook (infra/docs/ceremony-runbook.md checkpoints M, N, O, P, R).
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import json
 import os
@@ -786,3 +787,52 @@ def test_i2_trust_domains_are_pinned():
 def test_i3_signature_envelope_schema_version_pin():
     """Schema version is pinned at 1 — any bump requires explicit migration."""
     assert SCHEMA_VERSION == "1"
+
+
+# ---------------------------------------------------------------------------
+# J. Provenance-field mutation (known gap documentation)
+#
+# TrustBindingAuthority.verify_* checks envelope provenance fields
+# (key_id, issuer, public_key_fingerprint) for non-emptiness but does NOT
+# compare them against the enrolled anchor.  A stored envelope with forged
+# provenance metadata but a cryptographically valid signature will be accepted.
+#
+# These tests DOCUMENT the current behavior.  They pass today because the gap
+# exists.  When provenance binding against the anchor is implemented, these
+# tests will fail and must be converted to assert the forged envelopes REJECT.
+# ---------------------------------------------------------------------------
+
+
+def test_j1_verify_report_accepts_forged_key_id(authority, report_payload):
+    """KNOWN GAP: verify_report accepts a non-empty key_id that differs from the
+    enrolled anchor.  The backend verify() uses the configured role key, not
+    envelope.key_id, so provenance forgery passes the cryptographic check."""
+    env = authority.sign_report(report_payload)
+    forged = dataclasses.replace(env, key_id="transit/keys/attacker-key/9999")
+    assert authority.verify_report(report_payload, forged) is True, (
+        "KNOWN GAP: mutated key_id should fail once anchor comparison is implemented"
+    )
+
+
+def test_j2_verify_report_accepts_forged_issuer(authority, report_payload):
+    """KNOWN GAP: verify_report accepts a non-empty issuer that differs from the
+    enrolled anchor.  Issuer is recorded in the envelope but never validated
+    against the anchor registry."""
+    env = authority.sign_report(report_payload)
+    forged = dataclasses.replace(env, issuer="https://attacker.invalid/vault")
+    assert authority.verify_report(report_payload, forged) is True, (
+        "KNOWN GAP: mutated issuer should fail once anchor comparison is implemented"
+    )
+
+
+def test_j3_verify_report_accepts_forged_public_key_fingerprint(
+    authority, report_payload
+):
+    """KNOWN GAP: verify_report accepts a non-empty public_key_fingerprint that
+    does not match the signing key.  The fingerprint is checked for non-emptiness
+    but never re-derived from the signing key or compared against the anchor."""
+    env = authority.sign_report(report_payload)
+    forged = dataclasses.replace(env, public_key_fingerprint="a" * 64)
+    assert authority.verify_report(report_payload, forged) is True, (
+        "KNOWN GAP: forged fingerprint should fail once anchor comparison is implemented"
+    )

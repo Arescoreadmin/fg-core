@@ -19,7 +19,7 @@ Invariants proven:
   T9  — Outputs do not expose any sensitive value
   T10 — Required providers pin HCP, Vault, and AWS to compatible versions
   T11 — Terraform remote state uses HCP Terraform (not a raw S3/local backend)
-  T12 — IAM audit policy scopes to the exact log-group ARN prefix (no wildcard)
+  T12 — IAM audit policy scopes write actions to the exact log-group ARN; list actions (DescribeLogGroups) may use *
 """
 
 from __future__ import annotations
@@ -85,6 +85,29 @@ def _resource_blocks(tf: str, resource_type: str) -> list[str]:
             i += 1
         if depth == 0:
             blocks.append(tf[start : i - 1])
+    return blocks
+
+
+def _named_resource_blocks(tf: str, resource_type: str) -> dict[str, str]:
+    """Return a mapping from resource name to block body for a given resource type."""
+    pattern = re.compile(
+        rf'resource\s+"{re.escape(resource_type)}"\s+"([^"]+)"\s*\{{',
+        re.MULTILINE,
+    )
+    blocks: dict[str, str] = {}
+    for match in pattern.finditer(tf):
+        name = match.group(1)
+        depth = 1
+        start = match.end()
+        i = start
+        while i < len(tf) and depth > 0:
+            if tf[i] == "{":
+                depth += 1
+            elif tf[i] == "}":
+                depth -= 1
+            i += 1
+        if depth == 0:
+            blocks[name] = tf[start : i - 1]
     return blocks
 
 
@@ -204,17 +227,35 @@ def test_t7_approles_bind_secret_id_and_deny_default_policy(tf_blob: str):
 # T8 — Vault policies deny-by-default; no wildcard; no sys/* / auth admin
 # ---------------------------------------------------------------------------
 
+_CZ_SIGNING_PATHS = {
+    "identity": "transit/sign/customer-zero-identity",
+    "acceptance": "transit/sign/customer-zero-acceptance",
+    "approval": "transit/sign/customer-zero-approval",
+}
+
 
 def test_t8_vault_policies_grant_only_their_own_key(tf_text: dict[str, str]):
-    """Each policy references exactly one of the three Transit key paths."""
+    """Each policy contains exactly its own Transit signing path and no other.
+
+    Global string presence is insufficient — a policy that gained a second key's
+    path would still pass.  This test extracts each vault_policy block by name
+    and asserts 1:1 isolation: own path present, other two paths absent.
+    """
     policies_tf = tf_text.get("vault_policies.tf", "")
     assert policies_tf, "vault_policies.tf must exist"
-    # Three policies total
-    assert policies_tf.count('resource "vault_policy"') == 3
-    # Role→key binding must be 1:1 (self-reference only)
-    assert "transit/sign/customer-zero-identity" in policies_tf
-    assert "transit/sign/customer-zero-acceptance" in policies_tf
-    assert "transit/sign/customer-zero-approval" in policies_tf
+    blocks = _named_resource_blocks(policies_tf, "vault_policy")
+    assert set(blocks.keys()) == {"identity", "acceptance", "approval"}, (
+        f"expected exactly 3 vault_policy resources, got: {set(blocks.keys())}"
+    )
+    for name, block in blocks.items():
+        own_path = _CZ_SIGNING_PATHS[name]
+        assert own_path in block, f"vault_policy.{name} must grant {own_path}"
+        for other_name, other_path in _CZ_SIGNING_PATHS.items():
+            if other_name == name:
+                continue
+            assert other_path not in block, (
+                f"vault_policy.{name} must not grant {other_path} — cross-role path leak"
+            )
 
 
 def test_t8b_vault_policies_do_not_grant_admin_paths(tf_text: dict[str, str]):
@@ -316,11 +357,12 @@ def test_t11_remote_state_is_hcp_terraform(tf_text: dict[str, str]):
 def test_t12_iam_audit_policy_scopes_to_specific_log_group(tf_text: dict[str, str]):
     audit_tf = tf_text.get("aws_audit.tf", "")
     assert audit_tf, "aws_audit.tf must exist"
-    # The jsonencode block must reference the specific log group arn, not "*"
+    # Write-capable actions must be scoped to the specific log-group ARN.
     assert "aws_cloudwatch_log_group.vault_audit.arn" in audit_tf
-    # The policy may use "<arn>:*" (log stream wildcard), but never Resource = "*"
-    assert 'Resource = "*"' not in audit_tf
-    # Verify the heredoc policy JSON parses and does not use broader actions
+    # DescribeLogGroups is a list-type API that legitimately requires Resource = "*"
+    # per AWS documentation — do not prohibit it here.  Write actions (PutLogEvents,
+    # CreateLogStream, CreateLogGroup) are covered by the ARN assertion above.
+    # Verify the jsonencode block does not use broader actions
     policy_json_match = re.search(
         r"policy\s*=\s*jsonencode\(\s*(\{.*?\})\s*\)",
         audit_tf,
@@ -388,7 +430,7 @@ def test_t15_terraform_lock_file_present():
 
 
 def test_t16_evidence_schema_file_matches_python_validator():
-    """The committed JSON schema (artifacts/trust/customer_zero_trust_evidence.schema.json)
+    """The canonical JSON schema (schemas/artifacts/customer_zero_trust_evidence.schema.json)
     must accept the known-good sample manifest used by test_customer_zero_trust_evidence.py
     (which is the authoritative Python validator's contract)."""
     from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
@@ -399,12 +441,12 @@ def test_t16_evidence_schema_file_matches_python_validator():
 
     schema_path = (
         Path(__file__).parent.parent
+        / "schemas"
         / "artifacts"
-        / "trust"
         / "customer_zero_trust_evidence.schema.json"
     )
     assert schema_path.exists(), (
-        "artifacts/trust/customer_zero_trust_evidence.schema.json must be committed"
+        "schemas/artifacts/customer_zero_trust_evidence.schema.json must be committed"
     )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
 

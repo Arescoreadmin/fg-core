@@ -169,9 +169,9 @@ See `test_g1_verify_without_vault_connection` and the schema in `services/cgin/k
 
 ## 9. Defects found and repaired in this readiness pass
 
-- **None.** The audit confirms the trust implementation is structurally sound. Pre-crypto guards, domain binding, role binding, fingerprint re-derivation, and no-fallback behaviour are all enforced today.
+- **Open gap — provenance field binding not enforced in `verify_*`:** `TrustBindingAuthority.verify_report()`, `verify_qualification()`, and `verify_delivery_authorization()` check that `key_id`, `issuer`, `public_key_fingerprint`, and `key_version` are non-empty, but do NOT compare these fields against the enrolled anchor. A stored envelope with forged provenance metadata (different `key_id`, `issuer`, or `public_key_fingerprint`) but a cryptographically valid signature will pass `verify_*`. `TrustAnchor.verify()` (offline path) does perform independent fingerprint re-derivation — the gap is in the online `TrustBindingAuthority` path only. Tests J1–J3 in `tests/test_customer_zero_trust_ceremony_readiness.py` document the current behavior; they will fail (and must be updated) when anchor comparison is implemented.
 - The legacy `FG_REPORT_SIGNING_KEY` path remains fenced (prod/staging raise without a key; it cannot mint a Customer-Zero envelope).
-- Three structural test gaps are closed in this PR by `tests/test_customer_zero_trust_ceremony_readiness.py` and `tests/test_customer_zero_trust_terraform_safety.py`.
+- Structural test gaps closed in this PR by `tests/test_customer_zero_trust_ceremony_readiness.py` (A–J) and `tests/test_customer_zero_trust_terraform_safety.py` (T1–T16).
 
 ## 10. Classification per audit dimension
 
@@ -186,4 +186,4 @@ See `test_g1_verify_without_vault_connection` and the schema in `services/cgin/k
 | Unsigned success paths | COMPLETE — empty signatures fail pre-crypto guards |
 | Role substitution | LOCAL_PASS_LIVE_PROOF_REQUIRED — 9 adversarial tests prove local denial; LIVE_PROOF_REQUIRED for Vault policy enforcement |
 | Unverifiable signatures | COMPLETE — every envelope is independently verifiable via `TrustAnchor.verify()` |
-| Missing provenance | COMPLETE — envelope records `issuer`, `trust_role`, `key_id`, `key_version`, `public_key_fingerprint`, `signed_payload_sha256` |
+| Missing provenance | PARTIAL — envelope records all provenance fields; `TrustAnchor.verify()` (offline) re-derives fingerprint; `TrustBindingAuthority.verify_*` (online) checks fields non-empty but does NOT compare against enrolled anchor (open gap — see §9) |
