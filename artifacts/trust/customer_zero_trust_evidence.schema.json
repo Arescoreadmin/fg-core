@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.io/schemas/customer-zero-trust-evidence/1.0.json",
+  "title": "Customer-Zero Trust Evidence Manifest",
+  "description": "Non-secret, canonical evidence of a CUSTOMER-ZERO-TRUST-001 production ceremony. Validated by services/cgin/key_management/trust_evidence.py::validate_manifest(). The authoritative validator is the Python implementation; this schema is a human- and tooling-readable projection and must not drift from it. Any manifest containing a field whose name matches `token|secret[_-]?id|private[_-]?key|authorization|bearer|recovery[_-]?key|unseal` is rejected regardless of value.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "work_item",
+    "ceremony_id",
+    "environment",
+    "generated_at",
+    "operator_identity",
+    "source_sha",
+    "tested_sha",
+    "vault_deployment",
+    "trust_roles",
+    "dimensions"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "Pinned to 1.0; a bump requires an explicit migration PR."
+    },
+    "work_item": {
+      "const": "CUSTOMER-ZERO-TRUST-001"
+    },
+    "ceremony_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable ceremony identifier (e.g., customer-zero-trust-2026-10-02-001)."
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deployment environment identifier (e.g., hcp-vault-dedicated)."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operator_identity": {
+      "type": "object",
+      "required": ["name", "ref", "verification_method"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "verification_method": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "source_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "tested_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "deployed_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "vault_deployment": {
+      "type": "object",
+      "required": ["identity", "region"],
+      "properties": {
+        "identity": { "type": "string", "minLength": 1 },
+        "region": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "trust_roles": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/trust_role_record" }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SOURCE_IDENTITY": { "$ref": "#/$defs/evidence_state" },
+        "DEPLOYMENT_IDENTITY": { "$ref": "#/$defs/evidence_state" },
+        "VAULT_DEPLOYMENT": { "$ref": "#/$defs/evidence_state" },
+        "VAULT_AUTHENTICATION": { "$ref": "#/$defs/evidence_state" },
+        "ROLE_SEPARATION": { "$ref": "#/$defs/evidence_state" },
+        "IDENTITY_AUTHORITY": { "$ref": "#/$defs/evidence_state" },
+        "ACCEPTANCE_AUTHORITY": { "$ref": "#/$defs/evidence_state" },
+        "APPROVAL_AUTHORITY": { "$ref": "#/$defs/evidence_state" },
+        "KEY_CONFIGURATION": { "$ref": "#/$defs/evidence_state" },
+        "PUBLIC_ANCHORS": { "$ref": "#/$defs/evidence_state" },
+        "AUDITABILITY": { "$ref": "#/$defs/evidence_state" },
+        "ROTATION_HISTORY": { "$ref": "#/$defs/evidence_state" },
+        "FAILURE_BEHAVIOR": { "$ref": "#/$defs/evidence_state" },
+        "RECOVERY": { "$ref": "#/$defs/evidence_state" },
+        "SECRET_BOUNDARY": { "$ref": "#/$defs/evidence_state" }
+      }
+    },
+    "audit_evidence": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "rotation_history": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "failure_evidence": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "recovery_evidence_ref": {
+      "type": "string",
+      "description": "Reference to a committed recovery drill record (e.g., recovery_drill_YYYY-MM-DD.json)."
+    },
+    "evidence_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Optional. If present, must equal canonical SHA-256 fingerprint of the manifest with this field removed."
+    }
+  },
+  "$defs": {
+    "evidence_state": {
+      "enum": ["PASS", "FAIL", "NOT_PROVEN"]
+    },
+    "trust_role_name": {
+      "enum": [
+        "customer-zero-identity",
+        "customer-zero-acceptance",
+        "customer-zero-approval"
+      ]
+    },
+    "trust_role_record": {
+      "type": "object",
+      "required": [
+        "trust_role",
+        "issuer",
+        "auth_role_id",
+        "policy_id",
+        "policy_fingerprint",
+        "key_id",
+        "key_version",
+        "algorithm",
+        "exportable",
+        "deletion_allowed",
+        "public_key",
+        "public_key_fingerprint",
+        "anchor_status"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "trust_role": { "$ref": "#/$defs/trust_role_name" },
+        "issuer": { "type": "string", "minLength": 1 },
+        "auth_role_id": { "type": "string", "minLength": 1 },
+        "policy_id": { "type": "string", "minLength": 1 },
+        "policy_fingerprint": { "type": "string", "minLength": 1 },
+        "key_id": { "type": "string", "minLength": 1 },
+        "key_version": { "type": "integer", "minimum": 1 },
+        "algorithm": { "const": "ed25519" },
+        "exportable": { "const": false },
+        "deletion_allowed": { "const": false },
+        "public_key": { "type": "string", "minLength": 1 },
+        "public_key_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "anchor_status": { "const": "active" },
+        "audit_evidence_ref": { "type": "string" },
+        "public_anchor": {
+          "type": "object",
+          "required": [
+            "trust_role",
+            "key_id",
+            "key_version",
+            "public_key_fingerprint"
+          ],
+          "properties": {
+            "trust_role": { "$ref": "#/$defs/trust_role_name" },
+            "key_id": { "type": "string", "minLength": 1 },
+            "key_version": { "type": "integer", "minimum": 1 },
+            "public_key_fingerprint": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

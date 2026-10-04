@@ -7,6 +7,7 @@ This directory holds the non-secret public verification material for CUSTOMER-ZE
 | File | Description |
 |------|-------------|
 | `customer_zero_trust_evidence.json` | Canonical trust evidence manifest (created by the production ceremony) |
+| `customer_zero_trust_evidence.schema.json` | JSON Schema (draft 2020-12) describing the manifest shape; kept in sync with `services/cgin/key_management/trust_evidence.py::validate_manifest` via `tests/test_customer_zero_trust_terraform_safety.py::test_t16` |
 | `recovery_drill_<date>.json` | Recovery drill execution records (created after each drill) |
 
 ## What is stored here
