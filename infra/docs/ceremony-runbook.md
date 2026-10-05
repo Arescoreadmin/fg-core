@@ -96,6 +96,33 @@ terraform login
 
 ---
 
+## PRE-PLAN ENVIRONMENT — Required Terraform Variable Exports
+
+**Prerequisites:** Checkpoint B complete.
+
+These exports are required before any `terraform plan` or `terraform apply`.
+Set them once in the terminal; they persist for the session.
+
+```bash
+# REQUIRED — operator IAM user ARN for FrostGateVaultAuditReader trust policy.
+# Use the ARN printed at Checkpoint A4 (aws sts get-caller-identity).
+# operator_iam_user_arn has no default; Terraform validation fails without this.
+export TF_VAR_operator_iam_user_arn="arn:aws:iam::398915901105:user/<your-iam-username>"
+
+# CONDITIONAL — Vault cluster address.
+# Fresh ceremony (Checkpoint C): cluster does not exist yet; omit this export.
+#   Vault provider will fail with connection refused for Vault resources — expected
+#   for a first-run architecture-review plan. AWS resources plan cleanly.
+# Post-Phase-1 (Checkpoint G, before Phase 2): set from the Phase 1 output:
+#   export TF_VAR_vault_address="$(cd ~/Projects/fg-core/infra && terraform output -raw vault_address)"
+# State reconciliation (post-merge plan): set from live output before planning.
+```
+
+**Stop condition:** Proceeding to Checkpoint C without `TF_VAR_operator_iam_user_arn` set will
+cause Terraform validation to fail with: `operator_iam_user_arn must be a valid IAM user ARN`.
+
+---
+
 ## CHECKPOINT C — Fresh Terraform Plan
 
 **Prerequisites:** Checkpoint B complete. Ceremony ID matches `customer-zero-trust-2026-10-02-001`.

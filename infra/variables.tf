@@ -96,17 +96,17 @@ variable "cloudwatch_retention_days" {
 variable "operator_iam_user_arn" {
   type        = string
   description = <<-EOT
-    ARN of the MFA-authenticated human operator IAM user to trust for the
-    FrostGateVaultAuditReader role assumption. If set, the reader role trust
-    policy is narrowed to this exact user (narrowest). If empty (default), the
-    account root is used as the trust principal (still MFA-gated, but allows
-    any IAM user in the account who can authenticate with MFA).
-
-    Recommended: set this to the frostgate-terraform user ARN during the
-    production ceremony for the narrowest possible trust relationship.
-    Example: "arn:aws:iam::398915901105:user/frostgate-terraform"
+    ARN of the MFA-authenticated human operator IAM user trusted for
+    FrostGateVaultAuditReader role assumption. Required; no default.
+    Must be an IAM user ARN in the form arn:aws:iam::<account>:user/<name>.
+    Set via TF_VAR_operator_iam_user_arn before any plan or apply.
+    Example: "arn:aws:iam::398915901105:user/frostgate-human"
   EOT
-  default     = ""
+
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:user/.+$", var.operator_iam_user_arn))
+    error_message = "operator_iam_user_arn must be a valid IAM user ARN (arn:aws:iam::<account>:user/<name>). Set TF_VAR_operator_iam_user_arn before planning."
+  }
 }
 
 # ── Ceremony metadata ─────────────────────────────────────────────────────────

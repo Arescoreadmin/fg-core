@@ -24,9 +24,6 @@
 #   Neither == runtime AppRole signing authorities
 # =============================================================================
 
-# Account identity — used to construct the reader trust policy fallback ARN.
-data "aws_caller_identity" "current" {}
-
 # CloudWatch log group for Vault audit events
 resource "aws_cloudwatch_log_group" "vault_audit" {
   name              = var.cloudwatch_log_group_name
@@ -69,7 +66,7 @@ resource "aws_iam_user" "vault_audit" {
 resource "aws_iam_policy" "vault_audit" {
   name        = "frostgate-hcp-vault-audit-policy"
   path        = "/frostgate/vault/"
-  description = "Minimum permissions for HCP Vault Dedicated to stream audit logs to CloudWatch. Write-only; no event-read authority."
+  description = "Minimum permissions for HCP Vault Dedicated to stream audit logs to CloudWatch"
 
   # POLICY STRUCTURE — TWO STATEMENTS:
   #
@@ -132,9 +129,8 @@ resource "aws_iam_user_policy_attachment" "vault_audit" {
 #   - DescribeLogGroups (reader): same AWS limitation as writer — Resource="*"
 #
 # TRUST: MFA-authenticated operator only.
-#   If var.operator_iam_user_arn is provided, trust is narrowed to that exact
-#   IAM user (narrowest). Otherwise the account root is used as the principal
-#   (still MFA-gated; allows any account IAM user who can authenticate with MFA).
+#   Trust is narrowed to var.operator_iam_user_arn (required, no default).
+#   var.operator_iam_user_arn must be the exact ARN of the human operator IAM user.
 #
 # This role is DISTINCT from the writer user (frostgate-hcp-vault-audit) and
 # from FrostGateTerraformOperator, which intentionally lacks audit read actions.
@@ -149,7 +145,7 @@ resource "aws_iam_role" "vault_audit_reader" {
         Sid    = "MFARequiredOperator"
         Effect = "Allow"
         Principal = {
-          AWS = var.operator_iam_user_arn != "" ? var.operator_iam_user_arn : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+          AWS = var.operator_iam_user_arn
         }
         Action = "sts:AssumeRole"
         Condition = {
