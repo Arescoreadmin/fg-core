@@ -20,12 +20,14 @@ Invariants proven:
   AW3  — Writer has no audit-event-read actions (no FilterLogEvents, GetLogEvents)
   AW4  — Writer DescribeLogGroups is in a separate unscoped statement (AWS limitation)
   AW5  — Writer is an IAM user (not a role — credentials must be injected by human operator)
+  AW6  — Writer policy description matches live-deployed value exactly (no ForceNew suffix)
   AR1  — Reader role exists as a distinct IAM role (not the writer user)
   AR2  — Reader policy has only read actions
   AR3  — Reader policy has no write actions (no PutLogEvents, CreateLogGroup, CreateLogStream)
   AR4  — Reader trust policy requires MFA (aws:MultiFactorAuthPresent = true)
   AR5  — Reader is scoped to the audit log-group ARN for read actions
   AR6  — Reader DescribeLogGroups in its own unscoped statement (same AWS limitation)
+  AR7  — Reader trust uses explicit operator ARN variable (no root fallback, no conditional)
   SoD1 — Writer user != reader role (distinct resource types and names)
   SoD2 — No aws_iam_access_key in Terraform (human credential boundary)
   SoD3 — Terraform operator is not the reader (FrostGateTerraformOperator lacks read actions)
@@ -58,6 +60,13 @@ SCHEMAS = Path(__file__).parent.parent / "schemas" / "artifacts"
 def audit_tf() -> str:
     p = INFRA / "aws_audit.tf"
     assert p.exists(), "infra/aws_audit.tf must exist"
+    return p.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def variables_tf() -> str:
+    p = INFRA / "variables.tf"
+    assert p.exists(), "infra/variables.tf must exist"
     return p.read_text(encoding="utf-8")
 
 
@@ -184,6 +193,39 @@ def test_aw5_writer_is_iam_user_not_role(audit_tf: str):
     )
 
 
+def test_aw6_writer_policy_description_matches_live_deployed_value(audit_tf: str):
+    """Writer policy description must exactly match the live-deployed value.
+
+    The hashicorp/aws provider marks aws_iam_policy.description as ForceNew.
+    Any change to this field destroys and recreates the policy — and cascades
+    to aws_iam_user_policy_attachment (policy_arn is also ForceNew), causing
+    two unexpected replacements in an otherwise add-only plan.
+
+    The live-deployed description (from 2026-10-02 partial apply) is:
+      "Minimum permissions for HCP Vault Dedicated to stream audit logs to CloudWatch"
+
+    The PR #743 description added ". Write-only; no event-read authority." which
+    triggered the ForceNew. This suffix must not be present.
+    """
+    block = _extract_resource_block(audit_tf, "aws_iam_policy", "vault_audit")
+    assert block, "aws_iam_policy.vault_audit resource block must exist"
+
+    # Exact live-deployed description — any drift from this causes ForceNew replacement
+    expected = (
+        "Minimum permissions for HCP Vault Dedicated to stream audit logs to CloudWatch"
+    )
+    assert f'description = "{expected}"' in block, (
+        f"writer policy description must be exactly: {expected!r} — "
+        "any suffix change causes ForceNew replacement of the live policy"
+    )
+
+    # The ForceNew-triggering suffix must not be present
+    assert "Write-only; no event-read authority" not in block, (
+        "writer policy description must not contain the ForceNew-triggering suffix — "
+        "remove it to prevent unintended policy replacement in the live account"
+    )
+
+
 # ---------------------------------------------------------------------------
 # AR — Reader role invariants
 # ---------------------------------------------------------------------------
@@ -265,6 +307,61 @@ def test_ar6_reader_describe_log_groups_in_separate_unscoped_statement(audit_tf:
     )
     assert '"VaultAuditLogRead"' in block, (
         "reader policy must have VaultAuditLogRead Sid for scoped read actions"
+    )
+
+
+def test_ar7_reader_trust_uses_explicit_operator_arn_no_root_fallback(
+    audit_tf: str, variables_tf: str
+):
+    """Reader trust policy must use var.operator_iam_user_arn directly — no root fallback.
+
+    The silent root fallback (ternary conditional with empty-string default) allows
+    FrostGateVaultAuditReader to be assumed by ANY MFA-authenticated IAM entity in
+    the account, not only the designated ceremony operator. This is a trust boundary
+    violation: the reader role must be locked to the specific human operator.
+
+    operator_iam_user_arn must have no default value and must have a validation
+    block that rejects empty strings and non-user-ARN values.
+    """
+    # Trust principal in the role block must be the plain variable reference
+    role_block = _extract_resource_block(audit_tf, "aws_iam_role", "vault_audit_reader")
+    assert role_block, "aws_iam_role.vault_audit_reader must exist"
+    assert "var.operator_iam_user_arn" in role_block, (
+        "reader trust Principal must reference var.operator_iam_user_arn"
+    )
+    # No root fallback conditional
+    assert ":root" not in role_block, (
+        "reader trust policy must not fall back to account root — "
+        "remove the conditional and require an explicit user ARN"
+    )
+    assert (
+        "!= " not in role_block
+        or "operator_iam_user_arn" not in role_block.split("!=")[0]
+    ), (
+        "reader trust policy must not use a ternary conditional on operator_iam_user_arn — "
+        "use the variable directly"
+    )
+
+    # variables.tf must not have a default for operator_iam_user_arn
+    var_block_match = re.search(
+        r'variable\s+"operator_iam_user_arn"\s*\{(.*?)\n\}',
+        variables_tf,
+        re.DOTALL,
+    )
+    assert var_block_match, (
+        "variable operator_iam_user_arn must be declared in variables.tf"
+    )
+    var_block = var_block_match.group(1)
+    assert not re.search(r"^\s*default\s*=", var_block, re.MULTILINE), (
+        "operator_iam_user_arn must have no default = assignment — "
+        "a default of '' silently falls back to account root trust"
+    )
+    # Must have a validation block
+    assert "validation" in var_block, (
+        "operator_iam_user_arn must have a validation block that rejects empty/non-user-ARN values"
+    )
+    assert "arn:aws:iam" in var_block, (
+        "operator_iam_user_arn validation must require a valid IAM user ARN format"
     )
 
 
