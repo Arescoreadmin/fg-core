@@ -958,34 +958,62 @@ It must be revoked and recreated when audit streaming is disabled or when rotati
 
 ---
 
-### Q-7. Enable and verify stream destination
+### Q-7. HUMAN-ONLY: Assume FrostGateVaultAuditReader and verify stream destination
 
-```bash
-# Wait 60 seconds for HCP to establish the stream, then verify a log stream exists
-sleep 60
-AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
-  aws logs describe-log-streams \
-  --log-group-name "/frostgate/customer-zero/vault-audit" \
-  | python3 -c "
-import sys, json
-streams = json.load(sys.stdin).get('logStreams', [])
-print('stream_count:', len(streams))
-for s in streams[:3]:
-    print('  stream:', s.get('logStreamName', ''))
-"
-# Expected: stream_count >= 1 (HCP creates a stream upon first connection)
-```
+`FrostGateTerraformOperator` intentionally lacks CloudWatch read actions (SoD invariant). All
+log reads from this point use the `FrostGateVaultAuditReader` role assumed as the human IAM
+user with MFA. This step is performed by the operator — NOT by Claude.
 
-Verify the HCP-configured log group name matches the intended destination:
-```bash
-# Record which log group name HCP is actually sending to (visible in HCP portal)
-# and confirm it matches the terraform output from Q-2.
-echo "Intended:  $(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw cloudwatch_log_group_name)"
-echo "Actual: /frostgate/customer-zero/vault-audit"
-# If these differ, record the actual value in the evidence manifest as
-# "cloudwatch_actual_log_group_name" and update the evidence manifest
-# destination field accordingly.
-```
+> **Operator action:**
+> 1. Retrieve the reader role ARN from Terraform outputs:
+>    ```bash
+>    READER_ROLE_ARN="$(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw iam_audit_reader_role_arn)"
+>    echo "Reader role ARN: ${READER_ROLE_ARN}"
+>    ```
+> 2. Assume the reader role as the human IAM user (NOT the operator role — trust policy names
+>    the human user, not FrostGateTerraformOperator):
+>    ```bash
+>    eval "$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
+>      --role-arn "${READER_ROLE_ARN}" \
+>      --role-session-name "ceremony-evidence-verification" \
+>      --serial-number "<your MFA device ARN>" \
+>      --token-code "<current MFA code>" \
+>      | python3 -c "
+>    import sys, json
+>    creds = json.load(sys.stdin)['Credentials']
+>    print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
+>    print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
+>    print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
+>    ")"
+>    unset AWS_PROFILE
+>    ```
+>    Reader credentials are now active via env vars. Do NOT set `AWS_PROFILE` for subsequent
+>    log reads — doing so would override the assumed-role session.
+> 3. Wait for HCP to establish the stream, then verify a log stream exists:
+>    ```bash
+>    sleep 60
+>    AWS_DEFAULT_REGION=us-east-1 \
+>      aws logs describe-log-streams \
+>      --log-group-name "/frostgate/customer-zero/vault-audit" \
+>      | python3 -c "
+>    import sys, json
+>    streams = json.load(sys.stdin).get('logStreams', [])
+>    print('stream_count:', len(streams))
+>    for s in streams[:3]:
+>        print('  stream:', s.get('logStreamName', ''))
+>    "
+>    # Expected: stream_count >= 1 (HCP creates a stream upon first connection)
+>    ```
+> 4. Verify the log group name matches the intended destination:
+>    ```bash
+>    echo "Intended:  $(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw cloudwatch_log_group_name)"
+>    echo "Actual: /frostgate/customer-zero/vault-audit"
+>    # If these differ, record cloudwatch_actual_log_group_name in evidence manifest
+>    ```
+
+**Non-secret confirmation:** "Reader role assumed with MFA. stream_count: N (where N >= 1)."
+
+**Stop condition:** assume-role fails with AccessDenied; stream_count remains 0 after 2 minutes.
 
 ---
 
@@ -1002,9 +1030,9 @@ cd ~/Projects/fg-core
 python -m pytest tests/test_customer_zero_trust_ceremony_readiness.py -v -k "test_a or test_m or test_g" 2>&1 | tail -20
 ```
 
-Wait 60 seconds, then confirm events appear:
+Wait 60 seconds, then confirm events appear (reader credentials from Q-7 remain active):
 ```bash
-AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+AWS_DEFAULT_REGION=us-east-1 \
   aws logs filter-log-events \
   --log-group-name "/frostgate/customer-zero/vault-audit" \
   --start-time "$(python3 -c "import time; print(int((time.time()-600)*1000))")" \
@@ -1021,29 +1049,13 @@ if events:
 
 ---
 
-### Q-10. HUMAN-ONLY: Independently read and verify sanitized audit evidence
+### Q-10. Confirm reader role audit evidence verification
 
-The operator assumes the `FrostGateVaultAuditReader` role (MFA required) and reads
-audit events. This step is performed by the operator — NOT by Claude.
+Reader credentials assumed at Q-7 remain active. Read the full 1-hour audit window and
+confirm the independent reader view matches the event count from Q-9.
 
 > **Operator action:**
-> 1. Assume the reader role:
->    ```bash
->    AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
->      --role-arn "$(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw iam_audit_reader_role_arn)" \
->      --role-session-name "ceremony-evidence-verification" \
->      --serial-number "<your MFA device ARN>" \
->      --token-code "<current MFA code>" \
->      | python3 -c "
->    import sys, json
->    creds = json.load(sys.stdin)['Credentials']
->    print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
->    print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
->    print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
->    "
->    ```
-> 2. Set the printed exports in your terminal
-> 3. Read recent audit events:
+> 1. Read recent audit events (reader credentials from Q-7 are already active):
 >    ```bash
 >    AWS_DEFAULT_REGION=us-east-1 aws logs filter-log-events \
 >      --log-group-name "/frostgate/customer-zero/vault-audit" \
@@ -1055,12 +1067,12 @@ audit events. This step is performed by the operator — NOT by Claude.
 >    print('audit_event_count:', len(events))
 >    "
 >    ```
-> 4. Confirm audit events are visible under the reader role
-> 5. Unset the assumed-role credentials: `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN`
+> 2. Confirm audit events are visible under the reader role (count >= 1)
+> 3. Unset reader credentials: `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN`
 
-**Non-secret confirmation:** "Reader role assumed with MFA. audit_event_count: N (where N >= 1)."
+**Non-secret confirmation:** "audit_event_count: N (where N >= 1). Reader role verification complete."
 
-**Stop condition:** MFA device ARN unknown; assume-role fails; event count is 0 after confirmed streaming.
+**Stop condition:** Event count is 0 after confirmed streaming at Q-9.
 
 ---
 
@@ -1113,7 +1125,7 @@ cd ~/Projects/fg-core
 # Confirm no secret values in evidence manifest or Terraform source
 git diff --check
 grep -rn "AKIA" infra/ artifacts/trust/ 2>/dev/null | grep -v ".terraform.lock" && echo "WARNING: found AWS key prefix" || echo "secret scan: PASS"
-grep -rn "-----BEGIN" infra/ artifacts/trust/ 2>/dev/null && echo "WARNING: found PEM marker" || echo "PEM scan: PASS"
+grep -rn -- "-----BEGIN" infra/ artifacts/trust/ 2>/dev/null && echo "WARNING: found PEM marker" || echo "PEM scan: PASS"
 ```
 
 ---
@@ -1128,7 +1140,7 @@ All of the following must be confirmed before AUDITABILITY dimension is set to P
 | HCP streaming status | Active |
 | Writer has no read-event authority | CONFIRMED (policy structure) |
 | Reader role exists with MFA trust | CONFIRMED (Q-4) |
-| Reader assumed successfully with MFA | CONFIRMED (Q-10) |
+| Reader assumed successfully with MFA | CONFIRMED (Q-7) |
 | Audit events visible via reader role | CONFIRMED (event_count >= 1) |
 | No second rotation required | CONFIRMED (rotation_history != audit_evidence) |
 | Evidence manifest validates | PASS |
