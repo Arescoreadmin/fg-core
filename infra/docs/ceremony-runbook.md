@@ -1313,6 +1313,11 @@ gh pr create --title "feat(trust): CUSTOMER-ZERO-TRUST-001 production ceremony c
 
 ## CHECKPOINT U — Post-Ceremony Cluster Disposition
 
+> **Scope distinction:** Option A below is **FULL FINAL TEARDOWN** only. It intentionally
+> removes AWS audit authority and must not be used for emergency cost containment.
+> To stop HCP/Vault charges while preserving AWS audit resources, use
+> [Checkpoint V — Narrow Paid-Infrastructure Cost Containment](#checkpoint-v--narrow-paid-infrastructure-cost-containment).
+
 **Prerequisites:** Checkpoint T complete. PR created. Evidence manifest committed and pushed.
 
 **This checkpoint is MANDATORY.** The HCP Vault Dedicated cluster accrues hourly charges
@@ -1327,6 +1332,10 @@ make an explicit disposition decision here — not after the session ends.
 ---
 
 ### Option A — Teardown (cluster was ceremony-only)
+
+**FULL FINAL TEARDOWN — deletes the AWS audit destination and IAM authority too.**
+This is not a cost-containment shortcut. It requires separate final-decommission
+authorization and an evidence-retention decision.
 
 Choose this option if the cluster is not required for ongoing production signing.
 The signed evidence manifest and public trust anchors remain independently verifiable
@@ -1361,10 +1370,11 @@ cd ~/Projects/fg-core/infra
 #   infra/hcp_cluster.tf      (hcp_hvn + hcp_vault_cluster)
 #   infra/vault_transit.tf    (vault_mount + all 3 transit keys)
 #   infra/vault_approle.tf    (vault_auth_backend + all 3 approle roles)
+#   infra/vault_policies.tf   (all 3 trust policies)
 #   infra/aws_audit.tf        (aws_cloudwatch_log_group)
 #
 # Verify the change:
-grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf vault_policies.tf aws_audit.tf
 # Expected: all show prevent_destroy = false
 
 # U-A4. Apply the lifecycle change (no resources created or destroyed — plan should show
@@ -1405,9 +1415,9 @@ AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
 # U-A9. After destruction is confirmed, restore prevent_destroy = true in all files.
 #        This is required before the next plan/apply cycle (future cluster creation).
 #        Edit each file back: prevent_destroy = false  →  prevent_destroy = true
-grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+grep -n "prevent_destroy" hcp_cluster.tf vault_transit.tf vault_approle.tf vault_policies.tf aws_audit.tf
 # Expected: all show prevent_destroy = true
-git add hcp_cluster.tf vault_transit.tf vault_approle.tf aws_audit.tf
+git add hcp_cluster.tf vault_transit.tf vault_approle.tf vault_policies.tf aws_audit.tf
 git commit -m "chore(infra): restore prevent_destroy guards post-ceremony teardown"
 git push origin main
 ```
@@ -1462,6 +1472,162 @@ without an explicit business decision to add one.
 decision and the cluster continues accruing charges.
 
 ---
+
+## CHECKPOINT V — NARROW PAID-INFRASTRUCTURE COST CONTAINMENT
+
+**Purpose:** Stop Customer-Zero HCP charges while preserving the persistent AWS audit
+authority. This is an operational/economic action only. It does not validate governance,
+complete acceptance, or change the determination:
+
+> **`CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged by cost containment.**
+
+This is the only procedure for cost containment. It does not use broad `terraform destroy`.
+It generates three temporary self-contained Terraform configurations against the existing
+`Frostgate/frostgate-customer-zero` remote workspace. The generator copies the exact AWS
+resource definitions from reviewed source and includes only resources actually present
+in state. It does not change repository files or weaken the normal configuration's
+`prevent_destroy` protections. Terraform `removed` blocks destroy the named addresses
+and update state only after successful deletion; see the Terraform
+[`removed` block reference](https://developer.hashicorp.com/terraform/language/block/removed).
+
+### Resource boundaries and ordering
+
+| Stage | Exact eligible destruction | Required ordering / authentication |
+|---|---|---|
+| `vault-children` | Up to 11 Vault resources: Transit mount + 3 keys, AppRole backend + 3 roles, 3 policies; only addresses still in state | First, while the Vault cluster is live; human Vault admin auth is required by the Vault provider. |
+| `hcp-cluster` | `hcp_vault_cluster.customer_zero` only | After all Vault children are absent. The HVN and AWS audit resources remain configured. |
+| `hvn` | `hcp_hvn.frostgate` only | After HCP confirms the Vault cluster is absent. No Vault provider/authentication is configured. |
+
+Every stage preserves the AWS resources present before teardown:
+`aws_cloudwatch_log_group.vault_audit`, `aws_iam_user.vault_audit`,
+`aws_iam_policy.vault_audit`, and `aws_iam_user_policy_attachment.vault_audit`.
+If provisioned, the three #744 audit-reader resources are preserved as an all-or-none
+trio. An extra managed address or partial reader trio fails closed. Railway, credentials,
+and application resources are outside this boundary.
+
+### V-1 — Authority and cost preconditions
+
+1. Use `~/Projects/fg-core` on clean `main` with `HEAD == origin/main`; record its SHA and
+   current UTC time. Run the CUSTOMER-ZERO-TRUST-001 roadmap checker and require
+   `AUTHORIZED`.
+2. Verify AWS account `398915901105` and the assumed `FrostGateTerraformOperator` role.
+   Confirm the HCP organization, project, and workspace are the canonical target.
+3. Review current HCP billing, live cluster status, and the authorized gross cap. This
+   cost-containment action needs explicit human authorization; historical caps do not
+   renew or extend expired ceremony authority.
+4. If the Vault cluster exists, the `vault-children` stage requires valid human Vault
+   admin authentication through the Vault provider. Do not create a token for
+   convenience. Enter credentials only at the approved local secret boundary; never
+   print, record, or put them in a saved plan or command argument. Later HCP stages do
+   not configure the Vault provider and need no Vault authentication.
+   Confirm the workspace's execution mode first: a local execution must use the
+   human-approved local Vault environment, while remote execution requires the
+   authorized sensitive workspace environment variable to reach the Vault provider.
+   The same execution plane must be proven to use the expected AWS operator; a local
+   AWS profile is not evidence for remote HCP Terraform credentials. Never pass
+   `VAULT_TOKEN` as a `TF_VAR_*` input.
+5. Verify the audit writer has zero IAM access keys. Do not create or revoke credentials
+   as part of this procedure. If a writer key exists, stop for separate authority.
+
+### V-2 — Generate and inspect a saved plan per stage
+
+Do not edit Terraform source, switch branches, commit, or change the remote workspace
+during the operation. The helper requires clean `main == origin/main`, roadmap
+authorization, and an exact state inventory. It writes generated configurations only
+under `/tmp`, to a path that does not already exist. Use a new directory and saved-plan
+filename for each stage:
+
+```bash
+cd ~/Projects/fg-core
+umask 077
+STAGE=vault-children   # later: hcp-cluster, then hvn, separately
+TMP_ROOT="$(mktemp -d /tmp/customer-zero-cost-containment.XXXXXX)"
+CONFIG_DIR="$TMP_ROOT/$STAGE"
+PLAN_FILE="$CONFIG_DIR/customer-zero-$STAGE.tfplan"
+
+python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-TRUST-001
+python infra/scripts/customer_zero_teardown.py prepare \
+  --stage "$STAGE" --output-dir "$CONFIG_DIR"
+cd "$CONFIG_DIR"
+terraform init -input=false
+terraform plan -input=false -out="$PLAN_FILE"
+python ~/Projects/fg-core/infra/scripts/customer_zero_teardown.py verify \
+  --stage "$STAGE" --plan "$PLAN_FILE"
+sha256sum "$PLAN_FILE"
+```
+
+The verifier reads plan JSON and Terraform state without printing either. It permits
+only `delete` for the current stage's remaining allowlisted addresses and `no-op` for
+retained managed resources. It rejects create, update, replacement, unexpected destroy,
+unexpected state, partial reader trios, and unexpected output changes. Its output is
+the complete stage action set. If a stage already completed, an empty action set is
+idempotently accepted. Do not invent another target.
+
+Record outside the repository: stage, source SHA, plan filename and SHA-256, UTC plan
+time, Terraform/provider versions, workspace, AWS account/operator, exact actions,
+verifier result, and human authorization. Treat the saved plan as sensitive: keep it
+under the private temporary directory, do not upload/commit it, and remove it securely
+after the operation. If state changes or the plan becomes stale, discard it and restart
+with a new plan and hash.
+
+### V-3 — Human authorization and exact-plan apply
+
+Stop after validation at every stage. The human reviews and explicitly authorizes that
+stage's exact saved-plan SHA-256 and full action set. Approval of one stage does not
+approve the next. Only after this exact-plan authorization, apply the saved plan file
+from its generated configuration directory:
+
+```bash
+terraform apply "$PLAN_FILE"
+```
+
+Immediately before invoking that command, recheck clean `main`, `HEAD == origin/main`,
+the recorded source SHA, roadmap authorization, AWS operator identity, HCP workspace,
+current billing/cap, state, and the plan file SHA-256. If any differ from the reviewed
+checkpoint, do not apply; create and authorize a new plan.
+
+Never run `terraform destroy`, apply configuration without the saved-plan filename, or
+use `-auto-approve`. On a nonzero result, timeout, stale plan, or provider error, do not
+retry. Reconcile live provider status and state; regenerate the temporary configuration,
+produce a fresh plan, rerun the verifier, and obtain new authorization for the new hash.
+
+### V-4 — Post-stage verification
+
+After the Vault-child stage, confirm every Vault child address is absent from state and
+the Vault API confirms the mounts, policies, roles, and keys are gone while the cluster
+still exists. Only then prepare and separately authorize `hcp-cluster`.
+
+After the cluster stage, confirm `frostgate-customer-zero` is absent via HCP Portal or a
+read-only API. Only then prepare and separately authorize `hvn`. This stage boundary
+enforces cluster-before-HVN deletion without relying on concurrent provider ordering.
+
+After the HVN stage, confirm both HCP resources are absent; all AWS audit resources that
+were present before teardown remain live and in Terraform state; and the writer still
+has zero access keys. The final state must contain only persistent AWS audit resources
+(plus the complete reader trio if it existed). Verify HCP workspace state and billing
+portal; record the observed shutdown time. Billing settlement may lag deletion, so do
+not claim zero cost until confirmed in billing.
+
+Record apply start/end UTC, return code, resource outcomes, post-stage state count, HCP
+absence, AWS preservation, billing observation, and partial failures. Do not store
+credentials, tokens, Railway values, or raw sensitive plan/state JSON in evidence. The
+repository remains unchanged during operational execution.
+
+### V-5 — Partial failure, resume, and trust implications
+
+Resume only from observed state: inspect live provider status and state addresses,
+regenerate the corresponding stage from canonical source, create a new saved plan, run
+the verifier, and obtain new approval for its exact hash. Never reuse a stale plan or
+use `terraform state rm` to hide an object that may still exist. Vault children are
+destroyed while their provider endpoint remains available; later stages need no Vault
+authentication. The cluster is confirmed gone before the HVN stage. AWS resources stay
+configured and state-managed, so ordinary reconciliation will not adopt/recreate them.
+
+Reprovisioning is a new authorized ceremony: return to the ordinary `infra/` root,
+confirm only the preserved AWS authority remains in state, and generate a fresh plan
+before any apply. Temporary teardown configurations are not provisioning roots. Public
+verification artifacts may remain verifiable, but live signing stops. **Cost containment
+does not change `CUSTOMER_ZERO_TRUST_NOT_PROVEN`.**
 
 ## Rollback procedure
 

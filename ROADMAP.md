@@ -17,6 +17,12 @@ Update the relevant section when a PR merges — do not backfill multiple PRs at
 
 ---
 
+## Customer-Zero emergency cost containment
+
+| Work item | Status | Scope |
+|---|---|---|
+| CUSTOMER-ZERO-TRUST-001 narrow paid-infrastructure teardown | PR-ready — `fix/customer-zero-narrow-cost-teardown` | Source-only authority to remove Vault children, HCP Vault cluster, then HVN using separate reviewed saved plans; preserves AWS audit authority. No live mutation. `CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged. |
+
 ## Phase 0 — Infrastructure Foundation
 *30-day repo blitz: tenant isolation, auth boundary, CI stability, observability, agent packaging.*  
 Tracking: `plans/30_day_repo_blitz.yaml` + `plans/30_day_repo_blitz.state.yaml` (complete as of PR 18.6)

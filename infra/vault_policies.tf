@@ -39,6 +39,10 @@ resource "vault_policy" "identity" {
     # grant access to customer-zero-acceptance or customer-zero-approval keys.
     # Vault's default-deny model enforces this without explicit deny statements.
   VAULT_POLICY
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ── ACCEPTANCE policy ─────────────────────────────────────────────────────────
@@ -59,6 +63,10 @@ resource "vault_policy" "acceptance" {
       capabilities = ["read"]
     }
   VAULT_POLICY
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ── APPROVAL policy ───────────────────────────────────────────────────────────
@@ -79,4 +87,8 @@ resource "vault_policy" "approval" {
       capabilities = ["read"]
     }
   VAULT_POLICY
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
