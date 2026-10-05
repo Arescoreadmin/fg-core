@@ -126,6 +126,25 @@ output "iam_audit_policy_arn" {
   value       = aws_iam_policy.vault_audit.arn
 }
 
+# ── Audit reader role (non-secret identifiers) ────────────────────────────────
+# The reader role is assumed by the operator (with MFA) during ceremony
+# Checkpoint Q to independently verify audit evidence in CloudWatch.
+
+output "iam_audit_reader_role_arn" {
+  description = "ARN of the FrostGateVaultAuditReader role for ceremony evidence verification."
+  value       = aws_iam_role.vault_audit_reader.arn
+}
+
+output "iam_audit_reader_role_name" {
+  description = "Name of the FrostGateVaultAuditReader role."
+  value       = aws_iam_role.vault_audit_reader.name
+}
+
+output "iam_audit_reader_policy_arn" {
+  description = "ARN of the FrostGateVaultAuditReaderPolicy attached to the reader role."
+  value       = aws_iam_policy.vault_audit_reader.arn
+}
+
 # ── Ceremony metadata ─────────────────────────────────────────────────────────
 
 output "ceremony_id" {

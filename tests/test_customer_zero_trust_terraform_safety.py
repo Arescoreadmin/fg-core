@@ -245,9 +245,11 @@ def test_t8_vault_policies_grant_only_their_own_key(tf_text: dict[str, str]):
     policies_tf = tf_text.get("vault_policies.tf", "")
     assert policies_tf, "vault_policies.tf must exist"
     blocks = _named_resource_blocks(policies_tf, "vault_policy")
-    assert set(blocks.keys()) == {"identity", "acceptance", "approval"}, (
-        f"expected exactly 3 vault_policy resources, got: {set(blocks.keys())}"
-    )
+    assert set(blocks.keys()) == {
+        "identity",
+        "acceptance",
+        "approval",
+    }, f"expected exactly 3 vault_policy resources, got: {set(blocks.keys())}"
     for name, block in blocks.items():
         own_path = _CZ_SIGNING_PATHS[name]
         assert own_path in block, f"vault_policy.{name} must grant {own_path}"
@@ -355,26 +357,55 @@ def test_t11_remote_state_is_hcp_terraform(tf_text: dict[str, str]):
 # ---------------------------------------------------------------------------
 
 
-def test_t12_iam_audit_policy_scopes_to_specific_log_group(tf_text: dict[str, str]):
+def test_t12_writer_policy_two_statement_structure(tf_text: dict[str, str]):
+    """Writer policy must use exactly two statements:
+    - Statement 1 (VaultAuditLogWrite): write actions scoped to the specific log group ARN
+    - Statement 2 (VaultAuditDescribeLogGroupsUnscopedAWSLimit): DescribeLogGroups with
+      Resource=["*"] — unavoidable AWS platform limitation documented explicitly
+
+    DescribeLogGroups does not support resource-level permissions in AWS CloudWatch Logs
+    and must appear in a separate unscoped statement. Mixing it into the scoped write
+    statement (as the prior version did) renders the scoped resource declaration incorrect
+    because AWS silently ignores resource-level restrictions on that action.
+    """
     audit_tf = tf_text.get("aws_audit.tf", "")
     assert audit_tf, "aws_audit.tf must exist"
-    # Write-capable actions must be scoped to the specific log-group ARN.
-    assert "aws_cloudwatch_log_group.vault_audit.arn" in audit_tf
-    # DescribeLogGroups is a list-type API that legitimately requires Resource = "*"
-    # per AWS documentation — do not prohibit it here.  Write actions (PutLogEvents,
-    # CreateLogStream, CreateLogGroup) are covered by the ARN assertion above.
-    # Verify the jsonencode block does not use broader actions
-    policy_json_match = re.search(
-        r"policy\s*=\s*jsonencode\(\s*(\{.*?\})\s*\)",
+
+    # Write actions must be scoped to the specific log-group ARN
+    assert "aws_cloudwatch_log_group.vault_audit.arn" in audit_tf, (
+        "writer policy must reference the exact log-group ARN for scoped write actions"
+    )
+
+    # VaultAuditLogWrite statement must be present
+    assert '"VaultAuditLogWrite"' in audit_tf, (
+        "writer policy must have a VaultAuditLogWrite Sid for the scoped write statement"
+    )
+
+    # VaultAuditDescribeLogGroupsUnscopedAWSLimit statement must be present (separated)
+    assert '"VaultAuditDescribeLogGroupsUnscopedAWSLimit"' in audit_tf, (
+        "writer policy must have a VaultAuditDescribeLogGroupsUnscopedAWSLimit Sid — "
+        "DescribeLogGroups requires Resource=* and must be in a separate statement"
+    )
+
+    # No wildcard action specifiers — only specific actions allowed
+    assert '"logs:*"' not in audit_tf, "logs:* wildcard action not permitted"
+    assert '"iam:*"' not in audit_tf, "iam:* wildcard action not permitted"
+
+    # Reader-class event actions must not appear in the writer policy (no PII / audit read)
+    writer_policy_match = re.search(
+        r'resource\s+"aws_iam_policy"\s+"vault_audit"\s*\{.*?\}',
         audit_tf,
         re.DOTALL,
     )
-    assert policy_json_match, "could not locate policy jsonencode block"
-    # Can't eval the HCL expression easily, so pattern-check for Action patterns
-    assert '"logs:*"' not in audit_tf
-    assert '"iam:*"' not in audit_tf
-    assert (
-        '"*"' not in audit_tf.split("Action")[1][:400] if "Action" in audit_tf else True
+    assert writer_policy_match, (
+        "could not locate aws_iam_policy.vault_audit resource block"
+    )
+    writer_policy_block = writer_policy_match.group(0)
+    assert '"logs:FilterLogEvents"' not in writer_policy_block, (
+        "writer policy must not grant FilterLogEvents — writer has no audit-read authority"
+    )
+    assert '"logs:GetLogEvents"' not in writer_policy_block, (
+        "writer policy must not grant GetLogEvents — writer has no audit-read authority"
     )
 
 
@@ -468,30 +499,41 @@ def test_t16_evidence_schema_file_matches_python_validator():
 
 
 def test_t17_runbook_phase_plan_counts_coherent_and_sha_not_hardcoded():
-    """Runbook must document Phase-1=5, Phase-2=11, full=16, and must not
-    pin a hardcoded source SHA in the source-authority header line."""
+    """Runbook must document Phase-1=8, Phase-2=11, full=19, and must not
+    pin a hardcoded source SHA in the source-authority header line.
+
+    Phase-1 count (8 to add): 2 HCP + 6 AWS (log group, writer policy,
+    writer attachment, reader role, reader policy, reader attachment).
+    aws_iam_user.vault_audit is already in Terraform state — 0 changes.
+
+    Phase-2 count (11 to add): unchanged Vault resources.
+
+    Full plan (19 to add): 8 Phase-1 + 11 Phase-2. Audit authority repair
+    added 3 reader resources (role, policy, attachment) compared to the
+    prior 16-resource plan.
+    """
     runbook = (INFRA / "docs" / "ceremony-runbook.md").read_text(encoding="utf-8")
 
-    # Phase-1 targeted plan: exactly 5 resources (enforced at Checkpoint F)
-    assert "5 resources to add (2 HCP + 3 AWS)" in runbook, (
+    # Phase-1 targeted plan: 8 resources (enforced at Checkpoint F)
+    assert "8 resources to add (2 HCP + 6 AWS)" in runbook, (
         "Runbook Checkpoint F must specify the Phase-1 targeted plan expects "
-        "5 resources to add (2 HCP + 3 AWS)"
+        "8 resources to add (2 HCP + 6 AWS)"
     )
 
-    # Phase-2 plan: exactly 11 resources
+    # Phase-2 plan: exactly 11 resources (Vault resources — unchanged)
     assert "11 resources to add" in runbook, (
         "Runbook Checkpoint F Phase-2 must specify 11 resources to add"
     )
 
-    # Full architecture-review plan at Checkpoint C: 16 to add (5+11)
-    assert "16 to add" in runbook, (
-        "Runbook Checkpoint C must specify full plan = 16 to add (5 Phase-1 + 11 Phase-2)"
+    # Full architecture-review plan at Checkpoint C: 19 to add (8+11)
+    assert "19 to add" in runbook, (
+        "Runbook Checkpoint C must specify full plan = 19 to add (8 Phase-1 + 11 Phase-2)"
     )
 
     # Checkpoint C must distinguish itself from the Phase-1 targeted count
-    assert "5 Phase-1" in runbook or "Phase-1 targeted" in runbook, (
-        "Runbook Checkpoint C must clarify that 16 is the full-plan count and "
-        "the Phase-1 targeted apply plan will show 5 to add"
+    assert "8 Phase-1" in runbook or "Phase-1 targeted" in runbook, (
+        "Runbook Checkpoint C must clarify that 19 is the full-plan count and "
+        "the Phase-1 targeted apply plan will show 8 to add"
     )
 
     # Source-authority header must not hardcode a 40-char hex SHA

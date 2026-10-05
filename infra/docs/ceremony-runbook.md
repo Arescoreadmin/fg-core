@@ -115,13 +115,14 @@ tail -5 /tmp/ceremony-plan-output.txt
 ```
 
 **Expected result:**
-- Plan: 16 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
-- Breakdown: 5 Phase-1 resources (2 HCP + 3 AWS) + 11 Phase-2 Vault resources = 16 total
-- **Prior-apply context:** The 2026-10-02 partial apply created the HCP HVN and Vault cluster before failing on `aws_cloudwatch_log_group.vault_audit`. Those HCP resources were subsequently destroyed to contain costs; only `aws_iam_user.vault_audit` was retained in Terraform state. The fresh ceremony recreates the 2 HCP resources as additions (hence 16, not 14, to add).
-- All 16 resources match the intended architecture
+- Plan: 19 to add, 0 to change, 0 to destroy (`aws_iam_user.vault_audit` already in state)
+- Breakdown: 8 Phase-1 resources (2 HCP + 6 AWS) + 11 Phase-2 Vault resources = 19 total
+- Phase-1 AWS resources (6): aws_cloudwatch_log_group.vault_audit, aws_iam_policy.vault_audit, aws_iam_user_policy_attachment.vault_audit, aws_iam_role.vault_audit_reader, aws_iam_policy.vault_audit_reader, aws_iam_role_policy_attachment.vault_audit_reader
+- **Prior-apply context:** The 2026-10-02 partial apply created the HCP HVN and Vault cluster before failing on `aws_cloudwatch_log_group.vault_audit`. Those HCP resources were subsequently destroyed to contain costs; only `aws_iam_user.vault_audit` was retained in Terraform state. The fresh ceremony recreates the 2 HCP resources as additions (hence 19, not 17, to add).
+- All 19 resources match the intended architecture
 - No replacements, no destroys, no sensitive outputs
 - Ceremony ID `customer-zero-trust-2026-10-02-001` appears in tags
-- **Note:** The Phase-1 targeted apply plan generated at Checkpoint F will show **5 to add** — this is expected and correct. Checkpoint C plans all 16 resources for architecture review; Checkpoint F plans only the 5 Phase-1 targets for the first apply.
+- **Note:** The Phase-1 targeted apply plan generated at Checkpoint F will show **8 to add** — this is expected and correct. Checkpoint C plans all 19 resources for architecture review; Checkpoint F plans only the 8 Phase-1 targets for the first apply.
 
 **Evidence:** Plan summary line (non-secret). Resource count and categories.
 
@@ -202,6 +203,9 @@ terraform plan \
   -target=aws_iam_user.vault_audit \
   -target=aws_iam_policy.vault_audit \
   -target=aws_iam_user_policy_attachment.vault_audit \
+  -target=aws_iam_role.vault_audit_reader \
+  -target=aws_iam_policy.vault_audit_reader \
+  -target=aws_iam_role_policy_attachment.vault_audit_reader \
   -out=ceremony-plan-phase1.tfplan \
   2>&1 | tee /tmp/ceremony-plan-phase1-output.txt
 ```
@@ -213,7 +217,7 @@ terraform show ceremony-plan-phase1.tfplan 2>&1 | grep -E '^\s*(#|[~+]|Plan:|res
 echo "Phase 1 summary: $(tail -1 /tmp/ceremony-plan-phase1-output.txt)"
 ```
 
-Expected: 5 resources to add (2 HCP + 3 AWS), 0 changes, 0 destroys. `aws_iam_user.vault_audit`
+Expected: 8 resources to add (2 HCP + 6 AWS), 0 changes, 0 destroys. `aws_iam_user.vault_audit`
 is already in state from the 2026-10-02 partial apply and will show 0 changes. No unexpected
 resources. Confirm the output, then proceed to apply.
 
@@ -221,7 +225,7 @@ resources. Confirm the output, then proceed to apply.
 terraform apply ceremony-plan-phase1.tfplan
 ```
 
-**Expected result:** 5 resources created (2 HCP + 3 AWS). No errors. (`aws_iam_user.vault_audit` was already present — 0 changes.)
+**Expected result:** 8 resources created (2 HCP + 6 AWS). No errors. (`aws_iam_user.vault_audit` was already present — 0 changes.)
 
 **Collect vault_address immediately after Phase 1:**
 
@@ -784,38 +788,358 @@ latest_version not 2; v1 public key absent from key metadata.
 
 ---
 
-## CHECKPOINT Q — CloudWatch Audit Verification
+## CHECKPOINT Q — Audit Authority Verification (16-Step Sequence)
 
-**Prerequisites:** Checkpoint F complete. IAM user exists. HCP cluster running.
+**Prerequisites:** Checkpoint F Phase 1 complete. HCP cluster running (Checkpoint G). All
+three Transit keys verified (Checkpoint H). Signing tests PASS (Checkpoint M).
 
-**HUMAN OPERATOR ACTION — requires AWS Console + HCP portal.**
+**Destination model:** The CloudWatch log group is OPERATOR-CONFIGURED, not HCP-assigned.
+The intended destination (`var.cloudwatch_log_group_name`, default `/frostgate/customer-zero/vault-audit`)
+is pre-created by Terraform at Phase 1. When the operator enables HCP audit streaming
+(Q-6 below), the operator explicitly enters this log group name in the HCP UI. HCP does
+not pick a destination automatically — the operator chooses it and verifies it matches.
 
-> **Operator action:** In AWS Console, create an access key for `frostgate-hcp-vault-audit`.
-> Do NOT share the key with Claude. Copy the key ID and secret directly to HCP portal →
-> Vault cluster → Observability → Audit Logging → Enable streaming to CloudWatch.
-> Set log group: `/frostgate/customer-zero/vault-audit`.
+This checkpoint follows the 16-step authority sequence:
 
-**Non-secret verification:**
+---
+
+### Q-1. Confirm audit infrastructure is provisioned
 
 ```bash
-# Confirm log group exists and has retention policy
-AWS_DEFAULT_REGION=us-east-1 aws logs describe-log-groups \
-  --log-group-name-prefix "/frostgate/customer-zero" 2>&1
-
-# After a signing test, confirm audit log events appear
-AWS_DEFAULT_REGION=us-east-1 aws logs filter-log-events \
-  --log-group-name "/frostgate/customer-zero/vault-audit" \
-  --start-time $(date -d '-10 minutes' +%s000) 2>&1 | head -20
+cd ~/Projects/fg-core
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws logs describe-log-groups \
+  --log-group-name-prefix "/frostgate/customer-zero" \
+  | python3 -c "
+import sys, json
+groups = json.load(sys.stdin).get('logGroups', [])
+for g in groups:
+    print('logGroupName:', g['logGroupName'])
+    print('retentionInDays:', g.get('retentionInDays', 'none'))
+    print('arn:', g.get('arn', ''))
+"
+# Expected: exactly one group at /frostgate/customer-zero/vault-audit with retentionInDays=365
 ```
 
-**Expected result:** Log group exists. Vault auth and signing events appear in CloudWatch
-within 60 seconds of any Vault operation.
+Also confirm the writer user exists with no static access keys:
+```bash
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam get-user --user-name frostgate-hcp-vault-audit 2>&1 | grep -E "UserName|Path"
+# Expected: UserName=frostgate-hcp-vault-audit, Path=/frostgate/vault/
 
-**Evidence:** Log group ARN (non-secret). Presence of log events confirmed.
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam list-access-keys --user-name frostgate-hcp-vault-audit \
+  | python3 -c "import sys,json; keys=json.load(sys.stdin)['AccessKeyMetadata']; print('access_key_count:', len(keys))"
+# Expected: access_key_count: 0 (ceremony will create one at Q-5)
+```
 
-**Secret boundary:** AWS access key is created in Console and entered in HCP UI only. Never to Claude.
+Confirm the reader role exists:
+```bash
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam get-role --role-name FrostGateVaultAuditReader \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['Role']; print('RoleName:', r['RoleName']); print('Path:', r['Path'])"
+# Expected: RoleName=FrostGateVaultAuditReader, Path=/frostgate/vault/
+```
 
-**Stop condition:** Log group absent; no events appear after signing; HCP streaming fails.
+**Evidence:** Log group ARN, writer user (zero keys), reader role ARN (all non-secret).
+
+---
+
+### Q-2. Determine actual HCP CloudWatch destination
+
+The actual destination is operator-configured at Q-6 (below). Before configuring,
+confirm the intended destination from Terraform outputs:
+
+```bash
+cd ~/Projects/fg-core/infra
+AWS_PROFILE=frostgate-terraform terraform output cloudwatch_log_group_name
+# Expected: /frostgate/customer-zero/vault-audit
+# RECORD THIS VALUE. You will enter it verbatim in the HCP portal at Q-6.
+```
+
+The operator must ensure the HCP-configured log group name EXACTLY matches this output.
+If HCP assigns a different name or adds a prefix, that is the ACTUAL destination and
+must be recorded in the evidence manifest.
+
+---
+
+### Q-3. Confirm dedicated writer identity
+
+Writer identity is `frostgate-hcp-vault-audit` (verified at Q-1). This identity:
+- Has exactly one attached policy (`frostgate-hcp-vault-audit-policy`)
+- Has zero inline policies
+- Has zero access keys (until Q-5)
+
+```bash
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam list-attached-user-policies --user-name frostgate-hcp-vault-audit \
+  | python3 -c "import sys,json; ps=json.load(sys.stdin)['AttachedPolicies']; [print(p['PolicyName']) for p in ps]"
+# Expected: frostgate-hcp-vault-audit-policy
+
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam list-user-policies --user-name frostgate-hcp-vault-audit \
+  | python3 -c "import sys,json; ps=json.load(sys.stdin)['PolicyNames']; print('inline_count:', len(ps))"
+# Expected: inline_count: 0
+```
+
+---
+
+### Q-4. Confirm dedicated reader identity
+
+```bash
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam list-attached-role-policies --role-name FrostGateVaultAuditReader \
+  | python3 -c "import sys,json; ps=json.load(sys.stdin)['AttachedPolicies']; [print(p['PolicyName']) for p in ps]"
+# Expected: FrostGateVaultAuditReaderPolicy
+
+# Confirm reader trust policy requires MFA
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws iam get-role --role-name FrostGateVaultAuditReader \
+  | python3 -c "
+import sys, json
+role = json.load(sys.stdin)['Role']
+import urllib.parse
+doc = json.loads(urllib.parse.unquote(role['AssumeRolePolicyDocument']))
+for stmt in doc['Statement']:
+    print('Condition:', json.dumps(stmt.get('Condition', {})))
+"
+# Expected: Condition includes aws:MultiFactorAuthPresent = true
+```
+
+---
+
+### Q-5. HUMAN-ONLY: Create persistent writer credential
+
+**HARD STOP — HUMAN SECRET BOUNDARY. AWS access key must NOT be observed by Claude.**
+
+This credential is persistent (not rotated each ceremony) while audit streaming is enabled.
+It must be revoked and recreated when audit streaming is disabled or when rotation is required.
+
+> **Operator action (terminal only — no chat, no logs):**
+>
+> 1. In AWS Console → IAM → Users → `frostgate-hcp-vault-audit` → Security credentials
+> 2. Create access key (select "Application running outside AWS" → create)
+> 3. Copy the **Access key ID** and **Secret access key** immediately (only shown once)
+> 4. Do NOT paste these values into chat or terminal output visible to Claude
+> 5. Proceed directly to Q-6
+
+**Non-secret confirmation:** "Writer access key created. access_key_id prefix: AKIA..."
+(share only the AKIA prefix — first 4 chars only — not the full key ID or secret)
+
+**Credential lifecycle:**
+- This key is persistent while HCP audit streaming remains enabled
+- Revoke via AWS Console → IAM → Users → security credentials when no longer needed
+- No rotation is required during normal operation; if key is compromised, revoke immediately
+  and create a new key, then re-enter in HCP UI (see Q-6)
+- The key never enters Terraform state, repository, chat, evidence, or shell history
+
+**Stop condition:** Operator cannot authenticate to AWS Console; key creation fails.
+
+---
+
+### Q-6. HUMAN-ONLY: Credential transfer and stream enablement
+
+**HARD STOP — credentials must not cross the Claude boundary.**
+
+> **Operator action:**
+> 1. In HCP portal → Vault cluster `frostgate-customer-zero` → Observability → Audit Logging
+> 2. Enable CloudWatch streaming
+> 3. Enter:
+>    - AWS Region: `us-east-1`
+>    - Log group name: (value from Q-2 output — exactly `/frostgate/customer-zero/vault-audit`)
+>    - Access key ID: (the full key ID from Q-5 — enter directly, do not share with Claude)
+>    - Secret access key: (the secret from Q-5 — enter directly, do not share with Claude)
+> 4. Save and confirm HCP shows streaming as "Active"
+> 5. Clear the secret from clipboard immediately after saving
+
+**Non-secret confirmation:** "HCP audit streaming enabled. Status: Active. Log group confirmed: /frostgate/customer-zero/vault-audit."
+
+**Stop condition:** HCP UI shows streaming error; log group name mismatch; HCP cannot connect to CloudWatch.
+
+---
+
+### Q-7. Enable and verify stream destination
+
+```bash
+# Wait 60 seconds for HCP to establish the stream, then verify a log stream exists
+sleep 60
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws logs describe-log-streams \
+  --log-group-name "/frostgate/customer-zero/vault-audit" \
+  | python3 -c "
+import sys, json
+streams = json.load(sys.stdin).get('logStreams', [])
+print('stream_count:', len(streams))
+for s in streams[:3]:
+    print('  stream:', s.get('logStreamName', ''))
+"
+# Expected: stream_count >= 1 (HCP creates a stream upon first connection)
+```
+
+Verify the HCP-configured log group name matches the intended destination:
+```bash
+# Record which log group name HCP is actually sending to (visible in HCP portal)
+# and confirm it matches the terraform output from Q-2.
+echo "Intended:  $(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw cloudwatch_log_group_name)"
+echo "Actual: /frostgate/customer-zero/vault-audit"
+# If these differ, record the actual value in the evidence manifest as
+# "cloudwatch_actual_log_group_name" and update the evidence manifest
+# destination field accordingly.
+```
+
+---
+
+### Q-8 to Q-9. Generate bounded non-rotating operational events
+
+Generate a small set of bounded signing operations to produce audit evidence.
+These are the events that will appear in CloudWatch — NOT the rotation event from Checkpoint P.
+The rotation event (Checkpoint P) is separate rotation_history evidence; no second rotation
+is required here.
+
+```bash
+# Run the ceremony signing tests (non-destructive, produces Vault audit events)
+cd ~/Projects/fg-core
+python -m pytest tests/test_customer_zero_trust_ceremony_readiness.py -v -k "test_a or test_m or test_g" 2>&1 | tail -20
+```
+
+Wait 60 seconds, then confirm events appear:
+```bash
+AWS_PROFILE=frostgate-terraform AWS_DEFAULT_REGION=us-east-1 \
+  aws logs filter-log-events \
+  --log-group-name "/frostgate/customer-zero/vault-audit" \
+  --start-time "$(python3 -c "import time; print(int((time.time()-600)*1000))")" \
+  2>&1 | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+events = data.get('events', [])
+print('event_count:', len(events))
+if events:
+    print('first_event_timestamp:', events[0].get('timestamp', ''))
+"
+# Expected: event_count >= 1
+```
+
+---
+
+### Q-10. HUMAN-ONLY: Independently read and verify sanitized audit evidence
+
+The operator assumes the `FrostGateVaultAuditReader` role (MFA required) and reads
+audit events. This step is performed by the operator — NOT by Claude.
+
+> **Operator action:**
+> 1. Assume the reader role:
+>    ```bash
+>    AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
+>      --role-arn "$(cd ~/Projects/fg-core/infra && AWS_PROFILE=frostgate-terraform terraform output -raw iam_audit_reader_role_arn)" \
+>      --role-session-name "ceremony-evidence-verification" \
+>      --serial-number "<your MFA device ARN>" \
+>      --token-code "<current MFA code>" \
+>      | python3 -c "
+>    import sys, json
+>    creds = json.load(sys.stdin)['Credentials']
+>    print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
+>    print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
+>    print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
+>    "
+>    ```
+> 2. Set the printed exports in your terminal
+> 3. Read recent audit events:
+>    ```bash
+>    AWS_DEFAULT_REGION=us-east-1 aws logs filter-log-events \
+>      --log-group-name "/frostgate/customer-zero/vault-audit" \
+>      --start-time "$(python3 -c "import time; print(int((time.time()-3600)*1000))")" \
+>      2>&1 | python3 -c "
+>    import sys, json
+>    data = json.load(sys.stdin)
+>    events = data.get('events', [])
+>    print('audit_event_count:', len(events))
+>    "
+>    ```
+> 4. Confirm audit events are visible under the reader role
+> 5. Unset the assumed-role credentials: `unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN`
+
+**Non-secret confirmation:** "Reader role assumed with MFA. audit_event_count: N (where N >= 1)."
+
+**Stop condition:** MFA device ARN unknown; assume-role fails; event count is 0 after confirmed streaming.
+
+---
+
+### Q-11. Optionally recover historical rotation event from HCP archive
+
+The identity key rotation performed at Checkpoint P produced audit evidence in the HCP
+downloadable audit log archive. No second rotation is required to populate CloudWatch;
+subsequent authentication and signing events (Q-8/Q-9) are the CloudWatch audit evidence.
+
+If historical rotation evidence is needed:
+- HCP portal → Vault cluster → Observability → Audit Logs → Download archive
+- The archive contains the `transit/keys/customer-zero-identity/rotate` event
+- This is optional rotation recovery, not a new rotation
+
+**Evidence note:** `rotation_history` and `audit_evidence` are SEPARATE arrays in the
+evidence manifest. The rotation event populates `rotation_history`; CloudWatch streaming
+events populate `audit_evidence`. These are independent. Do NOT trigger a second rotation
+merely to generate a CloudWatch event.
+
+---
+
+### Q-12 to Q-14. Populate and validate evidence manifest
+
+```bash
+cd ~/Projects/fg-core
+
+# Q-12: Update artifacts/trust/customer_zero_trust_evidence.json with:
+#   - audit_evidence: CloudWatch event refs (event IDs, timestamps, non-secret)
+#   - rotation_history: from Checkpoint P pre/post rotation data
+#   - dimensions.AUDITABILITY: "PASS" (events confirmed in CloudWatch by reader role)
+
+# Q-13: Schema validate
+python tools/customer_zero_trust_evidence.py validate artifacts/trust/customer_zero_trust_evidence.json
+# Expected: all dimension checks PASS or NOT_PROVEN (no FAIL)
+
+python tools/customer_zero_trust_evidence.py verify-anchors artifacts/trust/customer_zero_trust_evidence.json
+# Expected: PASS
+
+# Q-14: Schema validate
+python tools/customer_zero_trust_evidence.py verify-role-separation artifacts/trust/customer_zero_trust_evidence.json
+# Expected: PASS
+```
+
+---
+
+### Q-15. Secret scan
+
+```bash
+cd ~/Projects/fg-core
+# Confirm no secret values in evidence manifest or Terraform source
+git diff --check
+grep -rn "AKIA" infra/ artifacts/trust/ 2>/dev/null | grep -v ".terraform.lock" && echo "WARNING: found AWS key prefix" || echo "secret scan: PASS"
+grep -rn "-----BEGIN" infra/ artifacts/trust/ 2>/dev/null && echo "WARNING: found PEM marker" || echo "PEM scan: PASS"
+```
+
+---
+
+### Q-16. Final trust determination
+
+All of the following must be confirmed before AUDITABILITY dimension is set to PASS:
+
+| Check | Expected |
+|---|---|
+| Log group provisioned at intended name | PASS |
+| HCP streaming status | Active |
+| Writer has no read-event authority | CONFIRMED (policy structure) |
+| Reader role exists with MFA trust | CONFIRMED (Q-4) |
+| Reader assumed successfully with MFA | CONFIRMED (Q-10) |
+| Audit events visible via reader role | CONFIRMED (event_count >= 1) |
+| No second rotation required | CONFIRMED (rotation_history != audit_evidence) |
+| Evidence manifest validates | PASS |
+| Secret scan | PASS |
+
+**Evidence:** All Q-1 through Q-15 outputs (non-secret). Operator records event count and reader confirmation.
+
+**Secret boundary:** Writer access key created in Console (Q-5) and entered in HCP UI (Q-6) only.
+Reader assumed-role credentials are transient and set/unset in terminal only. Neither cross the Claude boundary.
+
+**Stop condition:** Log group absent; streaming not Active; reader role assumption fails; event count is 0; secret scan finds matches.
 
 ---
 
@@ -1011,7 +1335,7 @@ AWS_PROFILE=frostgate-terraform terraform apply teardown-lifecycle.tfplan
 # U-A5. Destroy all resources
 AWS_PROFILE=frostgate-terraform terraform destroy
 # Type "yes" when prompted.
-# Expected: all 17 resources destroyed.
+# Expected: all 20 resources destroyed (19 added + aws_iam_user.vault_audit already in state = 20 total).
 ```
 
 **Post-destruction evidence:**
@@ -1046,7 +1370,7 @@ git commit -m "chore(infra): restore prevent_destroy guards post-ceremony teardo
 git push origin main
 ```
 
-**Expected result:** All 17 resources destroyed. HCP billing stops. Audit logs retained
+**Expected result:** All 20 resources destroyed. HCP billing stops. Audit logs retained
 for 365 days in CloudWatch (if log group retained separately). Evidence manifest and
 public trust anchors remain in fg-core permanently.
 
