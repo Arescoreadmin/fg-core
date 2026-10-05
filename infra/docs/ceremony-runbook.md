@@ -105,7 +105,10 @@ Set them once in the terminal; they persist for the session.
 
 ```bash
 # REQUIRED — operator IAM user ARN for FrostGateVaultAuditReader trust policy.
-# Use the ARN printed at Checkpoint A4 (aws sts get-caller-identity).
+# Must be an IAM user ARN (arn:aws:iam::<account>:user/<name>) — NOT a role/assumed-role ARN.
+# Checkpoint A4 (frostgate-terraform) returns an assumed-role ARN and is WRONG for this variable.
+# Retrieve the human user ARN using the frostgate-human profile:
+#   AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts get-caller-identity --query Arn --output text
 # operator_iam_user_arn has no default; Terraform validation fails without this.
 export TF_VAR_operator_iam_user_arn="arn:aws:iam::398915901105:user/<your-iam-username>"
 
