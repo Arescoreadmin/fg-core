@@ -182,6 +182,46 @@ PERMISSIONS_POLICY=$(cat <<PERMS
       ]
     },
     {
+      "Sid": "IAMAuditReaderRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:ListAttachedRolePolicies"
+      ],
+      "Resource": "arn:aws:iam::${ACCOUNT_ID}:role/frostgate/vault/FrostGateVaultAuditReader"
+    },
+    {
+      "Sid": "IAMAuditReaderPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:ListEntitiesForPolicy"
+      ],
+      "Resource": "arn:aws:iam::${ACCOUNT_ID}:policy/frostgate/vault/FrostGateVaultAuditReaderPolicy"
+    },
+    {
+      "Sid": "IAMAuditReaderPolicyAttachment",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::${ACCOUNT_ID}:role/frostgate/vault/FrostGateVaultAuditReader",
+        "arn:aws:iam::${ACCOUNT_ID}:policy/frostgate/vault/FrostGateVaultAuditReaderPolicy"
+      ]
+    },
+    {
       "Sid": "IAMGetAccountSummary",
       "Effect": "Allow",
       "Action": "iam:GetAccountSummary",
