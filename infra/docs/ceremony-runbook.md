@@ -1589,6 +1589,11 @@ trios, and unexpected output changes. Its output is the complete stage action se
 a stage already completed, an empty action set is idempotently accepted. Do not invent
 another target.
 
+Output `no-op` entries are accepted because Terraform reports unchanged configured
+outputs in `output_changes`; they do not alter state or authority. Output deletion is
+accepted only for the exact stage-specific names listed by the verifier. Output create,
+update, replacement, and unapproved deletion remain rejected.
+
 Record outside the repository: stage, source SHA, plan filename and SHA-256, UTC plan
 time, Terraform/provider versions, workspace, AWS account/operator, exact actions,
 verifier result, and human authorization. Treat the saved plan as sensitive: keep it

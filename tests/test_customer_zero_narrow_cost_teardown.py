@@ -419,6 +419,29 @@ def test_unexpected_output_changes_are_rejected() -> None:
         teardown.validate_plan("vault-children", plan, state)
 
 
+def test_stage_one_accepts_retained_approle_role_id_noop_output() -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state, updated=teardown.TRANSIT_KEYS)
+    plan["output_changes"] = {"approle_role_id_acceptance": {"actions": ["no-op"]}}
+
+    assert (
+        teardown.validate_plan("enable-key-deletion", plan, state)
+        == teardown.TRANSIT_KEYS
+    )
+
+
+@pytest.mark.parametrize(
+    "actions", [["create"], ["update"], ["delete"], ["delete", "create"]]
+)
+def test_stage_one_rejects_output_mutations(actions: list[str]) -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state)
+    plan["output_changes"] = {"approle_role_id_acceptance": {"actions": actions}}
+
+    with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
+        teardown.validate_plan("enable-key-deletion", plan, state)
+
+
 def test_generated_stage_config_uses_removed_blocks_and_only_stateful_aws_resources(
     tmp_path: Path,
 ) -> None:
