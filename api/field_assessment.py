@@ -7630,17 +7630,28 @@ def qa_approve_report_route(
             build_report_signing_payload as _brsp,
         )
 
-        _report_verify_payload = _brsp(
-            tenant_id=report.tenant_id,
-            engagement_id=report.engagement_id or engagement_id,
-            report_id=report.id,
-            report_version_id=report.id,
-            report_fingerprint=report.manifest_hash,
-            report_schema_version=report.schema_version,
-        )
-        _sig_valid = _get_trust_binding_authority().verify_report(
-            _report_verify_payload, _envelope_from_report_row(report)
-        )
+        # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from current
+        # report_json.  A DB-level mutation of report_json without updating
+        # manifest_hash must fail closed here — treat as invalid signature.
+        if report.report_json is None or not isinstance(report.report_json, dict):
+            _sig_valid = False
+        elif (
+            _derive_manifest_hash_from_report_json(report.report_json)
+            != report.manifest_hash
+        ):
+            _sig_valid = False
+        else:
+            _report_verify_payload = _brsp(
+                tenant_id=report.tenant_id,
+                engagement_id=report.engagement_id or engagement_id,
+                report_id=report.id,
+                report_version_id=report.id,
+                report_fingerprint=report.manifest_hash,
+                report_schema_version=report.schema_version,
+            )
+            _sig_valid = _get_trust_binding_authority().verify_report(
+                _report_verify_payload, _envelope_from_report_row(report)
+            )
     elif report.signature:
         try:
             _canonical = json.dumps(
@@ -9868,17 +9879,29 @@ def export_engagement_report_route(
             build_report_signing_payload as _brsp,
         )
 
-        _export_verify_payload = _brsp(
-            tenant_id=record.tenant_id,
-            engagement_id=record.engagement_id or engagement_id,
-            report_id=record.id,
-            report_version_id=record.id,
-            report_fingerprint=record.manifest_hash,
-            report_schema_version=record.schema_version,
-        )
-        _sig_valid = _get_trust_binding_authority().verify_report(
-            _export_verify_payload, _envelope_from_report_row(record)
-        )
+        # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from current
+        # report_json before using the stored value as the signing payload input.
+        # A DB-level mutation of report_json without updating manifest_hash must
+        # fail closed here — treat as invalid signature.
+        if record.report_json is None or not isinstance(record.report_json, dict):
+            _sig_valid = False
+        elif (
+            _derive_manifest_hash_from_report_json(record.report_json)
+            != record.manifest_hash
+        ):
+            _sig_valid = False
+        else:
+            _export_verify_payload = _brsp(
+                tenant_id=record.tenant_id,
+                engagement_id=record.engagement_id or engagement_id,
+                report_id=record.id,
+                report_version_id=record.id,
+                report_fingerprint=record.manifest_hash,
+                report_schema_version=record.schema_version,
+            )
+            _sig_valid = _get_trust_binding_authority().verify_report(
+                _export_verify_payload, _envelope_from_report_row(record)
+            )
     elif record.signature:
         try:
             _canonical = json.dumps(
@@ -10055,6 +10078,26 @@ def verify_engagement_report_route(
         from services.governance.trust_binding import (  # noqa: PLC0415
             build_report_signing_payload as _brsp,
         )
+
+        # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from the current
+        # report_json before using the stored value as the signing payload input.
+        # If the current content no longer matches the stored hash, the report_json
+        # has been mutated since signing — fail closed immediately.
+        if record.report_json is None or not isinstance(record.report_json, dict):
+            return EngagementReportVerifyResponse(
+                valid=False,
+                manifest_hash=record.manifest_hash,
+                signature=None,
+                verified_at=now,
+            )
+        _derived_hash = _derive_manifest_hash_from_report_json(record.report_json)
+        if _derived_hash != record.manifest_hash:
+            return EngagementReportVerifyResponse(
+                valid=False,
+                manifest_hash=record.manifest_hash,
+                signature=None,
+                verified_at=now,
+            )
 
         _verify_payload = _brsp(
             tenant_id=record.tenant_id,
@@ -13055,6 +13098,30 @@ def _compute_report_hash(report_json: dict[str, Any]) -> str:
 
     canonical = json.dumps(report_json, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _derive_manifest_hash_from_report_json(report_json: dict[str, Any]) -> str:
+    """Re-derive the manifest_hash from report_json using the canonical signing serialization.
+
+    PROVENANCE-INTEGRITY-001: This function must use the EXACT same serialization
+    parameters as the signing path (create_engagement_report_route, line ~9585):
+
+        canonical_str = json.dumps(report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        manifest_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+    Called by all verification paths (verify_engagement_report_route,
+    qa_approve_report_route, export_engagement_report_route) before accepting
+    the stored manifest_hash as the report_fingerprint input to the signing
+    payload.  If the re-derived hash does not match the stored hash, the current
+    report_json has been tampered — verification must fail closed.
+    """
+    import hashlib
+    import json
+
+    canonical_str = json.dumps(
+        report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
 
 def _compute_manifest_hash(manifest: dict[str, Any]) -> str:
