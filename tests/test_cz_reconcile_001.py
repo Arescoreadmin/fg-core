@@ -603,7 +603,7 @@ def test_l1_roadmap_checker_marks_cz_reconcile_001_completed() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must mark CZ-RECONCILE-001 as COMPLETED (exit 1); "
@@ -624,7 +624,7 @@ def test_l2_roadmap_checker_authorizes_provenance_integrity_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 0, (
         f"Roadmap checker rejected PROVENANCE-INTEGRITY-001: {result.stderr}"
@@ -643,7 +643,7 @@ def test_l3_roadmap_checker_authorizes_vault_verify_contract_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 0, (
         f"Roadmap checker rejected VAULT-VERIFY-CONTRACT-001: {result.stderr}"
@@ -668,14 +668,17 @@ def test_l4_roadmap_checker_blocks_final_readiness_until_deps_complete() -> None
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-FINAL-READINESS-001 (deps incomplete); "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
     assert "BLOCKED" in result.stderr or "BLOCKED" in result.stdout
-    assert "PROVENANCE-INTEGRITY-001" in result.stderr or "PROVENANCE-INTEGRITY-001" in result.stdout
+    assert (
+        "PROVENANCE-INTEGRITY-001" in result.stderr
+        or "PROVENANCE-INTEGRITY-001" in result.stdout
+    )
 
 
 def test_l5_roadmap_checker_blocks_trust_003() -> None:
@@ -690,7 +693,7 @@ def test_l5_roadmap_checker_blocks_trust_003() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-TRUST-003; "
@@ -710,14 +713,12 @@ def test_l6_roadmap_checker_blocks_accept_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-ACCEPT-001; "
         f"got rc={result.returncode}, stdout={result.stdout!r}"
     )
-
-
 
 
 def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
@@ -737,7 +738,7 @@ def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-TRUST-001 (ATTEMPTED_NOT_PROVEN); "
@@ -763,7 +764,7 @@ def test_l8_checker_enforces_blocked_by_before_authorizing() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
-    check=False,
+        check=False,
     )
     assert result.returncode == 1, (
         "Checker must enforce blocked_by and reject CUSTOMER-ZERO-FINAL-READINESS-001 "
@@ -772,7 +773,11 @@ def test_l8_checker_enforces_blocked_by_before_authorizing() -> None:
     combined = result.stdout + result.stderr
     assert "BLOCKED" in combined
     # At least one of the named dependencies must appear in the output
-    assert "PROVENANCE-INTEGRITY-001" in combined or "VAULT-VERIFY-CONTRACT-001" in combined
+    assert (
+        "PROVENANCE-INTEGRITY-001" in combined
+        or "VAULT-VERIFY-CONTRACT-001" in combined
+    )
+
 
 # ---------------------------------------------------------------------------
 # M. No live infrastructure requirements
