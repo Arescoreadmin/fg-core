@@ -63,7 +63,8 @@ next_sequence:
     freeze_law_justification: >
       P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
       direct blocker of Customer-Zero acceptance. No paid infrastructure required.
-    status: "AUTHORIZED_NOT_STARTED"
+    status: "IN_PROGRESS"
+    branch: "fix/provenance-integrity-001"
     work_class: "REPAIR"
     requires_paid_infrastructure: false
     blocked_by: "CZ-RECONCILE-001"
