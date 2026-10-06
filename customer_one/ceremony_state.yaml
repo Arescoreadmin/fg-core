@@ -1,0 +1,221 @@
+schema_version: "1.0"
+reconciliation_id: "CZ-RECONCILE-001"
+reconciliation_date: "2026-10-06"
+base_sha: "f4b970d1c745ce34fcfdb16683177fa94bb00cbe"
+
+# ---------------------------------------------------------------------------
+# AUTHORITATIVE CEREMONY STATE — CUSTOMER-ZERO-TRUST-001
+#
+# This file is the machine-readable record of the Customer-Zero trust ceremony
+# outcome after two attempted runs. It encodes WHAT WAS PROVEN, WHAT WAS NOT
+# PROVEN, WHY TRUST IS BLOCKED, and WHAT MUST HAPPEN BEFORE RUN 3.
+#
+# Status fields are IMMUTABLE historical records. They MUST NOT be changed to
+# reflect a more optimistic outcome than the evidence supports.
+# ---------------------------------------------------------------------------
+
+trust_proof_status: "NOT_PROVEN"
+operational_ceremony_status: "ATTEMPTED"
+cost_containment_status: "COMPLETE"
+infrastructure_lifecycle_status: "HCP_ABSENT"
+aws_audit_lifecycle_status: "AWS_AUDIT_PRESERVED"
+audit_evidence_status: "PRESERVED"
+acceptance_status: "BLOCKED"
+third_paid_ceremony_status: "NOT_AUTHORIZED"
+
+# ---------------------------------------------------------------------------
+# WHY TRUST IS NOT PROVEN
+# Two defects prevent Customer-Zero acceptance. BOTH must be repaired offline
+# before a third paid ceremony is authorized.
+# ---------------------------------------------------------------------------
+
+blocking_defects:
+  - id: "DEFECT-PROVENANCE-INTEGRITY"
+    short: "Report/provenance integrity"
+    detail: >
+      Verification trusts the stored manifest_hash without sufficiently
+      re-deriving or binding it to current report_json. A DB-level mutation of
+      report_json without changing manifest material produces an invalid
+      verification outcome that the current verifier accepts. DB-level tampering
+      of report_json must fail verification deterministically.
+    severity: "P0"
+    repair_work_item: "PROVENANCE-INTEGRITY-001"
+
+  - id: "DEFECT-VERIFIER-CONTRACT"
+    short: "Verifier contract — non-deterministic error on cross-domain/rotation path"
+    detail: >
+      A post-rotation cross-domain verification attempt involving differing key
+      versions can raise VaultTransitError instead of returning a deterministic
+      fail-closed boolean result. Every wrong-domain / wrong-key / wrong-version /
+      malformed-proof / replay / unavailable-Vault path must have an explicitly
+      tested deterministic fail-closed outcome. Non-deterministic exception
+      propagation is not a valid fail-closed contract.
+    severity: "P0"
+    repair_work_item: "VAULT-VERIFY-CONTRACT-001"
+
+# ---------------------------------------------------------------------------
+# WHAT WAS PROVEN DURING CEREMONIES (RUNS 1 AND 2)
+#
+# These facts are true. They are preserved here as historical evidence.
+# They do not constitute trust PROVEN under the required contract.
+# ---------------------------------------------------------------------------
+
+proven_during_ceremonies:
+  - "HCP Vault Dedicated could be provisioned (cluster created, then destroyed)"
+  - "Vault Transit engine could be configured"
+  - "AppRole authentication could be configured"
+  - "FrostGate runtime could authenticate through AppRole"
+  - "Three trust domains exercised: IDENTITY (report), ACCEPTANCE (delivery), APPROVAL (qualification)"
+  - "Positive signing worked across all three intended domains"
+  - "Cross-role substitution attempts failed closed (3x3 deny matrix)"
+  - "Static-token downgrade paths failed closed"
+  - "Environment-key downgrade paths failed closed"
+  - "Unavailable-Vault downgrade paths failed closed"
+  - "Identity signing-key rotation was exercised"
+  - "Historical verification across rotation demonstrated"
+  - "Isolation remained intact after rotation"
+  - "AWS CloudWatch audit log group was confirmed to receive Vault audit events"
+
+not_proven_during_ceremonies:
+  - "Report/provenance integrity: DB-level report_json tampering must fail verification (DEFECT-PROVENANCE-INTEGRITY)"
+  - "Verifier contract: wrong-domain/cross-version must return deterministic False, not raise (DEFECT-VERIFIER-CONTRACT)"
+  - "Customer-Zero acceptance: all required proof elements are not yet present simultaneously"
+
+# ---------------------------------------------------------------------------
+# COST CONTAINMENT RECORD
+#
+# Four-stage teardown completed. All stages verified before application.
+# AWS audit authority explicitly preserved through all stages.
+# ---------------------------------------------------------------------------
+
+cost_containment:
+  outcome: "CUSTOMER_ZERO_COST_CONTAINMENT_COMPLETE"
+  method: "four-stage-narrow-teardown"
+  historical_october_usage_usd: 321.81
+  usage_note: "Accrued from ceremony run 1 and run 2; not ongoing after teardown"
+
+  stages_completed:
+    - stage: "enable-key-deletion"
+      action: "Transit keys changed to deletion_allowed=true"
+      result: "COMPLETE"
+    - stage: "vault-children"
+      action: "11 Vault child resources destroyed (Transit mount, 3 keys, AppRole, 3 roles, 3 policies)"
+      result: "COMPLETE"
+    - stage: "hcp-cluster"
+      action: "HCP Vault Dedicated cluster destroyed"
+      result: "COMPLETE"
+    - stage: "hvn"
+      action: "HCP HVN destroyed"
+      result: "COMPLETE"
+
+  preserved_aws_resources:
+    - address: "aws_cloudwatch_log_group.vault_audit"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+    - address: "aws_iam_policy.vault_audit"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+    - address: "aws_iam_user.vault_audit"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+    - address: "aws_iam_user_policy_attachment.vault_audit"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+
+  preservation_invariant: >
+    No teardown completion state authorizes deletion of persistent AWS audit
+    resources. These resources are NOT ceremony-scoped. They are the durable
+    audit boundary required for any future ceremony. Cost containment does not
+    change CUSTOMER_ZERO_TRUST_NOT_PROVEN.
+
+# ---------------------------------------------------------------------------
+# THIRD CEREMONY PREREQUISITES
+#
+# ALL THREE must complete before a third paid ceremony is authorized.
+# These are OFFLINE (zero-cost) work items.
+# ---------------------------------------------------------------------------
+
+third_ceremony_prerequisites:
+  - id: "PROVENANCE-INTEGRITY-001"
+    title: "Repair report/provenance verification integrity"
+    description: >
+      Repair the report/provenance verification contract. Current report content
+      (report_json) must be cryptographically or deterministically bound such
+      that DB-level mutation of report_json without also mutating the manifest
+      material produces a detectable verification failure. Proof requires an
+      adversarial test demonstrating that a report with mutated report_json
+      fails verification.
+    work_class: "REPAIR"
+    requires_paid_infrastructure: false
+    blocks: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    order: 1
+
+  - id: "VAULT-VERIFY-CONTRACT-001"
+    title: "Repair deterministic fail-closed verification semantics"
+    description: >
+      Every verify_* path must return a deterministic boolean. Wrong domain,
+      wrong key, wrong version, malformed proof, replay, unavailable Vault, and
+      cross-domain paths must all have explicitly tested fail-closed outcomes
+      (return False). No path may raise VaultTransitError as a substitute for
+      a boolean fail-closed result. Proof requires a focused test suite covering
+      all enumerated cases including the post-rotation cross-domain case.
+    work_class: "REPAIR"
+    requires_paid_infrastructure: false
+    blocks: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    order: 2
+
+  - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    title: "Customer-Zero comprehensive offline readiness gate"
+    description: >
+      Comprehensive zero-cost readiness gate. Must prove every prerequisite for
+      acceptance without creating paid HCP infrastructure. Includes: provenance
+      integrity repaired and tested, verifier contract repaired and tested,
+      offline ceremony simulation green, all existing trust ceremony tests pass,
+      cost doctrine documented, Run 3 operational plan finalized, explicit cost
+      envelope prepared (fresh authorization required — $321.81 historical usage
+      means prior cost envelope is consumed).
+    work_class: "NEXT"
+    requires_paid_infrastructure: false
+    blocks: "CUSTOMER-ZERO-TRUST-003"
+    order: 3
+
+# ---------------------------------------------------------------------------
+# THIRD CEREMONY OPERATIONAL MODEL
+#
+# When all offline prerequisites complete, the third ceremony follows this
+# doctrine. Paid infrastructure is for proof execution, not application
+# debugging.
+# ---------------------------------------------------------------------------
+
+third_ceremony_operational_model:
+  doctrine: "Paid infrastructure is for proof execution, not application debugging."
+  sequence:
+    - "PREPARE OFFLINE"
+    - "PROVE ALL ZERO-COST PREREQUISITES (PROVENANCE-INTEGRITY-001 + VAULT-VERIFY-CONTRACT-001 + CUSTOMER-ZERO-FINAL-READINESS-001)"
+    - "FREEZE SOURCE SHA"
+    - "AUTHORIZE EXPLICIT COST ENVELOPE (fresh authorization required; $321.81 historical usage is consumed)"
+    - "CREATE HCP INFRASTRUCTURE"
+    - "CONFIGURE TRUST AUTHORITY"
+    - "PROVE AUDIT DELIVERY EARLY"
+    - "PROVE RUNTIME AUTHENTICATION"
+    - "PROVE DOMAIN SIGNING AND ISOLATION"
+    - "PROVE ROTATION AND HISTORICAL VERIFICATION"
+    - "PROVE REPORT/PROVENANCE INTEGRITY"
+    - "CAPTURE CANONICAL AUDIT EVIDENCE"
+    - "MAKE TRUST DETERMINATION"
+    - "CUSTOMER-ZERO ACCEPTANCE ONLY IF ALL REQUIRED PROOF EXISTS"
+    - "CONTROLLED COST-CONTAINMENT TEARDOWN"
+
+  cost_control_requirements:
+    - "No paid HCP infrastructure before all offline gates pass"
+    - "Explicit human authorization required before paid provisioning"
+    - "Explicit cost envelope with confirmed HCP portal pricing"
+    - "Explicit start timestamp recorded"
+    - "Review deadline and hard-abort deadline set before ceremony begins"
+    - "No unattended overnight execution"
+    - "No exploratory debugging against paid infrastructure"
+    - "Failed checkpoint means STOP and controlled teardown — not retry"
+    - "Known staged teardown path verified before ceremony begins"
+    - "Billing evidence captured after teardown completes"
+    - "Provider-side deletion is not the same as Terraform-state absence — both required"
+    - "Fresh cost authorization required for Run 3 — previous $321.81 usage means old envelope is consumed"
