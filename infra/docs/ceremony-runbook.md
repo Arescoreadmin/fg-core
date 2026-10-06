@@ -1482,7 +1482,7 @@ complete acceptance, or change the determination:
 > **`CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged by cost containment.**
 
 This is the only procedure for cost containment. It does not use broad `terraform destroy`.
-It generates three temporary self-contained Terraform configurations against the existing
+It generates four temporary self-contained Terraform configurations against the existing
 `Frostgate/frostgate-customer-zero` remote workspace. The generator copies the exact AWS
 resource definitions from reviewed source and includes only resources actually present
 in state. It does not change repository files or weaken the normal configuration's
@@ -1492,11 +1492,21 @@ and update state only after successful deletion; see the Terraform
 
 ### Resource boundaries and ordering
 
-| Stage | Exact eligible destruction | Required ordering / authentication |
+| Stage | Exact permitted action | Required ordering / authentication |
 |---|---|---|
-| `vault-children` | Up to 11 Vault resources: Transit mount + 3 keys, AppRole backend + 3 roles, 3 policies; only addresses still in state | First, while the Vault cluster is live; human Vault admin auth is required by the Vault provider. |
+| `enable-key-deletion` | No destruction. Update only the three Transit keys' `deletion_allowed` from false to true; no other field may change. | First, while Vault is live; separate human authorization and Vault admin authentication required. This temporarily removes the key-level deletion guard only to permit the subsequent authorized deletion. |
+| `vault-children` | Up to 11 Vault resources: Transit mount + 3 keys, AppRole backend + 3 roles, 3 policies; only addresses still in state | After the enablement stage is verified; while the Vault cluster is live; human Vault admin auth is required by the Vault provider. |
 | `hcp-cluster` | `hcp_vault_cluster.customer_zero` only | After all Vault children are absent. The HVN and AWS audit resources remain configured. |
 | `hvn` | `hcp_hvn.frostgate` only | After HCP confirms the Vault cluster is absent. No Vault provider/authentication is configured. |
+
+Vault rejects Transit key deletion unless `deletion_allowed` is true. The temporary
+enablement plan must prove that this is the only changed field on each key. Do not use
+the Vault API or CLI as an unplanned bypass. The setting remains true only for the
+short interval between two separately reviewed saved-plan operations; halt signing and
+proceed directly to the authorized Vault-child plan. If teardown is abandoned, use the
+ordinary configuration to plan and separately authorize restoration to false before
+resuming service. See the [Vault Transit API](https://developer.hashicorp.com/vault/api-docs/secret/transit)
+and the [Vault Terraform key resource](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/resources/transit_secret_backend_key).
 
 Every stage preserves the AWS resources present before teardown:
 `aws_cloudwatch_log_group.vault_audit`, `aws_iam_user.vault_audit`,
@@ -1515,9 +1525,9 @@ and application resources are outside this boundary.
 3. Review current HCP billing, live cluster status, and the authorized gross cap. This
    cost-containment action needs explicit human authorization; historical caps do not
    renew or extend expired ceremony authority.
-4. If the Vault cluster exists, the `vault-children` stage requires valid human Vault
-   admin authentication through the Vault provider. Do not create a token for
-   convenience. Enter credentials only at the approved local secret boundary; never
+4. If the Vault cluster exists, both `enable-key-deletion` and `vault-children` require
+   valid human Vault admin authentication through the Vault provider. Do not create a
+   token for convenience. Enter credentials only at the approved local secret boundary; never
    print, record, or put them in a saved plan or command argument. Later HCP stages do
    not configure the Vault provider and need no Vault authentication.
    Confirm the workspace's execution mode first: a local execution must use the
@@ -1540,7 +1550,7 @@ filename for each stage:
 ```bash
 cd ~/Projects/fg-core
 umask 077
-STAGE=vault-children   # later: hcp-cluster, then hvn, separately
+STAGE=enable-key-deletion  # then vault-children, hcp-cluster, and hvn, separately
 TMP_ROOT="$(mktemp -d /tmp/customer-zero-cost-containment.XXXXXX)"
 CONFIG_DIR="$TMP_ROOT/$STAGE"
 PLAN_FILE="$CONFIG_DIR/customer-zero-$STAGE.tfplan"
@@ -1556,12 +1566,15 @@ python ~/Projects/fg-core/infra/scripts/customer_zero_teardown.py verify \
 sha256sum "$PLAN_FILE"
 ```
 
-The verifier reads plan JSON and Terraform state without printing either. It permits
-only `delete` for the current stage's remaining allowlisted addresses and `no-op` for
-retained managed resources. It rejects create, update, replacement, unexpected destroy,
-unexpected state, partial reader trios, and unexpected output changes. Its output is
-the complete stage action set. If a stage already completed, an empty action set is
-idempotently accepted. Do not invent another target.
+The verifier reads plan JSON and Terraform state without printing either. For
+`enable-key-deletion`, it permits only the exact `deletion_allowed=true` updates on
+Transit keys (with all other before/after fields identical) and no-op for other
+resources. For later stages, it permits only `delete` for the current stage's remaining
+allowlisted addresses and `no-op` for retained managed resources. It rejects create,
+unexpected update, replacement, unexpected destroy, unexpected state, partial reader
+trios, and unexpected output changes. Its output is the complete stage action set. If
+a stage already completed, an empty action set is idempotently accepted. Do not invent
+another target.
 
 Record outside the repository: stage, source SHA, plan filename and SHA-256, UTC plan
 time, Terraform/provider versions, workspace, AWS account/operator, exact actions,
@@ -1593,9 +1606,13 @@ produce a fresh plan, rerun the verifier, and obtain new authorization for the n
 
 ### V-4 — Post-stage verification
 
-After the Vault-child stage, confirm every Vault child address is absent from state and
-the Vault API confirms the mounts, policies, roles, and keys are gone while the cluster
-still exists. Only then prepare and separately authorize `hcp-cluster`.
+After the key-enablement stage, read-only verify all three Transit keys report
+`deletion_allowed=true`, their algorithms/exportability/versions are otherwise
+unchanged, and the keys still exist. Proceed promptly to a separately planned and
+authorized `vault-children` stage. After that stage, confirm every Vault child address
+is absent from state and the Vault API confirms the mounts, policies, roles, and keys are
+gone while the cluster still exists. Only then prepare and separately authorize
+`hcp-cluster`.
 
 After the cluster stage, confirm `frostgate-customer-zero` is absent via HCP Portal or a
 read-only API. Only then prepare and separately authorize `hvn`. This stage boundary

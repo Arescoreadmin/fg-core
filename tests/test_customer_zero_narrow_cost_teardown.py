@@ -46,8 +46,59 @@ def _plan(
     }
 
 
+def _key_enable_plan(
+    state: set[str], *, updated: set[str] | None = None
+) -> dict[str, object]:
+    updated = updated or set()
+    changes = []
+    for address in sorted(state):
+        if address in teardown.TRANSIT_KEYS:
+            changes.append(
+                {
+                    "address": address,
+                    "mode": "managed",
+                    "change": {
+                        "actions": ["update"] if address in updated else ["no-op"],
+                        "before": {"deletion_allowed": address not in updated},
+                        "after": {"deletion_allowed": True},
+                    },
+                }
+            )
+        else:
+            changes.append(
+                {
+                    "address": address,
+                    "mode": "managed",
+                    "change": {"actions": ["no-op"]},
+                }
+            )
+    return {"resource_changes": changes, "output_changes": {}}
+
+
+def _child_delete_plan(
+    addresses: set[str], *, outputs: dict[str, list[str]] | None = None
+) -> dict[str, object]:
+    changes = []
+    for address in sorted(addresses):
+        item = {
+            "address": address,
+            "mode": "managed",
+            "change": {"actions": ["delete"]},
+        }
+        if address in teardown.TRANSIT_KEYS:
+            item["change"]["before"] = {"deletion_allowed": True}
+        changes.append(item)
+    return {
+        "resource_changes": changes,
+        "output_changes": {
+            name: {"actions": actions} for name, actions in (outputs or {}).items()
+        },
+    }
+
+
 def test_exact_ephemeral_boundary_is_explicit_and_split_by_provider_lifetime() -> None:
     assert len(teardown.VAULT_CHILDREN) == 11
+    assert teardown.TARGETS["enable-key-deletion"] == teardown.TRANSIT_KEYS
     assert teardown.TARGETS["vault-children"] == teardown.VAULT_CHILDREN
     assert teardown.TARGETS["hcp-cluster"] == {teardown.HCP_CLUSTER}
     assert teardown.TARGETS["hvn"] == {teardown.HCP_HVN}
@@ -55,9 +106,14 @@ def test_exact_ephemeral_boundary_is_explicit_and_split_by_provider_lifetime() -
 
 def test_aws_audit_resources_are_preserved_in_every_stage() -> None:
     assert len(teardown.AWS_CORE) == 4
+    teardown.validate_inventory("enable-key-deletion", _inventory())
     teardown.validate_inventory("vault-children", _inventory())
     teardown.validate_inventory("hcp-cluster", _inventory(vault=False))
     teardown.validate_inventory("hvn", _inventory(vault=False, cluster=False))
+    assert (
+        not (teardown.AWS_CORE | teardown.AWS_READER)
+        & teardown.TARGETS["enable-key-deletion"]
+    )
     assert (
         not (teardown.AWS_CORE | teardown.AWS_READER)
         & teardown.TARGETS["vault-children"]
@@ -105,28 +161,89 @@ def test_vault_stage_allows_partial_state_for_safe_replan_after_failure() -> Non
     partial.remove("vault_mount.transit")
     partial.remove("vault_policy.identity")
     teardown.validate_inventory("vault-children", partial)
-    plan = _plan(
-        *[(address, ["delete"]) for address in partial & teardown.VAULT_CHILDREN]
-    )
+    plan = _child_delete_plan(partial & teardown.VAULT_CHILDREN)
     result = teardown.validate_plan("vault-children", plan, partial)
     assert result == partial & teardown.VAULT_CHILDREN
 
 
 def test_vault_plan_must_destroy_every_remaining_child_and_only_children() -> None:
     state = _inventory()
-    changes = [(address, ["delete"]) for address in teardown.VAULT_CHILDREN]
+    changes = teardown.VAULT_CHILDREN
     assert (
-        teardown.validate_plan("vault-children", _plan(*changes), state)
+        teardown.validate_plan("vault-children", _child_delete_plan(changes), state)
         == teardown.VAULT_CHILDREN
     )
     with pytest.raises(teardown.UnsafePlan, match="destroy set differs"):
-        teardown.validate_plan("vault-children", _plan(*changes[:-1]), state)
+        teardown.validate_plan(
+            "vault-children", _child_delete_plan(set(sorted(changes)[:-1])), state
+        )
     with pytest.raises(teardown.UnsafePlan, match="unexpected action"):
         teardown.validate_plan(
             "vault-children",
-            _plan(*changes, ("aws_cloudwatch_log_group.vault_audit", ["delete"])),
+            _child_delete_plan(changes | {"aws_cloudwatch_log_group.vault_audit"}),
             state,
         )
+
+
+def test_child_key_destroy_requires_state_with_deletion_allowed_true() -> None:
+    state = _inventory()
+    plan = _child_delete_plan(teardown.VAULT_CHILDREN)
+    for change in plan["resource_changes"]:
+        if change["address"] in teardown.TRANSIT_KEYS:
+            change["change"]["before"]["deletion_allowed"] = False
+            break
+    with pytest.raises(teardown.UnsafePlan, match="not enabled in state"):
+        teardown.validate_plan("vault-children", plan, state)
+
+
+def test_key_deletion_enablement_is_a_precise_update_only_stage() -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state, updated=teardown.TRANSIT_KEYS)
+    assert (
+        teardown.validate_plan("enable-key-deletion", plan, state)
+        == teardown.TRANSIT_KEYS
+    )
+    assert (
+        teardown.validate_plan("enable-key-deletion", _key_enable_plan(state), state)
+        == set()
+    )
+
+
+def test_key_deletion_enablement_rejects_wrong_value_and_unrelated_mutation() -> None:
+    state = _inventory()
+    wrong = _key_enable_plan(state)
+    for change in wrong["resource_changes"]:
+        if change["address"] in teardown.TRANSIT_KEYS:
+            change["change"]["after"]["deletion_allowed"] = False
+            break
+    with pytest.raises(teardown.UnsafePlan, match="deletion_allowed=true"):
+        teardown.validate_plan("enable-key-deletion", wrong, state)
+
+    changes = _key_enable_plan(state)["resource_changes"]
+    changes.append(
+        {
+            "address": "aws_iam_user.vault_audit",
+            "mode": "managed",
+            "change": {"actions": ["update"]},
+        }
+    )
+    with pytest.raises(teardown.UnsafePlan, match="unexpected action"):
+        teardown.validate_plan(
+            "enable-key-deletion",
+            {"resource_changes": changes, "output_changes": {}},
+            state,
+        )
+
+
+def test_key_deletion_enablement_rejects_changes_to_other_key_properties() -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state, updated=teardown.TRANSIT_KEYS)
+    for change in plan["resource_changes"]:
+        if change["address"] in teardown.TRANSIT_KEYS:
+            change["change"]["after"]["exportable"] = True
+            break
+    with pytest.raises(teardown.UnsafePlan, match="beyond deletion_allowed"):
+        teardown.validate_plan("enable-key-deletion", plan, state)
 
 
 @pytest.mark.parametrize(
@@ -153,20 +270,49 @@ def test_cluster_then_hvn_are_separate_explicitly_ordered_authorizations() -> No
     ) == {teardown.HCP_HVN}
 
 
+def test_cluster_plan_accepts_vault_version_output_removal_but_nothing_else() -> None:
+    state = _inventory(vault=False)
+    plan = _plan(
+        (teardown.HCP_CLUSTER, ["delete"]),
+        outputs={"vault_version": ["delete"]},
+    )
+    assert teardown.validate_plan("hcp-cluster", plan, state) == {teardown.HCP_CLUSTER}
+    plan["output_changes"]["unexpected_output"] = {"actions": ["delete"]}
+    with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
+        teardown.validate_plan("hcp-cluster", plan, state)
+
+
+def test_cluster_stage_allows_only_canonical_cluster_output_removals() -> None:
+    state = _inventory(vault=False)
+    plan = _plan(
+        (teardown.HCP_CLUSTER, ["delete"]),
+        outputs={"vault_version": ["delete"]},
+    )
+    assert teardown.validate_plan("hcp-cluster", plan, state) == {teardown.HCP_CLUSTER}
+    plan["output_changes"]["unexpected_output"] = {"actions": ["delete"]}
+    with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
+        teardown.validate_plan("hcp-cluster", plan, state)
+
+
 def test_noop_replan_is_idempotent_when_stage_targets_are_already_absent() -> None:
     for stage, state in (
+        ("enable-key-deletion", _inventory()),
         ("vault-children", _inventory(vault=False)),
         ("hcp-cluster", _inventory(vault=False, cluster=False)),
         ("hvn", _inventory(vault=False, cluster=False, hvn=False)),
     ):
-        plan = _plan(*[(address, ["no-op"]) for address in state])
+        plan = (
+            _key_enable_plan(state)
+            if stage == "enable-key-deletion"
+            else _plan(*[(address, ["no-op"]) for address in state])
+        )
         assert teardown.validate_plan(stage, plan, state) == set()
 
 
 def test_unexpected_output_changes_are_rejected() -> None:
     state = _inventory()
-    plan = _plan(
-        *((address, ["delete"]) for address in teardown.VAULT_CHILDREN),
+    plan = _child_delete_plan(
+        teardown.VAULT_CHILDREN,
         outputs={"iam_audit_user_arn": ["delete"]},
     )
     with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
@@ -182,11 +328,22 @@ def test_generated_stage_config_uses_removed_blocks_and_only_stateful_aws_resour
     )
     assert "terraform destroy" not in "\n".join(generated.values())
     assert generated["removed.tf"].count("removed {") == 11
+    assert "vault_transit.tf" not in generated
     assert (
         'resource "aws_iam_role" "vault_audit_reader"' not in generated["aws_audit.tf"]
     )
     assert "prevent_destroy = true" in (infra / "aws_audit.tf").read_text()
     assert 'resource "hcp_vault_cluster" "customer_zero"' in generated["hcp_cluster.tf"]
+
+
+def test_key_enablement_configuration_only_opens_the_vault_deletion_guard() -> None:
+    generated = teardown.render_configuration(
+        REPO / "infra", "enable-key-deletion", "a" * 40, _inventory()
+    )
+    transit = generated["vault_transit.tf"]
+    assert len(re.findall(r"(?m)^\s*deletion_allowed\s*=\s*true$", transit)) == 3
+    assert "removed {" not in generated["removed.tf"]
+    assert "prevent_destroy = true" in transit
 
 
 def test_generated_hcp_stages_do_not_configure_or_authenticate_vault() -> None:
@@ -210,6 +367,7 @@ def test_generated_hcp_stages_do_not_configure_or_authenticate_vault() -> None:
 @pytest.mark.parametrize(
     ("stage", "state"),
     [
+        ("enable-key-deletion", _inventory()),
         ("vault-children", _inventory()),
         ("hcp-cluster", _inventory(vault=False)),
         ("hvn", _inventory(vault=False, cluster=False)),

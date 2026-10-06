@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 
-STAGES = ("vault-children", "hcp-cluster", "hvn")
+STAGES = ("enable-key-deletion", "vault-children", "hcp-cluster", "hvn")
 AWS_CORE = {
     "aws_cloudwatch_log_group.vault_audit",
     "aws_iam_user.vault_audit",
@@ -46,13 +46,20 @@ VAULT_CHILDREN = {
     "vault_transit_secret_backend_key.customer_zero_acceptance",
     "vault_transit_secret_backend_key.customer_zero_approval",
 }
+TRANSIT_KEYS = {
+    "vault_transit_secret_backend_key.customer_zero_identity",
+    "vault_transit_secret_backend_key.customer_zero_acceptance",
+    "vault_transit_secret_backend_key.customer_zero_approval",
+}
 DATA_ADDRESSES = {"data.hcp_project.frostgate_production"}
 TARGETS = {
+    "enable-key-deletion": TRANSIT_KEYS,
     "vault-children": VAULT_CHILDREN,
     "hcp-cluster": {HCP_CLUSTER},
     "hvn": {HCP_HVN},
 }
 OUTPUTS_REMOVED = {
+    "enable-key-deletion": set(),
     "vault-children": {
         "transit_key_identity",
         "transit_key_acceptance",
@@ -64,7 +71,12 @@ OUTPUTS_REMOVED = {
         "approle_role_id_acceptance",
         "approle_role_id_approval",
     },
-    "hcp-cluster": {"vault_cluster_id", "vault_cluster_tier", "vault_address"},
+    "hcp-cluster": {
+        "vault_cluster_id",
+        "vault_cluster_tier",
+        "vault_address",
+        "vault_version",
+    },
     "hvn": {"hcp_hvn_id"},
 }
 
@@ -91,9 +103,11 @@ def validate_inventory(stage: str, state_addresses: set[str]) -> None:
     if readers and readers != AWS_READER:
         raise UnsafePlan("audit-reader resources are only safe as a complete trio")
     allowed = AWS_CORE | AWS_READER
-    if stage == "vault-children":
+    if stage in ("enable-key-deletion", "vault-children"):
         allowed |= {HCP_CLUSTER, HCP_HVN} | VAULT_CHILDREN
         required = AWS_CORE | {HCP_CLUSTER, HCP_HVN}
+        if stage == "enable-key-deletion":
+            required |= VAULT_CHILDREN
     elif stage == "hcp-cluster":
         allowed |= {HCP_CLUSTER, HCP_HVN}
         required = AWS_CORE | {HCP_HVN}
@@ -103,7 +117,10 @@ def validate_inventory(stage: str, state_addresses: set[str]) -> None:
     if not required <= managed:
         missing = sorted(required - managed)
         raise UnsafePlan(f"required state addresses absent: {', '.join(missing)}")
-    if stage != "vault-children" and managed & VAULT_CHILDREN:
+    if (
+        stage not in ("enable-key-deletion", "vault-children")
+        and managed & VAULT_CHILDREN
+    ):
         raise UnsafePlan("Vault child resources must be absent before HCP teardown")
     if stage == "hvn" and HCP_CLUSTER in managed:
         raise UnsafePlan("HCP Vault cluster must be absent before HVN teardown")
@@ -117,13 +134,14 @@ def validate_inventory(stage: str, state_addresses: set[str]) -> None:
 def validate_plan(
     stage: str, plan: dict[str, Any], state_addresses: set[str]
 ) -> set[str]:
-    """Return the exact planned destroy set or fail closed on any other action."""
+    """Return the exact planned mutation set or fail closed on any other action."""
     validate_inventory(stage, state_addresses)
     managed = {
         address for address in state_addresses if not address.startswith("data.")
     }
     expected = managed & TARGETS[stage]
     actual: set[str] = set()
+    seen_keys: set[str] = set()
     for change in plan.get("resource_changes", []):
         address = change.get("address", "")
         mode = change.get("mode", "managed")
@@ -134,15 +152,47 @@ def validate_plan(
             continue
         if mode != "managed":
             raise UnsafePlan(f"unexpected resource mode at {address}")
+        if stage == "enable-key-deletion" and address in TRANSIT_KEYS:
+            details = change.get("change", {})
+            before = details.get("before") or {}
+            values = details.get("after") or {}
+            if actions not in (["no-op"], ["update"]):
+                raise UnsafePlan(
+                    f"unexpected key deletion-enablement action {actions} for {address}"
+                )
+            if values.get("deletion_allowed") is not True:
+                raise UnsafePlan(
+                    f"Transit key is not planned with deletion_allowed=true: {address}"
+                )
+            if actions == ["update"] and any(
+                before.get(name) != values.get(name)
+                for name in before.keys() | values.keys()
+                if name != "deletion_allowed"
+            ):
+                raise UnsafePlan(
+                    f"key enablement changes fields beyond deletion_allowed: {address}"
+                )
+            seen_keys.add(address)
+            if actions == ["update"]:
+                actual.add(address)
+            continue
         if actions == ["no-op"]:
             if address not in managed:
                 raise UnsafePlan(f"plan references untracked resource {address}")
             continue
         if actions == ["delete"] and address in TARGETS[stage]:
+            if stage == "vault-children" and address in TRANSIT_KEYS:
+                before = change.get("change", {}).get("before") or {}
+                if before.get("deletion_allowed") is not True:
+                    raise UnsafePlan(
+                        f"Transit key deletion is not enabled in state: {address}"
+                    )
             actual.add(address)
             continue
         raise UnsafePlan(f"unexpected action {actions} for {address}")
-    if actual != expected:
+    if stage == "enable-key-deletion" and seen_keys != (managed & TRANSIT_KEYS):
+        raise UnsafePlan("plan does not contain all tracked Transit keys")
+    if stage != "enable-key-deletion" and actual != expected:
         raise UnsafePlan(
             f"plan destroy set differs from remaining {stage} state: "
             f"expected={sorted(expected)}, actual={sorted(actual)}"
@@ -234,6 +284,19 @@ def _resource_block(source: str, address: str) -> str:
     return _source_block(source, "resource", address)
 
 
+def _enable_key_deletion(source: str, address: str) -> str:
+    """Change only the named Transit key's temporary teardown opt-in."""
+    block = _resource_block(source, address)
+    updated, count = re.subn(
+        r"(?m)^(\s*deletion_allowed\s*=\s*)false\s*$",
+        r"\1true",
+        block,
+    )
+    if count != 1:
+        raise UnsafePlan(f"expected one deletion_allowed=false in {address}")
+    return source.replace(block, updated, 1)
+
+
 def _data_block(source: str, address: str) -> str:
     if not address.startswith("data."):
         raise UnsafePlan(f"invalid data-source address: {address}")
@@ -287,13 +350,30 @@ def render_configuration(
         _resource_block(sources["aws"], address) for address in sorted(aws_addresses)
     ]
 
-    if stage == "vault-children":
+    if stage in ("enable-key-deletion", "vault-children"):
         hcp_source = sources["hcp"]
         configured |= {HCP_CLUSTER, HCP_HVN}
         files["hcp_cluster.tf"] = hcp_source
         provider_source = (infra / "providers.tf").read_text(encoding="utf-8")
         files["providers.tf"] = provider_source
-        removed = sorted(VAULT_CHILDREN)
+        if stage == "enable-key-deletion":
+            files["vault_transit.tf"] = (infra / "vault_transit.tf").read_text(
+                encoding="utf-8"
+            )
+            files["vault_approle.tf"] = (infra / "vault_approle.tf").read_text(
+                encoding="utf-8"
+            )
+            files["vault_policies.tf"] = (infra / "vault_policies.tf").read_text(
+                encoding="utf-8"
+            )
+            for address in sorted(TRANSIT_KEYS):
+                files["vault_transit.tf"] = _enable_key_deletion(
+                    files["vault_transit.tf"], address
+                )
+            configured |= VAULT_CHILDREN
+            removed = []
+        else:
+            removed = sorted(VAULT_CHILDREN)
     else:
         files["providers.tf"] = (
             'provider "hcp" {\n  project_id = var.hcp_project_id\n}\n\n'
@@ -406,10 +486,13 @@ def verify(stage: str, plan_path: Path, cwd: Path) -> None:
         plan = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise UnsafePlan("Terraform did not return valid plan JSON") from exc
-    destroys = validate_plan(stage, plan, state)
-    print(f"PLAN_SAFE stage={stage} destroy_count={len(destroys)}")
-    for address in sorted(destroys):
-        print(f"DESTROY {address}")
+    mutations = validate_plan(stage, plan, state)
+    action = (
+        "UPDATE deletion_allowed=true" if stage == "enable-key-deletion" else "DESTROY"
+    )
+    print(f"PLAN_SAFE stage={stage} action_count={len(mutations)}")
+    for address in sorted(mutations):
+        print(f"{action} {address}")
 
 
 def main() -> int:
