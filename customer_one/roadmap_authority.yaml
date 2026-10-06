@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-09-30"
+authority_date: "2026-10-06"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,30 +51,71 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "CUSTOMER-ZERO-TRUST-001"
-    title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
-    role: "INTERNAL_PREREQUISITE"
-    parent_objective: "CUSTOMER-ZERO-ACCEPT-001"
+  - id: "PROVENANCE-INTEGRITY-001"
+    title: "PROVENANCE-INTEGRITY-001 — Repair report/provenance verification integrity"
+    role: "OFFLINE_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
     blocker_closed: >
-      Customer-Zero approval cannot be defensibly issued until identity,
-      acceptance entitlement, and approval evidence each have separate,
-      non-exportable operational signing authorities with public verification.
+      Current report verification trusts the stored manifest_hash without
+      re-deriving or binding it to current report_json. DB-level mutation of
+      report_json must fail verification. This defect was identified during
+      ceremony run 2 and blocks Customer-Zero acceptance.
     freeze_law_justification: >
-      This is the smallest proven blocker preventing completion of the already
-      authorized Customer-Zero acceptance operation. Existing providers are
-      test-only or stubs; no production-capable issuer or managed signer exists.
-    status: NEXT
+      P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
+      direct blocker of Customer-Zero acceptance. No paid infrastructure required.
+    status: "AUTHORIZED_NOT_STARTED"
     work_class: "REPAIR"
+    requires_paid_infrastructure: false
+    blocked_by: "CZ-RECONCILE-001"
     completion_evidence:
-      - "three distinct managed trust roles and stable key IDs"
-      - "canonical identity assertion and bounded acceptance entitlement issuance"
-      - "non-exportable approval signing and public-only verification"
-      - "historical verification, durable provenance, and operational fail-closed tests"
-    forbidden_scope:
-      - "PROD-QUAL-001"
-      - "GOV-DELIVERY-001"
-      - "generalized PKI, IAM, RBAC, or secrets-platform redesign"
-      - "Customer-Zero corpus or expected-outcome changes"
+      - "report_json mutation fails verification deterministically"
+      - "adversarial test proves DB-level tamper is detected"
+      - "existing trust ceremony tests remain green"
+  - id: "VAULT-VERIFY-CONTRACT-001"
+    title: "VAULT-VERIFY-CONTRACT-001 — Repair deterministic fail-closed verification semantics"
+    role: "OFFLINE_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+    blocker_closed: >
+      Post-rotation cross-domain verification can raise VaultTransitError instead
+      of returning deterministic False. All wrong-domain / wrong-key / wrong-version /
+      malformed-proof / replay / unavailable-Vault / cross-domain paths must return
+      False, never raise. Identified during ceremony run 2.
+    freeze_law_justification: >
+      P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
+      direct blocker of Customer-Zero acceptance. No paid infrastructure required.
+    status: "AUTHORIZED_NOT_STARTED"
+    work_class: "REPAIR"
+    requires_paid_infrastructure: false
+    blocked_by: "CZ-RECONCILE-001"
+    completion_evidence:
+      - "all verify_* paths return bool (never raise) for wrong inputs"
+      - "focused test suite covers all enumerated fail-closed cases"
+      - "post-rotation cross-domain case explicitly tested"
+  - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
+    role: "OFFLINE_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+    blocker_closed: >
+      Must prove every prerequisite for Customer-Zero acceptance without creating
+      paid HCP infrastructure. PROVENANCE-INTEGRITY-001 and VAULT-VERIFY-CONTRACT-001
+      must be complete before this gate can open.
+    freeze_law_justification: >
+      New offline gate replacing the previously implicit readiness assumption.
+      Reduces third ceremony failure risk by requiring all defects proven repaired
+      before any paid provisioning.
+    status: "AUTHORIZED_NOT_STARTED"
+    work_class: "NEXT"
+    requires_paid_infrastructure: false
+    blocked_by:
+      - "PROVENANCE-INTEGRITY-001"
+      - "VAULT-VERIFY-CONTRACT-001"
+    completion_evidence:
+      - "provenance integrity repair proven by offline tests"
+      - "verifier contract repair proven by offline tests"
+      - "offline ceremony simulation green"
+      - "all existing trust ceremony tests pass"
+      - "cost doctrine documented for Run 3"
+      - "Run 3 operational plan finalized with explicit cost envelope"
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -86,14 +127,49 @@ next_sequence:
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
 
 blocked:
+  - id: "CUSTOMER-ZERO-TRUST-001"
+    title: "CUSTOMER-ZERO-TRUST-001 — Bounded operational trust infrastructure"
+    reason: >
+      Two ceremony runs completed (ATTEMPTED_NOT_PROVEN). Infrastructure provisioned and
+      destroyed. Trust was NOT proven due to two P0 defects: DEFECT-PROVENANCE-INTEGRITY
+      (report_json mutation not caught by verifier) and DEFECT-VERIFIER-CONTRACT
+      (cross-domain/rotation path raises exception instead of deterministic False).
+      Cost containment is complete. AWS audit authority is preserved. Third paid ceremony
+      is NOT authorized until CUSTOMER-ZERO-FINAL-READINESS-001 completes. Use
+      CUSTOMER-ZERO-TRUST-003 as the identifier for the next paid ceremony.
+    status: "ATTEMPTED_NOT_PROVEN"
+    ceremony_status_detail: >
+      Two ceremony runs completed. Infrastructure provisioned and destroyed.
+      Trust was NOT proven due to two P0 defects: DEFECT-PROVENANCE-INTEGRITY
+      and DEFECT-VERIFIER-CONTRACT. Cost containment is complete.
+      AWS audit authority is preserved. Third paid ceremony is NOT authorized
+      until CUSTOMER-ZERO-FINAL-READINESS-001 completes.
+    next_authorized_ceremony: "CUSTOMER-ZERO-TRUST-003"
+    ceremony_prerequisite: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    completion_evidence:
+      - "three distinct managed trust roles and stable key IDs"
+      - "canonical identity assertion and bounded acceptance entitlement issuance"
+      - "non-exportable approval signing and public-only verification"
+      - "historical verification, durable provenance, and operational fail-closed tests"
+      - "report/provenance integrity proven (PROVENANCE-INTEGRITY-001)"
+      - "verifier contract deterministic fail-closed (VAULT-VERIFY-CONTRACT-001)"
+  - id: "CUSTOMER-ZERO-TRUST-003"
+    title: "CUSTOMER-ZERO-TRUST-003 — Third paid Customer-Zero trust ceremony"
+    reason: >
+      Third paid ceremony is NOT authorized until CUSTOMER-ZERO-FINAL-READINESS-001
+      completes. CUSTOMER-ZERO-FINAL-READINESS-001 requires PROVENANCE-INTEGRITY-001
+      and VAULT-VERIFY-CONTRACT-001 to be complete first. Historical cost of $321.81
+      (accrued from runs 1 and 2) means the prior cost authorization is consumed.
+      A fresh explicit cost authorization is required before Run 3 provisioning.
   - id: "CUSTOMER-ZERO-ACCEPT-001"
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     reason: >
-      Open acceptance parent, blocked pending one open prerequisite:
-      CUSTOMER-ZERO-TRUST-001 — no HCP Vault Dedicated cluster provisioned;
-      no artifacts/ evidence manifest; production trust ceremony not yet executed.
-      TRUST-BINDING-001 closed in PR #731 (2562e875).
-      Do not execute approval or runtime acceptance before CUSTOMER-ZERO-TRUST-001 closes.
+      Open acceptance parent, blocked pending CUSTOMER-ZERO-TRUST-001 proven.
+      Two ceremony runs completed (ATTEMPTED_NOT_PROVEN). Two P0 defects block
+      trust proof: DEFECT-PROVENANCE-INTEGRITY and DEFECT-VERIFIER-CONTRACT.
+      TRUST-BINDING-001 closed in PR #731 (2562e875). Cost containment complete.
+      AWS audit authority preserved. Do not execute approval or runtime acceptance
+      before CUSTOMER-ZERO-TRUST-001 PROVED status is recorded.
 
 deferred:
   - id: "RAG-RETRY"
@@ -122,6 +198,19 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "CZ-RECONCILE-001"
+    title: "CZ-RECONCILE-001 — Reconcile Customer-Zero trust ceremony state"
+    prs: ["#749"]
+    note: >
+      Reconciles repository state with the factual outcome of two Customer-Zero
+      trust ceremony runs. Records CUSTOMER_ZERO_TRUST_NOT_PROVEN status, the two P0
+      defects (DEFECT-PROVENANCE-INTEGRITY and DEFECT-VERIFIER-CONTRACT), and
+      CUSTOMER_ZERO_COST_CONTAINMENT_COMPLETE. Introduces ceremony_state.yaml as the
+      canonical machine-readable ceremony status record. Moves CUSTOMER-ZERO-TRUST-001
+      to blocked (ATTEMPTED_NOT_PROVEN). Registers PROVENANCE-INTEGRITY-001,
+      VAULT-VERIFY-CONTRACT-001, and CUSTOMER-ZERO-FINAL-READINESS-001 as the required
+      offline prerequisite sequence before CUSTOMER-ZERO-TRUST-003 may be authorized.
+      52 offline determinism tests enforce the ceremony state and sequence invariants.
   - id: "TRUST-BINDING-001"
     title: "TRUST-BINDING-001 — Bind governance artifacts to canonical non-exportable trust authority"
     prs: ["#731"]

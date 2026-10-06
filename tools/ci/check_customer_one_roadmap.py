@@ -115,6 +115,30 @@ def _check_item(authority: dict, work_item: str) -> bool:
         return False
 
     if work_item in next_ids:
+        # Enforce blocked_by: all listed dependencies must be completed before this
+        # item is authorized.  An item sitting in next_sequence with unmet blocked_by
+        # entries is queued but not yet executable.
+        entry = next(
+            (e for e in authority.get("next_sequence", []) if e.get("id") == work_item),
+            None,
+        )
+        if entry:
+            raw_blocked_by = entry.get("blocked_by")
+            if raw_blocked_by:
+                deps: list[str] = (
+                    raw_blocked_by
+                    if isinstance(raw_blocked_by, list)
+                    else [raw_blocked_by]
+                )
+                unmet = [d for d in deps if d not in completed_ids]
+                if unmet:
+                    print(
+                        f"BLOCKED: '{work_item}' is in next_sequence but its blocked_by "
+                        f"dependencies are not yet completed: {unmet}; complete those items "
+                        "first",
+                        file=sys.stderr,
+                    )
+                    return False
         print(
             f"AUTHORIZED: '{work_item}' is in next_sequence — on Customer-One critical path"
         )

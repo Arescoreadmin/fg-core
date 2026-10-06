@@ -17,11 +17,12 @@ Update the relevant section when a PR merges — do not backfill multiple PRs at
 
 ---
 
-## Customer-Zero emergency cost containment
+## Customer-Zero ceremony state reconciliation
 
 | Work item | Status | Scope |
 |---|---|---|
-| CUSTOMER-ZERO-TRUST-001 narrow paid-infrastructure teardown | PR-ready — `fix/customer-zero-output-noop-verifier` | Source-only authority to remove Vault children, HCP Vault cluster, then HVN using separate reviewed saved plans; preserves AWS audit authority. Temporary configs project only allowlisted observed fields to avoid unrelated drift; verifier accepts unchanged Terraform outputs but only explicit stage-authorized output deletions. No live mutation. `CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged. |
+| CZ-RECONCILE-001: Customer-Zero trust ceremony state reconciliation | open — `docs/cz-reconcile-001` | Records honest NOT_PROVEN outcome of ceremony runs 1 and 2. Two P0 defects block trust: DEFECT-PROVENANCE-INTEGRITY (report_json mutation not caught) and DEFECT-VERIFIER-CONTRACT (cross-domain/rotation raises instead of returning False). Cost containment COMPLETE. AWS audit authority PRESERVED. Registers PROVENANCE-INTEGRITY-001, VAULT-VERIFY-CONTRACT-001, CUSTOMER-ZERO-FINAL-READINESS-001 as offline prerequisites before third paid ceremony. 52 determinism tests. No live infrastructure. No paid infra. `CUSTOMER_ZERO_TRUST_NOT_PROVEN` explicitly maintained. |
+| CUSTOMER-ZERO-TRUST-001 narrow paid-infrastructure teardown | COMPLETE — PRs #744 #746 #747 #748 | Four-stage teardown complete: Transit keys deletion-allowed, 11 Vault children destroyed, HCP Vault cluster destroyed, HCP HVN destroyed. AWS audit boundary preserved: aws_cloudwatch_log_group.vault_audit, aws_iam_policy.vault_audit, aws_iam_user.vault_audit, aws_iam_user_policy_attachment.vault_audit. Historical October usage: ~$321.81 (accrued, not ongoing). `CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged. |
 
 ## Phase 0 — Infrastructure Foundation
 *30-day repo blitz: tenant isolation, auth boundary, CI stability, observability, agent packaging.*  

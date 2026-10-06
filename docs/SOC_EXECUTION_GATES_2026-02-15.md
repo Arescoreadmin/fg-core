@@ -6908,3 +6908,31 @@ SOC review outcome: APPROVED. This repair narrows static typing only and preserv
 - `ruff format --check` → both files formatted
 
 SOC review outcome: APPROVED. Gate hardening only; no authority weakening; sink verification is scope-restricted and fail-closed.
+
+---
+
+## SOC-HIGH-002: CZ-RECONCILE-001 — blocked_by enforcement in check_customer_one_roadmap.py (PR #749)
+
+**Date:** 2026-10-06
+
+**Critical files changed:** `tools/ci/check_customer_one_roadmap.py`
+
+**Change summary:** Adds `blocked_by` dependency enforcement to `_check_item()`. Previously the checker authorized every ID present in `next_sequence` without inspecting entry-level `blocked_by` fields, allowing an operator to bypass cost/readiness gates by passing an ID whose prerequisite chain was incomplete. Now, if a `next_sequence` entry declares `blocked_by`, all listed IDs must be present in `completed` before the item is authorized; otherwise the checker exits 1 with the unmet dependency names in the error message. No other logic changed.
+
+**Security analysis:**
+
+1. **Gate logic only.** No production API code, authentication, authorization, tenant isolation, or session handling changed. The checker is a sequencing gate for roadmap governance, not a runtime authorization path.
+2. **Strictly additive enforcement.** The change can only tighten authorization (return exit 1 for items that previously returned exit 0 when their blockers were incomplete). It cannot weaken any existing authorization decision, RLS policy, or security invariant.
+3. **Fail-closed by design.** An item with `blocked_by` entries not yet in `completed` is now blocked rather than authorized. The enforcement mirrors the existing `blocked` and `deferred` logic.
+4. **No new external inputs.** The checker reads only the committed `customer_one/roadmap_authority.yaml` file. No network access, environment secrets, or user-supplied data involved.
+5. **YAML structure unchanged.** The `blocked_by` field was already present on multiple entries; this change teaches the checker to honour it rather than ignore it.
+
+**Validation evidence:**
+
+- `python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001` → `BLOCKED: ... blocked_by dependencies are not yet completed: ['PROVENANCE-INTEGRITY-001', 'VAULT-VERIFY-CONTRACT-001']` exit 1
+- `python tools/ci/check_customer_one_roadmap.py --work-item PROVENANCE-INTEGRITY-001` → `AUTHORIZED` exit 0 (CZ-RECONCILE-001 is in completed)
+- `python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-TRUST-001` → `BLOCKED` exit 1
+- `pytest tests/test_cz_reconcile_001.py tests/test_customer_one_roadmap_checker.py -q` → 69 passed
+- `ruff check tools/ci/check_customer_one_roadmap.py` → all checks passed
+
+SOC review outcome: APPROVED. Enforcement tightening only; no authority weakening; fail-closed behavior preserved and extended to `blocked_by` dependency chains.
