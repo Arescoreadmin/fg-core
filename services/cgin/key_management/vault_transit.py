@@ -126,6 +126,22 @@ class VaultTransitError(RuntimeError):
     """Fail-closed Vault Transit operation error."""
 
 
+class VaultVerifierUnavailableError(VaultTransitError):
+    """Vault verification authority is operationally unavailable.
+
+    Raised when a verification attempt fails due to an infrastructure
+    failure (transport timeout, auth failure, network error, Vault
+    unreachable) rather than a cryptographic invalidity of the proof.
+
+    Distinguishable from ordinary VaultTransitError so that callers can
+    correctly classify:
+      - VaultVerifierUnavailableError → verification authority absent,
+        fail closed (NOT an invalid-signature determination)
+      - VaultTransitError (base) → other operational Vault failure
+      - return False → cryptographic invalidity deterministically proven
+    """
+
+
 @dataclass(frozen=True)
 class VaultSession:
     """Short-lived Vault session; token is never shown in repr."""

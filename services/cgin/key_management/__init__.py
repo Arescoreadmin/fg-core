@@ -26,6 +26,7 @@ from services.cgin.key_management.vault_transit import (
     VaultSessionProvider,
     AppRoleAuthenticator,
     VaultTransitError,
+    VaultVerifierUnavailableError,
     public_key_fingerprint,
     signer_from_environment,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "VaultSessionProvider",
     "AppRoleAuthenticator",
     "VaultTransitError",
+    "VaultVerifierUnavailableError",
     "public_key_fingerprint",
     "signer_from_environment",
     "as_provider",
