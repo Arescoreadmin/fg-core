@@ -57,9 +57,7 @@ def _load_roadmap_authority() -> dict:
 
 
 def _find_item(authority: dict, section: str, item_id: str) -> dict | None:
-    return next(
-        (e for e in authority.get(section, []) if e.get("id") == item_id), None
-    )
+    return next((e for e in authority.get(section, []) if e.get("id") == item_id), None)
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +79,15 @@ def test_a2_trust_status_is_not_ambiguous() -> None:
     """trust_proof_status must not use any passing synonym."""
     state = _load_ceremony_state()
     status = state["trust_proof_status"].upper()
-    passing_synonyms = {"PASS", "PROVEN", "COMPLETE", "COMPLETED", "SUCCESS", "OK", "GREEN"}
+    passing_synonyms = {
+        "PASS",
+        "PROVEN",
+        "COMPLETE",
+        "COMPLETED",
+        "SUCCESS",
+        "OK",
+        "GREEN",
+    }
     assert status not in passing_synonyms, (
         f"trust_proof_status {status!r} is a passing synonym — use NOT_PROVEN"
     )
@@ -161,7 +167,10 @@ def test_c3_roadmap_accept_001_reason_references_not_proven() -> None:
     assert item is not None
     reason = item.get("reason", "").lower()
     # Must reference the attempted/not-proven state
-    assert any(term in reason for term in ("not_proven", "attempted_not_proven", "two ceremony", "defect")), (
+    assert any(
+        term in reason
+        for term in ("not_proven", "attempted_not_proven", "two ceremony", "defect")
+    ), (
         "CUSTOMER-ZERO-ACCEPT-001 blocked reason must reference the not-proven defect state"
     )
 
@@ -244,7 +253,11 @@ def test_e4_provenance_defect_maps_to_repair_work_item() -> None:
     """DEFECT-PROVENANCE-INTEGRITY must map to repair work item PROVENANCE-INTEGRITY-001."""
     state = _load_ceremony_state()
     defect = next(
-        (d for d in state.get("blocking_defects", []) if d["id"] == "DEFECT-PROVENANCE-INTEGRITY"),
+        (
+            d
+            for d in state.get("blocking_defects", [])
+            if d["id"] == "DEFECT-PROVENANCE-INTEGRITY"
+        ),
         None,
     )
     assert defect is not None
@@ -289,7 +302,11 @@ def test_f4_verifier_contract_defect_maps_to_repair_work_item() -> None:
     """DEFECT-VERIFIER-CONTRACT must map to repair work item VAULT-VERIFY-CONTRACT-001."""
     state = _load_ceremony_state()
     defect = next(
-        (d for d in state.get("blocking_defects", []) if d["id"] == "DEFECT-VERIFIER-CONTRACT"),
+        (
+            d
+            for d in state.get("blocking_defects", [])
+            if d["id"] == "DEFECT-VERIFIER-CONTRACT"
+        ),
         None,
     )
     assert defect is not None
@@ -305,7 +322,9 @@ def test_g1_final_readiness_in_next_sequence() -> None:
     """CUSTOMER-ZERO-FINAL-READINESS-001 must be in next_sequence."""
     authority = _load_roadmap_authority()
     item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
-    assert item is not None, "CUSTOMER-ZERO-FINAL-READINESS-001 must be in next_sequence"
+    assert item is not None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in next_sequence"
+    )
 
 
 def test_g2_final_readiness_requires_no_paid_infrastructure() -> None:
@@ -330,7 +349,9 @@ def test_g4_third_ceremony_prerequisites_are_ordered() -> None:
     state = _load_ceremony_state()
     prereqs = state.get("third_ceremony_prerequisites", [])
     orders = [p.get("order") for p in prereqs]
-    assert all(isinstance(o, int) for o in orders), "all prerequisites must have an integer order"
+    assert all(isinstance(o, int) for o in orders), (
+        "all prerequisites must have an integer order"
+    )
     assert sorted(orders) == list(range(1, len(orders) + 1)), (
         "prerequisite orders must be 1, 2, 3, ... without gaps"
     )
@@ -339,7 +360,9 @@ def test_g4_third_ceremony_prerequisites_are_ordered() -> None:
 def test_g5_provenance_and_verifier_before_final_readiness() -> None:
     """PROVENANCE-INTEGRITY-001 and VAULT-VERIFY-CONTRACT-001 must have lower order than final readiness."""
     state = _load_ceremony_state()
-    prereqs = {p["id"]: p["order"] for p in state.get("third_ceremony_prerequisites", [])}
+    prereqs = {
+        p["id"]: p["order"] for p in state.get("third_ceremony_prerequisites", [])
+    }
     assert "PROVENANCE-INTEGRITY-001" in prereqs
     assert "VAULT-VERIFY-CONTRACT-001" in prereqs
     assert "CUSTOMER-ZERO-FINAL-READINESS-001" in prereqs
@@ -363,7 +386,9 @@ def test_h2_exactly_four_aws_core_resources_preserved() -> None:
     """Exactly four AWS core audit resources must be listed as preserved."""
     state = _load_ceremony_state()
     preserved = state["cost_containment"]["preserved_aws_resources"]
-    assert len(preserved) == 4, f"Expected 4 preserved AWS resources, got {len(preserved)}"
+    assert len(preserved) == 4, (
+        f"Expected 4 preserved AWS resources, got {len(preserved)}"
+    )
 
 
 def test_h3_all_preserved_resources_are_active() -> None:
@@ -388,14 +413,18 @@ def test_h4_all_preserved_resources_are_persistent_audit_authority() -> None:
 def test_h5_expected_aws_resource_addresses_are_present() -> None:
     """The four canonical AWS audit resource addresses must be present."""
     state = _load_ceremony_state()
-    addresses = {r["address"] for r in state["cost_containment"]["preserved_aws_resources"]}
+    addresses = {
+        r["address"] for r in state["cost_containment"]["preserved_aws_resources"]
+    }
     expected = {
         "aws_cloudwatch_log_group.vault_audit",
         "aws_iam_policy.vault_audit",
         "aws_iam_user.vault_audit",
         "aws_iam_user_policy_attachment.vault_audit",
     }
-    assert expected == addresses, f"Preserved addresses mismatch: expected {expected}, got {addresses}"
+    assert expected == addresses, (
+        f"Preserved addresses mismatch: expected {expected}, got {addresses}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +482,12 @@ def test_i3_preservation_invariant_prohibits_audit_resource_deletion() -> None:
     # Must say teardown does not authorize deletion
     assert any(
         phrase in invariant_lower
-        for phrase in ("not authorize", "not change", "authorizes deletion", "no teardown")
+        for phrase in (
+            "not authorize",
+            "not change",
+            "authorizes deletion",
+            "no teardown",
+        )
     ), "preservation_invariant must explicitly prohibit audit resource deletion"
 
 
