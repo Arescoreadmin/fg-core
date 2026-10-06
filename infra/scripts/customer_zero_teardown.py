@@ -204,6 +204,67 @@ def validate_plan(
     return actual
 
 
+def extract_observed_values(
+    raw_state: str, stage: str, state_addresses: set[str]
+) -> dict[str, dict[str, Any]]:
+    """Project only explicitly whitelisted non-secret attributes from Terraform state."""
+    validate_inventory(stage, state_addresses)
+    try:
+        state = json.loads(raw_state)
+    except json.JSONDecodeError as exc:
+        raise UnsafePlan("Terraform state pull was not valid JSON") from exc
+
+    required: dict[str, set[str]] = {
+        "aws_iam_policy.vault_audit": {"description", "policy"}
+    }
+    if stage == "enable-key-deletion":
+        required.update(
+            {address: {"min_encryption_version"} for address in TRANSIT_KEYS}
+        )
+
+    found: dict[str, dict[str, Any]] = {}
+    for resource in state.get("resources", []):
+        if resource.get("mode") != "managed":
+            continue
+        module = resource.get("module")
+        address = ".".join(
+            part
+            for part in (module, resource.get("type"), resource.get("name"))
+            if part
+        )
+        if address not in required:
+            continue
+        instances = resource.get("instances", [])
+        if len(instances) != 1:
+            raise UnsafePlan(f"expected one state instance for {address}")
+        attributes = instances[0].get("attributes") or {}
+        if not required[address] <= attributes.keys():
+            raise UnsafePlan(f"required observed attributes are absent for {address}")
+        found[address] = {name: attributes[name] for name in required[address]}
+
+    if set(found) != set(required):
+        raise UnsafePlan(
+            f"required observed state resources are absent: {sorted(set(required) - set(found))}"
+        )
+    policy = found["aws_iam_policy.vault_audit"].get("policy")
+    description = found["aws_iam_policy.vault_audit"].get("description")
+    if not isinstance(description, str) or not isinstance(policy, str):
+        raise UnsafePlan("observed audit writer policy fields have invalid types")
+    try:
+        policy_document = json.loads(policy)
+    except json.JSONDecodeError as exc:
+        raise UnsafePlan("observed audit writer policy is not valid JSON") from exc
+    if not isinstance(policy_document, dict):
+        raise UnsafePlan("observed audit writer policy must be a JSON object")
+    for address in TRANSIT_KEYS & set(found):
+        version = found[address].get("min_encryption_version")
+        if type(version) is not int or version < 0:
+            raise UnsafePlan(
+                f"observed min_encryption_version is invalid for {address}"
+            )
+    return found
+
+
 def _run(argv: list[str], *, cwd: Path) -> str:
     """Run a local read-only command without ever echoing captured output on error."""
     result = subprocess.run(argv, cwd=cwd, check=False, capture_output=True, text=True)
@@ -297,6 +358,32 @@ def _enable_key_deletion(source: str, address: str) -> str:
     return source.replace(block, updated, 1)
 
 
+def _replace_line_assignment(block: str, name: str, expression: str) -> str:
+    pattern = re.compile(rf"(?m)^(\s*{re.escape(name)}\s*=\s*).+$")
+    updated, count = pattern.subn(lambda match: match.group(1) + expression, block)
+    if count != 1:
+        raise UnsafePlan(f"expected one simple {name} assignment in temporary config")
+    return updated
+
+
+def _observed_writer_policy_block(source: str, observed: dict[str, Any]) -> str:
+    address = "aws_iam_policy.vault_audit"
+    block = _resource_block(source, address)
+    block = _replace_line_assignment(
+        block, "description", json.dumps(observed["description"])
+    )
+    # The canonical source expresses this policy as jsonencode({...}); the temporary
+    # teardown root uses the exact state string so it preserves, rather than repairs,
+    # the live policy while AWS resources are outside the approved mutation boundary.
+    policy_pattern = re.compile(r"(?ms)^(\s*policy\s*=\s*)jsonencode\(\{.*?^\s*\}\)")
+    block, count = policy_pattern.subn(
+        lambda match: match.group(1) + json.dumps(observed["policy"]), block
+    )
+    if count != 1:
+        raise UnsafePlan("could not safely project the observed audit writer policy")
+    return block
+
+
 def _data_block(source: str, address: str) -> str:
     if not address.startswith("data."):
         raise UnsafePlan(f"invalid data-source address: {address}")
@@ -331,7 +418,11 @@ def _outputs_for(configured: set[str], source: str) -> str:
 
 
 def render_configuration(
-    infra: Path, stage: str, source_sha: str, state_addresses: set[str]
+    infra: Path,
+    stage: str,
+    source_sha: str,
+    state_addresses: set[str],
+    observed_values: dict[str, dict[str, Any]],
 ) -> dict[str, str]:
     """Render the self-contained configuration for one stage from canonical source."""
     validate_inventory(stage, state_addresses)
@@ -346,9 +437,19 @@ def render_configuration(
     }
     aws_addresses = (state_addresses & AWS_CORE) | (state_addresses & AWS_READER)
     configured = set(aws_addresses)
-    aws_blocks = [
-        _resource_block(sources["aws"], address) for address in sorted(aws_addresses)
-    ]
+    aws_blocks = []
+    for address in sorted(aws_addresses):
+        block = _resource_block(sources["aws"], address)
+        if address == "aws_iam_policy.vault_audit":
+            try:
+                block = _observed_writer_policy_block(
+                    sources["aws"], observed_values[address]
+                )
+            except KeyError as exc:
+                raise UnsafePlan(
+                    "observed audit writer policy values are required"
+                ) from exc
+        aws_blocks.append(block)
 
     if stage in ("enable-key-deletion", "vault-children"):
         hcp_source = sources["hcp"]
@@ -367,6 +468,21 @@ def render_configuration(
                 encoding="utf-8"
             )
             for address in sorted(TRANSIT_KEYS):
+                try:
+                    observed_version = observed_values[address][
+                        "min_encryption_version"
+                    ]
+                except KeyError as exc:
+                    raise UnsafePlan(
+                        f"observed min_encryption_version is required for {address}"
+                    ) from exc
+                key_block = _resource_block(files["vault_transit.tf"], address)
+                versioned = _replace_line_assignment(
+                    key_block, "min_encryption_version", str(observed_version)
+                )
+                files["vault_transit.tf"] = files["vault_transit.tf"].replace(
+                    key_block, versioned, 1
+                )
                 files["vault_transit.tf"] = _enable_key_deletion(
                     files["vault_transit.tf"], address
                 )
@@ -427,6 +543,7 @@ def prepare(
     output_dir: Path,
     source_sha: str,
     state_addresses: set[str],
+    observed_values: dict[str, dict[str, Any]],
 ) -> None:
     temp_root = Path(tempfile.gettempdir()).resolve()
     resolved = output_dir.resolve()
@@ -436,7 +553,9 @@ def prepare(
         )
     if output_dir.exists():
         raise UnsafePlan("output directory already exists; refusing to overwrite")
-    files = render_configuration(infra, stage, source_sha, state_addresses)
+    files = render_configuration(
+        infra, stage, source_sha, state_addresses, observed_values
+    )
     output_dir.mkdir(mode=0o700, parents=True)
     for name, content in files.items():
         path = output_dir / name
@@ -511,8 +630,10 @@ def main() -> int:
         if args.command == "prepare":
             sha = _source_authority(repo)
             infra = repo / "infra"
-            state = set(_run(["terraform", "state", "list"], cwd=infra).splitlines())
-            prepare(infra, args.stage, args.output_dir, sha, state)
+            state = _state_addresses(infra)
+            state_json = _run(["terraform", "state", "pull"], cwd=infra)
+            observed_values = extract_observed_values(state_json, args.stage, state)
+            prepare(infra, args.stage, args.output_dir, sha, state, observed_values)
         else:
             verify(args.stage, args.plan, Path.cwd())
     except (OSError, UnsafePlan) as exc:

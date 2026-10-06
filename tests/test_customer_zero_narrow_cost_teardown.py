@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -15,6 +16,80 @@ SPEC = importlib.util.spec_from_file_location("customer_zero_teardown", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 teardown = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(teardown)
+
+OBSERVED_WRITER_POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VaultAuditLogStreaming",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DescribeLogStreams",
+                "logs:DescribeLogGroups",
+                "logs:PutLogEvents",
+            ],
+            "Resource": [
+                "arn:aws:logs:us-east-1:398915901105:log-group:/frostgate/customer-zero/vault-audit",
+                "arn:aws:logs:us-east-1:398915901105:log-group:/frostgate/customer-zero/vault-audit:*",
+            ],
+        }
+    ],
+}
+
+
+def _state_json(*, min_encryption_version: int = 0) -> str:
+    resources = [
+        {
+            "mode": "managed",
+            "type": "aws_iam_policy",
+            "name": "vault_audit",
+            "instances": [
+                {
+                    "attributes": {
+                        "description": "Minimum permissions for HCP Vault Dedicated to stream audit logs to CloudWatch",
+                        "policy": json.dumps(OBSERVED_WRITER_POLICY),
+                    }
+                }
+            ],
+        }
+    ]
+    for name in ("identity", "acceptance", "approval"):
+        resources.append(
+            {
+                "mode": "managed",
+                "type": "vault_transit_secret_backend_key",
+                "name": f"customer_zero_{name}",
+                "instances": [
+                    {"attributes": {"min_encryption_version": min_encryption_version}}
+                ],
+            }
+        )
+    return json.dumps({"resources": resources})
+
+
+def _observed_values(
+    stage: str, addresses: set[str], *, min_encryption_version: int = 0
+) -> dict[str, dict[str, object]]:
+    return teardown.extract_observed_values(
+        _state_json(min_encryption_version=min_encryption_version), stage, addresses
+    )
+
+
+def _render(stage: str, addresses: set[str]) -> dict[str, str]:
+    return teardown.render_configuration(
+        REPO / "infra", stage, "a" * 40, addresses, _observed_values(stage, addresses)
+    )
+
+
+def _configured_writer_policy(files: dict[str, str]) -> dict[str, object]:
+    block = teardown._resource_block(
+        files["aws_audit.tf"], "aws_iam_policy.vault_audit"
+    )
+    match = re.search(r'(?m)^\s*policy\s*=\s*("(?:[^"\\]|\\.)*")$', block)
+    assert match is not None
+    return json.loads(json.loads(match.group(1)))
 
 
 def _inventory(
@@ -59,8 +134,14 @@ def _key_enable_plan(
                     "mode": "managed",
                     "change": {
                         "actions": ["update"] if address in updated else ["no-op"],
-                        "before": {"deletion_allowed": address not in updated},
-                        "after": {"deletion_allowed": True},
+                        "before": {
+                            "deletion_allowed": address not in updated,
+                            "min_encryption_version": 0,
+                        },
+                        "after": {
+                            "deletion_allowed": True,
+                            "min_encryption_version": 0,
+                        },
                     },
                 }
             )
@@ -138,10 +219,14 @@ def test_reader_authority_is_optional_but_must_be_complete_and_preserved() -> No
 
 
 def test_extra_state_resource_fails_closed() -> None:
-    with pytest.raises(teardown.UnsafePlan, match="unexpected managed state"):
-        teardown.validate_inventory(
-            "vault-children", _inventory() | {"aws_iam_access_key.audit"}
-        )
+    for stage, state in (
+        ("enable-key-deletion", _inventory()),
+        ("vault-children", _inventory()),
+        ("hcp-cluster", _inventory(vault=False)),
+        ("hvn", _inventory(vault=False, cluster=False)),
+    ):
+        with pytest.raises(teardown.UnsafePlan, match="unexpected managed state"):
+            teardown.validate_inventory(stage, state | {"aws_iam_access_key.audit"})
 
 
 def test_later_hcp_stages_require_vault_children_already_absent() -> None:
@@ -222,7 +307,7 @@ def test_key_deletion_enablement_rejects_wrong_value_and_unrelated_mutation() ->
     changes = _key_enable_plan(state)["resource_changes"]
     changes.append(
         {
-            "address": "aws_iam_user.vault_audit",
+            "address": "aws_iam_policy.vault_audit",
             "mode": "managed",
             "change": {"actions": ["update"]},
         }
@@ -270,18 +355,6 @@ def test_cluster_then_hvn_are_separate_explicitly_ordered_authorizations() -> No
     ) == {teardown.HCP_HVN}
 
 
-def test_cluster_plan_accepts_vault_version_output_removal_but_nothing_else() -> None:
-    state = _inventory(vault=False)
-    plan = _plan(
-        (teardown.HCP_CLUSTER, ["delete"]),
-        outputs={"vault_version": ["delete"]},
-    )
-    assert teardown.validate_plan("hcp-cluster", plan, state) == {teardown.HCP_CLUSTER}
-    plan["output_changes"]["unexpected_output"] = {"actions": ["delete"]}
-    with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
-        teardown.validate_plan("hcp-cluster", plan, state)
-
-
 def test_cluster_stage_allows_only_canonical_cluster_output_removals() -> None:
     state = _inventory(vault=False)
     plan = _plan(
@@ -292,6 +365,33 @@ def test_cluster_stage_allows_only_canonical_cluster_output_removals() -> None:
     plan["output_changes"]["unexpected_output"] = {"actions": ["delete"]}
     with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
         teardown.validate_plan("hcp-cluster", plan, state)
+
+
+def test_all_later_stages_reject_unrelated_preserved_aws_policy_updates() -> None:
+    vault_state = _inventory()
+    vault_plan = _child_delete_plan(teardown.VAULT_CHILDREN)
+    cluster_state = _inventory(vault=False)
+    cluster_plan = _plan(
+        (teardown.HCP_CLUSTER, ["delete"]),
+        outputs={"vault_version": ["delete"]},
+    )
+    hvn_state = _inventory(vault=False, cluster=False)
+    hvn_plan = _plan((teardown.HCP_HVN, ["delete"]))
+
+    for stage, plan, state in (
+        ("vault-children", vault_plan, vault_state),
+        ("hcp-cluster", cluster_plan, cluster_state),
+        ("hvn", hvn_plan, hvn_state),
+    ):
+        plan["resource_changes"].append(
+            {
+                "address": "aws_iam_policy.vault_audit",
+                "mode": "managed",
+                "change": {"actions": ["update"]},
+            }
+        )
+        with pytest.raises(teardown.UnsafePlan, match="unexpected action"):
+            teardown.validate_plan(stage, plan, state)
 
 
 def test_noop_replan_is_idempotent_when_stage_targets_are_already_absent() -> None:
@@ -323,9 +423,7 @@ def test_generated_stage_config_uses_removed_blocks_and_only_stateful_aws_resour
     tmp_path: Path,
 ) -> None:
     infra = REPO / "infra"
-    generated = teardown.render_configuration(
-        infra, "vault-children", "a" * 40, _inventory()
-    )
+    generated = _render("vault-children", _inventory())
     assert "terraform destroy" not in "\n".join(generated.values())
     assert generated["removed.tf"].count("removed {") == 11
     assert "vault_transit.tf" not in generated
@@ -337,26 +435,104 @@ def test_generated_stage_config_uses_removed_blocks_and_only_stateful_aws_resour
 
 
 def test_key_enablement_configuration_only_opens_the_vault_deletion_guard() -> None:
-    generated = teardown.render_configuration(
-        REPO / "infra", "enable-key-deletion", "a" * 40, _inventory()
-    )
+    generated = _render("enable-key-deletion", _inventory())
     transit = generated["vault_transit.tf"]
     assert len(re.findall(r"(?m)^\s*deletion_allowed\s*=\s*true$", transit)) == 3
     assert "removed {" not in generated["removed.tf"]
     assert "prevent_destroy = true" in transit
 
 
+def test_stage_one_uses_observed_writer_policy_and_key_minimum_version() -> None:
+    generated = _render("enable-key-deletion", _inventory())
+    configured_policy = _configured_writer_policy(generated)
+    assert configured_policy == OBSERVED_WRITER_POLICY
+    writer_block = teardown._resource_block(
+        generated["aws_audit.tf"], "aws_iam_policy.vault_audit"
+    )
+    assert (
+        'description = "Minimum permissions for HCP Vault Dedicated to stream '
+        'audit logs to CloudWatch"' in writer_block
+    )
+    assert "VaultAuditLogWrite" in (REPO / "infra/aws_audit.tf").read_text()
+    assert "VaultAuditLogStreaming" in json.dumps(configured_policy)
+    assert "VaultAuditDescribeLogGroupsUnscopedAWSLimit" not in json.dumps(
+        configured_policy
+    )
+
+    transit = generated["vault_transit.tf"]
+    for address in teardown.TRANSIT_KEYS:
+        block = teardown._resource_block(transit, address)
+        assert re.search(r"(?m)^\s*min_encryption_version\s*=\s*0$", block)
+        assert re.search(r"(?m)^\s*deletion_allowed\s*=\s*true$", block)
+    for address in teardown.TRANSIT_KEYS:
+        canonical = teardown._resource_block(
+            (REPO / "infra/vault_transit.tf").read_text(), address
+        )
+        assert re.search(r"(?m)^\s*min_encryption_version\s*=\s*1$", canonical)
+
+
+def test_state_projection_extracts_only_required_observed_attributes() -> None:
+    projected = _observed_values("enable-key-deletion", _inventory())
+    assert set(projected["aws_iam_policy.vault_audit"]) == {"description", "policy"}
+    assert set(teardown.TRANSIT_KEYS) <= set(projected)
+    assert all(
+        projected[address]["min_encryption_version"] == 0
+        for address in teardown.TRANSIT_KEYS
+    )
+
+
+def test_stage_one_verifier_allows_only_deletion_flag_change() -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state, updated=teardown.TRANSIT_KEYS)
+    assert (
+        teardown.validate_plan("enable-key-deletion", plan, state)
+        == teardown.TRANSIT_KEYS
+    )
+
+    min_version_drift = _key_enable_plan(state, updated=teardown.TRANSIT_KEYS)
+    for change in min_version_drift["resource_changes"]:
+        if change["address"] in teardown.TRANSIT_KEYS:
+            change["change"]["after"]["min_encryption_version"] = 1
+            break
+    with pytest.raises(teardown.UnsafePlan, match="beyond deletion_allowed"):
+        teardown.validate_plan("enable-key-deletion", min_version_drift, state)
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [["create"], ["delete"], ["delete", "create"], ["create", "delete"]],
+)
+def test_stage_one_rejects_create_delete_and_replacement(actions: list[str]) -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state)
+    target = next(
+        item
+        for item in plan["resource_changes"]
+        if item["address"] in teardown.TRANSIT_KEYS
+    )
+    target["change"]["actions"] = actions
+    with pytest.raises(teardown.UnsafePlan, match="unexpected key deletion-enablement"):
+        teardown.validate_plan("enable-key-deletion", plan, state)
+
+
+def test_stage_one_rejects_any_output_change() -> None:
+    state = _inventory()
+    plan = _key_enable_plan(state)
+    plan["output_changes"] = {"unexpected": {"actions": ["delete"]}}
+    with pytest.raises(teardown.UnsafePlan, match="unexpected output action"):
+        teardown.validate_plan("enable-key-deletion", plan, state)
+
+
 def test_generated_hcp_stages_do_not_configure_or_authenticate_vault() -> None:
-    hcp = teardown.render_configuration(
-        REPO / "infra", "hcp-cluster", "a" * 40, _inventory(vault=False)
-    )
-    hvn = teardown.render_configuration(
-        REPO / "infra", "hvn", "a" * 40, _inventory(vault=False, cluster=False)
-    )
+    hcp = _render("hcp-cluster", _inventory(vault=False))
+    hvn = _render("hvn", _inventory(vault=False, cluster=False))
     for files in (hcp, hvn):
         assert 'provider "vault"' not in files["providers.tf"]
         assert "VAULT_TOKEN" not in "\n".join(files.values())
-        assert "aws_cloudwatch_log_group.vault_audit" in files["aws_audit.tf"]
+        assert (
+            'resource "aws_cloudwatch_log_group" "vault_audit"' in files["aws_audit.tf"]
+        )
+        assert _configured_writer_policy(files) == OBSERVED_WRITER_POLICY
     assert "from = hcp_vault_cluster.customer_zero" in hcp["removed.tf"]
     assert "from = hcp_hvn.frostgate" in hvn["removed.tf"]
     assert 'resource "hcp_hvn" "frostgate"' in hcp["hcp_hvn.tf"]
@@ -377,7 +553,14 @@ def test_generated_stage_configuration_is_terraform_formatted(
     tmp_path: Path, stage: str, state: set[str]
 ) -> None:
     destination = tmp_path / stage
-    teardown.prepare(REPO / "infra", stage, destination, "a" * 40, state)
+    teardown.prepare(
+        REPO / "infra",
+        stage,
+        destination,
+        "a" * 40,
+        state,
+        _observed_values(stage, state),
+    )
     result = subprocess.run(
         ["terraform", "fmt", "-check", "-recursive"],
         cwd=destination,
@@ -389,9 +572,7 @@ def test_generated_stage_configuration_is_terraform_formatted(
 
 
 def test_generated_configuration_contains_no_credential_or_railway_resource() -> None:
-    generated = teardown.render_configuration(
-        REPO / "infra", "vault-children", "a" * 40, _inventory()
-    )
+    generated = _render("vault-children", _inventory())
     text = "\n".join(generated.values()).lower()
     assert "aws_iam_access_key" not in text
     assert 'resource "vault_token"' not in text
@@ -452,5 +633,10 @@ def test_generator_rejects_directory_overwrite(tmp_path: Path) -> None:
     destination.mkdir()
     with pytest.raises(teardown.UnsafePlan, match="refusing to overwrite"):
         teardown.prepare(
-            REPO / "infra", "vault-children", destination, "a" * 40, _inventory()
+            REPO / "infra",
+            "vault-children",
+            destination,
+            "a" * 40,
+            _inventory(),
+            _observed_values("vault-children", _inventory()),
         )
