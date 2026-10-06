@@ -7631,15 +7631,31 @@ def qa_approve_report_route(
         )
 
         # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from current
-        # report_json.  A DB-level mutation of report_json without updating
-        # manifest_hash must fail closed here — treat as invalid signature.
+        # report_json before using the stored value as the signing payload.
+        # A DB-level mutation of report_json without updating manifest_hash is a
+        # data-integrity violation — abort unconditionally regardless of
+        # FG_PROVENANCE_MODE.  This is not a trust-chain degradation that warn/off
+        # mode is permitted to allow through; it means the record being approved
+        # does not match what was signed.
         if report.report_json is None or not isinstance(report.report_json, dict):
-            _sig_valid = False
-        elif (
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=api_error(
+                    "REPORT_CONTENT_INTEGRITY_FAILED",
+                    "Report content is missing or malformed; QA approval blocked.",
+                ),
+            )
+        if (
             _derive_manifest_hash_from_report_json(report.report_json)
             != report.manifest_hash
         ):
-            _sig_valid = False
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=api_error(
+                    "REPORT_CONTENT_INTEGRITY_FAILED",
+                    "Report content does not match stored provenance; QA approval blocked.",
+                ),
+            )
         else:
             _report_verify_payload = _brsp(
                 tenant_id=report.tenant_id,
@@ -9881,15 +9897,30 @@ def export_engagement_report_route(
 
         # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from current
         # report_json before using the stored value as the signing payload input.
-        # A DB-level mutation of report_json without updating manifest_hash must
-        # fail closed here — treat as invalid signature.
+        # A DB-level mutation of report_json without updating manifest_hash is a
+        # data-integrity violation — abort unconditionally regardless of
+        # FG_PROVENANCE_MODE.  This is not a trust-chain degradation that warn/off
+        # mode is permitted to allow through; it means the record being exported
+        # does not match what was signed.
         if record.report_json is None or not isinstance(record.report_json, dict):
-            _sig_valid = False
-        elif (
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=api_error(
+                    "REPORT_CONTENT_INTEGRITY_FAILED",
+                    "Report content is missing or malformed; export blocked.",
+                ),
+            )
+        if (
             _derive_manifest_hash_from_report_json(record.report_json)
             != record.manifest_hash
         ):
-            _sig_valid = False
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=api_error(
+                    "REPORT_CONTENT_INTEGRITY_FAILED",
+                    "Report content does not match stored provenance; export blocked.",
+                ),
+            )
         else:
             _export_verify_payload = _brsp(
                 tenant_id=record.tenant_id,

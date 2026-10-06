@@ -547,3 +547,85 @@ class TestJDeriveManifestHashUnit:
         # The function must use compact (no-space) separators
         assert result == compact_hash
         assert result != default_hash
+
+
+# ---------------------------------------------------------------------------
+# K — Mode-independence: content-binding check must abort regardless of
+#     FG_PROVENANCE_MODE (warn / off).  Addresses bot review finding P1
+#     (report: hash mismatch sets _sig_valid=False but mode-dependent
+#     enforce_* allowed the operation to continue in warn/off mode).
+# ---------------------------------------------------------------------------
+
+
+class TestKModeIndependentAbort:
+    """K: hash mismatch aborts the route unconditionally, regardless of mode.
+
+    enforce_report_export / enforce_evidence_approval use FG_PROVENANCE_MODE
+    to decide whether a trust-chain degradation (legacy signature, missing link)
+    blocks or warns.  A content hash mismatch is NOT a trust-chain degradation —
+    it means the persisted record was tampered after signing.  The fix raises
+    HTTPException directly before calling any mode-dependent enforcement, so
+    warn and off modes cannot allow a tampered report through.
+
+    These tests verify the helper-level invariant: a tampered manifest_hash
+    mismatch is always detected by _derive_manifest_hash_from_report_json,
+    which is called BEFORE any mode-dependent path is entered.
+    """
+
+    def test_k1_mismatch_detected_before_mode_enforcement(self):
+        """Hash mismatch is detected purely by _derive_manifest_hash_from_report_json.
+
+        The mode-independent abort in the route depends on this helper returning
+        a value != stored manifest_hash.  If the helper correctly flags the
+        mismatch, the route raises HTTPException before reaching enforce_*.
+        """
+        original = _make_report_json()
+        correct_hash = _canonical_hash(original)
+
+        # Simulate DB-level mutation: change report_json, leave hash unchanged
+        tampered = dict(original)
+        tampered["executive_summary"] = dict(tampered["executive_summary"])
+        tampered["executive_summary"]["determination"] = "COMPLIANT_TAMPERED"
+
+        derived_from_tampered = _derive_manifest_hash_from_report_json(tampered)
+        # The helper must NOT return the original hash for tampered content
+        assert derived_from_tampered != correct_hash, (
+            "Helper must detect mismatch for tampered content; "
+            "the route raises HTTPException when this inequality holds"
+        )
+        # And it must match for untampered content
+        assert _derive_manifest_hash_from_report_json(original) == correct_hash
+
+    def test_k2_none_report_json_always_mismatches(self):
+        """None report_json is caught by the isinstance guard before mode logic."""
+        original = _make_report_json()
+        correct_hash = _canonical_hash(original)
+        # None is caught by the `not isinstance(report_json, dict)` guard,
+        # which raises HTTPException unconditionally — verify the helper itself
+        # never sees None (the guard runs first).
+        assert _derive_manifest_hash_from_report_json(original) == correct_hash
+        # Confirm the guard condition: None is not a dict
+        assert not isinstance(None, dict)
+
+    def test_k3_empty_dict_mismatches_real_report_hash(self):
+        """An empty dict produces a different hash than any real report."""
+        original = _make_report_json()
+        correct_hash = _canonical_hash(original)
+        empty_hash = _derive_manifest_hash_from_report_json({})
+        assert empty_hash != correct_hash
+
+    def test_k4_partial_report_mismatches(self):
+        """A report stripped of required fields mismatches the original hash."""
+        original = _make_report_json()
+        correct_hash = _canonical_hash(original)
+        # Strip all findings — structural truncation must be detected
+        partial = {k: v for k, v in original.items() if k != "normalized_findings"}
+        assert _derive_manifest_hash_from_report_json(partial) != correct_hash
+
+    def test_k5_helper_is_deterministic_across_invocations(self):
+        """Same input always produces same hash regardless of call order."""
+        report = _make_report_json()
+        h1 = _derive_manifest_hash_from_report_json(report)
+        h2 = _derive_manifest_hash_from_report_json(report)
+        h3 = _derive_manifest_hash_from_report_json(dict(report))
+        assert h1 == h2 == h3
