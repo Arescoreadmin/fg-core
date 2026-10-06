@@ -21,7 +21,7 @@ Update the relevant section when a PR merges — do not backfill multiple PRs at
 
 | Work item | Status | Scope |
 |---|---|---|
-| CUSTOMER-ZERO-TRUST-001 narrow paid-infrastructure teardown | PR-ready — `fix/customer-zero-teardown-drift-isolation` | Source-only authority to remove Vault children, HCP Vault cluster, then HVN using separate reviewed saved plans; preserves AWS audit authority. Temporary configs project only allowlisted observed writer-policy fields and Transit minimum version to avoid unrelated drift. No live mutation. `CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged. |
+| CUSTOMER-ZERO-TRUST-001 narrow paid-infrastructure teardown | PR-ready — `fix/customer-zero-output-noop-verifier` | Source-only authority to remove Vault children, HCP Vault cluster, then HVN using separate reviewed saved plans; preserves AWS audit authority. Temporary configs project only allowlisted observed fields to avoid unrelated drift; verifier accepts unchanged Terraform outputs but only explicit stage-authorized output deletions. No live mutation. `CUSTOMER_ZERO_TRUST_NOT_PROVEN` remains unchanged. |
 
 ## Phase 0 — Infrastructure Foundation
 *30-day repo blitz: tenant isolation, auth boundary, CI stability, observability, agent packaging.*  

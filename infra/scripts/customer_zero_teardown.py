@@ -199,7 +199,10 @@ def validate_plan(
         )
     allowed_outputs = OUTPUTS_REMOVED[stage]
     for name, change in plan.get("output_changes", {}).items():
-        if change.get("actions") != ["delete"] or name not in allowed_outputs:
+        actions = change.get("actions")
+        if actions == ["no-op"]:
+            continue
+        if actions != ["delete"] or name not in allowed_outputs:
             raise UnsafePlan(f"unexpected output action for {name}")
     return actual
 

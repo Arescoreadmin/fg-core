@@ -1,3 +1,11 @@
+# CUSTOMER-ZERO-TRUST-001 Stage-1 no-op output verification
+
+- **Finding — valid saved plan rejected on an unchanged output:** Terraform's sanitized `output_changes` metadata showed `approle_role_id_acceptance` with action `no-op`, `before_sensitive=false`, and `after_sensitive=false`. The generated Stage-1 configuration intentionally retains all AppRole resources and this non-secret role-ID output. No output value/state mutation was proposed; the verifier rejected it because it accepted only stage-authorized `delete` actions.
+- **Fix:** The narrow teardown verifier now accepts Terraform output `no-op` actions. It continues to allow output deletion only for the exact stage-specific allowlist and rejects output create, update, replacement, and unapproved deletion. Resource-action validation is unchanged.
+- **Regression coverage:** Adds the exact Stage-1 AppRole output no-op case and negative cases for create, update, delete, and replacement actions.
+- **Scope:** `infra/scripts/customer_zero_teardown.py`, `infra/docs/ceremony-runbook.md`, `tests/test_customer_zero_narrow_cost_teardown.py`, `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`.
+- **Safety boundary:** No plan regeneration, apply/destroy, provider authentication, credential creation, or AWS/HCP/Vault/Railway mutation.
+
 # CUSTOMER-ZERO-TRUST-001 narrow teardown drift isolation
 
 - **Finding — Stage 1 reconciled unrelated production drift:** The generated temporary configuration copied the canonical #743 writer policy and Transit `min_encryption_version=1`. Live state still had the pre-#743 writer policy and `min_encryption_version=0`, so the saved plan included one unauthorized AWS policy update and three unauthorized key-version updates alongside the requested deletion-enablement.
