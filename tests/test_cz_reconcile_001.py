@@ -100,10 +100,17 @@ def test_a3_ceremony_status_encodes_attempted() -> None:
 
 
 def test_a4_roadmap_trust_001_status_is_attempted_not_proven() -> None:
-    """CUSTOMER-ZERO-TRUST-001 in roadmap_authority must be ATTEMPTED_NOT_PROVEN."""
+    """CUSTOMER-ZERO-TRUST-001 must be in the blocked section with ATTEMPTED_NOT_PROVEN status."""
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-TRUST-001")
-    assert item is not None, "CUSTOMER-ZERO-TRUST-001 must be present in next_sequence"
+    # CUSTOMER-ZERO-TRUST-001 must NOT be in next_sequence (it cannot be re-authorized
+    # as the original ceremony ID; CUSTOMER-ZERO-TRUST-003 is the next paid ceremony).
+    item_in_next = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-TRUST-001")
+    assert item_in_next is None, (
+        "CUSTOMER-ZERO-TRUST-001 must NOT be in next_sequence; it is ATTEMPTED_NOT_PROVEN "
+        "and operators must use CUSTOMER-ZERO-TRUST-003 for the third ceremony"
+    )
+    item = _find_item(authority, "blocked", "CUSTOMER-ZERO-TRUST-001")
+    assert item is not None, "CUSTOMER-ZERO-TRUST-001 must be in the blocked section"
     status = item.get("status")
     assert status == "ATTEMPTED_NOT_PROVEN", (
         f"CUSTOMER-ZERO-TRUST-001 status must be ATTEMPTED_NOT_PROVEN; got {status!r}"
@@ -207,10 +214,10 @@ def test_d3_trust_003_blocked_reason_requires_final_readiness() -> None:
 
 
 def test_d4_trust_001_records_third_ceremony_prerequisite() -> None:
-    """CUSTOMER-ZERO-TRUST-001 must name its next_authorized_ceremony and prerequisite."""
+    """CUSTOMER-ZERO-TRUST-001 (in blocked) must name its next_authorized_ceremony and prerequisite."""
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-TRUST-001")
-    assert item is not None
+    item = _find_item(authority, "blocked", "CUSTOMER-ZERO-TRUST-001")
+    assert item is not None, "CUSTOMER-ZERO-TRUST-001 must be in blocked section"
     assert item.get("next_authorized_ceremony") == "CUSTOMER-ZERO-TRUST-003"
     assert item.get("ceremony_prerequisite") == "CUSTOMER-ZERO-FINAL-READINESS-001"
 
@@ -580,8 +587,12 @@ def test_k2_ceremony_readiness_test_file_exists() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_l1_roadmap_checker_authorizes_cz_reconcile_001() -> None:
-    """check_customer_one_roadmap.py --work-item CZ-RECONCILE-001 must exit 0."""
+def test_l1_roadmap_checker_marks_cz_reconcile_001_completed() -> None:
+    """check_customer_one_roadmap.py --work-item CZ-RECONCILE-001 must exit 1 (COMPLETED).
+
+    CZ-RECONCILE-001 is the current PR. Once merged it moves to completed; the checker
+    must block re-authorization of already-completed items.
+    """
     result = subprocess.run(
         [
             "python",
@@ -592,11 +603,13 @@ def test_l1_roadmap_checker_authorizes_cz_reconcile_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
-    assert result.returncode == 0, (
-        f"Roadmap checker rejected CZ-RECONCILE-001: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Roadmap checker must mark CZ-RECONCILE-001 as COMPLETED (exit 1); "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
-    assert "AUTHORIZED" in result.stdout
+    assert "COMPLETED" in result.stderr or "COMPLETED" in result.stdout
 
 
 def test_l2_roadmap_checker_authorizes_provenance_integrity_001() -> None:
@@ -611,6 +624,7 @@ def test_l2_roadmap_checker_authorizes_provenance_integrity_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
     assert result.returncode == 0, (
         f"Roadmap checker rejected PROVENANCE-INTEGRITY-001: {result.stderr}"
@@ -629,14 +643,21 @@ def test_l3_roadmap_checker_authorizes_vault_verify_contract_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
     assert result.returncode == 0, (
         f"Roadmap checker rejected VAULT-VERIFY-CONTRACT-001: {result.stderr}"
     )
 
 
-def test_l4_roadmap_checker_authorizes_final_readiness_001() -> None:
-    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 0."""
+def test_l4_roadmap_checker_blocks_final_readiness_until_deps_complete() -> None:
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 1.
+
+    CUSTOMER-ZERO-FINAL-READINESS-001 is blocked_by PROVENANCE-INTEGRITY-001 and
+    VAULT-VERIFY-CONTRACT-001, neither of which is yet in completed. The checker must
+    enforce this dependency and return exit 1 with a BLOCKED message naming the unmet
+    deps. This prevents the gate from opening before its required repairs are proven.
+    """
     result = subprocess.run(
         [
             "python",
@@ -647,10 +668,14 @@ def test_l4_roadmap_checker_authorizes_final_readiness_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
-    assert result.returncode == 0, (
-        f"Roadmap checker rejected CUSTOMER-ZERO-FINAL-READINESS-001: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Roadmap checker must block CUSTOMER-ZERO-FINAL-READINESS-001 (deps incomplete); "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
+    assert "BLOCKED" in result.stderr or "BLOCKED" in result.stdout
+    assert "PROVENANCE-INTEGRITY-001" in result.stderr or "PROVENANCE-INTEGRITY-001" in result.stdout
 
 
 def test_l5_roadmap_checker_blocks_trust_003() -> None:
@@ -665,6 +690,7 @@ def test_l5_roadmap_checker_blocks_trust_003() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-TRUST-003; "
@@ -684,12 +710,69 @@ def test_l6_roadmap_checker_blocks_accept_001() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+    check=False,
     )
     assert result.returncode == 1, (
         f"Roadmap checker must block CUSTOMER-ZERO-ACCEPT-001; "
         f"got rc={result.returncode}, stdout={result.stdout!r}"
     )
 
+
+
+
+def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-TRUST-001 must exit 1.
+
+    CUSTOMER-ZERO-TRUST-001 is ATTEMPTED_NOT_PROVEN and lives in the blocked section.
+    An operator using the original ceremony ID must never get exit 0 — they must use
+    CUSTOMER-ZERO-TRUST-003 for the third paid ceremony after all prerequisites complete.
+    """
+    result = subprocess.run(
+        [
+            "python",
+            "tools/ci/check_customer_one_roadmap.py",
+            "--work-item",
+            "CUSTOMER-ZERO-TRUST-001",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    check=False,
+    )
+    assert result.returncode == 1, (
+        f"Roadmap checker must block CUSTOMER-ZERO-TRUST-001 (ATTEMPTED_NOT_PROVEN); "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert "BLOCKED" in result.stderr or "BLOCKED" in result.stdout
+
+
+def test_l8_checker_enforces_blocked_by_before_authorizing() -> None:
+    """Checker must return BLOCKED for a next_sequence item whose blocked_by deps are incomplete.
+
+    CUSTOMER-ZERO-FINAL-READINESS-001 declares blocked_by: [PROVENANCE-INTEGRITY-001,
+    VAULT-VERIFY-CONTRACT-001]. Neither is in completed. The checker must refuse to
+    authorize it and name at least one unmet dependency in its output.
+    """
+    result = subprocess.run(
+        [
+            "python",
+            "tools/ci/check_customer_one_roadmap.py",
+            "--work-item",
+            "CUSTOMER-ZERO-FINAL-READINESS-001",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    check=False,
+    )
+    assert result.returncode == 1, (
+        "Checker must enforce blocked_by and reject CUSTOMER-ZERO-FINAL-READINESS-001 "
+        "while its dependencies are incomplete"
+    )
+    combined = result.stdout + result.stderr
+    assert "BLOCKED" in combined
+    # At least one of the named dependencies must appear in the output
+    assert "PROVENANCE-INTEGRITY-001" in combined or "VAULT-VERIFY-CONTRACT-001" in combined
 
 # ---------------------------------------------------------------------------
 # M. No live infrastructure requirements
@@ -739,9 +822,8 @@ def test_m4_cz_reconcile_itself_requires_no_infrastructure() -> None:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imported_names.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                imported_names.add(node.module.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_names.add(node.module.split(".")[0])
 
     forbidden_modules = {"boto3", "hvac", "railway"}
     overlap = imported_names & forbidden_modules

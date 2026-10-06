@@ -50,9 +50,15 @@ class TestAuthorizedItems:
         assert result.returncode == 1
         assert "BLOCKED" in result.stderr
 
-    def test_customer_zero_trust_repair_authorized(self) -> None:
+    def test_customer_zero_trust_001_blocked_attempted_not_proven(self) -> None:
+        # CUSTOMER-ZERO-TRUST-001 is ATTEMPTED_NOT_PROVEN and lives in the blocked
+        # section. Operators must use CUSTOMER-ZERO-TRUST-003 for the third ceremony.
         result = _run_item("CUSTOMER-ZERO-TRUST-001")
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 1, (
+            f"CUSTOMER-ZERO-TRUST-001 must be BLOCKED (ATTEMPTED_NOT_PROVEN); "
+            f"got rc={result.returncode}, stdout={result.stdout!r}"
+        )
+        assert "BLOCKED" in result.stderr
 
     def test_report_qa_completed_blocked(self) -> None:
         result = _run_item("REPORT-QA-001")
