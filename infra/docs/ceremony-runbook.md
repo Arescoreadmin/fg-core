@@ -1483,9 +1483,18 @@ complete acceptance, or change the determination:
 
 This is the only procedure for cost containment. It does not use broad `terraform destroy`.
 It generates four temporary self-contained Terraform configurations against the existing
-`Frostgate/frostgate-customer-zero` remote workspace. The generator copies the exact AWS
-resource definitions from reviewed source and includes only resources actually present
-in state. It does not change repository files or weaken the normal configuration's
+`Frostgate/frostgate-customer-zero` remote workspace. It includes only resources present
+in state and copies their definitions from reviewed source. To prevent unrelated drift
+reconciliation, the private temporary configuration uses observed state values only for
+the audit writer policy's `description` and `policy` fields, and (during
+`enable-key-deletion` only) each Transit key's `min_encryption_version`. These are the
+only known state/source discrepancies outside the authorized teardown mutation. The
+generator extracts only those allowlisted, non-credential attributes in memory from
+Terraform state; it never writes or prints raw state. Missing, malformed, or unexpected
+state fails closed. All other source/state differences remain visible to the plan
+verifier and abort the stage. No `ignore_changes` or broad drift suppression is used.
+The normal `infra/` source remains authoritative for future repair and reprovisioning.
+The helper does not change repository files or weaken the normal configuration's
 `prevent_destroy` protections. Terraform `removed` blocks destroy the named addresses
 and update state only after successful deletion; see the Terraform
 [`removed` block reference](https://developer.hashicorp.com/terraform/language/block/removed).
@@ -1569,7 +1578,11 @@ sha256sum "$PLAN_FILE"
 The verifier reads plan JSON and Terraform state without printing either. For
 `enable-key-deletion`, it permits only the exact `deletion_allowed=true` updates on
 Transit keys (with all other before/after fields identical) and no-op for other
-resources. For later stages, it permits only `delete` for the current stage's remaining
+resources. The temporary key configuration takes `min_encryption_version` from current
+state (for example, `0`) so the stage cannot also reconcile the known canonical source
+value (`1`). The writer policy declaration similarly uses only the observed description
+and policy JSON so it cannot repair the unrelated #743 live-policy drift. For later
+stages, it permits only `delete` for the current stage's remaining
 allowlisted addresses and `no-op` for retained managed resources. It rejects create,
 unexpected update, replacement, unexpected destroy, unexpected state, partial reader
 trios, and unexpected output changes. Its output is the complete stage action set. If

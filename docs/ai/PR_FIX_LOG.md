@@ -1,3 +1,12 @@
+# CUSTOMER-ZERO-TRUST-001 narrow teardown drift isolation
+
+- **Finding — Stage 1 reconciled unrelated production drift:** The generated temporary configuration copied the canonical #743 writer policy and Transit `min_encryption_version=1`. Live state still had the pre-#743 writer policy and `min_encryption_version=0`, so the saved plan included one unauthorized AWS policy update and three unauthorized key-version updates alongside the requested deletion-enablement.
+- **Fix:** The temporary teardown generator now projects only the observed non-secret writer policy `description`/`policy` and, in Stage 1 only, each Transit key's `min_encryption_version` from Terraform state. It still changes only `deletion_allowed` to `true` in the Stage-1 key configuration. Projection is allowlisted, validated, in-memory, and fails closed on missing/malformed state. There is no blanket drift suppression or `ignore_changes`; canonical AWS policy and key configuration remain unchanged for later repair/reprovisioning.
+- **Verifier:** Stage 1 now requires all tracked Transit keys to appear as no-op or update, and for each update compares every before/after field except `deletion_allowed`. Existing strict checks continue to reject other resources/actions/output changes and all later-stage drift.
+- **Regression coverage:** Reproduces the observed stale AWS writer policy and state/source key-version difference; verifies the generated temporary config keeps both observed values while the checked-in canonical sources retain #743 policy semantics and `min_encryption_version=1`; verifies Stage 1 permits only the deletion flag and rejects other updates, creates, deletes, replacements, and output changes.
+- **Scope:** `infra/scripts/customer_zero_teardown.py`, `infra/docs/ceremony-runbook.md`, `tests/test_customer_zero_narrow_cost_teardown.py`, `ROADMAP.md`, `docs/ai/PR_FIX_LOG.md`.
+- **Safety boundary:** No Terraform plan/apply/destroy, credential creation, provider authentication, AWS/HCP/Vault/Railway mutation, or production operation.
+
 ## CUSTOMER-ZERO-TRUST-001 narrow cost-containment teardown
 
 - **Finding — only Checkpoint U's full teardown could stop billing:** its lifecycle override and broad `terraform destroy` remove persistent AWS audit evidence and writer authority. A targeted destroy is unsuitable because Vault children must be removed while their provider endpoint exists, before cluster deletion.
