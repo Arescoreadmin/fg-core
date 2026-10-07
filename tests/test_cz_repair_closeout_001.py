@@ -94,7 +94,9 @@ def test_a5_provenance_integrity_001_exactly_once_in_completed() -> None:
     authority = _load_roadmap_authority()
     ids = _ids_in_section(authority, "completed")
     count = ids.count("PROVENANCE-INTEGRITY-001")
-    assert count == 1, f"PROVENANCE-INTEGRITY-001 must appear exactly once in completed; got {count}"
+    assert count == 1, (
+        f"PROVENANCE-INTEGRITY-001 must appear exactly once in completed; got {count}"
+    )
 
 
 def test_a6_vault_verify_contract_001_exactly_once_in_completed() -> None:
@@ -102,7 +104,9 @@ def test_a6_vault_verify_contract_001_exactly_once_in_completed() -> None:
     authority = _load_roadmap_authority()
     ids = _ids_in_section(authority, "completed")
     count = ids.count("VAULT-VERIFY-CONTRACT-001")
-    assert count == 1, f"VAULT-VERIFY-CONTRACT-001 must appear exactly once in completed; got {count}"
+    assert count == 1, (
+        f"VAULT-VERIFY-CONTRACT-001 must appear exactly once in completed; got {count}"
+    )
 
 
 # ---------------------------------------------------------------------------
