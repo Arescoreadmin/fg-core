@@ -227,11 +227,11 @@ def test_d4_trust_001_records_third_ceremony_prerequisite() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_e1_provenance_integrity_001_in_next_sequence() -> None:
-    """PROVENANCE-INTEGRITY-001 must be in next_sequence."""
+def test_e1_provenance_integrity_001_in_completed() -> None:
+    """PROVENANCE-INTEGRITY-001 must be in completed (repair shipped)."""
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "PROVENANCE-INTEGRITY-001")
-    assert item is not None, "PROVENANCE-INTEGRITY-001 must be in next_sequence"
+    item = _find_item(authority, "completed", "PROVENANCE-INTEGRITY-001")
+    assert item is not None, "PROVENANCE-INTEGRITY-001 must be in completed"
 
 
 def test_e2_final_readiness_blocked_by_provenance_integrity() -> None:
@@ -276,11 +276,11 @@ def test_e4_provenance_defect_maps_to_repair_work_item() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_f1_vault_verify_contract_001_in_next_sequence() -> None:
-    """VAULT-VERIFY-CONTRACT-001 must be in next_sequence."""
+def test_f1_vault_verify_contract_001_in_completed() -> None:
+    """VAULT-VERIFY-CONTRACT-001 must be in completed (repair shipped)."""
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "VAULT-VERIFY-CONTRACT-001")
-    assert item is not None, "VAULT-VERIFY-CONTRACT-001 must be in next_sequence"
+    item = _find_item(authority, "completed", "VAULT-VERIFY-CONTRACT-001")
+    assert item is not None, "VAULT-VERIFY-CONTRACT-001 must be in completed"
 
 
 def test_f2_final_readiness_blocked_by_verifier_contract() -> None:
@@ -612,8 +612,8 @@ def test_l1_roadmap_checker_marks_cz_reconcile_001_completed() -> None:
     assert "COMPLETED" in result.stderr or "COMPLETED" in result.stdout
 
 
-def test_l2_roadmap_checker_authorizes_provenance_integrity_001() -> None:
-    """check_customer_one_roadmap.py --work-item PROVENANCE-INTEGRITY-001 must exit 0."""
+def test_l2_roadmap_checker_reports_provenance_integrity_001_completed() -> None:
+    """check_customer_one_roadmap.py --work-item PROVENANCE-INTEGRITY-001 must exit 1 (COMPLETED)."""
     result = subprocess.run(
         [
             "python",
@@ -626,13 +626,15 @@ def test_l2_roadmap_checker_authorizes_provenance_integrity_001() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"Roadmap checker rejected PROVENANCE-INTEGRITY-001: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Roadmap checker must mark PROVENANCE-INTEGRITY-001 as COMPLETED (exit 1); "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
+    assert "COMPLETED" in result.stderr or "COMPLETED" in result.stdout
 
 
-def test_l3_roadmap_checker_authorizes_vault_verify_contract_001() -> None:
-    """check_customer_one_roadmap.py --work-item VAULT-VERIFY-CONTRACT-001 must exit 0."""
+def test_l3_roadmap_checker_reports_vault_verify_contract_001_completed() -> None:
+    """check_customer_one_roadmap.py --work-item VAULT-VERIFY-CONTRACT-001 must exit 1 (COMPLETED)."""
     result = subprocess.run(
         [
             "python",
@@ -645,18 +647,19 @@ def test_l3_roadmap_checker_authorizes_vault_verify_contract_001() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"Roadmap checker rejected VAULT-VERIFY-CONTRACT-001: {result.stderr}"
+    assert result.returncode == 1, (
+        f"Roadmap checker must mark VAULT-VERIFY-CONTRACT-001 as COMPLETED (exit 1); "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
+    assert "COMPLETED" in result.stderr or "COMPLETED" in result.stdout
 
 
-def test_l4_roadmap_checker_blocks_final_readiness_until_deps_complete() -> None:
-    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 1.
+def test_l4_roadmap_checker_authorizes_final_readiness_when_deps_complete() -> None:
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 0.
 
     CUSTOMER-ZERO-FINAL-READINESS-001 is blocked_by PROVENANCE-INTEGRITY-001 and
-    VAULT-VERIFY-CONTRACT-001, neither of which is yet in completed. The checker must
-    enforce this dependency and return exit 1 with a BLOCKED message naming the unmet
-    deps. This prevents the gate from opening before its required repairs are proven.
+    VAULT-VERIFY-CONTRACT-001. Both are now in completed. The checker must authorize
+    the item and return exit 0 — the gate is unblocked by the completed repairs.
     """
     result = subprocess.run(
         [
@@ -670,14 +673,9 @@ def test_l4_roadmap_checker_blocks_final_readiness_until_deps_complete() -> None
         text=True,
         check=False,
     )
-    assert result.returncode == 1, (
-        f"Roadmap checker must block CUSTOMER-ZERO-FINAL-READINESS-001 (deps incomplete); "
+    assert result.returncode == 0, (
+        f"Roadmap checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 (deps complete); "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
-    )
-    assert "BLOCKED" in result.stderr or "BLOCKED" in result.stdout
-    assert (
-        "PROVENANCE-INTEGRITY-001" in result.stderr
-        or "PROVENANCE-INTEGRITY-001" in result.stdout
     )
 
 
@@ -747,12 +745,12 @@ def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
     assert "BLOCKED" in result.stderr or "BLOCKED" in result.stdout
 
 
-def test_l8_checker_enforces_blocked_by_before_authorizing() -> None:
-    """Checker must return BLOCKED for a next_sequence item whose blocked_by deps are incomplete.
+def test_l8_checker_authorizes_when_blocked_by_deps_complete() -> None:
+    """Checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 now that its deps are complete.
 
     CUSTOMER-ZERO-FINAL-READINESS-001 declares blocked_by: [PROVENANCE-INTEGRITY-001,
-    VAULT-VERIFY-CONTRACT-001]. Neither is in completed. The checker must refuse to
-    authorize it and name at least one unmet dependency in its output.
+    VAULT-VERIFY-CONTRACT-001]. Both are now in completed. The checker must authorize
+    the item (exit 0) — the blocked_by enforcement gate is satisfied.
     """
     result = subprocess.run(
         [
@@ -766,16 +764,10 @@ def test_l8_checker_enforces_blocked_by_before_authorizing() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 1, (
-        "Checker must enforce blocked_by and reject CUSTOMER-ZERO-FINAL-READINESS-001 "
-        "while its dependencies are incomplete"
-    )
-    combined = result.stdout + result.stderr
-    assert "BLOCKED" in combined
-    # At least one of the named dependencies must appear in the output
-    assert (
-        "PROVENANCE-INTEGRITY-001" in combined
-        or "VAULT-VERIFY-CONTRACT-001" in combined
+    assert result.returncode == 0, (
+        "Checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 "
+        "now that its blocked_by dependencies are in completed; "
+        f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
 
 
@@ -797,10 +789,11 @@ def test_m2_provenance_and_verifier_items_require_no_paid_infra() -> None:
     """PROVENANCE-INTEGRITY-001 and VAULT-VERIFY-CONTRACT-001 must not require paid infrastructure."""
     authority = _load_roadmap_authority()
     for item_id in ("PROVENANCE-INTEGRITY-001", "VAULT-VERIFY-CONTRACT-001"):
-        item = _find_item(authority, "next_sequence", item_id)
-        assert item is not None, f"{item_id} must be in next_sequence"
-        assert item.get("requires_paid_infrastructure") is False, (
-            f"{item_id} must declare requires_paid_infrastructure: false"
+        item = _find_item(authority, "completed", item_id)
+        assert item is not None, f"{item_id} must be in completed"
+        # Completed repair entries omit the field (implicitly false) or declare it false.
+        assert not item.get("requires_paid_infrastructure", False), (
+            f"{item_id} must not declare requires_paid_infrastructure: true"
         )
 
 
