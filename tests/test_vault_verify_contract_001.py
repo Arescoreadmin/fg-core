@@ -948,7 +948,9 @@ def test_j1_vault_unavailable_returns_false(report_payload):
     try:
         result = authority.verify_report(report_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_report on Vault outage: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_report on Vault outage: {e}"
+        )
     assert result is False
 
 
@@ -963,7 +965,9 @@ def test_j2_vault_timeout_returns_false(qual_payload):
     try:
         result = authority.verify_qualification(qual_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_qualification on timeout: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_qualification on timeout: {e}"
+        )
     assert result is False
 
 
@@ -976,7 +980,9 @@ def test_j3_vault_auth_failure_returns_false(delivery_payload):
     try:
         result = authority.verify_delivery_authorization(delivery_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_delivery_authorization on auth failure: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_delivery_authorization on auth failure: {e}"
+        )
     assert result is False
 
 
@@ -999,7 +1005,9 @@ def test_j4_vault_authorization_failure_returns_false(report_payload):
     try:
         result = authority.verify_report(report_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_report on authorization failure: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_report on authorization failure: {e}"
+        )
     assert result is False
 
 
@@ -1023,7 +1031,9 @@ def test_j5_inaccessible_key_returns_false(qual_payload):
     try:
         result = authority.verify_qualification(qual_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_qualification for inaccessible key: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_qualification for inaccessible key: {e}"
+        )
     assert result is False
 
 
@@ -1042,7 +1052,9 @@ def test_j6_unexpected_vault_response_returns_false(delivery_payload):
     try:
         result = authority.verify_delivery_authorization(delivery_payload, env)
     except VaultTransitError as e:
-        pytest.fail(f"VaultTransitError escaped from verify_delivery_authorization on malformed response: {e}")
+        pytest.fail(
+            f"VaultTransitError escaped from verify_delivery_authorization on malformed response: {e}"
+        )
     assert result is False
 
 
@@ -1116,7 +1128,9 @@ def test_j9_vault_backend_outage_raises_verifier_unavailable():
 
     class _MockClient:
         def public_key(self, key_id, key_version, role, correlation_id=None):
-            raise VaultTransitError("Vault Transit transport failure: connection refused")
+            raise VaultTransitError(
+                "Vault Transit transport failure: connection refused"
+            )
 
     class _MockSigner:
         _key_ids: dict = {role: f"fg-{role.value}" for role in TrustRole}  # noqa: RUF012
