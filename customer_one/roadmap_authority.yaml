@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-10-06"
+authority_date: "2026-10-07"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,56 +51,6 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "PROVENANCE-INTEGRITY-001"
-    title: "PROVENANCE-INTEGRITY-001 — Repair report/provenance verification integrity"
-    role: "OFFLINE_PREREQUISITE"
-    parent_objective: "CUSTOMER-ZERO-TRUST-003"
-    blocker_closed: >
-      Current report verification trusts the stored manifest_hash without
-      re-deriving or binding it to current report_json. DB-level mutation of
-      report_json must fail verification. This defect was identified during
-      ceremony run 2 and blocks Customer-Zero acceptance.
-    freeze_law_justification: >
-      P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
-      direct blocker of Customer-Zero acceptance. No paid infrastructure required.
-    status: "IN_PROGRESS"
-    branch: "fix/provenance-integrity-001"
-    work_class: "REPAIR"
-    requires_paid_infrastructure: false
-    blocked_by: "CZ-RECONCILE-001"
-    completion_evidence:
-      - "report_json mutation fails verification deterministically"
-      - "adversarial test proves DB-level tamper is detected"
-      - "existing trust ceremony tests remain green"
-  - id: "VAULT-VERIFY-CONTRACT-001"
-    title: "VAULT-VERIFY-CONTRACT-001 — Repair deterministic fail-closed verification semantics"
-    role: "OFFLINE_PREREQUISITE"
-    parent_objective: "CUSTOMER-ZERO-TRUST-003"
-    blocker_closed: >
-      Post-rotation cross-domain verification can raise VaultTransitError instead
-      of returning deterministic False. All wrong-domain / wrong-key / wrong-version /
-      malformed-proof / replay / unavailable-Vault / cross-domain paths must return
-      False, never raise. Identified during ceremony run 2.
-    freeze_law_justification: >
-      P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
-      direct blocker of Customer-Zero acceptance. No paid infrastructure required.
-    status: "IN_PROGRESS"
-    branch: "fix/vault-verify-contract-001"
-    work_class: "REPAIR"
-    requires_paid_infrastructure: false
-    blocked_by: "CZ-RECONCILE-001"
-    completion_evidence:
-      - "all verify_* paths return bool (never raise) for wrong inputs"
-      - "focused test suite covers all enumerated fail-closed cases"
-      - "post-rotation cross-domain case explicitly tested"
-    implementation_notes: >
-      VaultVerifierUnavailableError(VaultTransitError) added to vault_transit.py.
-      VaultBackend.verify() catches VaultTransitError from public_key() and re-raises
-      as VaultVerifierUnavailableError. TrustBindingAuthority.verify_*() catches
-      VaultTransitError from backend.verify() and re-raises as VaultVerifierUnavailableError.
-      Cryptographic invalidity returns False; operational failure raises typed exception
-      (distinguishable). 49 adversarial tests (A-N) including root-cause regression.
-      PROVENANCE-INTEGRITY-001 preserved. POST_TEARDOWN_VERIFICATION: PARTIALLY_SUPPORTED.
   - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
     title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
     role: "OFFLINE_PREREQUISITE"
@@ -208,6 +158,40 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "VAULT-VERIFY-CONTRACT-001"
+    title: "VAULT-VERIFY-CONTRACT-001 — Repair deterministic fail-closed verification semantics"
+    prs: ["#751"]
+    merged_sha: "8d3dd55aedcce3ad719ca9fd829371f5f6063ab2"
+    note: >
+      Repairs DEFECT-VERIFIER-CONTRACT (P0). Final merged contract:
+      VaultKeyVersionUnavailableError(VaultTransitError) added to vault_transit.py;
+      VaultTransitClient.public_key() raises it when the requested key version is absent
+      (wrong-version proof = invalid, not a Vault outage).
+      VaultBackend.verify() catches VaultKeyVersionUnavailableError → return False;
+      catches remaining VaultTransitError → raises VaultVerifierUnavailableError
+      (genuine Vault outage — distinguishable internally for audit/logging).
+      TrustBindingAuthority.verify_*() catches VaultTransitError → return False
+      (deterministic boolean fail-closed contract satisfied at authority boundary).
+      All verify_* paths return a deterministic boolean; no path raises VaultTransitError
+      as substitute for a fail-closed boolean result.
+      51 adversarial tests (A–N) pass including root-cause regression and two new
+      VaultBackend-layer contract tests (test_j8, test_j9).
+      No migrations, no schema changes, no paid infrastructure.
+      CUSTOMER_ZERO_TRUST_NOT_PROVEN unchanged.
+  - id: "PROVENANCE-INTEGRITY-001"
+    title: "PROVENANCE-INTEGRITY-001 — Repair report/provenance verification integrity"
+    prs: ["#750"]
+    merged_sha: "7a707cfb4dd2d70bf44395afc3eace9bc62bead6"
+    note: >
+      Repairs DEFECT-PROVENANCE-INTEGRITY (P0). Added _derive_manifest_hash_from_report_json()
+      helper in api/field_assessment.py; added content-binding pre-check at all three
+      Vault trust-binding verification sites (verify_engagement_report_route,
+      qa_approve_report_route, export_engagement_report_route). DB-level mutation of
+      report_json without changing manifest_hash now fails verification deterministically,
+      regardless of FG_PROVENANCE_MODE (mismatch raises HTTPException directly, bypassing
+      mode-dependent enforcement). 45 adversarial tests (A–K) pass including
+      mode-independence tests. No migrations, no schema changes, no paid infrastructure.
+      CUSTOMER_ZERO_TRUST_NOT_PROVEN unchanged.
   - id: "CZ-RECONCILE-001"
     title: "CZ-RECONCILE-001 — Reconcile Customer-Zero trust ceremony state"
     prs: ["#749"]
