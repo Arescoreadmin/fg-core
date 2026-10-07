@@ -10,7 +10,11 @@ Security invariants:
 - Role binding is hard-coded; callers cannot override which role signs which artifact.
 - Domain prefixes prevent cross-artifact forgery (IDENTITY sig ≠ APPROVAL sig).
 - Signing bytes are deterministic (sort_keys, no volatile fields in signed payload).
-- Vault unavailable → VaultTransitError raised; no silent fallback.
+- Signing: Vault unavailable → VaultTransitError raised; no silent fallback.
+- Verification: cryptographic invalidity → returns False; Vault operationally unavailable
+  → returns False (fail closed, deterministic boolean per contract); internal distinction
+  between wrong-version proof (VaultKeyVersionUnavailableError) and Vault outage
+  (VaultVerifierUnavailableError) is preserved inside VaultBackend for audit/logging.
 - SignatureEnvelope contains only public verification material (no private key material).
 - Production env-key path (FG_REPORT_SIGNING_KEY) is explicitly rejected for canonical use.
 """
@@ -27,6 +31,9 @@ from services.cgin.key_management.vault_transit import (
     ManagedSignature,
     TrustRole,
     VaultCustomerZeroSigner,
+    VaultKeyVersionUnavailableError,
+    VaultTransitError,
+    VaultVerifierUnavailableError,
     public_key_fingerprint,
     signer_from_environment,
 )
@@ -86,9 +93,7 @@ class TrustBindingBackend(Protocol):
     """Protocol for the signing backend (real Vault or deterministic test fake)."""
 
     def sign(self, role: TrustRole, payload: bytes) -> ManagedSignature: ...
-    def verify(
-        self, role: TrustRole, payload: bytes, signature: str
-    ) -> bool: ...
+    def verify(self, role: TrustRole, payload: bytes, signature: str) -> bool: ...
 
 
 def _prepare_signing_bytes(domain: str, payload_dict: dict[str, Any]) -> bytes:
@@ -99,7 +104,7 @@ def _prepare_signing_bytes(domain: str, payload_dict: dict[str, Any]) -> bytes:
     signature, even if the payload dict is identical.
     """
     payload_json = json.dumps(payload_dict, sort_keys=True, separators=(",", ":"))
-    return f"{domain}\n{payload_json}".encode("utf-8")
+    return f"{domain}\n{payload_json}".encode()
 
 
 def _envelope_from_managed(
@@ -168,7 +173,12 @@ class TrustBindingAuthority:
         expected_sha = hashlib.sha256(signing_bytes).hexdigest()
         if envelope.signed_payload_sha256 != expected_sha:
             return False
-        return self._backend.verify(_ROLE_REPORT, signing_bytes, envelope.signature)
+        try:
+            return self._backend.verify(_ROLE_REPORT, signing_bytes, envelope.signature)
+        except VaultTransitError:
+            # Vault unavailable (transport, auth, timeout) or wrong-version proof that
+            # escaped the backend — fail closed with deterministic False per contract.
+            return False
 
     # ── Qualification ────────────────────────────────────────────────────────
 
@@ -176,9 +186,7 @@ class TrustBindingAuthority:
         self, canonical_payload: dict[str, Any]
     ) -> SignatureEnvelope:
         """Sign a qualification decision canonical payload with the APPROVAL trust role."""
-        signing_bytes = _prepare_signing_bytes(
-            DOMAIN_QUALIFICATION, canonical_payload
-        )
+        signing_bytes = _prepare_signing_bytes(DOMAIN_QUALIFICATION, canonical_payload)
         managed = self._backend.sign(_ROLE_QUALIFICATION, signing_bytes)
         return _envelope_from_managed(managed, DOMAIN_QUALIFICATION, signing_bytes)
 
@@ -202,15 +210,16 @@ class TrustBindingAuthority:
             return False
         if not envelope.issuer:
             return False
-        signing_bytes = _prepare_signing_bytes(
-            DOMAIN_QUALIFICATION, canonical_payload
-        )
+        signing_bytes = _prepare_signing_bytes(DOMAIN_QUALIFICATION, canonical_payload)
         expected_sha = hashlib.sha256(signing_bytes).hexdigest()
         if envelope.signed_payload_sha256 != expected_sha:
             return False
-        return self._backend.verify(
-            _ROLE_QUALIFICATION, signing_bytes, envelope.signature
-        )
+        try:
+            return self._backend.verify(
+                _ROLE_QUALIFICATION, signing_bytes, envelope.signature
+            )
+        except VaultTransitError:
+            return False
 
     # ── Delivery authorization ────────────────────────────────────────────────
 
@@ -252,14 +261,17 @@ class TrustBindingAuthority:
         expected_sha = hashlib.sha256(signing_bytes).hexdigest()
         if envelope.signed_payload_sha256 != expected_sha:
             return False
-        return self._backend.verify(
-            _ROLE_DELIVERY_AUTHORIZATION, signing_bytes, envelope.signature
-        )
+        try:
+            return self._backend.verify(
+                _ROLE_DELIVERY_AUTHORIZATION, signing_bytes, envelope.signature
+            )
+        except VaultTransitError:
+            return False
 
     # ── Factory ──────────────────────────────────────────────────────────────
 
     @classmethod
-    def from_environment(cls) -> "TrustBindingAuthority":
+    def from_environment(cls) -> TrustBindingAuthority:
         """Build the production authority from environment variables.
 
         Fails closed if Vault env is not configured.
@@ -322,7 +334,22 @@ class VaultBackend:
         key_id = self._signer._key_ids[role]  # type: ignore[attr-defined]
         cache_key = (role, key_id, version)
         if cache_key not in self._pub_cache:
-            pub = self._signer._client.public_key(key_id, version, role)  # type: ignore[attr-defined]
+            try:
+                pub = self._signer._client.public_key(key_id, version, role)  # type: ignore[attr-defined]
+            except VaultKeyVersionUnavailableError:
+                # The key version in this signature does not exist in Vault.
+                # This is a wrong-version proof (cryptographically invalid), not an
+                # infrastructure failure.  Return False so the TrustBindingAuthority
+                # verify_* callers receive a deterministic invalid-proof result.
+                return False
+            except VaultTransitError as exc:
+                # Infrastructure failure: transport, auth, timeout, or Vault unreachable.
+                # Raise typed subclass so VaultBackend callers can distinguish Vault
+                # outage from cryptographic invalidity if they need to.
+                raise VaultVerifierUnavailableError(
+                    f"Vault public key fetch failed for role={role.value} "
+                    f"key_id={key_id} version={version}: {exc}"
+                ) from exc
             self._pub_cache[cache_key] = pub
         pub_key = self._pub_cache[cache_key]
 

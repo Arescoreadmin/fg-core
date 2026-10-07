@@ -126,6 +126,36 @@ class VaultTransitError(RuntimeError):
     """Fail-closed Vault Transit operation error."""
 
 
+class VaultVerifierUnavailableError(VaultTransitError):
+    """Vault verification authority is operationally unavailable.
+
+    Raised when a verification attempt fails due to an infrastructure
+    failure (transport timeout, auth failure, network error, Vault
+    unreachable) rather than a cryptographic invalidity of the proof.
+
+    Distinguishable from ordinary VaultTransitError so that callers can
+    correctly classify:
+      - VaultVerifierUnavailableError → verification authority absent,
+        fail closed (NOT an invalid-signature determination)
+      - VaultTransitError (base) → other operational Vault failure
+      - return False → cryptographic invalidity deterministically proven
+    """
+
+
+class VaultKeyVersionUnavailableError(VaultTransitError):
+    """A requested key version does not exist in Vault.
+
+    Raised by VaultTransitClient.public_key() when the key version
+    referenced in a signature is not present in the Vault key metadata.
+    This means the proof is cryptographically invalid (wrong-version
+    proof), NOT that Vault is operationally absent.
+
+    Distinguishable from VaultVerifierUnavailableError so that
+    VaultBackend.verify() can return False (invalid proof) instead of
+    raising (Vault outage) for stale or fabricated key versions.
+    """
+
+
 @dataclass(frozen=True)
 class VaultSession:
     """Short-lived Vault session; token is never shown in repr."""
@@ -496,7 +526,9 @@ class VaultTransitClient:
         if not isinstance(keys, dict) or not isinstance(
             keys.get(str(key_version)), dict
         ):
-            raise VaultTransitError("Vault Transit public key version unavailable")
+            raise VaultKeyVersionUnavailableError(
+                "Vault Transit public key version unavailable"
+            )
         public_key = keys[str(key_version)].get("public_key")
         if not isinstance(public_key, str) or not public_key:
             raise VaultTransitError("Vault Transit public key missing")

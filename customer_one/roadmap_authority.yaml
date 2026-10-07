@@ -84,7 +84,8 @@ next_sequence:
     freeze_law_justification: >
       P0 defect repair (REPAIR class). Identified during ceremonies 1 and 2 as a
       direct blocker of Customer-Zero acceptance. No paid infrastructure required.
-    status: "AUTHORIZED_NOT_STARTED"
+    status: "IN_PROGRESS"
+    branch: "fix/vault-verify-contract-001"
     work_class: "REPAIR"
     requires_paid_infrastructure: false
     blocked_by: "CZ-RECONCILE-001"
@@ -92,6 +93,14 @@ next_sequence:
       - "all verify_* paths return bool (never raise) for wrong inputs"
       - "focused test suite covers all enumerated fail-closed cases"
       - "post-rotation cross-domain case explicitly tested"
+    implementation_notes: >
+      VaultVerifierUnavailableError(VaultTransitError) added to vault_transit.py.
+      VaultBackend.verify() catches VaultTransitError from public_key() and re-raises
+      as VaultVerifierUnavailableError. TrustBindingAuthority.verify_*() catches
+      VaultTransitError from backend.verify() and re-raises as VaultVerifierUnavailableError.
+      Cryptographic invalidity returns False; operational failure raises typed exception
+      (distinguishable). 49 adversarial tests (A-N) including root-cause regression.
+      PROVENANCE-INTEGRITY-001 preserved. POST_TEARDOWN_VERIFICATION: PARTIALLY_SUPPORTED.
   - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
     title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
     role: "OFFLINE_PREREQUISITE"
