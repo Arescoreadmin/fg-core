@@ -14,24 +14,26 @@ Contract:
   INVALID     — cryptographic invalidity (wrong domain, version, key, replay,
                 altered payload, malformed) → False (deterministic)
   UNAVAILABLE — Vault operationally absent (transport, auth, timeout) →
-                VaultVerifierUnavailableError raised (IS-A VaultTransitError)
+                False (deterministic, fail-closed per ceremony_state.yaml:153-160)
 
-Distinguishability: INVALID returns False; UNAVAILABLE raises. Callers that
-need only fail-closed behaviour may catch VaultVerifierUnavailableError and
-return False. Callers that need the distinction (e.g. HTTP 503 vs 403) can
-check the exception type.
+All verify_* paths return a deterministic boolean. No path raises
+VaultTransitError as a substitute for a fail-closed boolean result.
+Internal epistemic distinction is preserved inside VaultBackend:
+  - VaultKeyVersionUnavailableError (wrong-version proof) → return False
+  - VaultVerifierUnavailableError (transport/auth outage) → caught by verify_*, return False
+Unexpected non-VaultTransitError exceptions propagate (diagnosable, not silently False).
 
 Categories:
   A — Valid proof verifies (golden path)
   B — Cryptographic invalidity → deterministic False
   C — Payload tampering → False
   D — Wrong trust domain (all cross-domain combinations) → False
-  E — Key version violations → False / UNAVAILABLE
+  E — Key version violations → False
   F — Replay attacks (cross-report, cross-tenant, cross-engagement) → False
   G — Missing / empty / malformed signature → False
   H — Malformed fingerprint → False
-  I — ROOT-CAUSE REGRESSION: cross-domain/incompatible-version → INVALID, not exception
-  J — Vault unavailable / timeout / auth failure → VaultVerifierUnavailableError
+  I — ROOT-CAUSE REGRESSION: cross-domain/incompatible-version → INVALID (False), not exception
+  J — Vault unavailable / timeout / auth failure → False (deterministic, not exception)
   K — Unexpected Vault response / internal exception → fail closed
   L — Determinism
   M — PROVENANCE-INTEGRITY-001 preserved
@@ -46,7 +48,6 @@ import os
 os.environ.setdefault("FG_ENV", "test")
 
 import pytest
-
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -54,19 +55,20 @@ from services.cgin.key_management.vault_transit import (
     ManagedSignature,
     TrustAnchor,
     TrustRole,
+    VaultKeyVersionUnavailableError,
     VaultTransitError,
     VaultVerifierUnavailableError,
     public_key_fingerprint,
 )
 from services.governance.trust_binding import (
+    _ROLE_DELIVERY_AUTHORIZATION,
+    _ROLE_QUALIFICATION,
+    _ROLE_REPORT,
     DOMAIN_DELIVERY_AUTHORIZATION,
     DOMAIN_QUALIFICATION,
     DOMAIN_REPORT,
     SignatureEnvelope,
     TrustBindingAuthority,
-    _ROLE_DELIVERY_AUTHORIZATION,
-    _ROLE_QUALIFICATION,
-    _ROLE_REPORT,
     build_delivery_authorization_signing_payload,
     build_qualification_signing_payload,
     build_report_signing_payload,
@@ -76,7 +78,6 @@ from services.governance.trust_binding_fake import (
     make_test_authority,
     make_test_fake,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers and fixtures
@@ -819,7 +820,7 @@ def test_i1_root_cause_regression_cross_domain_incompatible_version():
     # Part 2: Simulate the exact DEFECT-VERIFIER-CONTRACT path:
     # A VaultBackend-like scenario where the backend's verify() raises VaultTransitError
     # (e.g., because Vault refuses/can't verify an incompatible key version).
-    # With the fix, this must be wrapped as VaultVerifierUnavailableError.
+    # With the fix, verify_* catches VaultTransitError and returns False (deterministic).
 
     # First, create a well-formed qualification envelope that passes all pre-crypto checks.
     qual_env = _make_verifiable_envelope("sign_qualification", qual_payload_b)
@@ -838,20 +839,20 @@ def test_i1_root_cause_regression_cross_domain_incompatible_version():
             )
 
     vault_like_authority = TrustBindingAuthority(_VaultBackendSimulator())
-    # With the fix: VaultTransitError from backend.verify() → VaultVerifierUnavailableError
-    with pytest.raises(VaultVerifierUnavailableError) as exc_info:
-        vault_like_authority.verify_qualification(qual_payload_b, qual_env)
-    # Must be the typed subclass
-    assert isinstance(exc_info.value, VaultVerifierUnavailableError)
-    assert isinstance(exc_info.value, VaultTransitError)  # IS-A VaultTransitError
+    # With the fix: VaultTransitError from backend.verify() → False (deterministic boolean)
+    result = vault_like_authority.verify_qualification(qual_payload_b, qual_env)
+    assert result is False, (
+        "ROOT-CAUSE REGRESSION: VaultTransitError from backend did not produce "
+        "deterministic False from verify_qualification"
+    )
 
 
-def test_i2_root_cause_regression_no_raw_vault_transit_error_from_verify():
-    """Test 17 (cont) — VaultTransitError must not escape raw from verify_*.
+def test_i2_root_cause_regression_no_vault_transit_error_from_verify():
+    """Test 17 (cont) — VaultTransitError must not escape from verify_* as an exception.
 
     The previous defect: VaultTransitError escaped from VaultBackend.verify()
     (from public_key() fetch) without being wrapped. This test confirms it is
-    now always wrapped as VaultVerifierUnavailableError.
+    now caught by verify_* and returned as deterministic False.
     """
 
     class _RawVaultTransitRaiser:
@@ -869,28 +870,22 @@ def test_i2_root_cause_regression_no_raw_vault_transit_error_from_verify():
     real_authority = TrustBindingAuthority(fake)
     env = real_authority.sign_report(payload)
 
-    # Must raise VaultVerifierUnavailableError, not raw VaultTransitError
-    exc = None
+    # Must return False (deterministic), not raise any VaultTransitError
     try:
-        authority.verify_report(payload, env)
-    except VaultVerifierUnavailableError as e:
-        exc = e
+        result = authority.verify_report(payload, env)
     except VaultTransitError as e:
-        # This is the defect — raw VaultTransitError leaked
         pytest.fail(
-            f"ROOT-CAUSE REGRESSION: raw VaultTransitError leaked from verify_report "
-            f"(should be VaultVerifierUnavailableError): {e}"
+            f"ROOT-CAUSE REGRESSION: VaultTransitError escaped from verify_report "
+            f"(must be caught and returned as False): {e}"
         )
-    except Exception as e:
-        pytest.fail(f"Unexpected exception type: {type(e).__name__}: {e}")
-
-    assert exc is not None, (
-        "Expected VaultVerifierUnavailableError but no exception was raised"
+    assert result is False, (
+        "ROOT-CAUSE REGRESSION: VaultTransitError from backend did not produce "
+        "deterministic False from verify_report"
     )
 
 
 def test_i3_same_for_delivery_authorization():
-    """Test 17 (delivery): VaultTransitError from backend.verify() → VaultVerifierUnavailableError."""
+    """Test 17 (delivery): VaultTransitError from backend.verify() → False (deterministic)."""
 
     class _RawRaiser:
         def sign(self, role, payload):
@@ -905,12 +900,17 @@ def test_i3_same_for_delivery_authorization():
     real_authority = TrustBindingAuthority(fake)
     env = real_authority.sign_delivery_authorization(payload)
 
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_delivery_authorization(payload, env)
+    try:
+        result = authority.verify_delivery_authorization(payload, env)
+    except VaultTransitError as e:
+        pytest.fail(
+            f"VaultTransitError escaped from verify_delivery_authorization: {e}"
+        )
+    assert result is False
 
 
 # ---------------------------------------------------------------------------
-# J — Vault unavailable / timeout / auth failure → VaultVerifierUnavailableError
+# J — Vault unavailable / timeout / auth failure → False (deterministic, fail-closed)
 # ---------------------------------------------------------------------------
 
 
@@ -941,38 +941,47 @@ def _make_verifiable_envelope(
     return sign_method(payload)
 
 
-def test_j1_vault_unavailable_raises_verifier_unavailable(report_payload):
-    """Test 18: Vault unavailable → VaultVerifierUnavailableError (not False, not raw VaultTransitError)."""
+def test_j1_vault_unavailable_returns_false(report_payload):
+    """Test 18: Vault unavailable → False (deterministic fail-closed, not exception)."""
     authority = TrustBindingAuthority(_UnavailableBackend("transport failure"))
     env = _make_verifiable_envelope("sign_report", report_payload)
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_report(report_payload, env)
+    try:
+        result = authority.verify_report(report_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_report on Vault outage: {e}")
+    assert result is False
 
 
-def test_j2_vault_timeout_raises_verifier_unavailable(qual_payload):
-    """Test 19: Vault timeout → VaultVerifierUnavailableError."""
+def test_j2_vault_timeout_returns_false(qual_payload):
+    """Test 19: Vault timeout → False (deterministic fail-closed)."""
     authority = TrustBindingAuthority(
         _UnavailableBackend("Vault Transit transport failure: timeout")
     )
     env = _make_verifiable_envelope("sign_qualification", qual_payload)
     # env was signed by TrustBindingFake; now verify with _UnavailableBackend
     # Pre-crypto checks pass (correct role/domain/sha256); backend.verify() raises
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_qualification(qual_payload, env)
+    try:
+        result = authority.verify_qualification(qual_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_qualification on timeout: {e}")
+    assert result is False
 
 
-def test_j3_vault_auth_failure_raises_verifier_unavailable(delivery_payload):
-    """Test 20: Vault authentication failure → VaultVerifierUnavailableError."""
+def test_j3_vault_auth_failure_returns_false(delivery_payload):
+    """Test 20: Vault authentication failure → False (deterministic fail-closed)."""
     authority = TrustBindingAuthority(
         _UnavailableBackend("Vault authentication denied (403)")
     )
     env = _make_verifiable_envelope("sign_delivery_authorization", delivery_payload)
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_delivery_authorization(delivery_payload, env)
+    try:
+        result = authority.verify_delivery_authorization(delivery_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_delivery_authorization on auth failure: {e}")
+    assert result is False
 
 
-def test_j4_vault_authorization_failure_raises_verifier_unavailable(report_payload):
-    """Test 21: Vault authorization failure → VaultVerifierUnavailableError."""
+def test_j4_vault_authorization_failure_returns_false(report_payload):
+    """Test 21: Vault authorization failure → False (deterministic fail-closed)."""
 
     class _AuthzFailureBackend:
         def sign(self, role, payload):
@@ -987,12 +996,20 @@ def test_j4_vault_authorization_failure_raises_verifier_unavailable(report_paylo
 
     authority = TrustBindingAuthority(_AuthzFailureBackend())
     env = _make_verifiable_envelope("sign_report", report_payload)
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_report(report_payload, env)
+    try:
+        result = authority.verify_report(report_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_report on authorization failure: {e}")
+    assert result is False
 
 
-def test_j5_inaccessible_key_raises_verifier_unavailable(qual_payload):
-    """Test 22: Inaccessible key (key version not found) → VaultVerifierUnavailableError."""
+def test_j5_inaccessible_key_returns_false(qual_payload):
+    """Test 22: Inaccessible key version from backend → False (deterministic fail-closed).
+
+    This covers the case where the backend's verify() raises VaultTransitError
+    (including VaultKeyVersionUnavailableError) for a key version not in Vault.
+    verify_* must catch and return False, not propagate.
+    """
 
     class _KeyVersionNotFoundBackend:
         def sign(self, role, payload):
@@ -1003,12 +1020,15 @@ def test_j5_inaccessible_key_raises_verifier_unavailable(qual_payload):
 
     authority = TrustBindingAuthority(_KeyVersionNotFoundBackend())
     env = _make_verifiable_envelope("sign_qualification", qual_payload)
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_qualification(qual_payload, env)
+    try:
+        result = authority.verify_qualification(qual_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_qualification for inaccessible key: {e}")
+    assert result is False
 
 
-def test_j6_unexpected_vault_response_raises_verifier_unavailable(delivery_payload):
-    """Test 23: Unexpected Vault response → VaultVerifierUnavailableError."""
+def test_j6_unexpected_vault_response_returns_false(delivery_payload):
+    """Test 23: Unexpected Vault response → False (deterministic fail-closed)."""
 
     class _UnexpectedResponseBackend:
         def sign(self, role, payload):
@@ -1019,12 +1039,15 @@ def test_j6_unexpected_vault_response_raises_verifier_unavailable(delivery_paylo
 
     authority = TrustBindingAuthority(_UnexpectedResponseBackend())
     env = _make_verifiable_envelope("sign_delivery_authorization", delivery_payload)
-    with pytest.raises(VaultVerifierUnavailableError):
-        authority.verify_delivery_authorization(delivery_payload, env)
+    try:
+        result = authority.verify_delivery_authorization(delivery_payload, env)
+    except VaultTransitError as e:
+        pytest.fail(f"VaultTransitError escaped from verify_delivery_authorization on malformed response: {e}")
+    assert result is False
 
 
-def test_j7_vault_unavailable_backend_for_report_verify_raises():
-    """All three verify methods raise VaultVerifierUnavailableError when backend.verify() raises."""
+def test_j7_vault_unavailable_backend_for_all_verify_returns_false():
+    """All three verify methods return False when backend.verify() raises VaultTransitError."""
     for make_payload, sign_name, verify_name in [
         (_make_report_payload, "sign_report", "verify_report"),
         (_make_qual_payload, "sign_qualification", "verify_qualification"),
@@ -1038,8 +1061,71 @@ def test_j7_vault_unavailable_backend_for_report_verify_raises():
         env = _make_verifiable_envelope(sign_name, payload)
         authority = TrustBindingAuthority(_UnavailableBackend())
         verify = getattr(authority, verify_name)
-        with pytest.raises(VaultVerifierUnavailableError):
-            verify(payload, env)
+        try:
+            result = verify(payload, env)
+        except VaultTransitError as e:
+            pytest.fail(
+                f"VaultTransitError escaped from {verify_name} on Vault outage: {e}"
+            )
+        assert result is False, (
+            f"{verify_name} did not return False on Vault outage — "
+            "deterministic boolean contract violated"
+        )
+
+
+def test_j8_vault_backend_wrong_key_version_returns_false():
+    """VaultBackend.verify(): VaultKeyVersionUnavailableError from public_key() → False.
+
+    P1 #2 regression: a proof referencing a nonexistent key version caused
+    VaultBackend to raise VaultVerifierUnavailableError (wrong classification —
+    this is an invalid proof, not a Vault outage). After the fix, VaultBackend
+    catches VaultKeyVersionUnavailableError specifically and returns False.
+    """
+    from services.governance.trust_binding import VaultBackend
+
+    class _MockClient:
+        def public_key(self, key_id, key_version, role, correlation_id=None):
+            raise VaultKeyVersionUnavailableError(
+                f"Vault Transit public key version unavailable: {key_id} v{key_version}"
+            )
+
+    class _MockSigner:
+        _key_ids: dict = {role: f"fg-{role.value}" for role in TrustRole}  # noqa: RUF012
+        _issuer = "vault-transit"
+        _client = _MockClient()
+
+    backend = VaultBackend(_MockSigner())
+    # Signature must parse correctly (vault:vN:payload) to reach public_key() call
+    result = backend.verify(TrustRole.IDENTITY, b"payload", "vault:v999:abc123==")
+    assert result is False, (
+        "VaultBackend.verify() must return False for VaultKeyVersionUnavailableError "
+        "(wrong-version proof is invalid, not a Vault outage)"
+    )
+
+
+def test_j9_vault_backend_outage_raises_verifier_unavailable():
+    """VaultBackend.verify(): transport VaultTransitError from public_key() → VaultVerifierUnavailableError.
+
+    Internal epistemic distinction: genuine transport/auth failures remain
+    classified as VaultVerifierUnavailableError inside VaultBackend so that
+    callers with monitoring needs can distinguish outage from invalid proof.
+    verify_* catches this and returns False; the distinction is visible at
+    the VaultBackend layer.
+    """
+    from services.governance.trust_binding import VaultBackend
+
+    class _MockClient:
+        def public_key(self, key_id, key_version, role, correlation_id=None):
+            raise VaultTransitError("Vault Transit transport failure: connection refused")
+
+    class _MockSigner:
+        _key_ids: dict = {role: f"fg-{role.value}" for role in TrustRole}  # noqa: RUF012
+        _issuer = "vault-transit"
+        _client = _MockClient()
+
+    backend = VaultBackend(_MockSigner())
+    with pytest.raises(VaultVerifierUnavailableError):
+        backend.verify(TrustRole.IDENTITY, b"payload", "vault:v1:abc123==")
 
 
 # ---------------------------------------------------------------------------
@@ -1261,9 +1347,9 @@ def test_n2_vault_backend_verify_requires_live_vault():
         timeout=httpx.Timeout(0.001), follow_redirects=False
     )
 
-    from services.cgin.key_management.vault_transit import (
-        VaultTransitClient,
+    from services.cgin.key_management.vault_transit import (  # noqa: PLC0415
         VaultCustomerZeroSigner,
+        VaultTransitClient,
     )
 
     try:
