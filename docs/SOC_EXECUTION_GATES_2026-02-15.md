@@ -6936,3 +6936,30 @@ SOC review outcome: APPROVED. Gate hardening only; no authority weakening; sink 
 - `ruff check tools/ci/check_customer_one_roadmap.py` → all checks passed
 
 SOC review outcome: APPROVED. Enforcement tightening only; no authority weakening; fail-closed behavior preserved and extended to `blocked_by` dependency chains.
+
+## 2026-10-07 - feat/customer-zero-final-readiness-001: Customer-Zero final offline readiness authority
+
+**Change scope:** CUSTOMER-ZERO-FINAL-READINESS-001. New offline deterministic readiness gate (`tools/ci/customer_zero_final_readiness.py`) and supporting implementation (`services/governance/customer_zero_readiness.py`). This is a read-only, offline-only, zero-cost gate that evaluates 53 dimensions across 9 categories to answer the question: "Are there zero known offline engineering blockers before the third Customer-Zero trust ceremony?"
+
+**Security posture:**
+
+1. **Offline and read-only.** The gate makes no network calls, no cloud API calls, no database writes, no filesystem mutations beyond the result JSON if `--output` is specified. No Vault, AWS, HCP, or Railway contact occurs.
+2. **No secrets accessed or displayed.** The gate reads only committed repository files (YAML, Python source, Terraform HCL). No environment secrets, API keys, or credentials are read.
+3. **No self-authorization.** READY result does NOT authorize CUSTOMER-ZERO-TRUST-003, does NOT provision paid infrastructure, and does NOT mark Customer-Zero trust as PROVEN. Canonical truth preserved: CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER-ZERO-TRUST-003=NOT_AUTHORIZED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED.
+4. **Fail-closed.** Any FAIL or NOT_PROVEN in a required dimension produces BLOCKED (exit 1). All blockers are retained — none are truncated. Blocker ordering is deterministic.
+5. **Portable verification security.** PortableVerificationBundle.__post_init__ rejects manifests containing secret-bearing field names. PortableVerificationAuthority.enroll() rejects secret-bearing material. Private key material is structurally forbidden from all portable artifacts.
+6. **Tenant isolation.** Trust binding payloads include tenant_id; cross-tenant proof substitution fails at signature verification. No tenant A evidence can satisfy a tenant B requirement.
+7. **No paid infrastructure triggered.** The gate cannot trigger provisioning. paid_infrastructure_present=False is a checked state from ceremony_state.yaml, not user-supplied input.
+
+**Critical-path files changed:** `tools/ci/customer_zero_final_readiness.py` (new CLI gate), `services/governance/customer_zero_readiness.py` (new readiness authority module), `tests/test_customer_zero_final_readiness_001.py` (60 adversarial tests).
+
+**Required invariant:** Gate evaluates all 53 readiness dimensions; READY only when zero blockers; BLOCKED with full enumeration otherwise; canonical Customer-Zero truth (NOT_PROVEN, NOT_AUTHORIZED, BLOCKED, ABSENT) preserved in every execution; 60 adversarial tests enforcing authority, determinism, trust, portable verification, tenant isolation, cost, aggregation, and ceremony truth invariants.
+
+**Validation evidence:**
+
+- `python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001` → AUTHORIZED
+- `pytest tests/test_customer_zero_final_readiness_001.py -q` → 60 passed
+- `ruff check services/governance/customer_zero_readiness.py tools/ci/customer_zero_final_readiness.py tests/test_customer_zero_final_readiness_001.py` → all checks passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Offline read-only gate; no runtime authority, no authentication path, no tenant isolation bypass, no secret access; canonical Customer-Zero truth preserved and enforced.
