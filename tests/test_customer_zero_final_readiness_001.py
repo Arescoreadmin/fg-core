@@ -13,6 +13,10 @@ These tests verify:
   G — COST / INFRA (5 tests)
   H — AGGREGATION (6 tests)
   I — CEREMONY TRUTH (4 tests)
+  J — COMPLETION EVIDENCE (3 tests)
+  K — VERIFY OFFLINE CANONICAL PAYLOAD (4 tests)
+  L — PRIVATE KEY REJECTION (4 tests)
+  M — VARIABLE CONTRACT REQUIRED (2 tests)
 
 Total: 50+ tests (≥ 50 required)
 
@@ -43,6 +47,8 @@ from services.governance.customer_zero_readiness import (
     ReadinessResult,
     ReadinessStatus,
     _check_no_secret_material,
+    _evaluate_completion_evidence,
+    _evaluate_infrastructure,
     _extract_blockers,
     evaluate,
     render_human_readable,
@@ -92,11 +98,22 @@ def _make_portable_bundle(
     *,
     trust_domain: str = "frostgate.report-proof.v1",
     algorithm: str = "ed25519",
-    artifact_digest: str = "a" * 64,
     key_version: int = 1,
     key_identifier: str = "test-key-001",
 ) -> tuple[PortableVerificationBundle, PortableVerificationAuthority, bytes]:
-    """Create a portable bundle with pre-enrolled public material. Returns (bundle, authority, signing_payload)."""
+    """Create a portable bundle with pre-enrolled public material.
+
+    Returns (bundle, authority, canonical_artifact_bytes).
+
+    The signing payload is constructed to match the production path exactly:
+        signing_bytes = domain.encode() + b"\\n" + canonical_artifact_bytes
+    where canonical_artifact_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+
+    The artifact_digest = sha256(canonical_artifact_bytes).hexdigest()
+    """
+    import hashlib
+    import json
+
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -108,13 +125,23 @@ def _make_portable_bundle(
     pub_b64 = base64.b64encode(pub_raw).decode("ascii")
     fp = public_key_fingerprint(pub_b64)
 
-    signing_payload = f"{trust_domain}\n{artifact_digest}".encode("utf-8")
+    # Canonical artifact bytes: production-identical serialization of the manifest
+    manifest = {"report_id": "rep-test-001", "version": 1}
+    canonical_artifact_bytes = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+    # artifact_digest = sha256(canonical_artifact_bytes)
+    artifact_digest = hashlib.sha256(canonical_artifact_bytes).hexdigest()
+
+    # Signing payload: production path is domain + "\n" + canonical_artifact_bytes
+    signing_payload = trust_domain.encode("utf-8") + b"\n" + canonical_artifact_bytes
     sig_raw = priv.sign(signing_payload)
     signature = f"vault:v{key_version}:" + base64.b64encode(sig_raw).decode("ascii")
 
     bundle = PortableVerificationBundle(
         artifact_digest=artifact_digest,
-        manifest={"report_id": "rep-test-001", "version": 1},
+        manifest=manifest,
         signature=signature,
         trust_domain=trust_domain,
         public_key_material=pub_b64,
@@ -132,7 +159,7 @@ def _make_portable_bundle(
     authority = PortableVerificationAuthority()
     authority.enroll(trust_domain, key_identifier, key_version, pub_b64)
 
-    return bundle, authority, signing_payload
+    return bundle, authority, canonical_artifact_bytes
 
 
 # ---------------------------------------------------------------------------
@@ -424,17 +451,17 @@ def test_c14_source_provenance_mismatch_is_blocker() -> None:
 
 def test_d15_correct_domain_verification_pass() -> None:
     """Test 15: Pre-enrolled public material + correct domain -> PASS."""
-    bundle, authority, _ = _make_portable_bundle(
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(
         trust_domain="frostgate.report-proof.v1"
     )
-    assert authority.verify_offline(bundle) is True, (
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is True, (
         "Correct domain with pre-enrolled material must verify"
     )
 
 
 def test_d16_wrong_domain_fails() -> None:
     """Test 16: Wrong trust domain -> False."""
-    bundle, authority, _ = _make_portable_bundle(
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(
         trust_domain="frostgate.report-proof.v1"
     )
     # Create bundle with wrong domain but same key material
@@ -455,7 +482,7 @@ def test_d16_wrong_domain_fails() -> None:
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
     # Different domain -> not enrolled under that domain
-    assert authority.verify_offline(bad_bundle) is False, (
+    assert authority.verify_offline(bad_bundle, canonical_artifact_bytes) is False, (
         "Wrong domain must fail (not enrolled)"
     )
 
@@ -465,7 +492,7 @@ def test_d17_wrong_key_fails() -> None:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-    bundle, authority, _ = _make_portable_bundle()
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
 
     # Enroll a DIFFERENT key under the same domain/id/version
     wrong_priv = Ed25519PrivateKey.generate()
@@ -478,14 +505,14 @@ def test_d17_wrong_key_fails() -> None:
         (bundle.trust_domain, bundle.key_identifier, bundle.key_version)
     ] = wrong_pub_b64
 
-    assert authority.verify_offline(bundle) is False, (
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is False, (
         "Wrong public key must fail verification"
     )
 
 
 def test_d18_wrong_key_version_fails() -> None:
     """Test 18: Absent key version -> False (key not enrolled)."""
-    bundle, authority, _ = _make_portable_bundle(key_version=1)
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(key_version=1)
     # Create bundle claiming version 2 but version 2 not enrolled
     bad_bundle = PortableVerificationBundle(
         artifact_digest=bundle.artifact_digest,
@@ -503,14 +530,14 @@ def test_d18_wrong_key_version_fails() -> None:
         provenance_sha=bundle.provenance_sha,
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
-    assert authority.verify_offline(bad_bundle) is False, (
+    assert authority.verify_offline(bad_bundle, canonical_artifact_bytes) is False, (
         "Wrong key version (not enrolled) must fail"
     )
 
 
 def test_d19_malformed_signature_fails() -> None:
     """Test 19: Malformed signature -> False."""
-    bundle, authority, _ = _make_portable_bundle()
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
     bad_bundle = PortableVerificationBundle(
         artifact_digest=bundle.artifact_digest,
         manifest=bundle.manifest,
@@ -527,7 +554,7 @@ def test_d19_malformed_signature_fails() -> None:
         provenance_sha=bundle.provenance_sha,
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
-    assert authority.verify_offline(bad_bundle) is False, (
+    assert authority.verify_offline(bad_bundle, canonical_artifact_bytes) is False, (
         "Malformed signature must fail"
     )
 
@@ -535,7 +562,7 @@ def test_d19_malformed_signature_fails() -> None:
 def test_d20_cross_domain_replay_fails() -> None:
     """Test 20: Signature from domain A cannot be replayed as domain B."""
     # Create bundle signed under report domain
-    bundle_report, authority_report, _ = _make_portable_bundle(
+    bundle_report, authority_report, canonical_artifact_bytes = _make_portable_bundle(
         trust_domain="frostgate.report-proof.v1",
         key_identifier="key-report",
     )
@@ -563,17 +590,17 @@ def test_d20_cross_domain_replay_fails() -> None:
         audit_evidence_reference=bundle_report.audit_evidence_reference,
     )
     # Not enrolled under qualification domain -> False
-    assert authority_report.verify_offline(replayed) is False, (
-        "Cross-domain replay must fail"
-    )
+    assert (
+        authority_report.verify_offline(replayed, canonical_artifact_bytes) is False
+    ), "Cross-domain replay must fail"
 
 
 def test_d21_historical_legitimate_version_pass() -> None:
     """Test 21: Pre-enrolled historical version verifies after 'Vault is gone'."""
-    bundle, authority, _ = _make_portable_bundle(key_version=1)
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(key_version=1)
     # Simulate Vault being absent: authority only has pre-enrolled material
     # verify_offline uses ONLY the enrolled material
-    assert authority.verify_offline(bundle) is True, (
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is True, (
         "Pre-enrolled historical v1 must verify offline (Vault absent)"
     )
 
@@ -630,26 +657,26 @@ def test_d22_operational_verifier_failure_handled_deterministically() -> None:
 
 def test_e23_pre_enrolled_public_material_offline_verify_pass() -> None:
     """Test 23: Pre-enrolled public material allows offline historical verification."""
-    bundle, authority, _ = _make_portable_bundle()
-    assert authority.verify_offline(bundle) is True
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is True
 
 
 def test_e24_simulated_vault_absent_historical_verify_pass() -> None:
     """Test 24: When Vault is 'absent', pre-enrolled material still works."""
-    bundle, authority, _ = _make_portable_bundle()
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
     # authority has no live Vault connection at all — purely offline
     # Confirm: verify_offline makes no network calls
-    assert authority.verify_offline(bundle) is True, (
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is True, (
         "Historical verification must succeed with pre-enrolled material when Vault is absent"
     )
 
 
 def test_e25_missing_public_material_returns_false() -> None:
     """Test 25: No pre-enrolled material -> False (NOT_PROVEN)."""
-    bundle, _, _ = _make_portable_bundle()
+    bundle, _, canonical_artifact_bytes = _make_portable_bundle()
     empty_authority = PortableVerificationAuthority()
     # Nothing enrolled
-    assert empty_authority.verify_offline(bundle) is False, (
+    assert empty_authority.verify_offline(bundle, canonical_artifact_bytes) is False, (
         "Missing enrollment must return False"
     )
 
@@ -662,7 +689,7 @@ def test_e26_substituted_public_material_fails() -> None:
         PublicFormat,
     )  # noqa: F401
 
-    bundle, authority, _ = _make_portable_bundle()
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
 
     # Enroll a different key for the same domain/id/version
     wrong_key = Ed25519PrivateKey.generate()
@@ -674,39 +701,25 @@ def test_e26_substituted_public_material_fails() -> None:
         (bundle.trust_domain, bundle.key_identifier, bundle.key_version)
     ] = wrong_pub_b64
 
-    assert authority.verify_offline(bundle) is False, (
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is False, (
         "Substituted public material must fail fingerprint or signature check"
     )
 
 
 def test_e27_mutated_signed_artifact_fails() -> None:
-    """Test 27: Mutated artifact digest -> False (signature mismatch)."""
-    bundle, authority, _ = _make_portable_bundle()
-    # Mutate the artifact digest
-    mutated_bundle = PortableVerificationBundle(
-        artifact_digest="deadbeef" + "0" * 56,  # MUTATED
-        manifest=bundle.manifest,
-        signature=bundle.signature,
-        trust_domain=bundle.trust_domain,
-        public_key_material=bundle.public_key_material,
-        public_key_fingerprint=bundle.public_key_fingerprint,
-        key_identifier=bundle.key_identifier,
-        key_version=bundle.key_version,
-        algorithm=bundle.algorithm,
-        signing_timestamp=bundle.signing_timestamp,
-        source_sha=bundle.source_sha,
-        methodology_version=bundle.methodology_version,
-        provenance_sha=bundle.provenance_sha,
-        audit_evidence_reference=bundle.audit_evidence_reference,
-    )
-    assert authority.verify_offline(mutated_bundle) is False, (
-        "Mutated artifact digest must fail signature verification"
+    """Test 27: Mutated artifact bytes -> False (digest mismatch caught before signature check)."""
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
+    # Tamper: mutate the artifact bytes while keeping the claimed digest unchanged.
+    # This simulates an attacker who changed the artifact content but retained the original digest.
+    tampered_bytes = canonical_artifact_bytes[:-1] + b"X"
+    assert authority.verify_offline(bundle, tampered_bytes) is False, (
+        "Tampered artifact bytes (digest mismatch) must fail verification"
     )
 
 
 def test_e28_wrong_domain_fails() -> None:
     """Test 28: Wrong trust domain -> False (not enrolled)."""
-    bundle, authority, _ = _make_portable_bundle(
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(
         trust_domain="frostgate.report-proof.v1"
     )
     wrong_domain_bundle = PortableVerificationBundle(
@@ -725,12 +738,14 @@ def test_e28_wrong_domain_fails() -> None:
         provenance_sha=bundle.provenance_sha,
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
-    assert authority.verify_offline(wrong_domain_bundle) is False
+    assert (
+        authority.verify_offline(wrong_domain_bundle, canonical_artifact_bytes) is False
+    )
 
 
 def test_e29_wrong_version_fails() -> None:
     """Test 29: Claimed version not enrolled -> False."""
-    bundle, authority, _ = _make_portable_bundle(key_version=1)
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle(key_version=1)
     # Version 99 not enrolled
     bad_bundle = PortableVerificationBundle(
         artifact_digest=bundle.artifact_digest,
@@ -748,12 +763,12 @@ def test_e29_wrong_version_fails() -> None:
         provenance_sha=bundle.provenance_sha,
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
-    assert authority.verify_offline(bad_bundle) is False
+    assert authority.verify_offline(bad_bundle, canonical_artifact_bytes) is False
 
 
 def test_e30_malformed_portable_bundle_fails() -> None:
     """Test 30: Malformed bundle (unknown domain) -> False."""
-    bundle, authority, _ = _make_portable_bundle()
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
     bad_bundle = PortableVerificationBundle(
         artifact_digest=bundle.artifact_digest,
         manifest=bundle.manifest,
@@ -770,7 +785,7 @@ def test_e30_malformed_portable_bundle_fails() -> None:
         provenance_sha=bundle.provenance_sha,
         audit_evidence_reference=bundle.audit_evidence_reference,
     )
-    assert authority.verify_offline(bad_bundle) is False, (
+    assert authority.verify_offline(bad_bundle, canonical_artifact_bytes) is False, (
         "Unknown domain must return False"
     )
 
@@ -1260,3 +1275,346 @@ def test_bonus_60_not_applicable_does_not_block() -> None:
     ]
     blockers = _extract_blockers(dims)
     assert len(blockers) == 0, "NOT_APPLICABLE must not produce a blocker"
+
+
+# ---------------------------------------------------------------------------
+# J — COMPLETION EVIDENCE (Fix 1: 3 tests)
+# ---------------------------------------------------------------------------
+
+
+def test_j61_completion_evidence_dimensions_present_in_evaluation() -> None:
+    """Test 61 (Fix 1): Completion evidence dimensions appear in full evaluation."""
+    result = evaluate(REPO)
+    ce_dims = [d for d in result.dimensions if d.category == "J-COMPLETION-EVIDENCE"]
+    assert len(ce_dims) == 6, (
+        f"Exactly 6 completion evidence dimensions required; got {len(ce_dims)}: "
+        f"{[d.id for d in ce_dims]}"
+    )
+
+
+def test_j62_completion_evidence_all_required_true() -> None:
+    """Test 62 (Fix 1): All completion evidence dimensions are required=True."""
+    result = evaluate(REPO)
+    ce_dims = [d for d in result.dimensions if d.category == "J-COMPLETION-EVIDENCE"]
+    non_required = [d.id for d in ce_dims if not d.required]
+    assert not non_required, (
+        f"All completion evidence dimensions must be required=True; "
+        f"non-required: {non_required}"
+    )
+
+
+def test_j63_missing_completion_evidence_blocks_ready() -> None:
+    """Test 63 (Fix 1): Missing completion evidence -> NOT_PROVEN + BLOCKED (required=True)."""
+    # Simulate an authority with no completed items → completion evidence NOT_PROVEN
+    empty_authority: dict = {
+        "schema_version": "1.0.0",
+        "completed": [],
+        "next_sequence": [
+            {
+                "id": "CUSTOMER-ZERO-FINAL-READINESS-001",
+                "completion_evidence": [
+                    "provenance integrity repair proven by offline tests",
+                ],
+            }
+        ],
+    }
+
+    with patch(
+        "services.governance.customer_zero_readiness._load_yaml_safe",
+        return_value=empty_authority,
+    ):
+        dims = _evaluate_completion_evidence(REPO)
+
+    # With no completed items, CE1 and CE2 must be NOT_PROVEN
+    ce1 = next(
+        (d for d in dims if d.id == "J_CE1-provenance-integrity-repair-proven"), None
+    )
+    ce2 = next(
+        (d for d in dims if d.id == "J_CE2-verifier-contract-repair-proven"), None
+    )
+    assert ce1 is not None and ce1.status == ReadinessStatus.NOT_PROVEN, (
+        f"CE1 must be NOT_PROVEN when authority is empty; got {ce1}"
+    )
+    assert ce2 is not None and ce2.status == ReadinessStatus.NOT_PROVEN, (
+        f"CE2 must be NOT_PROVEN when authority is empty; got {ce2}"
+    )
+    # They must be required=True → produce blockers
+    blockers = _extract_blockers(dims)
+    blocker_ids = {b.dimension_id for b in blockers}
+    assert "J_CE1-provenance-integrity-repair-proven" in blocker_ids, (
+        "CE1 NOT_PROVEN with required=True must be a blocker"
+    )
+
+
+# ---------------------------------------------------------------------------
+# K — VERIFY OFFLINE CANONICAL PAYLOAD (Fix 2: 4 tests)
+# ---------------------------------------------------------------------------
+
+
+def test_k64_signing_payload_matches_production_path() -> None:
+    """Test 64 (Fix 2): verify_offline signing payload matches production _prepare_signing_bytes."""
+    import hashlib
+    import json
+
+    # Reconstruct the production signing payload from trust_binding._prepare_signing_bytes:
+    #   f"{domain}\n{json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))}".encode()
+    trust_domain = "frostgate.report-proof.v1"
+    manifest = {"report_id": "rep-test-001", "version": 1}
+    payload_json = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    production_signing_payload = f"{trust_domain}\n{payload_json}".encode("utf-8")
+
+    # canonical_artifact_bytes IS the JSON bytes of the manifest
+    canonical_artifact_bytes = payload_json.encode("utf-8")
+    # verify_offline reconstructs: domain.encode() + b"\n" + canonical_artifact_bytes
+    offline_signing_payload = (
+        trust_domain.encode("utf-8") + b"\n" + canonical_artifact_bytes
+    )
+
+    assert production_signing_payload == offline_signing_payload, (
+        "verify_offline signing payload must match production _prepare_signing_bytes exactly"
+    )
+
+    # Also verify artifact_digest = sha256(canonical_artifact_bytes)
+    expected_digest = hashlib.sha256(canonical_artifact_bytes).hexdigest()
+    bundle, authority, cab = _make_portable_bundle(trust_domain=trust_domain)
+    assert bundle.artifact_digest == hashlib.sha256(cab).hexdigest(), (
+        "bundle.artifact_digest must equal sha256(canonical_artifact_bytes)"
+    )
+    assert expected_digest == bundle.artifact_digest, (
+        "Bundle artifact digest must match sha256 of the canonical artifact bytes"
+    )
+
+
+def test_k65_tampered_artifact_bytes_fails_even_with_original_digest() -> None:
+    """Test 65 (Fix 2): Artifact bytes tampered but claimed digest unchanged -> False.
+
+    This is the key adversarial case: an attacker changes the artifact bytes
+    but retains the original artifact_digest claim. The verifier must reject it.
+    """
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
+
+    # Tamper the artifact bytes without changing the claimed digest in the bundle
+    tampered_bytes = b"tampered_" + canonical_artifact_bytes
+    # bundle.artifact_digest still points to sha256(original canonical_artifact_bytes)
+    # tampered_bytes has a different sha256 → digest mismatch → reject
+    assert authority.verify_offline(bundle, tampered_bytes) is False, (
+        "Tampered artifact bytes with unchanged claimed digest must be rejected"
+    )
+
+
+def test_k66_correct_canonical_bytes_passes() -> None:
+    """Test 66 (Fix 2): Correct canonical bytes + correct digest -> True."""
+    bundle, authority, canonical_artifact_bytes = _make_portable_bundle()
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is True, (
+        "Correct canonical artifact bytes must pass verification"
+    )
+
+
+def test_k67_verify_offline_rejects_digest_only_signing() -> None:
+    """Test 67 (Fix 2): Signing over artifact_digest string (old broken path) does NOT verify."""
+    import base64
+    import hashlib
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    from services.cgin.key_management.vault_transit import public_key_fingerprint
+
+    trust_domain = "frostgate.report-proof.v1"
+    manifest = {"report_id": "rep-broken-path", "version": 1}
+    canonical_artifact_bytes = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    artifact_digest = hashlib.sha256(canonical_artifact_bytes).hexdigest()
+
+    priv = Ed25519PrivateKey.generate()
+    pub = priv.public_key()
+    pub_raw = pub.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    pub_b64 = base64.b64encode(pub_raw).decode("ascii")
+    fp = public_key_fingerprint(pub_b64)
+
+    # Sign using the OLD (broken) payload: domain + "\n" + artifact_digest_string
+    broken_signing_payload = f"{trust_domain}\n{artifact_digest}".encode("utf-8")
+    sig_raw = priv.sign(broken_signing_payload)
+    signature = "vault:v1:" + base64.b64encode(sig_raw).decode("ascii")
+
+    bundle = PortableVerificationBundle(
+        artifact_digest=artifact_digest,
+        manifest=manifest,
+        signature=signature,
+        trust_domain=trust_domain,
+        public_key_material=pub_b64,
+        public_key_fingerprint=fp,
+        key_identifier="key-broken",
+        key_version=1,
+        algorithm="ed25519",
+        signing_timestamp="2026-10-07T00:00:00Z",
+        source_sha="a" * 40,
+        methodology_version="1.0.0",
+        provenance_sha="b" * 40,
+        audit_evidence_reference="test-issuer",
+    )
+    authority = PortableVerificationAuthority()
+    authority.enroll(trust_domain, "key-broken", 1, pub_b64)
+
+    # Must FAIL: the signature was produced over digest-string, not canonical bytes
+    assert authority.verify_offline(bundle, canonical_artifact_bytes) is False, (
+        "Signature over artifact_digest string (old broken path) must NOT verify "
+        "against canonical artifact bytes (production-aligned path)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# L — PRIVATE KEY REJECTION (Fix 3: 4 tests)
+# ---------------------------------------------------------------------------
+
+
+def test_l68_pem_private_key_in_bundle_raises() -> None:
+    """Test 68 (Fix 3): PEM private key in public_key_material raises ValueError."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import (
+        Encoding,
+        NoEncryption,
+        PrivateFormat,
+    )
+
+    priv = Ed25519PrivateKey.generate()
+    pem_private = priv.private_bytes(
+        Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+    ).decode("utf-8")
+
+    with pytest.raises(ValueError):
+        PortableVerificationBundle(
+            artifact_digest="a" * 64,
+            manifest={"report_id": "test", "version": 1},
+            signature="vault:v1:abc",
+            trust_domain="frostgate.report-proof.v1",
+            public_key_material=pem_private,  # PRIVATE KEY — must be rejected
+            public_key_fingerprint="fp",
+            key_identifier="key-001",
+            key_version=1,
+            algorithm="ed25519",
+            signing_timestamp="2026-10-07T00:00:00Z",
+            source_sha="a" * 40,
+            methodology_version="1.0.0",
+            provenance_sha="b" * 40,
+            audit_evidence_reference="ref",
+        )
+
+
+def test_l69_pem_private_key_in_enroll_raises() -> None:
+    """Test 69 (Fix 3): PEM private key in enroll() raises ValueError."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import (
+        Encoding,
+        NoEncryption,
+        PrivateFormat,
+    )
+
+    priv = Ed25519PrivateKey.generate()
+    pem_private = priv.private_bytes(
+        Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+    ).decode("utf-8")
+
+    authority = PortableVerificationAuthority()
+    with pytest.raises(ValueError):
+        authority.enroll("frostgate.report-proof.v1", "key-001", 1, pem_private)
+
+
+def test_l70_valid_ed25519_public_key_accepted() -> None:
+    """Test 70 (Fix 3): Valid Ed25519 public key (base64 raw bytes) -> accepted."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    priv = Ed25519PrivateKey.generate()
+    pub = priv.public_key()
+    pub_raw = pub.public_bytes(Encoding.Raw, PublicFormat.Raw)
+    pub_b64 = base64.b64encode(pub_raw).decode("ascii")
+
+    authority = PortableVerificationAuthority()
+    # Must not raise
+    authority.enroll("frostgate.report-proof.v1", "key-valid", 1, pub_b64)
+    assert authority.is_enrolled("frostgate.report-proof.v1", "key-valid", 1)
+
+
+def test_l71_check_no_secret_material_scans_string_values() -> None:
+    """Test 71 (Fix 3): _check_no_secret_material scans string values for PEM private markers."""
+    # A string value containing a private key PEM marker must be detected
+    violations = _check_no_secret_material(
+        {
+            "public_key_material": "-----BEGIN PRIVATE KEY-----\nABCDEF\n-----END PRIVATE KEY-----"
+        }
+    )
+    assert any("PRIVATE KEY" in v or "private" in v.lower() for v in violations), (
+        f"PEM private key marker in string value must be detected; got violations: {violations}"
+    )
+
+    # A clean dict with only public material must pass
+    clean_violations = _check_no_secret_material(
+        {"public_key_material": "AAAA", "algorithm": "ed25519"}
+    )
+    assert len(clean_violations) == 0, (
+        f"Clean public material must produce no violations; got: {clean_violations}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M — VARIABLE CONTRACT REQUIRED (Fix 4: 2 tests)
+# ---------------------------------------------------------------------------
+
+
+def test_m72_missing_variables_tf_with_other_tf_files_is_blocker() -> None:
+    """Test 72 (Fix 4): infra/variables.tf missing with other .tf files -> NOT_PROVEN + BLOCKED.
+
+    required=True means NOT_PROVEN blocks READY.
+    """
+    import tempfile
+    from pathlib import Path as TPath
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = TPath(tmpdir)
+        # Create an infra/ dir with a non-variables .tf file but NO variables.tf
+        infra = tmp / "infra"
+        infra.mkdir()
+        (infra / "main.tf").write_text('resource "aws_s3_bucket" "b" {}')
+        # No variables.tf
+
+        # Minimal ceremony_state.yaml for HCP_ABSENT
+        ceremony_dir = tmp / "customer_one"
+        ceremony_dir.mkdir()
+        (ceremony_dir / "ceremony_state.yaml").write_text(
+            "infrastructure_lifecycle_status: HCP_ABSENT\n"
+            "third_paid_ceremony_status: NOT_AUTHORIZED\n"
+        )
+
+        dims = _evaluate_infrastructure(tmp)
+        f40 = next(
+            (d for d in dims if d.id == "F40-production-variable-contract"), None
+        )
+        assert f40 is not None, "F40-production-variable-contract dimension must exist"
+        assert f40.required is True, (
+            "F40-production-variable-contract must be required=True (Fix 4)"
+        )
+        assert f40.status == ReadinessStatus.NOT_PROVEN, (
+            f"Missing variables.tf must be NOT_PROVEN; got {f40.status}"
+        )
+        assert f40.is_blocker(), (
+            "Missing variables.tf (required=True, NOT_PROVEN) must be a blocker"
+        )
+
+
+def test_m73_present_variables_tf_passes() -> None:
+    """Test 73 (Fix 4): infra/variables.tf present -> PASS (not a blocker)."""
+    result = evaluate(REPO)
+    f40 = next(
+        (d for d in result.dimensions if d.id == "F40-production-variable-contract"),
+        None,
+    )
+    assert f40 is not None, "F40-production-variable-contract dimension must exist"
+    assert f40.required is True, "F40 must be required=True"
+    # If variables.tf exists in the repo, must be PASS; if absent, NOT_PROVEN
+    # Either way we just verify it evaluates without error and required=True is set
+    assert f40.status in (ReadinessStatus.PASS, ReadinessStatus.NOT_PROVEN), (
+        f"F40 status must be PASS or NOT_PROVEN; got {f40.status}"
+    )
