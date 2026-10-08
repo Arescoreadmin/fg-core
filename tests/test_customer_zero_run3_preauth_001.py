@@ -1399,3 +1399,316 @@ class TestAdditionalAdversarial:
         # All data refs should have "data" in the resource_type
         for r in data_refs:
             assert "data" in r.resource_type.lower() or "source" in r.purpose.lower()
+
+
+# ---------------------------------------------------------------------------
+# I. Review-fix tests (tests 71-84)
+# ---------------------------------------------------------------------------
+
+
+class TestReviewFixes:
+    """Tests 71-84: Review-issue fixes — readiness gate, source SHA binding,
+    TF coverage check, and portable verification derivation."""
+
+    # ── Fix 1: Reject BLOCKED final-readiness results ────────────────────
+
+    def test_71_readiness_blocked_result_is_fail(self) -> None:
+        """Test 71: READINESS-FINGERPRINT check FAILs when final_result is BLOCKED."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        mock_rr = MagicMock()
+        mock_rr.final_result.value = "BLOCKED"
+        mock_rr.offline_blocker_count = 1
+        mock_rr.canonical_fingerprint = "a" * 64
+
+        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+            checks, blockers = _run_offline_checks(_ROOT, "test-sha")
+
+        rf_check = next((c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None)
+        assert rf_check is not None
+        assert rf_check["result"] == "FAIL"
+        assert rf_check["evidence_strength"] == "NOT_PROVEN"
+        assert any("READINESS-FINGERPRINT" in b for b in blockers)
+        assert any("BLOCKED" in b for b in blockers)
+
+    def test_72_readiness_blocked_offline_blocker_count_in_message(self) -> None:
+        """Test 72: Blocker message includes offline_blocker_count when > 0."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        mock_rr = MagicMock()
+        mock_rr.final_result.value = "BLOCKED"
+        mock_rr.offline_blocker_count = 3
+        mock_rr.canonical_fingerprint = "b" * 64
+
+        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+            checks, blockers = _run_offline_checks(_ROOT, "test-sha")
+
+        assert any("offline_blocker_count=3" in b for b in blockers), (
+            "Blocker message must include offline_blocker_count when > 0"
+        )
+
+    def test_73_readiness_ready_result_is_pass(self) -> None:
+        """Test 73: READINESS-FINGERPRINT check PASSes when final_result is READY."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        mock_rr = MagicMock()
+        mock_rr.final_result.value = "READY"
+        mock_rr.offline_blocker_count = 0
+        mock_rr.canonical_fingerprint = "c" * 64
+
+        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+            checks, blockers = _run_offline_checks(_ROOT, "test-sha")
+
+        rf_check = next((c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None)
+        assert rf_check is not None
+        assert rf_check["result"] == "PASS"
+        assert not any("READINESS-FINGERPRINT" in b for b in blockers)
+
+    # ── Fix 2: source_sha stored on CostAuthorizationRequest ─────────────
+
+    def test_74_cost_authorization_request_stores_source_sha(self) -> None:
+        """Test 74: CostAuthorizationRequest dataclass has a source_sha field."""
+        from services.governance.run3_cost_request import CostAuthorizationRequest
+        import dataclasses
+
+        field_names = {f.name for f in dataclasses.fields(CostAuthorizationRequest)}
+        assert "source_sha" in field_names, (
+            "CostAuthorizationRequest must have a source_sha field"
+        )
+
+    def test_75_build_cost_request_propagates_source_sha(self) -> None:
+        """Test 75: build_cost_request() stores source_sha on the returned request."""
+        from services.governance.run3_cost_request import build_cost_request
+
+        req = build_cost_request(
+            candidate_fingerprint="fp_test",
+            resource_inventory_fingerprint="inv_test",
+            expected_resources=[],
+            preserved_resources=[],
+            source_sha="abc123deadbeef",
+        )
+        assert req.source_sha == "abc123deadbeef"
+
+    def test_76_authorization_with_wrong_source_sha_fails(self) -> None:
+        """Test 76: validate_authorization_binding rejects wrong source_sha."""
+        from services.governance.run3_cost_request import build_cost_request
+        from services.governance.run3_candidate import build_candidate
+        from services.governance.run3_resource_inventory import (
+            get_inventory,
+            get_preserved_resources,
+            compute_inventory_fingerprint,
+        )
+
+        candidate = build_candidate(_ROOT)
+        inv_fp = compute_inventory_fingerprint()
+        resources = [r.to_dict() for r in get_inventory()]
+        preserved = [r.to_dict() for r in get_preserved_resources()]
+
+        req = build_cost_request(
+            candidate.candidate_fingerprint, inv_fp, resources, preserved,
+            source_sha="correct-sha-aaaa",
+        )
+        valid, failures = req.validate_authorization_binding(
+            candidate.candidate_fingerprint,
+            inv_fp,
+            "wrong-sha-bbbb",  # different from stored source_sha
+            "CUSTOMER-ZERO-TRUST-003-RUN3",
+        )
+        assert not valid
+        assert any("source_sha" in f for f in failures), (
+            "source_sha mismatch must appear in failure reasons"
+        )
+
+    def test_77_authorization_with_matching_source_sha_does_not_fail_on_sha(self) -> None:
+        """Test 77: validate_authorization_binding does not flag source_sha when it matches."""
+        from services.governance.run3_cost_request import build_cost_request
+        from services.governance.run3_candidate import build_candidate
+        from services.governance.run3_resource_inventory import (
+            get_inventory,
+            get_preserved_resources,
+            compute_inventory_fingerprint,
+        )
+
+        candidate = build_candidate(_ROOT)
+        inv_fp = compute_inventory_fingerprint()
+        resources = [r.to_dict() for r in get_inventory()]
+        preserved = [r.to_dict() for r in get_preserved_resources()]
+
+        req = build_cost_request(
+            candidate.candidate_fingerprint, inv_fp, resources, preserved,
+            source_sha="same-sha-for-both",
+        )
+        _valid, failures = req.validate_authorization_binding(
+            candidate.candidate_fingerprint,
+            inv_fp,
+            "same-sha-for-both",
+            "CUSTOMER-ZERO-TRUST-003-RUN3",
+        )
+        # source_sha mismatch must NOT appear
+        assert not any("source_sha" in f for f in failures), (
+            "source_sha must not be in failures when it matches"
+        )
+
+    # ── Fix 3: INVENTORY-TF-COVERAGE check ───────────────────────────────
+
+    def test_78_inventory_tf_coverage_passes_when_all_classified(self) -> None:
+        """Test 78: INVENTORY-TF-COVERAGE PASSes when all .tf resources are in inventory."""
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        checks, blockers = _run_offline_checks(_ROOT, "test-sha")
+        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        assert cov_check is not None, "INVENTORY-TF-COVERAGE check must exist"
+        assert cov_check["result"] == "PASS", (
+            f"INVENTORY-TF-COVERAGE must PASS; detail={cov_check.get('detail')}"
+        )
+        assert cov_check["evidence_strength"] == "STATIC_VERIFIED"
+        assert not any("INVENTORY-TF-COVERAGE" in b for b in blockers)
+
+    def test_79_inventory_tf_coverage_fails_for_unclassified_tf_resource(self) -> None:
+        """Test 79: INVENTORY-TF-COVERAGE FAILs when a .tf resource is absent from inventory."""
+        import tempfile
+        from pathlib import Path as _Path
+        from unittest.mock import patch
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        # Create a temporary infra directory with an extra unclassified resource
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_infra = _Path(tmpdir) / "infra"
+            fake_infra.mkdir()
+            (fake_infra / "extra.tf").write_text(
+                'resource "aws_s3_bucket" "untracked_bucket" {\n  bucket = "fg-untracked"\n}\n'
+            )
+            # Copy existing inventory addresses to a mock inventory that does NOT include the new one
+            fake_repo = _Path(tmpdir)
+            # Patch only the RESOURCE_INVENTORY used inside the check
+            with patch.object(
+                __import__(
+                    "services.governance.run3_resource_inventory",
+                    fromlist=["RESOURCE_INVENTORY"],
+                ),
+                "RESOURCE_INVENTORY",
+                [],  # empty inventory — nothing classified
+            ):
+                checks, blockers = _run_offline_checks(fake_repo, "test-sha")
+
+        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        assert cov_check is not None
+        assert cov_check["result"] == "FAIL"
+        assert cov_check["evidence_strength"] == "NOT_PROVEN"
+        assert any("INVENTORY-TF-COVERAGE" in b for b in blockers)
+        assert any("aws_s3_bucket.untracked_bucket" in b for b in blockers)
+
+    def test_80_inventory_tf_coverage_includes_data_sources(self) -> None:
+        """Test 80: INVENTORY-TF-COVERAGE cross-checks data sources too."""
+        import tempfile
+        from pathlib import Path as _Path
+        from unittest.mock import patch
+        from tools.ci.customer_zero_run3_preauth import _run_offline_checks
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_infra = _Path(tmpdir) / "infra"
+            fake_infra.mkdir()
+            (fake_infra / "data.tf").write_text(
+                'data "aws_caller_identity" "unclassified_data" {}\n'
+            )
+            fake_repo = _Path(tmpdir)
+            with patch.object(
+                __import__(
+                    "services.governance.run3_resource_inventory",
+                    fromlist=["RESOURCE_INVENTORY"],
+                ),
+                "RESOURCE_INVENTORY",
+                [],
+            ):
+                checks, blockers = _run_offline_checks(fake_repo, "test-sha")
+
+        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        assert cov_check is not None
+        assert cov_check["result"] == "FAIL"
+        assert any("data.aws_caller_identity.unclassified_data" in b for b in blockers), (
+            "Data source must appear in INVENTORY-TF-COVERAGE blocker"
+        )
+
+    # ── Fix 4: Portable verification derived from execution ──────────────
+
+    def test_81_portable_verification_not_proven_when_tests_fail(self) -> None:
+        """Test 81: pv_result is NOT_PROVEN when portable verification tests fail."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _build_artifact
+
+        # Mock the subprocess.run inside _build_artifact to simulate test failure
+        _fake_run_result = MagicMock()
+        _fake_run_result.returncode = 1
+        _fake_run_result.stdout = "FAILED tests/test_customer_zero_run3_preauth_001.py::test_36_verify\n1 failed"
+        _fake_run_result.stderr = ""
+
+        with patch("subprocess.run", return_value=_fake_run_result):
+            artifact = _build_artifact(_ROOT, [], [], "test-sha")
+
+        assert artifact.get("portable_verification_result") == "NOT_PROVEN", (
+            "pv_result must be NOT_PROVEN when portable tests fail"
+        )
+        assert any("PORTABLE-VERIFICATION" in b for b in artifact.get("blockers", [])), (
+            "Artifact blockers must contain PORTABLE-VERIFICATION entry on test failure"
+        )
+
+    def test_82_portable_verification_test_proven_when_tests_pass(self) -> None:
+        """Test 82: pv_result is TEST_PROVEN when portable verification tests pass."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _build_artifact
+
+        _fake_run_result = MagicMock()
+        _fake_run_result.returncode = 0
+        _fake_run_result.stdout = "11 passed in 9.50s"
+        _fake_run_result.stderr = ""
+
+        with patch("subprocess.run", return_value=_fake_run_result):
+            artifact = _build_artifact(_ROOT, [], [], "test-sha")
+
+        assert artifact.get("portable_verification_result") == "TEST_PROVEN", (
+            "pv_result must be TEST_PROVEN when portable tests pass"
+        )
+
+    def test_83_portable_verification_result_not_hardcoded(self) -> None:
+        """Test 83: pv_result changes based on test outcome, not a hardcoded string."""
+        from unittest.mock import patch, MagicMock
+        from tools.ci.customer_zero_run3_preauth import _build_artifact
+
+        pass_result = MagicMock()
+        pass_result.returncode = 0
+        pass_result.stdout = "11 passed"
+        pass_result.stderr = ""
+
+        fail_result = MagicMock()
+        fail_result.returncode = 1
+        fail_result.stdout = "1 failed"
+        fail_result.stderr = ""
+
+        with patch("subprocess.run", return_value=pass_result):
+            artifact_pass = _build_artifact(_ROOT, [], [], "test-sha")
+        with patch("subprocess.run", return_value=fail_result):
+            artifact_fail = _build_artifact(_ROOT, [], [], "test-sha")
+
+        assert artifact_pass.get("portable_verification_result") == "TEST_PROVEN"
+        assert artifact_fail.get("portable_verification_result") == "NOT_PROVEN"
+        assert artifact_pass["portable_verification_result"] != artifact_fail["portable_verification_result"], (
+            "portable_verification_result must vary with test outcome"
+        )
+
+    def test_84_cost_request_source_sha_in_to_dict(self) -> None:
+        """Test 84: CostAuthorizationRequest.to_dict() includes source_sha."""
+        from services.governance.run3_cost_request import build_cost_request
+
+        req = build_cost_request(
+            candidate_fingerprint="fp_84",
+            resource_inventory_fingerprint="inv_84",
+            expected_resources=[],
+            preserved_resources=[],
+            source_sha="sha_84_test",
+        )
+        d = req.to_dict()
+        assert "source_sha" in d, "to_dict() must include source_sha"
+        assert d["source_sha"] == "sha_84_test"

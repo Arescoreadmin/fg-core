@@ -49,6 +49,7 @@ class CostAuthorizationRequest:
     ceremony_id: str
     candidate_fingerprint: str
     resource_inventory_fingerprint: str
+    source_sha: str
 
     # Historical cost evidence
     historical_cost_usd: float
@@ -111,6 +112,11 @@ class CostAuthorizationRequest:
             failures.append(
                 f"candidate_fingerprint mismatch: expected {candidate_fingerprint!r}"
             )
+        if self.source_sha != source_sha:
+            failures.append(
+                f"source_sha mismatch: authorization bound to {self.source_sha!r}, "
+                f"current runtime is {source_sha!r}"
+            )
         if self.resource_inventory_fingerprint != resource_inventory_fingerprint:
             failures.append(
                 f"resource_inventory_fingerprint mismatch: expected {resource_inventory_fingerprint!r}"
@@ -129,6 +135,7 @@ class CostAuthorizationRequest:
             "ceremony_id": self.ceremony_id,
             "candidate_fingerprint": self.candidate_fingerprint,
             "resource_inventory_fingerprint": self.resource_inventory_fingerprint,
+            "source_sha": self.source_sha,
             "historical_cost_usd": self.historical_cost_usd,
             "pricing_evidence": self.pricing_evidence,
             "pricing_as_of": self.pricing_as_of,
@@ -152,6 +159,7 @@ def build_cost_request(
     resource_inventory_fingerprint: str,
     expected_resources: list[dict[str, Any]],
     preserved_resources: list[dict[str, Any]],
+    source_sha: str = "UNKNOWN",
 ) -> CostAuthorizationRequest:
     """Build the canonical cost authorization REQUEST.
 
@@ -163,6 +171,7 @@ def build_cost_request(
         ceremony_id="CUSTOMER-ZERO-TRUST-003-RUN3",
         candidate_fingerprint=candidate_fingerprint,
         resource_inventory_fingerprint=resource_inventory_fingerprint,
+        source_sha=source_sha,
         historical_cost_usd=321.81,
         pricing_evidence="DECLARED — historical ceremony state (customer_one/ceremony_state.yaml:cost_containment.historical_october_usage_usd)",
         pricing_as_of="2026-10-06",

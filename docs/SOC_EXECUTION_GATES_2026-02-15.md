@@ -1,3 +1,28 @@
+## 2026-10-07 - governance/customer-zero-run3-preauth-001: P1/P2 review fixes for run3 preauth gate
+
+**Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_preauth.py` and `services/governance/run3_cost_request.py`. (1) READINESS-FINGERPRINT check now FAILs when `final_result` is not READY or when `offline_blocker_count > 0` — previously a BLOCKED readiness result silently produced a PASS. (2) `CostAuthorizationRequest` now stores `source_sha`; `validate_authorization_binding()` rejects mismatching source SHAs; `build_cost_request()` accepts and propagates it. (3) New INVENTORY-TF-COVERAGE check performs a static regex parse of `infra/*.tf` to detect resource or data-source declarations absent from `RESOURCE_INVENTORY`. (4) `portable_verification_result` is now derived by running the portable verification tests via `subprocess.run([pytest, …])` rather than being hardcoded to `"TEST_PROVEN"`. 14 new tests (71–84) cover all four fixes.
+
+**Security posture:**
+
+1. **Readiness gate tightened (P1).** A BLOCKED readiness result previously passed the preauth gate, allowing a regressed readiness state to be fingerprinted as authoritative. Now any `final_result != READY` or any non-zero `offline_blocker_count` sets `result=FAIL` and appends a blocker — the gate now fail-closes on readiness regression.
+2. **Source-SHA binding enforced (P1).** `CostAuthorizationRequest` previously carried no record of which source SHA it was built from. An authorization request created against SHA A could be reused without change against SHA B. The fix records `source_sha` on the dataclass and rejects it in `validate_authorization_binding()` on mismatch — authorization is now cryptographically anchored to the source commit.
+3. **Inventory-TF coverage check added (P1).** The previous INVENTORY-FINGERPRINT check only verified that the hardcoded list hashed consistently; it did not catch new resources added to `infra/*.tf` without updating `RESOURCE_INVENTORY`. The new INVENTORY-TF-COVERAGE check uses a static regex parse (no terraform init, no network) to extract all `resource "TYPE" "NAME"` and `data "TYPE" "NAME"` declarations and cross-checks them against the inventory. Any unclassified address fails closed with a blocker listing the unclassified addresses.
+4. **Portable verification result derived from execution (P2).** The previous hardcoded `"TEST_PROVEN"` was present unconditionally regardless of whether the tests passed. It is now derived from a real `subprocess.run(pytest …)` result; a non-zero exit becomes `"NOT_PROVEN"` and appends a blocker.
+5. **No self-authorization introduced.** All fixes narrow or tighten existing gates. No authorization path is weakened. `authorization_status` remains hardcoded `NOT_AUTHORIZED`. No cloud mutation. No secrets accessed. No paid infrastructure.
+6. **Offline-only design preserved.** Static `.tf` parsing uses only `Path.read_text()` and `re.match()`. No terraform binary, no network calls, no cloud provider authentication.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (check #5 reject BLOCKED, check #6b INVENTORY-TF-COVERAGE new, `_build_artifact` pv derivation, `source_sha` threaded through), `services/governance/run3_cost_request.py` (`source_sha` field + binding + to_dict), `tests/test_customer_zero_run3_preauth_001.py` (14 new tests 71–84).
+
+**Required invariant preserved:** preauth_result is READY_FOR_HUMAN_COST_AUTHORIZATION or BLOCKED; never AUTHORIZED_TO_SPEND; canonical Customer-Zero truth unchanged; 84 adversarial tests pass; ruff clean.
+
+**Validation evidence:**
+
+- `pytest tests/test_customer_zero_run3_preauth_001.py -v` → 84 passed
+- `ruff check tools/ci/customer_zero_run3_preauth.py services/governance/run3_cost_request.py tests/test_customer_zero_run3_preauth_001.py` → no errors
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. All four fixes narrow existing gates (fail-closed on BLOCKED readiness, source-SHA binding, .tf coverage, execution-derived pv result). No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-08-14 - fix/identity-setup-workflow: tenant identity administration lifecycle closure
 
 **Change scope:** Defect fix - newly provisioned tenants could have a valid Auth0 binding, valid console-bff-key, and active tenant_admin role, but no `tenant_identity_configs` row. Console Users still presented Invite User, and Core returned 422 `IDENTITY_CONFIGURATION_REQUIRED`. This PR makes identity setup an explicit Console lifecycle instead of silently guessing policy at provisioning time.

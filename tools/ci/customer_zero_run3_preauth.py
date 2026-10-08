@@ -190,7 +190,7 @@ def _get_evidence_quality(offline_checks: list[dict[str, Any]]) -> dict[str, int
     return counts
 
 
-def _run_offline_checks(repo: Path) -> tuple[list[dict[str, Any]], list[str]]:
+def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[dict[str, Any]], list[str]]:
     """Run all offline checks; return (checks, blockers)."""
     checks: list[dict[str, Any]] = []
     blockers: list[str] = []
@@ -249,14 +249,33 @@ def _run_offline_checks(repo: Path) -> tuple[list[dict[str, Any]], list[str]]:
         from services.governance.customer_zero_readiness import evaluate
         rr = evaluate(repo)
         fp = rr.canonical_fingerprint
-        checks.append({
-            "check_id": "READINESS-FINGERPRINT",
-            "description": "Final-readiness fingerprint obtained from evaluate()",
-            "evidence_strength": "STATIC_VERIFIED",
-            "result": "PASS",
-            "detail": f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value}",
-            "readiness_fingerprint": fp,
-        })
+        readiness_ready = rr.final_result.value == "READY"
+        offline_clean = rr.offline_blocker_count == 0
+        if readiness_ready and offline_clean:
+            checks.append({
+                "check_id": "READINESS-FINGERPRINT",
+                "description": "Final-readiness fingerprint obtained from evaluate()",
+                "evidence_strength": "STATIC_VERIFIED",
+                "result": "PASS",
+                "detail": f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value}",
+                "readiness_fingerprint": fp,
+            })
+        else:
+            checks.append({
+                "check_id": "READINESS-FINGERPRINT",
+                "description": "Final-readiness fingerprint obtained from evaluate()",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": (
+                    f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value} "
+                    f"offline_blocker_count={rr.offline_blocker_count}"
+                ),
+                "readiness_fingerprint": fp,
+            })
+            blockers.append(
+                f"READINESS-FINGERPRINT: Final-readiness result is {rr.final_result.value}, expected READY"
+                + (f" (offline_blocker_count={rr.offline_blocker_count})" if rr.offline_blocker_count > 0 else "")
+            )
     except Exception as exc:
         checks.append({
             "check_id": "READINESS-FINGERPRINT",
@@ -293,6 +312,68 @@ def _run_offline_checks(repo: Path) -> tuple[list[dict[str, Any]], list[str]]:
             "detail": str(exc),
         })
         blockers.append(f"INVENTORY-FINGERPRINT: {exc}")
+
+    # ── 6b. Resource inventory coverage against infra/*.tf ───────────────
+    try:
+        import re
+        from services.governance.run3_resource_inventory import RESOURCE_INVENTORY
+
+        infra_dir = repo / "infra"
+        tf_files = sorted(infra_dir.glob("*.tf"))
+        tf_resources: set[str] = set()
+        tf_data_sources: set[str] = set()
+
+        for tf_path in tf_files:
+            tf_text = tf_path.read_text(encoding="utf-8")
+            for line in tf_text.splitlines():
+                resource_match = re.match(r'^resource\s+"([^"]+)"\s+"([^"]+)"', line)
+                if resource_match:
+                    rtype, rname = resource_match.group(1), resource_match.group(2)
+                    tf_resources.add(f"{rtype}.{rname}")
+                data_match = re.match(r'^data\s+"([^"]+)"\s+"([^"]+)"', line)
+                if data_match:
+                    dtype, dname = data_match.group(1), data_match.group(2)
+                    tf_data_sources.add(f"data.{dtype}.{dname}")
+
+        all_tf_addresses = tf_resources | tf_data_sources
+        inventory_addresses = {r.terraform_address for r in RESOURCE_INVENTORY}
+        unclassified = all_tf_addresses - inventory_addresses
+
+        if unclassified:
+            checks.append({
+                "check_id": "INVENTORY-TF-COVERAGE",
+                "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": (
+                    f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
+                    f"unclassified={sorted(unclassified)}"
+                ),
+            })
+            blockers.append(
+                "INVENTORY-TF-COVERAGE: Terraform resources not in RESOURCE_INVENTORY: "
+                + ", ".join(sorted(unclassified))
+            )
+        else:
+            checks.append({
+                "check_id": "INVENTORY-TF-COVERAGE",
+                "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
+                "evidence_strength": "STATIC_VERIFIED",
+                "result": "PASS",
+                "detail": (
+                    f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
+                    f"all classified in inventory ({len(inventory_addresses)} entries)"
+                ),
+            })
+    except Exception as exc:
+        checks.append({
+            "check_id": "INVENTORY-TF-COVERAGE",
+            "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
+            "evidence_strength": "NOT_PROVEN",
+            "result": "FAIL",
+            "detail": str(exc),
+        })
+        blockers.append(f"INVENTORY-TF-COVERAGE: {exc}")
 
     # ── 7. Candidate fingerprint deterministic ────────────────────────────
     try:
@@ -331,7 +412,7 @@ def _run_offline_checks(repo: Path) -> tuple[list[dict[str, Any]], list[str]]:
         inv_fp = compute_inventory_fingerprint()
         resources = [r.to_dict() for r in get_inventory()]
         preserved = [r.to_dict() for r in get_preserved_resources()]
-        req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved)
+        req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha)
         not_auth = req.authorization_status == "NOT_AUTHORIZED"
         no_cost = req.proposed_max_cost_usd is None
         no_runtime = req.proposed_max_runtime_hours is None
@@ -553,7 +634,7 @@ def _build_artifact(
         inv_fp = compute_inventory_fingerprint()
         resources = [r.to_dict() for r in get_inventory()]
         preserved = [r.to_dict() for r in get_preserved_resources()]
-        cost_req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved)
+        cost_req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha)
         infra_fp = _compute_infra_fingerprint()
 
         # Readiness fingerprint from checks
@@ -562,10 +643,30 @@ def _build_artifact(
             if c.get("check_id") == "READINESS-FINGERPRINT":
                 readiness_fp = c.get("readiness_fingerprint", "")
 
-        # Determine portable verification result
-        # The full test suite proves this; here we report TEST_PROVEN if the
-        # implementation is present (tests validate real crypto)
-        pv_result = "TEST_PROVEN"
+        # Determine portable verification result by running the portable
+        # verification tests (tests 33-43 in TestPortableVerificationRealCrypto)
+        import subprocess as _subprocess
+        _pv_run = _subprocess.run(
+            [sys.executable, "-m", "pytest",
+             "tests/test_customer_zero_run3_preauth_001.py",
+             "-k", "portable or TestPortableVerification",
+             "--tb=no", "-q"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if _pv_run.returncode == 0:
+            pv_result = "TEST_PROVEN"
+        else:
+            pv_result = "NOT_PROVEN"
+            _pv_detail = _pv_run.stdout.strip().splitlines()[-1] if _pv_run.stdout.strip() else ""
+            _pv_msg = (
+                f"PORTABLE-VERIFICATION: Portable verification tests failed — {_pv_detail}"
+                if _pv_detail
+                else "PORTABLE-VERIFICATION: Portable verification tests failed"
+            )
+            blockers.append(_pv_msg)
 
         preauth_result = "READY_FOR_HUMAN_COST_AUTHORIZATION" if not blockers else "BLOCKED"
 
@@ -706,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
     repo = Path(args.repo).resolve() if args.repo else _ROOT
 
     source_sha = _get_source_sha(repo)
-    offline_checks, blockers = _run_offline_checks(repo)
+    offline_checks, blockers = _run_offline_checks(repo, source_sha)
     artifact = _build_artifact(repo, offline_checks, blockers, source_sha)
 
     # Write JSON if requested
