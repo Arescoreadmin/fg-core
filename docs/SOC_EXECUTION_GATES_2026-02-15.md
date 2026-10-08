@@ -1,3 +1,28 @@
+## 2026-10-08 - fix/cz-run3-readiness-integration: offline ceremony simulation runner (CZ-RUN3-READINESS-INTEGRATION-REPAIR-001)
+
+**Change scope:** New offline tool `tools/ci/run_offline_ceremony_simulation.py` added as part of CZ-RUN3-READINESS-INTEGRATION-REPAIR-001. The script produces machine-readable evidence for readiness dimension J_CE3 (offline-ceremony-simulation-green). It generates ephemeral TEST-ONLY Ed25519 key material in-process, exercises all three trust domains (IDENTITY, APPROVAL, ACCEPTANCE), validates cross-domain isolation, and verifies that the verifier rejects tampered payloads. On success it writes `customer_one/offline_simulation_evidence.json` bound to the current HEAD SHA. No production keys accessed. No network I/O. No cloud mutation.
+
+**Security posture:**
+
+1. **TEST-ONLY key material only.** All Ed25519 key pairs are generated ephemerally within the script process using `cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PrivateKey.generate()`. They are never written to disk, never stored, and never leave the process. They bear no relation to any production Vault transit key.
+2. **Offline-only execution.** The script uses no subprocess calls except `git rev-parse HEAD` (read-only). No terraform, no HCP, no AWS. No network connections made.
+3. **No authorization bypass.** The simulation runner produces a DECLARED_ONLY / TEST_PROVEN evidence artifact. The readiness evaluator (`customer_zero_readiness.py`) treats it as TEST_PROVEN, not RUNTIME_PROVEN. CUSTOMER_ZERO_TRUST remains NOT_PROVEN. TRUST-003 remains BLOCKED. No authorization status changes.
+4. **Source-SHA binding.** The evidence JSON records the HEAD SHA at generation time. The readiness evaluator (`_validate_offline_simulation_evidence()`) rejects evidence whose `source_sha` does not match `git rev-parse HEAD` — prevents stale evidence from passing an updated checkout.
+5. **Verifier fail-closed check.** One of the 6 simulation checks explicitly verifies that a tampered payload is rejected — the simulation cannot produce a GREEN result if the verifier silently accepts corrupted data.
+6. **No secrets accessed, no credentials stored, no production systems contacted.**
+
+**Critical-path files changed:** `tools/ci/run_offline_ceremony_simulation.py` (new — offline simulation runner, 6 checks, TEST-ONLY Ed25519, writes `customer_one/offline_simulation_evidence.json`).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT. No production key accessed. No authorization status changed. 33 adversarial integration tests cover both the A2 lifecycle-aware fix and J_CE3 evidence validation.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_readiness_integration_repair_001.py -v` → 33 passed
+- `ruff check tools/ci/run_offline_ceremony_simulation.py` → no errors
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. New `tools/ci` script is offline-only, TEST-ONLY key material, read-only except for writing the evidence JSON artifact. Strengthens J_CE3 readiness gate from NOT_PROVEN to TEST_PROVEN. No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-07 - governance/customer-zero-run3-preauth-001: P1/P2 review fixes for run3 preauth gate
 
 **Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_preauth.py` and `services/governance/run3_cost_request.py`. (1) READINESS-FINGERPRINT check now FAILs when `final_result` is not READY or when `offline_blocker_count > 0` — previously a BLOCKED readiness result silently produced a PASS. (2) `CostAuthorizationRequest` now stores `source_sha`; `validate_authorization_binding()` rejects mismatching source SHAs; `build_cost_request()` accepts and propagates it. (3) New INVENTORY-TF-COVERAGE check performs a static regex parse of `infra/*.tf` to detect resource or data-source declarations absent from `RESOURCE_INVENTORY`. (4) `portable_verification_result` is now derived by running the portable verification tests via `subprocess.run([pytest, …])` rather than being hardcoded to `"TEST_PROVEN"`. 14 new tests (71–84) cover all four fixes.
