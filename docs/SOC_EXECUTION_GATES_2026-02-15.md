@@ -6963,3 +6963,30 @@ SOC review outcome: APPROVED. Enforcement tightening only; no authority weakenin
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. Offline read-only gate; no runtime authority, no authentication path, no tenant isolation bypass, no secret access; canonical Customer-Zero truth preserved and enforced.
+
+## 2026-10-08 - governance/customer-zero-run3-preauth-001: Customer-Zero Run-3 pre-ceremony authority
+
+**Change scope:** CUSTOMER-ZERO-RUN3-PREAUTH-001. New offline deterministic pre-ceremony authority CLI (`tools/ci/customer_zero_run3_preauth.py`) and supporting implementation modules (`services/governance/run3_evidence_strength.py`, `run3_candidate.py`, `run3_resource_inventory.py`, `run3_cost_request.py`, `run3_proof_matrix.py`, `run3_abort_teardown.py`). This gate freezes the production candidate, resource inventory, proof matrix (families A–K), abort matrix, teardown contract, and cost-authorization REQUEST before any human authorization or paid HCP infrastructure provisioning occurs.
+
+**Security posture:**
+
+1. **Offline and read-only.** The gate makes no network calls, no cloud API calls, no database writes, no filesystem mutations. No Vault, AWS, HCP, or Railway contact occurs.
+2. **No secrets accessed or displayed.** The gate reads only committed repository files (Python source, YAML, Terraform HCL). No environment secrets, API keys, or credentials are read or printed.
+3. **No self-authorization.** READY_FOR_HUMAN_COST_AUTHORIZATION does NOT authorize spending, does NOT mark trust PROVEN, does NOT unblock CUSTOMER-ZERO-TRUST-003 or CUSTOMER-ZERO-ACCEPT-001, does NOT provision paid infrastructure. Canonical truth preserved: CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED.
+4. **Fail-closed.** authorization_status is hardcoded to NOT_AUTHORIZED. proposed_max_cost_usd and proposed_max_runtime_hours are None. Missing either threshold fails authorization binding. Wrong ceremony ID, wrong candidate fingerprint, wrong resource inventory, reused authorization all fail closed.
+5. **Real cryptography, no mocked trust.** Portable verification tests use real Ed25519 key pairs generated per test. Mutation attacks (artifact bytes, key version, trust domain, public key substitution) all fail deterministically.
+6. **Secret safety enforced.** No private key material, Vault tokens, AWS credentials, or HCP tokens appear in any artifact. PortableVerificationBundle.__post_init__ and enroll() reject secret-bearing material structurally.
+7. **No paid infrastructure triggered.** The gate cannot trigger provisioning. Zero cloud mutation. Zero new paid resources.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (new CLI gate), `services/governance/run3_*.py` (6 new implementation modules), `tests/test_customer_zero_run3_preauth_001.py` (70 adversarial tests).
+
+**Required invariant:** preauth_result is READY_FOR_HUMAN_COST_AUTHORIZATION or BLOCKED; never AUTHORIZED_TO_SPEND, TRUST_PROVEN, or CUSTOMER_ACCEPTED; canonical Customer-Zero truth preserved in every execution; 70 adversarial tests enforcing freeze, inventory, cost, proof matrix, portable verification, abort, no-self-authorization, and secret safety invariants.
+
+**Validation evidence:**
+
+- `python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-RUN3-PREAUTH-001` → AUTHORIZED (exit 0)
+- `pytest tests/test_customer_zero_run3_preauth_001.py -v` → 70 passed
+- `ruff check services/governance/run3_*.py tools/ci/customer_zero_run3_preauth.py tests/test_customer_zero_run3_preauth_001.py` → all checks passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Offline read-only gate; no runtime authority weakening; no authentication path change; no tenant isolation bypass; no secret access; canonical Customer-Zero truth preserved and enforced; authorization_status hardcoded NOT_AUTHORIZED and cannot be overridden by this module.
