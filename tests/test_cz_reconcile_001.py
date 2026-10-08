@@ -235,15 +235,23 @@ def test_e1_provenance_integrity_001_in_completed() -> None:
 
 
 def test_e2_final_readiness_blocked_by_provenance_integrity() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must declare it is blocked by PROVENANCE-INTEGRITY-001."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 is now in completed; verify it depended on PROVENANCE-INTEGRITY-001.
+
+    CUSTOMER-ZERO-FINAL-READINESS-001 has moved from next_sequence to completed (PR #753).
+    The item's completed entry records that PROVENANCE-INTEGRITY-001 was a prerequisite
+    (captured in the note field). Verify the item is in completed and that
+    PROVENANCE-INTEGRITY-001 is also in completed, confirming the dependency chain is intact.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
-    assert item is not None
-    blocked_by = item.get("blocked_by", [])
-    if isinstance(blocked_by, str):
-        blocked_by = [blocked_by]
-    assert "PROVENANCE-INTEGRITY-001" in blocked_by, (
-        "CUSTOMER-ZERO-FINAL-READINESS-001 must declare blocked_by PROVENANCE-INTEGRITY-001"
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    assert item is not None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed (PR #753 merged)"
+    )
+    # PROVENANCE-INTEGRITY-001 must also be in completed — it was the prerequisite.
+    dep = _find_item(authority, "completed", "PROVENANCE-INTEGRITY-001")
+    assert dep is not None, (
+        "PROVENANCE-INTEGRITY-001 must be in completed — it was a prerequisite for "
+        "CUSTOMER-ZERO-FINAL-READINESS-001 and must remain in the completed record"
     )
 
 
@@ -284,15 +292,22 @@ def test_f1_vault_verify_contract_001_in_completed() -> None:
 
 
 def test_f2_final_readiness_blocked_by_verifier_contract() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must declare it is blocked by VAULT-VERIFY-CONTRACT-001."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 is now in completed; verify it depended on VAULT-VERIFY-CONTRACT-001.
+
+    CUSTOMER-ZERO-FINAL-READINESS-001 has moved from next_sequence to completed (PR #753).
+    VAULT-VERIFY-CONTRACT-001 was a prerequisite. Verify the item is in completed and that
+    VAULT-VERIFY-CONTRACT-001 is also in completed, confirming the dependency chain is intact.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
-    assert item is not None
-    blocked_by = item.get("blocked_by", [])
-    if isinstance(blocked_by, str):
-        blocked_by = [blocked_by]
-    assert "VAULT-VERIFY-CONTRACT-001" in blocked_by, (
-        "CUSTOMER-ZERO-FINAL-READINESS-001 must declare blocked_by VAULT-VERIFY-CONTRACT-001"
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    assert item is not None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed (PR #753 merged)"
+    )
+    # VAULT-VERIFY-CONTRACT-001 must also be in completed — it was the prerequisite.
+    dep = _find_item(authority, "completed", "VAULT-VERIFY-CONTRACT-001")
+    assert dep is not None, (
+        "VAULT-VERIFY-CONTRACT-001 must be in completed — it was a prerequisite for "
+        "CUSTOMER-ZERO-FINAL-READINESS-001 and must remain in the completed record"
     )
 
 
@@ -326,21 +341,36 @@ def test_f4_verifier_contract_defect_maps_to_repair_work_item() -> None:
 
 
 def test_g1_final_readiness_in_next_sequence() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must be in next_sequence."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 must now be in completed, not next_sequence.
+
+    PR #753 moved this item from next_sequence to completed. The test verifies
+    the transition: the item must be in completed and absent from next_sequence.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
     assert item is not None, (
-        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in next_sequence"
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed (PR #753 merged)"
+    )
+    item_in_next = _find_item(
+        authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001"
+    )
+    assert item_in_next is None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must not remain in next_sequence after completion"
     )
 
 
 def test_g2_final_readiness_requires_no_paid_infrastructure() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must not require paid infrastructure."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 in completed must not have required paid infrastructure.
+
+    The item is now in completed. Its note records it was an offline gate with no paid
+    infrastructure requirement. Verify the completed entry carries no paid infra flag.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
-    assert item is not None
-    assert item.get("requires_paid_infrastructure") is False, (
-        "CUSTOMER-ZERO-FINAL-READINESS-001 must not require paid infrastructure"
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    assert item is not None, "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed"
+    assert not item.get("requires_paid_infrastructure", False), (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 completed entry must not declare "
+        "requires_paid_infrastructure: true"
     )
 
 
@@ -655,11 +685,12 @@ def test_l3_roadmap_checker_reports_vault_verify_contract_001_completed() -> Non
 
 
 def test_l4_roadmap_checker_authorizes_final_readiness_when_deps_complete() -> None:
-    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 0.
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 1.
 
-    CUSTOMER-ZERO-FINAL-READINESS-001 is blocked_by PROVENANCE-INTEGRITY-001 and
-    VAULT-VERIFY-CONTRACT-001. Both are now in completed. The checker must authorize
-    the item and return exit 0 — the gate is unblocked by the completed repairs.
+    CUSTOMER-ZERO-FINAL-READINESS-001 is now in completed (PR #753, SHA c9717807).
+    Its deps (PROVENANCE-INTEGRITY-001, VAULT-VERIFY-CONTRACT-001) are also complete.
+    The checker must return BLOCKED (exit 1) with a COMPLETED message — the item is
+    already merged and closed; no re-authorization is permitted.
     """
     result = subprocess.run(
         [
@@ -673,9 +704,12 @@ def test_l4_roadmap_checker_authorizes_final_readiness_when_deps_complete() -> N
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"Roadmap checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 (deps complete); "
+    assert result.returncode == 1, (
+        f"Roadmap checker must block CUSTOMER-ZERO-FINAL-READINESS-001 (now completed); "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert "COMPLETED" in result.stderr, (
+        f"Checker stderr must mention COMPLETED; got {result.stderr!r}"
     )
 
 
@@ -746,11 +780,12 @@ def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
 
 
 def test_l8_checker_authorizes_when_blocked_by_deps_complete() -> None:
-    """Checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 now that its deps are complete.
+    """Checker must block CUSTOMER-ZERO-FINAL-READINESS-001 now that it is itself completed.
 
-    CUSTOMER-ZERO-FINAL-READINESS-001 declares blocked_by: [PROVENANCE-INTEGRITY-001,
-    VAULT-VERIFY-CONTRACT-001]. Both are now in completed. The checker must authorize
-    the item (exit 0) — the blocked_by enforcement gate is satisfied.
+    CUSTOMER-ZERO-FINAL-READINESS-001 has been moved to completed (PR #753).
+    Its blocked_by dependencies (PROVENANCE-INTEGRITY-001, VAULT-VERIFY-CONTRACT-001)
+    were satisfied and the item itself executed and closed. The checker must now
+    return BLOCKED (exit 1) with a COMPLETED message — no re-work is authorized.
     """
     result = subprocess.run(
         [
@@ -764,10 +799,13 @@ def test_l8_checker_authorizes_when_blocked_by_deps_complete() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        "Checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 "
-        "now that its blocked_by dependencies are in completed; "
+    assert result.returncode == 1, (
+        "Checker must block CUSTOMER-ZERO-FINAL-READINESS-001 "
+        "now that it is in completed (already merged and closed); "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert "COMPLETED" in result.stderr, (
+        f"Checker stderr must mention COMPLETED; got {result.stderr!r}"
     )
 
 
@@ -798,11 +836,16 @@ def test_m2_provenance_and_verifier_items_require_no_paid_infra() -> None:
 
 
 def test_m3_final_readiness_requires_no_paid_infra() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must not require paid infrastructure."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 in completed must not have required paid infrastructure."""
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
-    assert item is not None
-    assert item.get("requires_paid_infrastructure") is False
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    assert item is not None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed (PR #753 merged)"
+    )
+    assert not item.get("requires_paid_infrastructure", False), (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 completed entry must not declare "
+        "requires_paid_infrastructure: true"
+    )
 
 
 def test_m4_cz_reconcile_itself_requires_no_infrastructure() -> None:

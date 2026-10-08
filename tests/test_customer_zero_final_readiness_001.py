@@ -168,7 +168,12 @@ def _make_portable_bundle(
 
 
 def test_a1_authorized_work_item_passes() -> None:
-    """Test 1: Authorized work item CUSTOMER-ZERO-FINAL-READINESS-001 is in next_sequence."""
+    """Test 1: CUSTOMER-ZERO-FINAL-READINESS-001 is now completed and blocked by the checker.
+
+    PR #753 moved CUSTOMER-ZERO-FINAL-READINESS-001 from next_sequence to completed.
+    The roadmap checker must now return BLOCKED (exit 1) with a COMPLETED message —
+    the item is already merged and closed; no re-authorization is permitted.
+    """
     result = subprocess.run(
         [
             "python",
@@ -181,10 +186,12 @@ def test_a1_authorized_work_item_passes() -> None:
         text=True,
         timeout=15,
     )
-    assert result.returncode == 0, (
-        f"CUSTOMER-ZERO-FINAL-READINESS-001 must be AUTHORIZED; got: {result.stderr}"
+    assert result.returncode == 1, (
+        f"CUSTOMER-ZERO-FINAL-READINESS-001 must be BLOCKED (completed); got: {result.stderr}"
     )
-    assert "AUTHORIZED" in result.stdout
+    assert "COMPLETED" in result.stderr, (
+        f"Checker stderr must mention COMPLETED; got {result.stderr!r}"
+    )
 
 
 def test_a2_missing_roadmap_authority_fails() -> None:
@@ -1615,6 +1622,7 @@ def test_m73_present_variables_tf_passes() -> None:
     assert f40.required is True, "F40 must be required=True"
     # If variables.tf exists in the repo, must be PASS; if absent, NOT_PROVEN
     # Either way we just verify it evaluates without error and required=True is set
-    assert f40.status in (ReadinessStatus.PASS, ReadinessStatus.NOT_PROVEN), (
-        f"F40 status must be PASS or NOT_PROVEN; got {f40.status}"
-    )
+    assert f40.status in (
+        ReadinessStatus.PASS,
+        ReadinessStatus.NOT_PROVEN,
+    ), f"F40 status must be PASS or NOT_PROVEN; got {f40.status}"

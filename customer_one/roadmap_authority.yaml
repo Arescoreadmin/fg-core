@@ -51,31 +51,25 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
-    title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
+  - id: "CUSTOMER-ZERO-RUN3-PREAUTH-001"
+    title: "CUSTOMER-ZERO-RUN3-PREAUTH-001 — Zero-new-infrastructure-cost Run-3 pre-ceremony authority"
     role: "OFFLINE_PREREQUISITE"
     parent_objective: "CUSTOMER-ZERO-TRUST-003"
-    blocker_closed: >
-      Must prove every prerequisite for Customer-Zero acceptance without creating
-      paid HCP infrastructure. PROVENANCE-INTEGRITY-001 and VAULT-VERIFY-CONTRACT-001
-      must be complete before this gate can open.
+    description: >
+      Zero-new-infrastructure-cost Run-3 pre-ceremony authority that freezes the
+      production candidate, expected resource inventory, proof matrix, abort matrix,
+      teardown contract, and cost-authorization request before any human authorization
+      or paid provisioning occurs.
     freeze_law_justification: >
-      New offline gate replacing the previously implicit readiness assumption.
-      Reduces third ceremony failure risk by requiring all defects proven repaired
-      before any paid provisioning.
+      Closes the final offline gate before Run-3 paid provisioning. Documents the
+      frozen source SHA, full resource plan, proof-matrix acceptance criteria, abort
+      conditions, and explicit cost envelope request — all without creating paid
+      infrastructure. Prevents ceremony failure due to unvalidated plan assumptions.
     status: "AUTHORIZED_NOT_STARTED"
     work_class: "NEXT"
     requires_paid_infrastructure: false
     blocked_by:
-      - "PROVENANCE-INTEGRITY-001"
-      - "VAULT-VERIFY-CONTRACT-001"
-    completion_evidence:
-      - "provenance integrity repair proven by offline tests"
-      - "verifier contract repair proven by offline tests"
-      - "offline ceremony simulation green"
-      - "all existing trust ceremony tests pass"
-      - "cost doctrine documented for Run 3"
-      - "Run 3 operational plan finalized with explicit cost envelope"
+      - "CUSTOMER-ZERO-FINAL-READINESS-001"
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -158,6 +152,23 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
+    title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
+    prs: ["#753"]
+    merged_sha: "c9717807efc6ef5775d8872f62c97b62cd613102"
+    role: "OFFLINE_PREREQUISITE"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+    note: >
+      Deterministic fail-closed offline readiness gate. 53 dimensions across 9
+      categories (Repository, Application Truth, Tenant/Security, Trust Authority,
+      Audit Authority, Infrastructure, Cost Authority, Recovery, Portable
+      Verification). PortableVerificationAuthority enables offline historical
+      verification post-teardown using pre-enrolled public key material.
+      60 adversarial tests (A-I + 10 bonus). CLI: tools/ci/customer_zero_final_readiness.py.
+      All PROVENANCE-INTEGRITY-001 and VAULT-VERIFY-CONTRACT-001 prerequisites met.
+      Canonical truth preserved: CUSTOMER_ZERO_TRUST=NOT_PROVEN,
+      THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT.
+      No cloud mutation. No paid infrastructure. No schema changes.
   - id: "VAULT-VERIFY-CONTRACT-001"
     title: "VAULT-VERIFY-CONTRACT-001 — Repair deterministic fail-closed verification semantics"
     prs: ["#751"]
