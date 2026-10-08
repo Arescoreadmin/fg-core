@@ -1422,10 +1422,14 @@ class TestReviewFixes:
         mock_rr.offline_blocker_count = 1
         mock_rr.canonical_fingerprint = "a" * 64
 
-        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+        with patch(
+            "services.governance.customer_zero_readiness.evaluate", return_value=mock_rr
+        ):
             checks, blockers = _run_offline_checks(_ROOT, "test-sha")
 
-        rf_check = next((c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None)
+        rf_check = next(
+            (c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None
+        )
         assert rf_check is not None
         assert rf_check["result"] == "FAIL"
         assert rf_check["evidence_strength"] == "NOT_PROVEN"
@@ -1442,7 +1446,9 @@ class TestReviewFixes:
         mock_rr.offline_blocker_count = 3
         mock_rr.canonical_fingerprint = "b" * 64
 
-        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+        with patch(
+            "services.governance.customer_zero_readiness.evaluate", return_value=mock_rr
+        ):
             checks, blockers = _run_offline_checks(_ROOT, "test-sha")
 
         assert any("offline_blocker_count=3" in b for b in blockers), (
@@ -1459,10 +1465,14 @@ class TestReviewFixes:
         mock_rr.offline_blocker_count = 0
         mock_rr.canonical_fingerprint = "c" * 64
 
-        with patch("services.governance.customer_zero_readiness.evaluate", return_value=mock_rr):
+        with patch(
+            "services.governance.customer_zero_readiness.evaluate", return_value=mock_rr
+        ):
             checks, blockers = _run_offline_checks(_ROOT, "test-sha")
 
-        rf_check = next((c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None)
+        rf_check = next(
+            (c for c in checks if c["check_id"] == "READINESS-FINGERPRINT"), None
+        )
         assert rf_check is not None
         assert rf_check["result"] == "PASS"
         assert not any("READINESS-FINGERPRINT" in b for b in blockers)
@@ -1508,7 +1518,10 @@ class TestReviewFixes:
         preserved = [r.to_dict() for r in get_preserved_resources()]
 
         req = build_cost_request(
-            candidate.candidate_fingerprint, inv_fp, resources, preserved,
+            candidate.candidate_fingerprint,
+            inv_fp,
+            resources,
+            preserved,
             source_sha="correct-sha-aaaa",
         )
         valid, failures = req.validate_authorization_binding(
@@ -1522,7 +1535,9 @@ class TestReviewFixes:
             "source_sha mismatch must appear in failure reasons"
         )
 
-    def test_77_authorization_with_matching_source_sha_does_not_fail_on_sha(self) -> None:
+    def test_77_authorization_with_matching_source_sha_does_not_fail_on_sha(
+        self,
+    ) -> None:
         """Test 77: validate_authorization_binding does not flag source_sha when it matches."""
         from services.governance.run3_cost_request import build_cost_request
         from services.governance.run3_candidate import build_candidate
@@ -1538,7 +1553,10 @@ class TestReviewFixes:
         preserved = [r.to_dict() for r in get_preserved_resources()]
 
         req = build_cost_request(
-            candidate.candidate_fingerprint, inv_fp, resources, preserved,
+            candidate.candidate_fingerprint,
+            inv_fp,
+            resources,
+            preserved,
             source_sha="same-sha-for-both",
         )
         _valid, failures = req.validate_authorization_binding(
@@ -1559,7 +1577,9 @@ class TestReviewFixes:
         from tools.ci.customer_zero_run3_preauth import _run_offline_checks
 
         checks, blockers = _run_offline_checks(_ROOT, "test-sha")
-        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        cov_check = next(
+            (c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None
+        )
         assert cov_check is not None, "INVENTORY-TF-COVERAGE check must exist"
         assert cov_check["result"] == "PASS", (
             f"INVENTORY-TF-COVERAGE must PASS; detail={cov_check.get('detail')}"
@@ -1594,7 +1614,9 @@ class TestReviewFixes:
             ):
                 checks, blockers = _run_offline_checks(fake_repo, "test-sha")
 
-        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        cov_check = next(
+            (c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None
+        )
         assert cov_check is not None
         assert cov_check["result"] == "FAIL"
         assert cov_check["evidence_strength"] == "NOT_PROVEN"
@@ -1625,12 +1647,14 @@ class TestReviewFixes:
             ):
                 checks, blockers = _run_offline_checks(fake_repo, "test-sha")
 
-        cov_check = next((c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None)
+        cov_check = next(
+            (c for c in checks if c["check_id"] == "INVENTORY-TF-COVERAGE"), None
+        )
         assert cov_check is not None
         assert cov_check["result"] == "FAIL"
-        assert any("data.aws_caller_identity.unclassified_data" in b for b in blockers), (
-            "Data source must appear in INVENTORY-TF-COVERAGE blocker"
-        )
+        assert any(
+            "data.aws_caller_identity.unclassified_data" in b for b in blockers
+        ), "Data source must appear in INVENTORY-TF-COVERAGE blocker"
 
     # ── Fix 4: Portable verification derived from execution ──────────────
 
@@ -1651,9 +1675,9 @@ class TestReviewFixes:
         assert artifact.get("portable_verification_result") == "NOT_PROVEN", (
             "pv_result must be NOT_PROVEN when portable tests fail"
         )
-        assert any("PORTABLE-VERIFICATION" in b for b in artifact.get("blockers", [])), (
-            "Artifact blockers must contain PORTABLE-VERIFICATION entry on test failure"
-        )
+        assert any(
+            "PORTABLE-VERIFICATION" in b for b in artifact.get("blockers", [])
+        ), "Artifact blockers must contain PORTABLE-VERIFICATION entry on test failure"
 
     def test_82_portable_verification_test_proven_when_tests_pass(self) -> None:
         """Test 82: pv_result is TEST_PROVEN when portable verification tests pass."""
@@ -1694,9 +1718,10 @@ class TestReviewFixes:
 
         assert artifact_pass.get("portable_verification_result") == "TEST_PROVEN"
         assert artifact_fail.get("portable_verification_result") == "NOT_PROVEN"
-        assert artifact_pass["portable_verification_result"] != artifact_fail["portable_verification_result"], (
-            "portable_verification_result must vary with test outcome"
-        )
+        assert (
+            artifact_pass["portable_verification_result"]
+            != artifact_fail["portable_verification_result"]
+        ), "portable_verification_result must vary with test outcome"
 
     def test_84_cost_request_source_sha_in_to_dict(self) -> None:
         """Test 84: CostAuthorizationRequest.to_dict() includes source_sha."""
