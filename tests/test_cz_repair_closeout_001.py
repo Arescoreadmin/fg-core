@@ -162,7 +162,12 @@ def test_b4_vault_verify_contract_001_has_merged_sha() -> None:
 
 
 def test_c1_checker_authorizes_final_readiness() -> None:
-    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 0."""
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001 must exit 1.
+
+    CUSTOMER-ZERO-FINAL-READINESS-001 is now in completed (PR #753, SHA c9717807).
+    The checker must return BLOCKED with a 'already merged and closed' message — no
+    further work is authorized on a completed item.
+    """
     result = subprocess.run(
         [
             "python",
@@ -175,20 +180,32 @@ def test_c1_checker_authorizes_final_readiness() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"Checker must authorize CUSTOMER-ZERO-FINAL-READINESS-001 now that its "
-        f"blocked_by deps (PROVENANCE-INTEGRITY-001, VAULT-VERIFY-CONTRACT-001) are complete; "
+    assert result.returncode == 1, (
+        f"Checker must block CUSTOMER-ZERO-FINAL-READINESS-001 (it is now completed); "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert "COMPLETED" in result.stderr, (
+        f"Checker stderr must mention COMPLETED; got {result.stderr!r}"
     )
 
 
 def test_c2_final_readiness_still_in_next_sequence() -> None:
-    """CUSTOMER-ZERO-FINAL-READINESS-001 must still be in next_sequence (it is not yet done)."""
+    """CUSTOMER-ZERO-FINAL-READINESS-001 must now be in completed, not next_sequence.
+
+    This item was authorized (in next_sequence) in the prior closeout state. PR #753
+    has now merged and moved it to completed. This test verifies the transition is
+    correctly recorded in roadmap_authority.yaml.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001")
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-FINAL-READINESS-001")
     assert item is not None, (
-        "CUSTOMER-ZERO-FINAL-READINESS-001 must remain in next_sequence; "
-        "it is authorized but not yet executed"
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must be in completed after PR #753 merged"
+    )
+    item_in_next = _find_item(
+        authority, "next_sequence", "CUSTOMER-ZERO-FINAL-READINESS-001"
+    )
+    assert item_in_next is None, (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 must not remain in next_sequence after completion"
     )
 
 

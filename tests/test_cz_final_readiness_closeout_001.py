@@ -29,6 +29,9 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 ROADMAP_AUTHORITY = REPO / "customer_one" / "roadmap_authority.yaml"
 CEREMONY_STATE = REPO / "customer_one" / "ceremony_state.yaml"
+LEVEL2_DOC = (
+    REPO / "docs" / "plans" / "customer_one_verified_governance_roadmap_20260910.md"
+)
 
 
 def _load_roadmap_authority() -> dict:
@@ -208,9 +211,7 @@ def test_d4_acceptance_status_blocked() -> None:
     """acceptance_status must remain BLOCKED."""
     state = _load_ceremony_state()
     status = state.get("acceptance_status")
-    assert status == "BLOCKED", (
-        f"acceptance_status must remain BLOCKED; got {status!r}"
-    )
+    assert status == "BLOCKED", f"acceptance_status must remain BLOCKED; got {status!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -264,4 +265,80 @@ def test_e4_prerequisite_enforcement_fail_closed() -> None:
     assert unmet == [], (
         f"CUSTOMER-ZERO-RUN3-PREAUTH-001 has unmet blocked_by dependencies: {unmet}; "
         "all dependencies must be in completed for the item to be authorized"
+    )
+
+
+# ---------------------------------------------------------------------------
+# F. Level-2 sequencing doc correctness (P1 review fix)
+# ---------------------------------------------------------------------------
+
+
+def _load_level2_doc() -> str:
+    with open(LEVEL2_DOC, encoding="utf-8") as f:
+        return f.read()
+
+
+def test_f1_level2_doc_does_not_say_final_readiness_alone_authorizes_trust_003() -> (
+    None
+):
+    """The Level-2 doc must NOT contain language stating FINAL-READINESS completion
+    alone authorizes TRUST-003.
+
+    The old incorrect text was:
+        'once complete, CUSTOMER-ZERO-TRUST-003 (Run 3, paid HCP ceremony) is authorized'
+    That language directly coupled FINAL-READINESS completion to TRUST-003 authorization
+    without the required PREAUTH gate. This test ensures that phrase is absent.
+    """
+    text = _load_level2_doc()
+    forbidden_phrase = "once complete, CUSTOMER-ZERO-TRUST-003 (Run 3, paid HCP ceremony) is authorized"
+    assert forbidden_phrase not in text, (
+        "Level-2 doc must not say FINAL-READINESS completion alone authorizes TRUST-003; "
+        f"found forbidden phrase: {forbidden_phrase!r}"
+    )
+
+
+def test_f2_level2_doc_references_preauth_as_required_before_trust_003() -> None:
+    """The Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 as a required
+    step before CUSTOMER-ZERO-TRUST-003.
+    """
+    text = _load_level2_doc()
+    assert "CUSTOMER-ZERO-RUN3-PREAUTH-001" in text, (
+        "Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 as an intermediate step"
+    )
+    # Confirm TRUST-003 row references PREAUTH as a blocker.
+    assert "blocked on CUSTOMER-ZERO-RUN3-PREAUTH-001" in text, (
+        "Level-2 doc TRUST-003 row must state it is blocked on CUSTOMER-ZERO-RUN3-PREAUTH-001"
+    )
+
+
+def test_f3_level2_doc_marks_final_readiness_as_complete() -> None:
+    """The Level-2 doc must mark CUSTOMER-ZERO-FINAL-READINESS-001 as COMPLETED,
+    not as NEXT.
+    """
+    text = _load_level2_doc()
+    # The sequence table row must show COMPLETED status for FINAL-READINESS-001.
+    assert (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 | Customer-Zero final pre-ceremony readiness checklist | COMPLETED"
+        in text
+    ), "Level-2 doc sequence table must show FINAL-READINESS-001 as COMPLETED"
+    # Ensure the old NEXT status for FINAL-READINESS-001 is gone from the table row.
+    assert (
+        "CUSTOMER-ZERO-FINAL-READINESS-001 | Customer-Zero final pre-ceremony readiness checklist | NEXT"
+        not in text
+    ), "Level-2 doc must not show FINAL-READINESS-001 as NEXT in the sequence table"
+
+
+def test_f4_level2_doc_requires_human_cost_authorization_before_trust_003() -> None:
+    """The Level-2 doc must require explicit human cost authorization before TRUST-003,
+    not just PREAUTH completion.
+    """
+    text = _load_level2_doc()
+    assert "human cost authorization" in text, (
+        "Level-2 doc must mention 'human cost authorization' as a gate before TRUST-003"
+    )
+    assert "does NOT authorize CUSTOMER-ZERO-TRUST-003" in text or (
+        "does not authorize" in text and "TRUST-003" in text
+    ), (
+        "Level-2 doc must explicitly state that FINAL-READINESS completion alone does not "
+        "authorize TRUST-003"
     )
