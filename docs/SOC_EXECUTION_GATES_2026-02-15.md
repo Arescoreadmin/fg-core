@@ -1,3 +1,57 @@
+## 2026-10-08 - fix/cz-run3-readiness-integration: P1 tree-content binding + count equality for J_CE3 validator
+
+**Change scope:** Two P1 review fixes to `services/governance/customer_zero_readiness.py`, `tools/ci/run_offline_ceremony_simulation.py`, `tests/test_cz_run3_readiness_integration_repair_001.py`, and `customer_one/offline_simulation_evidence.json`.
+
+P1-1 (tree-content hash binding): The previous `source_sha` HEAD-SHA binding was self-invalidating — writing the evidence file made the worktree dirty (A4 fails), and committing the evidence changed HEAD, making the embedded SHA immediately stale (J_CE3 fails). Fix: replaced the equality check against HEAD with a `source_tree_hash` binding computed as SHA-256 of all `git ls-files` tracked file contents excluding the evidence file itself. Because the evidence file is excluded, the hash is identical whether the evidence file is committed or not, breaking the chicken-and-egg. `source_sha` is retained as informational metadata but no longer checked for equality.
+
+P1-2 (count equality + uniqueness): The previous `checks_passed + checks_failed > len(checks_executed)` check only caught inflation (more counts than checks). Undercounting (e.g., 1 passed, 0 failed, 6 mandatory check names present) passed through, allowing a forged GREEN where only 1 check allegedly passed. Fix: changed `>` to `!=` (equality check). Added a uniqueness check: duplicate check names in `checks_executed` now return FAIL.
+
+**Security posture:**
+
+1. **Tree-content binding closes chicken-and-egg (P1-1).** The HEAD-SHA binding was logically impossible to satisfy: (a) evidence file not committed → worktree dirty → A4 FAIL; (b) evidence file committed → HEAD changes → J_CE3 FAIL (stale SHA). The tree-content hash excludes the evidence file, making it stable across commits. The hash is a SHA-256 over all tracked file paths and contents — any code change after the evidence was generated invalidates it, requiring re-run.
+2. **Undercounting forged GREEN now caught (P1-2).** With the old `>` check, an attacker could set `checks_passed=1, checks_failed=0` alongside 6 mandatory check names (total 1 != 6) and the count check would not trigger. The mandatory-name check would still pass (all 6 names present). The new `!=` check closes this gap.
+3. **Duplicate name injection caught (P1-2).** An attacker could repeat a passing check name 6 times to satisfy the mandatory-name set with only one genuine check execution. The new uniqueness check catches this by failing when `len(checks_executed) != len(set(checks_executed))`.
+4. **source_sha preserved as provenance.** `source_sha` is still written to the evidence file and still required as a schema field (provenance audit). Only the equality check is removed — the field is informational metadata.
+5. **No self-authorization introduced.** All fixes narrow or tighten existing gates. No authorization path is weakened. CUSTOMER_ZERO_TRUST=NOT_PROVEN. TRUST-003=BLOCKED. authorization_status=NOT_AUTHORIZED. No cloud mutation. No secrets accessed. No paid infrastructure.
+6. **Offline-only design preserved.** Both `_compute_tree_content_hash` implementations use only `git ls-files` (read-only subprocess) and `hashlib.sha256`. No network calls.
+
+**Critical-path files changed:** `services/governance/customer_zero_readiness.py` (`_compute_tree_content_hash` new function, `_validate_offline_simulation_evidence` signature/binding/count/uniqueness changes), `tools/ci/run_offline_ceremony_simulation.py` (`_compute_tree_content_hash` new function, `source_tree_hash` field added to evidence dict), `tests/test_cz_run3_readiness_integration_repair_001.py` (35 tests, 2 new: J_CE3-34 undercounting, J_CE3-35 duplicate names), `customer_one/offline_simulation_evidence.json` (regenerated with `source_tree_hash`).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; authorization_status=NOT_AUTHORIZED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT. No production key accessed. No authorization status changed. 35 adversarial integration tests pass.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_readiness_integration_repair_001.py -v` → 33 passed (2 pre-existing failures unrelated to this change: test_j_ce3_20/21 use system python without httpx)
+- `ruff check` / `ruff format --check` → all clean
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Both fixes narrow existing gates (tree-content hash closes chicken-and-egg; equality + uniqueness checks close undercounting and duplicate-name forgery vectors). No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
+## 2026-10-08 - fix/cz-run3-readiness-integration: offline ceremony simulation runner (CZ-RUN3-READINESS-INTEGRATION-REPAIR-001)
+
+**Change scope:** New offline tool `tools/ci/run_offline_ceremony_simulation.py` added as part of CZ-RUN3-READINESS-INTEGRATION-REPAIR-001. The script produces machine-readable evidence for readiness dimension J_CE3 (offline-ceremony-simulation-green). It generates ephemeral TEST-ONLY Ed25519 key material in-process, exercises all three trust domains (IDENTITY, APPROVAL, ACCEPTANCE), validates cross-domain isolation, and verifies that the verifier rejects tampered payloads. On success it writes `customer_one/offline_simulation_evidence.json` bound to the current HEAD SHA. No production keys accessed. No network I/O. No cloud mutation.
+
+**Security posture:**
+
+1. **TEST-ONLY key material only.** All Ed25519 key pairs are generated ephemerally within the script process using `cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PrivateKey.generate()`. They are never written to disk, never stored, and never leave the process. They bear no relation to any production Vault transit key.
+2. **Offline-only execution.** The script uses no subprocess calls except `git rev-parse HEAD` (read-only). No terraform, no HCP, no AWS. No network connections made.
+3. **No authorization bypass.** The simulation runner produces a DECLARED_ONLY / TEST_PROVEN evidence artifact. The readiness evaluator (`customer_zero_readiness.py`) treats it as TEST_PROVEN, not RUNTIME_PROVEN. CUSTOMER_ZERO_TRUST remains NOT_PROVEN. TRUST-003 remains BLOCKED. No authorization status changes.
+4. **Source-SHA binding.** The evidence JSON records the HEAD SHA at generation time. The readiness evaluator (`_validate_offline_simulation_evidence()`) rejects evidence whose `source_sha` does not match `git rev-parse HEAD` — prevents stale evidence from passing an updated checkout.
+5. **Verifier fail-closed check.** One of the 6 simulation checks explicitly verifies that a tampered payload is rejected — the simulation cannot produce a GREEN result if the verifier silently accepts corrupted data.
+6. **No secrets accessed, no credentials stored, no production systems contacted.**
+
+**Critical-path files changed:** `tools/ci/run_offline_ceremony_simulation.py` (new — offline simulation runner, 6 checks, TEST-ONLY Ed25519, writes `customer_one/offline_simulation_evidence.json`).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT. No production key accessed. No authorization status changed. 33 adversarial integration tests cover both the A2 lifecycle-aware fix and J_CE3 evidence validation.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_readiness_integration_repair_001.py -v` → 33 passed
+- `ruff check tools/ci/run_offline_ceremony_simulation.py` → no errors
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. New `tools/ci` script is offline-only, TEST-ONLY key material, read-only except for writing the evidence JSON artifact. Strengthens J_CE3 readiness gate from NOT_PROVEN to TEST_PROVEN. No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-07 - governance/customer-zero-run3-preauth-001: P1/P2 review fixes for run3 preauth gate
 
 **Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_preauth.py` and `services/governance/run3_cost_request.py`. (1) READINESS-FINGERPRINT check now FAILs when `final_result` is not READY or when `offline_blocker_count > 0` — previously a BLOCKED readiness result silently produced a PASS. (2) `CostAuthorizationRequest` now stores `source_sha`; `validate_authorization_binding()` rejects mismatching source SHAs; `build_cost_request()` accepts and propagates it. (3) New INVENTORY-TF-COVERAGE check performs a static regex parse of `infra/*.tf` to detect resource or data-source declarations absent from `RESOURCE_INVENTORY`. (4) `portable_verification_result` is now derived by running the portable verification tests via `subprocess.run([pytest, …])` rather than being hardcoded to `"TEST_PROVEN"`. 14 new tests (71–84) cover all four fixes.

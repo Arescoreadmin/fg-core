@@ -1,3 +1,30 @@
+# CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 P1 fixes — tree-content binding + count equality
+
+- **Root cause P1-1 (self-invalidating HEAD-bound evidence):** The runner wrote `source_sha: git_rev_parse_HEAD` into the evidence file. Writing the evidence made the worktree dirty (A4 fails). Committing the evidence changed HEAD, making the embedded SHA immediately stale (J_CE3 fails). The chicken-and-egg meant no normal clean checkout could satisfy both A4 and J_CE3 simultaneously.
+- **Fix P1-1:** Replaced the `source_sha` equality check with a `source_tree_hash` binding. Both `run_offline_ceremony_simulation.py` and `_validate_offline_simulation_evidence()` now compute SHA-256 of all `git ls-files` tracked file contents excluding the evidence file itself. Because the evidence file is excluded from `git ls-files` (or excluded by name), the hash is identical whether the evidence file has been committed or not. `source_sha` is retained as informational metadata (still a required schema field) but the equality check is removed from the validator.
+- **Root cause P1-2 (count inequality, not just non-exceeding):** Line 534 of `customer_zero_readiness.py` used `>` (inflation check only). Undercounting (`checks_passed=1, checks_failed=0, checks_executed=6_names`) passed through, allowing forged GREEN where 1 check allegedly passed but all 6 mandatory check names were present.
+- **Fix P1-2:** Changed `>` to `!=` (equality check). Added uniqueness check: if `checks_executed` has duplicate names, return FAIL.
+- **New function `_compute_tree_content_hash(repo, exclude_relpath)`:** Added to both `run_offline_ceremony_simulation.py` and `customer_zero_readiness.py`. Identical algorithm in both — `git ls-files -z`, sort paths excluding evidence relpath, hash each `relpath + b"\x00" + content + b"\x00"` via SHA-256. `OSError` on read → `b"\x00FILE_ABSENT\x00"` fallback (graceful degradation).
+- **Test changes:** 35 adversarial tests (was 33). Added `_get_tree_content_hash()` helper, `source_tree_hash` parameter to `_make_evidence()`. Updated all `_validate_offline_simulation_evidence(p, head)` calls to `_validate_offline_simulation_evidence(p, REPO)`. Updated test_j_ce3_14 to use fake tree hash. Updated test_int_29 to test stale tree hash. Added J_CE3-34 (undercounting) and J_CE3-35 (duplicate names).
+- **Evidence file regenerated:** `customer_one/offline_simulation_evidence.json` regenerated with `source_tree_hash` field computed from current tracked files.
+- **Preserved invariants:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER_ZERO_TRUST_003=BLOCKED, authorization_status=NOT_AUTHORIZED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT.
+- **Zero cloud mutations.** No paid infrastructure. No schema changes. No migrations.
+
+---
+
+# CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 — Post-merge readiness integration repair
+
+- **Work item:** CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 (REPAIR class)
+- **Root cause A2:** After PR #754 moved CUSTOMER-ZERO-FINAL-READINESS-001 to `completed`, the A2 check in `customer_zero_readiness.py` called `check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-FINAL-READINESS-001`. The roadmap checker returns BLOCKED for completed items (by design, fail-closed). The A2 check treated any non-AUTHORIZED response as FAIL, not distinguishing the legitimate post-merge completed state.
+- **Root cause J_CE3:** The J_CE3 evaluator accepted `ceremony_state.yaml offline_simulation_status=GREEN` (a manually set flag) or `test file present + roadmap checker AUTHORIZED` as evidence. Post-merge, neither condition held: the roadmap checker returned BLOCKED (completed item), and no machine-readable simulation evidence existed.
+- **Fix A2:** Added `_roadmap_item_completed_with_evidence()` — lifecycle-aware helper that validates an item is in `completed` with `prs` (non-empty list) and `merged_sha` (exactly 40 hex chars), checking for contradictory lifecycle placement (e.g., simultaneously in `next_sequence` or `deferred`). A2 evaluator now first tries the roadmap checker (AUTHORIZED → PASS); if BLOCKED, checks completed with valid evidence (→ PASS, STATIC_VERIFIED); if neither → FAIL. Does not modify the global roadmap checker behavior.
+- **Fix J_CE3:** Added `tools/ci/run_offline_ceremony_simulation.py` — deterministic offline trust ceremony simulation using ephemeral TEST-ONLY Ed25519 keys (never production Vault). Six checks: key generation for all three trust roles, signing/verification round-trips for IDENTITY/APPROVAL/ACCEPTANCE domains, cross-domain isolation, verifier contract fail-closed. Produces `customer_one/offline_simulation_evidence.json` bound to current source SHA. Added `_validate_offline_simulation_evidence()` which validates: file present, valid JSON, `result=GREEN`, source_sha matches HEAD, checks_passed > 0, checks_failed == 0, all 6 mandatory check names present, no contradictory counts, no forged GREEN flag (empty checks_executed). J_CE3 evaluator now reads and validates this evidence file.
+- **Test coverage:** 33 adversarial tests in `tests/test_cz_run3_readiness_integration_repair_001.py` (10 A2 + 11 J_CE3 + 12 integration). All 235 tests in the gate suite pass.
+- **Preserved invariants:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER_ZERO_TRUST_003=BLOCKED, CUSTOMER_ZERO_ACCEPT_001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, cost_authorization_status=NOT_AUTHORIZED, proposed_max_cost_usd=null.
+- **Zero cloud mutations.** No paid infrastructure. No schema changes. No migrations.
+
+---
+
 # CUSTOMER-ZERO-RUN3-PREAUTH-001 — Run-3 pre-ceremony authority
 
 - **Purpose:** Implements CUSTOMER-ZERO-RUN3-PREAUTH-001 — a deterministic, fail-closed, offline-only pre-ceremony authority that freezes the production candidate, expected resource inventory, proof matrix (families A–K), abort matrix, teardown contract, and cost-authorization REQUEST before any human authorization or paid HCP infrastructure provisioning occurs.
