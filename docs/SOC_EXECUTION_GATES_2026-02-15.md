@@ -1,3 +1,28 @@
+## 2026-10-07 - governance/customer-zero-run3-preauth-001: P1/P2 review fixes for run3 preauth gate
+
+**Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_preauth.py` and `services/governance/run3_cost_request.py`. (1) READINESS-FINGERPRINT check now FAILs when `final_result` is not READY or when `offline_blocker_count > 0` — previously a BLOCKED readiness result silently produced a PASS. (2) `CostAuthorizationRequest` now stores `source_sha`; `validate_authorization_binding()` rejects mismatching source SHAs; `build_cost_request()` accepts and propagates it. (3) New INVENTORY-TF-COVERAGE check performs a static regex parse of `infra/*.tf` to detect resource or data-source declarations absent from `RESOURCE_INVENTORY`. (4) `portable_verification_result` is now derived by running the portable verification tests via `subprocess.run([pytest, …])` rather than being hardcoded to `"TEST_PROVEN"`. 14 new tests (71–84) cover all four fixes.
+
+**Security posture:**
+
+1. **Readiness gate tightened (P1).** A BLOCKED readiness result previously passed the preauth gate, allowing a regressed readiness state to be fingerprinted as authoritative. Now any `final_result != READY` or any non-zero `offline_blocker_count` sets `result=FAIL` and appends a blocker — the gate now fail-closes on readiness regression.
+2. **Source-SHA binding enforced (P1).** `CostAuthorizationRequest` previously carried no record of which source SHA it was built from. An authorization request created against SHA A could be reused without change against SHA B. The fix records `source_sha` on the dataclass and rejects it in `validate_authorization_binding()` on mismatch — authorization is now cryptographically anchored to the source commit.
+3. **Inventory-TF coverage check added (P1).** The previous INVENTORY-FINGERPRINT check only verified that the hardcoded list hashed consistently; it did not catch new resources added to `infra/*.tf` without updating `RESOURCE_INVENTORY`. The new INVENTORY-TF-COVERAGE check uses a static regex parse (no terraform init, no network) to extract all `resource "TYPE" "NAME"` and `data "TYPE" "NAME"` declarations and cross-checks them against the inventory. Any unclassified address fails closed with a blocker listing the unclassified addresses.
+4. **Portable verification result derived from execution (P2).** The previous hardcoded `"TEST_PROVEN"` was present unconditionally regardless of whether the tests passed. It is now derived from a real `subprocess.run(pytest …)` result; a non-zero exit becomes `"NOT_PROVEN"` and appends a blocker.
+5. **No self-authorization introduced.** All fixes narrow or tighten existing gates. No authorization path is weakened. `authorization_status` remains hardcoded `NOT_AUTHORIZED`. No cloud mutation. No secrets accessed. No paid infrastructure.
+6. **Offline-only design preserved.** Static `.tf` parsing uses only `Path.read_text()` and `re.match()`. No terraform binary, no network calls, no cloud provider authentication.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (check #5 reject BLOCKED, check #6b INVENTORY-TF-COVERAGE new, `_build_artifact` pv derivation, `source_sha` threaded through), `services/governance/run3_cost_request.py` (`source_sha` field + binding + to_dict), `tests/test_customer_zero_run3_preauth_001.py` (14 new tests 71–84).
+
+**Required invariant preserved:** preauth_result is READY_FOR_HUMAN_COST_AUTHORIZATION or BLOCKED; never AUTHORIZED_TO_SPEND; canonical Customer-Zero truth unchanged; 84 adversarial tests pass; ruff clean.
+
+**Validation evidence:**
+
+- `pytest tests/test_customer_zero_run3_preauth_001.py -v` → 84 passed
+- `ruff check tools/ci/customer_zero_run3_preauth.py services/governance/run3_cost_request.py tests/test_customer_zero_run3_preauth_001.py` → no errors
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. All four fixes narrow existing gates (fail-closed on BLOCKED readiness, source-SHA binding, .tf coverage, execution-derived pv result). No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-08-14 - fix/identity-setup-workflow: tenant identity administration lifecycle closure
 
 **Change scope:** Defect fix - newly provisioned tenants could have a valid Auth0 binding, valid console-bff-key, and active tenant_admin role, but no `tenant_identity_configs` row. Console Users still presented Invite User, and Core returned 422 `IDENTITY_CONFIGURATION_REQUIRED`. This PR makes identity setup an explicit Console lifecycle instead of silently guessing policy at provisioning time.
@@ -6963,3 +6988,30 @@ SOC review outcome: APPROVED. Enforcement tightening only; no authority weakenin
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. Offline read-only gate; no runtime authority, no authentication path, no tenant isolation bypass, no secret access; canonical Customer-Zero truth preserved and enforced.
+
+## 2026-10-08 - governance/customer-zero-run3-preauth-001: Customer-Zero Run-3 pre-ceremony authority
+
+**Change scope:** CUSTOMER-ZERO-RUN3-PREAUTH-001. New offline deterministic pre-ceremony authority CLI (`tools/ci/customer_zero_run3_preauth.py`) and supporting implementation modules (`services/governance/run3_evidence_strength.py`, `run3_candidate.py`, `run3_resource_inventory.py`, `run3_cost_request.py`, `run3_proof_matrix.py`, `run3_abort_teardown.py`). This gate freezes the production candidate, resource inventory, proof matrix (families A–K), abort matrix, teardown contract, and cost-authorization REQUEST before any human authorization or paid HCP infrastructure provisioning occurs.
+
+**Security posture:**
+
+1. **Offline and read-only.** The gate makes no network calls, no cloud API calls, no database writes, no filesystem mutations. No Vault, AWS, HCP, or Railway contact occurs.
+2. **No secrets accessed or displayed.** The gate reads only committed repository files (Python source, YAML, Terraform HCL). No environment secrets, API keys, or credentials are read or printed.
+3. **No self-authorization.** READY_FOR_HUMAN_COST_AUTHORIZATION does NOT authorize spending, does NOT mark trust PROVEN, does NOT unblock CUSTOMER-ZERO-TRUST-003 or CUSTOMER-ZERO-ACCEPT-001, does NOT provision paid infrastructure. Canonical truth preserved: CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED.
+4. **Fail-closed.** authorization_status is hardcoded to NOT_AUTHORIZED. proposed_max_cost_usd and proposed_max_runtime_hours are None. Missing either threshold fails authorization binding. Wrong ceremony ID, wrong candidate fingerprint, wrong resource inventory, reused authorization all fail closed.
+5. **Real cryptography, no mocked trust.** Portable verification tests use real Ed25519 key pairs generated per test. Mutation attacks (artifact bytes, key version, trust domain, public key substitution) all fail deterministically.
+6. **Secret safety enforced.** No private key material, Vault tokens, AWS credentials, or HCP tokens appear in any artifact. PortableVerificationBundle.__post_init__ and enroll() reject secret-bearing material structurally.
+7. **No paid infrastructure triggered.** The gate cannot trigger provisioning. Zero cloud mutation. Zero new paid resources.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (new CLI gate), `services/governance/run3_*.py` (6 new implementation modules), `tests/test_customer_zero_run3_preauth_001.py` (70 adversarial tests).
+
+**Required invariant:** preauth_result is READY_FOR_HUMAN_COST_AUTHORIZATION or BLOCKED; never AUTHORIZED_TO_SPEND, TRUST_PROVEN, or CUSTOMER_ACCEPTED; canonical Customer-Zero truth preserved in every execution; 70 adversarial tests enforcing freeze, inventory, cost, proof matrix, portable verification, abort, no-self-authorization, and secret safety invariants.
+
+**Validation evidence:**
+
+- `python tools/ci/check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-RUN3-PREAUTH-001` → AUTHORIZED (exit 0)
+- `pytest tests/test_customer_zero_run3_preauth_001.py -v` → 70 passed
+- `ruff check services/governance/run3_*.py tools/ci/customer_zero_run3_preauth.py tests/test_customer_zero_run3_preauth_001.py` → all checks passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Offline read-only gate; no runtime authority weakening; no authentication path change; no tenant isolation bypass; no secret access; canonical Customer-Zero truth preserved and enforced; authorization_status hardcoded NOT_AUTHORIZED and cannot be overridden by this module.
