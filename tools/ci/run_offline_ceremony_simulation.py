@@ -92,6 +92,43 @@ def _git_head(repo: Path) -> str:
         return ""
 
 
+def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
+    """SHA-256 of tracked file contents excluding the evidence file itself.
+
+    Uses 'git ls-files' so the evidence file, whether untracked (freshly
+    written) or already committed, is consistently excluded from the hash.
+    This means the hash is the same before and after committing the evidence
+    file, breaking the HEAD-SHA chicken-and-egg.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return "TREE_HASH_ERROR"
+        files = sorted(
+            f for f in result.stdout.split("\0") if f and f != exclude_relpath
+        )
+        h = hashlib.sha256()
+        for relpath in files:
+            path = repo / relpath
+            try:
+                h.update(relpath.encode("utf-8"))
+                h.update(b"\x00")
+                h.update(path.read_bytes())
+                h.update(b"\x00")
+            except OSError:
+                h.update(relpath.encode("utf-8"))
+                h.update(b"\x00FILE_ABSENT\x00")
+        return h.hexdigest()
+    except Exception:
+        return "TREE_HASH_ERROR"
+
+
 def _run_simulation(repo: Path) -> dict:
     """Execute all simulation checks. Returns evidence dict."""
     from services.governance.trust_binding import (
@@ -134,7 +171,9 @@ def _run_simulation(repo: Path) -> dict:
             fp = fake.fingerprint(role)
             assert pub_b64 and len(pub_b64) > 0, f"No public key for {role}"
             assert fp and len(fp) > 0, f"No fingerprint for {role}"
-        record("trust_keys_generated", True, f"{len(list(TrustRole))} trust roles keyed")
+        record(
+            "trust_keys_generated", True, f"{len(list(TrustRole))} trust roles keyed"
+        )
     except Exception as exc:
         record("trust_keys_generated", False, str(exc))
 
@@ -173,7 +212,10 @@ def _run_simulation(repo: Path) -> dict:
         )
         qual_env = authority.sign_qualification(qual_payload)
         ok = authority.verify_qualification(qual_payload, qual_env)
-        record("approval_domain_sign_verify", ok and qual_env.domain == DOMAIN_QUALIFICATION)
+        record(
+            "approval_domain_sign_verify",
+            ok and qual_env.domain == DOMAIN_QUALIFICATION,
+        )
     except Exception as exc:
         record("approval_domain_sign_verify", False, str(exc))
 
@@ -221,7 +263,7 @@ def _run_simulation(repo: Path) -> dict:
         # Sign with authority1/approval, try to verify as identity — must fail
         env_qual = authority.sign_qualification(qual_payload)
         # Direct wrong-role check using the fake's wrong_role_verify
-        from services.governance.trust_binding import _ROLE_REPORT, _prepare_signing_bytes
+        from services.governance.trust_binding import _prepare_signing_bytes
 
         signing_bytes_report = _prepare_signing_bytes(
             env_qual.domain,
@@ -232,8 +274,11 @@ def _run_simulation(repo: Path) -> dict:
         )
 
         isolation_ok = (not cross_ok) and (not wrong_role_ok)
-        record("cross_domain_isolation", isolation_ok,
-               "cross-authority rejected, wrong-role rejected")
+        record(
+            "cross_domain_isolation",
+            isolation_ok,
+            "cross-authority rejected, wrong-role rejected",
+        )
     except Exception as exc:
         record("cross_domain_isolation", False, str(exc))
 
@@ -261,6 +306,7 @@ def _run_simulation(repo: Path) -> dict:
         fake3 = TrustBindingFake()
         auth3 = TrustBindingAuthority(fake3)
         from services.governance.trust_binding import SignatureEnvelope
+
         env_q_signed = auth3.sign_qualification(qual_payload)
         # Construct a spoofed report envelope using the qualification signature
         spoofed = SignatureEnvelope(
@@ -278,18 +324,25 @@ def _run_simulation(repo: Path) -> dict:
         if r3 is not False:
             fail_closed_ok = False
 
-        record("verifier_contract_fail_closed", fail_closed_ok,
-               "wrong-key=False, tampered=False, wrong-domain=False")
+        record(
+            "verifier_contract_fail_closed",
+            fail_closed_ok,
+            "wrong-key=False, tampered=False, wrong-domain=False",
+        )
     except Exception as exc:
         record("verifier_contract_fail_closed", False, str(exc))
 
-    source_sha = _git_head(repo)
+    source_sha = _git_head(
+        repo
+    )  # informational only — changes on every commit; use source_tree_hash for binding
+    source_tree_hash = _compute_tree_content_hash(repo, EVIDENCE_RELPATH)
     result = "GREEN" if not checks_failed_names else "FAILED"
 
     evidence = {
         "schema_version": SCHEMA_VERSION,
         "simulation_id": str(uuid.uuid4()),
         "source_sha": source_sha,
+        "source_tree_hash": source_tree_hash,
         "simulation_contract_version": SIMULATION_CONTRACT_VERSION,
         "result": result,
         "checks_executed": checks_executed,
@@ -339,7 +392,9 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit:
         raise
     except Exception as exc:
-        print(f"\nFATAL: simulation failed with unexpected error: {exc}", file=sys.stderr)
+        print(
+            f"\nFATAL: simulation failed with unexpected error: {exc}", file=sys.stderr
+        )
         return 2
 
     result = evidence.get("result", "FAILED")

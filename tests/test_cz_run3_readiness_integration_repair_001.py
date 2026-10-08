@@ -7,7 +7,7 @@ Covers:
   J_CE3 tests (11): offline ceremony simulation evidence validation
   Integration tests (12): end-to-end evaluator behavior, safety invariants
 
-Total: 33 adversarial tests.
+Total: 35 adversarial tests.
 
 Scope boundary: OFFLINE ONLY. No Vault. No AWS. No paid infrastructure.
 Zero cloud mutations.
@@ -29,6 +29,7 @@ import yaml
 from services.governance.customer_zero_readiness import (
     WORK_ITEM,
     ReadinessStatus,
+    _compute_tree_content_hash,
     _roadmap_item_completed_with_evidence,
     _validate_offline_simulation_evidence,
     evaluate,
@@ -67,6 +68,7 @@ def _make_evidence(
     *,
     result: str = "GREEN",
     source_sha: str | None = None,
+    source_tree_hash: str | None = None,
     checks_executed: list[str] | None = None,
     checks_passed: int | None = None,
     checks_failed: int = 0,
@@ -76,6 +78,8 @@ def _make_evidence(
 ) -> dict:
     if source_sha is None:
         source_sha = _get_head_sha()
+    if source_tree_hash is None:
+        source_tree_hash = _get_tree_content_hash()
     if checks_executed is None:
         checks_executed = [
             "trust_keys_generated",
@@ -93,6 +97,7 @@ def _make_evidence(
         "schema_version": schema_version,
         "simulation_id": simulation_id,
         "source_sha": source_sha,
+        "source_tree_hash": source_tree_hash,
         "simulation_contract_version": "1.0",
         "result": result,
         "checks_executed": checks_executed,
@@ -117,6 +122,13 @@ def _get_head_sha() -> str:
         return r.stdout.strip() if r.returncode == 0 else "0" * 40
     except Exception:
         return "0" * 40
+
+
+def _get_tree_content_hash() -> str:
+    """Compute tree content hash from REPO for test evidence."""
+    return _compute_tree_content_hash(
+        REPO, "customer_one/offline_simulation_evidence.json"
+    )
 
 
 def _write_evidence(tmp_path: Path, evidence: dict) -> Path:
@@ -297,11 +309,10 @@ def test_a2_10_item_not_found_in_any_section(tmp_path: Path) -> None:
 
 def test_j_ce3_11_real_offline_simulation_success(tmp_path: Path) -> None:
     """J_CE3-11: Real offline simulation success → PASS."""
-    head = _get_head_sha()
-    evidence = _make_evidence(source_sha=head)
+    evidence = _make_evidence()
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, remediation = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, remediation = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.PASS, f"Expected PASS, got {status}: {ev}"
     assert "GREEN" in ev
     assert evidence["checks_passed"] > 0
@@ -310,37 +321,35 @@ def test_j_ce3_11_real_offline_simulation_success(tmp_path: Path) -> None:
 def test_j_ce3_12_missing_evidence_file(tmp_path: Path) -> None:
     """J_CE3-12: Missing evidence file → NOT_PROVEN."""
     missing = tmp_path / "customer_one" / "offline_simulation_evidence.json"
-    status, ev, reason, _ = _validate_offline_simulation_evidence(missing, "a" * 40)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(missing, REPO)
     assert status == ReadinessStatus.NOT_PROVEN, f"Expected NOT_PROVEN, got {status}"
     assert "not found" in ev.lower(), ev
 
 
 def test_j_ce3_13_failed_simulation(tmp_path: Path) -> None:
     """J_CE3-13: Failed simulation (result=FAILED) → FAIL."""
-    head = _get_head_sha()
-    evidence = _make_evidence(
-        result="FAILED", checks_failed=1, checks_passed=5, source_sha=head
-    )
+    evidence = _make_evidence(result="FAILED", checks_failed=1, checks_passed=5)
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, f"Expected FAIL, got {status}: {ev}"
     assert "FAILED" in ev or "GREEN" in ev
 
 
 def test_j_ce3_14_stale_evidence_different_sha(tmp_path: Path) -> None:
-    """J_CE3-14: Stale evidence (different source SHA) → FAIL."""
-    stale_sha = "dead" * 10  # 40 chars, different from HEAD
-    head = _get_head_sha()
-    evidence = _make_evidence(source_sha=stale_sha)
+    """J_CE3-14: Stale evidence (different source_tree_hash) → FAIL."""
+    # Use a fake tree hash that definitely won't match the real repo hash
+    evidence = _make_evidence(
+        source_tree_hash="dead" * 16
+    )  # 64 chars, won't match repo
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
-    if head and head != stale_sha:
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
+    if True:  # fake hash always differs from real repo hash
         assert status == ReadinessStatus.FAIL, (
-            f"Expected FAIL for stale SHA, got {status}: {ev}"
+            f"Expected FAIL for stale tree hash, got {status}: {ev}"
         )
-        assert "stale" in ev.lower() or "sha" in ev.lower(), ev
+        assert "stale" in ev.lower() or "tree" in ev.lower(), ev
 
 
 def test_j_ce3_15_malformed_evidence_invalid_json(tmp_path: Path) -> None:
@@ -349,7 +358,7 @@ def test_j_ce3_15_malformed_evidence_invalid_json(tmp_path: Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("{ this is not valid json }", encoding="utf-8")
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, "a" * 40)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Expected FAIL for invalid JSON, got {status}"
     )
@@ -358,12 +367,15 @@ def test_j_ce3_15_malformed_evidence_invalid_json(tmp_path: Path) -> None:
 
 def test_j_ce3_16_missing_required_fields(tmp_path: Path) -> None:
     """J_CE3-16: Missing required fields → FAIL."""
-    head = _get_head_sha()
     # Omit 'result'
-    evidence = {"schema_version": "1.0", "simulation_id": "x", "source_sha": head}
+    evidence = {
+        "schema_version": "1.0",
+        "simulation_id": "x",
+        "source_sha": _get_head_sha(),
+    }
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Expected FAIL for missing result, got {status}"
     )
@@ -372,16 +384,14 @@ def test_j_ce3_16_missing_required_fields(tmp_path: Path) -> None:
 
 def test_j_ce3_17_missing_mandatory_checks(tmp_path: Path) -> None:
     """J_CE3-17: Missing mandatory checks → FAIL."""
-    head = _get_head_sha()
     # Only include some checks, missing cross_domain_isolation and verifier_contract_fail_closed
     evidence = _make_evidence(
-        source_sha=head,
         checks_executed=["trust_keys_generated", "identity_domain_sign_verify"],
         checks_passed=2,
     )
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Expected FAIL for missing mandatory checks, got {status}"
     )
@@ -390,15 +400,13 @@ def test_j_ce3_17_missing_mandatory_checks(tmp_path: Path) -> None:
 
 def test_j_ce3_18_contradictory_results(tmp_path: Path) -> None:
     """J_CE3-18: Contradictory results (passed+failed > executed) → FAIL."""
-    head = _get_head_sha()
     evidence = _make_evidence(
-        source_sha=head,
         checks_passed=10,  # more than executed
-        checks_failed=5,  # total = 15 > 6
+        checks_failed=5,  # total = 15 != 6
     )
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Expected FAIL for contradictory counts, got {status}: {ev}"
     )
@@ -409,11 +417,11 @@ def test_j_ce3_18_contradictory_results(tmp_path: Path) -> None:
 
 def test_j_ce3_19_forged_green_flag_no_execution_data(tmp_path: Path) -> None:
     """J_CE3-19: Forged GREEN flag with no execution data → FAIL."""
-    head = _get_head_sha()
     evidence = {
         "schema_version": "1.0",
         "simulation_id": str(uuid.uuid4()),
-        "source_sha": head,
+        "source_sha": _get_head_sha(),
+        "source_tree_hash": _get_tree_content_hash(),
         "simulation_contract_version": "1.0",
         "result": "GREEN",
         "checks_executed": [],  # empty — no checks ran
@@ -422,7 +430,7 @@ def test_j_ce3_19_forged_green_flag_no_execution_data(tmp_path: Path) -> None:
     }
     p = _write_evidence(tmp_path, evidence)
 
-    status, ev, reason, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Expected FAIL for forged GREEN with empty checks, got {status}: {ev}"
     )
@@ -537,7 +545,7 @@ def test_int_23_preauth_blocked_when_final_readiness_fails(tmp_path: Path) -> No
     # Use a tmp repo with no evidence to guarantee blockers
     # Just verify that with missing evidence J_CE3 returns NOT_PROVEN
     missing = tmp_path / "customer_one" / "offline_simulation_evidence.json"
-    status, ev, reason, _ = _validate_offline_simulation_evidence(missing, "a" * 40)
+    status, ev, reason, _ = _validate_offline_simulation_evidence(missing, REPO)
     assert status == ReadinessStatus.NOT_PROVEN
     # NOT_PROVEN is a blocker → final readiness would be BLOCKED → preauth BLOCKED
     # This validates the chain without running the full preauth evaluator
@@ -670,39 +678,37 @@ def test_int_28_fingerprint_determinism() -> None:
 
 
 def test_int_29_post_merge_source_rebinding_required() -> None:
-    """INT-29: Evidence source_sha must match HEAD (documented rebinding requirement)."""
-    # After a new merge, the evidence file would have a stale source_sha.
+    """INT-29: Evidence source_tree_hash must match current tree (documented rebinding requirement)."""
+    # After code changes, the evidence file would have a stale source_tree_hash.
     # This test confirms the validator catches it.
-    head = _get_head_sha()
-    stale_sha = "0" * 40  # obviously wrong
-    if head != stale_sha:
-        evidence = _make_evidence(source_sha=stale_sha)
-        import tempfile
+    import tempfile
 
-        with tempfile.TemporaryDirectory() as td:
-            p = Path(td) / "evidence.json"
-            p.write_text(json.dumps(evidence), encoding="utf-8")
-            status, ev, _, _ = _validate_offline_simulation_evidence(p, head)
-            assert status == ReadinessStatus.FAIL, (
-                "Stale source_sha must cause FAIL (rebinding required)"
-            )
+    evidence = _make_evidence(source_tree_hash="0" * 64)  # obviously wrong tree hash
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "evidence.json"
+        p.write_text(json.dumps(evidence), encoding="utf-8")
+        status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
+        assert status == ReadinessStatus.FAIL, (
+            "Stale source_tree_hash must cause FAIL (rebinding required)"
+        )
+        assert "stale" in ev.lower() or "tree" in ev.lower(), ev
 
 
 def test_int_30_fail_closed_for_incomplete_evidence(tmp_path: Path) -> None:
     """INT-30: Fail-closed for incomplete evidence."""
-    head = _get_head_sha()
     # Evidence missing checks_failed field
     evidence = {
         "schema_version": "1.0",
         "simulation_id": str(uuid.uuid4()),
-        "source_sha": head,
+        "source_sha": _get_head_sha(),
+        "source_tree_hash": _get_tree_content_hash(),
         "result": "GREEN",
         "checks_executed": ["trust_keys_generated"],
         "checks_passed": 1,
         # missing 'checks_failed'
     }
     p = _write_evidence(tmp_path, evidence)
-    status, ev, _, _ = _validate_offline_simulation_evidence(p, head)
+    status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
     assert status == ReadinessStatus.FAIL, (
         f"Incomplete evidence (missing checks_failed) must FAIL, got {status}"
     )
@@ -759,9 +765,10 @@ def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
 
 
 def test_int_33_evidence_provenance_validation() -> None:
-    """INT-33: Evidence provenance validated — simulation_id and source_sha must be present."""
+    """INT-33: Evidence provenance validated — simulation_id, source_sha, and source_tree_hash must be present."""
     # The simulation_id must be a non-empty string
-    # The source_sha must match HEAD
+    # The source_sha must be a 40-char hex string (informational)
+    # The source_tree_hash must be a 64-char hex string (tree binding)
     evidence_path = REPO / "customer_one" / "offline_simulation_evidence.json"
     assert evidence_path.exists(), (
         "offline_simulation_evidence.json must exist after simulation run"
@@ -775,11 +782,58 @@ def test_int_33_evidence_provenance_validation() -> None:
     assert source_sha, "source_sha must be present and non-empty"
     assert len(source_sha) == 40, f"source_sha must be 40 chars, got {len(source_sha)}"
 
-    # Note: the source_sha may be from the original simulation run; if HEAD has changed
-    # since the last simulation run, this comparison may differ. We validate format only
-    # for the canonical evidence file; SHA binding is validated in test 14/29.
     import re
 
     assert re.match(r"^[0-9a-f]{40}$", source_sha.lower()), (
         f"source_sha must be 40 lowercase hex chars: {source_sha!r}"
     )
+
+    source_tree_hash = evidence.get("source_tree_hash", "")
+    assert source_tree_hash, "source_tree_hash must be present and non-empty"
+    assert len(source_tree_hash) == 64, (
+        f"source_tree_hash must be 64 chars, got {len(source_tree_hash)}"
+    )
+    assert re.match(r"^[0-9a-f]{64}$", source_tree_hash.lower()), (
+        f"source_tree_hash must be 64 lowercase hex chars: {source_tree_hash!r}"
+    )
+
+
+def test_j_ce3_34_undercounting_passes_must_fail(tmp_path: Path) -> None:
+    """J_CE3-34 (P1-2): checks_passed + checks_failed != len(checks_executed) must FAIL.
+
+    Forged evidence: 1 check passed, 0 failed, but 6 names in checks_executed.
+    With the old '>' check this would pass the count gate and then pass the
+    mandatory-name gate (all 6 names present). Fix: '!=' catches undercounting.
+    """
+    evidence = _make_evidence(
+        checks_passed=1,  # only 1 passed
+        checks_failed=0,  # 0 failed — total 1 != 6
+    )
+    p = _write_evidence(tmp_path, evidence)
+    status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
+    assert status == ReadinessStatus.FAIL, (
+        f"Expected FAIL for undercounted passes (1 passed, 6 executed), got {status}: {ev}"
+    )
+    assert len(ev) > 0
+
+
+def test_j_ce3_35_duplicate_check_names_must_fail(tmp_path: Path) -> None:
+    """J_CE3-35 (P1-2): Duplicate check names in checks_executed must FAIL."""
+    evidence = _make_evidence(
+        checks_executed=[
+            "trust_keys_generated",
+            "trust_keys_generated",  # duplicate
+            "identity_domain_sign_verify",
+            "approval_domain_sign_verify",
+            "acceptance_domain_sign_verify",
+            "cross_domain_isolation",
+        ],
+        checks_passed=6,
+        checks_failed=0,
+    )
+    p = _write_evidence(tmp_path, evidence)
+    status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
+    assert status == ReadinessStatus.FAIL, (
+        f"Expected FAIL for duplicate check names, got {status}: {ev}"
+    )
+    assert "duplicate" in ev.lower() or "check" in ev.lower()

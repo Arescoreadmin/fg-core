@@ -1,3 +1,17 @@
+# CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 P1 fixes — tree-content binding + count equality
+
+- **Root cause P1-1 (self-invalidating HEAD-bound evidence):** The runner wrote `source_sha: git_rev_parse_HEAD` into the evidence file. Writing the evidence made the worktree dirty (A4 fails). Committing the evidence changed HEAD, making the embedded SHA immediately stale (J_CE3 fails). The chicken-and-egg meant no normal clean checkout could satisfy both A4 and J_CE3 simultaneously.
+- **Fix P1-1:** Replaced the `source_sha` equality check with a `source_tree_hash` binding. Both `run_offline_ceremony_simulation.py` and `_validate_offline_simulation_evidence()` now compute SHA-256 of all `git ls-files` tracked file contents excluding the evidence file itself. Because the evidence file is excluded from `git ls-files` (or excluded by name), the hash is identical whether the evidence file has been committed or not. `source_sha` is retained as informational metadata (still a required schema field) but the equality check is removed from the validator.
+- **Root cause P1-2 (count inequality, not just non-exceeding):** Line 534 of `customer_zero_readiness.py` used `>` (inflation check only). Undercounting (`checks_passed=1, checks_failed=0, checks_executed=6_names`) passed through, allowing forged GREEN where 1 check allegedly passed but all 6 mandatory check names were present.
+- **Fix P1-2:** Changed `>` to `!=` (equality check). Added uniqueness check: if `checks_executed` has duplicate names, return FAIL.
+- **New function `_compute_tree_content_hash(repo, exclude_relpath)`:** Added to both `run_offline_ceremony_simulation.py` and `customer_zero_readiness.py`. Identical algorithm in both — `git ls-files -z`, sort paths excluding evidence relpath, hash each `relpath + b"\x00" + content + b"\x00"` via SHA-256. `OSError` on read → `b"\x00FILE_ABSENT\x00"` fallback (graceful degradation).
+- **Test changes:** 35 adversarial tests (was 33). Added `_get_tree_content_hash()` helper, `source_tree_hash` parameter to `_make_evidence()`. Updated all `_validate_offline_simulation_evidence(p, head)` calls to `_validate_offline_simulation_evidence(p, REPO)`. Updated test_j_ce3_14 to use fake tree hash. Updated test_int_29 to test stale tree hash. Added J_CE3-34 (undercounting) and J_CE3-35 (duplicate names).
+- **Evidence file regenerated:** `customer_one/offline_simulation_evidence.json` regenerated with `source_tree_hash` field computed from current tracked files.
+- **Preserved invariants:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER_ZERO_TRUST_003=BLOCKED, authorization_status=NOT_AUTHORIZED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT.
+- **Zero cloud mutations.** No paid infrastructure. No schema changes. No migrations.
+
+---
+
 # CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 — Post-merge readiness integration repair
 
 - **Work item:** CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 (REPAIR class)

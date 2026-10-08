@@ -396,7 +396,10 @@ def _roadmap_item_completed_with_evidence(
         return False, f"'{work_item}' not found in completed section"
 
     if len(completed_entries) > 1:
-        return False, f"Duplicate lifecycle record: '{work_item}' appears {len(completed_entries)} times in completed"
+        return (
+            False,
+            f"Duplicate lifecycle record: '{work_item}' appears {len(completed_entries)} times in completed",
+        )
 
     entry = completed_entries[0]
 
@@ -407,7 +410,9 @@ def _roadmap_item_completed_with_evidence(
     merged_sha = entry.get("merged_sha", "")
     if not merged_sha:
         return False, f"'{work_item}' completed entry missing 'merged_sha' field"
-    if not isinstance(merged_sha, str) or not _SHA40_RE.match(merged_sha.strip().lower()):
+    if not isinstance(merged_sha, str) or not _SHA40_RE.match(
+        merged_sha.strip().lower()
+    ):
         return (
             False,
             f"'{work_item}' completed entry 'merged_sha' is malformed (not 40 hex chars): {merged_sha!r}",
@@ -433,9 +438,44 @@ _SIMULATION_MANDATORY_CHECKS = frozenset(
 )
 
 
+def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
+    """SHA-256 of tracked file contents excluding one path (the evidence file).
+
+    Same algorithm as run_offline_ceremony_simulation.py — runner and validator
+    must produce identical hashes for the same working tree.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return "TREE_HASH_ERROR"
+        files = sorted(
+            f for f in result.stdout.split("\0") if f and f != exclude_relpath
+        )
+        h = hashlib.sha256()
+        for relpath in files:
+            path = repo / relpath
+            try:
+                h.update(relpath.encode("utf-8"))
+                h.update(b"\x00")
+                h.update(path.read_bytes())
+                h.update(b"\x00")
+            except OSError:
+                h.update(relpath.encode("utf-8"))
+                h.update(b"\x00FILE_ABSENT\x00")
+        return h.hexdigest()
+    except Exception:
+        return "TREE_HASH_ERROR"
+
+
 def _validate_offline_simulation_evidence(
     evidence_path: Path,
-    head_sha: str,
+    repo: Path,
 ) -> tuple[ReadinessStatus, str, str, str]:
     """Validate the offline ceremony simulation evidence file.
 
@@ -472,8 +512,16 @@ def _validate_offline_simulation_evidence(
         )
 
     # Required fields
-    for field_name in ("schema_version", "simulation_id", "source_sha", "result",
-                       "checks_executed", "checks_passed", "checks_failed"):
+    for field_name in (
+        "schema_version",
+        "simulation_id",
+        "source_sha",
+        "result",
+        "checks_executed",
+        "checks_passed",
+        "checks_failed",
+        "source_tree_hash",
+    ):
         if field_name not in evidence:
             return (
                 ReadinessStatus.FAIL,
@@ -491,16 +539,25 @@ def _validate_offline_simulation_evidence(
             "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
         )
 
-    evidence_sha = evidence.get("source_sha", "")
-    if head_sha and evidence_sha != head_sha:
+    _evidence_relpath = "customer_one/offline_simulation_evidence.json"
+    evidence_tree_hash = evidence.get("source_tree_hash", "")
+    computed_tree_hash = _compute_tree_content_hash(repo, _evidence_relpath)
+    if computed_tree_hash.startswith("TREE_HASH_ERROR"):
+        return (
+            ReadinessStatus.FAIL,
+            "Unable to compute tree content hash — git ls-files failed",
+            "Source tree binding cannot be verified",
+            "Ensure this is a valid git repository and retry",
+        )
+    if evidence_tree_hash != computed_tree_hash:
         return (
             ReadinessStatus.FAIL,
             (
-                f"offline_simulation_evidence.json source_sha={evidence_sha[:12]!r} "
-                f"does not match HEAD {head_sha[:12]!r} — stale evidence"
+                f"offline_simulation_evidence.json source_tree_hash={evidence_tree_hash[:16]!r} "
+                f"does not match current tree {computed_tree_hash[:16]!r} — stale evidence"
             ),
-            "Simulation evidence bound to different source SHA",
-            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo . (current HEAD)",
+            "Simulation evidence bound to different tree content",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo . (current checkout)",
         )
 
     checks_executed = evidence.get("checks_executed", [])
@@ -531,14 +588,25 @@ def _validate_offline_simulation_evidence(
             "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
         )
 
-    if checks_passed + checks_failed > len(checks_executed):
+    if checks_passed + checks_failed != len(checks_executed):
         return (
             ReadinessStatus.FAIL,
             (
                 f"Contradictory results: checks_passed={checks_passed} + "
-                f"checks_failed={checks_failed} > checks_executed={len(checks_executed)}"
+                f"checks_failed={checks_failed} != checks_executed={len(checks_executed)}"
             ),
             "Contradictory simulation result counts",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    if len(checks_executed) != len(set(checks_executed)):
+        return (
+            ReadinessStatus.FAIL,
+            (
+                f"Duplicate check names in checks_executed: "
+                f"{sorted(n for n in set(checks_executed) if checks_executed.count(n) > 1)}"
+            ),
+            "Duplicate simulation check names — cannot verify individual check completion",
             "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
         )
 
@@ -2554,14 +2622,13 @@ def _evaluate_completion_evidence(repo: Path) -> list[ReadinessDimension]:
     # tools/ci/run_offline_ceremony_simulation.py.  The evaluator validates:
     #   - File exists and is valid JSON
     #   - result == "GREEN"
-    #   - source_sha matches current HEAD
+    #   - source_tree_hash matches current tree content (excluding evidence file)
     #   - checks_passed > 0 and checks_failed == 0
     #   - All mandatory check names are present in checks_executed
     #   - schema_version, simulation_id, checks_executed fields present
     evidence_path = repo / "customer_one" / "offline_simulation_evidence.json"
-    head_sha = _git_head(repo)
     j_ce3_status, j_ce3_evidence, j_ce3_reason, j_ce3_remediation = (
-        _validate_offline_simulation_evidence(evidence_path, head_sha)
+        _validate_offline_simulation_evidence(evidence_path, repo)
     )
     dims.append(
         _dim(
