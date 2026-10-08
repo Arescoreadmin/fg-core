@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re as _re
 import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -350,6 +351,218 @@ def _roadmap_checker_authorized(repo: Path, work_item: str) -> bool:
         return result.returncode == 0 and "AUTHORIZED" in result.stdout
     except Exception:
         return False
+
+
+_SHA40_RE = _re.compile(r"^[0-9a-f]{40}$")
+
+
+def _roadmap_item_completed_with_evidence(
+    repo: Path,
+    work_item: str,
+) -> tuple[bool, str]:
+    """Lifecycle-aware check: is *work_item* in `completed` with valid evidence?
+
+    Returns (ok, evidence_string).  *ok* is True only when ALL of these hold:
+      1. The item appears in ``completed`` with the correct id.
+      2. ``prs`` field is present and non-empty.
+      3. ``merged_sha`` field is present, non-empty, and exactly 40 hex chars.
+      4. The item is NOT simultaneously in next_sequence, blocked, or deferred
+         (contradictory lifecycle state → FAIL).
+      5. No duplicate ids in the completed section.
+
+    Returns (False, reason) on any violation.
+    """
+    authority_yaml = repo / "customer_one" / "roadmap_authority.yaml"
+    authority = _load_yaml_safe(authority_yaml)
+    if not authority:
+        return False, "roadmap_authority.yaml missing or unreadable"
+
+    # Collect all section ids for conflict detection
+    conflict_sections = ("next_sequence", "blocked", "deferred")
+    for sec in conflict_sections:
+        if _find_in_section(authority, sec, work_item):
+            return (
+                False,
+                f"Contradictory lifecycle: '{work_item}' found in both 'completed' and '{sec}'",
+            )
+
+    completed_entries = [
+        e
+        for e in authority.get("completed", [])
+        if isinstance(e, dict) and e.get("id") == work_item
+    ]
+
+    if not completed_entries:
+        return False, f"'{work_item}' not found in completed section"
+
+    if len(completed_entries) > 1:
+        return False, f"Duplicate lifecycle record: '{work_item}' appears {len(completed_entries)} times in completed"
+
+    entry = completed_entries[0]
+
+    prs = entry.get("prs")
+    if not prs or not isinstance(prs, list) or len(prs) == 0:
+        return False, f"'{work_item}' completed entry missing 'prs' field or empty"
+
+    merged_sha = entry.get("merged_sha", "")
+    if not merged_sha:
+        return False, f"'{work_item}' completed entry missing 'merged_sha' field"
+    if not isinstance(merged_sha, str) or not _SHA40_RE.match(merged_sha.strip().lower()):
+        return (
+            False,
+            f"'{work_item}' completed entry 'merged_sha' is malformed (not 40 hex chars): {merged_sha!r}",
+        )
+
+    pr_str = ", ".join(prs)
+    return (
+        True,
+        f"completed in roadmap_authority.yaml (prs={pr_str}, merged_sha={merged_sha[:12]}...)",
+    )
+
+
+# Mandatory check names that MUST appear in evidence checks_executed.
+_SIMULATION_MANDATORY_CHECKS = frozenset(
+    {
+        "trust_keys_generated",
+        "identity_domain_sign_verify",
+        "approval_domain_sign_verify",
+        "acceptance_domain_sign_verify",
+        "cross_domain_isolation",
+        "verifier_contract_fail_closed",
+    }
+)
+
+
+def _validate_offline_simulation_evidence(
+    evidence_path: Path,
+    head_sha: str,
+) -> tuple[ReadinessStatus, str, str, str]:
+    """Validate the offline ceremony simulation evidence file.
+
+    Returns (status, evidence_string, reason, remediation).
+    PASS only when all invariants are satisfied.
+    FAIL on malformed, failed, contradictory, or forged evidence.
+    NOT_PROVEN when the file is absent.
+    """
+    if not evidence_path.exists():
+        return (
+            ReadinessStatus.NOT_PROVEN,
+            "customer_one/offline_simulation_evidence.json not found",
+            "completion_evidence[2]: offline ceremony simulation green",
+            "Run: python tools/ci/run_offline_ceremony_simulation.py --repo . to generate evidence",
+        )
+
+    try:
+        with open(evidence_path, encoding="utf-8") as f:
+            evidence = json.load(f)
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        return (
+            ReadinessStatus.FAIL,
+            f"offline_simulation_evidence.json is malformed: {exc}",
+            "Malformed simulation evidence — cannot validate",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    if not isinstance(evidence, dict):
+        return (
+            ReadinessStatus.FAIL,
+            "offline_simulation_evidence.json is not a JSON object",
+            "Malformed simulation evidence",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    # Required fields
+    for field_name in ("schema_version", "simulation_id", "source_sha", "result",
+                       "checks_executed", "checks_passed", "checks_failed"):
+        if field_name not in evidence:
+            return (
+                ReadinessStatus.FAIL,
+                f"offline_simulation_evidence.json missing required field: {field_name!r}",
+                f"Incomplete simulation evidence (missing {field_name})",
+                "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+            )
+
+    result_val = evidence.get("result", "")
+    if result_val != "GREEN":
+        return (
+            ReadinessStatus.FAIL,
+            f"offline_simulation_evidence.json result={result_val!r} (expected GREEN)",
+            "Simulation did not return GREEN",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    evidence_sha = evidence.get("source_sha", "")
+    if head_sha and evidence_sha != head_sha:
+        return (
+            ReadinessStatus.FAIL,
+            (
+                f"offline_simulation_evidence.json source_sha={evidence_sha[:12]!r} "
+                f"does not match HEAD {head_sha[:12]!r} — stale evidence"
+            ),
+            "Simulation evidence bound to different source SHA",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo . (current HEAD)",
+        )
+
+    checks_executed = evidence.get("checks_executed", [])
+    checks_passed = evidence.get("checks_passed", 0)
+    checks_failed = evidence.get("checks_failed", 0)
+
+    if not isinstance(checks_executed, list) or len(checks_executed) == 0:
+        return (
+            ReadinessStatus.FAIL,
+            "offline_simulation_evidence.json checks_executed is empty — no checks ran",
+            "Forged GREEN flag: no checks executed",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    if not isinstance(checks_passed, int) or checks_passed <= 0:
+        return (
+            ReadinessStatus.FAIL,
+            f"offline_simulation_evidence.json checks_passed={checks_passed!r} (must be > 0)",
+            "No checks passed in simulation",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    if not isinstance(checks_failed, int) or checks_failed != 0:
+        return (
+            ReadinessStatus.FAIL,
+            f"offline_simulation_evidence.json checks_failed={checks_failed!r} (must be 0)",
+            "One or more simulation checks failed",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    if checks_passed + checks_failed > len(checks_executed):
+        return (
+            ReadinessStatus.FAIL,
+            (
+                f"Contradictory results: checks_passed={checks_passed} + "
+                f"checks_failed={checks_failed} > checks_executed={len(checks_executed)}"
+            ),
+            "Contradictory simulation result counts",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    executed_set = set(checks_executed)
+    missing_checks = _SIMULATION_MANDATORY_CHECKS - executed_set
+    if missing_checks:
+        return (
+            ReadinessStatus.FAIL,
+            f"offline_simulation_evidence.json missing mandatory checks: {sorted(missing_checks)}",
+            "Mandatory simulation checks not executed",
+            "Re-run: python tools/ci/run_offline_ceremony_simulation.py --repo .",
+        )
+
+    sim_id = evidence.get("simulation_id", "unknown")
+    return (
+        ReadinessStatus.PASS,
+        (
+            f"offline_simulation_evidence.json: result=GREEN, "
+            f"checks_passed={checks_passed}, checks_failed={checks_failed}, "
+            f"simulation_id={sim_id}"
+        ),
+        "",
+        "",
+    )
 
 
 def _check_no_secret_material(data: Any, path: str = "$") -> list[str]:
@@ -750,7 +963,7 @@ def _evaluate_repository_authority(repo: Path) -> list[ReadinessDimension]:
             )
         )
 
-    # A2 — roadmap_authority (roadmap checker)
+    # A2 — roadmap_authority (lifecycle-aware: AUTHORIZED pre-merge OR COMPLETED post-merge)
     authorized = _roadmap_checker_authorized(repo, WORK_ITEM)
     if authorized:
         dims.append(
@@ -763,17 +976,37 @@ def _evaluate_repository_authority(repo: Path) -> list[ReadinessDimension]:
             )
         )
     else:
-        dims.append(
-            _dim(
-                "A2-roadmap-authority",
-                "A-REPOSITORY",
-                "roadmap_authority",
-                ReadinessStatus.FAIL,
-                "check_customer_one_roadmap.py did not return AUTHORIZED",
-                reason="Work item must be authorized before evaluation",
-                remediation="Ensure CUSTOMER-ZERO-FINAL-READINESS-001 is in next_sequence with all blocked_by completed",
-            )
+        # Post-merge: item moves from next_sequence → completed. The roadmap checker
+        # returns BLOCKED for completed items (by design, to prevent re-execution).
+        # Accept COMPLETED with valid PR/SHA evidence as PASS (STATIC_VERIFIED).
+        completed_ok, completed_evidence = _roadmap_item_completed_with_evidence(
+            repo, WORK_ITEM
         )
+        if completed_ok:
+            dims.append(
+                _dim(
+                    "A2-roadmap-authority",
+                    "A-REPOSITORY",
+                    "roadmap_authority",
+                    ReadinessStatus.PASS,
+                    f"STATIC_VERIFIED: {completed_evidence}",
+                )
+            )
+        else:
+            dims.append(
+                _dim(
+                    "A2-roadmap-authority",
+                    "A-REPOSITORY",
+                    "roadmap_authority",
+                    ReadinessStatus.FAIL,
+                    f"check_customer_one_roadmap.py did not return AUTHORIZED; completed evidence invalid: {completed_evidence}",
+                    reason="Work item must be authorized (next_sequence) or completed with valid PR/SHA evidence",
+                    remediation=(
+                        "Ensure CUSTOMER-ZERO-FINAL-READINESS-001 is in next_sequence "
+                        "(pre-merge) or in completed with prs and 40-char merged_sha (post-merge)"
+                    ),
+                )
+            )
 
     # A3 — canonical_source_sha (HEAD == origin/main)
     head = _git_head(repo)
@@ -2234,6 +2467,7 @@ def _evaluate_completion_evidence(repo: Path) -> list[ReadinessDimension]:
     """
     dims: list[ReadinessDimension] = []
     authority = _load_yaml_safe(repo / "customer_one" / "roadmap_authority.yaml")
+    ceremony = _load_yaml_safe(repo / "customer_one" / "ceremony_state.yaml")
 
     # Locate the CUSTOMER-ZERO-FINAL-READINESS-001 work item to read its
     # declared completion_evidence list.
@@ -2316,42 +2550,28 @@ def _evaluate_completion_evidence(repo: Path) -> list[ReadinessDimension]:
     )
 
     # J_CE3 — offline ceremony simulation green
-    # Evidence: ceremony_state.yaml contains offline_simulation_status == "GREEN" or
-    # the customer_one/ceremony_state.yaml CUSTOMER-ZERO-FINAL-READINESS-001 item has
-    # work_class NEXT (not blocked); alternatively check test file is present.
-    # Primary check: test file for this work item exists and the roadmap checker passes.
-    ceremony = _load_yaml_safe(repo / "customer_one" / "ceremony_state.yaml")
-    sim_status = ceremony.get("offline_simulation_status", "")
-    # Fallback: check that the tests for this module exist (they ARE the offline simulation)
-    test_file = repo / "tests" / "test_customer_zero_final_readiness_001.py"
-    has_test_file = test_file.exists()
-    offline_sim_green = sim_status == "GREEN" or (
-        has_test_file and _roadmap_checker_authorized(repo, WORK_ITEM)
+    # Evidence: customer_one/offline_simulation_evidence.json produced by
+    # tools/ci/run_offline_ceremony_simulation.py.  The evaluator validates:
+    #   - File exists and is valid JSON
+    #   - result == "GREEN"
+    #   - source_sha matches current HEAD
+    #   - checks_passed > 0 and checks_failed == 0
+    #   - All mandatory check names are present in checks_executed
+    #   - schema_version, simulation_id, checks_executed fields present
+    evidence_path = repo / "customer_one" / "offline_simulation_evidence.json"
+    head_sha = _git_head(repo)
+    j_ce3_status, j_ce3_evidence, j_ce3_reason, j_ce3_remediation = (
+        _validate_offline_simulation_evidence(evidence_path, head_sha)
     )
     dims.append(
         _dim(
             "J_CE3-offline-ceremony-simulation-green",
             "J-COMPLETION-EVIDENCE",
             "offline_ceremony_simulation_green",
-            ReadinessStatus.PASS if offline_sim_green else ReadinessStatus.NOT_PROVEN,
-            (
-                (
-                    f"ceremony_state.yaml: offline_simulation_status={sim_status!r}"
-                    if sim_status == "GREEN"
-                    else "test_customer_zero_final_readiness_001.py present + roadmap checker AUTHORIZED"
-                )
-                if offline_sim_green
-                else "Offline ceremony simulation not confirmed green"
-            ),
-            reason=""
-            if offline_sim_green
-            else "completion_evidence[2]: offline ceremony simulation green",
-            remediation=(
-                ""
-                if offline_sim_green
-                else "Run: pytest tests/test_customer_zero_final_readiness_001.py -v (must pass) "
-                "or set ceremony_state.yaml offline_simulation_status=GREEN"
-            ),
+            j_ce3_status,
+            j_ce3_evidence,
+            reason=j_ce3_reason,
+            remediation=j_ce3_remediation,
             required=True,
         )
     )
@@ -2359,6 +2579,7 @@ def _evaluate_completion_evidence(repo: Path) -> list[ReadinessDimension]:
     # J_CE4 — all existing trust ceremony tests pass
     # Evidence: trust-ceremony test file exists and CI is not indicating failure.
     # Offline proxy: the relevant test files exist and trust_binding_fake.py is present.
+    test_file = repo / "tests" / "test_customer_zero_final_readiness_001.py"
     fake_path = repo / "services" / "governance" / "trust_binding_fake.py"
     tb_path = repo / "services" / "governance" / "trust_binding.py"
     trust_tests_exist = fake_path.exists() and tb_path.exists() and test_file.exists()
