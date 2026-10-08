@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -443,7 +444,7 @@ def test_j_ce3_20_deterministic_evidence_generation() -> None:
     """J_CE3-20: Simulation runner produces deterministic checks_executed list."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/run_offline_ceremony_simulation.py",
             "--repo",
             ".",
@@ -488,7 +489,7 @@ def test_j_ce3_21_no_dependency_on_paid_infrastructure() -> None:
     # It uses trust_binding_fake.py with ephemeral keys.
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/run_offline_ceremony_simulation.py",
             "--repo",
             ".",
@@ -606,7 +607,13 @@ def test_int_26_cost_authorization_not_authorized() -> None:
     """INT-26: Cost authorization NOT_AUTHORIZED after repairs."""
     # Run the preauth evaluator directly and verify cost authorization fields
     result = subprocess.run(
-        ["python", "tools/ci/customer_zero_run3_preauth.py", "--repo", ".", "--json"],
+        [
+            sys.executable,
+            "tools/ci/customer_zero_run3_preauth.py",
+            "--repo",
+            ".",
+            "--json",
+        ],
         cwd=str(REPO),
         capture_output=True,
         text=True,
@@ -629,7 +636,7 @@ def test_int_26_cost_authorization_not_authorized() -> None:
 def test_int_27_no_cloud_mutation_in_repair() -> None:
     """INT-27: No cloud mutation in repair — simulation runner rejects production env."""
     result = subprocess.run(
-        ["python", "tools/ci/run_offline_ceremony_simulation.py", "--dry-run"],
+        [sys.executable, "tools/ci/run_offline_ceremony_simulation.py", "--dry-run"],
         cwd=str(REPO),
         capture_output=True,
         text=True,
