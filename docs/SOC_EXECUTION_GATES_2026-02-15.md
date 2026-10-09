@@ -1,3 +1,33 @@
+## 2026-10-09 - governance/customer-zero-run3-operator-preflight-001: offline operator preflight authority
+
+**Change scope:** New offline operator preflight authority for CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001.
+
+New files:
+- `tools/ci/customer_zero_run3_operator_preflight.py` — CLI evaluator (offline only, no credentials, no cloud)
+- `services/governance/run3_operator_preflight.py` — manifest builder (composes existing Run-3 contracts)
+- `tests/test_customer_zero_run3_operator_preflight_001.py` — 71+ adversarial tests
+- `docs/operations/customer_zero_run3_operator_preflight.md` — operator runbook
+
+**Security posture:**
+
+1. **Offline-only design. No credentials, no cloud mutations.** `customer_zero_run3_operator_preflight.py` makes no network calls, holds no provider tokens, and has no AWS/HCP/Vault client code. It reads only local filesystem state (git, infra/*.tf, customer_one/). No secrets are touched. No environment credentials are required.
+
+2. **No new authorization paths.** `run3_operator_preflight.py` is a COMPOSE module — it imports and calls existing Run-3 modules (`run3_candidate`, `run3_resource_inventory`, `run3_cost_request`, `run3_proof_matrix`, `run3_abort_teardown`, `run3_evidence_strength`, `customer_zero_readiness`) and assembles their outputs into a manifest. No new authorization logic is introduced. `authorization_status` is always `NOT_AUTHORIZED`. `preflight_status` never reaches `AUTHORIZED`.
+
+3. **PREPARED_FOR_HUMAN_REVIEW is not AUTHORIZED.** The CLI exits 0 only when `preflight_status == PREPARED_FOR_HUMAN_REVIEW`, which means all 10 offline preparation checks pass and 16 deferred live checks are correctly catalogued. It explicitly documents that this status does NOT authorize spending, does NOT prove trust, and does NOT unblock TRUST-003 or ACCEPT-001.
+
+4. **Preflight fingerprint derivation is deterministic and tamper-evident.** The `preflight_fingerprint` is SHA-256 of security-relevant fields: `source_sha`, `candidate_fingerprint`, `infrastructure_fingerprint`, `resource_inventory_fingerprint`, sorted blocker IDs. `generated_at` is excluded (diagnostic only).
+
+5. **No tracked evidence file mutation.** The CLI explicitly refuses to write to `customer_one/offline_simulation_evidence.json`, `customer_one/ceremony_state.yaml`, or `customer_one/roadmap_authority.yaml` via the `--output` flag safety check.
+
+6. **Test suite coverage.** 71+ adversarial tests across 8 families: source/fingerprint, roadmap/authority, deferred checks, terraform/preservation, audit pipeline, cost authority, abort/recovery, integration. `_git_status_clean` and `_git_origin_main` are patched in tests for pre-commit branch state; core manifest logic is never mocked.
+
+**Critical-path files changed:** `services/governance/run3_operator_preflight.py` (new), `tools/ci/customer_zero_run3_operator_preflight.py` (new), `tests/test_customer_zero_run3_operator_preflight_001.py` (new), `docs/operations/customer_zero_run3_operator_preflight.md` (new), `ROADMAP.md` (row added), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry added).
+
+**Required invariant preserved:** `CUSTOMER_ZERO_TRUST=NOT_PROVEN`, `TRUST-003=BLOCKED`, `ACCEPT-001=BLOCKED`, `THIRD_PAID_CEREMONY=NOT_AUTHORIZED`, `PAID_HCP_INFRASTRUCTURE=ABSENT`, `COST_AUTHORIZATION=NOT_AUTHORIZED`. No authorization status changed. No paid infrastructure. No cloud mutations.
+
+SOC review outcome: APPROVED. New tools/ci script is offline-only with no credentials and no cloud mutations. New service module only composes existing Run-3 contracts without adding authorization logic. The manifest's `PREPARED_FOR_HUMAN_REVIEW` status is documented as a preparation milestone, not a spending authorization. All canonical Customer-Zero invariants preserved.
+
 ## 2026-10-08 - docs/cz-run3-preauth-closeout: P1 lifecycle-aware roadmap gate in customer_zero_run3_preauth.py
 
 **Change scope:** P1 review fix to `tools/ci/customer_zero_run3_preauth.py`. `_check_roadmap_authorized()` previously only accepted rc=0 from the roadmap checker (item in `next_sequence` with status AUTHORIZED). After CUSTOMER-ZERO-RUN3-PREAUTH-001 moves to `completed`, the checker returns nonzero — blocking every future preauth evaluation including post-merge candidate rebinding. Fix: when the roadmap checker returns nonzero, a secondary check via `_roadmap_item_completed_with_evidence(repo, WORK_ITEM)` is attempted; if the item is in `completed` with a non-empty `prs` list and a valid 40-char hex `merged_sha`, the check accepts it as COMPLETED and returns True. No new authorization path is introduced — only completed items with full evidence fields are accepted.

@@ -1,3 +1,19 @@
+# CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 — Run-3 operator preflight authority
+
+- **Work item:** CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (OFFLINE_PREPARATION class)
+- **Purpose:** Implements the deterministic offline operator preflight authority for the third Customer-Zero trust ceremony. Produces a machine-readable `OperatorPreflightManifest` by composing all existing Run-3 governance modules — no new authorization logic introduced. Covers all 16 deferred live checks, source/candidate rebinding, Terraform resource plan, preserved AWS audit resources, pricing request structure, abort matrix, teardown plan, and evidence manifest. `preflight_status=PREPARED_FOR_HUMAN_REVIEW` when all 10 offline checks pass. `authorization_status=NOT_AUTHORIZED` always.
+- **New files:**
+  - `services/governance/run3_operator_preflight.py` — `OperatorPreflightManifest` dataclass + `build_preflight_manifest()` + 10 offline mandatory checks + preflight fingerprint derivation (SHA-256 of security-relevant fields; excludes `generated_at`).
+  - `tools/ci/customer_zero_run3_operator_preflight.py` — CLI evaluator: `--repo`, `--json`, `--output`, `--quiet` flags; exit 0 = PREPARED_FOR_HUMAN_REVIEW; exit 1 = BLOCKED; exit 2 = error. Refuses to write to tracked evidence files.
+  - `tests/test_customer_zero_run3_operator_preflight_001.py` — 71 adversarial tests across 8 families (A: source/fingerprint, B: roadmap/authority, C: deferred checks, D: terraform/preservation, E: audit pipeline, F: cost authority, G: abort/recovery, H: integration).
+  - `docs/operations/customer_zero_run3_operator_preflight.md` — operator runbook.
+- **Updated files:** `ROADMAP.md` (new row), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (new entry), `docs/ai/PR_FIX_LOG.md` (this entry).
+- **Canonical truth preserved:** `CUSTOMER_ZERO_TRUST=NOT_PROVEN`, `TRUST-003=BLOCKED`, `ACCEPT-001=BLOCKED`, `THIRD_PAID_CEREMONY=NOT_AUTHORIZED`, `PAID_HCP_INFRASTRUCTURE=ABSENT`, `COST_AUTHORIZATION=NOT_AUTHORIZED`.
+- **Deferred live checks:** 16 remain unexecuted (require paid HCP infrastructure).
+- **Zero cloud mutations.** No paid infrastructure. No schema changes. No migrations. No API contract changes.
+
+---
+
 # CZ-RUN3-PREAUTH-CLOSEOUT-001 — Reconcile Customer-Zero Run-3 preauthorization closeout
 
 - **Work item:** CZ-RUN3-PREAUTH-CLOSEOUT-001 (REPAIR class)
