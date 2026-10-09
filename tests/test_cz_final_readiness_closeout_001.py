@@ -160,7 +160,9 @@ def test_b3_run3_preauth_requires_no_paid_infrastructure() -> None:
     in_blocked = _find_item(authority, "blocked", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
     in_next = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
     assert in_blocked is None, "CUSTOMER-ZERO-RUN3-PREAUTH-001 must not be in blocked"
-    assert in_next is None, "CUSTOMER-ZERO-RUN3-PREAUTH-001 must not be in next_sequence"
+    assert in_next is None, (
+        "CUSTOMER-ZERO-RUN3-PREAUTH-001 must not be in next_sequence"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +284,9 @@ def test_e4_prerequisite_enforcement_fail_closed() -> None:
     """
     authority = _load_roadmap_authority()
     # PREAUTH is now complete; the new next item is OPERATOR-PREFLIGHT-001
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001")
+    item = _find_item(
+        authority, "next_sequence", "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+    )
     assert item is not None, (
         "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 must be in next_sequence "
         "(registered by CZ-RUN3-PREAUTH-CLOSEOUT-001)"
@@ -343,9 +347,10 @@ def test_f2_level2_doc_references_preauth_as_required_before_trust_003() -> None
         "Level-2 doc must reference OPERATOR-PREFLIGHT as the step now blocking TRUST-003"
     )
     # PREAUTH must be marked COMPLETED in the sequence table (not NEXT).
-    assert "CUSTOMER-ZERO-RUN3-PREAUTH-001 | Customer-Zero Run 3 pre-authorization gate | COMPLETED" in text, (
-        "Level-2 doc sequence table must show PREAUTH-001 as COMPLETED"
-    )
+    assert (
+        "CUSTOMER-ZERO-RUN3-PREAUTH-001 | Customer-Zero Run 3 pre-authorization gate | COMPLETED"
+        in text
+    ), "Level-2 doc sequence table must show PREAUTH-001 as COMPLETED"
 
 
 def test_f3_level2_doc_marks_final_readiness_as_complete() -> None:

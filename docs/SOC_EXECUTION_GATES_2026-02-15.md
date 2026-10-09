@@ -1,3 +1,26 @@
+## 2026-10-08 - docs/cz-run3-preauth-closeout: P1 lifecycle-aware roadmap gate in customer_zero_run3_preauth.py
+
+**Change scope:** P1 review fix to `tools/ci/customer_zero_run3_preauth.py`. `_check_roadmap_authorized()` previously only accepted rc=0 from the roadmap checker (item in `next_sequence` with status AUTHORIZED). After CUSTOMER-ZERO-RUN3-PREAUTH-001 moves to `completed`, the checker returns nonzero — blocking every future preauth evaluation including post-merge candidate rebinding. Fix: when the roadmap checker returns nonzero, a secondary check via `_roadmap_item_completed_with_evidence(repo, WORK_ITEM)` is attempted; if the item is in `completed` with a non-empty `prs` list and a valid 40-char hex `merged_sha`, the check accepts it as COMPLETED and returns True. No new authorization path is introduced — only completed items with full evidence fields are accepted.
+
+**Security posture:**
+
+1. **Lifecycle completion accepted, not self-authorized.** The fallback only fires after the primary roadmap checker rejects the item. Acceptance requires `prs` non-empty AND `merged_sha` matching `[0-9a-f]{40}` — the same evidence fields populated by the merge commit record. An item with no PR or no SHA cannot satisfy the fallback.
+2. **No authorization status changed.** `authorization_status` remains hardcoded `NOT_AUTHORIZED`. The lifecycle gate governs whether the preauth evaluator can run at all, not whether a human has approved spend.
+3. **Fail-closed import.** `_roadmap_item_completed_with_evidence` is imported inside a try/except; any import error returns `(False, ...)` — the gate fails closed if the governance module is unavailable.
+4. **No cloud mutation. No secrets accessed. No paid infrastructure.** Canonical Customer-Zero truth preserved: `CUSTOMER_ZERO_TRUST=NOT_PROVEN`, `TRUST-003=BLOCKED`, `ACCEPT-001=BLOCKED`, `THIRD_PAID_CEREMONY=NOT_AUTHORIZED`.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (`_check_roadmap_authorized` lifecycle fallback).
+
+**Required invariant preserved:** preauth_result is READY_FOR_HUMAN_COST_AUTHORIZATION or BLOCKED; never AUTHORIZED_TO_SPEND; authorization_status=NOT_AUTHORIZED; canonical Customer-Zero truth unchanged.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_preauth_closeout_001.py -v` → 15 passed
+- `ruff check tools/ci/customer_zero_run3_preauth.py` → no errors
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Lifecycle fallback narrows a permanent post-merge deadlock by accepting completed items with verifiable PR/SHA evidence. No authorization path weakened, no tenant isolation changed, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-08 - fix/cz-run3-readiness-integration: P1 tree-content binding + count equality for J_CE3 validator
 
 **Change scope:** Two P1 review fixes to `services/governance/customer_zero_readiness.py`, `tools/ci/run_offline_ceremony_simulation.py`, `tests/test_cz_run3_readiness_integration_repair_001.py`, and `customer_one/offline_simulation_evidence.json`.

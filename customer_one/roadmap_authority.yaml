@@ -159,7 +159,7 @@ completed:
     merged_sha: "8de43e2275b18cb13a14b54940c9b64c48283f1c"
     parent_objective: "CUSTOMER-ZERO-TRUST-003"
     note: >
-      Freezes the production candidate, expected resource inventory (19 entries),
+      Freezes the production candidate, expected resource inventory (21 entries),
       proof matrix (families A–K), abort matrix, teardown contract, and explicit
       cost-authorization REQUEST before any human authorization or paid provisioning
       occurs. authorization_status=NOT_AUTHORIZED; proposed_max_cost_usd=null.
