@@ -104,7 +104,21 @@ def _get_source_sha(repo: Path) -> str:
 
 
 def _check_roadmap_authorized(repo: Path) -> tuple[bool, str]:
-    """Verify CUSTOMER-ZERO-RUN3-PREAUTH-001 is AUTHORIZED."""
+    """Verify CUSTOMER-ZERO-RUN3-PREAUTH-001 is AUTHORIZED or COMPLETED.
+
+    The roadmap checker returns nonzero for items that have been moved to
+    completed (fail-closed by design — the same behavior that blocked A2 in
+    the final-readiness evaluator before CZ-RUN3-READINESS-INTEGRATION-REPAIR-001).
+    Post-completion, every re-run of this evaluator for candidate rebinding
+    would become permanently blocked without lifecycle awareness.
+
+    Acceptance order:
+    1. Roadmap checker returns 0 (AUTHORIZED in next_sequence) → PASS.
+    2. If nonzero, check completed-with-evidence via the final-readiness
+       helper (_roadmap_item_completed_with_evidence) — same logic used by A2.
+       PASS only when prs is non-empty and merged_sha is a 40-char hex string.
+    3. Otherwise → FAIL.
+    """
     import subprocess
     try:
         r = subprocess.run(
@@ -121,6 +135,17 @@ def _check_roadmap_authorized(repo: Path) -> tuple[bool, str]:
         )
         if r.returncode == 0:
             return True, r.stdout.strip()
+        # Roadmap checker returns nonzero for completed items.  Accept completion
+        # evidence as equivalent to authorization for post-merge rebinding.
+        try:
+            from services.governance.customer_zero_readiness import (
+                _roadmap_item_completed_with_evidence,
+            )
+            ok, evidence = _roadmap_item_completed_with_evidence(repo, WORK_ITEM)
+            if ok:
+                return True, f"COMPLETED: {evidence}"
+        except Exception:
+            pass
         return False, r.stdout.strip() + r.stderr.strip()
     except Exception as exc:
         return False, f"roadmap checker error: {exc}"

@@ -522,8 +522,23 @@ def test_j_ce3_21_no_dependency_on_paid_infrastructure() -> None:
 
 
 def test_int_22_final_readiness_ready_when_evidence_satisfied() -> None:
-    """INT-22: FINAL-READINESS shows A2=PASS and J_CE3=PASS when evidence is present."""
-    result = evaluate(REPO)
+    """INT-22: FINAL-READINESS shows A2=PASS and J_CE3=PASS when evidence is present.
+
+    Patches _git_status_clean and _git_origin_main to avoid pre-commit worktree
+    noise (A4 dirty-source and A3 branch HEAD != origin/main). J_CE3 is exercised
+    against the real committed evidence file.
+    """
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_get_head_sha(),
+        ),
+    ):
+        result = evaluate(REPO)
     dims = {d.id: d for d in result.dimensions}
 
     a2 = dims.get("A2-roadmap-authority")
@@ -570,8 +585,22 @@ def test_int_23_preauth_blocked_when_final_readiness_fails(tmp_path: Path) -> No
 
 
 def test_int_24_preauth_ready_when_final_readiness_passes() -> None:
-    """INT-24: A2 and J_CE3 are both PASS after repair."""
-    result = evaluate(REPO)
+    """INT-24: A2 and J_CE3 are both PASS after repair.
+
+    Patches _git_status_clean and _git_origin_main to avoid pre-commit worktree
+    noise. J_CE3 is exercised against the real committed evidence file.
+    """
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_get_head_sha(),
+        ),
+    ):
+        result = evaluate(REPO)
     a2_blocker = next(
         (b for b in result.blockers if b.dimension_id == "A2-roadmap-authority"), None
     )
@@ -722,8 +751,22 @@ def test_int_30_fail_closed_for_incomplete_evidence(tmp_path: Path) -> None:
 
 
 def test_int_31_a2_and_j_ce3_both_fixed_simultaneously() -> None:
-    """INT-31: A2 and J_CE3 are BOTH fixed in the same evaluation."""
-    result = evaluate(REPO)
+    """INT-31: A2 and J_CE3 are BOTH fixed in the same evaluation.
+
+    Patches _git_status_clean and _git_origin_main to avoid pre-commit worktree
+    noise. J_CE3 is exercised against the real committed evidence file.
+    """
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_get_head_sha(),
+        ),
+    ):
+        result = evaluate(REPO)
     dims = {d.id: d for d in result.dimensions}
 
     a2 = dims.get("A2-roadmap-authority")
@@ -745,7 +788,11 @@ def test_int_31_a2_and_j_ce3_both_fixed_simultaneously() -> None:
 
 
 def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
-    """INT-32: Pre-repair had 2 blockers; post-repair has 0 for A2 and J_CE3."""
+    """INT-32: Pre-repair had 2 blockers; post-repair has 0 for A2 and J_CE3.
+
+    Patches _git_status_clean and _git_origin_main to avoid pre-commit worktree
+    noise. J_CE3 is exercised against the real committed evidence file.
+    """
     # Load the pre-repair output if available; otherwise verify current state
     pre_repair_path = Path("/tmp/cz-repair-before-readiness.json")
     if pre_repair_path.exists():
@@ -760,8 +807,18 @@ def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
             "Pre-repair should have had J_CE3 blocker"
         )
 
-    # Post-repair: neither should be a blocker
-    result = evaluate(REPO)
+    # Post-repair: neither should be a blocker (patch worktree noise)
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_get_head_sha(),
+        ),
+    ):
+        result = evaluate(REPO)
     post_blocker_ids = {b.dimension_id for b in result.blockers}
     assert "A2-roadmap-authority" not in post_blocker_ids, (
         "A2 still blocked post-repair"

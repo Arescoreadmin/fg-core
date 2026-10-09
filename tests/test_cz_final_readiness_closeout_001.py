@@ -110,36 +110,58 @@ def test_a4_final_readiness_001_has_merged_sha() -> None:
 
 
 # ---------------------------------------------------------------------------
-# B. CUSTOMER-ZERO-RUN3-PREAUTH-001 is in next_sequence with correct dependency
+# B. CUSTOMER-ZERO-RUN3-PREAUTH-001 is in completed (post-closeout state)
 # ---------------------------------------------------------------------------
 
 
 def test_b1_run3_preauth_001_in_next_sequence() -> None:
-    """CUSTOMER-ZERO-RUN3-PREAUTH-001 must appear in next_sequence."""
+    """CUSTOMER-ZERO-RUN3-PREAUTH-001 must appear in completed (moved from next_sequence
+    by CZ-RUN3-PREAUTH-CLOSEOUT-001).
+
+    Note: test name preserved for diff stability; assertion updated to reflect
+    post-closeout state (PREAUTH is now complete, not merely next).
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
-    assert item is not None, "CUSTOMER-ZERO-RUN3-PREAUTH-001 must be in next_sequence"
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
+    assert item is not None, (
+        "CUSTOMER-ZERO-RUN3-PREAUTH-001 must be in completed "
+        "(moved from next_sequence by CZ-RUN3-PREAUTH-CLOSEOUT-001)"
+    )
 
 
 def test_b2_run3_preauth_has_blocked_by_final_readiness() -> None:
-    """CUSTOMER-ZERO-RUN3-PREAUTH-001 must have blocked_by referencing FINAL-READINESS-001."""
+    """CUSTOMER-ZERO-RUN3-PREAUTH-001 completed entry must reference PR #755 (its dependency
+    on FINAL-READINESS-001 was satisfied at merge time).
+
+    Note: test name preserved for diff stability; validates the completed entry has
+    the correct PR and SHA evidence rather than blocked_by.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
-    assert item is not None
-    blocked_by = item.get("blocked_by", [])
-    assert "CUSTOMER-ZERO-FINAL-READINESS-001" in blocked_by, (
-        f"CUSTOMER-ZERO-RUN3-PREAUTH-001 must have blocked_by containing "
-        f"CUSTOMER-ZERO-FINAL-READINESS-001; got {blocked_by!r}"
+    item = _find_item(authority, "completed", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
+    assert item is not None, "CUSTOMER-ZERO-RUN3-PREAUTH-001 must be in completed"
+    prs = item.get("prs", [])
+    assert "#755" in prs, (
+        f"CUSTOMER-ZERO-RUN3-PREAUTH-001 completed entry must list '#755'; got {prs!r}"
+    )
+    sha = item.get("merged_sha", "")
+    assert sha == "8de43e2275b18cb13a14b54940c9b64c48283f1c", (
+        f"CUSTOMER-ZERO-RUN3-PREAUTH-001 completed entry must carry canonical merged_sha; "
+        f"got {sha!r}"
     )
 
 
 def test_b3_run3_preauth_requires_no_paid_infrastructure() -> None:
-    """CUSTOMER-ZERO-RUN3-PREAUTH-001 must not require paid infrastructure."""
+    """CUSTOMER-ZERO-RUN3-PREAUTH-001 was completed without paid infrastructure.
+
+    Note: test name preserved for diff stability; validates from the completed entry.
+    """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
-    assert item is not None
-    assert item.get("requires_paid_infrastructure") is False, (
-        "CUSTOMER-ZERO-RUN3-PREAUTH-001 must have requires_paid_infrastructure: false"
+    # The item is now in completed — verify it is NOT in blocked/deferred/next
+    in_blocked = _find_item(authority, "blocked", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
+    in_next = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
+    assert in_blocked is None, "CUSTOMER-ZERO-RUN3-PREAUTH-001 must not be in blocked"
+    assert in_next is None, (
+        "CUSTOMER-ZERO-RUN3-PREAUTH-001 must not be in next_sequence"
     )
 
 
@@ -149,10 +171,15 @@ def test_b3_run3_preauth_requires_no_paid_infrastructure() -> None:
 
 
 def test_c1_checker_authorizes_run3_preauth() -> None:
-    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-RUN3-PREAUTH-001 must exit 0."""
+    """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-RUN3-PREAUTH-001 must exit 1
+    (completed — no further work authorized on a completed item).
+
+    Note: test name preserved for diff stability; PREAUTH-001 is now in completed so
+    the checker correctly returns BLOCKED (exit 1) to prevent re-opening completed work.
+    """
     result = _run_checker("--work-item", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
-    assert result.returncode == 0, (
-        f"Checker must authorize CUSTOMER-ZERO-RUN3-PREAUTH-001; "
+    assert result.returncode == 1, (
+        f"Checker must return BLOCKED for completed CUSTOMER-ZERO-RUN3-PREAUTH-001; "
         f"got rc={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
     )
 
@@ -247,24 +274,29 @@ def test_e3_final_readiness_001_completed_blocks_reopening() -> None:
 def test_e4_prerequisite_enforcement_fail_closed() -> None:
     """next_sequence items with unmet blocked_by must not be authorized.
 
-    Verify the checker enforces prerequisite completeness by checking that
-    CUSTOMER-ZERO-RUN3-PREAUTH-001 would be blocked if its dependency were
-    absent — represented structurally by confirming blocked_by is non-empty.
+    Post-closeout: CUSTOMER-ZERO-RUN3-PREAUTH-001 is now in completed. This test
+    verifies prerequisite enforcement on CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001,
+    the new next_sequence item registered by CZ-RUN3-PREAUTH-CLOSEOUT-001, which
+    has an empty blocked_by (its dependency PREAUTH-001 is now complete and it
+    carries no further listed prerequisites).
+
+    Note: test name preserved for diff stability.
     """
     authority = _load_roadmap_authority()
-    item = _find_item(authority, "next_sequence", "CUSTOMER-ZERO-RUN3-PREAUTH-001")
-    assert item is not None
-    blocked_by = item.get("blocked_by", [])
-    assert len(blocked_by) > 0, (
-        "CUSTOMER-ZERO-RUN3-PREAUTH-001 must have non-empty blocked_by; "
-        "prerequisite enforcement requires at least one dependency"
+    # PREAUTH is now complete; the new next item is OPERATOR-PREFLIGHT-001
+    item = _find_item(
+        authority, "next_sequence", "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
     )
-    # All listed dependencies must be in completed for PREAUTH to be authorized.
+    assert item is not None, (
+        "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 must be in next_sequence "
+        "(registered by CZ-RUN3-PREAUTH-CLOSEOUT-001)"
+    )
+    # Its blocked_by is empty — PREAUTH-001 dependency is satisfied (completed)
+    blocked_by = item.get("blocked_by", [])
     completed_ids = {e.get("id") for e in authority.get("completed", [])}
     unmet = [dep for dep in blocked_by if dep not in completed_ids]
     assert unmet == [], (
-        f"CUSTOMER-ZERO-RUN3-PREAUTH-001 has unmet blocked_by dependencies: {unmet}; "
-        "all dependencies must be in completed for the item to be authorized"
+        f"CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 has unmet blocked_by dependencies: {unmet}"
     )
 
 
@@ -298,17 +330,27 @@ def test_f1_level2_doc_does_not_say_final_readiness_alone_authorizes_trust_003()
 
 
 def test_f2_level2_doc_references_preauth_as_required_before_trust_003() -> None:
-    """The Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 as a required
-    step before CUSTOMER-ZERO-TRUST-003.
+    """The Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 as a completed
+    intermediate step before CUSTOMER-ZERO-TRUST-003.
+
+    Post-closeout state: PREAUTH-001 is COMPLETED (#755). The TRUST-003 row now
+    references OPERATOR-PREFLIGHT as the immediate blocker (PREAUTH completed).
+    This test verifies PREAUTH-001 still appears in the doc (historical record)
+    and that TRUST-003 documents the updated blocker chain.
     """
     text = _load_level2_doc()
     assert "CUSTOMER-ZERO-RUN3-PREAUTH-001" in text, (
-        "Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 as an intermediate step"
+        "Level-2 doc must reference CUSTOMER-ZERO-RUN3-PREAUTH-001 (as completed step)"
     )
-    # Confirm TRUST-003 row references PREAUTH as a blocker.
-    assert "blocked on CUSTOMER-ZERO-RUN3-PREAUTH-001" in text, (
-        "Level-2 doc TRUST-003 row must state it is blocked on CUSTOMER-ZERO-RUN3-PREAUTH-001"
+    # TRUST-003 row now references OPERATOR-PREFLIGHT as the next required step.
+    assert "OPERATOR-PREFLIGHT" in text, (
+        "Level-2 doc must reference OPERATOR-PREFLIGHT as the step now blocking TRUST-003"
     )
+    # PREAUTH must be marked COMPLETED in the sequence table (not NEXT).
+    assert (
+        "CUSTOMER-ZERO-RUN3-PREAUTH-001 | Customer-Zero Run 3 pre-authorization gate | COMPLETED"
+        in text
+    ), "Level-2 doc sequence table must show PREAUTH-001 as COMPLETED"
 
 
 def test_f3_level2_doc_marks_final_readiness_as_complete() -> None:

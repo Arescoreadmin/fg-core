@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-10-07"
+authority_date: "2026-10-08"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,25 +51,19 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "CUSTOMER-ZERO-RUN3-PREAUTH-001"
-    title: "CUSTOMER-ZERO-RUN3-PREAUTH-001 — Zero-new-infrastructure-cost Run-3 pre-ceremony authority"
-    role: "OFFLINE_PREREQUISITE"
-    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+  - id: "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+    title: "Run-3 operator checklist, candidate rebinding, and human cost-authorization preparation"
+    blocked_by: []
+    work_class: "OFFLINE_PREPARATION"
     description: >
-      Zero-new-infrastructure-cost Run-3 pre-ceremony authority that freezes the
-      production candidate, expected resource inventory, proof matrix, abort matrix,
-      teardown contract, and cost-authorization request before any human authorization
-      or paid provisioning occurs.
-    freeze_law_justification: >
-      Closes the final offline gate before Run-3 paid provisioning. Documents the
-      frozen source SHA, full resource plan, proof-matrix acceptance criteria, abort
-      conditions, and explicit cost envelope request — all without creating paid
-      infrastructure. Prevents ceremony failure due to unvalidated plan assumptions.
-    status: "AUTHORIZED_NOT_STARTED"
-    work_class: "NEXT"
-    requires_paid_infrastructure: false
-    blocked_by:
-      - "CUSTOMER-ZERO-FINAL-READINESS-001"
+      Offline preparation activity covering the 16 deferred live checks checklist,
+      source/candidate fingerprint rebinding procedure, Terraform resource-plan review,
+      preserved AWS audit-resource verification, HCP Vault audit-to-CloudWatch
+      prerequisites, HCP pricing confirmation, explicit proposed maximum runtime and
+      cost, human authorization identity and expiration, cost/runtime abort thresholds,
+      teardown deadline, evidence capture procedures, and stop/rollback authority.
+      Does NOT provision infrastructure. Does NOT begin Run 3. Does NOT authorize spending.
+      Implementation is a separate future PR.
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -110,20 +104,27 @@ blocked:
   - id: "CUSTOMER-ZERO-TRUST-003"
     title: "CUSTOMER-ZERO-TRUST-003 — Third paid Customer-Zero trust ceremony"
     reason: >
-      Third paid ceremony is NOT authorized until CUSTOMER-ZERO-FINAL-READINESS-001
-      completes. CUSTOMER-ZERO-FINAL-READINESS-001 requires PROVENANCE-INTEGRITY-001
-      and VAULT-VERIFY-CONTRACT-001 to be complete first. Historical cost of $321.81
-      (accrued from runs 1 and 2) means the prior cost authorization is consumed.
-      A fresh explicit cost authorization is required before Run 3 provisioning.
+      Offline preparation complete: PR #750 (provenance-integrity), PR #751
+      (verifier-contract), PR #753 (final-readiness), PR #754 (roadmap
+      reconciliation), PR #755 (Run-3 preauth), PR #756 (integration repair) —
+      all merged. Offline readiness independently verified (READY, 0 blockers).
+      Still blocked on: fresh explicit human cost authorization (prior $321.81
+      authorization consumed), HCP infrastructure absent, live Vault/HCP ceremony
+      evidence outstanding, live CloudWatch audit proof outstanding.
+      16 deferred live checks remain unexecuted. Third paid ceremony NOT authorized.
+      CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 must complete before cost
+      authorization request is prepared for human review.
   - id: "CUSTOMER-ZERO-ACCEPT-001"
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     reason: >
-      Open acceptance parent, blocked pending CUSTOMER-ZERO-TRUST-001 proven.
-      Two ceremony runs completed (ATTEMPTED_NOT_PROVEN). Two P0 defects block
-      trust proof: DEFECT-PROVENANCE-INTEGRITY and DEFECT-VERIFIER-CONTRACT.
-      TRUST-BINDING-001 closed in PR #731 (2562e875). Cost containment complete.
-      AWS audit authority preserved. Do not execute approval or runtime acceptance
-      before CUSTOMER-ZERO-TRUST-001 PROVED status is recorded.
+      Blocked pending genuine trust proof from CUSTOMER-ZERO-TRUST-003.
+      Customer acceptance cannot precede live ceremony execution and independent
+      verification. TRUST-003 remains blocked on fresh explicit human cost
+      authorization, live Vault/HCP ceremony execution, live CloudWatch audit
+      proof, and all 16 deferred live checks. Completed offline preparation
+      (PRs #750, #751, #753, #754, #755, #756) is necessary but not sufficient —
+      offline readiness is READY (0 blockers) but live ceremony evidence is
+      outstanding and cannot be substituted.
 
 deferred:
   - id: "RAG-RETRY"
@@ -152,6 +153,30 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "CUSTOMER-ZERO-RUN3-PREAUTH-001"
+    title: "Run-3 offline preauthorization candidate freeze and cost-authorization request"
+    prs: ["#755"]
+    merged_sha: "8de43e2275b18cb13a14b54940c9b64c48283f1c"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+    note: >
+      Freezes the production candidate, expected resource inventory (21 entries),
+      proof matrix (families A–K), abort matrix, teardown contract, and explicit
+      cost-authorization REQUEST before any human authorization or paid provisioning
+      occurs. authorization_status=NOT_AUTHORIZED; proposed_max_cost_usd=null.
+      preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION. No cloud mutation.
+      No paid infrastructure. No schema changes.
+  - id: "CZ-RUN3-READINESS-INTEGRATION-REPAIR-001"
+    title: "Post-merge readiness integration repair"
+    prs: ["#756"]
+    merged_sha: "49a662f9240ec1733fc2c91d65fcc7661e9a3291"
+    note: >
+      Repairs two post-merge blockers: (A2) lifecycle-aware roadmap authority check
+      distinguishes AUTHORIZED (next_sequence) from COMPLETED (post-merge with valid
+      PR/SHA evidence); (J_CE3) offline ceremony simulation runner produces
+      machine-readable evidence; evaluator validates rather than trusting a flag.
+      35 adversarial tests. Canonical truth preserved: CUSTOMER_ZERO_TRUST=NOT_PROVEN,
+      TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED.
+      Zero cloud mutation. No paid infrastructure. No schema changes.
   - id: "CUSTOMER-ZERO-FINAL-READINESS-001"
     title: "CUSTOMER-ZERO-FINAL-READINESS-001 — Comprehensive offline readiness gate"
     prs: ["#753"]
