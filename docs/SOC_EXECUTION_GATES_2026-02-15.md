@@ -1,3 +1,31 @@
+## 2026-10-09 - docs/cz-run3-operator-preflight-closeout: CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 governance reconciliation
+
+**Change scope:** Governance reconciliation for CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (PR #758) post-merge closeout. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes.
+
+Roadmap transitions: CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 moved from `next_sequence` to `completed` (prs=["#758"], merged_sha=4b945df9d712d6007ab87e8aeaa48353fabdce39). CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 added to `next_sequence` (OFFLINE_PREPARATION). TRUST-003 and ACCEPT-001 blocker descriptions updated to reference completed offline preparation (PRs #750–#758) and enumerate outstanding live requirements. `authority_date` updated to 2026-10-09.
+
+**Security posture:**
+
+1. **No authorization path changed.** All transitions are record-keeping only. `authorization_status` remains hardcoded `NOT_AUTHORIZED` in all evaluators. No evaluator code modified.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** Updated descriptions reference the full list of outstanding live requirements: explicit human cost authorization, confirmed HCP pricing, proposed max cost/runtime, authorization identity and expiration, actual terraform plan, HCP Vault provisioning, live trust ceremony, CloudWatch audit delivery proof, independent verification, all 16 deferred live checks, teardown evidence.
+3. **Lifecycle fallback confirms COMPLETED.** After this PR, `_check_roadmap_authorized()` in `run3_operator_preflight.py` will find OPERATOR-PREFLIGHT-001 in `completed` with valid PR/SHA evidence and return PASS — no regression to preflight status.
+4. **No self-authorization introduced.** Moving OPERATOR-PREFLIGHT-001 to `completed` does not authorize the ceremony, does not advance trust, and does not unblock TRUST-003 or ACCEPT-001.
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** Canonical Customer-Zero truth preserved: `CUSTOMER_ZERO_TRUST=NOT_PROVEN`, `TRUST-003=BLOCKED`, `ACCEPT-001=BLOCKED`, `THIRD_PAID_CEREMONY=NOT_AUTHORIZED`.
+
+**Critical-path files changed:** `customer_one/roadmap_authority.yaml` (OPERATOR-PREFLIGHT-001 to completed; HUMAN-COST-REVIEW-001 to next_sequence; TRUST-003/ACCEPT-001 descriptions updated; authority_date), `customer_one/offline_simulation_evidence.json` (regenerated — tree hash stale after roadmap changes), `ROADMAP.md` (rows updated; closeout row added), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry added), `tests/test_cz_run3_operator_preflight_closeout_001.py` (new — 30 tests).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; authorization_status=NOT_AUTHORIZED. All three offline evaluators remain green (READY / READY_FOR_HUMAN_COST_AUTHORIZATION / PREPARED_FOR_HUMAN_REVIEW).
+
+**Validation evidence:**
+
+- `python tools/ci/customer_zero_final_readiness.py --repo . --json` → result=READY, offline_blocker_count=0
+- `python tools/ci/customer_zero_run3_preauth.py --repo . --json` → preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION, blockers=[]
+- `python tools/ci/customer_zero_run3_operator_preflight.py --repo . --json` → preflight_status=PREPARED_FOR_HUMAN_REVIEW, blockers=[]
+- `pytest tests/test_cz_run3_operator_preflight_closeout_001.py -v` → 30 passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. All changes are governance record-keeping. No evaluator code modified, no authorization path weakened, no tenant isolation changed, no secret accessed. Lifecycle fallback in `_check_roadmap_authorized()` correctly accepts COMPLETED items — no regression to preflight status. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-09 - governance/customer-zero-run3-operator-preflight-001: P1/P2 review fixes
 
 **Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_operator_preflight.py` and `services/governance/run3_operator_preflight.py`.
