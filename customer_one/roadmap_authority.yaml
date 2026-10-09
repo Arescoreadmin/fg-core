@@ -1,5 +1,5 @@
 schema_version: "1.0"
-authority_date: "2026-10-08"
+authority_date: "2026-10-09"
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,19 +51,19 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
-  - id: "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
-    title: "Run-3 operator checklist, candidate rebinding, and human cost-authorization preparation"
-    blocked_by: []
+  - id: "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001"
+    title: "Human cost-authorization review and decision preparation"
     work_class: "OFFLINE_PREPARATION"
-    description: >
-      Offline preparation activity covering the 16 deferred live checks checklist,
-      source/candidate fingerprint rebinding procedure, Terraform resource-plan review,
-      preserved AWS audit-resource verification, HCP Vault audit-to-CloudWatch
-      prerequisites, HCP pricing confirmation, explicit proposed maximum runtime and
-      cost, human authorization identity and expiration, cost/runtime abort thresholds,
-      teardown deadline, evidence capture procedures, and stop/rollback authority.
-      Does NOT provision infrastructure. Does NOT begin Run 3. Does NOT authorize spending.
-      Implementation is a separate future PR.
+    prerequisites:
+      - "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+    note: >
+      Prepare complete human cost-authorization review package: current HCP pricing
+      evidence, proposed maximum cost (USD), proposed maximum runtime (hours),
+      pricing confidence and validity window, operator identity, human approver
+      identity, approval expiration, source/candidate binding, audit prerequisites,
+      abort and teardown commitments, and independent approval verification.
+      The result is a reviewable request, NOT automatic authorization.
+      Actual spending requires a separate explicit human decision.
   - id: "L14"
     title: "Customer-One Commercial Execution"
     files: []
@@ -106,25 +106,36 @@ blocked:
     reason: >
       Offline preparation complete: PR #750 (provenance-integrity), PR #751
       (verifier-contract), PR #753 (final-readiness), PR #754 (roadmap
-      reconciliation), PR #755 (Run-3 preauth), PR #756 (integration repair) —
-      all merged. Offline readiness independently verified (READY, 0 blockers).
-      Still blocked on: fresh explicit human cost authorization (prior $321.81
-      authorization consumed), HCP infrastructure absent, live Vault/HCP ceremony
-      evidence outstanding, live CloudWatch audit proof outstanding.
-      16 deferred live checks remain unexecuted. Third paid ceremony NOT authorized.
-      CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 must complete before cost
-      authorization request is prepared for human review.
+      reconciliation), PR #755 (Run-3 preauth), PR #756 (integration repair),
+      PR #757 (preauth closeout), PR #758 (operator preflight) — all merged.
+      Offline readiness independently verified (READY, 0 blockers).
+      Operator preflight manifest complete: 16 deferred live checks catalogued,
+      source/candidate rebinding procedure documented, 21-resource Terraform
+      inventory reviewed, 4 preserved AWS audit resources verified,
+      CloudWatch/Vault audit prerequisites documented, pricing request structure
+      prepared. preflight_status=PREPARED_FOR_HUMAN_REVIEW.
+      Still blocked on: explicit human cost authorization (cost_authorization=NOT_AUTHORIZED;
+      prior $321.81 authorization consumed), confirmed HCP portal pricing,
+      proposed maximum cost (USD) and runtime (hours), authorization identity and
+      expiration, actual terraform plan review under authorized conditions,
+      HCP Vault infrastructure provisioning, live trust ceremony execution,
+      live CloudWatch audit delivery proof, independent verification of live evidence,
+      all 16 deferred live checks, teardown and preservation evidence.
+      Third paid ceremony NOT authorized. CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001
+      must complete before cost authorization decision is presented for human approval.
   - id: "CUSTOMER-ZERO-ACCEPT-001"
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     reason: >
       Blocked pending genuine trust proof from CUSTOMER-ZERO-TRUST-003.
       Customer acceptance cannot precede live ceremony execution and independent
-      verification. TRUST-003 remains blocked on fresh explicit human cost
-      authorization, live Vault/HCP ceremony execution, live CloudWatch audit
-      proof, and all 16 deferred live checks. Completed offline preparation
-      (PRs #750, #751, #753, #754, #755, #756) is necessary but not sufficient —
-      offline readiness is READY (0 blockers) but live ceremony evidence is
-      outstanding and cannot be substituted.
+      verification. TRUST-003 remains blocked on explicit human cost authorization,
+      live Vault/HCP ceremony execution, live CloudWatch audit proof, and all 16
+      deferred live checks. Completed offline preparation (PRs #750, #751, #753,
+      #754, #755, #756, #757, #758) including operator preflight manifest
+      (preflight_status=PREPARED_FOR_HUMAN_REVIEW) is necessary but not sufficient —
+      offline readiness is READY (0 blockers) and operator preflight is prepared
+      for human review, but live ceremony evidence is outstanding and cannot be
+      substituted. No acceptance transition until trust is proven live.
 
 deferred:
   - id: "RAG-RETRY"
@@ -153,6 +164,30 @@ deferred:
     reason: "Cleared by P-2 (QA auto-enable); no remaining blocker for Customer-One"
 
 completed:
+  - id: "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+    title: "Run-3 operator checklist, candidate rebinding, and human cost-authorization preparation"
+    prs: ["#758"]
+    merged_sha: "4b945df9d712d6007ab87e8aeaa48353fabdce39"
+    parent_objective: "CUSTOMER-ZERO-TRUST-003"
+    note: >
+      Offline operator-preflight manifest covering all 16 deferred live checks,
+      source/candidate rebinding procedure, 21-resource terraform inventory review,
+      4 preserved AWS audit resources, CloudWatch/Vault audit prerequisites, pricing
+      request structure, human authorization boundaries, abort conditions, teardown
+      and recovery plan. preflight_status=PREPARED_FOR_HUMAN_REVIEW.
+      authorization_status=NOT_AUTHORIZED. No cloud mutation. No paid infrastructure.
+      75 adversarial tests. CLI: tools/ci/customer_zero_run3_operator_preflight.py.
+  - id: "CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001"
+    title: "Post-merge operator preflight closeout"
+    prs: ["#759"]
+    merged_sha: "TBD"
+    note: >
+      Records CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (#758) in completed.
+      Updates TRUST-003 and ACCEPT-001 blocker descriptions to reflect current
+      state: offline preflight complete, 16 live checks deferred,
+      cost_authorization=NOT_AUTHORIZED. Identifies
+      CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 as next authorized work item.
+      Governance-only PR. No evaluator changes. No schema changes. No cloud mutation.
   - id: "CUSTOMER-ZERO-RUN3-PREAUTH-001"
     title: "Run-3 offline preauthorization candidate freeze and cost-authorization request"
     prs: ["#755"]

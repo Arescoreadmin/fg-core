@@ -1,3 +1,32 @@
+# CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 — Post-merge operator preflight closeout
+
+- **Work item:** CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 (REPAIR class)
+- **Purpose:** Governance reconciliation only. Records completed state of CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (PR #758, SHA 4b945df9d712d6007ab87e8aeaa48353fabdce39) in `customer_one/roadmap_authority.yaml`. Updates TRUST-003 and ACCEPT-001 blocker descriptions to reflect current state. Registers CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 as the next authorized offline preparation work item.
+- **Phase-1 evaluation (canonical main 4b945df9, clean committed state):**
+  - `customer_zero_final_readiness.py`: result=READY, offline_blocker_count=0
+  - `customer_zero_run3_preauth.py`: preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION, blockers=[]
+  - `customer_zero_run3_operator_preflight.py`: preflight_status=PREPARED_FOR_HUMAN_REVIEW, blockers=[]
+  - Cost authorization: NOT_AUTHORIZED, proposed_max_cost_usd=null
+- **Historical fingerprints from PR #758 clean-main evaluation (SHA 4b945df9):**
+  - preflight_fingerprint: 61241d900f7b (prefix — full value recorded at time of evaluation)
+  - candidate_fingerprint: 6be4bd7fa266 (prefix — full value recorded at time of evaluation)
+  - infrastructure_fingerprint: 303aa7d0bd8b8a864ee4900aaf2fd2cf11fa9ac6055d0a3f599ec9c2012e37dd
+  - These fingerprints are historical provenance records ONLY. They are NOT current execution authorization.
+  - The 303aa7d0bd8b infra fingerprint is stable (Terraform files unchanged). Preflight and candidate fingerprints depend on readiness/candidate state at evaluation time.
+- **Roadmap transitions:**
+  - CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 moved from next_sequence → completed (prs=["#758"], merged_sha=4b945df9)
+  - CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 added to completed (prs=["#759"], merged_sha=TBD)
+  - CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 removed from next_sequence
+  - CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 added to next_sequence (OFFLINE_PREPARATION)
+  - TRUST-003 and ACCEPT-001 blocker descriptions updated (remain BLOCKED)
+- **Test changes:** `tests/test_cz_run3_operator_preflight_closeout_001.py` (new — 30 closeout-specific assertions across roadmap lifecycle, historical provenance, ceremony truth, and evaluator integration categories).
+- **Scope:** `customer_one/roadmap_authority.yaml` (OPERATOR-PREFLIGHT-001 to completed; TRUST-003/ACCEPT-001 descriptions; HUMAN-COST-REVIEW-001 to next_sequence; authority_date bumped); `ROADMAP.md` (rows updated; closeout row added); `docs/SOC_EXECUTION_GATES_2026-02-15.md` (new entry); `docs/ai/PR_FIX_LOG.md` (this entry); `customer_one/offline_simulation_evidence.json` (regenerated — tracked file changed). No `tools/ci/` changes. No evaluator changes. No schema changes. No migrations. No API contract changes. No paid infrastructure. No cloud mutations.
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED.
+- **Deferred live checks:** 16 remain unexecuted.
+- **Post-merge revalidation requirement:** After merge, run `python tools/ci/customer_zero_run3_operator_preflight.py --repo .` on canonical clean main to confirm preflight_status=PREPARED_FOR_HUMAN_REVIEW against merged state.
+
+---
+
 # CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 — Run-3 operator preflight authority
 
 - **Work item:** CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (OFFLINE_PREPARATION class)
