@@ -85,6 +85,37 @@ EXPECTED_INVENTORY_COUNT = 21
 # Required number of deferred live checks (LIVE_CEREMONY + PRE_PROVISIONING)
 EXPECTED_DEFERRED_CHECK_COUNT = 16
 
+# Explicit proof-ID-to-abort-condition mapping for the 16 deferred live checks.
+# Derived from failure_classification in run3_proof_matrix.py — not from
+# objective substring heuristics, which silently misassign B/C/E/F/H family
+# checks (all P0_SECURITY_FAILURE) to ABORT-CER-001.
+_PROOF_ABORT_MAP: dict[str, str] = {
+    # A family — ordinary signing ceremony failures
+    "A-IDENTITY-SIGN": "ABORT-CER-001",
+    "A-ACCEPTANCE-SIGN": "ABORT-CER-001",
+    "A-APPROVAL-SIGN": "ABORT-CER-001",
+    # B family — cross-domain isolation (P0_SECURITY_FAILURE)
+    "B-CROSS-IDENTITY-ACCEPTANCE": "ABORT-CER-002",
+    "B-CROSS-ACCEPTANCE-APPROVAL": "ABORT-CER-002",
+    "B-CROSS-APPROVAL-IDENTITY": "ABORT-CER-002",
+    # C family — replay attacks (P0_SECURITY_FAILURE)
+    "C-WRONG-PAYLOAD-REPLAY": "ABORT-CER-002",
+    "C-WRONG-DOMAIN-REPLAY": "ABORT-CER-002",
+    "C-WRONG-KEY-VERSION-REPLAY": "ABORT-CER-002",
+    # D family — key rotation
+    "D-IDENTITY-ROTATION": "ABORT-CER-003",
+    # E family — cryptographic invalidity (P0_SECURITY_FAILURE)
+    "E-CRYPTOGRAPHIC-INVALIDITY-FALSE": "ABORT-CER-002",
+    "E-VAULT-UNAVAILABLE-FALSE": "ABORT-CER-002",
+    # F family — report mutation (P0_SECURITY_FAILURE)
+    "F-REPORT-MUTATION-FAILS": "ABORT-CER-002",
+    # G family — audit delivery
+    "G-VAULT-AUDIT-CLOUDWATCH": "ABORT-POST-003",
+    "G-AUDIT-DELIVERY-CHECKPOINT": "ABORT-POST-003",
+    # H family — cross-tenant signing (P0_SECURITY_FAILURE)
+    "H-CROSS-TENANT-SIGN-FAILS": "ABORT-CER-002",
+}
+
 # The 4 AWS audit resources that must be classified PRESERVE_AFTER_CEREMONY
 REQUIRED_PRESERVED_AWS_RESOURCES = frozenset(
     {
@@ -282,6 +313,61 @@ def _git_origin_main(repo: Path) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Offline mandatory check implementations
 # ---------------------------------------------------------------------------
+
+
+def _check_roadmap_authorized(repo: Path) -> dict[str, Any]:
+    """ROADMAP-AUTHORIZED: Verify WORK_ITEM is AUTHORIZED or COMPLETED."""
+    import subprocess
+
+    try:
+        checker = repo / "tools" / "ci" / "check_customer_one_roadmap.py"
+        r = subprocess.run(
+            [sys.executable, str(checker), "--work-item", WORK_ITEM],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if r.returncode == 0:
+            return {
+                "check_id": "ROADMAP-AUTHORIZED",
+                "description": f"{WORK_ITEM} is AUTHORIZED in next_sequence",
+                "evidence_strength": "OFFLINE_PROVEN",
+                "result": "PASS",
+                "detail": r.stdout.strip(),
+            }
+        # Nonzero: item may have been merged to completed — try lifecycle fallback
+        try:
+            from services.governance.customer_zero_readiness import (
+                _roadmap_item_completed_with_evidence,
+            )
+
+            ok, evidence = _roadmap_item_completed_with_evidence(repo, WORK_ITEM)
+            if ok:
+                return {
+                    "check_id": "ROADMAP-AUTHORIZED",
+                    "description": f"{WORK_ITEM} is COMPLETED with valid PR/SHA evidence",
+                    "evidence_strength": "OFFLINE_PROVEN",
+                    "result": "PASS",
+                    "detail": f"COMPLETED: {evidence}",
+                }
+        except Exception:
+            pass
+        return {
+            "check_id": "ROADMAP-AUTHORIZED",
+            "description": f"{WORK_ITEM} must be AUTHORIZED (next_sequence) or COMPLETED",
+            "evidence_strength": "NOT_PROVEN",
+            "result": "FAIL",
+            "detail": (r.stdout.strip() + r.stderr.strip()) or "roadmap checker returned nonzero",
+        }
+    except Exception as exc:
+        return {
+            "check_id": "ROADMAP-AUTHORIZED",
+            "description": f"{WORK_ITEM} roadmap authority check",
+            "evidence_strength": "NOT_PROVEN",
+            "result": "FAIL",
+            "detail": f"roadmap checker error: {exc}",
+        }
 
 
 def _check_source_binding(repo: Path, source_sha: str) -> dict[str, Any]:
@@ -659,6 +745,7 @@ def _check_preserved_audit_resources(repo: Path) -> dict[str, Any]:
 def _run_offline_checks(repo: Path, source_sha: str) -> list[dict[str, Any]]:
     """Run all mandatory offline checks. Returns list of check result dicts."""
     checks: list[dict[str, Any]] = []
+    checks.append(_check_roadmap_authorized(repo))
     checks.append(_check_source_binding(repo, source_sha))
     checks.append(_check_candidate_fingerprint(repo))
     checks.append(_check_infra_fingerprint(repo))
@@ -813,6 +900,7 @@ def build_preflight_manifest(repo: Path | None = None) -> OperatorPreflightManif
         manifest.pricing_request = cost_req.to_dict()
     except Exception as exc:
         manifest.pricing_request = {"error": str(exc)}
+        blockers.append(f"PRICING-REQUEST: cost request assembly failed: {exc}")
 
     # ── Authorization request (always NOT_AUTHORIZED) ─────────────────────
     manifest.authorization_request = {
@@ -901,15 +989,7 @@ def build_preflight_manifest(repo: Path | None = None) -> OperatorPreflightManif
                 "fail_condition": f"expected_result not achieved; failure_class={p.failure_classification}",
                 "evidence_strength": "NOT_PROVEN",  # None have been proven yet
                 "execution_stage": p.execution_stage,
-                "abort_trigger": (
-                    "ABORT-CER-002"
-                    if "isolation" in p.objective.lower()
-                    else "ABORT-CER-003"
-                    if "replay" in p.objective.lower()
-                    else "ABORT-POST-003"
-                    if "audit" in p.objective.lower()
-                    else "ABORT-CER-001"
-                ),
+                "abort_trigger": _PROOF_ABORT_MAP.get(p.proof_id, "ABORT-CER-001"),
             }
             for p in deferred
         ]

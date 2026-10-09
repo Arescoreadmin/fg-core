@@ -230,8 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     blockers = manifest.blockers
     offline_checks = manifest.offline_checks
 
-    # Human-readable output (unless --quiet)
-    if not args.quiet:
+    # Human-readable output — suppressed by --json (machine consumers) or --quiet
+    if not args.quiet and not args.as_json:
         print(_render_human_readable(manifest_dict, blockers, offline_checks))
 
     # JSON output

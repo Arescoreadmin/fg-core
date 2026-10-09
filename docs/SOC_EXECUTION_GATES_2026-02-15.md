@@ -1,3 +1,34 @@
+## 2026-10-09 - governance/customer-zero-run3-operator-preflight-001: P1/P2 review fixes
+
+**Change scope:** Four review-issue fixes to `tools/ci/customer_zero_run3_operator_preflight.py` and `services/governance/run3_operator_preflight.py`.
+
+(1) **P1 — lifecycle-aware roadmap gate:** `_check_roadmap_authorized()` added as a mandatory offline check in `_run_offline_checks()`. Accepts work item AUTHORIZED (next_sequence, rc=0 from checker) or COMPLETED post-merge (lifecycle fallback via `_roadmap_item_completed_with_evidence`). If neither, returns FAIL and adds a blocker. Prevents `PREPARED_FOR_HUMAN_REVIEW` if the work item is removed from next_sequence or moved to blocked/deferred.
+
+(2) **P1 — pricing request failure adds blocker:** Previously a `build_cost_request()` exception silently set `pricing_request={"error": ...}` while all offline checks still passed, allowing an incomplete cost-review package to advance. Fix: exception now also appends `PRICING-REQUEST: cost request assembly failed: ...` to `blockers`, causing `preflight_status=BLOCKED`.
+
+(3) **P2 — explicit proof-ID-to-abort mapping:** Replaced objective-substring heuristic with `_PROOF_ABORT_MAP` dict keyed by `proof_id`. The previous heuristic used `"isolation" in p.objective.lower()` to detect B-family checks, but all B-family objectives say "cross-domain substitution" — causing them to fall through to ABORT-CER-001 instead of ABORT-CER-002 (P0 isolation failure). New mapping: A-family→ABORT-CER-001, B/C/E/F/H-family→ABORT-CER-002, D-family→ABORT-CER-003, G-family→ABORT-POST-003.
+
+(4) **P2 — suppress human-readable output when --json selected:** `tools/ci/customer_zero_run3_operator_preflight.py` previously printed the banner and summary before the JSON document when `--json` was specified, breaking `json.load` and `jq` automation. Fix: changed `if not args.quiet:` to `if not args.quiet and not args.as_json:`, matching the existing `customer_zero_run3_preauth.py` pattern.
+
+**Security posture:**
+
+1. **Roadmap gate strengthened (P1).** Without the check, removal of the work item from next_sequence/completed was silently ignored and `PREPARED_FOR_HUMAN_REVIEW` was still reachable. Now the gate fails closed on missing or revoked authorization.
+2. **Pricing failure now blocks (P1).** An incomplete cost-review package can no longer advance to `PREPARED_FOR_HUMAN_REVIEW`. The cost authorization package is a mandatory section for human review.
+3. **Abort-condition assignment corrected (P2).** All six P0 security-failure proof families (B, C, E, F, H) now correctly map to ABORT-CER-002 (the P0 abort condition) rather than ABORT-CER-001 (ordinary signing failure). This corrects the operational record for how the operator should respond to security failures vs. ceremony failures.
+4. **No self-authorization introduced.** All fixes narrow or tighten existing gates. `authorization_status` remains hardcoded `NOT_AUTHORIZED`. No authorization path weakened. Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `services/governance/run3_operator_preflight.py` (`_PROOF_ABORT_MAP` constant, `_check_roadmap_authorized` new function, pricing blocker, `_run_offline_checks` updated), `tools/ci/customer_zero_run3_operator_preflight.py` (`--json` suppresses human-readable output). 4 new tests (B17-B20).
+
+**Required invariant preserved:** `preflight_status` is PREPARED_FOR_HUMAN_REVIEW or BLOCKED; never AUTHORIZED_TO_SPEND; canonical Customer-Zero truth unchanged. 75 adversarial tests pass.
+
+**Validation evidence:**
+
+- `pytest tests/test_customer_zero_run3_operator_preflight_001.py -v` → 75 passed
+- `ruff check` / `ruff format --check` (api/tests/scripts) → all clean
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. All four fixes narrow existing gates (roadmap check closes silent-skip, pricing failure closes incomplete-package advance, abort mapping corrects operational record, --json suppresses interfering output). No authentication path changed, no tenant isolation bypass, no runtime authority weakened, no secret accessed. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-09 - governance/customer-zero-run3-operator-preflight-001: offline operator preflight authority
 
 **Change scope:** New offline operator preflight authority for CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001.

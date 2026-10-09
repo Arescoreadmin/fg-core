@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,23 @@ from unittest.mock import patch
 # ---------------------------------------------------------------------------
 
 _ROOT = Path(__file__).resolve().parents[1]
+
+
+def _get_head_sha() -> str:
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return r.stdout.strip() if r.returncode == 0 else "0" * 40
+    except Exception:  # noqa: BLE001
+        return "0" * 40
+
+
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -315,6 +333,101 @@ class TestRoadmapAuthority:
             (_ROOT / "customer_one" / "ceremony_state.yaml").read_text()
         )
         assert state.get("third_paid_ceremony_status") == "NOT_AUTHORIZED"
+
+    def test_b17_roadmap_authorized_check_passes_when_in_next_sequence(
+        self, tmp_path: Path
+    ) -> None:
+        """Test B17: _check_roadmap_authorized returns PASS when checker exits 0."""
+        from services.governance.run3_operator_preflight import (
+            _check_roadmap_authorized,
+        )
+
+        with patch(
+            "services.governance.run3_operator_preflight.subprocess.run",
+            return_value=type(
+                "R", (), {"returncode": 0, "stdout": "AUTHORIZED", "stderr": ""}
+            )(),
+        ):
+            result = _check_roadmap_authorized(_ROOT)
+        assert result["result"] == "PASS", result
+        assert result["check_id"] == "ROADMAP-AUTHORIZED"
+
+    def test_b18_roadmap_authorized_check_fails_when_removed(
+        self, tmp_path: Path
+    ) -> None:
+        """Test B18: _check_roadmap_authorized returns FAIL when item absent from roadmap."""
+        from services.governance.run3_operator_preflight import (
+            _check_roadmap_authorized,
+        )
+
+        with (
+            patch(
+                "services.governance.run3_operator_preflight.subprocess.run",
+                return_value=type(
+                    "R", (), {"returncode": 1, "stdout": "NOT_FOUND", "stderr": ""}
+                )(),
+            ),
+            patch(
+                "services.governance.customer_zero_readiness._roadmap_item_completed_with_evidence",
+                return_value=(False, "not in completed"),
+            ),
+        ):
+            result = _check_roadmap_authorized(_ROOT)
+        assert result["result"] == "FAIL", result
+
+    def test_b19_roadmap_authorized_check_passes_post_merge_lifecycle(
+        self, tmp_path: Path
+    ) -> None:
+        """Test B19: _check_roadmap_authorized accepts COMPLETED post-merge items."""
+        from services.governance.run3_operator_preflight import (
+            _check_roadmap_authorized,
+        )
+
+        with (
+            patch(
+                "services.governance.run3_operator_preflight.subprocess.run",
+                return_value=type(
+                    "R", (), {"returncode": 1, "stdout": "COMPLETED", "stderr": ""}
+                )(),
+            ),
+            patch(
+                "services.governance.customer_zero_readiness._roadmap_item_completed_with_evidence",
+                return_value=(True, "prs=['#758'] merged_sha=abc123def456"),
+            ),
+        ):
+            result = _check_roadmap_authorized(_ROOT)
+        assert result["result"] == "PASS", result
+        assert "COMPLETED" in result["detail"]
+
+    def test_b20_pricing_request_failure_adds_blocker(self) -> None:
+        """Test B20: pricing request assembly failure adds a blocker, preventing PREPARED status."""
+        from services.governance.run3_operator_preflight import build_preflight_manifest
+
+        with (
+            patch(
+                "services.governance.run3_operator_preflight._git_status_clean",
+                return_value=(True, "patched"),
+            ),
+            patch(
+                "services.governance.run3_operator_preflight._git_origin_main",
+                return_value=(True, "patched"),
+            ),
+            patch(
+                "services.governance.run3_cost_request.build_cost_request",
+                side_effect=RuntimeError("simulated cost-request failure"),
+            ),
+        ):
+            manifest = build_preflight_manifest(_ROOT)
+
+        assert manifest.preflight_status == "BLOCKED", (
+            f"Expected BLOCKED when pricing fails, got {manifest.preflight_status}"
+        )
+        pricing_blocker = next(
+            (b for b in manifest.blockers if "PRICING-REQUEST" in b), None
+        )
+        assert pricing_blocker is not None, (
+            f"Expected PRICING-REQUEST blocker, blockers: {manifest.blockers}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -840,22 +953,19 @@ class TestIntegration:
     def test_h52_final_readiness_still_ready(self) -> None:
         """Test H52: customer_zero_readiness.evaluate() still returns READY.
 
-        Patches _git_status_clean and _validate_offline_simulation_evidence to
-        handle pre-commit worktree state. The pre-merge branch has new uncommitted
-        files — this is expected and patched for test purposes only.
+        Patches _git_status_clean (A4) and _git_origin_main (A3) for pre-merge
+        branch state. J_CE3 is exercised against the real committed evidence file.
         """
         from services.governance.customer_zero_readiness import evaluate
 
-        # Patch git-clean check (A4) and simulation evidence (J_CE3) for
-        # pre-commit branch state (new uncommitted files exist in this worktree)
         with (
             patch(
                 "services.governance.customer_zero_readiness._git_status_clean",
                 return_value=True,
             ),
             patch(
-                "services.governance.customer_zero_readiness._validate_offline_simulation_evidence",
-                return_value=("PASS", "patched_for_pre_commit", "", ""),
+                "services.governance.customer_zero_readiness._git_origin_main",
+                return_value=_get_head_sha(),
             ),
         ):
             result = evaluate(_ROOT)
