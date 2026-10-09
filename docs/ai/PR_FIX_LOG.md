@@ -1,3 +1,24 @@
+# CZ-RUN3-PREAUTH-CLOSEOUT-001 — Reconcile Customer-Zero Run-3 preauthorization closeout
+
+- **Work item:** CZ-RUN3-PREAUTH-CLOSEOUT-001 (REPAIR class)
+- **Purpose:** Governance reconciliation only. Records completed state of CUSTOMER-ZERO-RUN3-PREAUTH-001 (PR #755, SHA 8de43e22) and CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 (PR #756, SHA 49a662f9) in `customer_one/roadmap_authority.yaml`. Updates TRUST-003 and ACCEPT-001 blocker descriptions to reflect current state. Registers CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 as the next authorized offline preparation work item.
+- **Phase-1 evaluation (canonical main 49a662f9, clean committed state):**
+  - `customer_zero_final_readiness.py`: result=READY, offline_blocker_count=0
+  - `customer_zero_run3_preauth.py`: preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION, blockers=[]
+  - Cost authorization: NOT_AUTHORIZED, proposed_max_cost_usd=null
+- **Roadmap transitions:**
+  - CUSTOMER-ZERO-RUN3-PREAUTH-001 moved from next_sequence → completed (prs=["#755"], merged_sha=8de43e22)
+  - CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 added to completed (prs=["#756"], merged_sha=49a662f9)
+  - CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 added to next_sequence (blocked_by=[], OFFLINE_PREPARATION)
+  - TRUST-003 and ACCEPT-001 blocker descriptions updated (remain BLOCKED)
+- **Test changes:** `tests/test_cz_run3_preauth_closeout_001.py` (new — 15 closeout-specific assertions); `tests/test_cz_final_readiness_closeout_001.py` (5 tests updated to reflect post-closeout state: B1/B2/B3 reflect PREAUTH in completed, C1 reflects completed→blocked, E4 uses OPERATOR-PREFLIGHT, F2 checks PREAUTH COMPLETED row and OPERATOR-PREFLIGHT reference); `tests/test_cz_run3_readiness_integration_repair_001.py` (4 integration tests patched to avoid pre-commit worktree noise: int_22, int_24, int_31, int_32).
+- **Scope:** `customer_one/roadmap_authority.yaml` (PREAUTH-001 + REPAIR-001 to completed; TRUST-003/ACCEPT-001 descriptions; OPERATOR-PREFLIGHT to next_sequence; authority_date bumped); `ROADMAP.md` (rows updated to COMPLETE; closeout row added); `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (sequence table updated; new reconciliation paragraph; new candidate identity section); `docs/ai/PR_FIX_LOG.md` (this entry); test files above. No `tools/ci/` changes. No migrations. No schema changes. No infra. No API contract changes. No paid infrastructure. No cloud mutations.
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED.
+- **Deferred live checks:** 16 remain unexecuted.
+- **Post-merge revalidation requirement:** After merge, re-run `python tools/ci/customer_zero_run3_preauth.py --repo .` on canonical clean main to capture the then-current candidate fingerprint. Any future human cost authorization MUST bind to that re-run result — the pre-closeout fingerprints (candidate: f7d6e1b9..., infra: 303aa7d0...) are historical validation values, not valid authorization targets.
+
+---
+
 # CZ-RUN3-READINESS-INTEGRATION-REPAIR-001 P1 fixes — tree-content binding + count equality
 
 - **Root cause P1-1 (self-invalidating HEAD-bound evidence):** The runner wrote `source_sha: git_rev_parse_HEAD` into the evidence file. Writing the evidence made the worktree dirty (A4 fails). Committing the evidence changed HEAD, making the embedded SHA immediately stale (J_CE3 fails). The chicken-and-egg meant no normal clean checkout could satisfy both A4 and J_CE3 simultaneously.
