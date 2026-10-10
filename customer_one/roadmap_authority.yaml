@@ -56,6 +56,14 @@ next_sequence:
   - id: "CZ-RUN3-FAILURE-PREVENTION-001"
     title: "Run-3 adversarial failure prevention and cost containment audit"
     work_class: "OFFLINE_PREPARATION"
+    freeze_law_criterion: >
+      Criterion 3 — measurably reduces delivery risk with evidence.
+      Evidence: $321.81 spent across two failed ceremonies (ceremony_state.yaml
+      cost_containment.historical_october_usage_usd). This item was not in
+      next_sequence when this PR was created; the amendment is included as the
+      PR's first change. This differs from the closeout pattern used in PRs
+      #757 and #759 (which documented already-completed work). The re-sequencing
+      decision was made under criterion 3 and is recorded here for audit.
     prerequisites:
       - "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
     note: >

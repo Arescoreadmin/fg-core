@@ -70,18 +70,35 @@ Record the exact UTC timestamp of the operation.
 
 Within 60 seconds of the Vault operation:
 
-1. Assume the reader role (MFA required):
+1. Retrieve the reader role ARN from Terraform outputs (not hardcoded — path includes `/frostgate/vault/`):
    ```bash
-   aws sts assume-role \
-     --role-arn arn:aws:iam::ACCOUNT_ID:role/FrostGateVaultAuditReader \
-     --role-session-name smoke-test-$(date +%s) \
-     --serial-number arn:aws:iam::ACCOUNT_ID:mfa/DEVICE \
-     --token-code MFA_CODE
+   READER_ROLE_ARN="$(cd ~/Projects/fg-core/infra && \
+     AWS_PROFILE=frostgate-terraform terraform output -raw iam_audit_reader_role_arn)"
+   echo "Reader role ARN: ${READER_ROLE_ARN}"
    ```
 
-2. Query CloudWatch for events after the recorded timestamp:
+2. Assume the reader role as the human IAM user (MFA required) and export credentials:
    ```bash
-   aws logs filter-log-events \
+   eval "$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
+     --role-arn "${READER_ROLE_ARN}" \
+     --role-session-name "smoke-test-$(date +%s)" \
+     --serial-number "arn:aws:iam::ACCOUNT_ID:mfa/DEVICE" \
+     --token-code "MFA_CODE" \
+     | python3 -c "
+   import sys, json
+   creds = json.load(sys.stdin)['Credentials']
+   print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
+   print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
+   print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
+   ")"
+   unset AWS_PROFILE
+   ```
+   Reader credentials are now active via env vars. Do NOT set `AWS_PROFILE` for subsequent
+   log reads — doing so would override the assumed-role session.
+
+3. Query CloudWatch for events after the recorded timestamp:
+   ```bash
+   AWS_DEFAULT_REGION=us-east-1 aws logs filter-log-events \
      --log-group-name CLOUDWATCH_LOG_GROUP_NAME \
      --start-time EPOCH_MILLISECONDS \
      --query 'events[*].message' \
@@ -89,9 +106,14 @@ Within 60 seconds of the Vault operation:
    ```
 
 **Pass condition:** At least one audit event appears in CloudWatch with a timestamp matching
-or after the Vault operation timestamp.
+or after the Vault operation timestamp, **and the event body identifies the Run-3 cluster**
+(`hcp_vault_cluster.customer_zero` / cluster ID from Terraform output `vault_cluster_id`).
+A timestamp match alone is insufficient — an event from a different cluster or a prior operation
+writing to the same log group after the recorded timestamp would produce a false PASS.
+Verify the event body contains the expected cluster identifier before declaring PASS.
 
-**Failure condition:** No events appear within 2 minutes → ABORT-POST-003 (controlled teardown).
+**Failure condition:** No events appear within 2 minutes, or events appear but none contain the
+expected cluster identifier → ABORT-POST-003 (controlled teardown).
 Do NOT proceed to signing proofs. There is no partial-audit trust proof.
 
 ### Step 4: Record Smoke Test Evidence

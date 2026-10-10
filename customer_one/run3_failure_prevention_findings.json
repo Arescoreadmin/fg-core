@@ -19,12 +19,13 @@
       "id": "FP-002",
       "severity": "P1",
       "title": "Offline simulation evidence bound to stale source SHA",
-      "evidence": "customer_one/offline_simulation_evidence.json has source_sha=988cda57eaad3096e26fd511d95a2881190c4fd7 and source_tree_hash=14abbad18b7c3e6043c06dea21ca3c18fe5d560bab154b7e4b67a7c7cbcd748d. Canonical main SHA after PR #759 is ec8684df4699be43b40d1edc9a79b58fd23e3637. The tree hash will not match current main.",
+      "evidence": "customer_one/offline_simulation_evidence.json had source_sha=988cda57eaad3096e26fd511d95a2881190c4fd7 and source_tree_hash=14abbad18b7c3e6043c06dea21ca3c18fe5d560bab154b7e4b67a7c7cbcd748d at time of discovery. Canonical main SHA after PR #759 was ec8684df4699be43b40d1edc9a79b58fd23e3637.",
       "affected_control": "J_CE3 dimension in customer_zero_final_readiness.py",
-      "impact": "The final readiness evaluator validates simulation evidence source_tree_hash against current tree. Stale evidence will cause J_CE3 to FAIL, blocking READY result. All three evaluators will show degraded results.",
-      "remediation": "Run: python tools/ci/run_offline_ceremony_simulation.py --repo . --output customer_one/offline_simulation_evidence.json on canonical main (after this PR merges). Re-run all three evaluators to confirm READY / READY_FOR_HUMAN_COST_AUTHORIZATION / PREPARED_FOR_HUMAN_REVIEW.",
-      "owner": "Engineering (automated step before CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001)",
-      "blocking_run3": true
+      "impact": "The final readiness evaluator validates simulation evidence source_tree_hash against current tree. Stale evidence causes J_CE3 to FAIL, blocking READY result.",
+      "remediation": "RESOLVED IN THIS PR (commit 61823514): simulation evidence regenerated to source_sha=87686edf, source_tree_hash=76c95b30... matching current HEAD tree content. J_CE3 passes on canonical main post-merge.",
+      "owner": "Resolved — Engineering",
+      "blocking_run3": false,
+      "resolved_in_pr": "#760 (commit 61823514)"
     },
     {
       "id": "FP-003",
@@ -35,18 +36,7 @@
       "impact": "If the reader role is inadvertently destroyed during or after the ceremony, the independent audit read authority needed for post-teardown historical verification is lost. This is a permanent loss — IAM roles cannot be restored with the same ARN once deleted.",
       "remediation": "1. Add aws_iam_role.vault_audit_reader and aws_iam_role_policy_attachment.vault_audit_reader to ceremony_state.yaml preserved_aws_resources with lifecycle=PERSISTENT_AUDIT_AUTHORITY. 2. Add lifecycle { prevent_destroy = true } to both resources in infra/aws_audit.tf.",
       "owner": "Engineering (separate REPAIR PR before or concurrent with cost review)",
-      "blocking_run3": false
-    },
-    {
-      "id": "FP-004",
-      "severity": "P2",
-      "title": "Terraform resource count discrepancy: evaluator expects 21, audit counts 24",
-      "evidence": "services/governance/run3_operator_preflight.py EXPECTED_INVENTORY_COUNT=21. Reading infra/*.tf identifies: hcp_hvn.frostgate, hcp_vault_cluster.customer_zero (2); vault_mount.transit (1); 3 transit keys (3); vault_auth_backend.approle (1); 3 approle roles (3); 3 vault policies (3); aws_cloudwatch_log_group.vault_audit (1); aws_iam_user.vault_audit, aws_iam_policy.vault_audit, aws_iam_user_policy_attachment.vault_audit (3); aws_iam_role.vault_audit_reader, aws_iam_policy.vault_audit_reader, aws_iam_role_policy_attachment.vault_audit_reader (3). Total managed resources: 24.",
-      "affected_control": "Resource inventory check in run3_operator_preflight.py",
-      "impact": "If the actual `terraform plan` shows 24 resources but the evaluator expects 21, the inventory check may pass or fail incorrectly depending on how the count is derived. The manifest fingerprint is bound to the inventory fingerprint — a discrepancy here means the fingerprint is not accurately representing the deployment scope.",
-      "remediation": "Audit infra/*.tf to determine whether the 21-count comes from excluding data sources, the AWS reader resources, or another counting method. Update EXPECTED_INVENTORY_COUNT to match the actual resource count, or document the exclusion criteria.",
-      "owner": "Engineering (before final human cost review package)",
-      "blocking_run3": false
+      "blocking_run3": true
     },
     {
       "id": "FP-005",
@@ -96,9 +86,9 @@
   "summary": {
     "p0_count": 0,
     "p1_count": 3,
-    "p2_count": 5,
-    "total_count": 8,
+    "p2_count": 4,
+    "total_count": 7,
     "blocking_run3": 2,
-    "note": "FP-001 blocks cost authorization (not ceremony itself); FP-002 blocks readiness evaluator from returning READY on current SHA. Both are resolvable without paid infrastructure. FP-003 through FP-008 are improvements that do not independently block Run 3."
+    "note": "FP-001 blocks cost authorization package (unverified HCP pricing). FP-002 resolved in this PR (simulation evidence regenerated). FP-003 blocks ceremony preparation: reader role must have prevent_destroy and be in preserved resources before Run 3. FP-005 through FP-008 are improvement items. FP-004 retracted: initial count was wrong (20 managed resources + 1 data source = 21, matching EXPECTED_INVENTORY_COUNT=21 — no discrepancy)."
   }
 }

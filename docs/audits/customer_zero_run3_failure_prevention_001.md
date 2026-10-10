@@ -4,7 +4,7 @@
 **Canonical Source SHA:** ec8684df4699be43b40d1edc9a79b58fd23e3637
 **Audit Date:** 2026-10-09
 **Work Class:** OFFLINE_PREPARATION
-**Roadmap Authority:** CZ-RUN3-FAILURE-PREVENTION-001 (added to next_sequence 2026-10-09, self-authorized via governance amendment — same pattern as PRs #757, #759)
+**Roadmap Authority:** CZ-RUN3-FAILURE-PREVENTION-001 (added to next_sequence 2026-10-09 under Freeze Law criterion 3 — measurably reduces delivery risk; evidence: $321.81 spent across two failed ceremonies)
 
 ---
 
@@ -12,9 +12,9 @@
 
 This audit reconstructed the failure modes from Customer-Zero trust ceremony Runs 1 and 2, subjected the offline readiness machinery to adversarial challenge, reviewed the CloudWatch/Vault audit integration, assessed Terraform resource safety, evaluated the cost model, and examined evidence completeness and teardown reliability. Two verified P0 defects from prior runs (DEFECT-PROVENANCE-INTEGRITY and DEFECT-VERIFIER-CONTRACT) are confirmed repaired in PRs #750 and #751 respectively. The offline readiness machinery (three evaluators: `customer_zero_final_readiness.py`, `customer_zero_run3_preauth.py`, `customer_zero_run3_operator_preflight.py`) is verified to be adversarially sound with no false-positive path to PREPARED_FOR_HUMAN_REVIEW that bypasses real checks.
 
-The audit finds **no P0 findings that block Run 3 categorically**. There are three P1 findings requiring remediation before or at the start of the ceremony: (FP-001) HCP Vault Dedicated pricing is unverified in this offline audit and must be confirmed before cost authorization; (FP-002) the offline simulation evidence JSON is bound to a stale source SHA (988cda57) rather than the canonical main SHA (ec8684df) and must be regenerated before human cost review; (FP-003) the `aws_iam_role.vault_audit_reader` resource exists in Terraform but is not among the four resources listed as PRESERVE_AFTER_CEREMONY in `ceremony_state.yaml`, creating an ambiguous teardown obligation. Five P2 findings are noted as improvements that strengthen ceremony confidence but do not block it.
+The audit finds **no P0 findings**. Two P1 findings remain open: (FP-001) HCP Vault Dedicated pricing is unverified in this offline audit and must be confirmed before cost authorization; (FP-003) `aws_iam_role.vault_audit_reader` exists in Terraform but is absent from `ceremony_state.yaml` preserved_aws_resources and lacks `lifecycle { prevent_destroy = true }` — permanent loss of post-ceremony audit read authority if destroyed (P1 = must remediate before Run 3). FP-002 (stale simulation evidence) was identified and resolved within this PR (commit 61823514). Four P2 findings are noted as improvements that do not independently block the ceremony. FP-004 is retracted: the initial resource count of 24 was an arithmetic error; actual count is 20 managed resources + 1 data source = 21, matching `EXPECTED_INVENTORY_COUNT=21`.
 
-**Decision:** OFFLINE_AUDIT_PASS — the ceremony is NOT authorized (that remains a separate human decision), but no finding identified here independently blocks the ceremony from proceeding once the P1 findings are resolved and human cost authorization is obtained.
+**Decision:** OFFLINE_AUDIT_PASS — the ceremony is NOT authorized (that remains a separate human decision). Two open P1 findings (FP-001, FP-003) must be resolved before Run 3 can proceed: FP-001 before the cost authorization package is finalized, FP-003 as a REPAIR PR before or concurrent with cost review.
 
 ---
 
@@ -98,9 +98,7 @@ The 21-resource Terraform inventory is composed of:
 | AWS IAM WRITER (3) | `aws_iam_user.vault_audit`, `aws_iam_policy.vault_audit`, `aws_iam_user_policy_attachment.vault_audit` |
 | AWS IAM READER (3) | `aws_iam_role.vault_audit_reader`, `aws_iam_policy.vault_audit_reader`, `aws_iam_role_policy_attachment.vault_audit_reader` |
 
-Total: 24 Terraform-managed resources (the 21-resource count used in the preauth evaluator may count only HCP + Vault + AWS WRITER + CloudWatch = 2+1+3+3+3+1+3 = 16; exact count should be reconciled before plan review).
-
-**Finding FP-004 (P2):** The preauth evaluator uses `EXPECTED_INVENTORY_COUNT = 21` but this audit counts 24 distinct Terraform-managed resources from reading the `.tf` files. This discrepancy should be reconciled before the final human cost review package is produced. The likely explanation is that some resources are data sources or outputs rather than managed resources, but this should be explicitly verified.
+Total: 20 Terraform-managed resources + 1 data source (`data.hcp_project.frostgate_production`) = 21 inventory entries. This matches `EXPECTED_INVENTORY_COUNT = 21` in `run3_operator_preflight.py`. No discrepancy. ~~FP-004 retracted~~ — initial count of 24 was an arithmetic error (2+1+3+1+3+3+1+3+3 = 20 managed, not 24).
 
 ### Protected Resource Assessment
 
@@ -258,14 +256,14 @@ None. No findings categorically block Run 3.
 | ID | Title | Blocking Run 3 | Remediation |
 |----|-------|---------------|-------------|
 | FP-001 | HCP Vault Dedicated pricing unverified — must confirm before cost authorization | Yes (blocks cost review, not ceremony itself) | Human operator confirms current pricing in HCP portal as part of CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 |
-| FP-002 | Offline simulation evidence bound to stale source SHA (988cda57 vs ec8684df) | Yes (readiness evaluator will fail J_CE3 dimension) | Regenerate: `python tools/ci/run_offline_ceremony_simulation.py --repo . --output customer_one/offline_simulation_evidence.json` |
-| FP-003 | `aws_iam_role.vault_audit_reader` absent from preserved resources list and lacks `prevent_destroy = true` | No (blocks post-ceremony audit verification if destroyed) | Add to `ceremony_state.yaml` preserved_aws_resources; add `lifecycle { prevent_destroy = true }` to `infra/aws_audit.tf` reader resources |
+| FP-002 | Offline simulation evidence bound to stale source SHA (988cda57 vs ec8684df) | **Resolved in this PR** (commit 61823514) | Regenerated: source_tree_hash=76c95b30... matching current HEAD |
+| FP-003 | `aws_iam_role.vault_audit_reader` absent from preserved resources list and lacks `prevent_destroy = true` | **Yes** — permanent loss of post-ceremony audit read authority if destroyed | Add to `ceremony_state.yaml` preserved_aws_resources; add `lifecycle { prevent_destroy = true }` to `infra/aws_audit.tf` reader resources |
 
 ### P2 Findings
 
 | ID | Title | Blocking Run 3 |
 |----|-------|---------------|
-| FP-004 | Terraform resource count discrepancy (21 expected vs 24 counted) | No |
+| ~~FP-004~~ | ~~Terraform resource count discrepancy~~ | Retracted — arithmetic error; 20 managed + 1 data = 21, matches evaluator |
 | FP-005 | IAM WRITER resources lack `prevent_destroy = true` | No |
 | FP-006 | Offline rehearsal does not simulate provisioning failure or partial teardown | No |
 | FP-007 | No automated runtime watchdog — abort deadline enforced by operator discipline only | No |
@@ -276,12 +274,11 @@ None. No findings categorically block Run 3.
 ## Recommended Remediation Sequence
 
 1. **Before human cost review (CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001):**
-   - FP-002: Regenerate `offline_simulation_evidence.json` on canonical main
-   - FP-003: Patch `ceremony_state.yaml` preserved resources; patch `infra/aws_audit.tf` reader lifecycle
-   - FP-001: Confirm current HCP Vault Dedicated pricing in portal (must be live check)
+   - ~~FP-002~~: Resolved in this PR — simulation evidence regenerated (commit 61823514)
+   - FP-003: REPAIR PR — add `prevent_destroy = true` to reader role resources in `infra/aws_audit.tf`; add to `ceremony_state.yaml` preserved_aws_resources
+   - FP-001: Confirm current HCP Vault Dedicated pricing in portal (must be live check; cannot be performed offline)
 
 2. **Before ceremony execution (after cost authorization):**
-   - FP-004: Reconcile 21 vs 24 resource count discrepancy in preauth evaluator
    - FP-005: Add `prevent_destroy = true` to IAM WRITER resources
 
 3. **As improvement items (REPAIR class, do not block ceremony):**
