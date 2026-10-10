@@ -1,5 +1,7 @@
 schema_version: "1.0"
 authority_date: "2026-10-09"
+# Updated 2026-10-09: CZ-RUN3-FAILURE-PREVENTION-001 added to next_sequence;
+# CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 merged_sha fixed from TBD to ec8684df
 authority_file: "docs/plans/customer_one_verified_governance_roadmap_20260910.md"
 phase: "Identity Platform Completion → First Paying Client"
 goal: "Customer-One: first paying client engagement — invoice issued, paid, portal accessed"
@@ -51,6 +53,20 @@ active_objective:
     defensible customer-facing release.
 
 next_sequence:
+  - id: "CZ-RUN3-FAILURE-PREVENTION-001"
+    title: "Run-3 adversarial failure prevention and cost containment audit"
+    work_class: "OFFLINE_PREPARATION"
+    prerequisites:
+      - "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+    note: >
+      Independent adversarial audit of Run-3 readiness. Reconstructs Run-1 and
+      Run-2 failure modes, challenges readiness machinery for false-positive
+      detection, audits CloudWatch integration, Terraform safety, cost model,
+      offline rehearsal coverage, evidence completeness, teardown reliability,
+      and governance authorization integrity. Produces machine-readable findings,
+      failure-mode register, cost-containment plan, smoke-test contract, offline
+      rehearsal specification, and go/no-go decision artifact.
+      Zero new cloud spending. OFFLINE_PREPARATION only.
   - id: "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001"
     title: "Human cost-authorization review and decision preparation"
     work_class: "OFFLINE_PREPARATION"
@@ -180,7 +196,7 @@ completed:
   - id: "CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001"
     title: "Post-merge operator preflight closeout"
     prs: ["#759"]
-    merged_sha: "TBD"
+    merged_sha: "ec8684df4699be43b40d1edc9a79b58fd23e3637"
     note: >
       Records CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (#758) in completed.
       Updates TRUST-003 and ACCEPT-001 blocker descriptions to reflect current

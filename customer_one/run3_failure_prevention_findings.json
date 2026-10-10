@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "CZ-RUN3-FAILURE-PREVENTION-001",
+  "audit_date": "2026-10-09",
+  "canonical_sha": "ec8684df4699be43b40d1edc9a79b58fd23e3637",
+  "findings": [
+    {
+      "id": "FP-001",
+      "severity": "P1",
+      "title": "HCP Vault Dedicated pricing unverified — must confirm before cost authorization",
+      "evidence": "infra/hcp_cluster.tf specifies tier=standard_small; no live pricing confirmation is possible in OFFLINE_PREPARATION. Historical $321.81 (ceremony_state.yaml cost_containment.historical_october_usage_usd) covers Runs 1+2 and is consumed. No current pricing figure is available offline.",
+      "affected_control": "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 cost authorization package",
+      "impact": "Cost authorization decision cannot be correctly bounded without confirmed current HCP pricing. Using stale or estimated pricing risks authorizing an amount that is insufficient or misleading.",
+      "remediation": "Human operator must log into HCP portal and confirm current HCP Vault Dedicated (standard_small, us-east-1) pricing before the cost authorization package is finalized. This is a live check and cannot be performed offline.",
+      "owner": "Human operator (Jason Cosat) at CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001",
+      "blocking_run3": true
+    },
+    {
+      "id": "FP-002",
+      "severity": "P1",
+      "title": "Offline simulation evidence bound to stale source SHA",
+      "evidence": "customer_one/offline_simulation_evidence.json has source_sha=988cda57eaad3096e26fd511d95a2881190c4fd7 and source_tree_hash=14abbad18b7c3e6043c06dea21ca3c18fe5d560bab154b7e4b67a7c7cbcd748d. Canonical main SHA after PR #759 is ec8684df4699be43b40d1edc9a79b58fd23e3637. The tree hash will not match current main.",
+      "affected_control": "J_CE3 dimension in customer_zero_final_readiness.py",
+      "impact": "The final readiness evaluator validates simulation evidence source_tree_hash against current tree. Stale evidence will cause J_CE3 to FAIL, blocking READY result. All three evaluators will show degraded results.",
+      "remediation": "Run: python tools/ci/run_offline_ceremony_simulation.py --repo . --output customer_one/offline_simulation_evidence.json on canonical main (after this PR merges). Re-run all three evaluators to confirm READY / READY_FOR_HUMAN_COST_AUTHORIZATION / PREPARED_FOR_HUMAN_REVIEW.",
+      "owner": "Engineering (automated step before CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001)",
+      "blocking_run3": true
+    },
+    {
+      "id": "FP-003",
+      "severity": "P1",
+      "title": "aws_iam_role.vault_audit_reader absent from preserved resources list and lacks prevent_destroy",
+      "evidence": "infra/aws_audit.tf defines aws_iam_role.vault_audit_reader and aws_iam_role_policy_attachment.vault_audit_reader without lifecycle { prevent_destroy = true }. ceremony_state.yaml preserved_aws_resources lists only 4 resources: aws_cloudwatch_log_group.vault_audit, aws_iam_policy.vault_audit, aws_iam_user.vault_audit, aws_iam_user_policy_attachment.vault_audit. The reader role is omitted.",
+      "affected_control": "Post-ceremony audit read authority (independent verification at Checkpoint Q and post-teardown)",
+      "impact": "If the reader role is inadvertently destroyed during or after the ceremony, the independent audit read authority needed for post-teardown historical verification is lost. This is a permanent loss — IAM roles cannot be restored with the same ARN once deleted.",
+      "remediation": "1. Add aws_iam_role.vault_audit_reader and aws_iam_role_policy_attachment.vault_audit_reader to ceremony_state.yaml preserved_aws_resources with lifecycle=PERSISTENT_AUDIT_AUTHORITY. 2. Add lifecycle { prevent_destroy = true } to both resources in infra/aws_audit.tf.",
+      "owner": "Engineering (separate REPAIR PR before or concurrent with cost review)",
+      "blocking_run3": false
+    },
+    {
+      "id": "FP-004",
+      "severity": "P2",
+      "title": "Terraform resource count discrepancy: evaluator expects 21, audit counts 24",
+      "evidence": "services/governance/run3_operator_preflight.py EXPECTED_INVENTORY_COUNT=21. Reading infra/*.tf identifies: hcp_hvn.frostgate, hcp_vault_cluster.customer_zero (2); vault_mount.transit (1); 3 transit keys (3); vault_auth_backend.approle (1); 3 approle roles (3); 3 vault policies (3); aws_cloudwatch_log_group.vault_audit (1); aws_iam_user.vault_audit, aws_iam_policy.vault_audit, aws_iam_user_policy_attachment.vault_audit (3); aws_iam_role.vault_audit_reader, aws_iam_policy.vault_audit_reader, aws_iam_role_policy_attachment.vault_audit_reader (3). Total managed resources: 24.",
+      "affected_control": "Resource inventory check in run3_operator_preflight.py",
+      "impact": "If the actual `terraform plan` shows 24 resources but the evaluator expects 21, the inventory check may pass or fail incorrectly depending on how the count is derived. The manifest fingerprint is bound to the inventory fingerprint — a discrepancy here means the fingerprint is not accurately representing the deployment scope.",
+      "remediation": "Audit infra/*.tf to determine whether the 21-count comes from excluding data sources, the AWS reader resources, or another counting method. Update EXPECTED_INVENTORY_COUNT to match the actual resource count, or document the exclusion criteria.",
+      "owner": "Engineering (before final human cost review package)",
+      "blocking_run3": false
+    },
+    {
+      "id": "FP-005",
+      "severity": "P2",
+      "title": "IAM WRITER resources lack prevent_destroy lifecycle protection",
+      "evidence": "infra/aws_audit.tf: aws_iam_user.vault_audit, aws_iam_policy.vault_audit, and aws_iam_user_policy_attachment.vault_audit do not have lifecycle { prevent_destroy = true } blocks. aws_cloudwatch_log_group.vault_audit does have prevent_destroy = true.",
+      "affected_control": "Preserved AWS audit authority after teardown",
+      "impact": "The WRITER user and policy are listed in ceremony_state.yaml as PERSISTENT_AUDIT_AUTHORITY but are not Terraform-protected against accidental destroy. A mistaken terraform destroy on these resources would invalidate the audit authority.",
+      "remediation": "Add lifecycle { prevent_destroy = true } to aws_iam_user.vault_audit, aws_iam_policy.vault_audit, and aws_iam_user_policy_attachment.vault_audit in infra/aws_audit.tf.",
+      "owner": "Engineering (REPAIR PR)",
+      "blocking_run3": false
+    },
+    {
+      "id": "FP-006",
+      "severity": "P2",
+      "title": "Offline rehearsal does not simulate provisioning failure or partial teardown",
+      "evidence": "tools/ci/run_offline_ceremony_simulation.py runs 6 checks: trust_keys_generated, identity_domain_sign_verify, approval_domain_sign_verify, acceptance_domain_sign_verify, cross_domain_isolation, verifier_contract_fail_closed. No simulation of HCP provisioning failure (Case 12 in rehearsal spec), partial teardown (Case 13), or infrastructure timeout (Case 11).",
+      "affected_control": "Offline rehearsal coverage for highest-cost failure modes",
+      "impact": "The most expensive failure modes (provisioning hangs, partial teardown leaving billable resources) are not rehearsed offline. Operators have no practiced response for these scenarios.",
+      "remediation": "Extend the offline simulation with mock Terraform plan/apply/destroy dry-runs using local state. Add Cases 11, 12, 13 from the rehearsal specification. This is a REPAIR item and does not block Run 3.",
+      "owner": "Engineering (REPAIR item, pre-ceremony if time permits)",
+      "blocking_run3": false
+    },
+    {
+      "id": "FP-007",
+      "severity": "P2",
+      "title": "No automated runtime watchdog for ceremony time/cost limits",
+      "evidence": "Abort conditions in run3_operator_preflight.py map proof failures to abort codes but do not implement a wall-clock or accumulated-cost watchdog. The COST_THRESHOLD abort condition relies entirely on operator attention to elapsed time and estimated accruing cost.",
+      "affected_control": "Cost containment during live ceremony execution",
+      "impact": "If the operator is focused on ceremony steps and loses track of elapsed time, the ceremony could exceed the authorized maximum runtime. No automated stop exists.",
+      "remediation": "Implement a simple wall-clock timestamp check at each ceremony checkpoint transition that compares elapsed time against the authorized maximum runtime. Emit a prominent warning at 75% of max runtime, and a hard stop signal at 100%.",
+      "owner": "Engineering (REPAIR item before Run 3)",
+      "blocking_run3": false
+    },
+    {
+      "id": "FP-008",
+      "severity": "P2",
+      "title": "Simulation evidence regeneration not explicit in operator preflight runbook",
+      "evidence": "docs/operations/customer_zero_run3_operator_preflight.md Prerequisites section lists 7 prerequisite PRs and 5 AWS resources but does not include an explicit step to regenerate customer_one/offline_simulation_evidence.json before running the preflight gate.",
+      "affected_control": "Operator preparation checklist completeness",
+      "impact": "An operator following the runbook mechanically may not regenerate simulation evidence, causing J_CE3 dimension failure in the final readiness evaluator.",
+      "remediation": "Add an explicit step to the runbook Prerequisites section: 'Regenerate simulation evidence: python tools/ci/run_offline_ceremony_simulation.py --repo . --output customer_one/offline_simulation_evidence.json'.",
+      "owner": "Engineering (add to runbook, REPAIR class)",
+      "blocking_run3": false
+    }
+  ],
+  "summary": {
+    "p0_count": 0,
+    "p1_count": 3,
+    "p2_count": 5,
+    "total_count": 8,
+    "blocking_run3": 2,
+    "note": "FP-001 blocks cost authorization (not ceremony itself); FP-002 blocks readiness evaluator from returning READY on current SHA. Both are resolvable without paid infrastructure. FP-003 through FP-008 are improvements that do not independently block Run 3."
+  }
+}

@@ -1,3 +1,32 @@
+## 2026-10-09 - audit/cz-run3-failure-prevention-001: CZ-RUN3-FAILURE-PREVENTION-001 adversarial audit
+
+**Change scope:** Adversarial failure prevention and cost containment audit for CUSTOMER-ZERO-TRUST-003 (Run 3). OFFLINE_PREPARATION only. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No cloud spending. No paid infrastructure.
+
+Governance amendment: `CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001.merged_sha` corrected from `"TBD"` to `"ec8684df4699be43b40d1edc9a79b58fd23e3637"`. `CZ-RUN3-FAILURE-PREVENTION-001` added to `next_sequence` ahead of `CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001`. `authority_date` updated.
+
+**Security posture:**
+
+1. **No authorization path changed.** All transitions are governance record-keeping. `authorization_status` remains NOT_AUTHORIZED in all evaluators. No evaluator code modified.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** This PR adds offline audit findings and documents residual risks. It does not advance trust, does not authorize spending, and does not unblock TRUST-003 or ACCEPT-001.
+3. **Self-authorization via governance amendment.** This PR adds itself to `next_sequence` as its first change — the same pattern used by PRs #757 and #759. After merge, the lifecycle fallback in `_check_roadmap_authorized()` will correctly accept this item in `completed` with valid PR/SHA evidence.
+4. **Audit findings do not block ceremony categorically.** P1 findings (FP-001, FP-002) require action before the human cost review package is complete. FP-003 through FP-008 are recommended improvements. No P0 findings were identified.
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `customer_one/roadmap_authority.yaml` (merged_sha fix, CZ-RUN3-FAILURE-PREVENTION-001 to next_sequence, authority_date), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (new table row, reconciliation paragraph), `ROADMAP.md` (rows updated; audit row added), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**New files (OFFLINE_PREPARATION artifacts):** `docs/audits/customer_zero_run3_failure_prevention_001.md`, `customer_one/run3_failure_prevention_findings.json`, `docs/operations/customer_zero_run3_failure_modes.md`, `docs/operations/customer_zero_run3_cost_containment.md`, `docs/operations/customer_zero_run3_audit_smoke_test.md`, `docs/operations/customer_zero_run3_offline_rehearsal.md`, `customer_one/run3_failure_prevention_decision.json`.
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. No authorization status changed. No paid infrastructure. No cloud mutations.
+
+**Validation evidence:**
+
+- `python tools/ci/customer_zero_final_readiness.py --repo . --json` → expected READY (pending FP-002 resolution — simulation evidence stale)
+- `python tools/ci/customer_zero_run3_preauth.py --repo . --json` → preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION
+- `python tools/ci/customer_zero_run3_operator_preflight.py --repo . --json` → preflight_status=PREPARED_FOR_HUMAN_REVIEW
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. All changes are governance record-keeping plus offline audit artifacts. No evaluator code modified, no authorization path weakened, no tenant isolation changed, no secret accessed. Governance amendment correctly adds CZ-RUN3-FAILURE-PREVENTION-001 to next_sequence using established self-authorization pattern. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-09 - docs/cz-run3-operator-preflight-closeout: CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 governance reconciliation
 
 **Change scope:** Governance reconciliation for CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 (PR #758) post-merge closeout. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes.

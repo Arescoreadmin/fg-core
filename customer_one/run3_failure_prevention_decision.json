@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "decision_id": "CZ-RUN3-FAILURE-PREVENTION-DECISION-001",
+  "audit_date": "2026-10-09",
+  "canonical_sha": "ec8684df4699be43b40d1edc9a79b58fd23e3637",
+  "audit_outcome": "OFFLINE_AUDIT_PASS",
+  "review_readiness": "READY_FOR_HUMAN_REVIEW",
+  "live_proof_status": "LIVE_PROOF_PENDING",
+  "spending_authorization": "NOT_AUTHORIZED",
+  "run3_authorized": false,
+  "blocking_findings": [
+    {
+      "id": "FP-001",
+      "severity": "P1",
+      "title": "HCP Vault Dedicated pricing unverified",
+      "blocks": "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001",
+      "resolution": "Human operator confirms current pricing in HCP portal before cost authorization package is finalized"
+    },
+    {
+      "id": "FP-002",
+      "severity": "P1",
+      "title": "Offline simulation evidence bound to stale source SHA",
+      "blocks": "J_CE3 dimension in customer_zero_final_readiness.py",
+      "resolution": "Regenerate customer_one/offline_simulation_evidence.json by running python tools/ci/run_offline_ceremony_simulation.py --repo . --output customer_one/offline_simulation_evidence.json on canonical main after PR #760 merges"
+    }
+  ],
+  "constraints": [
+    "CUSTOMER_ZERO_TRUST remains NOT_PROVEN — no ceremony has been executed under Run 3",
+    "PAID_HCP_INFRASTRUCTURE remains ABSENT — this audit contains zero cloud spending",
+    "COST_AUTHORIZATION remains NOT_AUTHORIZED — explicit human authorization required before any spending",
+    "THIRD_PAID_CEREMONY remains NOT_AUTHORIZED — awaiting human cost authorization",
+    "CUSTOMER-ZERO-TRUST-003 remains BLOCKED — all offline prerequisites are complete but live execution is not authorized",
+    "CUSTOMER-ZERO-ACCEPT-001 remains BLOCKED — blocked on CUSTOMER-ZERO-TRUST-003",
+    "FP-001 and FP-002 must be resolved before CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 can produce a complete cost authorization package",
+    "FP-003, FP-004, FP-005 are recommended before ceremony but do not independently block it",
+    "FP-006, FP-007, FP-008 are REPAIR items; improvement recommended but do not block ceremony",
+    "HCP Vault Dedicated pricing is UNVERIFIED in this offline audit — do not use $321.81 historical figure as a cost ceiling for Run 3"
+  ],
+  "next_authorized_action": "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001",
+  "audit_notes": {
+    "p0_findings": 0,
+    "p1_findings": 3,
+    "p2_findings": 5,
+    "total_findings": 8,
+    "findings_blocking_run3": 2,
+    "historical_cost_usd": 321.81,
+    "historical_cost_status": "CONSUMED — covers Runs 1 and 2; not a valid ceiling for Run 3",
+    "work_class": "OFFLINE_PREPARATION",
+    "cloud_spending": 0,
+    "paid_infrastructure_created": false,
+    "secrets_accessed": false,
+    "authorization_status_changed": false,
+    "canonical_truth_preserved": true
+  }
+}
