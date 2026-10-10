@@ -121,12 +121,20 @@ cost_containment:
     - address: "aws_iam_user_policy_attachment.vault_audit"
       status: "ACTIVE"
       lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+    - address: "aws_iam_role.vault_audit_reader"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
+    - address: "aws_iam_role_policy_attachment.vault_audit_reader"
+      status: "ACTIVE"
+      lifecycle: "PERSISTENT_AUDIT_AUTHORITY"
 
   preservation_invariant: >
     No teardown completion state authorizes deletion of persistent AWS audit
-    resources. These resources are NOT ceremony-scoped. They are the durable
-    audit boundary required for any future ceremony. Cost containment does not
-    change CUSTOMER_ZERO_TRUST_NOT_PROVEN.
+    resources. These 6 resources (4 WRITER + 2 READER) are NOT ceremony-scoped.
+    They are the durable audit boundary required for any future ceremony.
+    The READER role (aws_iam_role.vault_audit_reader) and its policy attachment
+    are required for independent historical verification post-teardown.
+    Cost containment does not change CUSTOMER_ZERO_TRUST_NOT_PROVEN.
 
 # ---------------------------------------------------------------------------
 # THIRD CEREMONY PREREQUISITES

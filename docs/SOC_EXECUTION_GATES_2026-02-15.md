@@ -1,3 +1,35 @@
+## 2026-10-10 - repair/cz-run3-audit-preservation-001: CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 FP-003 repair
+
+**Change scope:** REPAIR-class PR. Implements FP-003 from merged audit PR #760. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No cloud spending. No paid infrastructure. Infra change is static Terraform lifecycle annotation only — no resource creation, no destruction, no plan mutation.
+
+Infra change: `infra/aws_audit.tf` — adds `lifecycle { prevent_destroy = true }` to `aws_iam_role.vault_audit_reader` and `aws_iam_role_policy_attachment.vault_audit_reader`. Does not change resource addresses, names, tags, trust policies, or IAM permissions. Does not change EXPECTED_INVENTORY_COUNT (21).
+
+Governance amendment: `CZ-RUN3-FAILURE-PREVENTION-001` moved from `next_sequence` to `completed` (prs=["#760"], merged_sha=4ab4fe62). `authority_date` updated to 2026-10-10. `customer_one/ceremony_state.yaml` preserved_aws_resources extended from 4 to 6 entries.
+
+**Security posture:**
+
+1. **No authorization path changed.** All transitions are governance record-keeping or static Terraform safety annotation. `authorization_status` remains NOT_AUTHORIZED in all evaluators. No evaluator code modified.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** This REPAIR PR narrows risk (prevents accidental Terraform destroy of the audit reader role) without advancing trust, authorizing spending, or unblocking TRUST-003 or ACCEPT-001.
+3. **Infra change is additive and non-destructive.** Adding `prevent_destroy = true` to existing resources cannot create infrastructure, incur costs, or delete existing infrastructure. The Terraform resource count remains 21.
+4. **REPAIR class is always authorized.** No Freeze Law justification required per `customer_one/roadmap_authority.yaml` `work_classes.REPAIR.gate = OPEN`.
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `infra/aws_audit.tf` (lifecycle blocks added), `customer_one/ceremony_state.yaml` (preserved_aws_resources extended to 6), `customer_one/roadmap_authority.yaml` (CZ-RUN3-FAILURE-PREVENTION-001 to completed, authority_date), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (table rows updated, reconciliation paragraph), `ROADMAP.md` (rows updated), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry added).
+
+**New files:** `tests/test_cz_run3_audit_preservation_repair_001.py` (14 adversarial tests FP003-T01–T14), `customer_one/run3_fp003_remediation_evidence.json` (FP-003 remediation evidence record).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. No authorization status changed. No paid infrastructure. No cloud mutations.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_audit_preservation_repair_001.py -v` → 14 passed (FP003-T01–T14)
+- `python tools/ci/customer_zero_final_readiness.py --repo . --json` → result=READY
+- `python tools/ci/customer_zero_run3_preauth.py --repo . --json` → preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION
+- `python tools/ci/customer_zero_run3_operator_preflight.py --repo . --json` → preflight_status=PREPARED_FOR_HUMAN_REVIEW
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Infra change is a static lifecycle annotation (additive, non-destructive). No evaluator code modified, no authorization path weakened, no tenant isolation changed, no secret accessed. Governance amendment correctly moves CZ-RUN3-FAILURE-PREVENTION-001 to completed using established pattern. Canonical Customer-Zero truth preserved.
+
 ## 2026-10-09 - audit/cz-run3-failure-prevention-001: CZ-RUN3-FAILURE-PREVENTION-001 adversarial audit
 
 **Change scope:** Adversarial failure prevention and cost containment audit for CUSTOMER-ZERO-TRUST-003 (Run 3). OFFLINE_PREPARATION only. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No cloud spending. No paid infrastructure.
