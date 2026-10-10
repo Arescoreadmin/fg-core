@@ -41,18 +41,23 @@ HISTORICAL_COST_USD = 321.81
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_request() -> dict:
     return json.loads(REQUEST_FILE.read_text())
+
 
 def _load_pricing() -> dict:
     return json.loads(PRICING_FILE.read_text())
 
+
 def _load_risk_register() -> dict:
     return json.loads(FINANCIAL_RISK_FILE.read_text())
+
 
 def _import_verifier():
     import importlib.util
     import sys
+
     name = "customer_zero_cost_review"
     if name in sys.modules:
         return sys.modules[name]
@@ -62,9 +67,11 @@ def _import_verifier():
     spec.loader.exec_module(mod)
     return mod
 
+
 def _import_watchdog():
     import importlib.util
     import sys
+
     name = "run3_operator_watchdog"
     if name in sys.modules:
         return sys.modules[name]
@@ -74,9 +81,11 @@ def _import_watchdog():
     spec.loader.exec_module(mod)
     return mod
 
+
 def _import_cost_model():
     import importlib.util
     import sys
+
     name = "run3_cost_model"
     if name in sys.modules:
         return sys.modules[name]
@@ -91,30 +100,48 @@ def _import_cost_model():
 # COST-001: Authorization request file exists
 # ---------------------------------------------------------------------------
 
+
 def test_cost_001_request_file_exists():
     """COST-001: run3_cost_authorization_request.json exists."""
-    assert REQUEST_FILE.exists(), f"Authorization request file not found: {REQUEST_FILE}"
+    assert REQUEST_FILE.exists(), (
+        f"Authorization request file not found: {REQUEST_FILE}"
+    )
 
 
 # ---------------------------------------------------------------------------
 # COST-002: Authorization request schema fields present
 # ---------------------------------------------------------------------------
 
+
 def test_cost_002_request_required_fields():
     """COST-002: Authorization request contains all required schema fields."""
     req = _load_request()
     REQUIRED = [
-        "request_id", "schema_version", "canonical_source_sha",
-        "candidate_fingerprint", "infrastructure_fingerprint",
-        "pricing_evidence_fingerprint", "pricing_valid_until",
-        "hcp_organization", "hcp_project", "hcp_tier", "hcp_region",
-        "aws_account", "terraform_workspace",
-        "operator_identity", "approver_identity",
-        "requested_max_cost_usd", "requested_max_runtime_minutes",
-        "teardown_reserve_minutes", "authorization_expires_at",
-        "abort_conditions", "audit_smoke_test_contract",
-        "preserved_aws_resources", "evidence_manifest_reference",
-        "request_created_at", "request_status",
+        "request_id",
+        "schema_version",
+        "canonical_source_sha",
+        "candidate_fingerprint",
+        "infrastructure_fingerprint",
+        "pricing_evidence_fingerprint",
+        "pricing_valid_until",
+        "hcp_organization",
+        "hcp_project",
+        "hcp_tier",
+        "hcp_region",
+        "aws_account",
+        "terraform_workspace",
+        "operator_identity",
+        "approver_identity",
+        "requested_max_cost_usd",
+        "requested_max_runtime_minutes",
+        "teardown_reserve_minutes",
+        "authorization_expires_at",
+        "abort_conditions",
+        "audit_smoke_test_contract",
+        "preserved_aws_resources",
+        "evidence_manifest_reference",
+        "request_created_at",
+        "request_status",
     ]
     missing = [f for f in REQUIRED if f not in req]
     assert not missing, f"Missing required fields: {missing}"
@@ -123,6 +150,7 @@ def test_cost_002_request_required_fields():
 # ---------------------------------------------------------------------------
 # COST-003: Canonical SHA is bound correctly
 # ---------------------------------------------------------------------------
+
 
 def test_cost_003_canonical_sha_bound():
     """COST-003: canonical_source_sha is bound to 873148e84b9d9163bb13c8e3e185f5c47d43225e."""
@@ -137,6 +165,7 @@ def test_cost_003_canonical_sha_bound():
 # COST-004: Request status is BLOCKED_PRICING_UNVERIFIED
 # ---------------------------------------------------------------------------
 
+
 def test_cost_004_request_status_blocked():
     """COST-004: request_status is BLOCKED_PRICING_UNVERIFIED (FP-001 open)."""
     req = _load_request()
@@ -149,6 +178,7 @@ def test_cost_004_request_status_blocked():
 # ---------------------------------------------------------------------------
 # COST-005: Six preserved AWS resources in authorization request
 # ---------------------------------------------------------------------------
+
 
 def test_cost_005_six_preserved_resources():
     """COST-005: Authorization request lists all 6 preserved AWS resources."""
@@ -164,12 +194,15 @@ def test_cost_005_six_preserved_resources():
     ]
     for addr in EXPECTED:
         assert addr in preserved, f"Missing preserved resource: {addr}"
-    assert len(preserved) == 6, f"Expected exactly 6 preserved resources, got {len(preserved)}"
+    assert len(preserved) == 6, (
+        f"Expected exactly 6 preserved resources, got {len(preserved)}"
+    )
 
 
 # ---------------------------------------------------------------------------
 # COST-006: Pricing evidence file exists
 # ---------------------------------------------------------------------------
+
 
 def test_cost_006_pricing_file_exists():
     """COST-006: run3_pricing_evidence_schema.json exists."""
@@ -179,6 +212,7 @@ def test_cost_006_pricing_file_exists():
 # ---------------------------------------------------------------------------
 # COST-007: Pricing evidence shows FP-001 as OPEN
 # ---------------------------------------------------------------------------
+
 
 def test_cost_007_pricing_fp001_open():
     """COST-007: Pricing schema correctly marks FP-001 as OPEN."""
@@ -193,13 +227,20 @@ def test_cost_007_pricing_fp001_open():
 # COST-008: All pricing evidence fields are null (unverified)
 # ---------------------------------------------------------------------------
 
+
 def test_cost_008_pricing_evidence_null():
     """COST-008: All pricing evidence value fields are null (pricing unverified)."""
     pricing = _load_pricing()
     evidence = pricing.get("evidence", {})
     VALUE_FIELDS = [
-        "source", "source_url", "hourly_rate_usd", "billing_unit",
-        "rate_confirmed_at", "rate_valid_until", "verifier_identity", "fingerprint",
+        "source",
+        "source_url",
+        "hourly_rate_usd",
+        "billing_unit",
+        "rate_confirmed_at",
+        "rate_valid_until",
+        "verifier_identity",
+        "fingerprint",
     ]
     for field in VALUE_FIELDS:
         assert evidence.get(field) is None, (
@@ -210,6 +251,7 @@ def test_cost_008_pricing_evidence_null():
 # ---------------------------------------------------------------------------
 # COST-009: Pricing schema has capture procedure
 # ---------------------------------------------------------------------------
+
 
 def test_cost_009_pricing_capture_procedure():
     """COST-009: Pricing schema contains operator capture procedure."""
@@ -223,6 +265,7 @@ def test_cost_009_pricing_capture_procedure():
 # ---------------------------------------------------------------------------
 # COST-010: Pricing product matches infra/hcp_cluster.tf configuration
 # ---------------------------------------------------------------------------
+
 
 def test_cost_010_pricing_product_matches_infra():
     """COST-010: Pricing schema product fields match HCP cluster Terraform config."""
@@ -243,6 +286,7 @@ def test_cost_010_pricing_product_matches_infra():
 # COST-011: Financial fields are null in request
 # ---------------------------------------------------------------------------
 
+
 def test_cost_011_financial_fields_null():
     """COST-011: All financial fields are null until pricing is confirmed."""
     req = _load_request()
@@ -261,6 +305,7 @@ def test_cost_011_financial_fields_null():
 # COST-012: Identity fields are null
 # ---------------------------------------------------------------------------
 
+
 def test_cost_012_identity_fields_null():
     """COST-012: operator_identity and approver_identity are null — AI must not fill these."""
     req = _load_request()
@@ -276,6 +321,7 @@ def test_cost_012_identity_fields_null():
 # COST-013: Authorization expiry is null
 # ---------------------------------------------------------------------------
 
+
 def test_cost_013_authorization_expiry_null():
     """COST-013: authorization_expires_at is null — human approver must set."""
     req = _load_request()
@@ -287,6 +333,7 @@ def test_cost_013_authorization_expiry_null():
 # ---------------------------------------------------------------------------
 # COST-014: Historical $321.81 not used as cost ceiling
 # ---------------------------------------------------------------------------
+
 
 def test_cost_014_historical_cost_not_ceiling():
     """COST-014: $321.81 historical cost is not used as requested_max_cost_usd."""
@@ -306,6 +353,7 @@ def test_cost_014_historical_cost_not_ceiling():
 # COST-015: Historical cost reference is marked CONSUMED in pricing schema
 # ---------------------------------------------------------------------------
 
+
 def test_cost_015_historical_cost_marked_consumed():
     """COST-015: Pricing schema marks $321.81 historical reference as consumed."""
     pricing = _load_pricing()
@@ -318,6 +366,7 @@ def test_cost_015_historical_cost_marked_consumed():
 # ---------------------------------------------------------------------------
 # COST-016: Verifier returns BLOCKED for current (unverified) state
 # ---------------------------------------------------------------------------
+
 
 def test_cost_016_verifier_returns_blocked():
     """COST-016: Independent verifier returns BLOCKED for current package state."""
@@ -334,6 +383,7 @@ def test_cost_016_verifier_returns_blocked():
 # COST-017: Verifier never returns APPROVED
 # ---------------------------------------------------------------------------
 
+
 def test_cost_017_verifier_never_approved():
     """COST-017: Independent verifier MUST NEVER return APPROVED."""
     verifier = _import_verifier()
@@ -347,6 +397,7 @@ def test_cost_017_verifier_never_approved():
 # ---------------------------------------------------------------------------
 # COST-018: Verifier detects FP-001 blocker
 # ---------------------------------------------------------------------------
+
 
 def test_cost_018_verifier_detects_fp001():
     """COST-018: Verifier explicitly identifies FP-001 (pricing unverified) as a blocker."""
@@ -365,6 +416,7 @@ def test_cost_018_verifier_detects_fp001():
 # COST-019: Verifier with manipulated SHA fails closed
 # ---------------------------------------------------------------------------
 
+
 def test_cost_019_verifier_wrong_sha_fails_closed(tmp_path):
     """COST-019: Verifier rejects authorization request with wrong canonical SHA."""
     req = _load_request()
@@ -373,7 +425,9 @@ def test_cost_019_verifier_wrong_sha_fails_closed(tmp_path):
     tampered.write_text(json.dumps(req))
     verifier = _import_verifier()
     result = verifier.verify_cost_review(tampered, PRICING_FILE)
-    sha_blocker = any("C05" in b or "canonical_source_sha" in b for b in result.blockers)
+    sha_blocker = any(
+        "C05" in b or "canonical_source_sha" in b for b in result.blockers
+    )
     assert sha_blocker, (
         f"Expected canonical SHA mismatch blocker. Blockers: {result.blockers}"
     )
@@ -382,6 +436,7 @@ def test_cost_019_verifier_wrong_sha_fails_closed(tmp_path):
 # ---------------------------------------------------------------------------
 # COST-020: Pending cost model outputs PENDING for all scenarios
 # ---------------------------------------------------------------------------
+
 
 def test_cost_020_pending_model_all_pending():
     """COST-020: Pending cost model outputs PENDING for all scenarios."""
@@ -399,6 +454,7 @@ def test_cost_020_pending_model_all_pending():
 # ---------------------------------------------------------------------------
 # COST-021: Cost model uses Decimal arithmetic (not float)
 # ---------------------------------------------------------------------------
+
 
 def test_cost_021_cost_model_decimal_arithmetic():
     """COST-021: Cost model calculations use Decimal, not float."""
@@ -427,6 +483,7 @@ def test_cost_021_cost_model_decimal_arithmetic():
 # COST-022: Cost model marks historical $321.81 as CONSUMED
 # ---------------------------------------------------------------------------
 
+
 def test_cost_022_cost_model_historical_consumed():
     """COST-022: Cost model marks historical $321.81 as CONSUMED in reference."""
     cost_model = _import_cost_model()
@@ -440,6 +497,7 @@ def test_cost_022_cost_model_historical_consumed():
 # ---------------------------------------------------------------------------
 # COST-023: Watchdog warns at 75% of effective max runtime
 # ---------------------------------------------------------------------------
+
 
 def test_cost_023_watchdog_warns_at_75pct():
     """COST-023: Watchdog emits WARN_75 when elapsed time >= 75% of effective max."""
@@ -463,6 +521,7 @@ def test_cost_023_watchdog_warns_at_75pct():
 # COST-024: Watchdog stops at 100% of effective max runtime
 # ---------------------------------------------------------------------------
 
+
 def test_cost_024_watchdog_stops_at_100pct():
     """COST-024: Watchdog emits should_stop=True at 100% of effective max."""
     watchdog = _import_watchdog()
@@ -483,6 +542,7 @@ def test_cost_024_watchdog_stops_at_100pct():
 # COST-025: Watchdog billing disclaimer is always present
 # ---------------------------------------------------------------------------
 
+
 def test_cost_025_watchdog_billing_disclaimer():
     """COST-025: Watchdog always includes billing disclaimer (not a guaranteed dollar cap)."""
     watchdog = _import_watchdog()
@@ -493,10 +553,16 @@ def test_cost_025_watchdog_billing_disclaimer():
     )
     wdog.start()
     status = wdog.check("test")
-    assert "billing" in status.billing_disclaimer.lower() or "delayed" in status.billing_disclaimer.lower(), (
+    assert (
+        "billing" in status.billing_disclaimer.lower()
+        or "delayed" in status.billing_disclaimer.lower()
+    ), (
         "Billing disclaimer must warn that cloud billing is delayed and cost is an estimate"
     )
-    assert "guaranteed" in status.billing_disclaimer.lower() or "estimate" in status.billing_disclaimer.lower(), (
+    assert (
+        "guaranteed" in status.billing_disclaimer.lower()
+        or "estimate" in status.billing_disclaimer.lower()
+    ), (
         "Billing disclaimer must state that the watchdog does not provide a guaranteed dollar cap"
     )
 
@@ -504,6 +570,7 @@ def test_cost_025_watchdog_billing_disclaimer():
 # ---------------------------------------------------------------------------
 # COST-026: Canonical truth preserved in authorization request
 # ---------------------------------------------------------------------------
+
 
 def test_cost_026_canonical_truth_preserved():
     """COST-026: Authorization request preserves all canonical truth invariants."""
@@ -527,20 +594,25 @@ def test_cost_026_canonical_truth_preserved():
 # COST-027: Ceremony state invariants unchanged
 # ---------------------------------------------------------------------------
 
+
 def test_cost_027_ceremony_state_invariants_unchanged():
     """COST-027: ceremony_state.yaml trust invariants are unchanged by this PR."""
     import yaml
+
     state = yaml.safe_load(CEREMONY_STATE_FILE.read_text())
     assert state["trust_proof_status"] == "NOT_PROVEN"
     assert state["third_paid_ceremony_status"] == "NOT_AUTHORIZED"
     assert state["infrastructure_lifecycle_status"] == "HCP_ABSENT"
-    preserved = [r["address"] for r in state["cost_containment"]["preserved_aws_resources"]]
+    preserved = [
+        r["address"] for r in state["cost_containment"]["preserved_aws_resources"]
+    ]
     assert len(preserved) == 6, f"Expected 6 preserved resources, got {len(preserved)}"
 
 
 # ---------------------------------------------------------------------------
 # COST-028: Financial risk register covers all key risks
 # ---------------------------------------------------------------------------
+
 
 def test_cost_028_financial_risk_register_complete():
     """COST-028: Financial risk register covers all key risks including FR-001 (pricing)."""

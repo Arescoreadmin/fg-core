@@ -48,6 +48,7 @@ from typing import Any
 # Pricing inputs
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PricingInputs:
     """Verified pricing inputs. All monetary values are Decimal.
@@ -55,9 +56,10 @@ class PricingInputs:
     These must be populated by the human operator after confirming pricing
     from the HCP portal. Do NOT use estimated or historical values here.
     """
-    hourly_rate_usd: Decimal          # HCP Vault Dedicated standard_small, us-east-1
-    billing_unit_minutes: int         # Billing granularity (e.g., 60 for hourly)
-    minimum_charge_usd: Decimal       # Minimum billable unit (may be 0)
+
+    hourly_rate_usd: Decimal  # HCP Vault Dedicated standard_small, us-east-1
+    billing_unit_minutes: int  # Billing granularity (e.g., 60 for hourly)
+    minimum_charge_usd: Decimal  # Minimum billable unit (may be 0)
     aws_cloudwatch_per_gb_usd: Decimal  # CloudWatch log ingestion (us-east-1)
     estimated_audit_volume_gb: Decimal  # Expected Vault audit log volume per ceremony
 
@@ -65,6 +67,7 @@ class PricingInputs:
 # ---------------------------------------------------------------------------
 # Scenario definitions
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ScenarioResult:
@@ -75,7 +78,7 @@ class ScenarioResult:
     description: str
     estimated_runtime_minutes_min: int
     estimated_runtime_minutes_max: int
-    hcp_cost_usd: str              # "PENDING" if unverified, else Decimal string
+    hcp_cost_usd: str  # "PENDING" if unverified, else Decimal string
     aws_cloudwatch_cost_usd: str
     total_cost_usd: str
     cost_note: str
@@ -96,7 +99,7 @@ class CostModel:
     scenario_c: ScenarioResult
     pricing_verified: bool
     pricing_note: str
-    historical_reference_usd: str    # Always "321.81 (CONSUMED — Runs 1+2 only)"
+    historical_reference_usd: str  # Always "321.81 (CONSUMED — Runs 1+2 only)"
     aws_note: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -169,6 +172,7 @@ def _apply_minimum(cost: Decimal, minimum: Decimal) -> Decimal:
 # ---------------------------------------------------------------------------
 # Model builders
 # ---------------------------------------------------------------------------
+
 
 def build_pending_cost_model() -> CostModel:
     """Build a PENDING cost model for use when pricing is unverified (FP-001 OPEN).
@@ -318,7 +322,9 @@ def build_cost_model(
     else:
         c_hcp_str = "PENDING"
         c_total_str = "PENDING"
-        c_note = "max_runtime_minutes not set — human approver must set before computing"
+        c_note = (
+            "max_runtime_minutes not set — human approver must set before computing"
+        )
         c_min_min = 0
         c_max_min = 0
 

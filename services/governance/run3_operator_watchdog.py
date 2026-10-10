@@ -55,6 +55,7 @@ from typing import Any
 # Watchdog state
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WatchdogStatus:
     """Current watchdog status snapshot."""
@@ -64,13 +65,13 @@ class WatchdogStatus:
     teardown_reserve_minutes: int
     effective_max_minutes: int  # max_runtime - teardown_reserve
     runtime_percent: float
-    should_warn: bool    # >= 75% of effective max
-    should_stop: bool    # >= 100% of effective max
+    should_warn: bool  # >= 75% of effective max
+    should_stop: bool  # >= 100% of effective max
     past_hard_deadline: bool  # >= 100% of max_runtime (including teardown reserve)
     estimated_cost_usd_accrued: str | None  # None if hourly rate unverified
     billing_disclaimer: str
     checkpoint_name: str
-    status_code: str     # OK | WARN_75 | STOP_EFFECTIVE_MAX | HARD_STOP
+    status_code: str  # OK | WARN_75 | STOP_EFFECTIVE_MAX | HARD_STOP
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +104,7 @@ class WatchdogCheckpoint:
 # ---------------------------------------------------------------------------
 # Watchdog implementation
 # ---------------------------------------------------------------------------
+
 
 class OperatorWatchdog:
     """Runtime and cost watchdog for the Customer-Zero trust ceremony.
@@ -206,7 +208,11 @@ class OperatorWatchdog:
             raise RuntimeError("Watchdog not started. Call start() first.")
 
         elapsed = self.elapsed_minutes()
-        pct = elapsed / self.effective_max_minutes if self.effective_max_minutes > 0 else 1.0
+        pct = (
+            elapsed / self.effective_max_minutes
+            if self.effective_max_minutes > 0
+            else 1.0
+        )
         should_warn = pct >= self.warn_at_pct
         should_stop = pct >= 1.0
         past_hard = elapsed >= self.max_runtime_minutes
@@ -221,13 +227,15 @@ class OperatorWatchdog:
         else:
             code = "OK"
 
-        self._checkpoints.append(WatchdogCheckpoint(
-            name=checkpoint_name,
-            elapsed_minutes=elapsed,
-            status_code=code,
-            timestamp_utc=datetime.now(UTC).isoformat(),
-            estimated_cost_usd_accrued=estimated_cost,
-        ))
+        self._checkpoints.append(
+            WatchdogCheckpoint(
+                name=checkpoint_name,
+                elapsed_minutes=elapsed,
+                status_code=code,
+                timestamp_utc=datetime.now(UTC).isoformat(),
+                estimated_cost_usd_accrued=estimated_cost,
+            )
+        )
 
         return WatchdogStatus(
             elapsed_minutes=elapsed,
@@ -257,7 +265,9 @@ class OperatorWatchdog:
             "effective_max_minutes": self.effective_max_minutes,
             "billing_disclaimer": self.BILLING_DISCLAIMER,
             "total_estimated_cost_usd": self._estimate_cost(total_elapsed),
-            "hourly_rate_used": str(self.hourly_rate_usd) if self.hourly_rate_usd else None,
+            "hourly_rate_used": str(self.hourly_rate_usd)
+            if self.hourly_rate_usd
+            else None,
             "checkpoints": [
                 {
                     "name": cp.name,

@@ -59,14 +59,16 @@ from typing import Any
 CANONICAL_SOURCE_SHA = "873148e84b9d9163bb13c8e3e185f5c47d43225e"
 WORK_ITEM_ID = "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001"
 
-EXPECTED_PRESERVED_RESOURCES = frozenset([
-    "aws_cloudwatch_log_group.vault_audit",
-    "aws_iam_policy.vault_audit",
-    "aws_iam_user.vault_audit",
-    "aws_iam_user_policy_attachment.vault_audit",
-    "aws_iam_role.vault_audit_reader",
-    "aws_iam_role_policy_attachment.vault_audit_reader",
-])
+EXPECTED_PRESERVED_RESOURCES = frozenset(
+    [
+        "aws_cloudwatch_log_group.vault_audit",
+        "aws_iam_policy.vault_audit",
+        "aws_iam_user.vault_audit",
+        "aws_iam_user_policy_attachment.vault_audit",
+        "aws_iam_role.vault_audit_reader",
+        "aws_iam_role_policy_attachment.vault_audit_reader",
+    ]
+)
 
 REQUIRED_REQUEST_FIELDS = [
     "request_id",
@@ -114,6 +116,7 @@ REQUIRED_PRICING_EVIDENCE_FIELDS = [
 # ---------------------------------------------------------------------------
 # Condition identifiers
 # ---------------------------------------------------------------------------
+
 
 class Condition:
     """22 fail-closed conditions. All must pass for READY_FOR_HUMAN_DECISION."""
@@ -188,6 +191,7 @@ class Condition:
 # Verification result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ConditionResult:
     id: str
@@ -208,12 +212,14 @@ class CostReviewVerification:
     blockers: list[str] = field(default_factory=list)
 
     # Canonical truth — always preserved, never modified by this module
-    canonical_truth: dict[str, str] = field(default_factory=lambda: {
-        "CUSTOMER_ZERO_TRUST": "NOT_PROVEN",
-        "THIRD_PAID_CEREMONY": "NOT_AUTHORIZED",
-        "PAID_HCP_INFRASTRUCTURE": "ABSENT",
-        "COST_AUTHORIZATION": "NOT_AUTHORIZED",
-    })
+    canonical_truth: dict[str, str] = field(
+        default_factory=lambda: {
+            "CUSTOMER_ZERO_TRUST": "NOT_PROVEN",
+            "THIRD_PAID_CEREMONY": "NOT_AUTHORIZED",
+            "PAID_HCP_INFRASTRUCTURE": "ABSENT",
+            "COST_AUTHORIZATION": "NOT_AUTHORIZED",
+        }
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -236,6 +242,7 @@ class CostReviewVerification:
 # Individual condition checks
 # ---------------------------------------------------------------------------
 
+
 def _check_file_exists(path: Path, condition_id: str, label: str) -> ConditionResult:
     if path.exists() and path.is_file():
         return ConditionResult(condition_id, True, f"{label} exists: {path}")
@@ -246,38 +253,45 @@ def _check_request_schema(req: dict) -> ConditionResult:
     missing = [f for f in REQUIRED_REQUEST_FIELDS if f not in req]
     if missing:
         return ConditionResult(
-            Condition.REQUEST_SCHEMA_VALID, False,
-            f"Missing required fields: {', '.join(missing)}"
+            Condition.REQUEST_SCHEMA_VALID,
+            False,
+            f"Missing required fields: {', '.join(missing)}",
         )
-    return ConditionResult(Condition.REQUEST_SCHEMA_VALID, True, "All required fields present")
+    return ConditionResult(
+        Condition.REQUEST_SCHEMA_VALID, True, "All required fields present"
+    )
 
 
 def _check_pricing_schema(pricing: dict) -> ConditionResult:
     evidence = pricing.get("evidence", {})
     if not isinstance(evidence, dict):
         return ConditionResult(
-            Condition.PRICING_SCHEMA_VALID, False,
-            "pricing.evidence is not a dict"
+            Condition.PRICING_SCHEMA_VALID, False, "pricing.evidence is not a dict"
         )
     missing = [f for f in REQUIRED_PRICING_EVIDENCE_FIELDS if f not in evidence]
     if missing:
         return ConditionResult(
-            Condition.PRICING_SCHEMA_VALID, False,
-            f"Missing pricing evidence fields: {', '.join(missing)}"
+            Condition.PRICING_SCHEMA_VALID,
+            False,
+            f"Missing pricing evidence fields: {', '.join(missing)}",
         )
-    return ConditionResult(Condition.PRICING_SCHEMA_VALID, True, "Pricing schema is valid")
+    return ConditionResult(
+        Condition.PRICING_SCHEMA_VALID, True, "Pricing schema is valid"
+    )
 
 
 def _check_canonical_sha(req: dict) -> ConditionResult:
     bound = req.get("canonical_source_sha")
     if bound == CANONICAL_SOURCE_SHA:
         return ConditionResult(
-            Condition.CANONICAL_SHA_BOUND, True,
-            f"canonical_source_sha correctly bound to {CANONICAL_SOURCE_SHA}"
+            Condition.CANONICAL_SHA_BOUND,
+            True,
+            f"canonical_source_sha correctly bound to {CANONICAL_SOURCE_SHA}",
         )
     return ConditionResult(
-        Condition.CANONICAL_SHA_BOUND, False,
-        f"canonical_source_sha mismatch: expected {CANONICAL_SOURCE_SHA!r}, got {bound!r}"
+        Condition.CANONICAL_SHA_BOUND,
+        False,
+        f"canonical_source_sha mismatch: expected {CANONICAL_SOURCE_SHA!r}, got {bound!r}",
     )
 
 
@@ -289,13 +303,11 @@ def _check_fp001_not_open(pricing: dict, req: dict) -> ConditionResult:
     blocked = req_status == "BLOCKED_PRICING_UNVERIFIED"
     if pricing_open or req_open or blocked:
         return ConditionResult(
-            Condition.PRICING_FP001_NOT_OPEN, False,
-            "FP-001 is OPEN — HCP pricing unverified. Human operator must confirm pricing from HCP portal."
+            Condition.PRICING_FP001_NOT_OPEN,
+            False,
+            "FP-001 is OPEN — HCP pricing unverified. Human operator must confirm pricing from HCP portal.",
         )
-    return ConditionResult(
-        Condition.PRICING_FP001_NOT_OPEN, True,
-        "FP-001 is not open"
-    )
+    return ConditionResult(Condition.PRICING_FP001_NOT_OPEN, True, "FP-001 is not open")
 
 
 def _check_pricing_evidence_populated(pricing: dict) -> ConditionResult:
@@ -303,12 +315,14 @@ def _check_pricing_evidence_populated(pricing: dict) -> ConditionResult:
     nulls = [f for f in REQUIRED_PRICING_EVIDENCE_FIELDS if evidence.get(f) is None]
     if nulls:
         return ConditionResult(
-            Condition.PRICING_EVIDENCE_POPULATED, False,
-            f"Pricing evidence fields are null (not yet confirmed): {', '.join(nulls)}"
+            Condition.PRICING_EVIDENCE_POPULATED,
+            False,
+            f"Pricing evidence fields are null (not yet confirmed): {', '.join(nulls)}",
         )
     return ConditionResult(
-        Condition.PRICING_EVIDENCE_POPULATED, True,
-        "All required pricing evidence fields are populated"
+        Condition.PRICING_EVIDENCE_POPULATED,
+        True,
+        "All required pricing evidence fields are populated",
     )
 
 
@@ -317,25 +331,29 @@ def _check_pricing_not_expired(pricing: dict) -> ConditionResult:
     valid_until = evidence.get("rate_valid_until")
     if valid_until is None:
         return ConditionResult(
-            Condition.PRICING_NOT_EXPIRED, False,
-            "rate_valid_until is null — cannot determine pricing validity"
+            Condition.PRICING_NOT_EXPIRED,
+            False,
+            "rate_valid_until is null — cannot determine pricing validity",
         )
     try:
         expiry = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
         now = datetime.now(UTC)
         if expiry < now:
             return ConditionResult(
-                Condition.PRICING_NOT_EXPIRED, False,
-                f"Pricing evidence has expired: {valid_until}"
+                Condition.PRICING_NOT_EXPIRED,
+                False,
+                f"Pricing evidence has expired: {valid_until}",
             )
         return ConditionResult(
-            Condition.PRICING_NOT_EXPIRED, True,
-            f"Pricing evidence valid until {valid_until}"
+            Condition.PRICING_NOT_EXPIRED,
+            True,
+            f"Pricing evidence valid until {valid_until}",
         )
     except (ValueError, AttributeError):
         return ConditionResult(
-            Condition.PRICING_NOT_EXPIRED, False,
-            f"rate_valid_until is not a parseable date: {valid_until!r}"
+            Condition.PRICING_NOT_EXPIRED,
+            False,
+            f"rate_valid_until is not a parseable date: {valid_until!r}",
         )
 
 
@@ -344,21 +362,26 @@ def _check_pricing_fingerprint(pricing: dict, req: dict) -> ConditionResult:
     req_fp = req.get("pricing_evidence_fingerprint")
     if evidence_fp is None or req_fp is None:
         return ConditionResult(
-            Condition.PRICING_FINGERPRINT_PRESENT, False,
-            "Pricing evidence fingerprint missing from pricing schema or authorization request"
+            Condition.PRICING_FINGERPRINT_PRESENT,
+            False,
+            "Pricing evidence fingerprint missing from pricing schema or authorization request",
         )
     if evidence_fp != req_fp:
         return ConditionResult(
-            Condition.PRICING_FINGERPRINT_PRESENT, False,
-            f"Pricing fingerprint mismatch: pricing has {evidence_fp!r}, request has {req_fp!r}"
+            Condition.PRICING_FINGERPRINT_PRESENT,
+            False,
+            f"Pricing fingerprint mismatch: pricing has {evidence_fp!r}, request has {req_fp!r}",
         )
     return ConditionResult(
-        Condition.PRICING_FINGERPRINT_PRESENT, True,
-        f"Pricing fingerprint consistent: {evidence_fp[:16]}..."
+        Condition.PRICING_FINGERPRINT_PRESENT,
+        True,
+        f"Pricing fingerprint consistent: {evidence_fp[:16]}...",
     )
 
 
-def _check_financial_field(req: dict, field_name: str, condition_id: str, label: str) -> ConditionResult:
+def _check_financial_field(
+    req: dict, field_name: str, condition_id: str, label: str
+) -> ConditionResult:
     val = req.get(field_name)
     if val is None:
         return ConditionResult(condition_id, False, f"{label} is null — human must set")
@@ -367,7 +390,9 @@ def _check_financial_field(req: dict, field_name: str, condition_id: str, label:
     return ConditionResult(condition_id, True, f"{label} = {val}")
 
 
-def _check_identity_field(req: dict, field_name: str, condition_id: str, label: str) -> ConditionResult:
+def _check_identity_field(
+    req: dict, field_name: str, condition_id: str, label: str
+) -> ConditionResult:
     val = req.get(field_name)
     if val is None or str(val).strip() == "":
         return ConditionResult(condition_id, False, f"{label} is null — human must set")
@@ -378,8 +403,9 @@ def _check_preserved_resources(req: dict) -> ConditionResult:
     resources = req.get("preserved_aws_resources", [])
     if not resources:
         return ConditionResult(
-            Condition.PRESERVED_RESOURCES_COMPLETE, False,
-            "preserved_aws_resources is empty or missing"
+            Condition.PRESERVED_RESOURCES_COMPLETE,
+            False,
+            "preserved_aws_resources is empty or missing",
         )
     present = frozenset(r.get("address", "") for r in resources)
     missing = EXPECTED_PRESERVED_RESOURCES - present
@@ -391,12 +417,14 @@ def _check_preserved_resources(req: dict) -> ConditionResult:
         issues.append(f"Unexpected: {', '.join(sorted(extra))}")
     if issues:
         return ConditionResult(
-            Condition.PRESERVED_RESOURCES_COMPLETE, False,
-            f"Preserved resources mismatch — {'; '.join(issues)}"
+            Condition.PRESERVED_RESOURCES_COMPLETE,
+            False,
+            f"Preserved resources mismatch — {'; '.join(issues)}",
         )
     return ConditionResult(
-        Condition.PRESERVED_RESOURCES_COMPLETE, True,
-        "All 6 preserved AWS resources present"
+        Condition.PRESERVED_RESOURCES_COMPLETE,
+        True,
+        "All 6 preserved AWS resources present",
     )
 
 
@@ -404,12 +432,14 @@ def _check_infra_fingerprint(req: dict) -> ConditionResult:
     fp = req.get("infrastructure_fingerprint")
     if not fp:
         return ConditionResult(
-            Condition.INFRA_FINGERPRINT_PRESENT, False,
-            "infrastructure_fingerprint is null or missing"
+            Condition.INFRA_FINGERPRINT_PRESENT,
+            False,
+            "infrastructure_fingerprint is null or missing",
         )
     return ConditionResult(
-        Condition.INFRA_FINGERPRINT_PRESENT, True,
-        f"infrastructure_fingerprint present: {fp[:16]}..."
+        Condition.INFRA_FINGERPRINT_PRESENT,
+        True,
+        f"infrastructure_fingerprint present: {fp[:16]}...",
     )
 
 
@@ -417,24 +447,26 @@ def _check_smoke_test_bound(req: dict) -> ConditionResult:
     contract = req.get("audit_smoke_test_contract")
     if not contract or not isinstance(contract, dict):
         return ConditionResult(
-            Condition.SMOKE_TEST_BOUND, False,
-            "audit_smoke_test_contract is missing or not a dict"
+            Condition.SMOKE_TEST_BOUND,
+            False,
+            "audit_smoke_test_contract is missing or not a dict",
         )
     doc_id = contract.get("document_id")
     ref_file = contract.get("reference_file")
     if doc_id != "SMOKE-TEST-RUN3-001":
         return ConditionResult(
-            Condition.SMOKE_TEST_BOUND, False,
-            f"audit_smoke_test_contract.document_id expected 'SMOKE-TEST-RUN3-001', got {doc_id!r}"
+            Condition.SMOKE_TEST_BOUND,
+            False,
+            f"audit_smoke_test_contract.document_id expected 'SMOKE-TEST-RUN3-001', got {doc_id!r}",
         )
     if not ref_file:
         return ConditionResult(
-            Condition.SMOKE_TEST_BOUND, False,
-            "audit_smoke_test_contract.reference_file is missing"
+            Condition.SMOKE_TEST_BOUND,
+            False,
+            "audit_smoke_test_contract.reference_file is missing",
         )
     return ConditionResult(
-        Condition.SMOKE_TEST_BOUND, True,
-        f"Smoke test contract bound: {doc_id}"
+        Condition.SMOKE_TEST_BOUND, True, f"Smoke test contract bound: {doc_id}"
     )
 
 
@@ -442,17 +474,16 @@ def _check_status_not_blocked(req: dict) -> ConditionResult:
     status = req.get("request_status", "")
     if status == "BLOCKED_PRICING_UNVERIFIED":
         return ConditionResult(
-            Condition.STATUS_NOT_BLOCKED, False,
-            "request_status is BLOCKED_PRICING_UNVERIFIED — pricing must be confirmed before review"
+            Condition.STATUS_NOT_BLOCKED,
+            False,
+            "request_status is BLOCKED_PRICING_UNVERIFIED — pricing must be confirmed before review",
         )
     if not status:
         return ConditionResult(
-            Condition.STATUS_NOT_BLOCKED, False,
-            "request_status is missing"
+            Condition.STATUS_NOT_BLOCKED, False, "request_status is missing"
         )
     return ConditionResult(
-        Condition.STATUS_NOT_BLOCKED, True,
-        f"request_status is {status!r}"
+        Condition.STATUS_NOT_BLOCKED, True, f"request_status is {status!r}"
     )
 
 
@@ -464,22 +495,24 @@ def _check_status_never_approved(req: dict) -> ConditionResult:
     third_ceremony = canonical_truth.get("THIRD_PAID_CEREMONY", "")
     if "APPROVED" in str(status).upper():
         return ConditionResult(
-            Condition.STATUS_NEVER_APPROVED, False,
-            f"CRITICAL: request_status contains 'APPROVED' ({status!r}) — this module cannot produce APPROVED"
+            Condition.STATUS_NEVER_APPROVED,
+            False,
+            f"CRITICAL: request_status contains 'APPROVED' ({status!r}) — this module cannot produce APPROVED",
         )
     if cost_auth == "AUTHORIZED":
         return ConditionResult(
-            Condition.STATUS_NEVER_APPROVED, False,
-            "CRITICAL: canonical_truth.COST_AUTHORIZATION is AUTHORIZED — this must not be set by this module"
+            Condition.STATUS_NEVER_APPROVED,
+            False,
+            "CRITICAL: canonical_truth.COST_AUTHORIZATION is AUTHORIZED — this must not be set by this module",
         )
     if third_ceremony == "AUTHORIZED":
         return ConditionResult(
-            Condition.STATUS_NEVER_APPROVED, False,
-            "CRITICAL: canonical_truth.THIRD_PAID_CEREMONY is AUTHORIZED — this must not be set by this module"
+            Condition.STATUS_NEVER_APPROVED,
+            False,
+            "CRITICAL: canonical_truth.THIRD_PAID_CEREMONY is AUTHORIZED — this must not be set by this module",
         )
     return ConditionResult(
-        Condition.STATUS_NEVER_APPROVED, True,
-        "No unauthorized approval state detected"
+        Condition.STATUS_NEVER_APPROVED, True, "No unauthorized approval state detected"
     )
 
 
@@ -488,13 +521,15 @@ def _check_historical_cost_not_ceiling(req: dict) -> ConditionResult:
     max_cost = req.get("requested_max_cost_usd")
     if max_cost == 321.81 or max_cost == "321.81":
         return ConditionResult(
-            Condition.HISTORICAL_COST_NOT_USED_AS_CEILING, False,
+            Condition.HISTORICAL_COST_NOT_USED_AS_CEILING,
+            False,
             "requested_max_cost_usd is set to 321.81 (historical Runs 1+2 total) — "
-            "this figure is CONSUMED and must not be used as a cost ceiling for Run 3"
+            "this figure is CONSUMED and must not be used as a cost ceiling for Run 3",
         )
     return ConditionResult(
-        Condition.HISTORICAL_COST_NOT_USED_AS_CEILING, True,
-        "Historical $321.81 figure is not used as cost ceiling"
+        Condition.HISTORICAL_COST_NOT_USED_AS_CEILING,
+        True,
+        "Historical $321.81 figure is not used as cost ceiling",
     )
 
 
@@ -513,18 +548,21 @@ def _check_canonical_truth(req: dict) -> ConditionResult:
             violations.append(f"{key}: expected {expected_val!r}, got {actual!r}")
     if violations:
         return ConditionResult(
-            Condition.CANONICAL_TRUTH_PRESERVED, False,
-            f"Canonical truth violations: {'; '.join(violations)}"
+            Condition.CANONICAL_TRUTH_PRESERVED,
+            False,
+            f"Canonical truth violations: {'; '.join(violations)}",
         )
     return ConditionResult(
-        Condition.CANONICAL_TRUTH_PRESERVED, True,
-        "All canonical truth invariants preserved"
+        Condition.CANONICAL_TRUTH_PRESERVED,
+        True,
+        "All canonical truth invariants preserved",
     )
 
 
 # ---------------------------------------------------------------------------
 # Main verifier
 # ---------------------------------------------------------------------------
+
 
 def verify_cost_review(
     request_path: Path,
@@ -542,16 +580,20 @@ def verify_cost_review(
     conditions = result.conditions
 
     # C01 / C02: File existence
-    c01 = _check_file_exists(request_path, Condition.REQUEST_FILE_EXISTS, "Authorization request")
-    c02 = _check_file_exists(pricing_path, Condition.PRICING_FILE_EXISTS, "Pricing evidence schema")
+    c01 = _check_file_exists(
+        request_path, Condition.REQUEST_FILE_EXISTS, "Authorization request"
+    )
+    c02 = _check_file_exists(
+        pricing_path, Condition.PRICING_FILE_EXISTS, "Pricing evidence schema"
+    )
     conditions.extend([c01, c02])
 
     # Short-circuit if files don't exist — remaining checks would fail with confusing errors
     if not c01.passed or not c02.passed:
         for cond_id in Condition.ALL[2:]:
-            conditions.append(ConditionResult(
-                cond_id, False, "Skipped — prerequisite files missing"
-            ))
+            conditions.append(
+                ConditionResult(cond_id, False, "Skipped — prerequisite files missing")
+            )
         _finalize(result)
         return result
 
@@ -559,22 +601,34 @@ def verify_cost_review(
     try:
         req = json.loads(request_path.read_text())
     except Exception as exc:
-        conditions.append(ConditionResult(
-            Condition.REQUEST_SCHEMA_VALID, False, f"Failed to parse request JSON: {exc}"
-        ))
+        conditions.append(
+            ConditionResult(
+                Condition.REQUEST_SCHEMA_VALID,
+                False,
+                f"Failed to parse request JSON: {exc}",
+            )
+        )
         for cond_id in Condition.ALL[3:]:
-            conditions.append(ConditionResult(cond_id, False, "Skipped — request parse failed"))
+            conditions.append(
+                ConditionResult(cond_id, False, "Skipped — request parse failed")
+            )
         _finalize(result)
         return result
 
     try:
         pricing = json.loads(pricing_path.read_text())
     except Exception as exc:
-        conditions.append(ConditionResult(
-            Condition.PRICING_SCHEMA_VALID, False, f"Failed to parse pricing JSON: {exc}"
-        ))
+        conditions.append(
+            ConditionResult(
+                Condition.PRICING_SCHEMA_VALID,
+                False,
+                f"Failed to parse pricing JSON: {exc}",
+            )
+        )
         for cond_id in Condition.ALL[4:]:
-            conditions.append(ConditionResult(cond_id, False, "Skipped — pricing parse failed"))
+            conditions.append(
+                ConditionResult(cond_id, False, "Skipped — pricing parse failed")
+            )
         _finalize(result)
         return result
 
@@ -598,39 +652,67 @@ def verify_cost_review(
     conditions.append(_check_pricing_fingerprint(pricing, req))
 
     # C10–C12: Financial fields
-    conditions.append(_check_financial_field(
-        req, "requested_max_cost_usd",
-        Condition.MAX_COST_SET, "requested_max_cost_usd"
-    ))
-    conditions.append(_check_financial_field(
-        req, "requested_max_runtime_minutes",
-        Condition.MAX_RUNTIME_SET, "requested_max_runtime_minutes"
-    ))
-    conditions.append(_check_financial_field(
-        req, "teardown_reserve_minutes",
-        Condition.TEARDOWN_RESERVE_SET, "teardown_reserve_minutes"
-    ))
+    conditions.append(
+        _check_financial_field(
+            req,
+            "requested_max_cost_usd",
+            Condition.MAX_COST_SET,
+            "requested_max_cost_usd",
+        )
+    )
+    conditions.append(
+        _check_financial_field(
+            req,
+            "requested_max_runtime_minutes",
+            Condition.MAX_RUNTIME_SET,
+            "requested_max_runtime_minutes",
+        )
+    )
+    conditions.append(
+        _check_financial_field(
+            req,
+            "teardown_reserve_minutes",
+            Condition.TEARDOWN_RESERVE_SET,
+            "teardown_reserve_minutes",
+        )
+    )
 
     # C13: Authorization expiry
     expiry = req.get("authorization_expires_at")
     if not expiry:
-        conditions.append(ConditionResult(
-            Condition.AUTHORIZATION_EXPIRY_SET, False,
-            "authorization_expires_at is null — human approver must set"
-        ))
+        conditions.append(
+            ConditionResult(
+                Condition.AUTHORIZATION_EXPIRY_SET,
+                False,
+                "authorization_expires_at is null — human approver must set",
+            )
+        )
     else:
-        conditions.append(ConditionResult(
-            Condition.AUTHORIZATION_EXPIRY_SET, True,
-            f"authorization_expires_at = {expiry}"
-        ))
+        conditions.append(
+            ConditionResult(
+                Condition.AUTHORIZATION_EXPIRY_SET,
+                True,
+                f"authorization_expires_at = {expiry}",
+            )
+        )
 
     # C14–C15: Identity fields
-    conditions.append(_check_identity_field(
-        req, "operator_identity", Condition.OPERATOR_IDENTITY_SET, "operator_identity"
-    ))
-    conditions.append(_check_identity_field(
-        req, "approver_identity", Condition.APPROVER_IDENTITY_SET, "approver_identity"
-    ))
+    conditions.append(
+        _check_identity_field(
+            req,
+            "operator_identity",
+            Condition.OPERATOR_IDENTITY_SET,
+            "operator_identity",
+        )
+    )
+    conditions.append(
+        _check_identity_field(
+            req,
+            "approver_identity",
+            Condition.APPROVER_IDENTITY_SET,
+            "approver_identity",
+        )
+    )
 
     # C16: Preserved resources
     conditions.append(_check_preserved_resources(req))
@@ -682,25 +764,31 @@ def _finalize(result: CostReviewVerification) -> None:
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Independent verifier for Customer-Zero Run-3 human cost review package."
     )
     parser.add_argument(
-        "--repo", type=Path, default=Path("."),
-        help="Path to repository root (default: .)"
+        "--repo",
+        type=Path,
+        default=Path("."),
+        help="Path to repository root (default: .)",
     )
     parser.add_argument(
-        "--request", type=Path, default=None,
-        help="Path to authorization request JSON (default: <repo>/customer_one/run3_cost_authorization_request.json)"
+        "--request",
+        type=Path,
+        default=None,
+        help="Path to authorization request JSON (default: <repo>/customer_one/run3_cost_authorization_request.json)",
     )
     parser.add_argument(
-        "--pricing", type=Path, default=None,
-        help="Path to pricing evidence schema JSON (default: <repo>/customer_one/run3_pricing_evidence_schema.json)"
+        "--pricing",
+        type=Path,
+        default=None,
+        help="Path to pricing evidence schema JSON (default: <repo>/customer_one/run3_pricing_evidence_schema.json)",
     )
     parser.add_argument(
-        "--json", action="store_true",
-        help="Output machine-readable JSON"
+        "--json", action="store_true", help="Output machine-readable JSON"
     )
     return parser
 
@@ -711,8 +799,12 @@ def main(argv: list[str] | None = None) -> int:
 
     repo = args.repo.resolve()
 
-    request_path = args.request or (repo / "customer_one" / "run3_cost_authorization_request.json")
-    pricing_path = args.pricing or (repo / "customer_one" / "run3_pricing_evidence_schema.json")
+    request_path = args.request or (
+        repo / "customer_one" / "run3_cost_authorization_request.json"
+    )
+    pricing_path = args.pricing or (
+        repo / "customer_one" / "run3_pricing_evidence_schema.json"
+    )
 
     result = verify_cost_review(request_path, pricing_path)
 
