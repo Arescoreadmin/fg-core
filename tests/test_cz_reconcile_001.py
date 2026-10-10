@@ -419,12 +419,12 @@ def test_h1_aws_audit_lifecycle_status_is_preserved() -> None:
     assert state["aws_audit_lifecycle_status"] == "AWS_AUDIT_PRESERVED"
 
 
-def test_h2_exactly_four_aws_core_resources_preserved() -> None:
-    """Exactly four AWS core audit resources must be listed as preserved."""
+def test_h2_exactly_six_aws_core_resources_preserved() -> None:
+    """Exactly six AWS audit resources must be listed as preserved (4 WRITER + 2 READER)."""
     state = _load_ceremony_state()
     preserved = state["cost_containment"]["preserved_aws_resources"]
-    assert len(preserved) == 4, (
-        f"Expected 4 preserved AWS resources, got {len(preserved)}"
+    assert len(preserved) == 6, (
+        f"Expected 6 preserved AWS resources (4 writer + 2 reader), got {len(preserved)}"
     )
 
 
@@ -448,7 +448,7 @@ def test_h4_all_preserved_resources_are_persistent_audit_authority() -> None:
 
 
 def test_h5_expected_aws_resource_addresses_are_present() -> None:
-    """The four canonical AWS audit resource addresses must be present."""
+    """The six canonical AWS audit resource addresses must be present."""
     state = _load_ceremony_state()
     addresses = {
         r["address"] for r in state["cost_containment"]["preserved_aws_resources"]
@@ -458,6 +458,8 @@ def test_h5_expected_aws_resource_addresses_are_present() -> None:
         "aws_iam_policy.vault_audit",
         "aws_iam_user.vault_audit",
         "aws_iam_user_policy_attachment.vault_audit",
+        "aws_iam_role.vault_audit_reader",
+        "aws_iam_role_policy_attachment.vault_audit_reader",
     }
     assert expected == addresses, (
         f"Preserved addresses mismatch: expected {expected}, got {addresses}"
