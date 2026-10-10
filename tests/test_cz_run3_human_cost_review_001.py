@@ -21,12 +21,9 @@ No AWS API. No network calls of any kind.
 from __future__ import annotations
 
 import json
-import copy
 import time
 from decimal import Decimal
 from pathlib import Path
-
-import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 REQUEST_FILE = REPO / "customer_one" / "run3_cost_authorization_request.json"

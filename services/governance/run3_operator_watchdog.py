@@ -45,7 +45,7 @@ Do NOT claim that this watchdog provides a guaranteed dollar cap.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any

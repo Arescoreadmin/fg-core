@@ -45,7 +45,6 @@ USAGE
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -397,7 +396,7 @@ def _check_preserved_resources(req: dict) -> ConditionResult:
         )
     return ConditionResult(
         Condition.PRESERVED_RESOURCES_COMPLETE, True,
-        f"All 6 preserved AWS resources present"
+        "All 6 preserved AWS resources present"
     )
 
 
