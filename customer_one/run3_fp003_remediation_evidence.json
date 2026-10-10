@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "finding_id": "FP-003",
+  "repair_pr": "#761",
+  "repair_work_item": "CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001",
+  "repair_date": "2026-10-10",
+  "canonical_sha_at_repair": "4ab4fe62dc9c61ad8892367f3a35ff251d89ef88",
+  "resources_protected": [
+    "aws_iam_role.vault_audit_reader",
+    "aws_iam_role_policy_attachment.vault_audit_reader"
+  ],
+  "preservation_inventory_before": [
+    "aws_cloudwatch_log_group.vault_audit",
+    "aws_iam_policy.vault_audit",
+    "aws_iam_user.vault_audit",
+    "aws_iam_user_policy_attachment.vault_audit"
+  ],
+  "preservation_inventory_after": [
+    "aws_cloudwatch_log_group.vault_audit",
+    "aws_iam_policy.vault_audit",
+    "aws_iam_user.vault_audit",
+    "aws_iam_user_policy_attachment.vault_audit",
+    "aws_iam_role.vault_audit_reader",
+    "aws_iam_role_policy_attachment.vault_audit_reader"
+  ],
+  "terraform_changes": [
+    "aws_iam_role.vault_audit_reader: added lifecycle { prevent_destroy = true }",
+    "aws_iam_role_policy_attachment.vault_audit_reader: added lifecycle { prevent_destroy = true }"
+  ],
+  "test_file": "tests/test_cz_run3_audit_preservation_repair_001.py",
+  "tests_passing": true,
+  "cloud_mutations": 0,
+  "spending_authorization_changed": false,
+  "live_trust_changed": false,
+  "fp_001_status": "OPEN — HCP Vault Dedicated pricing still unverified",
+  "fp_003_status": "IMPLEMENTATION_COMPLETE — pending post-merge validation",
+  "limitations": [
+    "lifecycle { prevent_destroy = true } prevents accidental destroy via Terraform but does not protect against AWS console deletion, IAM policy changes, or deletion of the Terraform configuration itself",
+    "Live cloud preservation verified only after actual teardown execution — this PR provides offline static validation only",
+    "aws_iam_policy.vault_audit_reader lacks prevent_destroy (by design — policy is less critical than role+attachment for audit access)"
+  ]
+}

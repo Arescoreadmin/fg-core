@@ -1,3 +1,18 @@
+# CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 — FP-003 repair: protect audit reader role and attachment
+
+- **Work item:** CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 (REPAIR class — always authorized)
+- **Purpose:** Implements FP-003 from merged audit PR #760 (CZ-RUN3-FAILURE-PREVENTION-001). FP-003: `aws_iam_role.vault_audit_reader` and `aws_iam_role_policy_attachment.vault_audit_reader` existed in Terraform without `lifecycle { prevent_destroy = true }` and were absent from `ceremony_state.yaml` preserved_aws_resources. Without this protection, the Reader role could be accidentally destroyed via `terraform destroy`, permanently removing post-ceremony independent audit verification authority.
+- **Terraform changes:** `infra/aws_audit.tf` — `lifecycle { prevent_destroy = true }` added to `aws_iam_role.vault_audit_reader` and `aws_iam_role_policy_attachment.vault_audit_reader`. No resource names, addresses, tags, trust policies, IAM permissions, or counts changed. EXPECTED_INVENTORY_COUNT remains 21.
+- **Governance changes:** `customer_one/ceremony_state.yaml` preserved_aws_resources extended from 4 to 6 entries (adds reader role + attachment). `customer_one/roadmap_authority.yaml` moves CZ-RUN3-FAILURE-PREVENTION-001 from next_sequence to completed (prs=["#760"], merged_sha=4ab4fe62). authority_date updated to 2026-10-10.
+- **New files:** `tests/test_cz_run3_audit_preservation_repair_001.py` (14 adversarial tests FP003-T01–T14), `customer_one/run3_fp003_remediation_evidence.json`.
+- **Scope:** `infra/aws_audit.tf` (lifecycle blocks), `customer_one/ceremony_state.yaml` (preserved list), `customer_one/roadmap_authority.yaml` (closeout + authority_date), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (table rows, reconciliation paragraph), `ROADMAP.md` (rows), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (new entry), `docs/ai/PR_FIX_LOG.md` (this entry). No `tools/ci/` changes. No evaluator changes. No schema changes. No migrations. No API contract changes. No cloud mutation.
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED.
+- **FP-001 status:** OPEN — HCP Vault Dedicated pricing unverified. Not addressable offline. Not resolved by this PR.
+- **FP-003 status:** IMPLEMENTATION_COMPLETE — pending post-merge validation.
+- **Zero cloud mutations. No paid infrastructure. No schema changes.**
+
+---
+
 # CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 — Post-merge operator preflight closeout
 
 - **Work item:** CZ-RUN3-OPERATOR-PREFLIGHT-CLOSEOUT-001 (REPAIR class)

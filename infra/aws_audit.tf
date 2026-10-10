@@ -163,6 +163,10 @@ resource "aws_iam_role" "vault_audit_reader" {
     ManagedBy = "terraform"
     WorkItem  = "CUSTOMER-ZERO-TRUST-001"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_policy" "vault_audit_reader" {
@@ -210,4 +214,8 @@ resource "aws_iam_policy" "vault_audit_reader" {
 resource "aws_iam_role_policy_attachment" "vault_audit_reader" {
   role       = aws_iam_role.vault_audit_reader.name
   policy_arn = aws_iam_policy.vault_audit_reader.arn
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
