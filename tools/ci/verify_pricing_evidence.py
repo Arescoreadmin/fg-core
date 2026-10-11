@@ -73,8 +73,47 @@ def run_verification(
     # Run pricing evidence verification
     pricing_result = verifier_mod.verify_pricing_evidence_file(str(evidence_path))
 
-    # Run cost authorization verification (uses the legacy pricing schema file)
-    cost_result = cost_review_mod.verify_cost_review(request_path, pricing_schema_path)
+    # Build a pricing override dict when evidence is validated, so the 22-condition
+    # cost verifier sees validated values rather than the legacy null schema.
+    # Without this, a fully validated evidence instance still fails the cost review
+    # because pricing_schema_path has fp_001_status=OPEN and all evidence fields null.
+    pricing_override: dict | None = None
+    if pricing_result.is_valid and pricing_result.pricing_snapshot is not None:
+        try:
+            instance_data = json.loads(evidence_path.read_text())
+            snap = pricing_result.pricing_snapshot
+            bum = snap.get("billing_unit_minutes")
+            billing_unit_str = (
+                "hourly" if bum == 60 else f"{bum}_minutes" if bum else "unknown"
+            )
+            prov = instance_data.get("provenance", {}) or {}
+            src = instance_data.get("source", {}) or {}
+            intg = instance_data.get("integrity", {}) or {}
+            ep = instance_data.get("expiry_policy", {}) or {}
+            pricing_override = {
+                "fp_001_status": "CLOSED",
+                "evidence": {
+                    "source": src.get("classification"),
+                    "product_tier_confirmed": snap.get("tier"),
+                    "region_confirmed": snap.get("region"),
+                    "currency": snap.get("currency"),
+                    "hourly_rate_usd": snap.get("hourly_rate_usd"),
+                    "billing_unit": billing_unit_str,
+                    "rate_confirmed_at": instance_data.get("collection_timestamp_utc"),
+                    "rate_valid_until": ep.get("expires_at_utc"),
+                    "verifier_identity": prov.get("independent_reviewer_identity"),
+                    "fingerprint": intg.get("evidence_fingerprint_sha256"),
+                },
+            }
+        except Exception:
+            pricing_override = None  # fall back to legacy schema on any load error
+
+    # Run cost authorization verification
+    cost_result = cost_review_mod.verify_cost_review(
+        request_path,
+        pricing_schema_path,
+        pricing_override_dict=pricing_override,
+    )
 
     # Determine overall status from pricing evidence result
     pe_status = pricing_result.validation_status

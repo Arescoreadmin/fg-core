@@ -493,9 +493,9 @@ def compute_bounded_exposure(
     )
     total = (ceiling + cw_cost).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
-    # Assess defensibility using pricing_snapshot for authoritative gap detection.
-    # The sentinel _unknown_charges_acknowledged attribute on inputs is retained for
-    # backward compatibility but pricing_snapshot takes precedence when provided.
+    # Assess defensibility using pricing_snapshot — the billing parameter values
+    # on PricingInputs alone are insufficient because they don't carry the operator's
+    # explicit acknowledgement that no additional charges exist.
     unresolved_unknowns: list[str] = []
 
     if pricing_snapshot is None:
@@ -595,9 +595,4 @@ def build_cost_model_from_evidence(
         aws_cloudwatch_per_gb_usd=Decimal("0.50"),
         estimated_audit_volume_gb=Decimal("0.001"),
     )
-    # Attach unknown_charges_acknowledged for bounded exposure reporting
-    inputs._unknown_charges_acknowledged = bool(  # type: ignore[attr-defined]
-        snapshot.get("unknown_charges_acknowledged", False)
-    )
-
     return build_cost_model(inputs, max_runtime_minutes)

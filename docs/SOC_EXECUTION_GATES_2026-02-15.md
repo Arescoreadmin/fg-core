@@ -1,3 +1,27 @@
+## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: fix(pricing-evidence): 4 PR bot findings — evidence pipeline, freshness window, sentinel, NaN
+
+**Change scope:** OFFLINE_PREPARATION class. Four targeted fixes to PR #763. (1) P1: `verify_pricing_evidence.py` now feeds validated evidence instance into cost review via `pricing_override_dict` parameter on `verify_cost_review` — prevents READY_FOR_HUMAN_DECISION being unreachable despite validated evidence; `customer_zero_cost_review.py` gains `pricing_override_dict: dict | None = None` param (backward-compatible). (2) P1: `_validate_freshness` enforces `expires_at_utc ≤ collection_timestamp_utc + valid_for_days + 1d` — prevents stale evidence (e.g. 2020 collection, 2099 expiry, 30-day window) from passing freshness. (3) P1: Remove dead sentinel `inputs._unknown_charges_acknowledged` from `build_cost_model_from_evidence` — was never used by `compute_bounded_exposure` after the `420cf5e0` fix but was misleadingly commented as retained. (4) P2: `_parse_decimal` rejects non-finite Decimal values (NaN, Infinity) before the positivity comparison. New tests: PEVID-033 (stale evidence window bypass) and PEVID-034 (NaN/Infinity rate). No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+**Security posture:**
+
+1. **No authorization path weakened.** `approved` remains hardcoded `False`. APPROVED state is unreachable. BLOCKED state preserved for all unvalidated instances.
+2. **Freshness control strengthened.** A far-future `expires_at_utc` with a short `valid_for_days` now correctly fails validation.
+3. **NaN/Infinity reject-closed.** Previously could crash or silently pass; now returns `REJECTED_CONTENT` with a clear finding.
+4. **Evidence pipeline is now correctly wired.** A fully validated evidence instance can reach `READY_FOR_HUMAN_DECISION` through the pipeline without requiring the operator to maintain a second file format.
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN.
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (pricing_override_dict wiring), `services/governance/customer_zero_cost_review.py` (pricing_override_dict param), `services/governance/run3_pricing_evidence_verifier.py` (valid_for_days consistency, NaN/Infinity rejection), `services/governance/run3_cost_model.py` (sentinel removal + comment), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-033/034 added, fixture valid_for_days corrected — 76 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations. APPROVED state is unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 76 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_EVIDENCE_INVALID, approved=false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
 ## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: fix(pricing-evidence): tighten is_defensible_upper_bound and null-template distinction
 
 **Change scope:** OFFLINE_PREPARATION class. Two targeted fixes to PR #763. (1) `is_defensible_upper_bound` tightened: now False unless `billing_unit_minutes`, `minimum_charge_usd`, AND `unknown_charges_acknowledged=True` are all confirmed in the pricing snapshot; `unresolved_unknowns` list added to `BoundedExposureReport` naming each specific gap. `compute_bounded_exposure` accepts `pricing_snapshot` dict for authoritative gap detection. (2) Null-template detection: `_is_template_unpopulated` check added before field-level content validation; all-null instance now returns `REJECTED_NOT_POPULATED` (not `REJECTED_CONTENT`), with a clear operator-facing message. Tampered fingerprint finding reworded to include expected vs computed values and explicit re-collection instruction. Pipeline (`verify_pricing_evidence.py`) updated to route `REJECTED_NOT_POPULATED` to `BLOCKED_PRICING_UNVERIFIED`. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.

@@ -136,11 +136,16 @@ def _compute_pricing_fingerprint(pricing: dict[str, Any]) -> str:
 
 
 def _parse_decimal(value: Any, field_name: str) -> tuple[Decimal | None, str | None]:
-    """Parse a value to Decimal. Returns (decimal, error_message)."""
+    """Parse a value to Decimal. Returns (decimal, error_message).
+
+    Rejects non-finite values (NaN, Infinity) — they cannot represent prices.
+    """
     if value is None:
         return None, f"{field_name} is null"
     try:
         d = Decimal(str(value))
+        if not d.is_finite():
+            return None, f"{field_name} must be a finite number; got {value!r} ({d})"
         return d, None
     except (InvalidOperation, ValueError):
         return None, f"{field_name} is not a valid number: {value!r}"
@@ -343,7 +348,14 @@ def _validate_provenance(
 def _validate_freshness(
     instance: dict[str, Any],
 ) -> list[str]:
-    """Validate timestamps: collection not in future, expiry not in past, timezone-aware."""
+    """Validate timestamps: collection not in future, expiry not in past, timezone-aware.
+
+    Also enforces that expires_at_utc is consistent with valid_for_days relative to
+    collection_timestamp_utc, preventing a far-future expiry (e.g. 2099) from bypassing
+    the stated freshness window.
+    """
+    from datetime import timedelta
+
     findings = []
     now = datetime.now(UTC)
 
@@ -358,9 +370,10 @@ def _validate_freshness(
             "pricing evidence cannot have been collected in the future"
         )
 
-    # expiry_policy.expires_at_utc
+    # expiry_policy.expires_at_utc and valid_for_days consistency
     expiry_policy = instance.get("expiry_policy", {}) or {}
     exp_raw = expiry_policy.get("expires_at_utc")
+    exp_dt: datetime | None = None
     if exp_raw is None:
         findings.append(
             "expiry_policy.expires_at_utc is null; evidence cannot be validated without expiry"
@@ -373,6 +386,37 @@ def _validate_freshness(
             findings.append(
                 f"expiry_policy.expires_at_utc {exp_raw!r} is in the past; "
                 "evidence has expired and must be re-collected"
+            )
+
+    # Enforce expiry window: expires_at_utc must not exceed collection + valid_for_days + 1 day.
+    # Without this, evidence collected in 2020 with expires_at_utc=2099 would pass the
+    # above check while completely violating the stated freshness policy.
+    valid_for_days_raw = expiry_policy.get("valid_for_days")
+    if (
+        valid_for_days_raw is not None
+        and ts is not None
+        and exp_dt is not None
+        and not findings  # only check consistency when timestamps are themselves valid
+    ):
+        try:
+            vfd = int(valid_for_days_raw)
+            if vfd <= 0:
+                findings.append(
+                    f"expiry_policy.valid_for_days must be > 0; got {vfd}"
+                )
+            else:
+                max_allowed_expiry = ts + timedelta(days=vfd + 1)  # +1 day processing tolerance
+                if exp_dt > max_allowed_expiry:
+                    findings.append(
+                        f"expiry_policy.expires_at_utc {exp_raw!r} is more than "
+                        f"{vfd} day(s) after collection_timestamp_utc {ts_raw!r} — "
+                        "the expiry window must be consistent with valid_for_days "
+                        "to prevent stale pricing from bypassing the freshness control"
+                    )
+        except (TypeError, ValueError):
+            findings.append(
+                f"expiry_policy.valid_for_days must be a positive integer; "
+                f"got {valid_for_days_raw!r}"
             )
 
     return findings

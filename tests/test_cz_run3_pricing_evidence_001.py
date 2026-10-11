@@ -52,7 +52,7 @@ SYNTHETIC_VALID_EVIDENCE = {
     "evidence_type": "pricing_observation",
     "collection_timestamp_utc": "2026-10-01T12:00:00+00:00",
     "expiry_policy": {
-        "valid_for_days": 30,
+        "valid_for_days": 36500,  # 100 years — consistent with 2099 synthetic expiry
         "expires_at_utc": "2099-12-31T23:59:59+00:00",
     },
     "provider": {
@@ -888,6 +888,70 @@ def test_pevid_032_bounded_exposure_no_snapshot():
     assert "pricing_snapshot" in combined or "not provided" in combined, (
         f"unresolved_unknowns should mention missing snapshot; got: {report.unresolved_unknowns}"
     )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-033: Old collection_timestamp with far-future expires_at_utc → REJECTED_FRESHNESS
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_033_stale_evidence_window_bypass():
+    """PEVID-033: Evidence collected long ago with a far-future expires_at_utc and
+    small valid_for_days → REJECTED_FRESHNESS.
+
+    A 30-day validity window set to expire in 2099 would bypass the freshness
+    control. The verifier must enforce that expires_at_utc is consistent with
+    collection_timestamp_utc + valid_for_days.
+    """
+    verifier = _load_verifier()
+    instance = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
+    # Evidence collected years ago — far outside any 30-day window
+    instance["collection_timestamp_utc"] = "2020-01-01T12:00:00+00:00"
+    instance["expiry_policy"] = {
+        "valid_for_days": 30,
+        "expires_at_utc": "2099-12-31T23:59:59+00:00",
+    }
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_FRESHNESS", (
+        f"Expected REJECTED_FRESHNESS for stale evidence with bypassed expiry window; "
+        f"got {result.validation_status!r}, findings: {result.findings}"
+    )
+    assert not result.is_valid
+    assert any(
+        "valid_for_days" in f.lower() or "expiry" in f.lower() or "stale" in f.lower()
+        for f in result.findings
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-034: NaN and Infinity hourly_rate_usd → rejected
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_034_non_finite_hourly_rate():
+    """PEVID-034: NaN and Infinity hourly_rate_usd → rejected (not VALIDATED).
+
+    Decimal('NaN') and Decimal('Infinity') are accepted by the Decimal constructor
+    but must be rejected before the positivity check, which would otherwise raise
+    decimal.InvalidOperation or silently produce nonsensical costs.
+    """
+    verifier = _load_verifier()
+    for bad_rate in ("NaN", "Infinity", "-Infinity", "nan", "inf"):
+        instance = _synthetic(**{"pricing.hourly_rate_usd": bad_rate})
+        result = verifier.verify_pricing_evidence(instance)
+        assert result.validation_status not in ("VALIDATED", "UNVALIDATED"), (
+            f"Non-finite rate {bad_rate!r} must not pass content validation; "
+            f"got status {result.validation_status!r}"
+        )
+        assert not result.is_valid, (
+            f"is_valid must be False for non-finite rate {bad_rate!r}"
+        )
+        assert any(
+            "finite" in f.lower() or "hourly_rate_usd" in f.lower()
+            for f in result.findings
+        ), f"findings should mention rate issue for {bad_rate!r}; got {result.findings}"
 
 
 # ---------------------------------------------------------------------------
