@@ -1,6 +1,6 @@
 """CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 — Adversarial tests for pricing evidence verifier.
 
-Tests: PEVID-001 through PEVID-031.
+Tests: PEVID-001 through PEVID-032.
 Work class: OFFLINE_PREPARATION.
 Cloud mutations: 0. Spending authorization: unchanged. Live trust: unchanged.
 
@@ -16,6 +16,7 @@ Coverage areas:
   - PEVID-028–029: build_cost_model_from_evidence
   - PEVID-030:     compute_bounded_exposure
   - PEVID-031:     Full pipeline returns BLOCKED_PRICING_UNVERIFIED for null instance
+  - PEVID-032:     compute_bounded_exposure with pricing_snapshot=None → not defensible
 
 All tests are deterministic and offline-only. No live infrastructure. No HCP API.
 No AWS API. No network calls of any kind.
@@ -188,10 +189,15 @@ def test_pevid_001_missing_evidence_file():
 
 @pytest.mark.contract
 def test_pevid_002_all_null_instance():
-    """PEVID-002: An all-null instance is rejected (fails content validation)."""
+    """PEVID-002: An all-null template returns REJECTED_NOT_POPULATED (not REJECTED_CONTENT).
+
+    REJECTED_NOT_POPULATED is distinct from REJECTED_CONTENT (malformed values) and
+    REJECTED_TAMPERED (fingerprint mismatch). It signals to the operator that the
+    template simply hasn't been filled in yet — not that values are wrong.
+    """
     verifier = _load_verifier()
     instance = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
-    # Null out all content fields
+    # Null out all five core value fields that _is_template_unpopulated checks
     instance["provider"]["tier"] = None
     instance["provider"]["region"] = None
     instance["pricing"]["currency"] = None
@@ -201,13 +207,16 @@ def test_pevid_002_all_null_instance():
     instance["pricing"]["unknown_charges_acknowledged"] = None
     result = verifier.verify_pricing_evidence(instance)
     assert not result.is_valid
-    assert result.validation_status in (
-        "REJECTED_SCHEMA",
-        "REJECTED_CONTENT",
-        "REJECTED_PROVENANCE",
-        "REJECTED_FRESHNESS",
-        "REJECTED_SOURCE",
-    ), f"Expected a REJECTED_* status, got {result.validation_status!r}"
+    assert result.validation_status == "REJECTED_NOT_POPULATED", (
+        f"All-null template must return REJECTED_NOT_POPULATED, "
+        f"got {result.validation_status!r}; findings={result.findings}"
+    )
+    # Finding must mention "not populated" so operator knows what to do
+    assert result.findings, "REJECTED_NOT_POPULATED must include at least one finding"
+    combined = " ".join(result.findings).lower()
+    assert "not been populated" in combined or "null" in combined, (
+        f"Finding must explain the template is unpopulated; got: {result.findings}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -590,7 +599,7 @@ def test_pevid_024_negative_minimum_charge():
 @pytest.mark.contract
 def test_pevid_025_unknown_charges_not_acknowledged():
     """PEVID-025: unknown_charges_acknowledged=False → warning issued, not rejected.
-    is_defensible_upper_bound will be False."""
+    is_defensible_upper_bound must be False AND unresolved_unknowns must be non-empty."""
     verifier = _load_verifier()
     cost_model = _load_cost_model()
     # Use fingerprinted instance so we get past fingerprint check
@@ -608,8 +617,12 @@ def test_pevid_025_unknown_charges_not_acknowledged():
         "unknown_charges" in w.lower() or "defensible" in w.lower()
         for w in result.warnings
     ), f"Expected a warning about unknown_charges; got warnings={result.warnings!r}"
-    # And if we build from this, is_defensible_upper_bound should be False
+    # And if we build from this, is_defensible_upper_bound should be False with
+    # unresolved_unknowns listing the specific gap.
     if result.is_valid and result.pricing_snapshot:
+        # Pass a snapshot where unknown_charges_acknowledged=False
+        snapshot = dict(result.pricing_snapshot)
+        snapshot["unknown_charges_acknowledged"] = False
         inputs = cost_model.PricingInputs(
             hourly_rate_usd=Decimal("1.50"),
             billing_unit_minutes=60,
@@ -617,10 +630,21 @@ def test_pevid_025_unknown_charges_not_acknowledged():
             aws_cloudwatch_per_gb_usd=Decimal("0.50"),
             estimated_audit_volume_gb=Decimal("0.001"),
         )
-        inputs._unknown_charges_acknowledged = False  # type: ignore[attr-defined]
-        exposure = cost_model.compute_bounded_exposure(inputs, max_runtime_minutes=120)
-        assert not exposure.is_defensible_upper_bound
+        exposure = cost_model.compute_bounded_exposure(
+            inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+        )
+        assert not exposure.is_defensible_upper_bound, (
+            "is_defensible_upper_bound must be False when unknown_charges_acknowledged=False"
+        )
+        assert exposure.unresolved_unknowns, (
+            "unresolved_unknowns must be non-empty when unknown_charges_acknowledged=False"
+        )
         assert exposure.unknown_charges_warning is not None
+        # Confirm the specific gap is named
+        combined = " ".join(exposure.unresolved_unknowns).lower()
+        assert "unknown_charges_acknowledged" in combined, (
+            f"unresolved_unknowns should name the gap; got: {exposure.unresolved_unknowns}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +654,12 @@ def test_pevid_025_unknown_charges_not_acknowledged():
 
 @pytest.mark.contract
 def test_pevid_026_unknown_charges_acknowledged():
-    """PEVID-026: unknown_charges_acknowledged=True → no warning, is_defensible_upper_bound eligible."""
+    """PEVID-026: complete snapshot + unknown_charges_acknowledged=True → is_defensible_upper_bound=True.
+
+    A partial snapshot (missing billing_unit_minutes or minimum_charge_usd) must still
+    produce is_defensible_upper_bound=False even when unknown_charges_acknowledged=True.
+    Defensibility requires ALL billing parameters to be confirmed.
+    """
     verifier = _load_verifier()
     cost_model = _load_cost_model()
     instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
@@ -641,7 +670,12 @@ def test_pevid_026_unknown_charges_acknowledged():
         f"Should have no unknown_charges warning when True; warnings={result.warnings!r}"
     )
 
-    # Build exposure report — should be defensible
+    # Complete snapshot — all required fields present and acknowledged
+    complete_snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+    }
     inputs = cost_model.PricingInputs(
         hourly_rate_usd=Decimal("1.50"),
         billing_unit_minutes=60,
@@ -649,9 +683,33 @@ def test_pevid_026_unknown_charges_acknowledged():
         aws_cloudwatch_per_gb_usd=Decimal("0.50"),
         estimated_audit_volume_gb=Decimal("0.001"),
     )
-    inputs._unknown_charges_acknowledged = True  # type: ignore[attr-defined]
-    exposure = cost_model.compute_bounded_exposure(inputs, max_runtime_minutes=120)
-    assert exposure.is_defensible_upper_bound
+    exposure = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=complete_snapshot
+    )
+    assert exposure.is_defensible_upper_bound, (
+        f"Expected is_defensible_upper_bound=True with complete snapshot; "
+        f"unresolved_unknowns={exposure.unresolved_unknowns}"
+    )
+    assert exposure.unresolved_unknowns == [], (
+        f"unresolved_unknowns must be empty for complete snapshot; "
+        f"got {exposure.unresolved_unknowns}"
+    )
+
+    # Partial snapshot — billing_unit_minutes missing → still False
+    partial_snapshot = {
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        # billing_unit_minutes intentionally absent
+    }
+    exposure_partial = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=partial_snapshot
+    )
+    assert not exposure_partial.is_defensible_upper_bound, (
+        "is_defensible_upper_bound must be False when billing_unit_minutes is missing"
+    )
+    assert exposure_partial.unresolved_unknowns, (
+        "unresolved_unknowns must be non-empty when billing_unit_minutes is missing"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -730,7 +788,12 @@ def test_pevid_029_build_cost_model_from_invalid_evidence():
 
 @pytest.mark.contract
 def test_pevid_030_bounded_exposure_ceiling_above_base():
-    """PEVID-030: compute_bounded_exposure returns ceiling > base_cost."""
+    """PEVID-030: compute_bounded_exposure returns ceiling > base_cost.
+
+    With a complete pricing_snapshot (billing_unit_minutes, minimum_charge_usd, and
+    unknown_charges_acknowledged=True), unresolved_unknowns must be empty and
+    is_defensible_upper_bound must be True.
+    """
     cost_model = _load_cost_model()
     inputs = cost_model.PricingInputs(
         hourly_rate_usd=Decimal("1.50"),
@@ -739,14 +802,27 @@ def test_pevid_030_bounded_exposure_ceiling_above_base():
         aws_cloudwatch_per_gb_usd=Decimal("0.50"),
         estimated_audit_volume_gb=Decimal("0.001"),
     )
-    inputs._unknown_charges_acknowledged = True  # type: ignore[attr-defined]
-    report = cost_model.compute_bounded_exposure(inputs, max_runtime_minutes=120)
+    complete_snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+    }
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=complete_snapshot
+    )
     base = Decimal(report.base_cost_usd)
     ceiling = Decimal(report.bounded_ceiling_usd)
     total = Decimal(report.total_bounded_ceiling_usd)
     assert ceiling > base, f"ceiling {ceiling} should be > base {base}"
     assert total >= ceiling, f"total {total} should be >= ceiling {ceiling}"
-    assert report.is_defensible_upper_bound is True
+    assert report.is_defensible_upper_bound is True, (
+        f"Expected is_defensible_upper_bound=True; "
+        f"unresolved_unknowns={report.unresolved_unknowns}"
+    )
+    assert report.unresolved_unknowns == [], (
+        f"unresolved_unknowns must be empty for complete snapshot; "
+        f"got {report.unresolved_unknowns}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +847,46 @@ def test_pevid_031_pipeline_blocked_for_null_instance():
     # SAFETY: approved must always be False
     assert report.get("approved") is False, (
         f"approved must always be False; got {report.get('approved')!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-032: compute_bounded_exposure with pricing_snapshot=None → not defensible
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_032_bounded_exposure_no_snapshot():
+    """PEVID-032: compute_bounded_exposure with pricing_snapshot=None →
+    is_defensible_upper_bound=False, unresolved_unknowns non-empty.
+
+    A 10% safety margin alone does not make the ceiling defensible when no snapshot
+    is provided to confirm billing parameters and charge acknowledgement.
+    """
+    cost_model = _load_cost_model()
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=None
+    )
+    assert report.is_defensible_upper_bound is False, (
+        "is_defensible_upper_bound must be False when pricing_snapshot is None"
+    )
+    assert report.unresolved_unknowns, (
+        "unresolved_unknowns must be non-empty when pricing_snapshot is None"
+    )
+    assert report.unknown_charges_warning is not None, (
+        "unknown_charges_warning must be set when pricing_snapshot is None"
+    )
+    # Confirm the gap reason is specific
+    combined = " ".join(report.unresolved_unknowns).lower()
+    assert "pricing_snapshot" in combined or "not provided" in combined, (
+        f"unresolved_unknowns should mention missing snapshot; got: {report.unresolved_unknowns}"
     )
 
 

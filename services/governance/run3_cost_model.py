@@ -417,8 +417,11 @@ def build_cost_model(
 class BoundedExposureReport:
     """Defensible upper-bound cost exposure report for a given max runtime.
 
-    is_defensible_upper_bound is True only if unknown_charges_acknowledged is True
-    in the pricing evidence. Otherwise the ceiling cannot be certified.
+    is_defensible_upper_bound is True only when unresolved_unknowns is empty,
+    which requires that billing_unit_minutes and minimum_charge_usd are known,
+    and unknown_charges_acknowledged is explicitly True in the pricing snapshot.
+    A 10% safety margin alone is insufficient — all billing parameters must be
+    confirmed and the operator must have explicitly acknowledged no additional charges.
     """
 
     base_cost_usd: str  # cost at max_runtime_minutes (Decimal string)
@@ -428,6 +431,7 @@ class BoundedExposureReport:
     total_bounded_ceiling_usd: str  # bounded_ceiling + cloudwatch
     unknown_charges_warning: str | None
     is_defensible_upper_bound: bool
+    unresolved_unknowns: list[str]  # specific gaps that prevent certification
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -438,19 +442,32 @@ class BoundedExposureReport:
             "total_bounded_ceiling_usd": self.total_bounded_ceiling_usd,
             "unknown_charges_warning": self.unknown_charges_warning,
             "is_defensible_upper_bound": self.is_defensible_upper_bound,
+            "unresolved_unknowns": self.unresolved_unknowns,
         }
 
 
 def compute_bounded_exposure(
     inputs: PricingInputs,
     max_runtime_minutes: int,
+    pricing_snapshot: dict | None = None,
     safety_margin_pct: Decimal = Decimal("0.10"),
 ) -> BoundedExposureReport:
     """Compute a bounded financial exposure report with safety margin.
 
+    is_defensible_upper_bound=True requires ALL of the following:
+      - pricing_snapshot is provided
+      - pricing_snapshot["billing_unit_minutes"] is a positive integer (> 0)
+      - pricing_snapshot["minimum_charge_usd"] is not None
+      - pricing_snapshot["unknown_charges_acknowledged"] is exactly True
+
+    A 10% safety margin alone is NOT sufficient to certify defensibility when
+    billing increments, minimum commitments, or additional charges are unknown.
+
     Args:
-        inputs: Verified pricing inputs.
+        inputs: Verified pricing inputs (used for arithmetic).
         max_runtime_minutes: The authorized maximum runtime (human-set).
+        pricing_snapshot: The raw pricing snapshot dict for defensibility assessment.
+            If None, is_defensible_upper_bound is forced False.
         safety_margin_pct: Safety margin fraction (default 10%).
 
     Returns:
@@ -476,18 +493,37 @@ def compute_bounded_exposure(
     )
     total = (ceiling + cw_cost).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
-    unknown_warning = None
-    defensible = True
-    # unknown_charges_acknowledged is stored as part of the pricing inputs via
-    # build_cost_model_from_evidence; we check via a special sentinel attribute
-    uca = getattr(inputs, "_unknown_charges_acknowledged", True)
-    if not uca:
-        unknown_warning = (
-            "pricing.unknown_charges_acknowledged is False — additional HCP charges "
-            "may apply beyond the hourly rate. Bounded ceiling is NOT certifiable as "
-            "a defensible upper bound until all charges are acknowledged."
+    # Assess defensibility using pricing_snapshot for authoritative gap detection.
+    # The sentinel _unknown_charges_acknowledged attribute on inputs is retained for
+    # backward compatibility but pricing_snapshot takes precedence when provided.
+    unresolved_unknowns: list[str] = []
+
+    if pricing_snapshot is None:
+        unresolved_unknowns.append(
+            "pricing_snapshot not provided — cannot assess unknown charges"
         )
-        defensible = False
+    else:
+        bum = pricing_snapshot.get("billing_unit_minutes")
+        if bum is None or not isinstance(bum, int) or bum <= 0:
+            unresolved_unknowns.append("billing_unit_minutes not confirmed")
+
+        if pricing_snapshot.get("minimum_charge_usd") is None:
+            unresolved_unknowns.append("minimum_charge_usd not confirmed")
+
+        if pricing_snapshot.get("unknown_charges_acknowledged") is not True:
+            unresolved_unknowns.append(
+                "unknown_charges_acknowledged is not True — operator has not confirmed "
+                "absence of additional charges"
+            )
+
+    defensible = len(unresolved_unknowns) == 0
+
+    unknown_warning: str | None = None
+    if not defensible:
+        unknown_warning = (
+            "Bounded ceiling cannot be certified as a defensible upper bound. "
+            f"Unresolved gaps: {'; '.join(unresolved_unknowns)}."
+        )
 
     return BoundedExposureReport(
         base_cost_usd=str(base_cost),
@@ -497,6 +533,7 @@ def compute_bounded_exposure(
         total_bounded_ceiling_usd=str(total),
         unknown_charges_warning=unknown_warning,
         is_defensible_upper_bound=defensible,
+        unresolved_unknowns=unresolved_unknowns,
     )
 
 

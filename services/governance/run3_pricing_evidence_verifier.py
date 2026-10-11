@@ -16,15 +16,17 @@ SAFETY INVARIANTS (NON-NEGOTIABLE)
 
 VALIDATION STATES
 ------------------
-  VALIDATED             — All required fields present and passing all checks.
-  UNVALIDATED           — Fingerprint field is null (collector hasn't set it yet).
-                          Not necessarily blocked; schema/content/provenance still checked.
-  REJECTED_SCHEMA       — Required fields missing or non-parseable structure.
-  REJECTED_CONTENT      — Content validation failed (wrong tier/region/currency/rate).
-  REJECTED_PROVENANCE   — Provenance validation failed (null identities or same person).
-  REJECTED_FRESHNESS    — Timestamps invalid, future collection, or expired evidence.
-  REJECTED_SOURCE       — Source classification or reference URL invalid.
-  REJECTED_TAMPERED     — Fingerprint present but does not match computed value.
+  VALIDATED               — All required fields present and passing all checks.
+  UNVALIDATED             — Fingerprint field is null (collector hasn't set it yet).
+                            Not necessarily blocked; schema/content/provenance still checked.
+  REJECTED_SCHEMA         — Required fields missing or non-parseable structure.
+  REJECTED_NOT_POPULATED  — All core value fields are null (template not populated).
+                            Operator must observe live HCP pricing and populate the file.
+  REJECTED_CONTENT        — Content validation failed (wrong tier/region/currency/rate).
+  REJECTED_PROVENANCE     — Provenance validation failed (null identities or same person).
+  REJECTED_FRESHNESS      — Timestamps invalid, future collection, or expired evidence.
+  REJECTED_SOURCE         — Source classification or reference URL invalid.
+  REJECTED_TAMPERED       — Fingerprint present but does not match computed value.
 
 USAGE
 -----
@@ -187,6 +189,26 @@ def _validate_schema(
         if sub in instance and not isinstance(instance[sub], dict):
             findings.append(f"Field {sub!r} must be a dict")
     return findings
+
+
+def _is_template_unpopulated(instance: dict[str, Any]) -> bool:
+    """Return True if all core value fields are null (template not yet populated).
+
+    Checks the five key pricing/provider fields that a human operator must set
+    by observing live HCP portal pricing.
+    """
+    provider = instance.get("provider", {}) or {}
+    pricing = instance.get("pricing", {}) or {}
+    return all(
+        v is None
+        for v in [
+            provider.get("tier"),
+            provider.get("region"),
+            pricing.get("hourly_rate_usd"),
+            pricing.get("billing_unit_minutes"),
+            pricing.get("currency"),
+        ]
+    )
 
 
 def _validate_content(
@@ -409,9 +431,10 @@ def _validate_fingerprint(
 
     if stored_fp != expected_fp:
         new_findings = list(findings) + [
-            f"integrity.evidence_fingerprint_sha256 mismatch: "
-            f"stored={stored_fp!r}, computed={expected_fp!r}. "
-            "Evidence may have been tampered with after fingerprinting."
+            f"Evidence fingerprint mismatch: expected {stored_fp!r}, "
+            f"computed {expected_fp!r}. "
+            "The evidence may have been altered after fingerprint computation. "
+            "Re-collect evidence from the HCP portal and recompute the fingerprint."
         ]
         return "REJECTED_TAMPERED", new_findings
 
@@ -460,6 +483,23 @@ def verify_pricing_evidence(
         )
 
     # --- Content validation ---
+    # Detect unpopulated template (all core fields null) before field-level checks
+    # so the operator gets a clear "not populated" message rather than a list of
+    # individual null-field errors that look like a malformed document.
+    if _is_template_unpopulated(instance):
+        return PricingEvidenceVerificationResult(
+            is_valid=False,
+            validation_status="REJECTED_NOT_POPULATED",
+            findings=[
+                "Pricing evidence template has not been populated — all core value fields "
+                "are null. This is expected for a new instance. The human operator must "
+                "observe current HCP Vault Dedicated (standard_small, us-east-1) pricing "
+                "from the HCP portal and populate this file. See "
+                "docs/operations/customer_zero_run3_pricing_evidence_capture.md for the "
+                "capture procedure."
+            ],
+        )
+
     content_findings, content_warnings, snapshot = _validate_content(instance)
     if content_findings:
         return PricingEvidenceVerificationResult(

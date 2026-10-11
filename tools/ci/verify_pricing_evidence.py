@@ -78,7 +78,16 @@ def run_verification(
 
     # Determine overall status from pricing evidence result
     pe_status = pricing_result.validation_status
-    if pe_status in (
+    if pe_status == "REJECTED_NOT_POPULATED":
+        overall_status = "BLOCKED_PRICING_UNVERIFIED"
+        next_action = (
+            "All core pricing evidence fields are null — the template has not been "
+            "populated. Human operator must observe current HCP Vault Dedicated "
+            "(standard_small, us-east-1) pricing from the HCP portal and populate "
+            "customer_one/run3_pricing_evidence_instance.json. "
+            "Follow docs/operations/customer_zero_run3_pricing_evidence_capture.md."
+        )
+    elif pe_status in (
         "REJECTED_SCHEMA",
         "REJECTED_CONTENT",
         "REJECTED_PROVENANCE",
