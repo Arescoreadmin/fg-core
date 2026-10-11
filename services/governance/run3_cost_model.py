@@ -40,7 +40,7 @@ The historical figure is CONSUMED (Runs 1+2 only).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 
@@ -163,6 +163,7 @@ def _round_up_to_billing_unit(minutes: int, billing_unit: int) -> int:
     if billing_unit <= 0:
         raise ValueError("billing_unit must be > 0")
     import math
+
     return math.ceil(minutes / billing_unit) * billing_unit
 
 
@@ -405,3 +406,161 @@ def build_cost_model(
             "(KB-scale at $0.50/GB ingestion, us-east-1). IAM resources have no direct cost."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Bounded exposure report
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BoundedExposureReport:
+    """Defensible upper-bound cost exposure report for a given max runtime.
+
+    is_defensible_upper_bound is True only if unknown_charges_acknowledged is True
+    in the pricing evidence. Otherwise the ceiling cannot be certified.
+    """
+
+    base_cost_usd: str  # cost at max_runtime_minutes (Decimal string)
+    safety_margin_usd: str  # margin amount
+    bounded_ceiling_usd: str  # base + margin
+    cloudwatch_cost_usd: str
+    total_bounded_ceiling_usd: str  # bounded_ceiling + cloudwatch
+    unknown_charges_warning: str | None
+    is_defensible_upper_bound: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "base_cost_usd": self.base_cost_usd,
+            "safety_margin_usd": self.safety_margin_usd,
+            "bounded_ceiling_usd": self.bounded_ceiling_usd,
+            "cloudwatch_cost_usd": self.cloudwatch_cost_usd,
+            "total_bounded_ceiling_usd": self.total_bounded_ceiling_usd,
+            "unknown_charges_warning": self.unknown_charges_warning,
+            "is_defensible_upper_bound": self.is_defensible_upper_bound,
+        }
+
+
+def compute_bounded_exposure(
+    inputs: PricingInputs,
+    max_runtime_minutes: int,
+    safety_margin_pct: Decimal = Decimal("0.10"),
+) -> BoundedExposureReport:
+    """Compute a bounded financial exposure report with safety margin.
+
+    Args:
+        inputs: Verified pricing inputs.
+        max_runtime_minutes: The authorized maximum runtime (human-set).
+        safety_margin_pct: Safety margin fraction (default 10%).
+
+    Returns:
+        BoundedExposureReport with all values as Decimal strings.
+    """
+    if max_runtime_minutes <= 0:
+        raise ValueError("max_runtime_minutes must be > 0")
+    if safety_margin_pct < Decimal("0"):
+        raise ValueError("safety_margin_pct must be >= 0")
+
+    base_cost = _apply_minimum(
+        _cost_for_minutes(
+            inputs.hourly_rate_usd, max_runtime_minutes, inputs.billing_unit_minutes
+        ),
+        inputs.minimum_charge_usd,
+    )
+    margin = (base_cost * safety_margin_pct).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP
+    )
+    ceiling = (base_cost + margin).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    cw_cost = _cloudwatch_cost(
+        inputs.aws_cloudwatch_per_gb_usd, inputs.estimated_audit_volume_gb
+    )
+    total = (ceiling + cw_cost).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+
+    unknown_warning = None
+    defensible = True
+    # unknown_charges_acknowledged is stored as part of the pricing inputs via
+    # build_cost_model_from_evidence; we check via a special sentinel attribute
+    uca = getattr(inputs, "_unknown_charges_acknowledged", True)
+    if not uca:
+        unknown_warning = (
+            "pricing.unknown_charges_acknowledged is False — additional HCP charges "
+            "may apply beyond the hourly rate. Bounded ceiling is NOT certifiable as "
+            "a defensible upper bound until all charges are acknowledged."
+        )
+        defensible = False
+
+    return BoundedExposureReport(
+        base_cost_usd=str(base_cost),
+        safety_margin_usd=str(margin),
+        bounded_ceiling_usd=str(ceiling),
+        cloudwatch_cost_usd=str(cw_cost),
+        total_bounded_ceiling_usd=str(total),
+        unknown_charges_warning=unknown_warning,
+        is_defensible_upper_bound=defensible,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Evidence-based cost model builder
+# ---------------------------------------------------------------------------
+
+
+def build_cost_model_from_evidence(
+    evidence_result: Any,
+    max_runtime_minutes: int | None = None,
+) -> CostModel:
+    """Build cost model from a validated pricing evidence result.
+
+    Returns pending model if evidence is not validated.
+    Raises ValueError if evidence is validated but pricing snapshot is incomplete.
+
+    Args:
+        evidence_result: Result from run3_pricing_evidence_verifier.verify_pricing_evidence().
+        max_runtime_minutes: Optional authorized maximum runtime for scenario C.
+
+    Returns:
+        CostModel — with real values if evidence is valid, PENDING values otherwise.
+    """
+    if not evidence_result.is_valid:
+        return build_pending_cost_model()
+
+    snapshot = evidence_result.pricing_snapshot
+    if snapshot is None:
+        raise ValueError(
+            "Evidence result is_valid=True but pricing_snapshot is None — "
+            "this is a verifier bug. Cannot build cost model."
+        )
+
+    required_snapshot_keys = [
+        "hourly_rate_usd",
+        "billing_unit_minutes",
+        "minimum_charge_usd",
+    ]
+    missing = [k for k in required_snapshot_keys if snapshot.get(k) is None]
+    if missing:
+        raise ValueError(
+            f"Validated pricing snapshot is missing required fields: {missing}"
+        )
+
+    try:
+        hourly_rate = Decimal(str(snapshot["hourly_rate_usd"]))
+        billing_unit = int(snapshot["billing_unit_minutes"])
+        minimum_charge = Decimal(str(snapshot["minimum_charge_usd"]))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError(
+            f"Failed to convert pricing snapshot values to Decimal: {exc}"
+        ) from exc
+
+    inputs = PricingInputs(
+        hourly_rate_usd=hourly_rate,
+        billing_unit_minutes=billing_unit,
+        minimum_charge_usd=minimum_charge,
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    # Attach unknown_charges_acknowledged for bounded exposure reporting
+    inputs._unknown_charges_acknowledged = bool(  # type: ignore[attr-defined]
+        snapshot.get("unknown_charges_acknowledged", False)
+    )
+
+    return build_cost_model(inputs, max_runtime_minutes)

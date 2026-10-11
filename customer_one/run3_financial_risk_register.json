@@ -76,6 +76,17 @@
       "mitigation": "CloudWatch log retention and cost confirmed negligible in cost_containment.md. AWS IAM resources have no direct cost.",
       "residual_risk": "VERY_LOW",
       "status": "ACCEPTED_LOW_RISK"
+    },
+    {
+      "id": "FR-008",
+      "title": "Pricing evidence fabrication or staleness",
+      "description": "Pricing evidence fabrication or staleness: a team member populates evidence fields with estimated or historical values rather than current observed pricing, causing the cost model to understate actual exposure.",
+      "likelihood": "medium",
+      "impact": "high",
+      "mitigation": "Independent reviewer separation of duties (collector != reviewer); evidence fingerprint tamper detection; expiry policy enforcement; explicit OPEN FP-001 status; verifier rejects evidence where source.classification or source.reference_url is null.",
+      "residual_risk": "LOW — enforced by verifier and test suite (PEVID-001–PEVID-031)",
+      "status": "MITIGATED_BY_VERIFIER",
+      "mitigated_by": ["run3_pricing_evidence_verifier.py", "run3_financial_risk_register.json FR-001"]
     }
   ],
 

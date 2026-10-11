@@ -1,3 +1,30 @@
+## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 verified pricing evidence
+
+**Change scope:** OFFLINE_PREPARATION class. Implements structured pricing evidence ingestion, verification, and bounded exposure reporting for HCP Vault Dedicated (standard_small, us-east-1). Extends the 22-condition cost-authorization verifier with pricing evidence pipeline. Produces human-decision readiness infrastructure for Run 3. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+New tools/ci file: `tools/ci/verify_pricing_evidence.py` (standalone CLI verifier pipeline — read-only, no cloud calls, no credentials, no network). New service modules: `run3_pricing_evidence_verifier.py` (schema/content/provenance/freshness/source/fingerprint verifier), extended `run3_cost_model.py` (bounded exposure report, evidence-based model builder). New governance artifacts: `run3_pricing_evidence_instance.json` (all-null template). Updated: `run3_financial_risk_register.json` (FR-008 added). New operator runbook: `docs/operations/customer_zero_run3_pricing_evidence_capture.md`. 33 adversarial tests (PEVID-001–PEVID-031 + 2 safety guards).
+
+**Security posture:**
+
+1. **No authorization path changed.** request_status=BLOCKED_PRICING_UNVERIFIED. APPROVED state remains unreachable through any automated path. The `approved` field in `verify_pricing_evidence.py` output is hardcoded `False` with a runtime RuntimeError guard. Independent verifier confirms BLOCKED state.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** FP-001 (HCP pricing unverified) remains OPEN — not resolvable offline. All null fields in `run3_pricing_evidence_instance.json` must be populated by a human operator from the live HCP portal.
+3. **`tools/ci/verify_pricing_evidence.py` is read-only.** It loads three local files, runs offline verification logic, and outputs JSON. No cloud mutation. No network calls. No credentials. No paid infrastructure.
+4. **Separation of duties enforced.** Collector identity must differ from reviewer identity. Self-certification is rejected at the verifier level and tested (PEVID-009). Fingerprint tamper detection enforced (PEVID-020).
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (new — read-only CLI pipeline), `services/governance/run3_pricing_evidence_verifier.py` (new), `services/governance/run3_cost_model.py` (extended — no breaking changes), `customer_one/run3_pricing_evidence_instance.json` (new — all null), `customer_one/run3_financial_risk_register.json` (FR-008 added), `docs/operations/customer_zero_run3_pricing_evidence_capture.md` (new), `tests/test_cz_run3_pricing_evidence_001.py` (new — 33 tests), `docs/ai/PR_FIX_LOG.md` (entry added).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations. APPROVED state is unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py -v` → 33 passed (PEVID-001–PEVID-031 + safety guards)
+- `pytest tests/test_cz_run3_human_cost_review_001.py -v` → 40 passed (all PR #762 tests preserved)
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
 ## 2026-10-10 - governance/customer-zero-run3-human-cost-review-001: CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 cost review package
 
 **Change scope:** OFFLINE_PREPARATION class. Prepares complete human cost-authorization review package for CUSTOMER-ZERO-TRUST-003. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
