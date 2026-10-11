@@ -1,3 +1,30 @@
+## 2026-10-10 - governance/customer-zero-run3-human-cost-review-001: CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 cost review package
+
+**Change scope:** OFFLINE_PREPARATION class. Prepares complete human cost-authorization review package for CUSTOMER-ZERO-TRUST-003. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+New service modules: `customer_zero_cost_review.py` (22-condition independent verifier), `run3_cost_model.py` (Decimal cost model), `run3_operator_watchdog.py` (runtime watchdog). New governance artifacts: `run3_cost_authorization_request.json` (BLOCKED_PRICING_UNVERIFIED), `run3_pricing_evidence_schema.json` (FP-001 OPEN), `run3_financial_risk_register.json`. New operator procedure: `docs/operations/customer_zero_run3_human_cost_review.md`. 28 adversarial tests (COST-001–COST-028).
+
+**Security posture:**
+
+1. **No authorization path changed.** request_status=BLOCKED_PRICING_UNVERIFIED. Independent verifier confirms BLOCKED state. APPROVED is not reachable by any module in this PR.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** FP-001 (HCP pricing unverified) remains OPEN — not resolvable offline.
+3. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. Canonical Customer-Zero truth preserved.
+4. **Freeze Law criterion 3 (measurably reduces delivery risk).** Prepares the package that the human approver needs to make an informed cost authorization decision. Reduces risk of unauthorized overspend by requiring explicit pricing confirmation before authorization can advance.
+
+**Critical-path files changed:** `services/governance/customer_zero_cost_review.py` (new — verifier), `services/governance/run3_cost_model.py` (new — cost model), `services/governance/run3_operator_watchdog.py` (new — watchdog), `customer_one/run3_cost_authorization_request.json` (new), `customer_one/run3_pricing_evidence_schema.json` (new), `customer_one/run3_financial_risk_register.json` (new), `docs/operations/customer_zero_run3_human_cost_review.md` (new), `tests/test_cz_run3_human_cost_review_001.py` (new — 28 tests), `ROADMAP.md` (row added), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (reconciliation paragraph), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry added).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_human_cost_review_001.py -v` → 28 passed (COST-001–COST-028)
+- `python services/governance/customer_zero_cost_review.py --repo . --json` → overall_state=BLOCKED (FP-001 OPEN, financial fields null)
+- `python tools/ci/customer_zero_final_readiness.py --repo . --json` → result=READY
+- `python tools/ci/customer_zero_run3_preauth.py --repo . --json` → preauth_result=READY_FOR_HUMAN_COST_AUTHORIZATION
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
 ## 2026-10-10 - repair/cz-run3-audit-preservation-001: CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 FP-003 repair
 
 **Change scope:** REPAIR-class PR. Implements FP-003 from merged audit PR #760. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No cloud spending. No paid infrastructure. Infra change is static Terraform lifecycle annotation only — no resource creation, no destruction, no plan mutation.

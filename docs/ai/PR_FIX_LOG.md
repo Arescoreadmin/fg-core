@@ -1,3 +1,16 @@
+# CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 — Human cost-authorization review and decision preparation
+
+- **Work item:** CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 (OFFLINE_PREPARATION class)
+- **Purpose:** Prepares the complete human cost-authorization review package for CUSTOMER-ZERO-TRUST-003. Implements the pricing evidence capture procedure (FP-001 OPEN — not addressable offline), deterministic three-scenario cost model (Decimal arithmetic), execution window optimization, 22-condition independent verifier, cost authorization request (BLOCKED_PRICING_UNVERIFIED), operator watchdog (time-based, with explicit billing disclaimer), audit-first smoke test binding (SMOKE-TEST-RUN3-001), and six-resource teardown preservation contract.
+- **New files:** `services/governance/customer_zero_cost_review.py` (22-condition independent verifier, CLI entry point), `services/governance/run3_cost_model.py` (Decimal cost model, three scenarios, PricingInputs dataclass), `services/governance/run3_operator_watchdog.py` (runtime watchdog, time-based, billing disclaimer), `customer_one/run3_cost_authorization_request.json` (request_status=BLOCKED_PRICING_UNVERIFIED, canonical_source_sha=873148e8..., six preserved resources, smoke test contract), `customer_one/run3_pricing_evidence_schema.json` (capture procedure, all value fields null, fp_001_status=OPEN), `customer_one/run3_financial_risk_register.json` (FR-001–FR-007), `docs/operations/customer_zero_run3_human_cost_review.md` (operator procedure, execution window optimization, phase-by-phase guide), `tests/test_cz_run3_human_cost_review_001.py` (28 adversarial tests COST-001–COST-028).
+- **Governance changes:** `ROADMAP.md` row added for PR #762. `docs/plans/customer_one_verified_governance_roadmap_20260910.md` reconciliation paragraph added.
+- **Scope:** New service modules (verifier, cost model, watchdog), new customer_one artifacts (request, pricing schema, risk register), new test file, new operator procedure doc, ROADMAP.md row, plans reconciliation paragraph, PR_FIX_LOG.md entry. No tools/ci changes. No evaluator changes. No schema changes. No migrations. No infra changes. No API contract changes. No cloud mutation.
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED.
+- **FP-001 status:** OPEN — HCP Vault Dedicated pricing unverified. Not addressable offline. Not resolved by this PR. request_status=BLOCKED_PRICING_UNVERIFIED.
+- **Zero cloud mutations. No paid infrastructure. No schema changes.**
+
+---
+
 # CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 — FP-003 repair: protect audit reader role and attachment
 
 - **Work item:** CZ-RUN3-AUDIT-PRESERVATION-REPAIR-001 (REPAIR class — always authorized)

@@ -1,0 +1,121 @@
+{
+  "request_id": "CZ-RUN3-COST-AUTH-REQUEST-001",
+  "schema_version": "1.0",
+  "work_item": "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001",
+  "canonical_source_sha": "873148e84b9d9163bb13c8e3e185f5c47d43225e",
+  "candidate_fingerprint": null,
+  "infrastructure_fingerprint": "303aa7d0bd8b8a864ee4900aaf2fd2cf11fa9ac6055d0a3f599ec9c2012e37dd",
+  "pricing_evidence_fingerprint": null,
+  "pricing_valid_until": null,
+
+  "_comment_canonical_sha": "canonical_source_sha is bound to the merged HEAD of PR #761 (873148e84b9d9163bb13c8e3e185f5c47d43225e). This binding MUST NOT be altered offline. It resolves to origin/main on merge.",
+
+  "hcp_organization": "frostgate",
+  "hcp_project": "frostgate-trust",
+  "hcp_tier": "standard_small",
+  "hcp_region": "us-east-1",
+  "aws_account": null,
+  "terraform_workspace": "infra/",
+
+  "operator_identity": null,
+  "approver_identity": null,
+
+  "_comment_identities": "operator_identity and approver_identity are null. Neither field may be populated by an AI agent. A human operator must enter their own identity after reading and understanding the full authorization request. The approver must be a different person from the operator, or the same person making an explicit documented decision with full understanding of the cost and scope.",
+
+  "requested_max_cost_usd": null,
+  "requested_max_runtime_minutes": null,
+  "teardown_reserve_minutes": null,
+
+  "_comment_financial": "All financial values are null because FP-001 (HCP pricing unverified) is OPEN. These MUST remain null until: (1) the human operator confirms current HCP pricing via the HCP portal, (2) populates run3_pricing_evidence_schema.json, and (3) makes an explicit decision about the maximum authorized spend. No AI agent may fill in these values.",
+
+  "authorization_expires_at": null,
+
+  "abort_conditions": {
+    "ABORT-COST-001": {
+      "condition": "Estimated accrued cost reaches requested_max_cost_usd",
+      "action": "Initiate immediate controlled teardown",
+      "note": "Estimated cost only — cloud billing is delayed. See operator watchdog design in docs/operations/customer_zero_run3_human_cost_review.md"
+    },
+    "ABORT-TIME-001": {
+      "condition": "Elapsed ceremony runtime reaches requested_max_runtime_minutes",
+      "action": "Initiate immediate controlled teardown regardless of ceremony state",
+      "note": "Hard deadline. Applies whether trust is proven or not."
+    },
+    "ABORT-SMOKE-001": {
+      "condition": "Audit smoke test (SMOKE-TEST-RUN3-001) fails at any step",
+      "action": "Immediate controlled teardown. No signing proofs may proceed.",
+      "reference": "docs/operations/customer_zero_run3_audit_smoke_test.md"
+    },
+    "ABORT-CER-001": {
+      "condition": "Any ceremony checkpoint fails",
+      "action": "Stop. Diagnose. If cannot resolve in 15 minutes, initiate teardown.",
+      "note": "No exploratory debugging against paid infrastructure."
+    }
+  },
+
+  "audit_smoke_test_contract": {
+    "document_id": "SMOKE-TEST-RUN3-001",
+    "reference_file": "docs/operations/customer_zero_run3_audit_smoke_test.md",
+    "canonical_sha_at_definition": "ec8684df4699be43b40d1edc9a79b58fd23e3637",
+    "invariant": "No signing proof (A-family, B-family, C-family, D-family, E-family, F-family, H-family) may begin until the audit smoke test passes",
+    "abort_on_failure": "ABORT-SMOKE-001 — immediate controlled teardown"
+  },
+
+  "preserved_aws_resources": [
+    {
+      "address": "aws_cloudwatch_log_group.vault_audit",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": true,
+      "note": "Must remain ACTIVE before, during, and after ceremony"
+    },
+    {
+      "address": "aws_iam_policy.vault_audit",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": false,
+      "note": "ACTIVE. FP-005 (P2): prevent_destroy absent but resource is in preserved list"
+    },
+    {
+      "address": "aws_iam_user.vault_audit",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": false,
+      "note": "ACTIVE. FP-005 (P2): prevent_destroy absent but resource is in preserved list"
+    },
+    {
+      "address": "aws_iam_user_policy_attachment.vault_audit",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": false,
+      "note": "ACTIVE. FP-005 (P2): prevent_destroy absent but resource is in preserved list"
+    },
+    {
+      "address": "aws_iam_role.vault_audit_reader",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": true,
+      "note": "Added in PR #761 (FP-003 repair). Required for independent historical verification post-teardown."
+    },
+    {
+      "address": "aws_iam_role_policy_attachment.vault_audit_reader",
+      "lifecycle": "PERSISTENT_AUDIT_AUTHORITY",
+      "prevent_destroy": true,
+      "note": "Added in PR #761 (FP-003 repair). Required for independent historical verification post-teardown."
+    }
+  ],
+
+  "evidence_manifest_reference": "customer_one/offline_simulation_evidence.json",
+
+  "request_created_at": "2026-10-10T00:00:00Z",
+  "request_status": "BLOCKED_PRICING_UNVERIFIED",
+
+  "_comment_status": "request_status is BLOCKED_PRICING_UNVERIFIED because FP-001 is OPEN. It MUST NOT be changed to PENDING_HUMAN_REVIEW until run3_pricing_evidence_schema.json is fully populated with confirmed current HCP pricing. It MUST NOT be changed to APPROVED by any automated process — approval requires explicit human action and a separate authorization record.",
+
+  "fp_001_status": "OPEN",
+  "fp_001_note": "HCP Vault Dedicated pricing is UNVERIFIED offline. The human operator must confirm current pricing from the HCP portal before this request can advance to PENDING_HUMAN_REVIEW.",
+
+  "canonical_truth_preserved": {
+    "CUSTOMER_ZERO_TRUST": "NOT_PROVEN",
+    "THIRD_PAID_CEREMONY": "NOT_AUTHORIZED",
+    "PAID_HCP_INFRASTRUCTURE": "ABSENT",
+    "COST_AUTHORIZATION": "NOT_AUTHORIZED",
+    "CUSTOMER_ZERO_TRUST_003": "BLOCKED",
+    "CUSTOMER_ZERO_ACCEPT_001": "BLOCKED"
+  }
+}

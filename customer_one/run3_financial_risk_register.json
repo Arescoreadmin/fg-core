@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "register_id": "CZ-RUN3-FINANCIAL-RISK-REGISTER-001",
+  "work_item": "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001",
+  "canonical_source_sha": "873148e84b9d9163bb13c8e3e185f5c47d43225e",
+  "created_at": "2026-10-10T00:00:00Z",
+  "status": "ACTIVE",
+
+  "risks": [
+    {
+      "id": "FR-001",
+      "title": "HCP pricing increases since Runs 1+2",
+      "likelihood": "MEDIUM",
+      "impact": "HIGH",
+      "description": "HCP Vault Dedicated (standard_small) pricing may have changed since the $321.81 historical accrual (Runs 1+2, October). If the hourly rate has increased, an equivalent ceremony duration will cost more.",
+      "mitigation": "Human operator confirms current pricing from HCP portal BEFORE any cost authorization decision. Never use $321.81 as a ceiling — it is historical reference only.",
+      "residual_risk": "LOW — if pricing confirmation procedure is followed",
+      "status": "OPEN_PENDING_PRICING_CONFIRMATION"
+    },
+    {
+      "id": "FR-002",
+      "title": "Ceremony runtime exceeds authorized maximum",
+      "likelihood": "MEDIUM",
+      "impact": "HIGH",
+      "description": "Unexpected delays (provisioning, CloudWatch configuration, verification retries) can cause the ceremony to run longer than the authorized maximum, resulting in unauthorized cost accrual.",
+      "mitigation": "1. Hard maximum runtime set and recorded before provisioning. 2. Operator watchdog (FP-007 remediation) emits warning at 75% and mandatory stop signal at 100% of max runtime. 3. No exploratory debugging against paid infrastructure.",
+      "residual_risk": "MEDIUM — cloud billing is delayed; watchdog estimates cost but cannot guarantee dollar cap",
+      "status": "MITIGATED_VIA_WATCHDOG"
+    },
+    {
+      "id": "FR-003",
+      "title": "Billing delay causes overspend before operator can respond",
+      "likelihood": "LOW",
+      "impact": "MEDIUM",
+      "description": "HCP cloud billing is not real-time. An operator tracking estimated cost via runtime cannot rely on provider-reported accruals as a hard cap. By the time a billing alert fires, the actual cost may already exceed the authorized maximum.",
+      "mitigation": "1. Operator watchdog is time-based (wall clock), not cost-based. 2. Authorized maximum runtime is the binding control, not a dollar amount. 3. Cost ceiling is derived from hourly rate * max_runtime. 4. Document explicitly that runtime watchdog does NOT provide a guaranteed dollar cap.",
+      "residual_risk": "LOW — time-based watchdog is more reliable than cost-based",
+      "status": "MITIGATED_BY_DESIGN"
+    },
+    {
+      "id": "FR-004",
+      "title": "Partial teardown leaves billable HCP resources running",
+      "likelihood": "LOW",
+      "impact": "HIGH",
+      "description": "A teardown failure (network interruption, Terraform state corruption, operator error) may leave the HCP Vault cluster running after the ceremony ends, causing ongoing cost accrual until manually destroyed.",
+      "mitigation": "1. Staged teardown path verified offline before ceremony. 2. Provider-side deletion (HCP console) is a backup to Terraform destroy. 3. Billing evidence captured AFTER teardown completes to confirm zero ongoing accrual. 4. Hard teardown deadline regardless of ceremony state.",
+      "residual_risk": "LOW — multiple teardown verification layers",
+      "status": "MITIGATED_VIA_TEARDOWN_CONTRACT"
+    },
+    {
+      "id": "FR-005",
+      "title": "Prior $321.81 authorization treated as valid for Run 3",
+      "likelihood": "LOW",
+      "impact": "HIGH",
+      "description": "An operator or reviewer may incorrectly believe the $321.81 historical figure from ceremony_state.yaml constitutes an available spending envelope for Run 3. It does not — it is consumed.",
+      "mitigation": "1. run3_cost_authorization_request.json explicitly marks all financial values null. 2. Pricing evidence schema requires fresh confirmation. 3. Tests assert that $321.81 is never used as a cost ceiling in any authorization logic.",
+      "residual_risk": "LOW — enforced by test suite (COST-014)",
+      "status": "MITIGATED_VIA_SCHEMA_AND_TESTS"
+    },
+    {
+      "id": "FR-006",
+      "title": "Unattended ceremony run overnight",
+      "likelihood": "LOW",
+      "impact": "HIGH",
+      "description": "If the operator leaves the ceremony running unattended (e.g., overnight), and the watchdog is not active, the cluster could accrue cost far beyond the authorized maximum.",
+      "mitigation": "1. ceremony_state.yaml explicitly prohibits unattended overnight execution. 2. Hard teardown deadline set before ceremony begins. 3. Operator watchdog emits hard stop signal at maximum runtime.",
+      "residual_risk": "LOW — multiple controls",
+      "status": "MITIGATED_BY_POLICY"
+    },
+    {
+      "id": "FR-007",
+      "title": "AWS costs underestimated",
+      "likelihood": "LOW",
+      "impact": "LOW",
+      "description": "AWS CloudWatch costs for ceremony-scale Vault audit traffic are negligible (KB-scale volume at $0.50/GB ingestion). However, if audit volume is much higher than expected, costs could be marginally higher.",
+      "mitigation": "CloudWatch log retention and cost confirmed negligible in cost_containment.md. AWS IAM resources have no direct cost.",
+      "residual_risk": "VERY_LOW",
+      "status": "ACCEPTED_LOW_RISK"
+    }
+  ],
+
+  "aggregate_risk_posture": "MEDIUM — primary driver is FR-001 (unverified pricing) and FR-002 (runtime overrun). Both are mitigated if the operator follows the pricing confirmation procedure and operator watchdog is active.",
+
+  "risk_acceptance_conditions": [
+    "Human operator has confirmed current HCP pricing from the HCP portal",
+    "requested_max_cost_usd is set to a value the approver explicitly accepts",
+    "requested_max_runtime_minutes is set before provisioning",
+    "Operator watchdog is running during the ceremony",
+    "Teardown procedure is verified offline before ceremony begins",
+    "Historical $321.81 figure is not used as a ceiling"
+  ]
+}
