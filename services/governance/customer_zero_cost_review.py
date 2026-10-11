@@ -249,6 +249,14 @@ def _check_file_exists(path: Path, condition_id: str, label: str) -> ConditionRe
     return ConditionResult(condition_id, False, f"{label} not found: {path}")
 
 
+SOURCE_BINDING_FIELDS = [
+    "canonical_source_sha",
+    "candidate_fingerprint",
+    "aws_account",
+    "pricing_valid_until",
+]
+
+
 def _check_request_schema(req: dict) -> ConditionResult:
     missing = [f for f in REQUIRED_REQUEST_FIELDS if f not in req]
     if missing:
@@ -257,8 +265,15 @@ def _check_request_schema(req: dict) -> ConditionResult:
             False,
             f"Missing required fields: {', '.join(missing)}",
         )
+    null_binding = [f for f in SOURCE_BINDING_FIELDS if req.get(f) is None]
+    if null_binding:
+        return ConditionResult(
+            Condition.REQUEST_SCHEMA_VALID,
+            False,
+            f"Source-binding fields must be non-null: {', '.join(null_binding)}",
+        )
     return ConditionResult(
-        Condition.REQUEST_SCHEMA_VALID, True, "All required fields present"
+        Condition.REQUEST_SCHEMA_VALID, True, "All required fields present and non-null"
     )
 
 
@@ -310,6 +325,11 @@ def _check_fp001_not_open(pricing: dict, req: dict) -> ConditionResult:
     return ConditionResult(Condition.PRICING_FP001_NOT_OPEN, True, "FP-001 is not open")
 
 
+EXPECTED_PRICING_TIER = "standard_small"
+EXPECTED_PRICING_REGION = "us-east-1"
+EXPECTED_PRICING_CURRENCY = "USD"
+
+
 def _check_pricing_evidence_populated(pricing: dict) -> ConditionResult:
     evidence = pricing.get("evidence", {})
     nulls = [f for f in REQUIRED_PRICING_EVIDENCE_FIELDS if evidence.get(f) is None]
@@ -319,10 +339,38 @@ def _check_pricing_evidence_populated(pricing: dict) -> ConditionResult:
             False,
             f"Pricing evidence fields are null (not yet confirmed): {', '.join(nulls)}",
         )
+    errors = []
+    rate = evidence.get("hourly_rate_usd")
+    try:
+        if float(rate) <= 0:
+            errors.append(f"hourly_rate_usd must be > 0, got {rate!r}")
+    except (TypeError, ValueError):
+        errors.append(f"hourly_rate_usd must be a positive number, got {rate!r}")
+    currency = evidence.get("currency")
+    if str(currency).upper() != EXPECTED_PRICING_CURRENCY:
+        errors.append(
+            f"currency must be {EXPECTED_PRICING_CURRENCY!r}, got {currency!r}"
+        )
+    tier = evidence.get("product_tier_confirmed")
+    if tier != EXPECTED_PRICING_TIER:
+        errors.append(
+            f"product_tier_confirmed must be {EXPECTED_PRICING_TIER!r}, got {tier!r}"
+        )
+    region = evidence.get("region_confirmed")
+    if region != EXPECTED_PRICING_REGION:
+        errors.append(
+            f"region_confirmed must be {EXPECTED_PRICING_REGION!r}, got {region!r}"
+        )
+    if errors:
+        return ConditionResult(
+            Condition.PRICING_EVIDENCE_POPULATED,
+            False,
+            f"Pricing evidence validation failed: {'; '.join(errors)}",
+        )
     return ConditionResult(
         Condition.PRICING_EVIDENCE_POPULATED,
         True,
-        "All required pricing evidence fields are populated",
+        f"Pricing evidence populated and validated ({EXPECTED_PRICING_TIER} / {EXPECTED_PRICING_REGION} / {EXPECTED_PRICING_CURRENCY})",
     )
 
 
@@ -377,6 +425,39 @@ def _check_pricing_fingerprint(pricing: dict, req: dict) -> ConditionResult:
         True,
         f"Pricing fingerprint consistent: {evidence_fp[:16]}...",
     )
+
+
+def _check_authorization_expiry(req: dict) -> ConditionResult:
+    """C13: authorization_expires_at must be non-null, parseable ISO-8601, and in the future."""
+    expiry = req.get("authorization_expires_at")
+    if not expiry:
+        return ConditionResult(
+            Condition.AUTHORIZATION_EXPIRY_SET,
+            False,
+            "authorization_expires_at is null — human approver must set",
+        )
+    try:
+        expiry_dt = datetime.fromisoformat(str(expiry))
+        if expiry_dt.tzinfo is None:
+            raise ValueError("authorization_expires_at must be timezone-aware")
+        now_utc = datetime.now(UTC)
+        if expiry_dt <= now_utc:
+            return ConditionResult(
+                Condition.AUTHORIZATION_EXPIRY_SET,
+                False,
+                f"authorization_expires_at {expiry!r} is in the past — authorization has expired",
+            )
+        return ConditionResult(
+            Condition.AUTHORIZATION_EXPIRY_SET,
+            True,
+            f"authorization_expires_at = {expiry} (future, timezone-aware)",
+        )
+    except (ValueError, TypeError) as exc:
+        return ConditionResult(
+            Condition.AUTHORIZATION_EXPIRY_SET,
+            False,
+            f"authorization_expires_at {expiry!r} is not a valid ISO-8601 timezone-aware datetime: {exc}",
+        )
 
 
 def _check_financial_field(
@@ -677,24 +758,27 @@ def verify_cost_review(
         )
     )
 
-    # C13: Authorization expiry
-    expiry = req.get("authorization_expires_at")
-    if not expiry:
+    # Cross-field: teardown_reserve must be < requested_max_runtime
+    _max_rt = req.get("requested_max_runtime_minutes")
+    _td_res = req.get("teardown_reserve_minutes")
+    if (
+        isinstance(_max_rt, (int, float))
+        and isinstance(_td_res, (int, float))
+        and _max_rt > 0
+        and _td_res > 0
+        and _td_res >= _max_rt
+    ):
         conditions.append(
             ConditionResult(
-                Condition.AUTHORIZATION_EXPIRY_SET,
+                Condition.TEARDOWN_RESERVE_SET,
                 False,
-                "authorization_expires_at is null — human approver must set",
+                f"teardown_reserve_minutes ({_td_res}) must be < requested_max_runtime_minutes ({_max_rt}); "
+                "OperatorWatchdog would raise ValueError with this combination",
             )
         )
-    else:
-        conditions.append(
-            ConditionResult(
-                Condition.AUTHORIZATION_EXPIRY_SET,
-                True,
-                f"authorization_expires_at = {expiry}",
-            )
-        )
+
+    # C13: Authorization expiry
+    conditions.append(_check_authorization_expiry(req))
 
     # C14–C15: Identity fields
     conditions.append(

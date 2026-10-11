@@ -153,9 +153,30 @@ class CostModel:
 _TWO_PLACES = Decimal("0.01")
 
 
-def _cost_for_minutes(hourly_rate: Decimal, minutes: int) -> Decimal:
-    """Compute cost for a given number of minutes at an hourly rate."""
-    hours = Decimal(str(minutes)) / Decimal("60")
+def _round_up_to_billing_unit(minutes: int, billing_unit: int) -> int:
+    """Round minutes UP to the next multiple of billing_unit.
+
+    For hourly billing (billing_unit=60), 30 minutes → 60 minutes,
+    61 minutes → 120 minutes. This prevents understating costs when
+    providers bill in full units rather than prorating.
+    """
+    if billing_unit <= 0:
+        raise ValueError("billing_unit must be > 0")
+    import math
+    return math.ceil(minutes / billing_unit) * billing_unit
+
+
+def _cost_for_minutes(
+    hourly_rate: Decimal, minutes: int, billing_unit_minutes: int = 1
+) -> Decimal:
+    """Compute cost for a given number of minutes at an hourly rate.
+
+    Rounds minutes UP to the confirmed billing unit before applying the rate.
+    With billing_unit_minutes=60 (hourly), 30 min → 1 billable hour.
+    With billing_unit_minutes=1 (per-minute, the default), no rounding occurs.
+    """
+    billable_minutes = _round_up_to_billing_unit(minutes, billing_unit_minutes)
+    hours = Decimal(str(billable_minutes)) / Decimal("60")
     return (hourly_rate * hours).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
@@ -284,30 +305,32 @@ def build_cost_model(
         inputs.estimated_audit_volume_gb,
     )
 
+    bu = inputs.billing_unit_minutes  # confirmed billing granularity
+
     # Scenario A: 120–240 minutes
     a_min = _apply_minimum(
-        _cost_for_minutes(inputs.hourly_rate_usd, 120),
+        _cost_for_minutes(inputs.hourly_rate_usd, 120, bu),
         inputs.minimum_charge_usd,
     )
     a_max = _apply_minimum(
-        _cost_for_minutes(inputs.hourly_rate_usd, 240),
+        _cost_for_minutes(inputs.hourly_rate_usd, 240, bu),
         inputs.minimum_charge_usd,
     )
 
     # Scenario B: 30–60 minutes
     b_min = _apply_minimum(
-        _cost_for_minutes(inputs.hourly_rate_usd, 30),
+        _cost_for_minutes(inputs.hourly_rate_usd, 30, bu),
         inputs.minimum_charge_usd,
     )
     b_max = _apply_minimum(
-        _cost_for_minutes(inputs.hourly_rate_usd, 60),
+        _cost_for_minutes(inputs.hourly_rate_usd, 60, bu),
         inputs.minimum_charge_usd,
     )
 
     # Scenario C: max_runtime_minutes (human-set)
     if max_runtime_minutes is not None and max_runtime_minutes > 0:
         c_cost = _apply_minimum(
-            _cost_for_minutes(inputs.hourly_rate_usd, max_runtime_minutes),
+            _cost_for_minutes(inputs.hourly_rate_usd, max_runtime_minutes, bu),
             inputs.minimum_charge_usd,
         )
         c_total = (c_cost + cw_cost).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)

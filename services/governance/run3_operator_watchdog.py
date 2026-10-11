@@ -44,7 +44,10 @@ Do NOT claim that this watchdog provides a guaranteed dollar cap.
 
 from __future__ import annotations
 
+import sys
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -129,6 +132,8 @@ class OperatorWatchdog:
         teardown_reserve_minutes: int,
         hourly_rate_usd_estimate: float | None = None,
         warn_at_pct: float = 0.75,
+        on_warn: Callable[[str], None] | None = None,
+        on_stop: Callable[[str], None] | None = None,
     ) -> None:
         """
         Args:
@@ -139,6 +144,12 @@ class OperatorWatchdog:
             hourly_rate_usd_estimate: Current confirmed HCP hourly rate (USD).
                                       None if pricing is unverified.
             warn_at_pct: Warn threshold as fraction of effective max (default 0.75).
+            on_warn: Optional callback invoked by the background timer when the warn
+                     threshold is reached, even if check() is never called. Receives
+                     a human-readable message string.
+            on_stop: Optional callback invoked by the background timer when the hard
+                     stop deadline is reached, even if check() is never called. Receives
+                     a human-readable message string.
         """
         if max_runtime_minutes <= 0:
             raise ValueError("max_runtime_minutes must be > 0")
@@ -158,17 +169,56 @@ class OperatorWatchdog:
             if hourly_rate_usd_estimate is not None
             else None
         )
+        self._on_warn = on_warn
+        self._on_stop = on_stop
 
         self._start_time: float | None = None
         self._ceremony_start_utc: str | None = None
         self._checkpoints: list[WatchdogCheckpoint] = []
+        self._warn_timer: threading.Timer | None = None
+        self._stop_timer: threading.Timer | None = None
 
     @property
     def is_started(self) -> bool:
         return self._start_time is not None
 
+    def _fire_warn(self) -> None:
+        msg = (
+            f"[WATCHDOG WARN] {datetime.now(UTC).isoformat()} — "
+            f"Ceremony has reached {self.warn_at_pct * 100:.0f}% of effective max runtime "
+            f"({self.effective_max_minutes} min). "
+            f"Remaining paid window: ~{self.effective_max_minutes * (1 - self.warn_at_pct):.0f} min. "
+            "Prepare for teardown."
+        )
+        print(msg, file=sys.stderr, flush=True)
+        if self._on_warn is not None:
+            self._on_warn(msg)
+
+    def _fire_stop(self) -> None:
+        msg = (
+            f"[WATCHDOG HARD STOP] {datetime.now(UTC).isoformat()} — "
+            f"Ceremony has reached or exceeded the authorized maximum runtime "
+            f"({self.max_runtime_minutes} min INCLUDING teardown reserve). "
+            "INITIATE TEARDOWN IMMEDIATELY."
+        )
+        print(msg, file=sys.stderr, flush=True)
+        if self._on_stop is not None:
+            self._on_stop(msg)
+
+    def cancel_timers(self) -> None:
+        """Cancel any pending background warn/stop timers."""
+        if self._warn_timer is not None:
+            self._warn_timer.cancel()
+            self._warn_timer = None
+        if self._stop_timer is not None:
+            self._stop_timer.cancel()
+            self._stop_timer = None
+
     def start(self, *, allow_restart: bool = False) -> str:
-        """Record ceremony start time.
+        """Record ceremony start time and arm background warn/stop timers.
+
+        The timers fire independently of check() calls, so a stalled or
+        unattended ceremony will still receive warn and stop signals.
 
         Returns the ceremony start timestamp (UTC ISO-8601).
         Raises RuntimeError if already started and allow_restart is False.
@@ -178,9 +228,22 @@ class OperatorWatchdog:
                 "Watchdog already started. To restart, call start(allow_restart=True). "
                 "WARNING: restarting resets elapsed time accounting."
             )
+        self.cancel_timers()
         self._start_time = time.monotonic()
         self._ceremony_start_utc = datetime.now(UTC).isoformat()
         self._checkpoints = []
+
+        warn_seconds = self.effective_max_minutes * self.warn_at_pct * 60
+        stop_seconds = self.max_runtime_minutes * 60
+
+        self._warn_timer = threading.Timer(warn_seconds, self._fire_warn)
+        self._warn_timer.daemon = True
+        self._warn_timer.start()
+
+        self._stop_timer = threading.Timer(stop_seconds, self._fire_stop)
+        self._stop_timer.daemon = True
+        self._stop_timer.start()
+
         return self._ceremony_start_utc
 
     def elapsed_minutes(self) -> float:
