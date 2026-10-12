@@ -37,6 +37,17 @@ export function validateProductionConfig(): void {
     errors.push(`  CORE_TENANT_ID "${coreTenantId}" is not a valid tenant ID.`);
   }
 
+  // AUTH-SECRET-ISOLATION-001: AUTH_SECRET is the dedicated session-signing secret
+  // for Auth.js.  It must be present and non-empty.  FG_INTERNAL_AUTH_SECRET must
+  // never be used as a session secret fallback (AUTH-002, AUTH-004, AUTH-008).
+  const authSecret = (process.env.AUTH_SECRET || '').trim();
+  if (!authSecret) {
+    errors.push(
+      '  AUTH_SECRET is not configured. Set a dedicated session-signing secret for Auth.js. ' +
+        'Do not reuse FG_INTERNAL_AUTH_SECRET or any internal gateway credential for this purpose.',
+    );
+  }
+
   if (!internalGatewaySecret()) {
     errors.push(
       '  Internal gateway secret is not configured (set FG_INTERNAL_GATEWAY_SECRET).',
