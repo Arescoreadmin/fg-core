@@ -22,7 +22,26 @@
     "billing_unit_minutes": null,
     "minimum_billable_unit": null,
     "minimum_charge_usd": null,
-    "additional_charges": [],
+    "additional_charges": [
+      {
+        "charge_id": "HCP-CLIENT-UNIT-001",
+        "provider": "HashiCorp Cloud Platform",
+        "description": "HCP Vault Dedicated Standard client unit fee observed on HCP billing/pricing page",
+        "billing_metric": "per_client_month",
+        "unit_price_usd": null,
+        "currency": "USD",
+        "billing_frequency": "monthly",
+        "quantity_basis": "UNKNOWN — billable client counting rules not confirmed",
+        "max_billable_quantity": null,
+        "proration_rule": null,
+        "minimum_commitment_usd": null,
+        "applicability_status": "UNKNOWN_APPLICABILITY",
+        "source_evidence_ref": "PENDING",
+        "confidence": "UNKNOWN",
+        "calculated_max_exposure_usd": null,
+        "notes": "Rate of $72.92/month per client observed on HCP portal 2026-10-12. Applicability to ceremony cluster depends on client counting rules, minimum commitment, and proration — none confirmed. UNKNOWN_APPLICABILITY blocks is_defensible_upper_bound until independently verified as APPLICABLE_VERIFIED or NOT_APPLICABLE_VERIFIED."
+      }
+    ],
     "unknown_charges_acknowledged": false,
     "unknown_charges_notes": null
   },

@@ -1,3 +1,21 @@
+# CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 — Financial exposure integrity repair
+
+- **Work item:** CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 (REPAIR class — always authorized)
+- **Purpose:** Repairs four post-merge gaps in the pricing evidence pipeline: (A) overlapping fingerprint schemes between PR #762 cost-review contract and PR #763 pricing evidence verifier; (B) bounded exposure model omits HCP client-unit charge (HCP-CLIENT-UNIT-001, $72.92/month observed 2026-10-12, UNKNOWN_APPLICABILITY); (C) is_defensible_upper_bound rules don't account for all charge components; (D) authorization request doesn't bind to the pricing evidence fingerprint.
+- **Workstream A (Evidence contract reconciliation):** C23 EVIDENCE_FINGERPRINT_BOUND condition added to customer_zero_cost_review.py — when request.pricing_evidence_fingerprint is non-null, it must match the SHA-256 of the validated instance's pricing sub-object. Null fingerprint passes (not yet bound). Mismatch fails (stale binding detected).
+- **Workstream B (Additional charges model):** AdditionalCharge dataclass with 5 applicability statuses added to run3_cost_model.py. VALID_APPLICABILITY_STATUSES constant added to both run3_cost_model.py and run3_pricing_evidence_verifier.py. HCP-CLIENT-UNIT-001 modeled as UNKNOWN_APPLICABILITY in run3_pricing_evidence_instance.json additional_charges (unit_price_usd stays null — not confirmed offline).
+- **Workstream C (Bounded exposure extension):** compute_bounded_exposure extended: additional_charges_included and additional_charges_blocking fields added to BoundedExposureReport; APPLICABLE_VERIFIED charges with calculated_max_exposure_usd included in total ceiling; UNKNOWN/UNBOUNDED/PENDING blocks defensibility with charge_id in additional_charges_blocking; unverified_tax_exposure field added.
+- **Workstream D (Authorization binding):** C23 added; verify_cost_review signature extended with pricing_instance_dict parameter.
+- **Workstream E (Verifier pipeline update):** verify_pricing_evidence.py updated to pass additional_charges from snapshot and pricing_instance_dict to cost verifier; next_action messages made more specific per blocking state including C23.
+- **Workstream F (Tests):** 21 new tests PEVID-035–PEVID-055 (all @pytest.mark.contract); all 76 existing tests preserved; 97 total.
+- **Workstream G (Documentation):** docs/operations/customer_zero_run3_pricing_evidence_capture.md — Section 12 (additional charges HCP client billing) added; FR-009 added to run3_financial_risk_register.json.
+- **Changed files:** `services/governance/run3_cost_model.py`, `services/governance/run3_pricing_evidence_verifier.py`, `services/governance/customer_zero_cost_review.py`, `tools/ci/verify_pricing_evidence.py`, `tests/test_cz_run3_pricing_evidence_001.py`, `customer_one/run3_pricing_evidence_instance.json`, `customer_one/run3_financial_risk_register.json`, `docs/operations/customer_zero_run3_pricing_evidence_capture.md`, `docs/ai/PR_FIX_LOG.md`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- **Test counts:** 21 new tests (PEVID-035–PEVID-055); all 76 existing tests preserved; 97 total. fg-fast and fg-security pass.
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. request_status: BLOCKED_PRICING_UNVERIFIED.
+- **Zero cloud mutations. No paid infrastructure. No schema changes. APPROVED unreachable.**
+
+---
+
 # CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 — Verified pricing evidence pipeline
 
 - **Work item:** CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 (OFFLINE_PREPARATION class)

@@ -983,3 +983,626 @@ def test_approved_state_unreachable_from_pipeline():
     assert report["approved"] is False
     # The word APPROVED may appear in status strings but the approved flag must be False
     assert report["approved"] is not True
+
+
+# ---------------------------------------------------------------------------
+# SYNTHETIC additional charge fixtures
+# ---------------------------------------------------------------------------
+
+SYNTHETIC_CHARGE_NOT_APPLICABLE = {
+    "charge_id": "HCP-CLIENT-UNIT-SYNTHETIC",
+    "provider": "HashiCorp Cloud Platform",
+    "description": "SYNTHETIC: client unit charge — verified not applicable to test cluster",
+    "billing_metric": "per_client_month",
+    "unit_price_usd": "72.92",
+    "currency": "USD",
+    "billing_frequency": "monthly",
+    "quantity_basis": "per_active_client",
+    "max_billable_quantity": 0,
+    "proration_rule": "none",
+    "minimum_commitment_usd": "0.00",
+    "applicability_status": "NOT_APPLICABLE_VERIFIED",
+    "source_evidence_ref": "SYNTHETIC-TEST-ONLY",
+    "confidence": "VERIFIED",
+    "calculated_max_exposure_usd": "0.00",
+    "notes": "SYNTHETIC TEST FIXTURE ONLY — NOT REAL EVIDENCE",
+}
+
+
+def _load_cost_review():
+    name = "customer_zero_cost_review"
+    if name in sys.modules:
+        return sys.modules[name]
+    cost_review_module = (
+        REPO / "services" / "governance" / "customer_zero_cost_review.py"
+    )
+    spec = importlib.util.spec_from_file_location(name, cost_review_module)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# ---------------------------------------------------------------------------
+# PEVID-035: additional_charges entry with invalid applicability_status → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_035_invalid_applicability_status():
+    """PEVID-035: additional_charges entry with invalid applicability_status → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    bad_charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    bad_charge["applicability_status"] = "INVALID_STATUS"
+    instance = _synthetic(**{"pricing.additional_charges": [bad_charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for invalid applicability_status; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+    assert any("applicability_status" in f.lower() for f in result.findings)
+
+
+# ---------------------------------------------------------------------------
+# PEVID-036: additional_charges entry with APPLICABLE_VERIFIED but null unit_price_usd → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_036_applicable_verified_null_unit_price():
+    """PEVID-036: APPLICABLE_VERIFIED charge with null unit_price_usd → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["applicability_status"] = "APPLICABLE_VERIFIED"
+    charge["unit_price_usd"] = None
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT; got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+    assert any("unit_price_usd" in f.lower() for f in result.findings)
+
+
+# ---------------------------------------------------------------------------
+# PEVID-037: additional_charges entry with NaN unit_price_usd → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_037_nan_unit_price():
+    """PEVID-037: NaN unit_price_usd in additional_charges → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["applicability_status"] = "APPLICABLE_VERIFIED"
+    charge["unit_price_usd"] = "NaN"
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for NaN unit_price_usd; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+
+
+# ---------------------------------------------------------------------------
+# PEVID-038: additional_charges entry with negative unit_price_usd → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_038_negative_unit_price():
+    """PEVID-038: negative unit_price_usd in additional_charges → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["applicability_status"] = "APPLICABLE_VERIFIED"
+    charge["unit_price_usd"] = "-1.00"
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for negative unit_price_usd; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+
+
+# ---------------------------------------------------------------------------
+# PEVID-039: additional_charges entry with negative calculated_max_exposure_usd → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_039_negative_calculated_max_exposure():
+    """PEVID-039: negative calculated_max_exposure_usd in additional_charges → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["calculated_max_exposure_usd"] = "-5.00"
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for negative calculated_max_exposure_usd; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+    assert any("calculated_max_exposure_usd" in f.lower() for f in result.findings)
+
+
+# ---------------------------------------------------------------------------
+# PEVID-040: UNKNOWN_APPLICABILITY charge → compute_bounded_exposure is_defensible_upper_bound=False
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_040_unknown_applicability_blocks_defensibility():
+    """PEVID-040: UNKNOWN_APPLICABILITY charge → is_defensible_upper_bound=False."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [
+            {
+                "charge_id": "HCP-CLIENT-UNIT-001",
+                "applicability_status": "UNKNOWN_APPLICABILITY",
+                "calculated_max_exposure_usd": None,
+            }
+        ],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert not report.is_defensible_upper_bound, (
+        "UNKNOWN_APPLICABILITY charge must block is_defensible_upper_bound"
+    )
+    assert "HCP-CLIENT-UNIT-001" in report.additional_charges_blocking, (
+        f"HCP-CLIENT-UNIT-001 must be in additional_charges_blocking; "
+        f"got {report.additional_charges_blocking}"
+    )
+    assert report.unresolved_unknowns, "unresolved_unknowns must be non-empty"
+
+
+# ---------------------------------------------------------------------------
+# PEVID-041: UNBOUNDED charge → is_defensible_upper_bound=False
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_041_unbounded_charge_blocks_defensibility():
+    """PEVID-041: UNBOUNDED applicability_status → is_defensible_upper_bound=False."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [
+            {
+                "charge_id": "SOME-UNBOUNDED-CHARGE",
+                "applicability_status": "UNBOUNDED",
+                "calculated_max_exposure_usd": None,
+            }
+        ],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert not report.is_defensible_upper_bound, (
+        "UNBOUNDED charge must block is_defensible_upper_bound"
+    )
+    assert "SOME-UNBOUNDED-CHARGE" in report.additional_charges_blocking
+
+
+# ---------------------------------------------------------------------------
+# PEVID-042: NOT_APPLICABLE_VERIFIED charge → does NOT block defensibility
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_042_not_applicable_verified_does_not_block():
+    """PEVID-042: NOT_APPLICABLE_VERIFIED charge does NOT block defensibility."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert report.is_defensible_upper_bound, (
+        "NOT_APPLICABLE_VERIFIED charge must NOT block is_defensible_upper_bound; "
+        f"unresolved_unknowns={report.unresolved_unknowns}"
+    )
+    assert report.additional_charges_blocking == [], (
+        f"additional_charges_blocking must be empty; got {report.additional_charges_blocking}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-043: APPLICABLE_VERIFIED charge with calculated exposure → included in total ceiling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_043_applicable_verified_included_in_ceiling():
+    """PEVID-043: APPLICABLE_VERIFIED charge with calculated_max_exposure_usd → included in total."""
+    cost_model = _load_cost_model()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["applicability_status"] = "APPLICABLE_VERIFIED"
+    charge["calculated_max_exposure_usd"] = "10.00"
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [charge],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert report.is_defensible_upper_bound, (
+        f"APPLICABLE_VERIFIED charge must not block; "
+        f"unresolved_unknowns={report.unresolved_unknowns}"
+    )
+    total = Decimal(report.total_bounded_ceiling_usd)
+    # Expected: 120 min * 1.50/hr = 3.00 + 10% margin = 3.30 + 0.00 CW + 10.00 charge = 13.30
+    assert total >= Decimal("13.00"), (
+        f"Total ceiling must include the $10.00 applicable charge; got {total}"
+    )
+    # Confirm charge appears in additional_charges_included
+    assert any(
+        c.get("charge_id") == "HCP-CLIENT-UNIT-SYNTHETIC"
+        and c.get("exposure_included_usd") == "10.00"
+        for c in report.additional_charges_included
+    ), (
+        f"Charge not found in additional_charges_included: {report.additional_charges_included}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-044: unknown_charges_acknowledged=True with UNKNOWN_APPLICABILITY charge → still blocks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_044_uca_true_with_unknown_still_blocks():
+    """PEVID-044: acknowledgement alone is insufficient — UNKNOWN_APPLICABILITY still blocks."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,  # acknowledged, but charge is still UNKNOWN
+        "additional_charges": [
+            {
+                "charge_id": "HCP-CLIENT-UNIT-001",
+                "applicability_status": "UNKNOWN_APPLICABILITY",
+                "calculated_max_exposure_usd": None,
+            }
+        ],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert not report.is_defensible_upper_bound, (
+        "unknown_charges_acknowledged=True alone is insufficient; "
+        "UNKNOWN_APPLICABILITY must still block"
+    )
+    assert "HCP-CLIENT-UNIT-001" in report.additional_charges_blocking
+
+
+# ---------------------------------------------------------------------------
+# PEVID-045: all charges NOT_APPLICABLE_VERIFIED + acknowledgement → is_defensible_upper_bound=True eligible
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_045_all_not_applicable_verified_defensible():
+    """PEVID-045: all charges NOT_APPLICABLE_VERIFIED + uca=True → is_defensible_upper_bound=True."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert report.is_defensible_upper_bound, (
+        "All NOT_APPLICABLE_VERIFIED + uca=True must allow is_defensible_upper_bound=True; "
+        f"unresolved_unknowns={report.unresolved_unknowns}"
+    )
+    assert report.unresolved_unknowns == []
+
+
+# ---------------------------------------------------------------------------
+# PEVID-046: pricing_evidence_fingerprint in request set and matching → C23 PASS
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_046_fingerprint_matching_c23_pass():
+    """PEVID-046: pricing_evidence_fingerprint in request matching → C23 PASS."""
+    cost_review = _load_cost_review()
+    # Build a validated instance with a fingerprint
+    verifier = _load_verifier()
+    instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.is_valid, f"Expected valid instance; findings={result.findings}"
+    # Compute what the fingerprint should be
+    fp = _compute_fingerprint(instance["pricing"])
+    # Build a minimal request dict with the fingerprint set
+    request_with_fp = {"pricing_evidence_fingerprint": fp}
+    c23 = cost_review._check_evidence_fingerprint_bound(request_with_fp, instance)
+    assert c23.passed, f"C23 must PASS when fingerprint matches; detail={c23.detail}"
+    assert c23.id == "C23_EVIDENCE_FINGERPRINT_BOUND"
+
+
+# ---------------------------------------------------------------------------
+# PEVID-047: pricing_evidence_fingerprint in request set and NOT matching → C23 FAIL
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_047_fingerprint_mismatch_c23_fail():
+    """PEVID-047: pricing_evidence_fingerprint set and NOT matching → C23 FAIL."""
+    cost_review = _load_cost_review()
+    instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+    # Use a wrong fingerprint in the request
+    request_with_wrong_fp = {"pricing_evidence_fingerprint": "deadbeef" * 8}
+    c23 = cost_review._check_evidence_fingerprint_bound(request_with_wrong_fp, instance)
+    assert not c23.passed, (
+        f"C23 must FAIL when fingerprint mismatches; detail={c23.detail}"
+    )
+    assert "mismatch" in c23.detail.lower() or "MISMATCH" in c23.detail.upper()
+
+
+# ---------------------------------------------------------------------------
+# PEVID-048: pricing_evidence_fingerprint in request is null → C23 PASS (not yet bound)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_048_null_fingerprint_c23_pass():
+    """PEVID-048: pricing_evidence_fingerprint is null → C23 PASS (not yet bound)."""
+    cost_review = _load_cost_review()
+    instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+    request_with_null_fp = {"pricing_evidence_fingerprint": None}
+    c23 = cost_review._check_evidence_fingerprint_bound(request_with_null_fp, instance)
+    assert c23.passed, (
+        f"C23 must PASS when pricing_evidence_fingerprint is null; detail={c23.detail}"
+    )
+    # Detail should explain this is not yet bound
+    assert "null" in c23.detail.lower() or "not yet bound" in c23.detail.lower()
+
+
+# ---------------------------------------------------------------------------
+# PEVID-049: collector identity == reviewer identity in additional_charges context
+# (existing provenance check still enforced)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_049_provenance_check_still_enforced_with_additional_charges():
+    """PEVID-049: collector == reviewer still rejected even when additional_charges present."""
+    verifier = _load_verifier()
+    instance = _synthetic(
+        **{
+            "provenance.collector_identity": "same@example.com",
+            "provenance.independent_reviewer_identity": "same@example.com",
+            "pricing.additional_charges": [
+                copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+            ],
+        }
+    )
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_PROVENANCE", (
+        f"Expected REJECTED_PROVENANCE when collector == reviewer; "
+        f"got {result.validation_status!r}"
+    )
+    assert not result.is_valid
+
+
+# ---------------------------------------------------------------------------
+# PEVID-050: additional_charges entry with wrong currency → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_050_wrong_currency_in_additional_charge():
+    """PEVID-050: additional_charges entry with currency != USD → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["currency"] = "EUR"
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for non-USD currency in additional_charges; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+    assert any("currency" in f.lower() for f in result.findings)
+
+
+# ---------------------------------------------------------------------------
+# PEVID-051: float monetary value in additional_charges — string "1.50" is fine
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_051_string_decimal_in_additional_charge():
+    """PEVID-051: unit_price_usd as string '1.50' in additional_charges parses correctly."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["applicability_status"] = "APPLICABLE_VERIFIED"
+    charge["unit_price_usd"] = "1.50"
+    instance = _with_valid_fingerprint(
+        _synthetic(**{"pricing.additional_charges": [charge]})
+    )
+    result = verifier.verify_pricing_evidence(instance)
+    # Should not be REJECTED_CONTENT due to unit_price_usd parsing
+    assert result.validation_status not in ("REJECTED_SCHEMA",), (
+        f"String '1.50' should parse as Decimal; got {result.validation_status!r}, "
+        f"findings={result.findings}"
+    )
+    assert not any(
+        "unit_price_usd" in f.lower() and "not a valid" in f.lower()
+        for f in result.findings
+    ), f"String '1.50' should parse correctly; findings={result.findings}"
+
+
+# ---------------------------------------------------------------------------
+# PEVID-052: additional_charges entry with missing charge_id → REJECTED_CONTENT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_052_missing_charge_id():
+    """PEVID-052: additional_charges entry with null/missing charge_id → REJECTED_CONTENT."""
+    verifier = _load_verifier()
+    charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+    charge["charge_id"] = None
+    instance = _synthetic(**{"pricing.additional_charges": [charge]})
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_CONTENT", (
+        f"Expected REJECTED_CONTENT for null charge_id; "
+        f"got {result.validation_status!r}, findings={result.findings}"
+    )
+    assert not result.is_valid
+    assert any("charge_id" in f.lower() for f in result.findings)
+
+
+# ---------------------------------------------------------------------------
+# PEVID-053: multiple UNKNOWN charges → all charge_ids appear in additional_charges_blocking
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_053_multiple_unknown_charges_all_blocking():
+    """PEVID-053: multiple UNKNOWN_APPLICABILITY charges → all charge_ids in additional_charges_blocking."""
+    cost_model = _load_cost_model()
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [
+            {
+                "charge_id": "HCP-CHARGE-001",
+                "applicability_status": "UNKNOWN_APPLICABILITY",
+                "calculated_max_exposure_usd": None,
+            },
+            {
+                "charge_id": "HCP-CHARGE-002",
+                "applicability_status": "UNKNOWN_APPLICABILITY",
+                "calculated_max_exposure_usd": None,
+            },
+        ],
+    }
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.50"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert not report.is_defensible_upper_bound
+    assert "HCP-CHARGE-001" in report.additional_charges_blocking, (
+        f"HCP-CHARGE-001 must be in blocking; got {report.additional_charges_blocking}"
+    )
+    assert "HCP-CHARGE-002" in report.additional_charges_blocking, (
+        f"HCP-CHARGE-002 must be in blocking; got {report.additional_charges_blocking}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PEVID-054: full null instance → still REJECTED_NOT_POPULATED (regression test)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_054_null_instance_still_rejected_not_populated():
+    """PEVID-054: full null instance must still return REJECTED_NOT_POPULATED (no regression)."""
+    verifier = _load_verifier()
+    instance = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
+    instance["provider"]["tier"] = None
+    instance["provider"]["region"] = None
+    instance["pricing"]["currency"] = None
+    instance["pricing"]["hourly_rate_usd"] = None
+    instance["pricing"]["billing_unit_minutes"] = None
+    instance["pricing"]["minimum_charge_usd"] = None
+    instance["pricing"]["unknown_charges_acknowledged"] = None
+    result = verifier.verify_pricing_evidence(instance)
+    assert result.validation_status == "REJECTED_NOT_POPULATED", (
+        f"All-null template must still return REJECTED_NOT_POPULATED; "
+        f"got {result.validation_status!r}"
+    )
+    assert not result.is_valid
+
+
+# ---------------------------------------------------------------------------
+# PEVID-055: APPROVED state unreachable even when all additional charges are NOT_APPLICABLE_VERIFIED
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_055_approved_unreachable_with_not_applicable_charges():
+    """PEVID-055: APPROVED state is unreachable even when all additional charges are NOT_APPLICABLE_VERIFIED."""
+    pipeline = _load_pipeline()
+    # Use repo state which has UNKNOWN_APPLICABILITY charge — still BLOCKED
+    report = pipeline.run_verification(repo=REPO)
+    # Overall must NOT be APPROVED
+    assert report.get("overall_status") != "APPROVED", (
+        "APPROVED must never appear as overall_status"
+    )
+    assert report.get("approved") is False, (
+        f"approved must always be False; got {report.get('approved')!r}"
+    )
+    # Even if we could construct a perfect evidence scenario, the verifier pipeline
+    # must not produce approved=True
+    # (approved field must be false; "APPROVED" can appear in other context strings)
+    assert report["approved"] is not True

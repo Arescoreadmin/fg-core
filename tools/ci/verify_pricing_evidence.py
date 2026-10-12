@@ -73,14 +73,16 @@ def run_verification(
     # Run pricing evidence verification
     pricing_result = verifier_mod.verify_pricing_evidence_file(str(evidence_path))
 
-    # Build a pricing override dict when evidence is validated, so the 22-condition
+    # Build a pricing override dict when evidence is validated, so the 23-condition
     # cost verifier sees validated values rather than the legacy null schema.
     # Without this, a fully validated evidence instance still fails the cost review
     # because pricing_schema_path has fp_001_status=OPEN and all evidence fields null.
     pricing_override: dict | None = None
+    pricing_instance_raw: dict | None = None
     if pricing_result.is_valid and pricing_result.pricing_snapshot is not None:
         try:
             instance_data = json.loads(evidence_path.read_text())
+            pricing_instance_raw = instance_data
             snap = pricing_result.pricing_snapshot
             bum = snap.get("billing_unit_minutes")
             billing_unit_str = (
@@ -90,6 +92,9 @@ def run_verification(
             src = instance_data.get("source", {}) or {}
             intg = instance_data.get("integrity", {}) or {}
             ep = instance_data.get("expiry_policy", {}) or {}
+            # Include additional_charges from the snapshot so the cost verifier
+            # can assess blocking charges
+            additional_charges = snap.get("additional_charges", [])
             pricing_override = {
                 "fp_001_status": "CLOSED",
                 "evidence": {
@@ -103,16 +108,21 @@ def run_verification(
                     "rate_valid_until": ep.get("expires_at_utc"),
                     "verifier_identity": prov.get("independent_reviewer_identity"),
                     "fingerprint": intg.get("evidence_fingerprint_sha256"),
+                    "additional_charges": additional_charges,
                 },
+                # Also expose the pricing sub-object for C23 fingerprint binding
+                "pricing": instance_data.get("pricing"),
             }
         except Exception:
             pricing_override = None  # fall back to legacy schema on any load error
+            pricing_instance_raw = None
 
     # Run cost authorization verification
     cost_result = cost_review_mod.verify_cost_review(
         request_path,
         pricing_schema_path,
         pricing_override_dict=pricing_override,
+        pricing_instance_dict=pricing_instance_raw,
     )
 
     # Determine overall status from pricing evidence result
@@ -135,17 +145,45 @@ def run_verification(
         "REJECTED_TAMPERED",
     ):
         overall_status = "BLOCKED_PRICING_EVIDENCE_INVALID"
+        # Provide specific guidance based on rejection type
+        if pe_status == "REJECTED_TAMPERED":
+            specific_guidance = (
+                "Evidence fingerprint mismatch — pricing sub-object may have been "
+                "modified after fingerprint computation. Recompute integrity.evidence_fingerprint_sha256 "
+                "from the current pricing sub-object."
+            )
+        elif pe_status == "REJECTED_CONTENT":
+            specific_guidance = (
+                f"Content validation failed: {'; '.join(pricing_result.findings[:3])}. "
+                "Check additional_charges entries — each must have a valid applicability_status "
+                "in VALID_APPLICABILITY_STATUSES and USD currency."
+            )
+        elif pe_status == "REJECTED_PROVENANCE":
+            specific_guidance = (
+                f"Provenance validation failed: {'; '.join(pricing_result.findings[:2])}. "
+                "Collector and independent reviewer must be different people."
+            )
+        elif pe_status == "REJECTED_FRESHNESS":
+            specific_guidance = (
+                f"Freshness validation failed: {'; '.join(pricing_result.findings[:2])}. "
+                "Timestamps must be timezone-aware, not in the future, and within the "
+                "valid_for_days window."
+            )
+        else:
+            specific_guidance = f"Fix: {'; '.join(pricing_result.findings[:3])}."
         next_action = (
-            "Pricing evidence instance validation failed. "
-            f"Fix: {'; '.join(pricing_result.findings[:3])}. "
+            f"Pricing evidence instance validation failed ({pe_status}). "
+            f"{specific_guidance} "
             "See docs/operations/customer_zero_run3_pricing_evidence_capture.md."
         )
     elif pe_status == "UNVALIDATED":
         overall_status = "BLOCKED_PRICING_UNVERIFIED"
         next_action = (
-            "All pricing evidence fields are null or the evidence fingerprint is not set. "
-            "Human operator must populate customer_one/run3_pricing_evidence_instance.json "
-            "from the live HCP portal. "
+            "Pricing evidence fingerprint is not set (UNVALIDATED). "
+            "Human operator must: (1) populate all null fields in "
+            "customer_one/run3_pricing_evidence_instance.json from the live HCP portal, "
+            "(2) compute SHA-256 fingerprint of the pricing sub-object, "
+            "(3) set integrity.evidence_fingerprint_sha256. "
             "Follow docs/operations/customer_zero_run3_pricing_evidence_capture.md."
         )
     elif pe_status == "VALIDATED":
@@ -184,12 +222,27 @@ def run_verification(
                     "requested_max_runtime_minutes, and teardown_reserve_minutes."
                 )
             else:
-                overall_status = "BLOCKED_PRICING_UNVERIFIED"
-                next_action = (
-                    "Cost authorization has unresolved blockers. "
-                    f"Blockers: {cost_result.blockers[:3]}. "
-                    "Resolve all blockers before presenting for human decision."
+                # Check for C23 fingerprint binding blocker specifically
+                c23_blocked = any(
+                    "C23_EVIDENCE_FINGERPRINT_BOUND" in b for b in cost_result.blockers
                 )
+                if c23_blocked:
+                    overall_status = "BLOCKED_FINGERPRINT_MISMATCH"
+                    next_action = (
+                        "C23 EVIDENCE_FINGERPRINT_BOUND FAILED: "
+                        "pricing_evidence_fingerprint in the authorization request "
+                        "does not match the fingerprint of the validated evidence instance's "
+                        "pricing sub-object. The request was bound to a stale or altered "
+                        "evidence snapshot. Recompute the fingerprint from the current "
+                        "validated pricing evidence and update the request."
+                    )
+                else:
+                    overall_status = "BLOCKED_PRICING_UNVERIFIED"
+                    next_action = (
+                        "Cost authorization has unresolved blockers. "
+                        f"Blockers: {cost_result.blockers[:3]}. "
+                        "Resolve all blockers before presenting for human decision."
+                    )
     else:
         overall_status = "BLOCKED_PRICING_UNVERIFIED"
         next_action = (

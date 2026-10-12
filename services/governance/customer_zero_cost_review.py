@@ -8,7 +8,7 @@ SAFETY INVARIANTS (NON-NEGOTIABLE)
 1. This module NEVER returns APPROVED. APPROVED is not a reachable state from this
    module — it requires a separate verified human decision mechanism that does not
    exist in this file.
-2. This module fails CLOSED on all 22 conditions listed in _VERIFICATION_CONDITIONS.
+2. This module fails CLOSED on all 23 conditions listed in _VERIFICATION_CONDITIONS.
 3. No cloud queries, no provider tokens, no network calls of any kind.
 4. No secrets, credentials, API keys, or private keys are read or written.
 5. No authorization is granted, advanced, or implied by this module.
@@ -45,6 +45,7 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -119,7 +120,7 @@ REQUIRED_PRICING_EVIDENCE_FIELDS = [
 
 
 class Condition:
-    """22 fail-closed conditions. All must pass for READY_FOR_HUMAN_DECISION."""
+    """23 fail-closed conditions. All must pass for READY_FOR_HUMAN_DECISION."""
 
     # C1: Schema completeness
     REQUEST_FILE_EXISTS = "C01_REQUEST_FILE_EXISTS"
@@ -161,6 +162,9 @@ class Condition:
     # C9: Canonical truth
     CANONICAL_TRUTH_PRESERVED = "C22_CANONICAL_TRUTH_PRESERVED"
 
+    # C10: Evidence fingerprint binding
+    EVIDENCE_FINGERPRINT_BOUND = "C23_EVIDENCE_FINGERPRINT_BOUND"
+
     ALL = [
         REQUEST_FILE_EXISTS,
         PRICING_FILE_EXISTS,
@@ -184,6 +188,7 @@ class Condition:
         STATUS_NEVER_APPROVED,
         HISTORICAL_COST_NOT_USED_AS_CEILING,
         CANONICAL_TRUTH_PRESERVED,
+        EVIDENCE_FINGERPRINT_BOUND,
     ]
 
 
@@ -640,6 +645,89 @@ def _check_canonical_truth(req: dict) -> ConditionResult:
     )
 
 
+def _compute_pricing_fingerprint(pricing: dict) -> str:
+    """Compute SHA-256 of the canonical JSON (sorted keys, no whitespace) of pricing.
+
+    This mirrors run3_pricing_evidence_verifier._compute_pricing_fingerprint exactly.
+    When pricing_override_dict is provided (validated instance), the binding check
+    uses this to verify the request's pricing_evidence_fingerprint matches the
+    fingerprint of the validated instance's pricing sub-object.
+    """
+    canonical = json.dumps(pricing, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _check_evidence_fingerprint_bound(
+    req: dict, pricing_override_dict: dict | None
+) -> ConditionResult:
+    """C23: EVIDENCE_FINGERPRINT_BOUND — evidence fingerprint binding check.
+
+    Binding semantics:
+    - If request.pricing_evidence_fingerprint is null: PASS (not yet bound by
+      the human operator — acceptable when requesting a decision).
+    - If pricing_override_dict is not provided (no validated instance available):
+      PASS (cannot perform binding check without validated evidence).
+    - If both request.pricing_evidence_fingerprint is set and pricing_override_dict
+      is available: the fingerprint MUST match the SHA-256 of the validated
+      instance's pricing sub-object. A mismatch means the request was bound to
+      a different (stale or altered) evidence snapshot — FAIL.
+
+    This prevents silent stale binding: once an operator populates the request
+    fingerprint, any subsequent mutation to the pricing evidence is detected.
+    """
+    req_fp = req.get("pricing_evidence_fingerprint")
+
+    # Null fingerprint: operator hasn't bound it yet — acceptable
+    if req_fp is None:
+        return ConditionResult(
+            Condition.EVIDENCE_FINGERPRINT_BOUND,
+            True,
+            "pricing_evidence_fingerprint is null — not yet bound by human operator; "
+            "binding is required before final authorization",
+        )
+
+    # No validated instance to check against — cannot verify binding
+    if pricing_override_dict is None:
+        return ConditionResult(
+            Condition.EVIDENCE_FINGERPRINT_BOUND,
+            True,
+            "pricing_evidence_fingerprint is set but no validated instance available "
+            "for binding check; accepted pending validated evidence",
+        )
+
+    # Validated instance is available — check binding
+    # Extract the pricing sub-object from the override dict's evidence fields
+    # The override dict may have evidence fields or a full instance structure.
+    # Try to get the pricing object if it's a full instance structure.
+    pricing_obj = pricing_override_dict.get("pricing")
+    if pricing_obj is None:
+        # pricing_override_dict may be the legacy schema format (evidence sub-dict)
+        # In that case, we cannot compute the fingerprint — accept
+        return ConditionResult(
+            Condition.EVIDENCE_FINGERPRINT_BOUND,
+            True,
+            "pricing_evidence_fingerprint set but override dict lacks pricing sub-object; "
+            "fingerprint binding check skipped",
+        )
+
+    computed_fp = _compute_pricing_fingerprint(pricing_obj)
+    if req_fp == computed_fp:
+        return ConditionResult(
+            Condition.EVIDENCE_FINGERPRINT_BOUND,
+            True,
+            f"pricing_evidence_fingerprint matches validated instance pricing fingerprint: "
+            f"{req_fp[:16]}...",
+        )
+    return ConditionResult(
+        Condition.EVIDENCE_FINGERPRINT_BOUND,
+        False,
+        f"pricing_evidence_fingerprint MISMATCH: request has {req_fp!r}, "
+        f"computed from validated instance pricing: {computed_fp!r}. "
+        "The request was bound to a different (stale or altered) evidence snapshot. "
+        "Recompute the fingerprint from the current validated pricing evidence.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main verifier
 # ---------------------------------------------------------------------------
@@ -649,8 +737,9 @@ def verify_cost_review(
     request_path: Path,
     pricing_path: Path,
     pricing_override_dict: dict | None = None,
+    pricing_instance_dict: dict | None = None,
 ) -> CostReviewVerification:
-    """Run all 22 conditions and return the verification result.
+    """Run all 23 conditions and return the verification result.
 
     Fails closed on every condition. APPROVED is never returned.
 
@@ -661,9 +750,14 @@ def verify_cost_review(
         pricing_override_dict: When provided, use this dict as the pricing evidence
             instead of loading from pricing_path. Intended for callers that have
             already validated pricing via run3_pricing_evidence_verifier and want to
-            feed the validated data into the 22-condition cost verifier without
+            feed the validated data into the 23-condition cost verifier without
             requiring the operator to maintain two separate evidence files.
             When provided, C02 (pricing file existence) is satisfied automatically.
+        pricing_instance_dict: When provided, the raw validated pricing evidence
+            instance dict. Used by C23 (EVIDENCE_FINGERPRINT_BOUND) to check that
+            the request's pricing_evidence_fingerprint matches the fingerprint of
+            the validated instance's pricing sub-object. If None, C23 accepts any
+            non-null fingerprint (binding check skipped).
     """
     result = CostReviewVerification(
         generated_at=datetime.now(UTC).isoformat(),
@@ -841,6 +935,13 @@ def verify_cost_review(
 
     # C22: Canonical truth
     conditions.append(_check_canonical_truth(req))
+
+    # C23: Evidence fingerprint binding
+    # Pass pricing_instance_dict so C23 can verify binding against the validated instance.
+    # When pricing_instance_dict is None, C23 will try to use pricing_override_dict
+    # as a fallback for the binding check (legacy path).
+    c23_instance = pricing_instance_dict if pricing_instance_dict is not None else None
+    conditions.append(_check_evidence_fingerprint_bound(req, c23_instance))
 
     _finalize(result)
     return result

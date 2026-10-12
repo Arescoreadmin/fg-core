@@ -295,6 +295,81 @@ Pre-authorization checklist for the human operator:
 - **Set `approved: true` anywhere in the pipeline** — APPROVED state is unreachable
   through automation. Any code that produces APPROVED is a critical defect.
 
+- **Set `unknown_charges_acknowledged: true` while any charge has `UNKNOWN_APPLICABILITY`,
+  `UNBOUNDED`, or `PENDING_VERIFICATION` status** — acknowledgement alone is insufficient.
+  All `additional_charges` entries must be classified as `APPLICABLE_VERIFIED` or
+  `NOT_APPLICABLE_VERIFIED` before the bounded exposure report can be certified.
+
+---
+
+## 12. Additional charges — HCP client billing
+
+### What is the HCP client unit charge?
+
+An HCP Vault Dedicated Standard client unit fee ($72.92/month per client was observed
+on the HCP portal on 2026-10-12) may apply to the ceremony cluster. The current instance
+records this charge as `HCP-CLIENT-UNIT-001` with `applicability_status: UNKNOWN_APPLICABILITY`.
+
+### Why this blocks defensibility
+
+Until `HCP-CLIENT-UNIT-001` is classified as either `APPLICABLE_VERIFIED` or
+`NOT_APPLICABLE_VERIFIED`, `is_defensible_upper_bound` will be `False`. The charge's
+applicability depends on:
+
+1. **Client counting rules**: How does HCP define a "billable client"? Is the ceremony
+   cluster a client? Is the AppRole authentication mechanism counted?
+2. **Minimum commitment**: Is there a minimum number of clients billed per month?
+3. **Proration rules**: Are partial-month charges prorated daily or hourly?
+
+### How to classify the charge
+
+To resolve `HCP-CLIENT-UNIT-001`:
+
+1. Log into the HCP portal and navigate to the billing/pricing section
+2. Locate the client unit charge definition and rules
+3. Confirm whether the ceremony cluster's usage pattern incurs this charge
+4. Set `applicability_status` to one of:
+   - `APPLICABLE_VERIFIED` — charge applies; set `unit_price_usd`, `max_billable_quantity`,
+     and `calculated_max_exposure_usd` from confirmed values
+   - `NOT_APPLICABLE_VERIFIED` — charge does not apply; document the evidence in `notes`
+     and set `source_evidence_ref` to a verifiable reference
+5. Have an independent reviewer confirm the classification
+6. Recompute the evidence fingerprint after updating `additional_charges`
+
+### How to populate additional_charges entries
+
+Each entry must include:
+
+| Field | Required | Valid values |
+|-------|----------|-------------|
+| `charge_id` | Yes | Non-empty string, unique within the instance |
+| `currency` | Yes | `"USD"` (case-insensitive) |
+| `applicability_status` | Yes | `APPLICABLE_VERIFIED`, `NOT_APPLICABLE_VERIFIED`, `UNKNOWN_APPLICABILITY`, `UNBOUNDED`, `PENDING_VERIFICATION` |
+| `unit_price_usd` | Required when `APPLICABLE_VERIFIED` | Positive Decimal string |
+| `calculated_max_exposure_usd` | Optional | Non-negative Decimal string |
+
+**Monetary values must be Decimal strings** (`"72.92"`, not `72.92` as a float).
+
+### What `unknown_charges_acknowledged` means with additional_charges
+
+`unknown_charges_acknowledged` must remain `false` until ALL `additional_charges`
+entries have been classified as `APPLICABLE_VERIFIED` or `NOT_APPLICABLE_VERIFIED`.
+Setting it to `true` while any charge is `UNKNOWN_APPLICABILITY` will NOT make the
+bounded exposure defensible — the per-charge classification is enforced independently.
+
+### Fingerprint binding in the authorization request
+
+Once the pricing evidence instance is validated and fingerprinted, the human operator
+must bind the evidence to the cost authorization request:
+
+1. Compute the fingerprint: `run3_pricing_evidence_verifier._compute_pricing_fingerprint(instance['pricing'])`
+2. Set `pricing_evidence_fingerprint` in `run3_cost_authorization_request.json`
+3. After setting the fingerprint, do NOT modify any `pricing.*` fields without recomputing
+   the fingerprint — a stale fingerprint will trigger C23 EVIDENCE_FINGERPRINT_BOUND FAIL
+
+If `pricing_evidence_fingerprint` remains `null` in the request, C23 passes (not yet bound
+is acceptable when requesting a decision). But once set, it must match exactly.
+
 ---
 
 *This runbook is part of CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001.
