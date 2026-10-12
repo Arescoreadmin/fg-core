@@ -4,6 +4,7 @@ import { authConfig } from './auth.config';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  secret: process.env.AUTH_SECRET ?? process.env.FG_INTERNAL_AUTH_SECRET,
   providers: [
     Auth0({
       clientId: process.env.AUTH0_CLIENT_ID,
