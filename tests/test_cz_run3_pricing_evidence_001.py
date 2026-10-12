@@ -1606,3 +1606,122 @@ def test_pevid_055_approved_unreachable_with_not_applicable_charges():
     # must not produce approved=True
     # (approved field must be false; "APPROVED" can appear in other context strings)
     assert report["approved"] is not True
+
+
+# ---------------------------------------------------------------------------
+# PEVID-056 through PEVID-059: PR bot findings — 4 targeted fixes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_056_falsey_nonlist_additional_charges_rejected():
+    """PEVID-056 (P2): Falsey non-list values in additional_charges must be rejected.
+
+    {} / "" / 0 previously bypassed type validation because the guard was
+    'if additional_charges_raw is not None and additional_charges_raw'. The fix
+    checks type whenever the field is non-null, regardless of truthiness.
+    """
+    verifier = _load_verifier()
+    for bad_value in ({}, "", 0, False):
+        instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+        instance["pricing"]["additional_charges"] = bad_value
+        # Must recompute fingerprint since pricing changed
+        pricing = instance.get("pricing", {})
+        import hashlib
+        import json as _json
+
+        fp = hashlib.sha256(
+            _json.dumps(pricing, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        instance["integrity"]["evidence_fingerprint_sha256"] = fp
+        result = verifier.verify_pricing_evidence(instance)
+        assert result.validation_status not in ("VALIDATED", "UNVALIDATED"), (
+            f"Falsey non-list additional_charges {bad_value!r} must fail validation; "
+            f"got {result.validation_status!r}"
+        )
+        assert not result.is_valid, (
+            f"is_valid must be False for bad additional_charges {bad_value!r}"
+        )
+
+
+@pytest.mark.contract
+def test_pevid_057_null_absent_currency_in_charge_rejected():
+    """PEVID-057 (P2): Null or absent currency in an additional charge must be rejected.
+
+    Adding an undenominated number to a USD ceiling is unsound. The fix requires
+    currency to be non-null and equal to 'USD' for every charge entry.
+    """
+    verifier = _load_verifier()
+    for bad_currency in (None, ""):
+        instance = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
+        charge = copy.deepcopy(SYNTHETIC_CHARGE_NOT_APPLICABLE)
+        charge["currency"] = bad_currency
+        instance["pricing"]["additional_charges"] = [charge]
+        result = verifier.verify_pricing_evidence(instance)
+        assert not result.is_valid, (
+            f"is_valid must be False for charge with currency={bad_currency!r}"
+        )
+        assert any("currency" in f.lower() for f in result.findings), (
+            f"findings must mention currency; got {result.findings}"
+        )
+
+
+@pytest.mark.contract
+def test_pevid_058_applicable_verified_null_exposure_blocks_defensibility():
+    """PEVID-058 (P1): APPLICABLE_VERIFIED charge with null calculated_max_exposure_usd
+    must block is_defensible_upper_bound — silently contributing zero is unsound.
+    """
+    cost_model = _load_cost_model()
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.84299"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    # Charge is APPLICABLE_VERIFIED but no calculated_max_exposure_usd
+    charge_with_null_exposure = {
+        "charge_id": "TEST-APPLICABLE-NULL-EXPOSURE",
+        "applicability_status": "APPLICABLE_VERIFIED",
+        "calculated_max_exposure_usd": None,
+        "currency": "USD",
+    }
+    snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [charge_with_null_exposure],
+    }
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=snapshot
+    )
+    assert report.is_defensible_upper_bound is False, (
+        "APPLICABLE_VERIFIED charge with null calculated_max_exposure_usd must block defensibility"
+    )
+    assert report.unresolved_unknowns, (
+        "unresolved_unknowns must be non-empty when APPLICABLE_VERIFIED exposure is null"
+    )
+    combined = " ".join(report.unresolved_unknowns).lower()
+    assert "applicable_verified" in combined or "null" in combined, (
+        f"unresolved_unknowns should describe the issue; got: {report.unresolved_unknowns}"
+    )
+
+
+@pytest.mark.contract
+def test_pevid_059_unknown_applicability_blocks_pipeline_readiness():
+    """PEVID-059 (P1): A UNKNOWN_APPLICABILITY charge in validated evidence must prevent
+    the pipeline from returning READY_FOR_HUMAN_DECISION even when all request fields
+    are populated and the cost verifier would otherwise return READY_FOR_HUMAN_DECISION.
+
+    The pricing verifier returns VALIDATED regardless of per-charge classification.
+    The pipeline must enforce the defensibility gate explicitly.
+    """
+    pipeline = _load_pipeline()
+    # Verify that the current repo state (which has HCP-CLIENT-UNIT-001 as UNKNOWN)
+    # does not produce READY_FOR_HUMAN_DECISION from the pipeline
+    report = pipeline.run_verification(repo=REPO)
+    assert report["overall_status"] != "READY_FOR_HUMAN_DECISION", (
+        "Pipeline must not reach READY_FOR_HUMAN_DECISION when an UNKNOWN_APPLICABILITY "
+        f"charge exists; got overall_status={report['overall_status']!r}"
+    )
+    assert report["approved"] is False

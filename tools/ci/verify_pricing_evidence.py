@@ -187,62 +187,98 @@ def run_verification(
             "Follow docs/operations/customer_zero_run3_pricing_evidence_capture.md."
         )
     elif pe_status == "VALIDATED":
-        # Check cost authorization status for further blocking
-        ca_state = cost_result.overall_state
-        if ca_state == "READY_FOR_HUMAN_DECISION":
-            overall_status = "READY_FOR_HUMAN_DECISION"
+        # Before consulting the cost-authorization result, check whether any
+        # additional charges in the validated evidence instance are unresolved.
+        # The pricing verifier returns VALIDATED based on schema/content/provenance
+        # alone — it does not gate on charge classification. The cost-review verifier's
+        # _check_pricing_evidence_populated() similarly does not inspect per-charge
+        # blocking status. We must enforce the defensibility gate here so that
+        # UNKNOWN_APPLICABILITY / UNBOUNDED / PENDING_VERIFICATION charges cannot
+        # silently reach READY_FOR_HUMAN_DECISION.
+        _BLOCKING_STATUSES = frozenset(
+            {"UNKNOWN_APPLICABILITY", "UNBOUNDED", "PENDING_VERIFICATION"}
+        )
+        snap_charges = (
+            pricing_result.pricing_snapshot.get("additional_charges", [])
+            if pricing_result.pricing_snapshot
+            else []
+        )
+        blocking_charge_ids = [
+            c.get("charge_id", f"<idx {i}>")
+            for i, c in enumerate(snap_charges)
+            if isinstance(c, dict)
+            and c.get("applicability_status") in _BLOCKING_STATUSES
+        ]
+        if blocking_charge_ids:
+            overall_status = "BLOCKED_FINANCIAL_EXPOSURE"
             next_action = (
-                "All automated checks pass. Package is ready for human approver review. "
-                "Human approver must make an explicit authorization decision — "
-                "APPROVED state is NOT reachable through automation."
+                "Pricing evidence is validated but the bounded financial exposure cannot "
+                "be certified as a defensible upper bound. The following additional charges "
+                "have unresolved applicability status and must be independently verified before "
+                "the authorization package can advance: "
+                + ", ".join(blocking_charge_ids)
+                + ". Each charge must be reclassified as APPLICABLE_VERIFIED (with "
+                "calculated_max_exposure_usd) or NOT_APPLICABLE_VERIFIED (with evidence). "
+                "See docs/operations/customer_zero_run3_pricing_evidence_capture.md "
+                "Section 12 for the classification procedure."
             )
         else:
-            # Determine specific blocking reason
-            blocker_ids = {b.split(":")[0] for b in cost_result.blockers}
-            identity_blockers = {
-                "C14_OPERATOR_IDENTITY_SET",
-                "C15_APPROVER_IDENTITY_SET",
-            }
-            exposure_blockers = {
-                "C10_MAX_COST_SET",
-                "C11_MAX_RUNTIME_SET",
-                "C12_TEARDOWN_RESERVE_SET",
-            }
-            if blocker_ids & identity_blockers:
-                overall_status = "BLOCKED_HUMAN_INPUTS"
+            # Check cost authorization status for further blocking
+            ca_state = cost_result.overall_state
+            if ca_state == "READY_FOR_HUMAN_DECISION":
+                overall_status = "READY_FOR_HUMAN_DECISION"
                 next_action = (
-                    "Pricing is validated. Human operator and approver identities must be set "
-                    "in run3_cost_authorization_request.json before the review package is complete."
-                )
-            elif blocker_ids & exposure_blockers:
-                overall_status = "BLOCKED_FINANCIAL_EXPOSURE"
-                next_action = (
-                    "Pricing is validated but maximum cost/runtime not set. "
-                    "Human operator must set requested_max_cost_usd, "
-                    "requested_max_runtime_minutes, and teardown_reserve_minutes."
+                    "All automated checks pass. Package is ready for human approver review. "
+                    "Human approver must make an explicit authorization decision — "
+                    "APPROVED state is NOT reachable through automation."
                 )
             else:
-                # Check for C23 fingerprint binding blocker specifically
-                c23_blocked = any(
-                    "C23_EVIDENCE_FINGERPRINT_BOUND" in b for b in cost_result.blockers
-                )
-                if c23_blocked:
-                    overall_status = "BLOCKED_FINGERPRINT_MISMATCH"
+                # Determine specific blocking reason
+                blocker_ids = {b.split(":")[0] for b in cost_result.blockers}
+                identity_blockers = {
+                    "C14_OPERATOR_IDENTITY_SET",
+                    "C15_APPROVER_IDENTITY_SET",
+                }
+                exposure_blockers = {
+                    "C10_MAX_COST_SET",
+                    "C11_MAX_RUNTIME_SET",
+                    "C12_TEARDOWN_RESERVE_SET",
+                }
+                if blocker_ids & identity_blockers:
+                    overall_status = "BLOCKED_HUMAN_INPUTS"
                     next_action = (
-                        "C23 EVIDENCE_FINGERPRINT_BOUND FAILED: "
-                        "pricing_evidence_fingerprint in the authorization request "
-                        "does not match the fingerprint of the validated evidence instance's "
-                        "pricing sub-object. The request was bound to a stale or altered "
-                        "evidence snapshot. Recompute the fingerprint from the current "
-                        "validated pricing evidence and update the request."
+                        "Pricing is validated. Human operator and approver identities must be set "
+                        "in run3_cost_authorization_request.json before the review package is complete."
+                    )
+                elif blocker_ids & exposure_blockers:
+                    overall_status = "BLOCKED_FINANCIAL_EXPOSURE"
+                    next_action = (
+                        "Pricing is validated but maximum cost/runtime not set. "
+                        "Human operator must set requested_max_cost_usd, "
+                        "requested_max_runtime_minutes, and teardown_reserve_minutes."
                     )
                 else:
-                    overall_status = "BLOCKED_PRICING_UNVERIFIED"
-                    next_action = (
-                        "Cost authorization has unresolved blockers. "
-                        f"Blockers: {cost_result.blockers[:3]}. "
-                        "Resolve all blockers before presenting for human decision."
+                    # Check for C23 fingerprint binding blocker specifically
+                    c23_blocked = any(
+                        "C23_EVIDENCE_FINGERPRINT_BOUND" in b for b in cost_result.blockers
                     )
+                    if c23_blocked:
+                        overall_status = "BLOCKED_FINGERPRINT_MISMATCH"
+                        next_action = (
+                            "C23 EVIDENCE_FINGERPRINT_BOUND FAILED: "
+                            "pricing_evidence_fingerprint in the authorization request "
+                            "does not match the fingerprint of the validated evidence instance's "
+                            "pricing sub-object. The request was bound to a stale or altered "
+                            "evidence snapshot. Recompute the fingerprint from the current "
+                            "validated pricing evidence and update the request."
+                        )
+                    else:
+                        overall_status = "BLOCKED_PRICING_UNVERIFIED"
+                        next_action = (
+                            "Cost authorization has unresolved blockers. "
+                            f"Blockers: {cost_result.blockers[:3]}. "
+                            "Resolve all blockers before presenting for human decision."
+                        )
     else:
         overall_status = "BLOCKED_PRICING_UNVERIFIED"
         next_action = (

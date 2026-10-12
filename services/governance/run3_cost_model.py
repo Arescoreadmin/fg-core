@@ -655,12 +655,19 @@ def compute_bounded_exposure(
                             }
                         )
                 else:
+                    # APPLICABLE_VERIFIED without a calculated exposure is not a
+                    # defensible zero — it is an unknown upper bound that must block
+                    # certification just as UNKNOWN_APPLICABILITY does.
+                    unresolved_unknowns.append(
+                        f"additional charge {charge_id!r} is APPLICABLE_VERIFIED but "
+                        "calculated_max_exposure_usd is null — bounded exposure unknown"
+                    )
                     additional_charges_included.append(
                         {
                             "charge_id": charge_id,
                             "applicability_status": status,
-                            "exposure_included_usd": "0.00",
-                            "note": "APPLICABLE_VERIFIED with null calculated_max_exposure_usd — zero contribution",
+                            "exposure_included_usd": None,
+                            "note": "APPLICABLE_VERIFIED but calculated_max_exposure_usd is null — blocks defensibility",
                         }
                     )
 

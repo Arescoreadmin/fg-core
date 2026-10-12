@@ -302,9 +302,10 @@ def _validate_content(
             "is_defensible_upper_bound will be False; bounded exposure report cannot be certified"
         )
 
-    # Validate additional_charges entries
+    # Validate additional_charges entries — check type whenever non-null,
+    # not just when truthy: {}, "", or 0 are all invalid non-list values.
     additional_charges_raw = pricing.get("additional_charges")
-    if additional_charges_raw is not None and additional_charges_raw:
+    if additional_charges_raw is not None:
         if not isinstance(additional_charges_raw, list):
             findings.append(
                 "pricing.additional_charges must be a list if present; "
@@ -326,12 +327,11 @@ def _validate_content(
                         "non-null, non-empty string"
                     )
 
-                # currency must be USD
+                # currency must be present and USD — a null/absent currency must
+                # be rejected even when a calculated_max_exposure_usd is set,
+                # because adding an undenominated number to a USD total is unsound.
                 charge_currency = charge.get("currency")
-                if (
-                    charge_currency is not None
-                    and str(charge_currency).upper() != "USD"
-                ):
+                if charge_currency is None or str(charge_currency).upper() != "USD":
                     findings.append(
                         f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
                         f"currency must be 'USD'; got {charge_currency!r}"

@@ -1,3 +1,26 @@
+## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(pricing-evidence): 4 PR bot findings — charge blocking gate, APPLICABLE_VERIFIED null exposure, falsey type check, null currency
+
+**Change scope:** REPAIR class. Four targeted fixes to PR #764. (1) P1: `verify_pricing_evidence.py` now checks per-charge blocking status (UNKNOWN/UNBOUNDED/PENDING) before allowing READY_FOR_HUMAN_DECISION — previously the pipeline could reach readiness while `compute_bounded_exposure` would report `is_defensible_upper_bound=False`. (2) P1: APPLICABLE_VERIFIED charge with null `calculated_max_exposure_usd` now adds to `unresolved_unknowns` and blocks defensibility — previously silently contributed zero. (3) P2: `additional_charges` type validation now runs whenever field is non-null, not only when truthy — prevents `{}`, `""`, or `0` from bypassing type check. (4) P2: Null/absent `currency` in additional charge entry now rejected — previously only non-null non-USD values were checked. New tests: PEVID-056–PEVID-059 (101 total). No authorization path weakened. No cloud mutations. FP-001 OPEN.
+
+**Security posture:**
+
+1. **No authorization path weakened.** READY_FOR_HUMAN_DECISION cannot be reached while blocking additional charges exist. `approved` hardcoded `False`.
+2. **Defensibility tightened.** APPLICABLE_VERIFIED without a bounded exposure now blocks certification.
+3. **Validation fail-closed on falsey non-list and null currency.** Both are now REJECTED_CONTENT.
+4. **COST_AUTHORIZATION=NOT_AUTHORIZED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. FP-001 OPEN.**
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (blocking charges gate before readiness), `services/governance/run3_cost_model.py` (APPLICABLE_VERIFIED null exposure blocks defensibility), `services/governance/run3_pricing_evidence_verifier.py` (falsey type check + null currency), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-056–059 added — 101 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; HCP_ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 101 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets. No paid infrastructure.
+
+---
+
 ## 2026-10-11 - governance/customer-zero-run3-pricing-cost-integration-001: fix(governance): financial exposure integrity repair
 
 **Change scope:** CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 (REPAIR class). Repairs four post-merge gaps in the Run 3 pricing evidence pipeline. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
