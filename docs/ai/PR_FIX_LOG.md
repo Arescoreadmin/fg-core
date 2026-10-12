@@ -1,3 +1,15 @@
+# AUTH-SECRET-ISOLATION-001 — Dedicated Auth.js session secret and production recovery
+
+- **Work item:** AUTH-SECRET-ISOLATION-001 (SECURITY-HOTFIX class — P1 production security and availability)
+- **Purpose:** Removes unsafe fallback in `apps/console/auth.ts` that allowed `FG_INTERNAL_AUTH_SECRET` (a gateway/service-to-service credential) to serve as the browser-facing Auth.js session-signing secret. Adds `AUTH_SECRET` presence check to `startup-validation.ts` so misconfigured production deployments fail fast at boot. Updates `apps/console/vercel.json` `ignoreCommand` to watch `package-lock.json`. Creates 27-test regression suite covering the full AUTH-001–AUTH-010 invariant set.
+- **Root cause:** `auth.ts` line 7 read `secret: process.env.AUTH_SECRET ?? process.env.FG_INTERNAL_AUTH_SECRET`, introduced in PR #764. If `AUTH_SECRET` was absent from the Vercel console deployment, the session signing key silently fell back to the internal gateway credential — crossing the session/gateway trust boundary. The original `[auth][error] MissingSecret` logs from `api.frostgate.ai` show the production deployment was missing `AUTH_SECRET` entirely.
+- **Invariants enforced:** AUTH-001 (dedicated AUTH_SECRET), AUTH-002 (FG_INTERNAL_AUTH_SECRET never used for sessions), AUTH-003 (credential boundary isolation), AUTH-004 (fail closed on missing/empty/whitespace secret), AUTH-005 (no secret leakage), AUTH-006 (session lifetime preserved), AUTH-007 (no hardcoded fallback secrets), AUTH-008 (no silent fallback to unrelated env vars), AUTH-009 (middleware/handler secret consistency), AUTH-010 (Edge/Node compat preserved).
+- **Changed files:** `apps/console/auth.ts` (remove fallback, add invariant comment), `apps/console/lib/startup-validation.ts` (add AUTH_SECRET presence check), `apps/console/vercel.json` (add package-lock.json to ignoreCommand), `apps/console/tests/auth-secret-isolation.test.js` (new — 27 tests), `docs/security/AUTH-SECRET-ISOLATION-001-evidence.md` (new — audit evidence), `docs/ai/PR_FIX_LOG.md` (this entry).
+- **Test counts:** 27 new tests (AUTH-T01–T22 + AUTH-003/007/002-ordering); all 2334 pre-existing console tests preserved; 2361 total. fg-fast passes.
+- **Production verification required:** AUTH_SECRET must be set in Vercel Production environment for the console project. `FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK` must be set to `"false"`. A fresh deployment from the merged commit is required. Live authentication proof is a separate milestone.
+
+---
+
 # CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 — Financial exposure integrity repair
 
 - **Work item:** CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 (REPAIR class — always authorized)
