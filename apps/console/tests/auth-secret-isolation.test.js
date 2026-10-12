@@ -384,16 +384,19 @@ test('AUTH-T19: auth.ts (route handler) is Node.js runtime code', () => {
 });
 
 // ─── AUTH-T20: Authentication file change triggers deployment ────────────────
-// [STATIC] vercel.json ignoreCommand watches apps/console (which includes auth.ts).
+// [STATIC] vercel.json ignoreCommand watches . (the console root, relative to
+// Vercel rootDirectory=apps/console) which covers auth.ts and auth.config.ts.
+// Paths are relative to rootDirectory — "apps/console" would resolve to the
+// nonexistent nested path apps/console/apps/console inside the Vercel runner.
 
 test('AUTH-T20: vercel.json ignoreCommand watches apps/console for auth file changes', () => {
   const src = read('vercel.json');
   const config = JSON.parse(src);
   assert.ok(config.ignoreCommand, 'vercel.json must have ignoreCommand');
-  assert.match(config.ignoreCommand, /apps\/console/,
-    'ignoreCommand must watch apps/console (contains auth.ts, auth.config.ts, etc.)');
-  // auth.ts lives inside apps/console — any change triggers a build
-  // This is correct: apps/console covers the entire console app tree
+  // Vercel runs ignoreCommand from rootDirectory (apps/console), so "." covers
+  // the full console app tree including auth.ts and auth.config.ts.
+  assert.match(config.ignoreCommand, /-- \./,
+    'ignoreCommand must watch . (console root relative to Vercel rootDirectory apps/console)');
 });
 
 // ─── AUTH-T21: Unrelated governance-only change may skip frontend build ───────
