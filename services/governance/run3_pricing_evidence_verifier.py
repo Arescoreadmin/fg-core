@@ -61,6 +61,16 @@ EXPECTED_TIER = "standard_small"
 EXPECTED_REGION = "us-east-1"
 EXPECTED_CURRENCY = "USD"
 
+VALID_APPLICABILITY_STATUSES = frozenset(
+    [
+        "APPLICABLE_VERIFIED",
+        "NOT_APPLICABLE_VERIFIED",
+        "UNKNOWN_APPLICABILITY",
+        "UNBOUNDED",
+        "PENDING_VERIFICATION",
+    ]
+)
+
 VALID_SOURCE_CLASSIFICATIONS = frozenset(
     [
         "hcp_portal_screenshot",
@@ -292,6 +302,108 @@ def _validate_content(
             "is_defensible_upper_bound will be False; bounded exposure report cannot be certified"
         )
 
+    # Validate additional_charges entries — check type whenever non-null,
+    # not just when truthy: {}, "", or 0 are all invalid non-list values.
+    additional_charges_raw = pricing.get("additional_charges")
+    if additional_charges_raw is not None:
+        if not isinstance(additional_charges_raw, list):
+            findings.append(
+                "pricing.additional_charges must be a list if present; "
+                f"got {type(additional_charges_raw).__name__!r}"
+            )
+        else:
+            for idx, charge in enumerate(additional_charges_raw):
+                if not isinstance(charge, dict):
+                    findings.append(
+                        f"pricing.additional_charges[{idx}] must be a dict; "
+                        f"got {type(charge).__name__!r}"
+                    )
+                    continue
+
+                charge_id = charge.get("charge_id")
+                if charge_id is None or str(charge_id).strip() == "":
+                    findings.append(
+                        f"pricing.additional_charges[{idx}].charge_id must be a "
+                        "non-null, non-empty string"
+                    )
+
+                # currency must be present and USD — a null/absent currency must
+                # be rejected even when a calculated_max_exposure_usd is set,
+                # because adding an undenominated number to a USD total is unsound.
+                charge_currency = charge.get("currency")
+                if charge_currency is None or str(charge_currency).upper() != "USD":
+                    findings.append(
+                        f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                        f"currency must be 'USD'; got {charge_currency!r}"
+                    )
+
+                # applicability_status must be in VALID_APPLICABILITY_STATUSES
+                app_status = charge.get("applicability_status")
+                if app_status not in VALID_APPLICABILITY_STATUSES:
+                    findings.append(
+                        f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                        f"applicability_status {app_status!r} is not valid; "
+                        "must be one of: "
+                        + ", ".join(sorted(VALID_APPLICABILITY_STATUSES))
+                    )
+
+                # If APPLICABLE_VERIFIED, unit_price_usd must be parseable positive Decimal
+                unit_price_raw = charge.get("unit_price_usd")
+                if app_status == "APPLICABLE_VERIFIED":
+                    if unit_price_raw is None:
+                        findings.append(
+                            f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                            "applicability_status=APPLICABLE_VERIFIED requires a non-null "
+                            "unit_price_usd"
+                        )
+                    else:
+                        upd, up_err = _parse_decimal(
+                            unit_price_raw, f"additional_charges[{idx}].unit_price_usd"
+                        )
+                        if up_err:
+                            findings.append(
+                                f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                                + up_err
+                            )
+                        elif upd is not None and upd <= Decimal("0"):
+                            findings.append(
+                                f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                                f"unit_price_usd must be > 0 for APPLICABLE_VERIFIED; got {upd}"
+                            )
+                elif unit_price_raw is not None:
+                    # Not APPLICABLE_VERIFIED but unit_price_usd is set — validate if finite positive
+                    upd, up_err = _parse_decimal(
+                        unit_price_raw, f"additional_charges[{idx}].unit_price_usd"
+                    )
+                    if up_err:
+                        findings.append(
+                            f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                            + up_err
+                        )
+                    elif upd is not None and upd < Decimal("0"):
+                        findings.append(
+                            f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                            f"unit_price_usd must be >= 0 when set; got {upd}"
+                        )
+
+                # calculated_max_exposure_usd — if set, must be finite non-negative Decimal
+                max_exp_raw = charge.get("calculated_max_exposure_usd")
+                if max_exp_raw is not None:
+                    med, me_err = _parse_decimal(
+                        max_exp_raw,
+                        f"additional_charges[{idx}].calculated_max_exposure_usd",
+                    )
+                    if me_err:
+                        findings.append(
+                            f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                            + me_err
+                        )
+                    elif med is not None and med < Decimal("0"):
+                        findings.append(
+                            f"pricing.additional_charges[{idx}] (charge_id={charge_id!r}): "
+                            f"calculated_max_exposure_usd must be >= 0; got {med}"
+                        )
+
     # Build snapshot if no findings so far (content is usable)
     snapshot = None
     if not findings and hourly_rate is not None:
@@ -305,6 +417,9 @@ def _validate_content(
             "unknown_charges_acknowledged": bool(uca)
             if isinstance(uca, bool)
             else False,
+            "additional_charges": list(additional_charges_raw)
+            if isinstance(additional_charges_raw, list)
+            else [],
         }
 
     return findings, warnings, snapshot
@@ -401,11 +516,11 @@ def _validate_freshness(
         try:
             vfd = int(valid_for_days_raw)
             if vfd <= 0:
-                findings.append(
-                    f"expiry_policy.valid_for_days must be > 0; got {vfd}"
-                )
+                findings.append(f"expiry_policy.valid_for_days must be > 0; got {vfd}")
             else:
-                max_allowed_expiry = ts + timedelta(days=vfd + 1)  # +1 day processing tolerance
+                max_allowed_expiry = ts + timedelta(
+                    days=vfd + 1
+                )  # +1 day processing tolerance
                 if exp_dt > max_allowed_expiry:
                     findings.append(
                         f"expiry_policy.expires_at_utc {exp_raw!r} is more than "

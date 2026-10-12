@@ -84,9 +84,20 @@
       "likelihood": "medium",
       "impact": "high",
       "mitigation": "Independent reviewer separation of duties (collector != reviewer); evidence fingerprint tamper detection; expiry policy enforcement; explicit OPEN FP-001 status; verifier rejects evidence where source.classification or source.reference_url is null.",
-      "residual_risk": "LOW — enforced by verifier and test suite (PEVID-001–PEVID-031)",
+      "residual_risk": "LOW — enforced by verifier and test suite (PEVID-001–PEVID-034)",
       "status": "MITIGATED_BY_VERIFIER",
       "mitigated_by": ["run3_pricing_evidence_verifier.py", "run3_financial_risk_register.json FR-001"]
+    },
+    {
+      "id": "FR-009",
+      "title": "Client unit billing exposure — HCP Vault Dedicated client unit charges",
+      "description": "HCP Vault Dedicated client-unit charges ($72.92/month per client observed on 2026-10-12) may apply to the ceremony cluster. Quantity, proration rules, and minimum commitment are unconfirmed. UNKNOWN_APPLICABILITY blocks is_defensible_upper_bound until independently verified as APPLICABLE_VERIFIED or NOT_APPLICABLE_VERIFIED. If applicable and unbounded, this charge could materially exceed the base hourly HCP cluster cost depending on client counting rules.",
+      "likelihood": "UNKNOWN",
+      "impact": "MEDIUM_TO_HIGH",
+      "mitigation": "HCP-CLIENT-UNIT-001 charge modeled as UNKNOWN_APPLICABILITY in run3_pricing_evidence_instance.json additional_charges. Verifier enforces that UNKNOWN_APPLICABILITY blocks is_defensible_upper_bound (PEVID-040, PEVID-044). Human operator must: (1) confirm client counting rules from HCP documentation or sales, (2) classify charge as APPLICABLE_VERIFIED or NOT_APPLICABLE_VERIFIED with supporting evidence, (3) have independent reviewer confirm classification before pricing evidence can be validated.",
+      "residual_risk": "OPEN — remains UNKNOWN_APPLICABILITY until independently verified",
+      "status": "OPEN_PENDING_CHARGE_CLASSIFICATION",
+      "mitigated_by": ["run3_pricing_evidence_verifier.py VALID_APPLICABILITY_STATUSES", "run3_cost_model.py compute_bounded_exposure additional_charges_blocking", "tests PEVID-035–PEVID-055"]
     }
   ],
 

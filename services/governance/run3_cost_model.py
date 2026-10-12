@@ -39,9 +39,66 @@ The historical figure is CONSUMED (Runs 1+2 only).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Additional charge model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AdditionalCharge:
+    """A structured representation of a potential additional charge component.
+
+    Classification semantics:
+    - APPLICABLE_VERIFIED: charge applies and amount is confirmed
+    - NOT_APPLICABLE_VERIFIED: charge does not apply with supporting evidence
+    - UNKNOWN_APPLICABILITY: cannot determine if charge applies — BLOCKS defensibility
+    - UNBOUNDED: charge applies but quantity/amount cannot be bounded — BLOCKS defensibility
+    - PENDING_VERIFICATION: requires further evidence collection
+    """
+
+    charge_id: str
+    provider: str
+    description: str
+    billing_metric: str  # e.g. "per_client_month", "per_hour"
+    unit_price_usd: str | None  # Decimal string, None if unknown
+    currency: str  # must be "USD"
+    billing_frequency: str  # "monthly", "hourly", "one_time"
+    quantity_basis: str  # how quantity is determined
+    max_billable_quantity: int | None  # None if unbounded
+    proration_rule: str | None  # "daily", "hourly", "none", None if unknown
+    minimum_commitment_usd: str | None  # Decimal string
+    applicability_status: str  # one of the 5 above
+    source_evidence_ref: str | None  # evidence_id or "PENDING"
+    confidence: str  # "VERIFIED", "ESTIMATED", "UNKNOWN"
+    calculated_max_exposure_usd: str | None  # Decimal string, None if unbounded/unknown
+    notes: str | None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items()}
+
+    @property
+    def blocks_defensibility(self) -> bool:
+        return self.applicability_status in (
+            "UNKNOWN_APPLICABILITY",
+            "UNBOUNDED",
+            "PENDING_VERIFICATION",
+        )
+
+
+VALID_APPLICABILITY_STATUSES = frozenset(
+    [
+        "APPLICABLE_VERIFIED",
+        "NOT_APPLICABLE_VERIFIED",
+        "UNKNOWN_APPLICABILITY",
+        "UNBOUNDED",
+        "PENDING_VERIFICATION",
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +476,8 @@ class BoundedExposureReport:
 
     is_defensible_upper_bound is True only when unresolved_unknowns is empty,
     which requires that billing_unit_minutes and minimum_charge_usd are known,
-    and unknown_charges_acknowledged is explicitly True in the pricing snapshot.
+    unknown_charges_acknowledged is explicitly True in the pricing snapshot,
+    AND all additional_charges entries are APPLICABLE_VERIFIED or NOT_APPLICABLE_VERIFIED.
     A 10% safety margin alone is insufficient — all billing parameters must be
     confirmed and the operator must have explicitly acknowledged no additional charges.
     """
@@ -428,10 +486,21 @@ class BoundedExposureReport:
     safety_margin_usd: str  # margin amount
     bounded_ceiling_usd: str  # base + margin
     cloudwatch_cost_usd: str
-    total_bounded_ceiling_usd: str  # bounded_ceiling + cloudwatch
+    total_bounded_ceiling_usd: (
+        str  # bounded_ceiling + cloudwatch + applicable verified charges
+    )
     unknown_charges_warning: str | None
     is_defensible_upper_bound: bool
     unresolved_unknowns: list[str]  # specific gaps that prevent certification
+    additional_charges_included: list[dict] = field(
+        default_factory=list
+    )  # charges included in calculation
+    additional_charges_blocking: list[str] = field(
+        default_factory=list
+    )  # charge_ids that block defensibility
+    unverified_tax_exposure: bool = (
+        True  # True unless evidence explicitly confirms tax treatment
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -443,6 +512,9 @@ class BoundedExposureReport:
             "unknown_charges_warning": self.unknown_charges_warning,
             "is_defensible_upper_bound": self.is_defensible_upper_bound,
             "unresolved_unknowns": self.unresolved_unknowns,
+            "additional_charges_included": self.additional_charges_included,
+            "additional_charges_blocking": self.additional_charges_blocking,
+            "unverified_tax_exposure": self.unverified_tax_exposure,
         }
 
 
@@ -455,13 +527,20 @@ def compute_bounded_exposure(
     """Compute a bounded financial exposure report with safety margin.
 
     is_defensible_upper_bound=True requires ALL of the following:
-      - pricing_snapshot is provided
-      - pricing_snapshot["billing_unit_minutes"] is a positive integer (> 0)
-      - pricing_snapshot["minimum_charge_usd"] is not None
-      - pricing_snapshot["unknown_charges_acknowledged"] is exactly True
+      1. pricing_snapshot is provided
+      2. pricing_snapshot["billing_unit_minutes"] is a positive integer (> 0)
+      3. pricing_snapshot["minimum_charge_usd"] is not None
+      4. pricing_snapshot["unknown_charges_acknowledged"] is exactly True
+      5. ALL entries in pricing_snapshot.get("additional_charges", []) have
+         applicability_status in ("APPLICABLE_VERIFIED", "NOT_APPLICABLE_VERIFIED")
+         — i.e., none are UNKNOWN_APPLICABILITY, UNBOUNDED, or PENDING_VERIFICATION
 
     A 10% safety margin alone is NOT sufficient to certify defensibility when
     billing increments, minimum commitments, or additional charges are unknown.
+
+    APPLICABLE_VERIFIED charges with calculated_max_exposure_usd are included
+    in the total ceiling. NOT_APPLICABLE_VERIFIED charges contribute zero exposure.
+    UNKNOWN/UNBOUNDED/PENDING charges block defensibility.
 
     Args:
         inputs: Verified pricing inputs (used for arithmetic).
@@ -491,12 +570,14 @@ def compute_bounded_exposure(
     cw_cost = _cloudwatch_cost(
         inputs.aws_cloudwatch_per_gb_usd, inputs.estimated_audit_volume_gb
     )
-    total = (ceiling + cw_cost).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
     # Assess defensibility using pricing_snapshot — the billing parameter values
     # on PricingInputs alone are insufficient because they don't carry the operator's
     # explicit acknowledgement that no additional charges exist.
     unresolved_unknowns: list[str] = []
+    additional_charges_included: list[dict] = []
+    additional_charges_blocking: list[str] = []
+    additional_charges_ceiling = Decimal("0")
 
     if pricing_snapshot is None:
         unresolved_unknowns.append(
@@ -516,10 +597,100 @@ def compute_bounded_exposure(
                 "absence of additional charges"
             )
 
+        # Process additional_charges entries
+        extra_charges = pricing_snapshot.get("additional_charges") or []
+        for charge in extra_charges:
+            charge_id = charge.get("charge_id", "<unknown>")
+            status = charge.get("applicability_status", "")
+            if status in ("UNKNOWN_APPLICABILITY", "UNBOUNDED", "PENDING_VERIFICATION"):
+                additional_charges_blocking.append(charge_id)
+                unresolved_unknowns.append(
+                    f"additional charge {charge_id!r} has applicability_status="
+                    f"{status!r} — must be APPLICABLE_VERIFIED or NOT_APPLICABLE_VERIFIED"
+                )
+                additional_charges_included.append(
+                    {
+                        "charge_id": charge_id,
+                        "applicability_status": status,
+                        "exposure_included_usd": None,
+                        "note": f"BLOCKS defensibility: applicability_status={status!r}",
+                    }
+                )
+            elif status == "NOT_APPLICABLE_VERIFIED":
+                additional_charges_included.append(
+                    {
+                        "charge_id": charge_id,
+                        "applicability_status": status,
+                        "exposure_included_usd": "0.00",
+                        "note": "Not applicable — zero exposure",
+                    }
+                )
+            elif status == "APPLICABLE_VERIFIED":
+                max_exp_raw = charge.get("calculated_max_exposure_usd")
+                if max_exp_raw is not None:
+                    try:
+                        max_exp = Decimal(str(max_exp_raw)).quantize(
+                            _TWO_PLACES, rounding=ROUND_HALF_UP
+                        )
+                        additional_charges_ceiling += max_exp
+                        additional_charges_included.append(
+                            {
+                                "charge_id": charge_id,
+                                "applicability_status": status,
+                                "exposure_included_usd": str(max_exp),
+                                "note": "APPLICABLE_VERIFIED — included in total ceiling",
+                            }
+                        )
+                    except (InvalidOperation, ValueError):
+                        unresolved_unknowns.append(
+                            f"additional charge {charge_id!r} has unparseable "
+                            f"calculated_max_exposure_usd: {max_exp_raw!r}"
+                        )
+                        additional_charges_included.append(
+                            {
+                                "charge_id": charge_id,
+                                "applicability_status": status,
+                                "exposure_included_usd": None,
+                                "note": "APPLICABLE_VERIFIED but unparseable exposure",
+                            }
+                        )
+                else:
+                    # APPLICABLE_VERIFIED without a calculated exposure is not a
+                    # defensible zero — it is an unknown upper bound that must block
+                    # certification just as UNKNOWN_APPLICABILITY does.
+                    unresolved_unknowns.append(
+                        f"additional charge {charge_id!r} is APPLICABLE_VERIFIED but "
+                        "calculated_max_exposure_usd is null — bounded exposure unknown"
+                    )
+                    additional_charges_included.append(
+                        {
+                            "charge_id": charge_id,
+                            "applicability_status": status,
+                            "exposure_included_usd": None,
+                            "note": "APPLICABLE_VERIFIED but calculated_max_exposure_usd is null — blocks defensibility",
+                        }
+                    )
+
+    total = (ceiling + cw_cost + additional_charges_ceiling).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP
+    )
+
     defensible = len(unresolved_unknowns) == 0
 
     unknown_warning: str | None = None
     if not defensible:
+        blocking_summary = []
+        if additional_charges_blocking:
+            blocking_summary.append(
+                f"blocking additional charges: {', '.join(additional_charges_blocking)}"
+            )
+        other_unknowns = [
+            u
+            for u in unresolved_unknowns
+            if not any(cid in u for cid in additional_charges_blocking)
+        ]
+        if other_unknowns:
+            blocking_summary.append(f"other gaps: {'; '.join(other_unknowns)}")
         unknown_warning = (
             "Bounded ceiling cannot be certified as a defensible upper bound. "
             f"Unresolved gaps: {'; '.join(unresolved_unknowns)}."
@@ -534,6 +705,9 @@ def compute_bounded_exposure(
         unknown_charges_warning=unknown_warning,
         is_defensible_upper_bound=defensible,
         unresolved_unknowns=unresolved_unknowns,
+        additional_charges_included=additional_charges_included,
+        additional_charges_blocking=additional_charges_blocking,
+        unverified_tax_exposure=True,
     )
 
 

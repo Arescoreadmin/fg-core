@@ -1,3 +1,88 @@
+## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(governance): C23 tightened — null fingerprint FAILS when validated evidence available; unverified_tax_exposure invariant test added
+
+**Change scope:** REPAIR class. Two review findings for PR #764. (1) P1: C23 `EVIDENCE_FINGERPRINT_BOUND` now FAILs when `pricing_evidence_fingerprint` is null AND validated pricing evidence (with `pricing` sub-object) is available — previously null always passed, allowing READY_FOR_HUMAN_DECISION without fingerprint binding. Null-pass retained only when no validated evidence exists yet. (2) P2 (hardening): PEVID-048 updated to test null-with-no-evidence path; PEVID-060 added for null-with-evidence FAIL; PEVID-061 added asserting `unverified_tax_exposure` is always `True` with no bypass path (103 tests total). No authorization path weakened. No cloud mutations. FP-001 OPEN.
+
+**Security posture:**
+
+1. **C23 tightened.** Once validated pricing evidence exists, the authorization request MUST be bound to its fingerprint — an unbound request cannot reach READY_FOR_HUMAN_DECISION.
+2. **`unverified_tax_exposure` invariant explicit.** The field is always `True`; no input can set it to `False`. Human approver accounts for tax uncertainty.
+3. **COST_AUTHORIZATION=NOT_AUTHORIZED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. FP-001 OPEN.**
+
+**Critical-path files changed:** `services/governance/customer_zero_cost_review.py` (C23 null-fingerprint tightened), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-048 updated, PEVID-060–061 added — 103 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; HCP_ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 103 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets. No paid infrastructure.
+
+---
+
+## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(pricing-evidence): 4 PR bot findings — charge blocking gate, APPLICABLE_VERIFIED null exposure, falsey type check, null currency
+
+**Change scope:** REPAIR class. Four targeted fixes to PR #764. (1) P1: `verify_pricing_evidence.py` now checks per-charge blocking status (UNKNOWN/UNBOUNDED/PENDING) before allowing READY_FOR_HUMAN_DECISION — previously the pipeline could reach readiness while `compute_bounded_exposure` would report `is_defensible_upper_bound=False`. (2) P1: APPLICABLE_VERIFIED charge with null `calculated_max_exposure_usd` now adds to `unresolved_unknowns` and blocks defensibility — previously silently contributed zero. (3) P2: `additional_charges` type validation now runs whenever field is non-null, not only when truthy — prevents `{}`, `""`, or `0` from bypassing type check. (4) P2: Null/absent `currency` in additional charge entry now rejected — previously only non-null non-USD values were checked. New tests: PEVID-056–PEVID-059 (101 total). No authorization path weakened. No cloud mutations. FP-001 OPEN.
+
+**Security posture:**
+
+1. **No authorization path weakened.** READY_FOR_HUMAN_DECISION cannot be reached while blocking additional charges exist. `approved` hardcoded `False`.
+2. **Defensibility tightened.** APPLICABLE_VERIFIED without a bounded exposure now blocks certification.
+3. **Validation fail-closed on falsey non-list and null currency.** Both are now REJECTED_CONTENT.
+4. **COST_AUTHORIZATION=NOT_AUTHORIZED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. FP-001 OPEN.**
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (blocking charges gate before readiness), `services/governance/run3_cost_model.py` (APPLICABLE_VERIFIED null exposure blocks defensibility), `services/governance/run3_pricing_evidence_verifier.py` (falsey type check + null currency), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-056–059 added — 101 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; HCP_ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 101 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets. No paid infrastructure.
+
+---
+
+## 2026-10-11 - governance/customer-zero-run3-pricing-cost-integration-001: fix(governance): financial exposure integrity repair
+
+**Change scope:** CUSTOMER-ZERO-RUN3-PRICING-COST-INTEGRATION-001 (REPAIR class). Repairs four post-merge gaps in the Run 3 pricing evidence pipeline. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+**Changed files:**
+- `services/governance/run3_cost_model.py` — AdditionalCharge dataclass, VALID_APPLICABILITY_STATUSES constant, BoundedExposureReport extended with additional_charges_included/blocking/unverified_tax_exposure fields, compute_bounded_exposure updated to process additional_charges entries per applicability_status
+- `services/governance/run3_pricing_evidence_verifier.py` — VALID_APPLICABILITY_STATUSES constant, _validate_content extended to validate additional_charges entries (charge_id, currency, applicability_status, unit_price_usd for APPLICABLE_VERIFIED, Decimal validation for monetary fields), snapshot extended with additional_charges list
+- `services/governance/customer_zero_cost_review.py` — C23 EVIDENCE_FINGERPRINT_BOUND condition added (23rd fail-closed condition); _check_evidence_fingerprint_bound function; verify_cost_review signature extended with pricing_instance_dict parameter; hashlib import added
+- `tools/ci/verify_pricing_evidence.py` — pricing_override includes additional_charges from snapshot and pricing sub-object for C23; pricing_instance_raw passed to verify_cost_review; next_action messages more specific per blocking state
+- `tests/test_cz_run3_pricing_evidence_001.py` — 21 new adversarial tests PEVID-035–PEVID-055 (all @pytest.mark.contract); 97 total
+- `customer_one/run3_pricing_evidence_instance.json` — additional_charges populated with HCP-CLIENT-UNIT-001 (UNKNOWN_APPLICABILITY); unknown_charges_acknowledged remains false
+- `customer_one/run3_financial_risk_register.json` — FR-009 added (client unit billing exposure)
+- `docs/operations/customer_zero_run3_pricing_evidence_capture.md` — Section 12 added (additional charges classification guidance, fingerprint binding guidance)
+- `docs/ai/PR_FIX_LOG.md` — new entry
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — this entry
+
+**Security posture:**
+
+1. **Offline and read-only.** All changes are offline preparation only. No network calls, no cloud API calls, no database writes, no infrastructure mutations.
+2. **No secrets accessed.** Only committed repository files read. No environment secrets, API keys, or credentials.
+3. **No self-authorization.** APPROVED state remains unreachable. COST_AUTHORIZATION=NOT_AUTHORIZED preserved. C23 PASS does not authorize spending — it is a structural binding check only. `approved` field remains hardcoded False.
+4. **Fail-closed extension.** C23 adds a 23rd fail-closed condition. UNKNOWN_APPLICABILITY charges block defensibility (not silently skipped). Fingerprint mismatch fails hard, not as a warning.
+5. **No weakening of existing conditions.** All 22 existing conditions (C01–C22) are preserved exactly. C23 is additive.
+6. **Canonical truth preserved.** CUSTOMER_ZERO_TRUST=NOT_PROVEN, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED preserved in every execution path.
+7. **Monetary arithmetic uses Decimal throughout.** No float arithmetic introduced. All monetary values parsed via _parse_decimal with non-finite rejection.
+
+**Required invariant:** 97 tests pass (76 existing + 21 new); APPROVED unreachable (PEVID-055 asserts); C23 FAIL when fingerprint mismatches (PEVID-047 asserts); UNKNOWN_APPLICABILITY blocks defensibility (PEVID-040, PEVID-044 assert); all existing COST-001–COST-028 preserved.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 97 passed
+- `ruff check <changed service/test files>` → all checks passed
+- `ruff format --check <changed files>` → all files already formatted
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status: BLOCKED_PRICING_UNVERIFIED, approved: false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Offline repair; additive fail-closed condition; no authority weakening; no secret access; APPROVED unreachable enforced by test; canonical Customer-Zero truth preserved.
+
+---
+
 ## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: fix(pricing-evidence): 4 PR bot findings — evidence pipeline, freshness window, sentinel, NaN
 
 **Change scope:** OFFLINE_PREPARATION class. Four targeted fixes to PR #763. (1) P1: `verify_pricing_evidence.py` now feeds validated evidence instance into cost review via `pricing_override_dict` parameter on `verify_cost_review` — prevents READY_FOR_HUMAN_DECISION being unreachable despite validated evidence; `customer_zero_cost_review.py` gains `pricing_override_dict: dict | None = None` param (backward-compatible). (2) P1: `_validate_freshness` enforces `expires_at_utc ≤ collection_timestamp_utc + valid_for_days + 1d` — prevents stale evidence (e.g. 2020 collection, 2099 expiry, 30-day window) from passing freshness. (3) P1: Remove dead sentinel `inputs._unknown_charges_acknowledged` from `build_cost_model_from_evidence` — was never used by `compute_bounded_exposure` after the `420cf5e0` fix but was misleadingly commented as retained. (4) P2: `_parse_decimal` rejects non-finite Decimal values (NaN, Infinity) before the positivity comparison. New tests: PEVID-033 (stale evidence window bypass) and PEVID-034 (NaN/Infinity rate). No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
