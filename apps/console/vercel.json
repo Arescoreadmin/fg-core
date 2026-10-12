@@ -3,5 +3,5 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/console packages/navigation packages/ui package-lock.json"
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/navigation ../../packages/ui ../../package-lock.json"
 }
