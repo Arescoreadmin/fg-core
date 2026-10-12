@@ -1,3 +1,24 @@
+# CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 — Verified pricing evidence pipeline
+
+- **Work item:** CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 (OFFLINE_PREPARATION class)
+- **Purpose:** Implements structured pricing evidence ingestion and verification for HCP Vault Dedicated (standard_small, us-east-1), extending the Run 3 cost-authorization framework to close FP-001 from CZ-RUN3-FAILURE-PREVENTION-001. Produces human-decision readiness infrastructure: pricing evidence verifier with schema/content/provenance/freshness/source/fingerprint checks; bounded financial exposure report; CLI verification pipeline; operator evidence-capture runbook; FR-008 in financial risk register.
+- **New files:**
+  - `services/governance/run3_pricing_evidence_verifier.py` (pricing evidence verifier — schema, content, provenance, freshness, source, fingerprint checks; `PricingEvidenceVerificationResult` dataclass; CLI entry point)
+  - `customer_one/run3_pricing_evidence_instance.json` (evidence capture template — all fields null, awaiting human operator)
+  - `tools/ci/verify_pricing_evidence.py` (standalone CLI pipeline — loads evidence instance + cost auth request + ceremony state; outputs JSON report with `approved: false` hardcoded; APPROVED unreachable)
+  - `docs/operations/customer_zero_run3_pricing_evidence_capture.md` (11-section operator runbook with anti-patterns)
+  - `tests/test_cz_run3_pricing_evidence_001.py` (33 adversarial tests PEVID-001–PEVID-031 + 2 safety guards)
+- **Changes to existing files:**
+  - `services/governance/run3_cost_model.py` — added `BoundedExposureReport` dataclass, `compute_bounded_exposure()`, `build_cost_model_from_evidence()`; no breaking changes to existing API
+  - `customer_one/run3_financial_risk_register.json` — FR-008 added (pricing evidence fabrication/staleness risk)
+  - `docs/ai/PR_FIX_LOG.md` (this entry)
+  - `docs/SOC_EXECUTION_GATES_2026-02-15.md` (SOC review entry for `tools/ci/verify_pricing_evidence.py`)
+- **Test counts:** 33 new tests (PEVID-001–PEVID-031 + 2 guards); all 40 existing COST-001–COST-040 preserved; fg-fast 529 passed, 2 skipped; fg-security 17 passed, 2 skipped
+- **Canonical truth preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN, TRUST-003=BLOCKED, ACCEPT-001=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT, COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN.
+- **Zero cloud mutations. No paid infrastructure. No schema changes.**
+
+---
+
 # CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 — Human cost-authorization review and decision preparation
 
 - **Work item:** CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 (OFFLINE_PREPARATION class)

@@ -1,3 +1,78 @@
+## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: fix(pricing-evidence): 4 PR bot findings — evidence pipeline, freshness window, sentinel, NaN
+
+**Change scope:** OFFLINE_PREPARATION class. Four targeted fixes to PR #763. (1) P1: `verify_pricing_evidence.py` now feeds validated evidence instance into cost review via `pricing_override_dict` parameter on `verify_cost_review` — prevents READY_FOR_HUMAN_DECISION being unreachable despite validated evidence; `customer_zero_cost_review.py` gains `pricing_override_dict: dict | None = None` param (backward-compatible). (2) P1: `_validate_freshness` enforces `expires_at_utc ≤ collection_timestamp_utc + valid_for_days + 1d` — prevents stale evidence (e.g. 2020 collection, 2099 expiry, 30-day window) from passing freshness. (3) P1: Remove dead sentinel `inputs._unknown_charges_acknowledged` from `build_cost_model_from_evidence` — was never used by `compute_bounded_exposure` after the `420cf5e0` fix but was misleadingly commented as retained. (4) P2: `_parse_decimal` rejects non-finite Decimal values (NaN, Infinity) before the positivity comparison. New tests: PEVID-033 (stale evidence window bypass) and PEVID-034 (NaN/Infinity rate). No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+**Security posture:**
+
+1. **No authorization path weakened.** `approved` remains hardcoded `False`. APPROVED state is unreachable. BLOCKED state preserved for all unvalidated instances.
+2. **Freshness control strengthened.** A far-future `expires_at_utc` with a short `valid_for_days` now correctly fails validation.
+3. **NaN/Infinity reject-closed.** Previously could crash or silently pass; now returns `REJECTED_CONTENT` with a clear finding.
+4. **Evidence pipeline is now correctly wired.** A fully validated evidence instance can reach `READY_FOR_HUMAN_DECISION` through the pipeline without requiring the operator to maintain a second file format.
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN.
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (pricing_override_dict wiring), `services/governance/customer_zero_cost_review.py` (pricing_override_dict param), `services/governance/run3_pricing_evidence_verifier.py` (valid_for_days consistency, NaN/Infinity rejection), `services/governance/run3_cost_model.py` (sentinel removal + comment), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-033/034 added, fixture valid_for_days corrected — 76 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations. APPROVED state is unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 76 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_EVIDENCE_INVALID, approved=false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
+## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: fix(pricing-evidence): tighten is_defensible_upper_bound and null-template distinction
+
+**Change scope:** OFFLINE_PREPARATION class. Two targeted fixes to PR #763. (1) `is_defensible_upper_bound` tightened: now False unless `billing_unit_minutes`, `minimum_charge_usd`, AND `unknown_charges_acknowledged=True` are all confirmed in the pricing snapshot; `unresolved_unknowns` list added to `BoundedExposureReport` naming each specific gap. `compute_bounded_exposure` accepts `pricing_snapshot` dict for authoritative gap detection. (2) Null-template detection: `_is_template_unpopulated` check added before field-level content validation; all-null instance now returns `REJECTED_NOT_POPULATED` (not `REJECTED_CONTENT`), with a clear operator-facing message. Tampered fingerprint finding reworded to include expected vs computed values and explicit re-collection instruction. Pipeline (`verify_pricing_evidence.py`) updated to route `REJECTED_NOT_POPULATED` to `BLOCKED_PRICING_UNVERIFIED`. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+**Security posture:**
+
+1. **No authorization path changed.** `approved` remains hardcoded `False`. APPROVED state is unreachable. BLOCKED state preserved.
+2. **`is_defensible_upper_bound` tightened — never more permissive.** The fix can only produce `False` in additional cases (incomplete snapshot), never `True` in cases previously `False`.
+3. **`REJECTED_NOT_POPULATED` is a new blocking status.** It prevents all-null templates from silently reaching any validation stage.
+4. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (REJECTED_NOT_POPULATED routing added), `services/governance/run3_pricing_evidence_verifier.py` (REJECTED_NOT_POPULATED status + _is_template_unpopulated + tampered message), `services/governance/run3_cost_model.py` (unresolved_unknowns field + pricing_snapshot param + defensibility logic tightened), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-002/025/026/030 updated; PEVID-032 added — 34 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations. APPROVED state is unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py -v` → 34 passed (PEVID-001–PEVID-032 + safety guards)
+- `pytest tests/test_cz_run3_human_cost_review_001.py -v` → 40 passed (all PR #762 tests preserved)
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
+## 2026-10-11 - governance/customer-zero-run3-pricing-evidence-001: CUSTOMER-ZERO-RUN3-PRICING-EVIDENCE-001 verified pricing evidence
+
+**Change scope:** OFFLINE_PREPARATION class. Implements structured pricing evidence ingestion, verification, and bounded exposure reporting for HCP Vault Dedicated (standard_small, us-east-1). Extends the 22-condition cost-authorization verifier with pricing evidence pipeline. Produces human-decision readiness infrastructure for Run 3. No evaluator changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.
+
+New tools/ci file: `tools/ci/verify_pricing_evidence.py` (standalone CLI verifier pipeline — read-only, no cloud calls, no credentials, no network). New service modules: `run3_pricing_evidence_verifier.py` (schema/content/provenance/freshness/source/fingerprint verifier), extended `run3_cost_model.py` (bounded exposure report, evidence-based model builder). New governance artifacts: `run3_pricing_evidence_instance.json` (all-null template). Updated: `run3_financial_risk_register.json` (FR-008 added). New operator runbook: `docs/operations/customer_zero_run3_pricing_evidence_capture.md`. 33 adversarial tests (PEVID-001–PEVID-031 + 2 safety guards).
+
+**Security posture:**
+
+1. **No authorization path changed.** request_status=BLOCKED_PRICING_UNVERIFIED. APPROVED state remains unreachable through any automated path. The `approved` field in `verify_pricing_evidence.py` output is hardcoded `False` with a runtime RuntimeError guard. Independent verifier confirms BLOCKED state.
+2. **TRUST-003 and ACCEPT-001 remain BLOCKED.** FP-001 (HCP pricing unverified) remains OPEN — not resolvable offline. All null fields in `run3_pricing_evidence_instance.json` must be populated by a human operator from the live HCP portal.
+3. **`tools/ci/verify_pricing_evidence.py` is read-only.** It loads three local files, runs offline verification logic, and outputs JSON. No cloud mutation. No network calls. No credentials. No paid infrastructure.
+4. **Separation of duties enforced.** Collector identity must differ from reviewer identity. Self-certification is rejected at the verifier level and tested (PEVID-009). Fingerprint tamper detection enforced (PEVID-020).
+5. **No cloud mutation. No secrets accessed. No paid infrastructure.** COST_AUTHORIZATION=NOT_AUTHORIZED. Canonical Customer-Zero truth preserved.
+
+**Critical-path files changed:** `tools/ci/verify_pricing_evidence.py` (new — read-only CLI pipeline), `services/governance/run3_pricing_evidence_verifier.py` (new), `services/governance/run3_cost_model.py` (extended — no breaking changes), `customer_one/run3_pricing_evidence_instance.json` (new — all null), `customer_one/run3_financial_risk_register.json` (FR-008 added), `docs/operations/customer_zero_run3_pricing_evidence_capture.md` (new), `tests/test_cz_run3_pricing_evidence_001.py` (new — 33 tests), `docs/ai/PR_FIX_LOG.md` (entry added).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; ACCEPT-001=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 status: OPEN. No authorization status changed. No paid infrastructure. No cloud mutations. APPROVED state is unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py -v` → 33 passed (PEVID-001–PEVID-031 + safety guards)
+- `pytest tests/test_cz_run3_human_cost_review_001.py -v` → 40 passed (all PR #762 tests preserved)
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
 ## 2026-10-10 - governance/customer-zero-run3-human-cost-review-001: CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 cost review package
 
 **Change scope:** OFFLINE_PREPARATION class. Prepares complete human cost-authorization review package for CUSTOMER-ZERO-TRUST-003. No evaluator changes. No tools/ci changes. No schema changes. No migrations. No API contract changes. No infra changes. No cloud spending. No paid infrastructure.

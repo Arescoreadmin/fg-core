@@ -648,10 +648,22 @@ def _check_canonical_truth(req: dict) -> ConditionResult:
 def verify_cost_review(
     request_path: Path,
     pricing_path: Path,
+    pricing_override_dict: dict | None = None,
 ) -> CostReviewVerification:
     """Run all 22 conditions and return the verification result.
 
     Fails closed on every condition. APPROVED is never returned.
+
+    Args:
+        request_path: Path to the cost authorization request JSON.
+        pricing_path: Path to the pricing evidence schema JSON (used when
+            pricing_override_dict is None).
+        pricing_override_dict: When provided, use this dict as the pricing evidence
+            instead of loading from pricing_path. Intended for callers that have
+            already validated pricing via run3_pricing_evidence_verifier and want to
+            feed the validated data into the 22-condition cost verifier without
+            requiring the operator to maintain two separate evidence files.
+            When provided, C02 (pricing file existence) is satisfied automatically.
     """
     result = CostReviewVerification(
         generated_at=datetime.now(UTC).isoformat(),
@@ -664,9 +676,17 @@ def verify_cost_review(
     c01 = _check_file_exists(
         request_path, Condition.REQUEST_FILE_EXISTS, "Authorization request"
     )
-    c02 = _check_file_exists(
-        pricing_path, Condition.PRICING_FILE_EXISTS, "Pricing evidence schema"
-    )
+    if pricing_override_dict is not None:
+        # Caller has already loaded and validated pricing — file check is satisfied
+        c02 = ConditionResult(
+            Condition.PRICING_FILE_EXISTS,
+            True,
+            "Pricing evidence supplied via validated override (pricing_override_dict)",
+        )
+    else:
+        c02 = _check_file_exists(
+            pricing_path, Condition.PRICING_FILE_EXISTS, "Pricing evidence schema"
+        )
     conditions.extend([c01, c02])
 
     # Short-circuit if files don't exist — remaining checks would fail with confusing errors
@@ -696,22 +716,25 @@ def verify_cost_review(
         _finalize(result)
         return result
 
-    try:
-        pricing = json.loads(pricing_path.read_text())
-    except Exception as exc:
-        conditions.append(
-            ConditionResult(
-                Condition.PRICING_SCHEMA_VALID,
-                False,
-                f"Failed to parse pricing JSON: {exc}",
-            )
-        )
-        for cond_id in Condition.ALL[4:]:
+    if pricing_override_dict is not None:
+        pricing = pricing_override_dict
+    else:
+        try:
+            pricing = json.loads(pricing_path.read_text())
+        except Exception as exc:
             conditions.append(
-                ConditionResult(cond_id, False, "Skipped — pricing parse failed")
+                ConditionResult(
+                    Condition.PRICING_SCHEMA_VALID,
+                    False,
+                    f"Failed to parse pricing JSON: {exc}",
+                )
             )
-        _finalize(result)
-        return result
+            for cond_id in Condition.ALL[4:]:
+                conditions.append(
+                    ConditionResult(cond_id, False, "Skipped — pricing parse failed")
+                )
+            _finalize(result)
+            return result
 
     # C03/C04: Schema validity
     conditions.append(_check_request_schema(req))

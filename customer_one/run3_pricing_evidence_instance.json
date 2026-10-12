@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "evidence_id": null,
+  "evidence_type": "pricing_observation",
+  "collection_timestamp_utc": null,
+  "expiry_policy": {
+    "valid_for_days": 30,
+    "expires_at_utc": null
+  },
+  "provider": {
+    "name": "HashiCorp Cloud Platform",
+    "product": "HCP Vault Dedicated",
+    "tier": null,
+    "region": null,
+    "organization": "Frostgate-org",
+    "project": "frostgate-production"
+  },
+  "pricing": {
+    "currency": null,
+    "hourly_rate_usd": null,
+    "billing_unit": null,
+    "billing_unit_minutes": null,
+    "minimum_billable_unit": null,
+    "minimum_charge_usd": null,
+    "additional_charges": [],
+    "unknown_charges_acknowledged": false,
+    "unknown_charges_notes": null
+  },
+  "source": {
+    "classification": null,
+    "reference_url": null,
+    "screenshot_sha256": null,
+    "collection_method": null
+  },
+  "provenance": {
+    "collector_identity": null,
+    "collection_method": null,
+    "independent_reviewer_identity": null,
+    "reviewer_notes": null
+  },
+  "integrity": {
+    "evidence_fingerprint_sha256": null,
+    "fingerprint_covers_fields": [],
+    "fingerprint_algorithm": "sha256"
+  },
+  "validation_status": "UNVALIDATED",
+  "validation_reasons": [],
+  "fp_001_status": "OPEN",
+  "fp_001_note": "FP-001 from CZ-RUN3-FAILURE-PREVENTION-001 is OPEN. Human operator must populate all null fields from live HCP portal before this instance can be validated. Do NOT invent or estimate values."
+}
