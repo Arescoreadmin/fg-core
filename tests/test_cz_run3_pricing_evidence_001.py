@@ -1400,21 +1400,27 @@ def test_pevid_047_fingerprint_mismatch_c23_fail():
 
 
 # ---------------------------------------------------------------------------
-# PEVID-048: pricing_evidence_fingerprint in request is null → C23 PASS (not yet bound)
+# PEVID-048: pricing_evidence_fingerprint in request is null, NO validated evidence → C23 PASS
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.contract
-def test_pevid_048_null_fingerprint_c23_pass():
-    """PEVID-048: pricing_evidence_fingerprint is null → C23 PASS (not yet bound)."""
+def test_pevid_048_null_fingerprint_no_evidence_c23_pass():
+    """PEVID-048: pricing_evidence_fingerprint is null AND no validated instance available
+    → C23 PASS (nothing to bind against yet).
+
+    After the C23 tightening: null is only acceptable when no validated evidence
+    exists. When a full validated instance (with pricing sub-object) is available,
+    null must FAIL (see PEVID-060).
+    """
     cost_review = _load_cost_review()
-    instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+    # Pass None as pricing_override_dict — no validated evidence available
     request_with_null_fp = {"pricing_evidence_fingerprint": None}
-    c23 = cost_review._check_evidence_fingerprint_bound(request_with_null_fp, instance)
+    c23 = cost_review._check_evidence_fingerprint_bound(request_with_null_fp, None)
     assert c23.passed, (
-        f"C23 must PASS when pricing_evidence_fingerprint is null; detail={c23.detail}"
+        f"C23 must PASS when pricing_evidence_fingerprint is null and no validated "
+        f"instance is available; detail={c23.detail}"
     )
-    # Detail should explain this is not yet bound
     assert "null" in c23.detail.lower() or "not yet bound" in c23.detail.lower()
 
 
@@ -1725,3 +1731,83 @@ def test_pevid_059_unknown_applicability_blocks_pipeline_readiness():
         f"charge exists; got overall_status={report['overall_status']!r}"
     )
     assert report["approved"] is False
+
+
+# ---------------------------------------------------------------------------
+# PEVID-060: C23 null fingerprint WITH validated evidence → FAIL
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_060_null_fingerprint_with_validated_evidence_c23_fail():
+    """PEVID-060: pricing_evidence_fingerprint is null but validated pricing evidence
+    IS available → C23 must FAIL.
+
+    Once the pipeline has a validated instance (pricing sub-object present in
+    pricing_override_dict), the operator MUST bind the request to the specific
+    evidence fingerprint. An unbound request cannot reach READY_FOR_HUMAN_DECISION.
+    """
+    cost_review = _load_cost_review()
+    instance = _with_valid_fingerprint(copy.deepcopy(SYNTHETIC_VALID_EVIDENCE))
+    # instance has a "pricing" sub-object — validated evidence IS available
+    request_with_null_fp = {"pricing_evidence_fingerprint": None}
+    c23 = cost_review._check_evidence_fingerprint_bound(request_with_null_fp, instance)
+    assert not c23.passed, (
+        "C23 must FAIL when pricing_evidence_fingerprint is null but validated "
+        f"evidence (with pricing sub-object) is available; detail={c23.detail}"
+    )
+    assert c23.id == "C23_EVIDENCE_FINGERPRINT_BOUND"
+    assert (
+        "null" in c23.detail.lower()
+        or "must be bound" in c23.detail.lower()
+        or "required" in c23.detail.lower()
+    ), f"C23 detail should explain fingerprint binding is required; got: {c23.detail!r}"
+
+
+# ---------------------------------------------------------------------------
+# PEVID-061: unverified_tax_exposure is always True — no input can bypass it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_pevid_061_unverified_tax_exposure_invariant():
+    """PEVID-061: unverified_tax_exposure is always True regardless of inputs.
+
+    The field is informational — it flags that tax treatment has not been
+    independently confirmed. No input combination can set it to False:
+    the field is hardcoded in compute_bounded_exposure and has no bypass path.
+    A defensible-upper-bound report can coexist with unverified_tax_exposure=True
+    (the human approver accounts for tax uncertainty in their decision).
+    """
+    cost_model = _load_cost_model()
+    inputs = cost_model.PricingInputs(
+        hourly_rate_usd=Decimal("1.84299"),
+        billing_unit_minutes=60,
+        minimum_charge_usd=Decimal("0"),
+        aws_cloudwatch_per_gb_usd=Decimal("0.50"),
+        estimated_audit_volume_gb=Decimal("0.001"),
+    )
+    fully_verified_snapshot = {
+        "billing_unit_minutes": 60,
+        "minimum_charge_usd": "0",
+        "unknown_charges_acknowledged": True,
+        "additional_charges": [],
+    }
+    report = cost_model.compute_bounded_exposure(
+        inputs, max_runtime_minutes=120, pricing_snapshot=fully_verified_snapshot
+    )
+    # is_defensible_upper_bound should be True — all conditions met
+    assert report.is_defensible_upper_bound is True, (
+        "Expected is_defensible_upper_bound=True with fully verified snapshot"
+    )
+    # unverified_tax_exposure must be True even when everything else is verified
+    assert report.unverified_tax_exposure is True, (
+        "unverified_tax_exposure must be True regardless of how complete the "
+        "pricing evidence is — tax treatment confirmation is outside scope of "
+        "this evidence pipeline"
+    )
+    # Verify to_dict() serializes it correctly too
+    d = report.to_dict()
+    assert d["unverified_tax_exposure"] is True, (
+        "to_dict() must include unverified_tax_exposure=True"
+    )

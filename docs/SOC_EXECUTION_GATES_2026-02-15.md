@@ -1,3 +1,25 @@
+## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(governance): C23 tightened — null fingerprint FAILS when validated evidence available; unverified_tax_exposure invariant test added
+
+**Change scope:** REPAIR class. Two review findings for PR #764. (1) P1: C23 `EVIDENCE_FINGERPRINT_BOUND` now FAILs when `pricing_evidence_fingerprint` is null AND validated pricing evidence (with `pricing` sub-object) is available — previously null always passed, allowing READY_FOR_HUMAN_DECISION without fingerprint binding. Null-pass retained only when no validated evidence exists yet. (2) P2 (hardening): PEVID-048 updated to test null-with-no-evidence path; PEVID-060 added for null-with-evidence FAIL; PEVID-061 added asserting `unverified_tax_exposure` is always `True` with no bypass path (103 tests total). No authorization path weakened. No cloud mutations. FP-001 OPEN.
+
+**Security posture:**
+
+1. **C23 tightened.** Once validated pricing evidence exists, the authorization request MUST be bound to its fingerprint — an unbound request cannot reach READY_FOR_HUMAN_DECISION.
+2. **`unverified_tax_exposure` invariant explicit.** The field is always `True`; no input can set it to `False`. Human approver accounts for tax uncertainty.
+3. **COST_AUTHORIZATION=NOT_AUTHORIZED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. FP-001 OPEN.**
+
+**Critical-path files changed:** `services/governance/customer_zero_cost_review.py` (C23 null-fingerprint tightened), `tests/test_cz_run3_pricing_evidence_001.py` (PEVID-048 updated, PEVID-060–061 added — 103 tests total), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; HCP_ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `pytest tests/test_cz_run3_pricing_evidence_001.py tests/test_cz_run3_human_cost_review_001.py -q` → 103 passed
+- `python tools/ci/verify_pricing_evidence.py --repo .` → overall_status=BLOCKED_PRICING_UNVERIFIED, approved=false
+- No cloud mutation. No secrets. No paid infrastructure.
+
+---
+
 ## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(pricing-evidence): 4 PR bot findings — charge blocking gate, APPLICABLE_VERIFIED null exposure, falsey type check, null currency
 
 **Change scope:** REPAIR class. Four targeted fixes to PR #764. (1) P1: `verify_pricing_evidence.py` now checks per-charge blocking status (UNKNOWN/UNBOUNDED/PENDING) before allowing READY_FOR_HUMAN_DECISION — previously the pipeline could reach readiness while `compute_bounded_exposure` would report `is_defensible_upper_bound=False`. (2) P1: APPLICABLE_VERIFIED charge with null `calculated_max_exposure_usd` now adds to `unresolved_unknowns` and blocks defensibility — previously silently contributed zero. (3) P2: `additional_charges` type validation now runs whenever field is non-null, not only when truthy — prevents `{}`, `""`, or `0` from bypassing type check. (4) P2: Null/absent `currency` in additional charge entry now rejected — previously only non-null non-USD values were checked. New tests: PEVID-056–PEVID-059 (101 total). No authorization path weakened. No cloud mutations. FP-001 OPEN.

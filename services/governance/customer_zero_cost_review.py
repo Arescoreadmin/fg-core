@@ -677,13 +677,31 @@ def _check_evidence_fingerprint_bound(
     """
     req_fp = req.get("pricing_evidence_fingerprint")
 
-    # Null fingerprint: operator hasn't bound it yet — acceptable
+    # Determine whether a validated pricing object is available to bind against.
+    # We only have a bindable fingerprint target when pricing_override_dict carries
+    # the full instance's pricing sub-object (set by the evidence pipeline).
+    pricing_obj = pricing_override_dict.get("pricing") if pricing_override_dict else None
+
+    # Null fingerprint: FAIL when validated evidence is available for binding.
+    # The null-pass is only acceptable before any validated evidence exists.
+    # Once the pipeline has a validated instance, the operator MUST bind the
+    # request to it — an unbound request cannot reach READY_FOR_HUMAN_DECISION.
     if req_fp is None:
+        if pricing_obj is not None:
+            return ConditionResult(
+                Condition.EVIDENCE_FINGERPRINT_BOUND,
+                False,
+                "pricing_evidence_fingerprint is null but validated pricing evidence is "
+                "available — the authorization request must be bound to the validated "
+                "evidence fingerprint before it can reach READY_FOR_HUMAN_DECISION. "
+                "Set pricing_evidence_fingerprint to SHA-256(canonical_json(pricing)).",
+            )
+        # No validated instance available yet — null is acceptable
         return ConditionResult(
             Condition.EVIDENCE_FINGERPRINT_BOUND,
             True,
-            "pricing_evidence_fingerprint is null — not yet bound by human operator; "
-            "binding is required before final authorization",
+            "pricing_evidence_fingerprint is null and no validated instance is available; "
+            "binding required once pricing evidence is validated",
         )
 
     # No validated instance to check against — cannot verify binding
@@ -695,11 +713,6 @@ def _check_evidence_fingerprint_bound(
             "for binding check; accepted pending validated evidence",
         )
 
-    # Validated instance is available — check binding
-    # Extract the pricing sub-object from the override dict's evidence fields
-    # The override dict may have evidence fields or a full instance structure.
-    # Try to get the pricing object if it's a full instance structure.
-    pricing_obj = pricing_override_dict.get("pricing")
     if pricing_obj is None:
         # pricing_override_dict may be the legacy schema format (evidence sub-dict)
         # In that case, we cannot compute the fingerprint — accept
