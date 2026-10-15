@@ -1,3 +1,14 @@
+## CUSTOMER-ZERO-RUN3-FINGERPRINT-REPAIR-002 — permanent source-tree fingerprint stability
+
+- **Work item:** CUSTOMER-ZERO-RUN3-FINGERPRINT-REPAIR-002 (governance fingerprint integrity)
+- **Root cause:** `ROADMAP.md` is a tracked file that records the `source_tree_hash` fingerprint as part of its status ledger (the FINGERPRINT-REPAIR-001 row). Computing the hash includes `ROADMAP.md`, whose content changes when the hash is written into it — creating an inherent circular dependency. Every commit that updated `ROADMAP.md` with a new fingerprint invalidated the fingerprint it recorded. Old broken hash: `6c706efd…`.
+- **Fix:** Introduced `_TREE_HASH_EXCLUDED = frozenset({EVIDENCE_RELPATH, "ROADMAP.md"})` in `tools/ci/run_offline_ceremony_simulation.py`. Updated `_compute_tree_content_hash` to accept `frozenset[str]` (backward-compatible: still accepts a bare `str`). Updated the validator in `services/governance/customer_zero_readiness.py` to apply the identical exclusion set `{evidence_relpath, "ROADMAP.md"}` so runner and validator always produce matching hashes. New stable hash: `88221786947dcd1fead9ce1c18010f5ebd513e30f229d34e880e5bbe39baf5d2`.
+- **Squash-merge stability:** After merge, `ROADMAP.md` gains a new row referencing the new hash. Because `ROADMAP.md` is excluded from the hash, the hash does not change when that row is added — breaking the circular dependency permanently.
+- **Authorization/trust state:** Unchanged. No ceremony gates, trust anchors, simulation results, readiness verifier invariants, or authorization records were altered. The simulation runs 6/6 GREEN. F-009 (source-tree hash mismatch) is cleared.
+- **Regression tests:** `tests/test_cz_run3_readiness_integration_repair_001.py` — 5 new tests covering: stable hash after ROADMAP update, hash recomputation matches evidence after ROADMAP-only change, validator accepts updated evidence, hash algorithm is order-independent, exclusion set symmetry between runner and validator.
+- **Changed files:** `tools/ci/run_offline_ceremony_simulation.py` (frozenset exclusion, updated signature), `services/governance/customer_zero_readiness.py` (validator exclusion set sync), `tests/test_cz_run3_readiness_integration_repair_001.py` (5 new regression tests), `customer_one/offline_simulation_evidence.json` (regenerated with stable hash), `ROADMAP.md` (status row — exempt per CLAUDE.md), `docs/ai/PR_FIX_LOG.md` (this entry).
+- **Test counts:** 102 focused tests pass. fg-fast all gates green.
+
 # AUTH-SECRET-ISOLATION-001 — Dedicated Auth.js session secret and production recovery
 
 - **Work item:** AUTH-SECRET-ISOLATION-001 (SECURITY-HOTFIX class — P1 production security and availability)
