@@ -134,9 +134,7 @@ def _get_tree_content_hash() -> str:
     """
     return _compute_tree_content_hash(
         REPO,
-        frozenset(
-            {"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}
-        ),
+        frozenset({"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}),
     )
 
 
@@ -181,9 +179,9 @@ def test_a2_02_valid_completed_state() -> None:
     """A2-02: Valid completed state (PR #753, SHA c9717807...) → PASS."""
     ok, evidence_str = _roadmap_item_completed_with_evidence(REPO, WORK_ITEM)
     assert ok is True, f"Expected PASS for completed WORK_ITEM, got: {evidence_str}"
-    assert "c9717807" in evidence_str, (
-        f"Expected merged_sha prefix in evidence: {evidence_str}"
-    )
+    assert (
+        "c9717807" in evidence_str
+    ), f"Expected merged_sha prefix in evidence: {evidence_str}"
     assert "#753" in evidence_str, f"Expected PR #753 in evidence: {evidence_str}"
 
 
@@ -195,12 +193,12 @@ def test_a2_03_pr753_completion_evidence_present_and_correct() -> None:
     completed = authority.get("completed", [])
     entry = next((e for e in completed if e.get("id") == WORK_ITEM), None)
     assert entry is not None, f"'{WORK_ITEM}' not found in completed"
-    assert entry.get("prs") == _EXPECTED_PRS, (
-        f"prs field mismatch: {entry.get('prs')} != {_EXPECTED_PRS}"
-    )
-    assert entry.get("merged_sha") == _EXPECTED_MERGED_SHA, (
-        f"merged_sha mismatch: {entry.get('merged_sha')} != {_EXPECTED_MERGED_SHA}"
-    )
+    assert (
+        entry.get("prs") == _EXPECTED_PRS
+    ), f"prs field mismatch: {entry.get('prs')} != {_EXPECTED_PRS}"
+    assert (
+        entry.get("merged_sha") == _EXPECTED_MERGED_SHA
+    ), f"merged_sha mismatch: {entry.get('merged_sha')} != {_EXPECTED_MERGED_SHA}"
 
 
 def test_a2_04_missing_completion_metadata(tmp_path: Path) -> None:
@@ -355,9 +353,9 @@ def test_j_ce3_14_stale_evidence_different_sha(tmp_path: Path) -> None:
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
     if True:  # fake hash always differs from real repo hash
-        assert status == ReadinessStatus.FAIL, (
-            f"Expected FAIL for stale tree hash, got {status}: {ev}"
-        )
+        assert (
+            status == ReadinessStatus.FAIL
+        ), f"Expected FAIL for stale tree hash, got {status}: {ev}"
         assert "stale" in ev.lower() or "tree" in ev.lower(), ev
 
 
@@ -368,9 +366,9 @@ def test_j_ce3_15_malformed_evidence_invalid_json(tmp_path: Path) -> None:
     p.write_text("{ this is not valid json }", encoding="utf-8")
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for invalid JSON, got {status}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for invalid JSON, got {status}"
     assert "malformed" in ev.lower() or "json" in ev.lower(), ev
 
 
@@ -385,9 +383,9 @@ def test_j_ce3_16_missing_required_fields(tmp_path: Path) -> None:
     p = _write_evidence(tmp_path, evidence)
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for missing result, got {status}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for missing result, got {status}"
     assert "result" in ev or "missing" in ev.lower(), ev
 
 
@@ -401,9 +399,9 @@ def test_j_ce3_17_missing_mandatory_checks(tmp_path: Path) -> None:
     p = _write_evidence(tmp_path, evidence)
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for missing mandatory checks, got {status}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for missing mandatory checks, got {status}"
     assert "mandatory" in ev.lower() or "check" in ev.lower(), ev
 
 
@@ -416,9 +414,9 @@ def test_j_ce3_18_contradictory_results(tmp_path: Path) -> None:
     p = _write_evidence(tmp_path, evidence)
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for contradictory counts, got {status}: {ev}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for contradictory counts, got {status}: {ev}"
     # The validator may catch checks_failed != 0 before the arithmetic check;
     # either message is acceptable as long as it's FAIL.
     assert len(ev) > 0, "Evidence string must not be empty on FAIL"
@@ -440,9 +438,9 @@ def test_j_ce3_19_forged_green_flag_no_execution_data(tmp_path: Path) -> None:
     p = _write_evidence(tmp_path, evidence)
 
     status, ev, reason, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for forged GREEN with empty checks, got {status}: {ev}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for forged GREEN with empty checks, got {status}: {ev}"
     assert (
         "empty" in ev.lower() or "no checks" in ev.lower() or "forged" in ev.lower()
     ), ev
@@ -463,9 +461,9 @@ def test_j_ce3_20_deterministic_evidence_generation() -> None:
         text=True,
         timeout=60,
     )
-    assert result.returncode == 0, (
-        f"Simulation failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Simulation failed:\n{result.stdout}\n{result.stderr}"
     # Parse the JSON output from dry-run
     lines = result.stdout.splitlines()
     json_start = next(
@@ -509,9 +507,9 @@ def test_j_ce3_21_no_dependency_on_paid_infrastructure() -> None:
         timeout=60,
         env={**os.environ, "FG_ENV": "test"},
     )
-    assert result.returncode == 0, (
-        f"Simulation failed (should succeed without paid infra):\n{result.stdout}\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Simulation failed (should succeed without paid infra):\n{result.stdout}\n{result.stderr}"
     # Verify the evidence says no paid infrastructure required
     lines = result.stdout.splitlines()
     json_start = next(
@@ -519,9 +517,9 @@ def test_j_ce3_21_no_dependency_on_paid_infrastructure() -> None:
     )
     if json_start is not None:
         evidence = json.loads("\n".join(lines[json_start:]))
-        assert evidence.get("paid_infrastructure_required") is False, (
-            "Evidence must indicate no paid infrastructure required"
-        )
+        assert (
+            evidence.get("paid_infrastructure_required") is False
+        ), "Evidence must indicate no paid infrastructure required"
 
 
 # ===========================================================================
@@ -551,17 +549,17 @@ def test_int_22_final_readiness_ready_when_evidence_satisfied() -> None:
 
     a2 = dims.get("A2-roadmap-authority")
     assert a2 is not None, "A2-roadmap-authority dimension missing"
-    assert a2.status == ReadinessStatus.PASS, (
-        f"A2 must be PASS after repair; got {a2.status}: {a2.evidence}"
-    )
+    assert (
+        a2.status == ReadinessStatus.PASS
+    ), f"A2 must be PASS after repair; got {a2.status}: {a2.evidence}"
 
     j_ce3 = dims.get("J_CE3-offline-ceremony-simulation-green")
-    assert j_ce3 is not None, (
-        "J_CE3-offline-ceremony-simulation-green dimension missing"
-    )
-    assert j_ce3.status == ReadinessStatus.PASS, (
-        f"J_CE3 must be PASS after repair; got {j_ce3.status}: {j_ce3.evidence}"
-    )
+    assert (
+        j_ce3 is not None
+    ), "J_CE3-offline-ceremony-simulation-green dimension missing"
+    assert (
+        j_ce3.status == ReadinessStatus.PASS
+    ), f"J_CE3 must be PASS after repair; got {j_ce3.status}: {j_ce3.evidence}"
 
 
 def test_int_23_preauth_blocked_when_final_readiness_fails(tmp_path: Path) -> None:
@@ -620,12 +618,12 @@ def test_int_24_preauth_ready_when_final_readiness_passes() -> None:
         ),
         None,
     )
-    assert a2_blocker is None, (
-        f"A2 must not be a blocker after repair; found: {a2_blocker}"
-    )
-    assert j_ce3_blocker is None, (
-        f"J_CE3 must not be a blocker after repair; found: {j_ce3_blocker}"
-    )
+    assert (
+        a2_blocker is None
+    ), f"A2 must not be a blocker after repair; found: {a2_blocker}"
+    assert (
+        j_ce3_blocker is None
+    ), f"J_CE3 must not be a blocker after repair; found: {j_ce3_blocker}"
 
 
 def test_int_25_trust_acceptance_state_unchanged() -> None:
@@ -661,13 +659,13 @@ def test_int_26_cost_authorization_not_authorized() -> None:
     # Cost authorization is in the cost_authorization_request sub-document
     cost_req = preauth_data.get("cost_authorization_request", {})
     auth_status = cost_req.get("authorization_status")
-    assert auth_status == "NOT_AUTHORIZED", (
-        f"Cost authorization must remain NOT_AUTHORIZED: {auth_status}"
-    )
+    assert (
+        auth_status == "NOT_AUTHORIZED"
+    ), f"Cost authorization must remain NOT_AUTHORIZED: {auth_status}"
     proposed_max = cost_req.get("proposed_max_cost_usd")
-    assert proposed_max is None, (
-        f"proposed_max_cost_usd must remain null (no human authorization yet): {proposed_max}"
-    )
+    assert (
+        proposed_max is None
+    ), f"proposed_max_cost_usd must remain null (no human authorization yet): {proposed_max}"
 
 
 def test_int_27_no_cloud_mutation_in_repair() -> None:
@@ -680,9 +678,9 @@ def test_int_27_no_cloud_mutation_in_repair() -> None:
         timeout=60,
         env={**os.environ, "FG_ENV": "production"},
     )
-    assert result.returncode != 0, (
-        "Simulation runner must exit non-zero in production environment"
-    )
+    assert (
+        result.returncode != 0
+    ), "Simulation runner must exit non-zero in production environment"
     combined = result.stdout + result.stderr
     assert "production" in combined.lower() or "error" in combined.lower(), combined
 
@@ -716,9 +714,9 @@ def test_int_28_fingerprint_determinism() -> None:
         dimensions=dims,
         blockers=[],
     )
-    assert r1.canonical_fingerprint == r2.canonical_fingerprint, (
-        "Fingerprint must be deterministic (exclude generated_at)"
-    )
+    assert (
+        r1.canonical_fingerprint == r2.canonical_fingerprint
+    ), "Fingerprint must be deterministic (exclude generated_at)"
 
 
 def test_int_29_post_merge_source_rebinding_required() -> None:
@@ -732,9 +730,9 @@ def test_int_29_post_merge_source_rebinding_required() -> None:
         p = Path(td) / "evidence.json"
         p.write_text(json.dumps(evidence), encoding="utf-8")
         status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
-        assert status == ReadinessStatus.FAIL, (
-            "Stale source_tree_hash must cause FAIL (rebinding required)"
-        )
+        assert (
+            status == ReadinessStatus.FAIL
+        ), "Stale source_tree_hash must cause FAIL (rebinding required)"
         assert "stale" in ev.lower() or "tree" in ev.lower(), ev
 
 
@@ -753,9 +751,9 @@ def test_int_30_fail_closed_for_incomplete_evidence(tmp_path: Path) -> None:
     }
     p = _write_evidence(tmp_path, evidence)
     status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Incomplete evidence (missing checks_failed) must FAIL, got {status}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Incomplete evidence (missing checks_failed) must FAIL, got {status}"
 
 
 def test_int_31_a2_and_j_ce3_both_fixed_simultaneously() -> None:
@@ -780,19 +778,19 @@ def test_int_31_a2_and_j_ce3_both_fixed_simultaneously() -> None:
     a2 = dims.get("A2-roadmap-authority")
     j_ce3 = dims.get("J_CE3-offline-ceremony-simulation-green")
 
-    assert a2 is not None and a2.status == ReadinessStatus.PASS, (
-        f"A2 must be PASS: {a2.status if a2 else 'missing'}"
-    )
-    assert j_ce3 is not None and j_ce3.status == ReadinessStatus.PASS, (
-        f"J_CE3 must be PASS: {j_ce3.status if j_ce3 else 'missing'}"
-    )
+    assert (
+        a2 is not None and a2.status == ReadinessStatus.PASS
+    ), f"A2 must be PASS: {a2.status if a2 else 'missing'}"
+    assert (
+        j_ce3 is not None and j_ce3.status == ReadinessStatus.PASS
+    ), f"J_CE3 must be PASS: {j_ce3.status if j_ce3 else 'missing'}"
 
     # Verify no A2 or J_CE3 blockers
     blocker_ids = {b.dimension_id for b in result.blockers}
     assert "A2-roadmap-authority" not in blocker_ids, "A2 still blocking after repair"
-    assert "J_CE3-offline-ceremony-simulation-green" not in blocker_ids, (
-        "J_CE3 still blocking after repair"
-    )
+    assert (
+        "J_CE3-offline-ceremony-simulation-green" not in blocker_ids
+    ), "J_CE3 still blocking after repair"
 
 
 def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
@@ -808,12 +806,12 @@ def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
         pre_blocker_ids = {
             b.get("dimension_id") for b in pre.get("offline_blockers", [])
         }
-        assert "A2-roadmap-authority" in pre_blocker_ids, (
-            "Pre-repair should have had A2 blocker"
-        )
-        assert "J_CE3-offline-ceremony-simulation-green" in pre_blocker_ids, (
-            "Pre-repair should have had J_CE3 blocker"
-        )
+        assert (
+            "A2-roadmap-authority" in pre_blocker_ids
+        ), "Pre-repair should have had A2 blocker"
+        assert (
+            "J_CE3-offline-ceremony-simulation-green" in pre_blocker_ids
+        ), "Pre-repair should have had J_CE3 blocker"
 
     # Post-repair: neither should be a blocker (patch worktree noise)
     with (
@@ -828,12 +826,12 @@ def test_int_32_pre_repair_vs_post_repair_comparison() -> None:
     ):
         result = evaluate(REPO)
     post_blocker_ids = {b.dimension_id for b in result.blockers}
-    assert "A2-roadmap-authority" not in post_blocker_ids, (
-        "A2 still blocked post-repair"
-    )
-    assert "J_CE3-offline-ceremony-simulation-green" not in post_blocker_ids, (
-        "J_CE3 still blocked post-repair"
-    )
+    assert (
+        "A2-roadmap-authority" not in post_blocker_ids
+    ), "A2 still blocked post-repair"
+    assert (
+        "J_CE3-offline-ceremony-simulation-green" not in post_blocker_ids
+    ), "J_CE3 still blocked post-repair"
 
 
 def test_int_33_evidence_provenance_validation() -> None:
@@ -842,9 +840,9 @@ def test_int_33_evidence_provenance_validation() -> None:
     # The source_sha must be a 40-char hex string (informational)
     # The source_tree_hash must be a 64-char hex string (tree binding)
     evidence_path = REPO / "customer_one" / "offline_simulation_evidence.json"
-    assert evidence_path.exists(), (
-        "offline_simulation_evidence.json must exist after simulation run"
-    )
+    assert (
+        evidence_path.exists()
+    ), "offline_simulation_evidence.json must exist after simulation run"
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
 
     sim_id = evidence.get("simulation_id", "")
@@ -856,18 +854,18 @@ def test_int_33_evidence_provenance_validation() -> None:
 
     import re
 
-    assert re.match(r"^[0-9a-f]{40}$", source_sha.lower()), (
-        f"source_sha must be 40 lowercase hex chars: {source_sha!r}"
-    )
+    assert re.match(
+        r"^[0-9a-f]{40}$", source_sha.lower()
+    ), f"source_sha must be 40 lowercase hex chars: {source_sha!r}"
 
     source_tree_hash = evidence.get("source_tree_hash", "")
     assert source_tree_hash, "source_tree_hash must be present and non-empty"
-    assert len(source_tree_hash) == 64, (
-        f"source_tree_hash must be 64 chars, got {len(source_tree_hash)}"
-    )
-    assert re.match(r"^[0-9a-f]{64}$", source_tree_hash.lower()), (
-        f"source_tree_hash must be 64 lowercase hex chars: {source_tree_hash!r}"
-    )
+    assert (
+        len(source_tree_hash) == 64
+    ), f"source_tree_hash must be 64 chars, got {len(source_tree_hash)}"
+    assert re.match(
+        r"^[0-9a-f]{64}$", source_tree_hash.lower()
+    ), f"source_tree_hash must be 64 lowercase hex chars: {source_tree_hash!r}"
 
 
 def test_j_ce3_34_undercounting_passes_must_fail(tmp_path: Path) -> None:
@@ -883,9 +881,9 @@ def test_j_ce3_34_undercounting_passes_must_fail(tmp_path: Path) -> None:
     )
     p = _write_evidence(tmp_path, evidence)
     status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for undercounted passes (1 passed, 6 executed), got {status}: {ev}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for undercounted passes (1 passed, 6 executed), got {status}: {ev}"
     assert len(ev) > 0
 
 
@@ -905,9 +903,9 @@ def test_j_ce3_35_duplicate_check_names_must_fail(tmp_path: Path) -> None:
     )
     p = _write_evidence(tmp_path, evidence)
     status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Expected FAIL for duplicate check names, got {status}: {ev}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Expected FAIL for duplicate check names, got {status}: {ev}"
     assert "duplicate" in ev.lower() or "check" in ev.lower()
 
 
@@ -943,16 +941,18 @@ def test_fpr002_01_source_changes_invalidate_hash(tmp_path: Path) -> None:
         capture_output=True,
     )
 
-    excluded = frozenset({"customer_one/offline_simulation_evidence.json", "ROADMAP.md"})
+    excluded = frozenset(
+        {"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}
+    )
     hash_before = _compute_tree_content_hash(tmp_path, excluded)
 
     # Modify a tracked (non-excluded) file
     (tmp_path / "a").write_text("mutated", encoding="utf-8")
     hash_after = _compute_tree_content_hash(tmp_path, excluded)
 
-    assert hash_before != hash_after, (
-        "Modifying a tracked source file MUST change the tree hash"
-    )
+    assert (
+        hash_before != hash_after
+    ), "Modifying a tracked source file MUST change the tree hash"
 
 
 def test_fpr002_02_roadmap_changes_do_not_invalidate_hash(tmp_path: Path) -> None:
@@ -980,11 +980,15 @@ def test_fpr002_02_roadmap_changes_do_not_invalidate_hash(tmp_path: Path) -> Non
         capture_output=True,
     )
 
-    excluded = frozenset({"customer_one/offline_simulation_evidence.json", "ROADMAP.md"})
+    excluded = frozenset(
+        {"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}
+    )
     hash_before = _compute_tree_content_hash(tmp_path, excluded)
 
     # Modify ROADMAP.md (the excluded ledger)
-    (tmp_path / "ROADMAP.md").write_text("new row recording fingerprint", encoding="utf-8")
+    (tmp_path / "ROADMAP.md").write_text(
+        "new row recording fingerprint", encoding="utf-8"
+    )
     hash_after = _compute_tree_content_hash(tmp_path, excluded)
 
     assert hash_before == hash_after, (
@@ -1002,9 +1006,9 @@ def test_fpr002_03_tampered_evidence_payload_fails_verification(tmp_path: Path) 
     evidence = _make_evidence(source_tree_hash="dead" * 16)  # obviously wrong
     p = _write_evidence(tmp_path, evidence)
     status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
-    assert status == ReadinessStatus.FAIL, (
-        f"Tampered source_tree_hash must FAIL, got {status}: {ev}"
-    )
+    assert (
+        status == ReadinessStatus.FAIL
+    ), f"Tampered source_tree_hash must FAIL, got {status}: {ev}"
     assert "stale" in ev.lower() or "tree" in ev.lower(), ev
 
 
@@ -1020,12 +1024,12 @@ def test_fpr002_04_exclusion_set_is_minimal() -> None:
 
     assert "ROADMAP.md" in _TREE_HASH_EXCLUDED
     assert "customer_one/offline_simulation_evidence.json" in _TREE_HASH_EXCLUDED
-    assert "SYSTEM.md" not in _TREE_HASH_EXCLUDED, (
-        "SYSTEM.md must remain in hash coverage — not a fingerprint ledger"
-    )
-    assert "CLAUDE.md" not in _TREE_HASH_EXCLUDED, (
-        "CLAUDE.md must remain in hash coverage — not a fingerprint ledger"
-    )
+    assert (
+        "SYSTEM.md" not in _TREE_HASH_EXCLUDED
+    ), "SYSTEM.md must remain in hash coverage — not a fingerprint ledger"
+    assert (
+        "CLAUDE.md" not in _TREE_HASH_EXCLUDED
+    ), "CLAUDE.md must remain in hash coverage — not a fingerprint ledger"
     # Guard against accidental scope creep
     assert len(_TREE_HASH_EXCLUDED) == 2, (
         f"Exclusion set must stay minimal (2 entries), got {len(_TREE_HASH_EXCLUDED)}: "
