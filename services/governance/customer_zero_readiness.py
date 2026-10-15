@@ -438,12 +438,23 @@ _SIMULATION_MANDATORY_CHECKS = frozenset(
 )
 
 
-def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
-    """SHA-256 of tracked file contents excluding one path (the evidence file).
+def _compute_tree_content_hash(
+    repo: Path, exclude: "str | frozenset[str]"
+) -> str:
+    """SHA-256 of tracked file contents excluding tracking-ledger files.
 
     Same algorithm as run_offline_ceremony_simulation.py — runner and validator
     must produce identical hashes for the same working tree.
+
+    Accepts either a single relpath (backwards-compatible) or a frozenset of
+    relpaths to exclude. The runner excludes both the evidence file itself and
+    tracking ledgers that record the fingerprint (e.g. ROADMAP.md); the
+    validator must apply the same exclusion set to produce a matching hash.
     """
+    if isinstance(exclude, str):
+        excluded: frozenset[str] = frozenset({exclude})
+    else:
+        excluded = exclude
     try:
         result = subprocess.run(
             ["git", "ls-files", "-z"],
@@ -455,7 +466,7 @@ def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
         if result.returncode != 0:
             return "TREE_HASH_ERROR"
         files = sorted(
-            f for f in result.stdout.split("\0") if f and f != exclude_relpath
+            f for f in result.stdout.split("\0") if f and f not in excluded
         )
         h = hashlib.sha256()
         for relpath in files:
@@ -540,8 +551,11 @@ def _validate_offline_simulation_evidence(
         )
 
     _evidence_relpath = "customer_one/offline_simulation_evidence.json"
+    # Must match the exclusion set in tools/ci/run_offline_ceremony_simulation.py
+    # (_TREE_HASH_EXCLUDED) so runner and validator produce identical hashes.
+    _tree_hash_excluded = frozenset({_evidence_relpath, "ROADMAP.md"})
     evidence_tree_hash = evidence.get("source_tree_hash", "")
-    computed_tree_hash = _compute_tree_content_hash(repo, _evidence_relpath)
+    computed_tree_hash = _compute_tree_content_hash(repo, _tree_hash_excluded)
     if computed_tree_hash.startswith("TREE_HASH_ERROR"):
         return (
             ReadinessStatus.FAIL,
