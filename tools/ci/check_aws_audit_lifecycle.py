@@ -67,6 +67,71 @@ class ResourceBlock:
         return f"{self.type_}.{self.name}"
 
 
+def _strip_block_comments(text: str) -> str:
+    """Remove /* ... */ block comments, replacing with whitespace.
+
+    Preserves newlines so line-based logic (#/// comments, line counts) is
+    not disturbed. Fails closed: an unterminated block comment blanks out
+    everything from the opening /* to end-of-text, ensuring no valid resource
+    declarations survive inside an unclosed comment.
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(text):
+        if text[i : i + 2] == "/*":
+            end = text.find("*/", i + 2)
+            if end == -1:
+                for c in text[i:]:
+                    result.append("\n" if c == "\n" else " ")
+                break
+            for c in text[i : end + 2]:
+                result.append("\n" if c == "\n" else " ")
+            i = end + 2
+        else:
+            result.append(text[i])
+            i += 1
+    return "".join(result)
+
+
+def _strip_line_comments(text: str) -> str:
+    """Remove # and // line comments from text, preserving line structure.
+
+    Skips quoted strings so that # or // inside a string value is not treated
+    as a comment. Used to clean lifecycle block bodies before regex matching
+    so that `# prevent_destroy = true` is not mistaken for the real setting.
+    """
+    result: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if in_string:
+            result.append(c)
+            if c == "\\":
+                i += 1
+                if i < len(text):
+                    result.append(text[i])
+            elif c == '"':
+                in_string = False
+            i += 1
+            continue
+        if c == '"':
+            in_string = True
+            result.append(c)
+            i += 1
+            continue
+        if c == "#" or (c == "/" and i + 1 < len(text) and text[i + 1] == "/"):
+            nl = text.find("\n", i)
+            if nl == -1:
+                break
+            result.append("\n")
+            i = nl + 1
+            continue
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
 def _find_matching_brace(text: str, open_pos: int) -> int:
     """Return index of matching `}` for the `{` at `open_pos`.
 
@@ -210,6 +275,10 @@ def check_tf_file(tf_path: Path) -> tuple[bool, list[str]]:
     except OSError as e:
         return False, [f"FAIL: cannot read {tf_path}: {e}"]
 
+    # Strip /* ... */ block comments before resource discovery so that a
+    # resource wrapped in a block comment is not counted as present.
+    tf_text = _strip_block_comments(tf_text)
+
     try:
         blocks = parse_resource_blocks(tf_text)
     except (ValueError, IndexError) as e:
@@ -251,12 +320,15 @@ def check_tf_file(tf_path: Path) -> tuple[bool, list[str]]:
             ok = False
             continue
         lc = lifecycles[0]
-        if _PREVENT_DESTROY_FALSE.search(lc):
+        # Strip line comments before matching so `# prevent_destroy = true`
+        # inside the lifecycle block is not accepted as a real setting.
+        lc_clean = _strip_line_comments(lc)
+        if _PREVENT_DESTROY_FALSE.search(lc_clean):
             messages.append(f"FAIL: {address}: prevent_destroy = false (must be true)")
             ok = False
             continue
-        if not _PREVENT_DESTROY_TRUE.search(lc):
-            if _PREVENT_DESTROY_ANY.search(lc):
+        if not _PREVENT_DESTROY_TRUE.search(lc_clean):
+            if _PREVENT_DESTROY_ANY.search(lc_clean):
                 messages.append(
                     f"FAIL: {address}: prevent_destroy present but not literal 'true'"
                 )

@@ -345,3 +345,44 @@ def test_n008_cli_exits_1_on_missing_file(tmp_path):
     result = _run_gate_cli(missing)
     assert result.returncode == 1
     assert "FAIL" in result.stdout
+
+
+def test_n009_block_commented_resource_fails_closed(tmp_path):
+    """N-009: Protected resource wrapped in /* ... */ block comment → gate FAILs.
+
+    A block comment is valid HCL that Terraform ignores entirely. The gate must
+    not count a commented-out resource as present.
+    """
+    tf_real = _read_real_tf()
+    blocks = _blocks_by_address(tf_real)
+    start, end = blocks["aws_iam_user.vault_audit"]
+    # Wrap the entire resource block in a /* ... */ comment
+    tampered = tf_real[:start] + "/*\n" + tf_real[start:end] + "\n*/" + tf_real[end:]
+    tf = _write_tmp_tf(tmp_path, tampered)
+    ok, messages = check_tf_file(tf)
+    assert ok is False, (
+        "gate must FAIL when a protected resource is inside a block comment"
+    )
+    assert any("aws_iam_user.vault_audit" in m and "not found" in m for m in messages)
+
+
+def test_n010_line_commented_prevent_destroy_fails_closed(tmp_path):
+    """N-010: `# prevent_destroy = true` inside lifecycle block → gate FAILs.
+
+    A line comment is valid HCL that Terraform ignores. The gate must not
+    accept a commented-out prevent_destroy assignment as real protection.
+    """
+    tf_real = _read_real_tf()
+    # Replace the real setting with a commented-out version inside the block
+    tampered = tf_real.replace(
+        "    prevent_destroy = true",
+        "    # prevent_destroy = true",
+        1,  # only the first occurrence (aws_cloudwatch_log_group.vault_audit)
+    )
+    tf = _write_tmp_tf(tmp_path, tampered)
+    ok, messages = check_tf_file(tf)
+    assert ok is False, "gate must FAIL when prevent_destroy is commented out with #"
+    assert any(
+        "lifecycle block missing prevent_destroy" in m or "prevent_destroy" in m
+        for m in messages
+    )
