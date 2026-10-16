@@ -58,6 +58,15 @@ SCHEMA_VERSION = "1.0"
 EVIDENCE_RELPATH = "customer_one/offline_simulation_evidence.json"
 SIMULATION_CONTRACT_VERSION = "1.0"
 
+# Files excluded from source_tree_hash because they necessarily reference
+# the fingerprint being computed, creating an inherent circular dependency.
+# These are tracking ledgers, not simulation source — their exclusion does
+# not weaken ceremony integrity.
+_TREE_HASH_EXCLUDED = frozenset({
+    EVIDENCE_RELPATH,
+    "ROADMAP.md",
+})
+
 _PRODUCTION_ENVIRONMENTS = {"production", "staging", "prod"}
 
 
@@ -92,13 +101,17 @@ def _git_head(repo: Path) -> str:
         return ""
 
 
-def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
-    """SHA-256 of tracked file contents excluding the evidence file itself.
+def _compute_tree_content_hash(repo: Path, excluded: frozenset[str]) -> str:
+    """SHA-256 of tracked file contents excluding tracking-ledger files.
 
     Uses 'git ls-files' so the evidence file, whether untracked (freshly
     written) or already committed, is consistently excluded from the hash.
     This means the hash is the same before and after committing the evidence
     file, breaking the HEAD-SHA chicken-and-egg.
+
+    Additional ledger files that record the fingerprint being computed
+    (e.g. ROADMAP.md) are also excluded to avoid a circular dependency:
+    recording the hash would otherwise invalidate the hash itself.
     """
     try:
         result = subprocess.run(
@@ -111,7 +124,7 @@ def _compute_tree_content_hash(repo: Path, exclude_relpath: str) -> str:
         if result.returncode != 0:
             return "TREE_HASH_ERROR"
         files = sorted(
-            f for f in result.stdout.split("\0") if f and f != exclude_relpath
+            f for f in result.stdout.split("\0") if f and f not in excluded
         )
         h = hashlib.sha256()
         for relpath in files:
@@ -335,7 +348,7 @@ def _run_simulation(repo: Path) -> dict:
     source_sha = _git_head(
         repo
     )  # informational only — changes on every commit; use source_tree_hash for binding
-    source_tree_hash = _compute_tree_content_hash(repo, EVIDENCE_RELPATH)
+    source_tree_hash = _compute_tree_content_hash(repo, _TREE_HASH_EXCLUDED)
     result = "GREEN" if not checks_failed_names else "FAILED"
 
     evidence = {

@@ -1,3 +1,33 @@
+## 2026-10-16 - fix/cz-run3-fingerprint-repair-002: CUSTOMER-ZERO-RUN3-FINGERPRINT-REPAIR-002 — permanent source-tree fingerprint stability
+
+**Change scope:** REPAIR class. Resolves post-squash-merge F-009 regression: `ROADMAP.md` was inside hash coverage but records the `source_tree_hash` fingerprint in its status ledger, creating an inherent circular dependency. Every commit that updated the ROADMAP row with a new fingerprint invalidated the fingerprint it recorded. After squash-merge of PR #766, the committed evidence recorded `6c706efd...` but the actual tree hash at `d73d1197` computed to `f9f30231...` — blocking both `customer_zero_final_readiness.py` and `customer_zero_run3_preauth.py` at J_CE3.
+
+Fix: introduced `_TREE_HASH_EXCLUDED = frozenset({EVIDENCE_RELPATH, "ROADMAP.md"})` in `tools/ci/run_offline_ceremony_simulation.py` replacing the previous single-string exclusion. Updated `_compute_tree_content_hash` to accept `frozenset[str]`. Mirrored the identical exclusion set in `services/governance/customer_zero_readiness.py` so runner and validator always produce matching hashes. `docs/ai/PR_FIX_LOG.md` does not record the literal hash to avoid introducing another circular reference.
+
+**Security posture:**
+
+1. **All simulation source files remain in hash coverage.** `services/governance/trust_binding.py`, `services/governance/customer_zero_cost_review.py`, `tools/ci/customer_zero_final_readiness.py`, `tools/ci/customer_zero_run3_preauth.py`, and `tools/ci/run_offline_ceremony_simulation.py` itself are all inside the hash. Any change to simulation or readiness source invalidates the evidence and requires regeneration.
+2. **Only tracking ledgers excluded.** `ROADMAP.md` is excluded because it is a status ledger that necessarily references the fingerprint being computed. `customer_one/offline_simulation_evidence.json` is excluded because it IS the evidence (contains the hash). No security-relevant source file is excluded.
+3. **Fail-closed preserved.** Tampered or stale evidence continues to fail J_CE3. Exclusion set symmetry between runner and validator enforced by 5 regression tests.
+4. **Squash-merge stable.** After merge, ROADMAP.md gains a new status row — because ROADMAP.md is excluded, this commit does not change `source_tree_hash` and does not invalidate the evidence.
+5. **No authorization bypass.** Simulation produces TEST_PROVEN evidence only. CUSTOMER_ZERO_TRUST=NOT_PROVEN. TRUST-003=BLOCKED. authorization_status=NOT_AUTHORIZED. No cloud mutation. No secrets accessed.
+
+**Critical-path files changed:** `tools/ci/run_offline_ceremony_simulation.py` (`_TREE_HASH_EXCLUDED` frozenset replacing single-string exclusion; `_compute_tree_content_hash` signature updated to `frozenset[str]`), `services/governance/customer_zero_readiness.py` (validator exclusion set synced to `{evidence_relpath, "ROADMAP.md"}`), `tests/test_cz_run3_readiness_integration_repair_001.py` (5 new regression tests FPR002-01–FPR002-05), `customer_one/offline_simulation_evidence.json` (regenerated — authoritative hash), `ROADMAP.md` (status row — exempt), `docs/ai/PR_FIX_LOG.md` (entry — hash omitted to avoid circular reference), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; authorization_status=NOT_AUTHORIZED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT. 39 tests pass in `test_cz_run3_readiness_integration_repair_001.py`. fg-fast all gates green.
+
+**Validation evidence:**
+
+- `python tools/ci/run_offline_ceremony_simulation.py --dry-run` → 6/6 GREEN, hash matches `customer_one/offline_simulation_evidence.json`
+- `python tools/ci/customer_zero_final_readiness.py` → J_CE3 PASS, F-009 blocker absent
+- `python tools/ci/customer_zero_run3_preauth.py` → F-009 binding blocker absent
+- `pytest tests/test_cz_run3_readiness_integration_repair_001.py` → 39 passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Exclusion set widened by one tracking ledger (`ROADMAP.md`) to break inherent circular dependency. All security-relevant source files remain inside hash coverage. Fail-closed behavior preserved. No authorization path weakened, no tenant isolation changed, no secret accessed. Canonical Customer-Zero truth preserved.
+
+---
+
 ## 2026-10-12 - fix/customer-zero-run3-pricing-cost-integration-001: fix(governance): C23 tightened — null fingerprint FAILS when validated evidence available; unverified_tax_exposure invariant test added
 
 **Change scope:** REPAIR class. Two review findings for PR #764. (1) P1: C23 `EVIDENCE_FINGERPRINT_BOUND` now FAILs when `pricing_evidence_fingerprint` is null AND validated pricing evidence (with `pricing` sub-object) is available — previously null always passed, allowing READY_FOR_HUMAN_DECISION without fingerprint binding. Null-pass retained only when no validated evidence exists yet. (2) P2 (hardening): PEVID-048 updated to test null-with-no-evidence path; PEVID-060 added for null-with-evidence FAIL; PEVID-061 added asserting `unverified_tax_exposure` is always `True` with no bypass path (103 tests total). No authorization path weakened. No cloud mutations. FP-001 OPEN.

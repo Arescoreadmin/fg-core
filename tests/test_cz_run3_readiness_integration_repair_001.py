@@ -126,9 +126,15 @@ def _get_head_sha() -> str:
 
 
 def _get_tree_content_hash() -> str:
-    """Compute tree content hash from REPO for test evidence."""
+    """Compute tree content hash from REPO for test evidence.
+
+    Must match the exclusion set used by the validator in
+    services/governance/customer_zero_readiness.py and the runner in
+    tools/ci/run_offline_ceremony_simulation.py (_TREE_HASH_EXCLUDED).
+    """
     return _compute_tree_content_hash(
-        REPO, "customer_one/offline_simulation_evidence.json"
+        REPO,
+        frozenset({"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}),
     )
 
 
@@ -901,3 +907,131 @@ def test_j_ce3_35_duplicate_check_names_must_fail(tmp_path: Path) -> None:
         f"Expected FAIL for duplicate check names, got {status}: {ev}"
     )
     assert "duplicate" in ev.lower() or "check" in ev.lower()
+
+
+# ===========================================================================
+# FINGERPRINT-REPAIR-002 — tree-hash exclusion set regression tests
+# ===========================================================================
+#
+# These tests pin the exclusion-set contract introduced by
+# CUSTOMER-ZERO-RUN3-FINGERPRINT-REPAIR-002 to prevent a regression of the
+# circular ROADMAP.md dependency documented in that work item.
+
+
+def test_fpr002_01_source_changes_invalidate_hash(tmp_path: Path) -> None:
+    """FPR002-01: Modifying a tracked simulation source file changes the hash.
+
+    The invariant: changes to simulation source MUST invalidate the hash so
+    stale evidence is detected by the readiness verifier.
+    """
+    # Build a minimal fake git tree with two tracked files
+    (tmp_path / "a").write_text("original", encoding="utf-8")
+    (tmp_path / "b").write_text("other", encoding="utf-8")
+    subprocess.run(
+        ["git", "init", "-q"], cwd=str(tmp_path), check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "add", "a", "b"], cwd=str(tmp_path), check=True, capture_output=True
+    )
+    # Configure a committer so the test is deterministic
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "x"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+
+    excluded = frozenset(
+        {"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}
+    )
+    hash_before = _compute_tree_content_hash(tmp_path, excluded)
+
+    # Modify a tracked (non-excluded) file
+    (tmp_path / "a").write_text("mutated", encoding="utf-8")
+    hash_after = _compute_tree_content_hash(tmp_path, excluded)
+
+    assert hash_before != hash_after, (
+        "Modifying a tracked source file MUST change the tree hash"
+    )
+
+
+def test_fpr002_02_roadmap_changes_do_not_invalidate_hash(tmp_path: Path) -> None:
+    """FPR002-02: Modifying ROADMAP.md does NOT change the hash.
+
+    This is the whole point of the exclusion: ROADMAP.md records the
+    fingerprint being computed, so changing it after regeneration must not
+    invalidate the evidence.
+    """
+    (tmp_path / "a").write_text("source", encoding="utf-8")
+    (tmp_path / "ROADMAP.md").write_text("initial roadmap", encoding="utf-8")
+    subprocess.run(
+        ["git", "init", "-q"], cwd=str(tmp_path), check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "add", "a", "ROADMAP.md"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "x"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+
+    excluded = frozenset(
+        {"customer_one/offline_simulation_evidence.json", "ROADMAP.md"}
+    )
+    hash_before = _compute_tree_content_hash(tmp_path, excluded)
+
+    # Modify ROADMAP.md (the excluded ledger)
+    (tmp_path / "ROADMAP.md").write_text(
+        "new row recording fingerprint", encoding="utf-8"
+    )
+    hash_after = _compute_tree_content_hash(tmp_path, excluded)
+
+    assert hash_before == hash_after, (
+        "ROADMAP.md MUST be excluded from the hash to break the circular "
+        "fingerprint dependency"
+    )
+
+
+def test_fpr002_03_tampered_evidence_payload_fails_verification(tmp_path: Path) -> None:
+    """FPR002-03: A tampered source_tree_hash in evidence is detected as stale.
+
+    This confirms the readiness verifier still fails closed on forged payloads
+    even with the broader exclusion set.
+    """
+    evidence = _make_evidence(source_tree_hash="dead" * 16)  # obviously wrong
+    p = _write_evidence(tmp_path, evidence)
+    status, ev, _, _ = _validate_offline_simulation_evidence(p, REPO)
+    assert status == ReadinessStatus.FAIL, (
+        f"Tampered source_tree_hash must FAIL, got {status}: {ev}"
+    )
+    assert "stale" in ev.lower() or "tree" in ev.lower(), ev
+
+
+def test_fpr002_04_exclusion_set_is_minimal() -> None:
+    """FPR002-04: Only tracking ledgers are excluded.
+
+    SYSTEM.md and CLAUDE.md are documentation but NOT fingerprint ledgers —
+    they do not record the hash being computed, so they must remain inside
+    the hash coverage. Adding them would weaken the ceremony integrity
+    guarantee without the circular-dependency justification.
+    """
+    from tools.ci.run_offline_ceremony_simulation import _TREE_HASH_EXCLUDED
+
+    assert "ROADMAP.md" in _TREE_HASH_EXCLUDED
+    assert "customer_one/offline_simulation_evidence.json" in _TREE_HASH_EXCLUDED
+    assert "SYSTEM.md" not in _TREE_HASH_EXCLUDED, (
+        "SYSTEM.md must remain in hash coverage — not a fingerprint ledger"
+    )
+    assert "CLAUDE.md" not in _TREE_HASH_EXCLUDED, (
+        "CLAUDE.md must remain in hash coverage — not a fingerprint ledger"
+    )
+    # Guard against accidental scope creep
+    assert len(_TREE_HASH_EXCLUDED) == 2, (
+        f"Exclusion set must stay minimal (2 entries), got {len(_TREE_HASH_EXCLUDED)}: "
+        f"{sorted(_TREE_HASH_EXCLUDED)}"
+    )
