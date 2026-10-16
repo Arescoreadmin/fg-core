@@ -1,3 +1,34 @@
+## 2026-10-12 - fix/cz-run3-aws-audit-lifecycle-001: CUSTOMER-ZERO-RUN3-AWS-AUDIT-LIFECYCLE-001 — protect preserved AWS audit WRITER resources
+
+**Change scope:** REPAIR class. Resolves FP-005 from the Run-3 adversarial audit (docs/audits/customer_zero_run3_failure_prevention_001.md): three WRITER IAM resources in `infra/aws_audit.tf` (`aws_iam_user.vault_audit`, `aws_iam_policy.vault_audit`, `aws_iam_user_policy_attachment.vault_audit`) were listed as `PERSISTENT_AUDIT_AUTHORITY` in `customer_one/ceremony_state.yaml` but lacked `lifecycle { prevent_destroy = true }`. The CloudWatch log group was already protected and the two READER resources were protected in PR #761 (FP-003 repair); only these three WRITER IAM resources remained unprotected, relying on operator discipline rather than Terraform-level static enforcement. A mistaken `terraform destroy` targeting them would invalidate the audit boundary required by the Customer-Zero trust ceremony. No AWS resource was created, modified, or deleted. No Terraform state was mutated. No cloud API was called.
+
+**Security posture:**
+
+1. **Static-time destruction protection added.** `aws_iam_user.vault_audit`, `aws_iam_policy.vault_audit`, and `aws_iam_user_policy_attachment.vault_audit` each gained a `lifecycle { prevent_destroy = true }` block. Any `terraform destroy` (or plan implying destruction) against them now errors out before touching the AWS API.
+2. **No IAM authority changed.** The policy document, user name, path, attached policy ARN, and tags are unchanged. Separation of duties (WRITER ≠ READER ≠ TERRAFORM OPERATOR) is unchanged. No permission is broadened. No principal gains new access.
+3. **Static gate added.** `tools/ci/check_aws_audit_lifecycle.py` enforces that the exact inventory of 6 preserved AWS audit resources (4 WRITER + 2 READER) each has `lifecycle { prevent_destroy = true }`. The gate is wired into `make fg-fast` via a new `aws-audit-lifecycle-check` target. The gate uses depth-aware HCL block parsing (not fragile regex), rejects duplicates, rejects `prevent_destroy = false`, and fails closed on parse errors.
+4. **Fail-closed proven.** 16 regression tests (7 positive + 9 negative) in `tests/test_cz_run3_aws_audit_lifecycle_001.py` cover inventory presence, protection presence, no-duplicates, parse integrity, ceremony-state alignment, and six adversarial tamper scenarios (removed lifecycle, flipped to false, deleted block, renamed resource, duplicate lifecycle, malformed HCL, missing file).
+5. **No authorization bypass.** CUSTOMER_ZERO_TRUST=NOT_PROVEN. TRUST-003=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT. FP-001 (HCP pricing unverified) remains OPEN — unaffected by this PR. No secrets accessed. No cloud mutation.
+
+**Critical-path files changed:** `infra/aws_audit.tf` (three `lifecycle { prevent_destroy = true }` blocks added to WRITER IAM resources; no other content modified; `terraform fmt -check -recursive infra/` clean), `tools/ci/check_aws_audit_lifecycle.py` (new static gate — depth-aware HCL parser, canonical inventory matches `preserved_aws_resources`), `tests/test_cz_run3_aws_audit_lifecycle_001.py` (new — 7 positive + 9 negative adversarial tests, fixtures use `tmp_path`), `Makefile` (new `aws-audit-lifecycle-check` target wired into `fg-fast` prerequisites), `docs/governance/aws_audit_lifecycle_protection.md` (new governance reference), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry — no source_tree_hash recorded per FINGERPRINT-REPAIR-002 lesson), `ROADMAP.md` (status row — exempt per CLAUDE.md).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; authorization_status=NOT_AUTHORIZED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. FP-001 OPEN. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `terraform fmt -check -recursive infra/` → exit 0 (clean)
+- `python tools/ci/check_aws_audit_lifecycle.py` → PASS: all 6 AWS audit resources (4 WRITER + 2 READER) have lifecycle { prevent_destroy = true }
+- `pytest tests/test_cz_run3_aws_audit_lifecycle_001.py -v` → 16 passed (7 positive + 9 negative)
+- `pytest tests/test_cz_run3_audit_preservation_repair_001.py -v` → preserved READER tests continue to pass
+- `make fg-fast` → PASS (all gates green)
+- `make fg-security` → PASS
+- Readiness verifiers: BLOCKER-A3 / J_CE3 expected pre-merge (branch not yet merged to main; simulation evidence rebinds on merge). `offline_ceremony_simulation_green` status matches pre-merge expectation.
+- No cloud mutation. No Terraform state change. No AWS API call. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Change is static Terraform lifecycle annotation + static gate + regression tests + governance doc. No evaluator changes. No tools/ci evaluator-side mutations. No schema changes. No migrations. No API contract changes. No cloud spending. No paid infrastructure. Infra change is pure static safety hardening — Terraform plan is non-destructive against existing state, cannot destroy guarded resources without explicit `prevent_destroy = false` edit + follow-up review.
+
+---
+
 ## 2026-10-16 - fix/cz-run3-fingerprint-repair-002: CUSTOMER-ZERO-RUN3-FINGERPRINT-REPAIR-002 — permanent source-tree fingerprint stability
 
 **Change scope:** REPAIR class. Resolves post-squash-merge F-009 regression: `ROADMAP.md` was inside hash coverage but records the `source_tree_hash` fingerprint in its status ledger, creating an inherent circular dependency. Every commit that updated the ROADMAP row with a new fingerprint invalidated the fingerprint it recorded. After squash-merge of PR #766, the committed evidence recorded `6c706efd...` but the actual tree hash at `d73d1197` computed to `f9f30231...` — blocking both `customer_zero_final_readiness.py` and `customer_zero_run3_preauth.py` at J_CE3.

@@ -61,6 +61,10 @@ resource "aws_iam_user" "vault_audit" {
     Purpose  = "hcp-vault-audit-streaming"
     Ceremony = var.ceremony_id
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_policy" "vault_audit" {
@@ -106,11 +110,19 @@ resource "aws_iam_policy" "vault_audit" {
       }
     ]
   })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_iam_user_policy_attachment" "vault_audit" {
   user       = aws_iam_user.vault_audit.name
   policy_arn = aws_iam_policy.vault_audit.arn
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Writer access key is created out-of-band via AWS Console after terraform apply.
