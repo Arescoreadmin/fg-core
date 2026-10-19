@@ -1,0 +1,198 @@
+name: prod-auth-smoke
+
+# PROD-AUTH-AUTOMATION-001
+#
+# Mode A (public smoke): runs automatically after fg-required passes on main.
+# Mode B (authenticated): manually triggered ONLY — never automatic.
+#
+# Mode B requires explicit operator approval and dedicated synthetic identity.
+# Mode B is NEVER triggered by push, PR, or scheduled events.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Verification mode: smoke (Mode A, safe) or authenticated (Mode B, operator-approved)'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - authenticated
+      console_url:
+        description: 'Console URL (default: https://console.frostgate.ai)'
+        required: false
+        default: 'https://console.frostgate.ai'
+      write_evidence:
+        description: 'Write evidence artifact'
+        required: false
+        default: 'true'
+        type: boolean
+  workflow_call:
+    inputs:
+      mode:
+        required: false
+        default: 'smoke'
+        type: string
+      console_url:
+        required: false
+        default: 'https://console.frostgate.ai'
+        type: string
+
+concurrency:
+  group: prod-auth-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Mode A — Public Production Smoke (no credentials)
+  # ─────────────────────────────────────────────
+  smoke:
+    name: prod-smoke (Mode A)
+    if: ${{ inputs.mode == 'smoke' || inputs.mode == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      FG_PROD_SMOKE_URL: ${{ inputs.console_url || 'https://console.frostgate.ai' }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_CONSOLE_PROJECT_ID || '' }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Mode A — public production smoke
+        id: smoke_run
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          python tools/testing/production/prod_smoke_001.py \
+            ${{ inputs.write_evidence && '--write-evidence' || '' }}
+
+      - name: Upload evidence artifact
+        if: always() && inputs.write_evidence == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-smoke-evidence-${{ github.run_attempt }}
+          path: contracts/artifacts/identity/prod-auth-automation-001-smoke-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish job summary
+        if: always()
+        run: |
+          {
+            echo "## PROD-AUTH-AUTOMATION-001 — Mode A: Public Production Smoke"
+            echo ""
+            echo "- Status: **${{ job.status }}**"
+            echo "- URL: ${{ env.FG_PROD_SMOKE_URL }}"
+            echo "- Run: \`${{ github.run_id }}\`"
+            echo "- Repo SHA: \`${{ github.sha }}\`"
+            echo ""
+            echo "> Mode B (authenticated) requires manual dispatch with \`mode: authenticated\`."
+            echo "> See \`docs/deployment/runbook-prod-auth-automation-001.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────
+  # Mode B — Authenticated Playwright Verification
+  # NEVER triggered automatically.
+  # ─────────────────────────────────────────────
+  authenticated:
+    name: prod-auth (Mode B — operator-approved)
+    if: ${{ inputs.mode == 'authenticated' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Extra gate: Mode B requires secrets to be populated.
+    # Missing secrets → activation guard rejects with exit code 2, not exit code 1.
+    # This prevents silent failure when operator forgets to set secrets.
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      FG_PROD_SMOKE_URL: ${{ inputs.console_url || 'https://console.frostgate.ai' }}
+      FG_PROD_AUTH_TEST_ENABLED: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install requests playwright
+
+      - name: Install Playwright browser
+        run: playwright install chromium --with-deps
+
+      - name: Verify activation guard
+        run: |
+          set -euo pipefail
+          if [ -z "$FG_PROD_TEST_EMAIL" ] || [ -z "$FG_PROD_TEST_PASSWORD" ]; then
+            echo "ERROR: FG_PROD_TEST_EMAIL and FG_PROD_TEST_PASSWORD must be set in repository secrets."
+            echo "Mode B is operator-approved only. See runbook-prod-auth-automation-001.md"
+            exit 2
+          fi
+        env:
+          FG_PROD_TEST_EMAIL: ${{ secrets.FG_PROD_TEST_EMAIL }}
+          FG_PROD_TEST_PASSWORD: ${{ secrets.FG_PROD_TEST_PASSWORD }}
+
+      - name: Run Mode B — authenticated Playwright verification
+        id: auth_run
+        env:
+          FG_PROD_TEST_EMAIL: ${{ secrets.FG_PROD_TEST_EMAIL }}
+          FG_PROD_TEST_PASSWORD: ${{ secrets.FG_PROD_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          python tools/testing/production/auth_harness_001.py \
+            --write-evidence \
+            --headless true
+
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-auth-evidence-${{ github.run_attempt }}
+          path: contracts/artifacts/identity/prod-auth-automation-001-auth-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish job summary
+        if: always()
+        run: |
+          {
+            echo "## PROD-AUTH-AUTOMATION-001 — Mode B: Authenticated Playwright"
+            echo ""
+            echo "- Status: **${{ job.status }}**"
+            echo "- URL: ${{ env.FG_PROD_SMOKE_URL }}"
+            echo "- Run: \`${{ github.run_id }}\`"
+            echo "- Repo SHA: \`${{ github.sha }}\`"
+            echo "- Identity: synthetic (see evidence artifact)"
+            echo ""
+            echo "> This run was operator-approved. Never run automatically."
+            echo "> Evidence fingerprint is in the uploaded artifact."
+          } >> "$GITHUB_STEP_SUMMARY"

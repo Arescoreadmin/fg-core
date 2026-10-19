@@ -1,0 +1,76 @@
+{
+  "schema_version": "prod-auth-automation-001/v1",
+  "work_item": "PROD-AUTH-AUTOMATION-001",
+  "timestamp": "2026-10-19T23:27:52.395619Z",
+  "run_id": "04468abd-59c9-4a00-930b-2e8e48a545ec",
+  "repo_sha": "14a44bb43dcf210d7930a60dcb4972ac6b8e8d77",
+  "deployed_sha": "NOT_PROVEN",
+  "deployment_id": "NOT_PROVEN",
+  "verification_environment": "public_smoke",
+  "test_identity_ref": "NOT_APPLICABLE",
+  "checks": [
+    {
+      "id": "SMOKE-001",
+      "description": "Console root path accessible (HTTP 200)",
+      "expected": "200",
+      "observed": "200",
+      "result": "PASS",
+      "timestamp": "2026-10-19T23:27:52.398772Z"
+    },
+    {
+      "id": "SMOKE-002",
+      "description": "Login page accessible (HTTP 200)",
+      "expected": "200",
+      "observed": "200",
+      "result": "PASS",
+      "timestamp": "2026-10-19T23:27:52.743701Z"
+    },
+    {
+      "id": "SMOKE-003",
+      "description": "Unauthenticated session endpoint returns 200 JSON",
+      "expected": "200 application/json",
+      "observed": "200 application/json",
+      "result": "PASS",
+      "timestamp": "2026-10-19T23:27:52.827100Z"
+    },
+    {
+      "id": "SMOKE-004",
+      "description": "Dashboard redirects unauthenticated requests to /login",
+      "expected": "3xx redirect to /login",
+      "observed": "307 Location: /login",
+      "result": "PASS",
+      "timestamp": "2026-10-19T23:27:52.913600Z"
+    },
+    {
+      "id": "SMOKE-005",
+      "description": "Vercel deployment SHA resolution via API",
+      "expected": "Vercel deployment with gitSource.sha",
+      "observed": "NOT_PROVEN (VERCEL_TOKEN or VERCEL_PROJECT_ID not set)",
+      "result": "NOT_PROVEN",
+      "timestamp": "2026-10-19T23:27:52.982534Z",
+      "diagnostic": "Set VERCEL_TOKEN and VERCEL_PROJECT_ID to enable"
+    },
+    {
+      "id": "SMOKE-006",
+      "description": "Unauthenticated session response contains no sensitive fields",
+      "expected": "No sensitive field names in unauthenticated session",
+      "observed": "No sensitive fields found (keys=[])",
+      "result": "PASS",
+      "timestamp": "2026-10-19T23:27:52.982552Z"
+    }
+  ],
+  "unverified_production_checks": [
+    "AUTH-001: Auth0 login form rendered and interactive",
+    "AUTH-002: Auth.js session cookie established after successful login",
+    "AUTH-003: Session cookie has Secure, HttpOnly, SameSite=Lax/Strict attributes",
+    "AUTH-004: Authenticated user can access /dashboard",
+    "AUTH-005: Unauthorized routes fail closed (403/redirect)",
+    "AUTH-006: Logout clears Auth.js session cookie",
+    "AUTH-007: Post-logout session endpoint returns empty/null user",
+    "AUTH-008: Auth0 SLO (identity-provider logout) completes",
+    "AUTH-009: Tenant isolation — synthetic user cannot access other tenant routes",
+    "AUTH-010: Re-use of invalidated session cookie is rejected"
+  ],
+  "overall_result": "NOT_PROVEN",
+  "evidence_fingerprint": "sha256:84e3e8391e4c2a2af1b2b540fd2b8710f7b3759ef7218097f308d1ed4fadda9b"
+}
