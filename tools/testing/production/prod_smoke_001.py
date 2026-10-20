@@ -35,8 +35,8 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Optional
-from urllib.parse import urljoin, urlparse
+from typing import Any
+from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
 # Guard: requests must be available (it is in requirements.txt)
@@ -71,7 +71,13 @@ from tools.testing.production.evidence import (  # noqa: E402
 
 DEFAULT_CONSOLE_URL = "https://console.frostgate.ai"
 REQUEST_TIMEOUT_SECONDS = 15
-EVIDENCE_PATH = _REPO_ROOT / "contracts" / "artifacts" / "identity" / "prod-auth-automation-001-smoke-evidence.json"
+EVIDENCE_PATH = (
+    _REPO_ROOT
+    / "contracts"
+    / "artifacts"
+    / "identity"
+    / "prod-auth-automation-001-smoke-evidence.json"
+)
 
 # Sensitive field names that must never appear in the unauthenticated session response.
 _SENSITIVE_FIELDS = frozenset(
@@ -97,7 +103,9 @@ _SENSITIVE_FIELDS = frozenset(
 def check_root_accessible(session: Session, base_url: str) -> CheckResult:
     ts = now_iso()
     try:
-        r = session.get(f"{base_url}/", timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True)
+        r = session.get(
+            f"{base_url}/", timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+        )
         ok = r.status_code == 200
         return CheckResult(
             id="SMOKE-001",
@@ -133,7 +141,9 @@ def check_root_accessible(session: Session, base_url: str) -> CheckResult:
 def check_login_accessible(session: Session, base_url: str) -> CheckResult:
     ts = now_iso()
     try:
-        r = session.get(f"{base_url}/login", timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True)
+        r = session.get(
+            f"{base_url}/login", timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+        )
         ok = r.status_code == 200
         return CheckResult(
             id="SMOKE-002",
@@ -318,7 +328,11 @@ def check_vercel_deployment(base_url: str) -> tuple[CheckResult, str]:
         import requests as req_lib
 
         team_id = os.environ.get("VERCEL_TEAM_ID", "")
-        params: dict[str, str] = {"projectId": project_id, "limit": "1", "target": "production"}
+        params: dict[str, str] = {
+            "projectId": project_id,
+            "limit": "1",
+            "target": "production",
+        }
         if team_id:
             params["teamId"] = team_id
         r = req_lib.get(
@@ -367,7 +381,9 @@ def check_vercel_deployment(base_url: str) -> tuple[CheckResult, str]:
                 description="Vercel deployment SHA resolution via API",
                 expected="READY deployment with gitSource.sha",
                 observed=f"state={state} sha={sha[:12] if sha not in ('NOT_PROVEN', 'UNKNOWN') else sha} id={deploy_id}",
-                result=EvidenceResult.PASS if (sha != "NOT_PROVEN" and ready) else EvidenceResult.NOT_PROVEN,
+                result=EvidenceResult.PASS
+                if (sha != "NOT_PROVEN" and ready)
+                else EvidenceResult.NOT_PROVEN,
                 timestamp=ts,
                 diagnostic=None if ready else f"Latest deployment state is {state!r}",
             ),
@@ -512,7 +528,9 @@ def run_smoke(base_url: str) -> EvidenceRecord:
 
     # Create a session with no cookies, no auth headers
     session = requests.Session()
-    session.headers.update({"User-Agent": "FrostGate-ProdSmoke/1.0 PROD-AUTH-AUTOMATION-001"})
+    session.headers.update(
+        {"User-Agent": "FrostGate-ProdSmoke/1.0 PROD-AUTH-AUTOMATION-001"}
+    )
 
     checks: list[CheckResult] = []
 
@@ -553,7 +571,9 @@ def _print_summary(record: EvidenceRecord, output_json: bool = False) -> None:
     print()
 
     for check in record.checks:
-        symbol = {"PASS": "[PASS]", "FAIL": "[FAIL]", "NOT_PROVEN": "[????]"}[check.result]
+        symbol = {"PASS": "[PASS]", "FAIL": "[FAIL]", "NOT_PROVEN": "[????]"}[
+            check.result
+        ]
         print(f"  {symbol} {check.id}: {check.description}")
         if check.result != EvidenceResult.PASS:
             print(f"           expected: {check.expected}")
@@ -567,7 +587,9 @@ def _print_summary(record: EvidenceRecord, output_json: bool = False) -> None:
     print()
 
     if record.unverified_production_checks:
-        print(f"NOT_PROVEN — {len(record.unverified_production_checks)} checks require Mode B (authenticated):")
+        print(
+            f"NOT_PROVEN — {len(record.unverified_production_checks)} checks require Mode B (authenticated):"
+        )
         for item in record.unverified_production_checks:
             print(f"  {item}")
     print("=" * 64)

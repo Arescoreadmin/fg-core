@@ -438,9 +438,7 @@ _SIMULATION_MANDATORY_CHECKS = frozenset(
 )
 
 
-def _compute_tree_content_hash(
-    repo: Path, exclude: "str | frozenset[str]"
-) -> str:
+def _compute_tree_content_hash(repo: Path, exclude: "str | frozenset[str]") -> str:
     """SHA-256 of tracked file contents excluding tracking-ledger files.
 
     Same algorithm as run_offline_ceremony_simulation.py — runner and validator
@@ -465,9 +463,7 @@ def _compute_tree_content_hash(
         )
         if result.returncode != 0:
             return "TREE_HASH_ERROR"
-        files = sorted(
-            f for f in result.stdout.split("\0") if f and f not in excluded
-        )
+        files = sorted(f for f in result.stdout.split("\0") if f and f not in excluded)
         h = hashlib.sha256()
         for relpath in files:
             path = repo / relpath

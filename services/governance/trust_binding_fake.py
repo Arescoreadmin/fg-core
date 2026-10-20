@@ -70,9 +70,7 @@ class _FakeRoleKey:
     def sign(self, payload: bytes) -> ManagedSignature:
         sig_raw = self._priv.sign(payload)
         # Mimic vault:v<n>:<base64> format for interface compatibility
-        sig_str = f"vault:v{self._version}:" + base64.b64encode(sig_raw).decode(
-            "ascii"
-        )
+        sig_str = f"vault:v{self._version}:" + base64.b64encode(sig_raw).decode("ascii")
         return ManagedSignature(
             issuer=_ISSUER,
             trust_role=self._role,

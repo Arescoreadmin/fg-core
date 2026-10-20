@@ -358,7 +358,8 @@ def _check_roadmap_authorized(repo: Path) -> dict[str, Any]:
             "description": f"{WORK_ITEM} must be AUTHORIZED (next_sequence) or COMPLETED",
             "evidence_strength": "NOT_PROVEN",
             "result": "FAIL",
-            "detail": (r.stdout.strip() + r.stderr.strip()) or "roadmap checker returned nonzero",
+            "detail": (r.stdout.strip() + r.stderr.strip())
+            or "roadmap checker returned nonzero",
         }
     except Exception as exc:
         return {

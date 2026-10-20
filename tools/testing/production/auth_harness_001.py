@@ -55,7 +55,7 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
@@ -110,7 +110,10 @@ def _activation_guard() -> tuple[bool, str]:
         )
     email = os.environ.get("FG_PROD_TEST_EMAIL", "").strip()
     if not email:
-        return False, "FG_PROD_TEST_EMAIL is not set. Provide a dedicated synthetic test identity."
+        return (
+            False,
+            "FG_PROD_TEST_EMAIL is not set. Provide a dedicated synthetic test identity.",
+        )
     password = os.environ.get("FG_PROD_TEST_PASSWORD", "").strip()
     if not password:
         return False, "FG_PROD_TEST_PASSWORD is not set."
@@ -120,6 +123,7 @@ def _activation_guard() -> tuple[bool, str]:
 def _playwright_available() -> bool:
     try:
         import playwright  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -150,7 +154,12 @@ def check_auth0_login_page(page: Any, base_url: str) -> CheckResult:
             )
         # May be a custom login page (FrostGate's /login with Auth0 button)
         # or a different IdP. Check for the Auth0 sign-in button.
-        has_auth0_button = page.locator('button:has-text("Auth0"), button:has-text("Sign in with Auth0")').count() > 0
+        has_auth0_button = (
+            page.locator(
+                'button:has-text("Auth0"), button:has-text("Sign in with Auth0")'
+            ).count()
+            > 0
+        )
         if has_auth0_button:
             return CheckResult(
                 id="AUTH-001",
@@ -181,7 +190,9 @@ def check_auth0_login_page(page: Any, base_url: str) -> CheckResult:
         )
 
 
-def _perform_login(page: Any, email: str, password: str, base_url: str) -> tuple[bool, str]:
+def _perform_login(
+    page: Any, email: str, password: str, base_url: str
+) -> tuple[bool, str]:
     """Attempt Auth0 login. Returns (success, diagnostic)."""
     try:
         page.goto(
@@ -210,7 +221,10 @@ def _perform_login(page: Any, email: str, password: str, base_url: str) -> tuple
 
         password_field = page.locator(_AUTH0_PASSWORD_SELECTOR).first
         if not password_field.is_visible(timeout=10000):
-            return False, "Password field not visible after email entry — possible MFA or CAPTCHA"
+            return (
+                False,
+                "Password field not visible after email entry — possible MFA or CAPTCHA",
+            )
 
         password_field.fill(password)
         submit_btn = page.locator(_AUTH0_SUBMIT_SELECTOR).first
@@ -223,12 +237,19 @@ def _perform_login(page: Any, email: str, password: str, base_url: str) -> tuple
         return False, f"{type(exc).__name__}: {str(exc)[:200]}"
 
 
-def check_session_established(page: Any, base_url: str, email: str, password: str) -> tuple[CheckResult, bool]:
+def check_session_established(
+    page: Any, base_url: str, email: str, password: str
+) -> tuple[CheckResult, bool]:
     """Attempt login and verify Auth.js session cookie is set. Returns (check, logged_in)."""
     ts = now_iso()
     login_ok, diag = _perform_login(page, email, password, base_url)
     if not login_ok:
-        if "MFA" in diag or "CAPTCHA" in diag or "captcha" in diag.lower() or "bot" in diag.lower():
+        if (
+            "MFA" in diag
+            or "CAPTCHA" in diag
+            or "captcha" in diag.lower()
+            or "bot" in diag.lower()
+        ):
             return (
                 CheckResult(
                     id="AUTH-002",
@@ -317,9 +338,7 @@ def check_cookie_security_attributes(page: Any) -> CheckResult:
     if not samesite_ok:
         failures.append(f"SameSite={samesite!r} (expected Lax or Strict)")
 
-    observed = (
-        f"Secure={is_secure}, HttpOnly={is_httponly}, SameSite={samesite!r}"
-    )
+    observed = f"Secure={is_secure}, HttpOnly={is_httponly}, SameSite={samesite!r}"
 
     if failures:
         return CheckResult(
@@ -390,7 +409,11 @@ def check_unauthorized_route_rejected(page: Any, base_url: str) -> CheckResult:
         page.wait_for_load_state("load", timeout=10000)
         status = response.status if response else 0
         current_url = page.url
-        is_rejected = status in (401, 403, 405) or "/unauthorized" in current_url or "/login" in current_url
+        is_rejected = (
+            status in (401, 403, 405)
+            or "/unauthorized" in current_url
+            or "/login" in current_url
+        )
         if is_rejected:
             return CheckResult(
                 id="AUTH-005",
@@ -421,7 +444,9 @@ def check_unauthorized_route_rejected(page: Any, base_url: str) -> CheckResult:
         )
 
 
-def check_logout_clears_session(page: Any, base_url: str) -> tuple[CheckResult, CheckResult, CheckResult]:
+def check_logout_clears_session(
+    page: Any, base_url: str
+) -> tuple[CheckResult, CheckResult, CheckResult]:
     """Perform logout and verify session is invalidated. Returns three checks (AUTH-006/007/008)."""
     ts6 = now_iso()
 
@@ -488,6 +513,7 @@ def check_logout_clears_session(page: Any, base_url: str) -> tuple[CheckResult, 
     ts7 = now_iso()
     try:
         import requests as req_lib
+
         r = req_lib.get(
             f"{base_url}/api/auth/session",
             timeout=10,
@@ -531,7 +557,9 @@ def check_logout_clears_session(page: Any, base_url: str) -> tuple[CheckResult, 
             observed=f"HTTP {status}, URL={current_url[:80]}",
             result=EvidenceResult.PASS if on_login else EvidenceResult.FAIL,
             timestamp=ts8,
-            diagnostic=None if on_login else "Dashboard accessible after logout — session not invalidated",
+            diagnostic=None
+            if on_login
+            else "Dashboard accessible after logout — session not invalidated",
         )
     except Exception as exc:
         check8 = CheckResult(
@@ -621,7 +649,9 @@ def run_auth_harness(base_url: str, headless: bool = True) -> EvidenceRecord:
         try:
             checks.append(check_auth0_login_page(page, base_url))
 
-            session_check, logged_in = check_session_established(page, base_url, email, password)
+            session_check, logged_in = check_session_established(
+                page, base_url, email, password
+            )
             checks.append(session_check)
 
             if logged_in:
@@ -643,15 +673,17 @@ def run_auth_harness(base_url: str, headless: bool = True) -> EvidenceRecord:
                     ("AUTH-009", "Auth0 SLO redirect"),
                 ]
                 for cid, cdesc in not_proven_ids:
-                    checks.append(CheckResult(
-                        id=cid,
-                        description=cdesc,
-                        expected="N/A",
-                        observed="NOT_PROVEN (login did not succeed)",
-                        result=EvidenceResult.NOT_PROVEN,
-                        timestamp=now_iso(),
-                        diagnostic="AUTH-002 (session establishment) did not pass",
-                    ))
+                    checks.append(
+                        CheckResult(
+                            id=cid,
+                            description=cdesc,
+                            expected="N/A",
+                            observed="NOT_PROVEN (login did not succeed)",
+                            result=EvidenceResult.NOT_PROVEN,
+                            timestamp=now_iso(),
+                            diagnostic="AUTH-002 (session establishment) did not pass",
+                        )
+                    )
         finally:
             context.close()
             browser.close()
@@ -681,7 +713,9 @@ def _print_summary(record: EvidenceRecord, output_json: bool = False) -> None:
     print()
 
     for check in record.checks:
-        symbol = {"PASS": "[PASS]", "FAIL": "[FAIL]", "NOT_PROVEN": "[????]"}[check.result]
+        symbol = {"PASS": "[PASS]", "FAIL": "[FAIL]", "NOT_PROVEN": "[????]"}[
+            check.result
+        ]
         print(f"  {symbol} {check.id}: {check.description}")
         if check.result != EvidenceResult.PASS:
             print(f"           expected: {check.expected}")
@@ -726,7 +760,9 @@ def main(argv: list[str] | None = None) -> int:
     # Activation guard — must pass before any browser is launched
     ok, reason = _activation_guard()
     if not ok:
-        print(f"ERROR: Mode B activation guard not satisfied: {reason}", file=sys.stderr)
+        print(
+            f"ERROR: Mode B activation guard not satisfied: {reason}", file=sys.stderr
+        )
         print(
             "See docs/deployment/runbook-prod-auth-automation-001.md for operator-assisted fallback.",
             file=sys.stderr,
@@ -743,7 +779,10 @@ def main(argv: list[str] | None = None) -> int:
     base_url = args.url.rstrip("/")
     headless = args.headless == "true"
     print(f"Running authenticated harness against: {base_url}", file=sys.stderr)
-    print(f"Identity: {os.environ.get('FG_PROD_TEST_EMAIL', '').split('@')[0]}@[domain-redacted]", file=sys.stderr)
+    print(
+        f"Identity: {os.environ.get('FG_PROD_TEST_EMAIL', '').split('@')[0]}@[domain-redacted]",
+        file=sys.stderr,
+    )
 
     try:
         record = run_auth_harness(base_url, headless=headless)

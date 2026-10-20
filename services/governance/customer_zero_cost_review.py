@@ -680,7 +680,9 @@ def _check_evidence_fingerprint_bound(
     # Determine whether a validated pricing object is available to bind against.
     # We only have a bindable fingerprint target when pricing_override_dict carries
     # the full instance's pricing sub-object (set by the evidence pipeline).
-    pricing_obj = pricing_override_dict.get("pricing") if pricing_override_dict else None
+    pricing_obj = (
+        pricing_override_dict.get("pricing") if pricing_override_dict else None
+    )
 
     # Null fingerprint: FAIL when validated evidence is available for binding.
     # The null-pass is only acceptable before any validated evidence exists.

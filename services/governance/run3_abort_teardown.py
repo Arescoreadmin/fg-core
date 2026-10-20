@@ -398,6 +398,7 @@ ABORT_MATRIX: list[AbortCondition] = [
 # Teardown contract
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TeardownContractEntry:
     """A single resource in the teardown contract."""

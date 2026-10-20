@@ -400,7 +400,8 @@ def get_inventory() -> list[ResourceInventoryEntry]:
 def get_preserved_resources() -> list[ResourceInventoryEntry]:
     """Return resources that must be preserved after teardown."""
     return [
-        r for r in RESOURCE_INVENTORY
+        r
+        for r in RESOURCE_INVENTORY
         if r.lifecycle_class == LifecycleClass.PRESERVE_AFTER_CEREMONY
     ]
 
@@ -408,8 +409,10 @@ def get_preserved_resources() -> list[ResourceInventoryEntry]:
 def get_ephemeral_resources() -> list[ResourceInventoryEntry]:
     """Return resources that must be absent after teardown."""
     return [
-        r for r in RESOURCE_INVENTORY
-        if r.lifecycle_class in (
+        r
+        for r in RESOURCE_INVENTORY
+        if r.lifecycle_class
+        in (
             LifecycleClass.CREATE_FOR_CEREMONY,
             LifecycleClass.DESTROY_AFTER_CEREMONY,
         )
@@ -419,8 +422,7 @@ def get_ephemeral_resources() -> list[ResourceInventoryEntry]:
 def get_cost_bearing_resources() -> list[ResourceInventoryEntry]:
     """Return resources with COST_BEARING classification."""
     return [
-        r for r in RESOURCE_INVENTORY
-        if r.cost_relevance == CostRelevance.COST_BEARING
+        r for r in RESOURCE_INVENTORY if r.cost_relevance == CostRelevance.COST_BEARING
     ]
 
 
