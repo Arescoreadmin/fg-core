@@ -1,3 +1,17 @@
+## POST-770-GATE-REMEDIATION-001 — Remove unused imports, format pre-existing debt
+
+- **Work item:** POST-770-GATE-REMEDIATION-001 (REPAIR class)
+- **Date:** 2026-10-20
+- **Root cause:** Three ruff F401 violations (`Optional` unused in `prod_smoke_001.py` and `auth_harness_001.py`; `urljoin` unused in `prod_smoke_001.py`) identified in codex-gates.log. Pre-existing `ruff format` debt in 10 `services/governance/` files was masked by the lint failure (codex_gates.sh exits on first failure); exposed once lint was clean.
+- **Fix:** Removed unused imports (3 F401 errors). Applied `ruff format` to the 2 production testing files and 10 pre-existing `services/governance/` files. The 3 `tools/ci/` files with format debt deferred — they trigger `soc-review-sync` and require a dedicated SOC entry in a separate PR.
+- **frostgate-release-images diagnosis:** `make docker-build` target missing from Makefile; `release-images.yml` calls it. Exit code 2 (make: No rule to make target). Confirmed pre-existing since ≥2026-10-16, before any PROD-AUTH-AUTOMATION work. Separate scoped PR required to add the target.
+- **Evidence rebind:** `customer_one/offline_simulation_evidence.json` regenerated (6/6 GREEN, source_sha=13a5ccfe) to capture post-format source_tree_hash.
+- **Authorization/trust state:** Unchanged. No test expectations modified. No security controls weakened. No schema changes, no migrations, no infra. All governance constants preserved: PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN, CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER_ZERO_ACCEPTANCE=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, COST_AUTHORIZATION=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT.
+- **Changed files:** `tools/testing/production/prod_smoke_001.py` (3 import removals + format), `tools/testing/production/auth_harness_001.py` (1 import removal + format), `services/governance/*.py` (10 files — format only, zero logic change), `customer_one/offline_simulation_evidence.json` (rebound), `ROADMAP.md` (rows — exempt per CLAUDE.md), `docs/ai/PR_FIX_LOG.md` (this entry).
+- **Test counts:** 48 smoke tests pass. fg-fast PASS (384s). fg-contract PASS. fg-security PASS (1239/1 baseline, pure style changes).
+
+---
+
 ## PROD-AUTH-AUTOMATION-001-DIRECT-PUSH-EXCEPTION — Direct push to main without PR (post-hoc exception record)
 
 - **Work item:** PROD-AUTH-AUTOMATION-001-DIRECT-PUSH-EXCEPTION (GOVERNANCE-EXCEPTION class)
