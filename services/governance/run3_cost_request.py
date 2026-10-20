@@ -99,7 +99,9 @@ class CostAuthorizationRequest:
                 f"authorization_status must be NOT_AUTHORIZED, got {self.authorization_status!r}"
             )
         if self.proposed_max_cost_usd is None:
-            failures.append("proposed_max_cost_usd is None — human must set maximum cost")
+            failures.append(
+                "proposed_max_cost_usd is None — human must set maximum cost"
+            )
         if self.proposed_max_runtime_hours is None:
             failures.append(
                 "proposed_max_runtime_hours is None — human must set maximum runtime"
@@ -122,7 +124,9 @@ class CostAuthorizationRequest:
                 f"resource_inventory_fingerprint mismatch: expected {resource_inventory_fingerprint!r}"
             )
         if self.abort_thresholds.get("cost_usd") is None:
-            failures.append("abort_thresholds.cost_usd is None — human must set cost abort threshold")
+            failures.append(
+                "abort_thresholds.cost_usd is None — human must set cost abort threshold"
+            )
         if self.abort_thresholds.get("runtime_hours") is None:
             failures.append(
                 "abort_thresholds.runtime_hours is None — human must set runtime abort threshold"

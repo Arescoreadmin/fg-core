@@ -118,8 +118,10 @@ def _compute_readiness_fingerprint() -> str:
     """
     try:
         import os
+
         os.environ.setdefault("FG_ENV", "test")
         from services.governance.customer_zero_readiness import evaluate
+
         result = evaluate(_REPO)
         return result.canonical_fingerprint
     except Exception as exc:
@@ -257,8 +259,10 @@ def build_candidate(repo: Path | None = None) -> Run3Candidate:
     # Determine readiness_result from the readiness evaluation
     try:
         import os
+
         os.environ.setdefault("FG_ENV", "test")
         from services.governance.customer_zero_readiness import evaluate
+
         rr = evaluate(_REPO)
         readiness_result = rr.final_result.value
     except Exception:

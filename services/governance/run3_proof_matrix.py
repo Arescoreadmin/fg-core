@@ -105,7 +105,10 @@ PROOF_MATRIX: list[ProofRequirement] = [
         "A-ACCEPTANCE-SIGN",
         "ACCEPTANCE",
         "ACCEPTANCE trust role signs an authorized canonical delivery authorization and verifier returns True",
-        ["Vault Transit ACCEPTANCE key provisioned", "AppRole ACCEPTANCE authenticated"],
+        [
+            "Vault Transit ACCEPTANCE key provisioned",
+            "AppRole ACCEPTANCE authenticated",
+        ],
         "LIVE_CEREMONY",
         "TrustBindingAuthority.sign_delivery_authorization() + verify_delivery_authorization()",
         "verify_delivery_authorization() returns True",
@@ -252,7 +255,9 @@ PROOF_MATRIX: list[ProofRequirement] = [
         "E-VAULT-UNAVAILABLE-FALSE",
         "ALL",
         "Vault operationally unavailable during verify returns False — does NOT raise VaultTransitError to caller",
-        ["VaultVerifierUnavailableError path tested (VAULT-VERIFY-CONTRACT-001 repair proven)"],
+        [
+            "VaultVerifierUnavailableError path tested (VAULT-VERIFY-CONTRACT-001 repair proven)"
+        ],
         "LIVE_CEREMONY",
         "Simulate Vault network failure during verify_*; must return False",
         "False (fail-closed)",
@@ -275,7 +280,10 @@ PROOF_MATRIX: list[ProofRequirement] = [
         "F-REPORT-MUTATION-FAILS",
         "IDENTITY",
         "Mutating report_json content after signing causes verify_report() to return False",
-        ["IDENTITY positive signing complete", "PROVENANCE-INTEGRITY-001 repair proven"],
+        [
+            "IDENTITY positive signing complete",
+            "PROVENANCE-INTEGRITY-001 repair proven",
+        ],
         "LIVE_CEREMONY",
         "Sign report; mutate report_json bytes; verify → must return False",
         "False (provenance tamper detected)",
@@ -298,7 +306,11 @@ PROOF_MATRIX: list[ProofRequirement] = [
         "G-VAULT-AUDIT-CLOUDWATCH",
         "ALL",
         "Vault audit events reach CloudWatch log group; independently readable by FrostGateVaultAuditReader",
-        ["HCP Vault cluster provisioned", "CloudWatch audit log group present", "HCP UI audit config complete"],
+        [
+            "HCP Vault cluster provisioned",
+            "CloudWatch audit log group present",
+            "HCP UI audit config complete",
+        ],
         "LIVE_CEREMONY",
         "Perform signing operation; verify CloudWatch log group contains audit event (FilterLogEvents)",
         "At least one audit event visible in aws_cloudwatch_log_group.vault_audit",
@@ -344,7 +356,9 @@ PROOF_MATRIX: list[ProofRequirement] = [
         "I-OFFLINE-AFTER-VAULT-ABSENT",
         "ALL",
         "Historical artifact is verifiable offline using PortableVerificationAuthority after Vault teardown",
-        ["PortableVerificationAuthority implemented (CUSTOMER-ZERO-FINAL-READINESS-001)"],
+        [
+            "PortableVerificationAuthority implemented (CUSTOMER-ZERO-FINAL-READINESS-001)"
+        ],
         "OFFLINE_ENGINEERING",
         "tests/test_customer_zero_run3_preauth_001.py::test_portable_verification_*",
         "verify_offline() returns True with enrolled public key; True without Vault",
@@ -450,7 +464,11 @@ def get_offline_proofs() -> list[ProofRequirement]:
 
 def get_deferred_live_proofs() -> list[ProofRequirement]:
     """Return proofs deferred to live ceremony."""
-    return [p for p in PROOF_MATRIX if p.execution_stage in ("PRE_PROVISIONING", "LIVE_CEREMONY")]
+    return [
+        p
+        for p in PROOF_MATRIX
+        if p.execution_stage in ("PRE_PROVISIONING", "LIVE_CEREMONY")
+    ]
 
 
 def get_proofs_by_domain(domain: TrustDomain) -> list[ProofRequirement]:

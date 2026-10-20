@@ -81,9 +81,7 @@ def validate_recipient_type(recipient_type: str) -> list[str]:
 def validate_channel(channel: str) -> list[str]:
     """Return list of validation errors; empty means valid."""
     if channel not in ALLOWED_CHANNELS:
-        return [
-            f"unknown channel '{channel}'; allowed: {sorted(ALLOWED_CHANNELS)}"
-        ]
+        return [f"unknown channel '{channel}'; allowed: {sorted(ALLOWED_CHANNELS)}"]
     return []
 
 
@@ -101,17 +99,13 @@ def check_delivery_binding(
     """
     errors: list[str] = []
     if binding.tenant_id != qualification_tenant_id:
-        errors.append(
-            "tenant_id mismatch between delivery request and qualification"
-        )
+        errors.append("tenant_id mismatch between delivery request and qualification")
     if binding.engagement_id != qualification_engagement_id:
         errors.append(
             "engagement_id mismatch between delivery request and qualification"
         )
     if binding.report_id != qualification_report_id:
-        errors.append(
-            "report_id mismatch between delivery request and qualification"
-        )
+        errors.append("report_id mismatch between delivery request and qualification")
     if binding.report_version_id != qualification_report_version_id:
         errors.append(
             "report_version_id mismatch between delivery request and qualification"
