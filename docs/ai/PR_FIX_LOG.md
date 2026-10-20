@@ -1,3 +1,20 @@
+## PROD-AUTH-AUTOMATION-001-DIRECT-PUSH-EXCEPTION — Direct push to main without PR (post-hoc exception record)
+
+- **Work item:** PROD-AUTH-AUTOMATION-001-DIRECT-PUSH-EXCEPTION (GOVERNANCE-EXCEPTION class)
+- **Commit:** e3d51a8dce16358d188b9debe7bab7e0e93ee3bd
+- **Date:** 2026-10-19
+- **This is NOT a PR review record.** This entry documents an exception to the branch-protection process and the corrective actions taken.
+- **What happened:** Commit `e3d51a8d` was pushed directly to `origin/main` without a pull request. The commit added: `tools/testing/production/evidence.py`, `tools/testing/production/prod_smoke_001.py`, `tools/testing/production/auth_harness_001.py`, `tests/test_prod_auth_automation_001.py`, `.github/workflows/prod-auth-smoke.yml`, `docs/deployment/runbook-prod-auth-automation-001.md`, `contracts/artifacts/identity/prod-auth-automation-001-smoke-evidence.json`, `customer_one/offline_simulation_evidence.json` (rebound), and a `ROADMAP.md` row.
+- **Root cause:** Prior context session committed all PROD-AUTH-AUTOMATION-001 work to the local `main` branch (no feature branch was created first). The push to `origin/main` executed before a `gh pr create` command was run. The repository has `protected: false` on `main`, so no branch protection rule rejected the push.
+- **Post-push verification performed:** `git rev-parse HEAD origin/main` confirmed HEAD == origin/main (sha e3d51a8d). CI runs 39344603198 (frostgate-core-ci) and 39344603137 (frostgate-release-images) were inspected. `frostgate-core-ci` failed the `Guard (paths + syntax + fg-fast)` job due to lint errors in `tests/test_prod_auth_automation_001.py` (F401 unused `hashlib`, E402 module-level import order, F841 unused variable, F401 unused `requests`). No secrets were exposed. No test expectations were modified to manufacture PASS. No schema changes, no migration changes, no auth boundary changes were made.
+- **Governance impact:** No test expectations modified. No secrets accessed. No paid infrastructure. All governance constants unchanged: PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN, CUSTOMER_ZERO_TRUST=NOT_PROVEN, CUSTOMER_ZERO_ACCEPTANCE=BLOCKED, THIRD_PAID_CEREMONY=NOT_AUTHORIZED, COST_AUTHORIZATION=NOT_AUTHORIZED, PAID_HCP_INFRASTRUCTURE=ABSENT. The code was pre-verified via local tests before commit.
+- **Branch protection gap:** `main` has `protected: false`. A push-to-main protection rule with required status checks would have prevented this. Recommendation for enabling branch protection is included in PROD-AUTH-AUTOMATION-002 PR description.
+- **Corrective action:** This PR (PROD-AUTH-AUTOMATION-002 on branch `feat/prod-auth-automation-002`) adds this exception record, fixes the lint errors that caused CI to fail, wires Mode A automatic triggering, rebinds simulation evidence, and provides branch protection guidance. The exception was isolated to one commit; all subsequent work follows the standard feature-branch + PR workflow.
+- **Changed files in e3d51a8d (committed directly):** `tools/testing/production/evidence.py` (new), `tools/testing/production/prod_smoke_001.py` (new), `tools/testing/production/auth_harness_001.py` (new), `tests/test_prod_auth_automation_001.py` (new — 48 unit tests), `.github/workflows/prod-auth-smoke.yml` (new), `docs/deployment/runbook-prod-auth-automation-001.md` (new), `contracts/artifacts/identity/prod-auth-automation-001-smoke-evidence.json` (new), `customer_one/offline_simulation_evidence.json` (rebound), `ROADMAP.md` (row added — exempt per CLAUDE.md).
+- **Corrective files in PROD-AUTH-AUTOMATION-002 (this PR):** `tests/test_prod_auth_automation_001.py` (lint fixes — F401/E402/F841), `.github/workflows/prod-auth-smoke.yml` (Mode A automatic trigger via workflow_run), `customer_one/offline_simulation_evidence.json` (rebound to post-PROD-AUTH-AUTOMATION-001 source tree), `docs/ai/PR_FIX_LOG.md` (this entry), `ROADMAP.md` (PROD-AUTH-AUTOMATION-002 row — exempt per CLAUDE.md).
+
+---
+
 ## CUSTOMER-ZERO-RUN3-AWS-AUDIT-LIFECYCLE-001 — FP-005 repair: protect WRITER IAM audit resources
 
 - **Work item:** CUSTOMER-ZERO-RUN3-AWS-AUDIT-LIFECYCLE-001 (REPAIR class — always authorized)

@@ -10,23 +10,21 @@ Classification:
 
 from __future__ import annotations
 
-import hashlib
 import json
+import sys
 import unittest
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-import sys
-
-pytestmark = pytest.mark.smoke
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from tools.testing.production.evidence import (
+# E402: path manipulation must precede these project imports
+from tools.testing.production.evidence import (  # noqa: E402
     CheckResult,
     EvidenceRecord,
     EvidenceResult,
@@ -36,7 +34,7 @@ from tools.testing.production.evidence import (
     now_iso,
     write_evidence,
 )
-from tools.testing.production.prod_smoke_001 import (
+from tools.testing.production.prod_smoke_001 import (  # noqa: E402
     _find_sensitive_keys,
     _flatten_keys,
     check_dashboard_redirect,
@@ -47,6 +45,8 @@ from tools.testing.production.prod_smoke_001 import (
     check_vercel_deployment,
     run_smoke,
 )
+
+pytestmark = pytest.mark.smoke
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +147,7 @@ class TestEvidenceResult(unittest.TestCase):
 
     def test_write_evidence(self, tmp_path: Path = None) -> None:
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             r = EvidenceRecord(run_id="test-run")
             path = Path(tmpdir) / "evidence.json"
@@ -199,7 +200,9 @@ def _mock_session(responses: dict[str, Any]) -> MagicMock:
     """Build a mock requests.Session from (url, method) → response spec."""
     session = MagicMock()
 
-    def make_response(url: str, allow_redirects: bool = True, **_kwargs: Any) -> MagicMock:
+    def make_response(
+        url: str, allow_redirects: bool = True, **_kwargs: Any
+    ) -> MagicMock:
         r = responses.get(url)
         if r is None:
             resp = MagicMock()
@@ -232,6 +235,7 @@ class TestCheckRootAccessible(unittest.TestCase):
 
     def test_fail_on_timeout(self) -> None:
         import requests as req_lib
+
         session = MagicMock()
         session.get.side_effect = req_lib.Timeout()
         c = check_root_accessible(session, "https://test.example.com")
@@ -240,6 +244,7 @@ class TestCheckRootAccessible(unittest.TestCase):
 
     def test_fail_on_connection_error(self) -> None:
         import requests as req_lib
+
         session = MagicMock()
         session.get.side_effect = req_lib.ConnectionError("connection refused")
         c = check_root_accessible(session, "https://test.example.com")
@@ -249,89 +254,109 @@ class TestCheckRootAccessible(unittest.TestCase):
 
 class TestCheckLoginAccessible(unittest.TestCase):
     def test_pass_on_200(self) -> None:
-        session = _mock_session({"https://test.example.com/login": {"status_code": 200}})
+        session = _mock_session(
+            {"https://test.example.com/login": {"status_code": 200}}
+        )
         c = check_login_accessible(session, "https://test.example.com")
         assert c.result == EvidenceResult.PASS
         assert c.id == "SMOKE-002"
 
     def test_fail_on_404(self) -> None:
-        session = _mock_session({"https://test.example.com/login": {"status_code": 404}})
+        session = _mock_session(
+            {"https://test.example.com/login": {"status_code": 404}}
+        )
         c = check_login_accessible(session, "https://test.example.com")
         assert c.result == EvidenceResult.FAIL
 
 
 class TestCheckSessionEndpoint(unittest.TestCase):
     def test_pass_on_200_json(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/api/auth/session": {
-                "status_code": 200,
-                "content_type": "application/json",
+        session = _mock_session(
+            {
+                "https://test.example.com/api/auth/session": {
+                    "status_code": 200,
+                    "content_type": "application/json",
+                }
             }
-        })
+        )
         c = check_session_endpoint(session, "https://test.example.com")
         assert c.result == EvidenceResult.PASS
         assert c.id == "SMOKE-003"
 
     def test_fail_on_non_json_content_type(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/api/auth/session": {
-                "status_code": 200,
-                "content_type": "text/html",
+        session = _mock_session(
+            {
+                "https://test.example.com/api/auth/session": {
+                    "status_code": 200,
+                    "content_type": "text/html",
+                }
             }
-        })
+        )
         c = check_session_endpoint(session, "https://test.example.com")
         assert c.result == EvidenceResult.FAIL
 
     def test_fail_on_non_200(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/api/auth/session": {
-                "status_code": 401,
-                "content_type": "application/json",
+        session = _mock_session(
+            {
+                "https://test.example.com/api/auth/session": {
+                    "status_code": 401,
+                    "content_type": "application/json",
+                }
             }
-        })
+        )
         c = check_session_endpoint(session, "https://test.example.com")
         assert c.result == EvidenceResult.FAIL
 
 
 class TestCheckDashboardRedirect(unittest.TestCase):
     def test_pass_on_302_to_login(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/dashboard": {
-                "status_code": 302,
-                "headers": {"location": "https://test.example.com/login?callbackUrl=%2Fdashboard"},
+        session = _mock_session(
+            {
+                "https://test.example.com/dashboard": {
+                    "status_code": 302,
+                    "headers": {
+                        "location": "https://test.example.com/login?callbackUrl=%2Fdashboard"
+                    },
+                }
             }
-        })
+        )
         c = check_dashboard_redirect(session, "https://test.example.com")
         assert c.result == EvidenceResult.PASS
         assert c.id == "SMOKE-004"
 
     def test_pass_on_307_to_login(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/dashboard": {
-                "status_code": 307,
-                "headers": {"location": "/login"},
+        session = _mock_session(
+            {
+                "https://test.example.com/dashboard": {
+                    "status_code": 307,
+                    "headers": {"location": "/login"},
+                }
             }
-        })
+        )
         c = check_dashboard_redirect(session, "https://test.example.com")
         assert c.result == EvidenceResult.PASS
 
     def test_fail_on_200_no_redirect(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/dashboard": {
-                "status_code": 200,
-                "headers": {},
+        session = _mock_session(
+            {
+                "https://test.example.com/dashboard": {
+                    "status_code": 200,
+                    "headers": {},
+                }
             }
-        })
+        )
         c = check_dashboard_redirect(session, "https://test.example.com")
         assert c.result == EvidenceResult.FAIL
 
     def test_fail_on_redirect_to_wrong_destination(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/dashboard": {
-                "status_code": 302,
-                "headers": {"location": "/home"},
+        session = _mock_session(
+            {
+                "https://test.example.com/dashboard": {
+                    "status_code": 302,
+                    "headers": {"location": "/home"},
+                }
             }
-        })
+        )
         c = check_dashboard_redirect(session, "https://test.example.com")
         assert c.result == EvidenceResult.FAIL
         assert "not /login" in (c.diagnostic or "")
@@ -339,13 +364,15 @@ class TestCheckDashboardRedirect(unittest.TestCase):
 
 class TestCheckSessionNoSecrets(unittest.TestCase):
     def test_pass_on_clean_session(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/api/auth/session": {
-                "status_code": 200,
-                "content_type": "application/json",
-                "json": {},
+        session = _mock_session(
+            {
+                "https://test.example.com/api/auth/session": {
+                    "status_code": 200,
+                    "content_type": "application/json",
+                    "json": {},
+                }
             }
-        })
+        )
         c = check_session_no_secrets(session, "https://test.example.com")
         assert c.result == EvidenceResult.PASS
         assert c.id == "SMOKE-006"
@@ -372,44 +399,46 @@ class TestCheckSessionNoSecrets(unittest.TestCase):
         assert c.result == EvidenceResult.FAIL
 
     def test_not_proven_on_non_200(self) -> None:
-        session = _mock_session({
-            "https://test.example.com/api/auth/session": {
-                "status_code": 401,
-                "content_type": "application/json",
+        session = _mock_session(
+            {
+                "https://test.example.com/api/auth/session": {
+                    "status_code": 401,
+                    "content_type": "application/json",
+                }
             }
-        })
+        )
         c = check_session_no_secrets(session, "https://test.example.com")
         assert c.result == EvidenceResult.NOT_PROVEN
 
 
 class TestCheckVercelDeployment(unittest.TestCase):
     def test_not_proven_without_env_vars(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            os_env_backup = {
-                k: None for k in ["VERCEL_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID"]
-            }
-            with patch.dict("os.environ", {"VERCEL_TOKEN": "", "VERCEL_PROJECT_ID": ""}):
-                c, sha = check_vercel_deployment("https://test.example.com")
+        with patch.dict("os.environ", {"VERCEL_TOKEN": "", "VERCEL_PROJECT_ID": ""}):
+            c, sha = check_vercel_deployment("https://test.example.com")
         assert c.result == EvidenceResult.NOT_PROVEN
         assert sha == "NOT_PROVEN"
         assert c.id == "SMOKE-005"
 
     def test_pass_on_ready_deployment(self) -> None:
-        import requests as req_lib
-        with patch.dict("os.environ", {
-            "VERCEL_TOKEN": "test-token",
-            "VERCEL_PROJECT_ID": "proj-123",
-            "VERCEL_TEAM_ID": "",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "VERCEL_TOKEN": "test-token",
+                "VERCEL_PROJECT_ID": "proj-123",
+                "VERCEL_TEAM_ID": "",
+            },
+        ):
             with patch("requests.get") as mock_get:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 mock_resp.json.return_value = {
-                    "deployments": [{
-                        "uid": "dpl-abc",
-                        "readyState": "READY",
-                        "gitSource": {"sha": "abc123def456"},
-                    }]
+                    "deployments": [
+                        {
+                            "uid": "dpl-abc",
+                            "readyState": "READY",
+                            "gitSource": {"sha": "abc123def456"},
+                        }
+                    ]
                 }
                 mock_get.return_value = mock_resp
                 c, sha = check_vercel_deployment("https://test.example.com")
@@ -417,31 +446,39 @@ class TestCheckVercelDeployment(unittest.TestCase):
         assert sha == "abc123def456"
 
     def test_not_proven_on_non_ready_deployment(self) -> None:
-        with patch.dict("os.environ", {
-            "VERCEL_TOKEN": "test-token",
-            "VERCEL_PROJECT_ID": "proj-123",
-            "VERCEL_TEAM_ID": "",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "VERCEL_TOKEN": "test-token",
+                "VERCEL_PROJECT_ID": "proj-123",
+                "VERCEL_TEAM_ID": "",
+            },
+        ):
             with patch("requests.get") as mock_get:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 mock_resp.json.return_value = {
-                    "deployments": [{
-                        "uid": "dpl-abc",
-                        "readyState": "BUILDING",
-                        "gitSource": {"sha": "abc123"},
-                    }]
+                    "deployments": [
+                        {
+                            "uid": "dpl-abc",
+                            "readyState": "BUILDING",
+                            "gitSource": {"sha": "abc123"},
+                        }
+                    ]
                 }
                 mock_get.return_value = mock_resp
                 c, sha = check_vercel_deployment("https://test.example.com")
         assert c.result == EvidenceResult.NOT_PROVEN
 
     def test_fail_on_vercel_api_error(self) -> None:
-        with patch.dict("os.environ", {
-            "VERCEL_TOKEN": "test-token",
-            "VERCEL_PROJECT_ID": "proj-123",
-            "VERCEL_TEAM_ID": "",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "VERCEL_TOKEN": "test-token",
+                "VERCEL_PROJECT_ID": "proj-123",
+                "VERCEL_TEAM_ID": "",
+            },
+        ):
             with patch("requests.get") as mock_get:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 401
@@ -464,7 +501,12 @@ class TestRunSmoke(unittest.TestCase):
             session_inst = MagicMock()
             mock_req_mod.Session.return_value = session_inst
 
-            def mock_get(url: str, timeout: int = 15, allow_redirects: bool = True, **_kwargs: Any) -> MagicMock:
+            def mock_get(
+                url: str,
+                timeout: int = 15,
+                allow_redirects: bool = True,
+                **_kwargs: Any,
+            ) -> MagicMock:
                 resp = MagicMock()
                 if url.endswith("/") or url.endswith(".com/"):
                     resp.status_code = 200
@@ -492,10 +534,14 @@ class TestRunSmoke(unittest.TestCase):
             mock_req_mod.Timeout = __import__("requests").Timeout
             mock_req_mod.ConnectionError = __import__("requests").ConnectionError
 
-            with patch("tools.testing.production.prod_smoke_001.check_vercel_deployment") as mock_vd:
+            with patch(
+                "tools.testing.production.prod_smoke_001.check_vercel_deployment"
+            ) as mock_vd:
                 ts = now_iso()
                 mock_vd.return_value = (
-                    CheckResult("SMOKE-005", "Vercel", "e", "o", EvidenceResult.NOT_PROVEN, ts),
+                    CheckResult(
+                        "SMOKE-005", "Vercel", "e", "o", EvidenceResult.NOT_PROVEN, ts
+                    ),
                     "NOT_PROVEN",
                 )
                 record = run_smoke("https://test.example.com")
@@ -510,7 +556,12 @@ class TestRunSmoke(unittest.TestCase):
             session_inst = MagicMock()
             mock_req_mod.Session.return_value = session_inst
 
-            def mock_get(url: str, timeout: int = 15, allow_redirects: bool = True, **_kwargs: Any) -> MagicMock:
+            def mock_get(
+                url: str,
+                timeout: int = 15,
+                allow_redirects: bool = True,
+                **_kwargs: Any,
+            ) -> MagicMock:
                 resp = MagicMock()
                 resp.headers = {"content-type": "application/json"}
                 resp.json.return_value = {}
@@ -524,10 +575,14 @@ class TestRunSmoke(unittest.TestCase):
             mock_req_mod.Timeout = __import__("requests").Timeout
             mock_req_mod.ConnectionError = __import__("requests").ConnectionError
 
-            with patch("tools.testing.production.prod_smoke_001.check_vercel_deployment") as mock_vd:
+            with patch(
+                "tools.testing.production.prod_smoke_001.check_vercel_deployment"
+            ) as mock_vd:
                 ts = now_iso()
                 mock_vd.return_value = (
-                    CheckResult("SMOKE-005", "Vercel", "e", "o", EvidenceResult.NOT_PROVEN, ts),
+                    CheckResult(
+                        "SMOKE-005", "Vercel", "e", "o", EvidenceResult.NOT_PROVEN, ts
+                    ),
                     "NOT_PROVEN",
                 )
                 record = run_smoke("https://test.example.com")
@@ -545,56 +600,76 @@ class TestRunSmoke(unittest.TestCase):
 class TestActivationGuard(unittest.TestCase):
     def test_guard_fails_without_enabled_flag(self) -> None:
         from tools.testing.production.auth_harness_001 import _activation_guard
-        with patch.dict("os.environ", {
-            "FG_PROD_AUTH_TEST_ENABLED": "",
-            "FG_PROD_TEST_EMAIL": "test@example.com",
-            "FG_PROD_TEST_PASSWORD": "pass",
-        }):
+
+        with patch.dict(
+            "os.environ",
+            {
+                "FG_PROD_AUTH_TEST_ENABLED": "",
+                "FG_PROD_TEST_EMAIL": "test@example.com",
+                "FG_PROD_TEST_PASSWORD": "pass",
+            },
+        ):
             ok, reason = _activation_guard()
         assert not ok
         assert "FG_PROD_AUTH_TEST_ENABLED" in reason
 
     def test_guard_fails_without_email(self) -> None:
         from tools.testing.production.auth_harness_001 import _activation_guard
-        with patch.dict("os.environ", {
-            "FG_PROD_AUTH_TEST_ENABLED": "true",
-            "FG_PROD_TEST_EMAIL": "",
-            "FG_PROD_TEST_PASSWORD": "pass",
-        }):
+
+        with patch.dict(
+            "os.environ",
+            {
+                "FG_PROD_AUTH_TEST_ENABLED": "true",
+                "FG_PROD_TEST_EMAIL": "",
+                "FG_PROD_TEST_PASSWORD": "pass",
+            },
+        ):
             ok, reason = _activation_guard()
         assert not ok
         assert "FG_PROD_TEST_EMAIL" in reason
 
     def test_guard_fails_without_password(self) -> None:
         from tools.testing.production.auth_harness_001 import _activation_guard
-        with patch.dict("os.environ", {
-            "FG_PROD_AUTH_TEST_ENABLED": "true",
-            "FG_PROD_TEST_EMAIL": "test@example.com",
-            "FG_PROD_TEST_PASSWORD": "",
-        }):
+
+        with patch.dict(
+            "os.environ",
+            {
+                "FG_PROD_AUTH_TEST_ENABLED": "true",
+                "FG_PROD_TEST_EMAIL": "test@example.com",
+                "FG_PROD_TEST_PASSWORD": "",
+            },
+        ):
             ok, reason = _activation_guard()
         assert not ok
         assert "FG_PROD_TEST_PASSWORD" in reason
 
     def test_guard_passes_when_all_set(self) -> None:
         from tools.testing.production.auth_harness_001 import _activation_guard
-        with patch.dict("os.environ", {
-            "FG_PROD_AUTH_TEST_ENABLED": "true",
-            "FG_PROD_TEST_EMAIL": "test@example.com",
-            "FG_PROD_TEST_PASSWORD": "pass",
-        }):
+
+        with patch.dict(
+            "os.environ",
+            {
+                "FG_PROD_AUTH_TEST_ENABLED": "true",
+                "FG_PROD_TEST_EMAIL": "test@example.com",
+                "FG_PROD_TEST_PASSWORD": "pass",
+            },
+        ):
             ok, reason = _activation_guard()
         assert ok
         assert reason == ""
 
     def test_guard_requires_exactly_true(self) -> None:
         from tools.testing.production.auth_harness_001 import _activation_guard
+
         for bad_value in ("True", "TRUE", "1", "yes", "on"):
-            with patch.dict("os.environ", {
-                "FG_PROD_AUTH_TEST_ENABLED": bad_value,
-                "FG_PROD_TEST_EMAIL": "test@example.com",
-                "FG_PROD_TEST_PASSWORD": "pass",
-            }):
+            with patch.dict(
+                "os.environ",
+                {
+                    "FG_PROD_AUTH_TEST_ENABLED": bad_value,
+                    "FG_PROD_TEST_EMAIL": "test@example.com",
+                    "FG_PROD_TEST_PASSWORD": "pass",
+                },
+            ):
                 ok, _ = _activation_guard()
             assert not ok, f"Expected guard to fail for {bad_value!r}"
 

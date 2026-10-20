@@ -9,6 +9,13 @@ name: prod-auth-smoke
 # Mode B is NEVER triggered by push, PR, or scheduled events.
 
 on:
+  # Automatic trigger: runs Mode A after frostgate-core-ci passes on main.
+  # workflow_run always executes with base-branch (main) privileges — safe.
+  # Branch filter prevents triggering on PR synthetic merge commits.
+  workflow_run:
+    workflows: ["frostgate-core-ci"]
+    branches: [main]
+    types: [completed]
   workflow_dispatch:
     inputs:
       mode:
@@ -53,7 +60,12 @@ jobs:
   # ─────────────────────────────────────────────
   smoke:
     name: prod-smoke (Mode A)
-    if: ${{ inputs.mode == 'smoke' || inputs.mode == '' }}
+    # Run when:
+    #   - workflow_run: frostgate-core-ci completed successfully (auto Mode A on main push)
+    #   - workflow_dispatch / workflow_call: mode is 'smoke' or empty
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name != 'workflow_run' && (inputs.mode == 'smoke' || inputs.mode == ''))
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -118,7 +130,8 @@ jobs:
   # ─────────────────────────────────────────────
   authenticated:
     name: prod-auth (Mode B — operator-approved)
-    if: ${{ inputs.mode == 'authenticated' }}
+    # NEVER triggered automatically. workflow_run is explicitly excluded.
+    if: ${{ github.event_name != 'workflow_run' && inputs.mode == 'authenticated' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Extra gate: Mode B requires secrets to be populated.

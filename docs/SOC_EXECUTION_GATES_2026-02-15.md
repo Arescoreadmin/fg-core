@@ -1,3 +1,32 @@
+## 2026-10-19 - feat/prod-auth-automation-002: PROD-AUTH-AUTOMATION-002 — CI wiring, lint fixes, evidence rebind
+
+**Change scope:** CI wiring + lint repair + evidence rebind. Adds automatic `workflow_run` trigger to `.github/workflows/prod-auth-smoke.yml` so Mode A (public production smoke) runs automatically after `frostgate-core-ci` succeeds on main pushes. Fixes 5 ruff lint violations in `tests/test_prod_auth_automation_001.py` (F401 unused imports, E402 import order, F841 unused variable) that caused the `frostgate-core-ci` Guard job to fail on commit `e3d51a8d`. Rebinds `customer_one/offline_simulation_evidence.json` to current source tree hash after the direct push advanced the tree. No new tools/ci evaluator logic. No schema changes. No migrations. No AWS API calls. No cloud mutation. No paid infrastructure.
+
+**Security posture:**
+
+1. **Mode A wiring is security-neutral.** The `workflow_run` trigger fires with base-branch (main) privileges — it does not grant additional access compared to `workflow_dispatch`. Mode B (authenticated) explicitly excluded from `workflow_run` events via `github.event_name != 'workflow_run'` guard. No credentials are consumed by Mode A.
+2. **No credentials in Mode A path.** `prod_smoke_001.py` does not reference `FG_PROD_TEST_EMAIL`, `FG_PROD_TEST_PASSWORD`, or `FG_PROD_AUTH_TEST_ENABLED`. Confirmed by grep: no matches.
+3. **Mode B activation guard unchanged.** `_activation_guard()` requires `FG_PROD_AUTH_TEST_ENABLED == "true"` (exact lowercase string), `FG_PROD_TEST_EMAIL`, and `FG_PROD_TEST_PASSWORD`. All three must be non-empty. Guard is tested by 5 unit tests in `TestActivationGuard`.
+4. **Evidence is clean.** Regex scan of `contracts/artifacts/identity/prod-auth-automation-001-smoke-evidence.json` against JWT, API key, token, and password patterns: CLEAN.
+5. **No authorization bypass.** PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT. No governance constants changed.
+
+**Critical-path files changed:** `.github/workflows/prod-auth-smoke.yml` (added `workflow_run` trigger for `frostgate-core-ci` on `main`; updated job conditions; Mode B remains manual-only), `tests/test_prod_auth_automation_001.py` (5 lint fixes — no logic or expectation changes), `customer_one/offline_simulation_evidence.json` (rebind to post-`e3d51a8d` source tree), `docs/ai/PR_FIX_LOG.md` (direct-push exception record), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `ROADMAP.md` (PROD-AUTH-AUTOMATION-002 row — exempt per CLAUDE.md).
+
+**Required invariant preserved:** PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN; CUSTOMER_ZERO_TRUST=NOT_PROVEN; CUSTOMER_ZERO_ACCEPTANCE=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. APPROVED unreachable.
+
+**Validation evidence:**
+
+- `ruff check tests/test_prod_auth_automation_001.py` → All checks passed
+- `python -m pytest tests/test_prod_auth_automation_001.py -q` → 48 passed
+- `python tools/ci/run_offline_ceremony_simulation.py` → 6/6 GREEN, source_sha=e3d51a8d, simulation_id bound
+- Evidence secret scan → CLEAN (no JWT, API key, token, password patterns)
+- Workflow trigger YAML parse: triggers=['workflow_run', 'workflow_dispatch', 'workflow_call'], no push/pull_request/schedule
+- No cloud mutation. No Terraform state change. No AWS API call. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Change is CI wiring (workflow_run trigger — main-branch privilege only), lint fixes (no logic change), and evidence rebind. No evaluator changes. No schema changes. No migrations. No new authorization paths. Mode B remains manually-gated. Security posture unchanged or improved (explicit Mode B exclusion guard added to workflow_run path).
+
+---
+
 ## 2026-10-12 - fix/cz-run3-aws-audit-lifecycle-001: CUSTOMER-ZERO-RUN3-AWS-AUDIT-LIFECYCLE-001 — protect preserved AWS audit WRITER resources
 
 **Change scope:** REPAIR class. Resolves FP-005 from the Run-3 adversarial audit (docs/audits/customer_zero_run3_failure_prevention_001.md): three WRITER IAM resources in `infra/aws_audit.tf` (`aws_iam_user.vault_audit`, `aws_iam_policy.vault_audit`, `aws_iam_user_policy_attachment.vault_audit`) were listed as `PERSISTENT_AUDIT_AUTHORITY` in `customer_one/ceremony_state.yaml` but lacked `lifecycle { prevent_destroy = true }`. The CloudWatch log group was already protected and the two READER resources were protected in PR #761 (FP-003 repair); only these three WRITER IAM resources remained unprotected, relying on operator discipline rather than Terraform-level static enforcement. A mistaken `terraform destroy` targeting them would invalidate the audit boundary required by the Customer-Zero trust ceremony. No AWS resource was created, modified, or deleted. No Terraform state was mutated. No cloud API was called.
