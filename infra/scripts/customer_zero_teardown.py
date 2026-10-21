@@ -58,7 +58,7 @@ TARGETS = {
     "hcp-cluster": {HCP_CLUSTER},
     "hvn": {HCP_HVN},
 }
-OUTPUTS_REMOVED = {
+OUTPUTS_REMOVED: dict[str, set[str]] = {
     "enable-key-deletion": set(),
     "vault-children": {
         "transit_key_identity",

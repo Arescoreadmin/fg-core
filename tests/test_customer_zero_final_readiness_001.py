@@ -267,7 +267,7 @@ def test_a5_completed_prerequisite_ids_verified() -> None:
 
     for prereq in REQUIRED_COMPLETED_PREREQUISITES:
         assert prereq in completed_ids, (
-            f"Prerequisite {prereq!r} must be in completed; current completed: {sorted(completed_ids)}"
+            f"Prerequisite {prereq!r} must be in completed; current completed: {sorted(i for i in completed_ids if i is not None)}"
         )
 
 

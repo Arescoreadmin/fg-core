@@ -1,3 +1,24 @@
+## POST-772-MYPY-GATE-REMEDIATION-001 — restore strict mypy type compliance
+
+- **Work item:** POST-772-MYPY-GATE-REMEDIATION-001 (REPAIR class)
+- **Baseline commit:** `01fa4937937fd1f0265642b39a3ce12237a70357`
+- **Mypy errors before:** 95 errors across 11 files
+- **Mypy errors after:** 0
+- **Root causes:**
+  1. `test_governed_delivery.py`: Helper `_governed_delivery()` annotated `-> dict` but returns `httpx.Response`. Fixed by importing `httpx` and changing return type to `httpx.Response`.
+  2. `test_customer_zero_narrow_cost_teardown.py`: Helper functions `_plan`, `_key_enable_plan`, `_child_delete_plan` annotated `-> dict[str, object]`. `object` does not support iteration, indexing, or `.append()`. Fixed by changing to `-> dict[str, Any]` and annotating the inner `item` variable.
+  3. `infra/scripts/customer_zero_teardown.py`: `OUTPUTS_REMOVED` dict has `set()` (untyped empty set) alongside `set[str]` values; mypy inferred the union as `set[object]`, causing `name not in allowed_outputs` to fail. Fixed by adding `dict[str, set[str]]` annotation.
+  4. `test_cz_run3_preauth_closeout_001.py` and `test_cz_run3_operator_preflight_closeout_001.py`: `_run_final_readiness_api()` annotated `-> object` but callers access `.final_result`, `.blockers`, `.offline_blocker_count`, `.to_dict()`. Fixed by removing the explicit `-> object` annotation (function uses lazy imports; returning `Any` is correct).
+  5. `test_cz_run3_pricing_evidence_001.py`: `copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)` inferred as a complex union type; indexed assignment into nested values failed. Fixed by annotating `instance: dict[str, Any]`.
+  6. `test_cz_run3_human_cost_review_001.py`: Dict comprehension `{field: "placeholder" for field in ...}` inferred as `dict[str, str]`; `.update({"hourly_rate_usd": 1.50, ...})` caused `dict-item` error. Fixed by annotating `base: dict[str, Any]`.
+  7. `test_customer_zero_run3_preauth_001.py`: `dict(...)` with mixed `str` and `dict[str, str]` values (for `relevant_schema_versions`) widened to `dict[str, Collection[str]]`; spreading with `**kwargs` caused `arg-type` errors. Fixed by annotating `base_kwargs: dict[str, Any]` and `kwargs: dict[str, Any]`.
+  8. `test_cz_reconcile_001.py`: `Path(test_module.__file__)` where `__file__` is `str | None`. Fixed by adding `assert test_module.__file__ is not None`.
+  9. `test_prod_auth_automation_001.py`: `tmp_path: Path = None` prohibits implicit `Optional`. Fixed by changing to `tmp_path: Path | None = None`.
+  10. `test_customer_zero_final_readiness_001.py`: `sorted(completed_ids)` where `completed_ids: set[Any | None]`; `None` is not sortable. Fixed by filtering out `None` in the error message expression.
+- **Files changed:** `infra/scripts/customer_zero_teardown.py`, `tests/test_governed_delivery.py`, `tests/test_customer_zero_narrow_cost_teardown.py`, `tests/test_cz_run3_preauth_closeout_001.py`, `tests/test_cz_run3_operator_preflight_closeout_001.py`, `tests/test_cz_run3_pricing_evidence_001.py`, `tests/test_cz_run3_human_cost_review_001.py`, `tests/test_customer_zero_run3_preauth_001.py`, `tests/test_cz_reconcile_001.py`, `tests/test_prod_auth_automation_001.py`, `tests/test_customer_zero_final_readiness_001.py`
+- **Validation:** ruff check PASS, ruff format PASS, mypy 0 errors (2190 files), targeted test suite 479+ passed, fg-fast 607+ passed
+- **No changes to:** governance constants, authentication requirements, security assertions, CI configuration, infra behavior
+
 ## POST-771-FORMAT-GATE-REMEDIATION-001 — ruff format for deferred tools/ci/ files
 
 - **Work item:** POST-771-FORMAT-GATE-REMEDIATION-001 (REPAIR class)

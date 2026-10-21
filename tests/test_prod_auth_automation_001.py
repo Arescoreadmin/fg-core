@@ -145,7 +145,7 @@ class TestEvidenceResult(unittest.TestCase):
         finalize(r)
         assert r.overall_result == EvidenceResult.NOT_PROVEN
 
-    def test_write_evidence(self, tmp_path: Path = None) -> None:
+    def test_write_evidence(self, tmp_path: Path | None = None) -> None:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:

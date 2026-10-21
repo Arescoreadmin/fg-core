@@ -24,6 +24,7 @@ import json
 import time
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 REQUEST_FILE = REPO / "customer_one" / "run3_cost_authorization_request.json"
@@ -669,7 +670,9 @@ def test_cost_031_null_pricing_valid_until_rejected():
 
 def _make_valid_pricing_evidence(verifier) -> dict:
     """Build a fully-populated pricing evidence dict for parameterized tests."""
-    base = {field: "placeholder" for field in verifier.REQUIRED_PRICING_EVIDENCE_FIELDS}
+    base: dict[str, Any] = {
+        field: "placeholder" for field in verifier.REQUIRED_PRICING_EVIDENCE_FIELDS
+    }
     base.update(
         {
             "hourly_rate_usd": 1.50,

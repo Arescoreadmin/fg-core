@@ -111,7 +111,7 @@ def _make_mock_subprocess_result(
     return mock
 
 
-def _run_final_readiness_api() -> object:
+def _run_final_readiness_api():  # -> ReadinessResult (imported lazily inside)
     """Run the final readiness evaluator via the Python API.
 
     Patches three pre-commit noise sources so authority-content dimensions are

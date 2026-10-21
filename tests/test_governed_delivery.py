@@ -24,6 +24,7 @@ import uuid
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -302,7 +303,7 @@ def _governed_delivery(
     recipient_id: str | None = None,
     channel: str = "direct_download",
     idempotency_key: str | None = None,
-) -> dict:
+) -> httpx.Response:
     body: dict = {
         "report_version_id": vid,
         "recipient_type": recipient_type,
