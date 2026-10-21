@@ -260,7 +260,8 @@ def run_verification(
                 else:
                     # Check for C23 fingerprint binding blocker specifically
                     c23_blocked = any(
-                        "C23_EVIDENCE_FINGERPRINT_BOUND" in b for b in cost_result.blockers
+                        "C23_EVIDENCE_FINGERPRINT_BOUND" in b
+                        for b in cost_result.blockers
                     )
                     if c23_blocked:
                         overall_status = "BLOCKED_FINGERPRINT_MISMATCH"

@@ -83,6 +83,7 @@ def _load_modules() -> tuple[bool, str]:
         import services.governance.run3_proof_matrix  # noqa: F401
         import services.governance.run3_abort_teardown  # noqa: F401
         import services.governance.customer_zero_readiness  # noqa: F401
+
         return True, ""
     except ImportError as exc:
         return False, str(exc)
@@ -90,6 +91,7 @@ def _load_modules() -> tuple[bool, str]:
 
 def _get_source_sha(repo: Path) -> str:
     import subprocess
+
     try:
         r = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -120,6 +122,7 @@ def _check_roadmap_authorized(repo: Path) -> tuple[bool, str]:
     3. Otherwise → FAIL.
     """
     import subprocess
+
     try:
         r = subprocess.run(
             [
@@ -141,6 +144,7 @@ def _check_roadmap_authorized(repo: Path) -> tuple[bool, str]:
             from services.governance.customer_zero_readiness import (
                 _roadmap_item_completed_with_evidence,
             )
+
             ok, evidence = _roadmap_item_completed_with_evidence(repo, WORK_ITEM)
             if ok:
                 return True, f"COMPLETED: {evidence}"
@@ -154,6 +158,7 @@ def _check_roadmap_authorized(repo: Path) -> tuple[bool, str]:
 def _check_trust_003_blocked(repo: Path) -> tuple[bool, str]:
     """Verify CUSTOMER-ZERO-TRUST-003 remains BLOCKED."""
     import subprocess
+
     try:
         r = subprocess.run(
             [
@@ -178,6 +183,7 @@ def _check_trust_003_blocked(repo: Path) -> tuple[bool, str]:
 def _check_accept_001_blocked(repo: Path) -> tuple[bool, str]:
     """Verify CUSTOMER-ZERO-ACCEPT-001 remains BLOCKED."""
     import subprocess
+
     try:
         r = subprocess.run(
             [
@@ -215,100 +221,123 @@ def _get_evidence_quality(offline_checks: list[dict[str, Any]]) -> dict[str, int
     return counts
 
 
-def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[dict[str, Any]], list[str]]:
+def _run_offline_checks(
+    repo: Path, source_sha: str = "UNKNOWN"
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Run all offline checks; return (checks, blockers)."""
     checks: list[dict[str, Any]] = []
     blockers: list[str] = []
 
     # ── 1. Module imports ────────────────────────────────────────────────
     ok, msg = _load_modules()
-    checks.append({
-        "check_id": "MODULE-IMPORTS",
-        "description": "All preauth modules importable",
-        "evidence_strength": "TEST_PROVEN" if ok else "NOT_PROVEN",
-        "result": "PASS" if ok else "FAIL",
-        "detail": "All run3_* modules imported successfully" if ok else f"Import error: {msg}",
-    })
+    checks.append(
+        {
+            "check_id": "MODULE-IMPORTS",
+            "description": "All preauth modules importable",
+            "evidence_strength": "TEST_PROVEN" if ok else "NOT_PROVEN",
+            "result": "PASS" if ok else "FAIL",
+            "detail": "All run3_* modules imported successfully"
+            if ok
+            else f"Import error: {msg}",
+        }
+    )
     if not ok:
         blockers.append(f"MODULE-IMPORTS: {msg}")
         return checks, blockers
 
     # ── 2. Roadmap authorization ─────────────────────────────────────────
     auth_ok, auth_msg = _check_roadmap_authorized(repo)
-    checks.append({
-        "check_id": "ROADMAP-AUTHORIZED",
-        "description": "CUSTOMER-ZERO-RUN3-PREAUTH-001 is AUTHORIZED in roadmap",
-        "evidence_strength": "STATIC_VERIFIED" if auth_ok else "NOT_PROVEN",
-        "result": "PASS" if auth_ok else "FAIL",
-        "detail": auth_msg,
-    })
+    checks.append(
+        {
+            "check_id": "ROADMAP-AUTHORIZED",
+            "description": "CUSTOMER-ZERO-RUN3-PREAUTH-001 is AUTHORIZED in roadmap",
+            "evidence_strength": "STATIC_VERIFIED" if auth_ok else "NOT_PROVEN",
+            "result": "PASS" if auth_ok else "FAIL",
+            "detail": auth_msg,
+        }
+    )
     if not auth_ok:
         blockers.append(f"ROADMAP-AUTHORIZED: {auth_msg}")
 
     # ── 3. Canonical truth — TRUST-003 remains BLOCKED ───────────────────
     t003_ok, t003_msg = _check_trust_003_blocked(repo)
-    checks.append({
-        "check_id": "TRUST-003-BLOCKED",
-        "description": "CUSTOMER-ZERO-TRUST-003 remains BLOCKED (canonical truth)",
-        "evidence_strength": "STATIC_VERIFIED" if t003_ok else "NOT_PROVEN",
-        "result": "PASS" if t003_ok else "FAIL",
-        "detail": t003_msg,
-    })
+    checks.append(
+        {
+            "check_id": "TRUST-003-BLOCKED",
+            "description": "CUSTOMER-ZERO-TRUST-003 remains BLOCKED (canonical truth)",
+            "evidence_strength": "STATIC_VERIFIED" if t003_ok else "NOT_PROVEN",
+            "result": "PASS" if t003_ok else "FAIL",
+            "detail": t003_msg,
+        }
+    )
     if not t003_ok:
         blockers.append(f"TRUST-003-BLOCKED: {t003_msg}")
 
     # ── 4. Canonical truth — ACCEPT-001 remains BLOCKED ─────────────────
     a001_ok, a001_msg = _check_accept_001_blocked(repo)
-    checks.append({
-        "check_id": "ACCEPT-001-BLOCKED",
-        "description": "CUSTOMER-ZERO-ACCEPT-001 remains BLOCKED (canonical truth)",
-        "evidence_strength": "STATIC_VERIFIED" if a001_ok else "NOT_PROVEN",
-        "result": "PASS" if a001_ok else "FAIL",
-        "detail": a001_msg,
-    })
+    checks.append(
+        {
+            "check_id": "ACCEPT-001-BLOCKED",
+            "description": "CUSTOMER-ZERO-ACCEPT-001 remains BLOCKED (canonical truth)",
+            "evidence_strength": "STATIC_VERIFIED" if a001_ok else "NOT_PROVEN",
+            "result": "PASS" if a001_ok else "FAIL",
+            "detail": a001_msg,
+        }
+    )
     if not a001_ok:
         blockers.append(f"ACCEPT-001-BLOCKED: {a001_msg}")
 
     # ── 5. Final-readiness fingerprint available ─────────────────────────
     try:
         from services.governance.customer_zero_readiness import evaluate
+
         rr = evaluate(repo)
         fp = rr.canonical_fingerprint
         readiness_ready = rr.final_result.value == "READY"
         offline_clean = rr.offline_blocker_count == 0
         if readiness_ready and offline_clean:
-            checks.append({
-                "check_id": "READINESS-FINGERPRINT",
-                "description": "Final-readiness fingerprint obtained from evaluate()",
-                "evidence_strength": "STATIC_VERIFIED",
-                "result": "PASS",
-                "detail": f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value}",
-                "readiness_fingerprint": fp,
-            })
+            checks.append(
+                {
+                    "check_id": "READINESS-FINGERPRINT",
+                    "description": "Final-readiness fingerprint obtained from evaluate()",
+                    "evidence_strength": "STATIC_VERIFIED",
+                    "result": "PASS",
+                    "detail": f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value}",
+                    "readiness_fingerprint": fp,
+                }
+            )
         else:
-            checks.append({
+            checks.append(
+                {
+                    "check_id": "READINESS-FINGERPRINT",
+                    "description": "Final-readiness fingerprint obtained from evaluate()",
+                    "evidence_strength": "NOT_PROVEN",
+                    "result": "FAIL",
+                    "detail": (
+                        f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value} "
+                        f"offline_blocker_count={rr.offline_blocker_count}"
+                    ),
+                    "readiness_fingerprint": fp,
+                }
+            )
+            blockers.append(
+                f"READINESS-FINGERPRINT: Final-readiness result is {rr.final_result.value}, expected READY"
+                + (
+                    f" (offline_blocker_count={rr.offline_blocker_count})"
+                    if rr.offline_blocker_count > 0
+                    else ""
+                )
+            )
+    except Exception as exc:
+        checks.append(
+            {
                 "check_id": "READINESS-FINGERPRINT",
                 "description": "Final-readiness fingerprint obtained from evaluate()",
                 "evidence_strength": "NOT_PROVEN",
                 "result": "FAIL",
-                "detail": (
-                    f"canonical_fingerprint={fp[:16]}... result={rr.final_result.value} "
-                    f"offline_blocker_count={rr.offline_blocker_count}"
-                ),
-                "readiness_fingerprint": fp,
-            })
-            blockers.append(
-                f"READINESS-FINGERPRINT: Final-readiness result is {rr.final_result.value}, expected READY"
-                + (f" (offline_blocker_count={rr.offline_blocker_count})" if rr.offline_blocker_count > 0 else "")
-            )
-    except Exception as exc:
-        checks.append({
-            "check_id": "READINESS-FINGERPRINT",
-            "description": "Final-readiness fingerprint obtained from evaluate()",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": f"readiness evaluation error: {exc}",
-        })
+                "detail": f"readiness evaluation error: {exc}",
+            }
+        )
         blockers.append(f"READINESS-FINGERPRINT: {exc}")
 
     # ── 6. Resource inventory fingerprint deterministic ──────────────────
@@ -317,25 +346,30 @@ def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[d
             compute_inventory_fingerprint,
             RESOURCE_INVENTORY,
         )
+
         inv_fp1 = compute_inventory_fingerprint()
         inv_fp2 = compute_inventory_fingerprint()
         deterministic = inv_fp1 == inv_fp2
-        checks.append({
-            "check_id": "INVENTORY-FINGERPRINT",
-            "description": "Resource inventory fingerprint is deterministic",
-            "evidence_strength": "TEST_PROVEN" if deterministic else "NOT_PROVEN",
-            "result": "PASS" if deterministic else "FAIL",
-            "detail": f"fingerprint={inv_fp1[:16]}... resources={len(RESOURCE_INVENTORY)}",
-            "inventory_fingerprint": inv_fp1,
-        })
+        checks.append(
+            {
+                "check_id": "INVENTORY-FINGERPRINT",
+                "description": "Resource inventory fingerprint is deterministic",
+                "evidence_strength": "TEST_PROVEN" if deterministic else "NOT_PROVEN",
+                "result": "PASS" if deterministic else "FAIL",
+                "detail": f"fingerprint={inv_fp1[:16]}... resources={len(RESOURCE_INVENTORY)}",
+                "inventory_fingerprint": inv_fp1,
+            }
+        )
     except Exception as exc:
-        checks.append({
-            "check_id": "INVENTORY-FINGERPRINT",
-            "description": "Resource inventory fingerprint is deterministic",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "INVENTORY-FINGERPRINT",
+                "description": "Resource inventory fingerprint is deterministic",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"INVENTORY-FINGERPRINT: {exc}")
 
     # ── 6b. Resource inventory coverage against infra/*.tf ───────────────
@@ -365,63 +399,74 @@ def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[d
         unclassified = all_tf_addresses - inventory_addresses
 
         if unclassified:
-            checks.append({
-                "check_id": "INVENTORY-TF-COVERAGE",
-                "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
-                "evidence_strength": "NOT_PROVEN",
-                "result": "FAIL",
-                "detail": (
-                    f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
-                    f"unclassified={sorted(unclassified)}"
-                ),
-            })
+            checks.append(
+                {
+                    "check_id": "INVENTORY-TF-COVERAGE",
+                    "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
+                    "evidence_strength": "NOT_PROVEN",
+                    "result": "FAIL",
+                    "detail": (
+                        f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
+                        f"unclassified={sorted(unclassified)}"
+                    ),
+                }
+            )
             blockers.append(
                 "INVENTORY-TF-COVERAGE: Terraform resources not in RESOURCE_INVENTORY: "
                 + ", ".join(sorted(unclassified))
             )
         else:
-            checks.append({
+            checks.append(
+                {
+                    "check_id": "INVENTORY-TF-COVERAGE",
+                    "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
+                    "evidence_strength": "STATIC_VERIFIED",
+                    "result": "PASS",
+                    "detail": (
+                        f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
+                        f"all classified in inventory ({len(inventory_addresses)} entries)"
+                    ),
+                }
+            )
+    except Exception as exc:
+        checks.append(
+            {
                 "check_id": "INVENTORY-TF-COVERAGE",
                 "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
-                "evidence_strength": "STATIC_VERIFIED",
-                "result": "PASS",
-                "detail": (
-                    f"tf_resources={len(tf_resources)} tf_data={len(tf_data_sources)} "
-                    f"all classified in inventory ({len(inventory_addresses)} entries)"
-                ),
-            })
-    except Exception as exc:
-        checks.append({
-            "check_id": "INVENTORY-TF-COVERAGE",
-            "description": "Every infra/*.tf resource is classified in RESOURCE_INVENTORY",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"INVENTORY-TF-COVERAGE: {exc}")
 
     # ── 7. Candidate fingerprint deterministic ────────────────────────────
     try:
         from services.governance.run3_candidate import build_candidate
+
         c1 = build_candidate(repo)
         c2 = build_candidate(repo)
         det = c1.candidate_fingerprint == c2.candidate_fingerprint
-        checks.append({
-            "check_id": "CANDIDATE-FINGERPRINT",
-            "description": "Candidate fingerprint is deterministic",
-            "evidence_strength": "TEST_PROVEN" if det else "NOT_PROVEN",
-            "result": "PASS" if det else "FAIL",
-            "detail": f"fingerprint={c1.candidate_fingerprint[:16]}...",
-            "candidate_fingerprint": c1.candidate_fingerprint,
-        })
+        checks.append(
+            {
+                "check_id": "CANDIDATE-FINGERPRINT",
+                "description": "Candidate fingerprint is deterministic",
+                "evidence_strength": "TEST_PROVEN" if det else "NOT_PROVEN",
+                "result": "PASS" if det else "FAIL",
+                "detail": f"fingerprint={c1.candidate_fingerprint[:16]}...",
+                "candidate_fingerprint": c1.candidate_fingerprint,
+            }
+        )
     except Exception as exc:
-        checks.append({
-            "check_id": "CANDIDATE-FINGERPRINT",
-            "description": "Candidate fingerprint is deterministic",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "CANDIDATE-FINGERPRINT",
+                "description": "Candidate fingerprint is deterministic",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"CANDIDATE-FINGERPRINT: {exc}")
 
     # ── 8. Cost authorization request NOT_AUTHORIZED ─────────────────────
@@ -433,104 +478,151 @@ def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[d
             compute_inventory_fingerprint,
         )
         from services.governance.run3_cost_request import build_cost_request
+
         candidate = build_candidate(repo)
         inv_fp = compute_inventory_fingerprint()
         resources = [r.to_dict() for r in get_inventory()]
         preserved = [r.to_dict() for r in get_preserved_resources()]
-        req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha)
+        req = build_cost_request(
+            candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha
+        )
         not_auth = req.authorization_status == "NOT_AUTHORIZED"
         no_cost = req.proposed_max_cost_usd is None
         no_runtime = req.proposed_max_runtime_hours is None
         historical_ok = abs(req.historical_cost_usd - 321.81) < 0.001
-        checks.append({
-            "check_id": "COST-REQUEST-NOT-AUTHORIZED",
-            "description": "Cost authorization request: NOT_AUTHORIZED, no max cost, historical=$321.81",
-            "evidence_strength": "TEST_PROVEN" if (not_auth and no_cost and no_runtime and historical_ok) else "NOT_PROVEN",
-            "result": "PASS" if (not_auth and no_cost and no_runtime and historical_ok) else "FAIL",
-            "detail": (
-                f"authorization_status={req.authorization_status} "
-                f"proposed_max_cost_usd={req.proposed_max_cost_usd} "
-                f"historical_cost_usd={req.historical_cost_usd}"
-            ),
-        })
+        checks.append(
+            {
+                "check_id": "COST-REQUEST-NOT-AUTHORIZED",
+                "description": "Cost authorization request: NOT_AUTHORIZED, no max cost, historical=$321.81",
+                "evidence_strength": "TEST_PROVEN"
+                if (not_auth and no_cost and no_runtime and historical_ok)
+                else "NOT_PROVEN",
+                "result": "PASS"
+                if (not_auth and no_cost and no_runtime and historical_ok)
+                else "FAIL",
+                "detail": (
+                    f"authorization_status={req.authorization_status} "
+                    f"proposed_max_cost_usd={req.proposed_max_cost_usd} "
+                    f"historical_cost_usd={req.historical_cost_usd}"
+                ),
+            }
+        )
         if not (not_auth and no_cost and no_runtime and historical_ok):
             blockers.append("COST-REQUEST-NOT-AUTHORIZED: Cost request has wrong state")
     except Exception as exc:
-        checks.append({
-            "check_id": "COST-REQUEST-NOT-AUTHORIZED",
-            "description": "Cost authorization request: NOT_AUTHORIZED, no max cost, historical=$321.81",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "COST-REQUEST-NOT-AUTHORIZED",
+                "description": "Cost authorization request: NOT_AUTHORIZED, no max cost, historical=$321.81",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"COST-REQUEST-NOT-AUTHORIZED: {exc}")
 
     # ── 9. Proof matrix completeness ─────────────────────────────────────
     try:
         from services.governance.run3_proof_matrix import PROOF_MATRIX
+
         domains = {p.trust_domain for p in PROOF_MATRIX}
         families = {p.proof_id.split("-")[0] for p in PROOF_MATRIX}
         has_identity = "IDENTITY" in domains or "ALL" in domains
         has_acceptance = "ACCEPTANCE" in domains or "ALL" in domains
         has_approval = "APPROVAL" in domains or "ALL" in domains
-        has_families = families >= {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"}
-        offline_proofs = [p for p in PROOF_MATRIX if p.execution_stage == "OFFLINE_ENGINEERING"]
+        has_families = families >= {
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+        }
+        offline_proofs = [
+            p for p in PROOF_MATRIX if p.execution_stage == "OFFLINE_ENGINEERING"
+        ]
         pm_ok = has_identity and has_acceptance and has_approval and has_families
-        checks.append({
-            "check_id": "PROOF-MATRIX-COMPLETE",
-            "description": "Proof matrix covers all three domains and families A-K",
-            "evidence_strength": "STATIC_VERIFIED" if pm_ok else "NOT_PROVEN",
-            "result": "PASS" if pm_ok else "FAIL",
-            "detail": (
-                f"total={len(PROOF_MATRIX)} offline={len(offline_proofs)} "
-                f"domains={sorted(domains)} families={sorted(families)}"
-            ),
-        })
+        checks.append(
+            {
+                "check_id": "PROOF-MATRIX-COMPLETE",
+                "description": "Proof matrix covers all three domains and families A-K",
+                "evidence_strength": "STATIC_VERIFIED" if pm_ok else "NOT_PROVEN",
+                "result": "PASS" if pm_ok else "FAIL",
+                "detail": (
+                    f"total={len(PROOF_MATRIX)} offline={len(offline_proofs)} "
+                    f"domains={sorted(domains)} families={sorted(families)}"
+                ),
+            }
+        )
         if not pm_ok:
             blockers.append("PROOF-MATRIX-COMPLETE: Missing domains or families")
     except Exception as exc:
-        checks.append({
-            "check_id": "PROOF-MATRIX-COMPLETE",
-            "description": "Proof matrix covers all three domains and families A-K",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "PROOF-MATRIX-COMPLETE",
+                "description": "Proof matrix covers all three domains and families A-K",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"PROOF-MATRIX-COMPLETE: {exc}")
 
     # ── 10. Abort matrix completeness ────────────────────────────────────
     try:
         from services.governance.run3_abort_teardown import ABORT_MATRIX, AbortStage
+
         stages = {a.stage for a in ABORT_MATRIX}
         no_proven = all(not a.blocks_proven for a in ABORT_MATRIX)
-        has_cost = any("cost" in a.abort_id.lower() or "cost" in a.title.lower() for a in ABORT_MATRIX)
-        am_ok = stages == {AbortStage.PRE_PROVISIONING, AbortStage.POST_PROVISIONING,
-                           AbortStage.DURING_CEREMONY, AbortStage.DURING_TEARDOWN}
-        checks.append({
-            "check_id": "ABORT-MATRIX-COMPLETE",
-            "description": "Abort matrix covers all 4 stages; no abort translatable to PROVEN",
-            "evidence_strength": "STATIC_VERIFIED" if (am_ok and no_proven and has_cost) else "NOT_PROVEN",
-            "result": "PASS" if (am_ok and no_proven and has_cost) else "FAIL",
-            "detail": (
-                f"total={len(ABORT_MATRIX)} stages={sorted(s.value for s in stages)} "
-                f"no_proven={no_proven} has_cost_abort={has_cost}"
-            ),
-        })
+        has_cost = any(
+            "cost" in a.abort_id.lower() or "cost" in a.title.lower()
+            for a in ABORT_MATRIX
+        )
+        am_ok = stages == {
+            AbortStage.PRE_PROVISIONING,
+            AbortStage.POST_PROVISIONING,
+            AbortStage.DURING_CEREMONY,
+            AbortStage.DURING_TEARDOWN,
+        }
+        checks.append(
+            {
+                "check_id": "ABORT-MATRIX-COMPLETE",
+                "description": "Abort matrix covers all 4 stages; no abort translatable to PROVEN",
+                "evidence_strength": "STATIC_VERIFIED"
+                if (am_ok and no_proven and has_cost)
+                else "NOT_PROVEN",
+                "result": "PASS" if (am_ok and no_proven and has_cost) else "FAIL",
+                "detail": (
+                    f"total={len(ABORT_MATRIX)} stages={sorted(s.value for s in stages)} "
+                    f"no_proven={no_proven} has_cost_abort={has_cost}"
+                ),
+            }
+        )
         if not (am_ok and no_proven):
-            blockers.append("ABORT-MATRIX-COMPLETE: Missing stages or abort translatable to PROVEN")
+            blockers.append(
+                "ABORT-MATRIX-COMPLETE: Missing stages or abort translatable to PROVEN"
+            )
     except Exception as exc:
-        checks.append({
-            "check_id": "ABORT-MATRIX-COMPLETE",
-            "description": "Abort matrix covers all 4 stages; no abort translatable to PROVEN",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "ABORT-MATRIX-COMPLETE",
+                "description": "Abort matrix covers all 4 stages; no abort translatable to PROVEN",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"ABORT-MATRIX-COMPLETE: {exc}")
 
     # ── 11. Teardown contract preserved resources ────────────────────────
     try:
         from services.governance.run3_abort_teardown import TEARDOWN_CONTRACT
+
         preserved = TEARDOWN_CONTRACT["post_ceremony_preserved"]
         preserved_addresses = {r["terraform_address"] for r in preserved}
         required_preserved = {
@@ -543,97 +635,125 @@ def _run_offline_checks(repo: Path, source_sha: str = "UNKNOWN") -> tuple[list[d
         absent = TEARDOWN_CONTRACT["post_ceremony_absent"]
         has_cluster = any("hcp_vault_cluster" in r["terraform_address"] for r in absent)
         tc_ok = has_required and has_cluster
-        checks.append({
-            "check_id": "TEARDOWN-CONTRACT",
-            "description": "Teardown contract: AWS audit preserved, HCP cluster absent",
-            "evidence_strength": "STATIC_VERIFIED" if tc_ok else "NOT_PROVEN",
-            "result": "PASS" if tc_ok else "FAIL",
-            "detail": (
-                f"preserved_count={len(preserved)} absent_count={len(absent)} "
-                f"has_required_aws={has_required} has_cluster_absent={has_cluster}"
-            ),
-        })
+        checks.append(
+            {
+                "check_id": "TEARDOWN-CONTRACT",
+                "description": "Teardown contract: AWS audit preserved, HCP cluster absent",
+                "evidence_strength": "STATIC_VERIFIED" if tc_ok else "NOT_PROVEN",
+                "result": "PASS" if tc_ok else "FAIL",
+                "detail": (
+                    f"preserved_count={len(preserved)} absent_count={len(absent)} "
+                    f"has_required_aws={has_required} has_cluster_absent={has_cluster}"
+                ),
+            }
+        )
         if not tc_ok:
-            blockers.append("TEARDOWN-CONTRACT: Missing required preserved or absent resources")
+            blockers.append(
+                "TEARDOWN-CONTRACT: Missing required preserved or absent resources"
+            )
     except Exception as exc:
-        checks.append({
-            "check_id": "TEARDOWN-CONTRACT",
-            "description": "Teardown contract: AWS audit preserved, HCP cluster absent",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "TEARDOWN-CONTRACT",
+                "description": "Teardown contract: AWS audit preserved, HCP cluster absent",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"TEARDOWN-CONTRACT: {exc}")
 
     # ── 12. Infra fingerprint computable ─────────────────────────────────
     try:
         from services.governance.run3_candidate import _compute_infra_fingerprint
+
         infra_fp = _compute_infra_fingerprint()
         infra_ok = len(infra_fp) == 64  # SHA-256 hex = 64 chars
-        checks.append({
-            "check_id": "INFRA-FINGERPRINT",
-            "description": "Infrastructure source fingerprint computable from infra/*.tf",
-            "evidence_strength": "STATIC_VERIFIED" if infra_ok else "NOT_PROVEN",
-            "result": "PASS" if infra_ok else "FAIL",
-            "detail": f"fingerprint={infra_fp[:16]}...",
-            "infrastructure_fingerprint": infra_fp,
-        })
+        checks.append(
+            {
+                "check_id": "INFRA-FINGERPRINT",
+                "description": "Infrastructure source fingerprint computable from infra/*.tf",
+                "evidence_strength": "STATIC_VERIFIED" if infra_ok else "NOT_PROVEN",
+                "result": "PASS" if infra_ok else "FAIL",
+                "detail": f"fingerprint={infra_fp[:16]}...",
+                "infrastructure_fingerprint": infra_fp,
+            }
+        )
     except Exception as exc:
-        checks.append({
-            "check_id": "INFRA-FINGERPRINT",
-            "description": "Infrastructure source fingerprint computable from infra/*.tf",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "INFRA-FINGERPRINT",
+                "description": "Infrastructure source fingerprint computable from infra/*.tf",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"INFRA-FINGERPRINT: {exc}")
 
     # ── 13. No secret patterns in preauth artifact ───────────────────────
     # (Validated structurally — the artifact is built without live credentials)
-    checks.append({
-        "check_id": "SECRET-SAFETY",
-        "description": "Preauth evaluator requires no live credentials (offline-only design)",
-        "evidence_strength": "STATIC_VERIFIED",
-        "result": "PASS",
-        "detail": "Evaluator design: offline-only, no Vault/HCP/AWS tokens required",
-    })
+    checks.append(
+        {
+            "check_id": "SECRET-SAFETY",
+            "description": "Preauth evaluator requires no live credentials (offline-only design)",
+            "evidence_strength": "STATIC_VERIFIED",
+            "result": "PASS",
+            "detail": "Evaluator design: offline-only, no Vault/HCP/AWS tokens required",
+        }
+    )
 
     # ── 14. Portable verification implementation present ─────────────────
     pv_present = (
-        (repo / "services" / "governance" / "customer_zero_readiness.py").exists()
+        repo / "services" / "governance" / "customer_zero_readiness.py"
+    ).exists()
+    checks.append(
+        {
+            "check_id": "PORTABLE-VERIFICATION",
+            "description": "PortableVerificationAuthority implemented in customer_zero_readiness.py",
+            "evidence_strength": "STATIC_VERIFIED" if pv_present else "NOT_PROVEN",
+            "result": "PASS" if pv_present else "FAIL",
+            "detail": "PortableVerificationAuthority, PortableVerificationBundle present",
+        }
     )
-    checks.append({
-        "check_id": "PORTABLE-VERIFICATION",
-        "description": "PortableVerificationAuthority implemented in customer_zero_readiness.py",
-        "evidence_strength": "STATIC_VERIFIED" if pv_present else "NOT_PROVEN",
-        "result": "PASS" if pv_present else "FAIL",
-        "detail": "PortableVerificationAuthority, PortableVerificationBundle present",
-    })
     if not pv_present:
-        blockers.append("PORTABLE-VERIFICATION: PortableVerificationAuthority not found")
+        blockers.append(
+            "PORTABLE-VERIFICATION: PortableVerificationAuthority not found"
+        )
 
     # ── 15. Evidence strength taxonomy present ────────────────────────────
     try:
         from services.governance.run3_evidence_strength import EvidenceStrength
+
         has_levels = all(
             hasattr(EvidenceStrength, lvl)
-            for lvl in ["RUNTIME_PROVEN", "TEST_PROVEN", "STATIC_VERIFIED", "DECLARED_ONLY", "NOT_PROVEN"]
+            for lvl in [
+                "RUNTIME_PROVEN",
+                "TEST_PROVEN",
+                "STATIC_VERIFIED",
+                "DECLARED_ONLY",
+                "NOT_PROVEN",
+            ]
         )
-        checks.append({
-            "check_id": "EVIDENCE-TAXONOMY",
-            "description": "Evidence-strength taxonomy with all required levels",
-            "evidence_strength": "STATIC_VERIFIED" if has_levels else "NOT_PROVEN",
-            "result": "PASS" if has_levels else "FAIL",
-            "detail": f"All levels present: {has_levels}",
-        })
+        checks.append(
+            {
+                "check_id": "EVIDENCE-TAXONOMY",
+                "description": "Evidence-strength taxonomy with all required levels",
+                "evidence_strength": "STATIC_VERIFIED" if has_levels else "NOT_PROVEN",
+                "result": "PASS" if has_levels else "FAIL",
+                "detail": f"All levels present: {has_levels}",
+            }
+        )
     except Exception as exc:
-        checks.append({
-            "check_id": "EVIDENCE-TAXONOMY",
-            "description": "Evidence-strength taxonomy with all required levels",
-            "evidence_strength": "NOT_PROVEN",
-            "result": "FAIL",
-            "detail": str(exc),
-        })
+        checks.append(
+            {
+                "check_id": "EVIDENCE-TAXONOMY",
+                "description": "Evidence-strength taxonomy with all required levels",
+                "evidence_strength": "NOT_PROVEN",
+                "result": "FAIL",
+                "detail": str(exc),
+            }
+        )
         blockers.append(f"EVIDENCE-TAXONOMY: {exc}")
 
     return checks, blockers
@@ -647,19 +767,29 @@ def _build_artifact(
 ) -> dict[str, Any]:
     """Build the machine-readable preauth artifact."""
     try:
-        from services.governance.run3_candidate import build_candidate, _compute_infra_fingerprint
+        from services.governance.run3_candidate import (
+            build_candidate,
+            _compute_infra_fingerprint,
+        )
         from services.governance.run3_resource_inventory import (
-            get_inventory, get_preserved_resources, compute_inventory_fingerprint,
+            get_inventory,
+            get_preserved_resources,
+            compute_inventory_fingerprint,
         )
         from services.governance.run3_cost_request import build_cost_request
         from services.governance.run3_proof_matrix import PROOF_MATRIX
-        from services.governance.run3_abort_teardown import ABORT_MATRIX, TEARDOWN_CONTRACT
+        from services.governance.run3_abort_teardown import (
+            ABORT_MATRIX,
+            TEARDOWN_CONTRACT,
+        )
 
         candidate = build_candidate(repo)
         inv_fp = compute_inventory_fingerprint()
         resources = [r.to_dict() for r in get_inventory()]
         preserved = [r.to_dict() for r in get_preserved_resources()]
-        cost_req = build_cost_request(candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha)
+        cost_req = build_cost_request(
+            candidate.candidate_fingerprint, inv_fp, resources, preserved, source_sha
+        )
         infra_fp = _compute_infra_fingerprint()
 
         # Readiness fingerprint from checks
@@ -671,11 +801,18 @@ def _build_artifact(
         # Determine portable verification result by running the portable
         # verification tests (tests 33-43 in TestPortableVerificationRealCrypto)
         import subprocess as _subprocess
+
         _pv_run = _subprocess.run(
-            [sys.executable, "-m", "pytest",
-             "tests/test_customer_zero_run3_preauth_001.py",
-             "-k", "portable or TestPortableVerification",
-             "--tb=no", "-q"],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/test_customer_zero_run3_preauth_001.py",
+                "-k",
+                "portable or TestPortableVerification",
+                "--tb=no",
+                "-q",
+            ],
             cwd=str(repo),
             capture_output=True,
             text=True,
@@ -685,7 +822,11 @@ def _build_artifact(
             pv_result = "TEST_PROVEN"
         else:
             pv_result = "NOT_PROVEN"
-            _pv_detail = _pv_run.stdout.strip().splitlines()[-1] if _pv_run.stdout.strip() else ""
+            _pv_detail = (
+                _pv_run.stdout.strip().splitlines()[-1]
+                if _pv_run.stdout.strip()
+                else ""
+            )
             _pv_msg = (
                 f"PORTABLE-VERIFICATION: Portable verification tests failed — {_pv_detail}"
                 if _pv_detail
@@ -693,7 +834,9 @@ def _build_artifact(
             )
             blockers.append(_pv_msg)
 
-        preauth_result = "READY_FOR_HUMAN_COST_AUTHORIZATION" if not blockers else "BLOCKED"
+        preauth_result = (
+            "READY_FOR_HUMAN_COST_AUTHORIZATION" if not blockers else "BLOCKED"
+        )
 
         # Build immutable content (no timestamps)
         immutable = {
@@ -782,21 +925,29 @@ def _render_human(
         lines.append("BLOCKERS: None")
 
     lines.append("")
-    lines.append(f"CANDIDATE FINGERPRINT: {artifact.get('candidate_fingerprint', 'N/A')[:32]}...")
-    lines.append(f"RESOURCE INVENTORY FINGERPRINT: {artifact.get('resource_inventory_fingerprint', 'N/A')[:32]}...")
-    lines.append(f"CANONICAL FINGERPRINT: {artifact.get('canonical_fingerprint', 'N/A')[:32]}...")
+    lines.append(
+        f"CANDIDATE FINGERPRINT: {artifact.get('candidate_fingerprint', 'N/A')[:32]}..."
+    )
+    lines.append(
+        f"RESOURCE INVENTORY FINGERPRINT: {artifact.get('resource_inventory_fingerprint', 'N/A')[:32]}..."
+    )
+    lines.append(
+        f"CANONICAL FINGERPRINT: {artifact.get('canonical_fingerprint', 'N/A')[:32]}..."
+    )
     lines.append("")
     result = artifact.get("preauth_result", "BLOCKED")
     lines.append(f"PREAUTH RESULT: {result}")
 
     if result == "READY_FOR_HUMAN_COST_AUTHORIZATION":
-        lines.extend([
-            "",
-            "READY_FOR_HUMAN_COST_AUTHORIZATION does NOT authorize spending.",
-            "READY does NOT mark trust PROVEN.",
-            "READY does NOT unblock TRUST-003 or ACCEPT-001.",
-            "Human operator must create a separate cost authorization record.",
-        ])
+        lines.extend(
+            [
+                "",
+                "READY_FOR_HUMAN_COST_AUTHORIZATION does NOT authorize spending.",
+                "READY does NOT mark trust PROVEN.",
+                "READY does NOT unblock TRUST-003 or ACCEPT-001.",
+                "Human operator must create a separate cost authorization record.",
+            ]
+        )
 
     return "\n".join(lines)
 
