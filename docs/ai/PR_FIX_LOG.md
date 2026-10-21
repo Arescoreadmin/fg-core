@@ -1,3 +1,15 @@
+## POST-771-FORMAT-GATE-REMEDIATION-001 — ruff format for deferred tools/ci/ files
+
+- **Work item:** POST-771-FORMAT-GATE-REMEDIATION-001 (REPAIR class)
+- **Date:** 2026-10-20
+- **Root cause:** Three `tools/ci/` files (`customer_zero_run3_preauth.py`, `run_offline_ceremony_simulation.py`, `verify_pricing_evidence.py`) had pre-existing `ruff format` debt deferred from PR #771 (`POST-770-GATE-REMEDIATION-001`) because formatting them triggers `soc-review-sync`. A dedicated SOC review entry was required before touching them.
+- **Fix:** Applied `ruff format` to all three files. All changes are pure whitespace/line-wrapping — function signature wrapping, dict-literal trailing-comma style, list-comprehension wrapping. No logic, authorization rules, evidence classifications, or runtime behavior changed. Verified by manual diff review.
+- **Evidence rebind:** `customer_one/offline_simulation_evidence.json` regenerated (6/6 GREEN, source_sha=e5616c73) — formatting changes file content, which changes the source_tree_hash.
+- **Authorization/trust state:** Unchanged. PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. CUSTOMER_ZERO_ACCEPTANCE=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT. No cloud mutation. No secrets accessed. No paid infrastructure.
+- **Changed files:** `tools/ci/customer_zero_run3_preauth.py` (format only), `tools/ci/run_offline_ceremony_simulation.py` (format only), `tools/ci/verify_pricing_evidence.py` (format only), `customer_one/offline_simulation_evidence.json` (rebound), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (SOC entry), `docs/ai/PR_FIX_LOG.md` (this entry), `ROADMAP.md` (row — exempt per CLAUDE.md).
+
+---
+
 ## POST-770-GATE-REMEDIATION-001 — Remove unused imports, format pre-existing debt
 
 - **Work item:** POST-770-GATE-REMEDIATION-001 (REPAIR class)

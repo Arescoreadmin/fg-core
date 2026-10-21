@@ -62,10 +62,12 @@ SIMULATION_CONTRACT_VERSION = "1.0"
 # the fingerprint being computed, creating an inherent circular dependency.
 # These are tracking ledgers, not simulation source — their exclusion does
 # not weaken ceremony integrity.
-_TREE_HASH_EXCLUDED = frozenset({
-    EVIDENCE_RELPATH,
-    "ROADMAP.md",
-})
+_TREE_HASH_EXCLUDED = frozenset(
+    {
+        EVIDENCE_RELPATH,
+        "ROADMAP.md",
+    }
+)
 
 _PRODUCTION_ENVIRONMENTS = {"production", "staging", "prod"}
 
@@ -123,9 +125,7 @@ def _compute_tree_content_hash(repo: Path, excluded: frozenset[str]) -> str:
         )
         if result.returncode != 0:
             return "TREE_HASH_ERROR"
-        files = sorted(
-            f for f in result.stdout.split("\0") if f and f not in excluded
-        )
+        files = sorted(f for f in result.stdout.split("\0") if f and f not in excluded)
         h = hashlib.sha256()
         for relpath in files:
             path = repo / relpath

@@ -1,3 +1,28 @@
+## 2026-10-20 - fix/post-771-format-gate-remediation: POST-771-FORMAT-GATE-REMEDIATION-001 — ruff format for tools/ci/ files
+
+**Change scope:** Format-only. Applies `ruff format` to three `tools/ci/` files with pre-existing format debt: `customer_zero_run3_preauth.py`, `run_offline_ceremony_simulation.py`, `verify_pricing_evidence.py`. Deferred from PR #771 because these files are SOC-critical and required a dedicated SOC entry. No logic changes. No authorization rules changed. No evidence classifications changed. No runtime behavior changed.
+
+**Diff review — all changes are pure whitespace/line-wrapping:**
+
+- `customer_zero_run3_preauth.py`: function signature line-wrapped; dict literals reformatted to trailing-comma style; string concatenation wrapped. All keys, values, and conditions byte-identical.
+- `run_offline_ceremony_simulation.py`: `frozenset({...})` literal braces moved to own lines; short `sorted()` generator inlined to single line. Set contents (`EVIDENCE_RELPATH`, `"ROADMAP.md"`) unchanged.
+- `verify_pricing_evidence.py`: boolean expression in list comprehension wrapped to two lines. Predicate logic unchanged.
+
+**Security posture:**
+
+1. **No authorization logic changed.** All `PASS`/`FAIL`/`NOT_PROVEN` decision paths are byte-identical after whitespace normalization.
+2. **No evidence classification changed.** Evidence `result`, `evidence_strength`, and `detail` fields are unchanged; only their surrounding dict-literal formatting changed.
+3. **No evaluator behavior changed.** `_run_offline_checks`, `_compute_tree_content_hash`, and all top-level evaluation functions produce identical outputs.
+4. **Governance constants unchanged.** PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. CUSTOMER_ZERO_ACCEPTANCE=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT.
+
+**Critical-path files changed:** `tools/ci/customer_zero_run3_preauth.py` (format only), `tools/ci/run_offline_ceremony_simulation.py` (format only), `tools/ci/verify_pricing_evidence.py` (format only), `customer_one/offline_simulation_evidence.json` (rebound), `docs/ai/PR_FIX_LOG.md` (entry), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `ROADMAP.md` (row — exempt per CLAUDE.md).
+
+**Validation:** `ruff format --check .` PASS. `ruff check .` PASS. `make fg-fast` PASS. `make fg-contract` PASS. `bash codex_gates.sh` PASS (target state). Simulation 6/6 GREEN. No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Change is purely cosmetic formatting. No logic, authorization, evidence classification, or runtime behavior changed. Verified by manual diff review.
+
+---
+
 ## 2026-10-19 - feat/prod-auth-automation-002: PROD-AUTH-AUTOMATION-002 — CI wiring, lint fixes, evidence rebind
 
 **Change scope:** CI wiring + lint repair + evidence rebind. Adds automatic `workflow_run` trigger to `.github/workflows/prod-auth-smoke.yml` so Mode A (public production smoke) runs automatically after `frostgate-core-ci` succeeds on main pushes. Fixes 5 ruff lint violations in `tests/test_prod_auth_automation_001.py` (F401 unused imports, E402 import order, F841 unused variable) that caused the `frostgate-core-ci` Guard job to fail on commit `e3d51a8d`. Rebinds `customer_one/offline_simulation_evidence.json` to current source tree hash after the direct push advanced the tree. No new tools/ci evaluator logic. No schema changes. No migrations. No AWS API calls. No cloud mutation. No paid infrastructure.
