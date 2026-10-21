@@ -34,9 +34,13 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import yaml
+
+if TYPE_CHECKING:
+    from services.governance.customer_zero_readiness import ReadinessResult
 
 REPO = Path(__file__).resolve().parents[1]
 ROADMAP_AUTHORITY = REPO / "customer_one" / "roadmap_authority.yaml"
@@ -111,7 +115,7 @@ def _make_mock_subprocess_result(
     return mock
 
 
-def _run_final_readiness_api() -> object:
+def _run_final_readiness_api() -> ReadinessResult:
     """Run the final readiness evaluator via the Python API.
 
     Patches three pre-commit noise sources so authority-content dimensions are

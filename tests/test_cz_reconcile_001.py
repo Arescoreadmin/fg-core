@@ -856,6 +856,7 @@ def test_m4_cz_reconcile_itself_requires_no_infrastructure() -> None:
     import sys
 
     test_module = sys.modules[__name__]
+    assert test_module.__file__ is not None
     source = Path(test_module.__file__).read_text()
     tree = ast.parse(source)
 

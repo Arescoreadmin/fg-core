@@ -31,6 +31,7 @@ import json
 import sys
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -138,7 +139,7 @@ def _load_pipeline():
 
 def _synthetic(**overrides) -> dict:
     """Return a deep copy of SYNTHETIC_VALID_EVIDENCE with nested overrides applied."""
-    instance = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
+    instance: dict[str, Any] = copy.deepcopy(SYNTHETIC_VALID_EVIDENCE)
     for k, v in overrides.items():
         # Support dot-notation for nested keys (one level)
         if "." in k:

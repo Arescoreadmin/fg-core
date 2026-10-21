@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -109,7 +110,7 @@ def _inventory(
 
 def _plan(
     *changes: tuple[str, list[str]], outputs: dict[str, list[str]] | None = None
-) -> dict[str, object]:
+) -> dict[str, Any]:
     return {
         "resource_changes": [
             {"address": address, "mode": "managed", "change": {"actions": actions}}
@@ -123,7 +124,7 @@ def _plan(
 
 def _key_enable_plan(
     state: set[str], *, updated: set[str] | None = None
-) -> dict[str, object]:
+) -> dict[str, Any]:
     updated = updated or set()
     changes = []
     for address in sorted(state):
@@ -158,10 +159,10 @@ def _key_enable_plan(
 
 def _child_delete_plan(
     addresses: set[str], *, outputs: dict[str, list[str]] | None = None
-) -> dict[str, object]:
+) -> dict[str, Any]:
     changes = []
     for address in sorted(addresses):
-        item = {
+        item: dict[str, Any] = {
             "address": address,
             "mode": "managed",
             "change": {"actions": ["delete"]},

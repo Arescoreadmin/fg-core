@@ -187,7 +187,7 @@ class TestSourceCandidateFreeze:
             RESOURCE_INVENTORY_FINGERPRINT,
         )
 
-        base_kwargs = dict(
+        base_kwargs: dict[str, Any] = dict(
             repository_identity=REPOSITORY_IDENTITY,
             source_sha="sha_test",
             readiness_result="BLOCKED",
@@ -245,7 +245,7 @@ class TestSourceCandidateFreeze:
             RESOURCE_INVENTORY_FINGERPRINT,
         )
 
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             repository_identity=REPOSITORY_IDENTITY,
             source_sha="sha_test_ts",
             readiness_result="BLOCKED",
