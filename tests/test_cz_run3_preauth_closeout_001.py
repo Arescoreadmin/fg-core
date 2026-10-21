@@ -34,9 +34,13 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import yaml
+
+if TYPE_CHECKING:
+    from services.governance.customer_zero_readiness import ReadinessResult
 
 REPO = Path(__file__).resolve().parents[1]
 ROADMAP_AUTHORITY = REPO / "customer_one" / "roadmap_authority.yaml"
@@ -83,7 +87,7 @@ def _run_checker(*extra_args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _run_final_readiness_api():  # -> ReadinessResult (imported lazily inside)
+def _run_final_readiness_api() -> ReadinessResult:
     """Run the final readiness evaluator via the Python API.
 
     Patches three pre-commit noise sources so authority-content dimensions are
