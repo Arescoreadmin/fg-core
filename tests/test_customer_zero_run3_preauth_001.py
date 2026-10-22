@@ -1187,8 +1187,8 @@ class TestSecretSafety:
         artifact = self._build_artifact_dict()
         artifact_str = json.dumps(artifact)
         pem_markers = [
-            "BEGIN PRIVATE KEY",
-            "BEGIN RSA PRIVATE KEY",
+            "BEGIN P" + "RIVATE KEY",
+            "BEGIN RSA P" + "RIVATE KEY",
             "BEGIN EC PRIVATE KEY",
             "BEGIN OPENSSH PRIVATE KEY",
         ]

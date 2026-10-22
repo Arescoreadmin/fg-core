@@ -1003,22 +1003,24 @@ user with MFA. This step is performed by the operator — NOT by Claude.
 > 2. Assume the reader role as the human IAM user (NOT the operator role — trust policy names
 >    the human user, not FrostGateTerraformOperator):
 >    ```bash
->    eval "$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
+>    CREDS=$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
 >      --role-arn "${READER_ROLE_ARN}" \
 >      --role-session-name "ceremony-evidence-verification" \
 >      --serial-number "<your MFA device ARN>" \
->      --token-code "<current MFA code>" \
->      | python3 -c "
->    import sys, json
->    creds = json.load(sys.stdin)['Credentials']
->    print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
->    print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
->    print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
->    ")"
->    unset AWS_PROFILE
+>      --token-code "<current MFA code>")
+>
+>    # Credentials loaded into a named profile — not printed to terminal or logs
+>    aws configure set aws_access_key_id \
+>        "$(jq -r '.Credentials.AccessKeyId' <<< "$CREDS")" --profile ceremony-reader
+>    aws configure set aws_secret_access_key \
+>        "$(jq -r '.Credentials.SecretAccessKey' <<< "$CREDS")" --profile ceremony-reader
+>    aws configure set aws_session_token \
+>        "$(jq -r '.Credentials.SessionToken' <<< "$CREDS")" --profile ceremony-reader
+>    unset CREDS
+>    export AWS_PROFILE=ceremony-reader
 >    ```
->    Reader credentials are now active via env vars. Do NOT set `AWS_PROFILE` for subsequent
->    log reads — doing so would override the assumed-role session.
+>    Reader credentials are now active via the `ceremony-reader` named profile. Credentials are
+>    loaded directly into the profile and never printed to the terminal or logs.
 > 3. Wait for HCP to establish the stream, then verify a log stream exists:
 >    ```bash
 >    sleep 60

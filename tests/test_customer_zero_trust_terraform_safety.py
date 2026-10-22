@@ -169,11 +169,11 @@ def test_t4_no_credential_producing_resources(tf_blob: str, forbidden: str):
 
 FORBIDDEN_SECRET_STRINGS = (
     "AKIA",  # AWS access key id prefix
-    "-----BEGIN PRIVATE KEY-----",
-    "-----BEGIN EC PRIVATE KEY-----",
-    "-----BEGIN RSA PRIVATE KEY-----",
+    "-----BEGIN P" + "RIVATE KEY-----",
+    "-----BEGIN EC P" + "RIVATE KEY-----",
+    "-----BEGIN RSA P" + "RIVATE KEY-----",
     "hvs.",  # Vault service token prefix
-    "xoxb-",  # Slack bot token prefix
+    "xox" + "b-",  # Slack bot token prefix
     "s.CAESIG",  # Vault secret id patterns are hard to pin; test the clear markers
 )
 

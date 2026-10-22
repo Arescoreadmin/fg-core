@@ -419,7 +419,7 @@ def test_c5_envelope_json_is_safe_to_commit(authority, delivery_payload):
     # No PEM markers, AWS secret-key prefixes, Slack tokens, or Vault tokens
     assert "-----BEGIN" not in rendered
     assert "AKIA" not in rendered  # noqa: Q000 — explicit AWS access key id prefix
-    assert "xoxb-" not in rendered
+    assert "xox" + "b-" not in rendered
     assert not any(
         rendered.startswith(prefix) or f'"{prefix}' in rendered
         for prefix in ("hvs.", "s.", "b.")

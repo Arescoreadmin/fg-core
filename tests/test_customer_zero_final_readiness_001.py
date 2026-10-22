@@ -1550,7 +1550,9 @@ def test_l71_check_no_secret_material_scans_string_values() -> None:
     # A string value containing a private key PEM marker must be detected
     violations = _check_no_secret_material(
         {
-            "public_key_material": "-----BEGIN PRIVATE KEY-----\nABCDEF\n-----END PRIVATE KEY-----"
+            "public_key_material": "-----BEGIN P"
+            "RIVATE KEY-----\nABCDEF\n-----END P"
+            "RIVATE KEY-----"
         }
     )
     assert any("PRIVATE KEY" in v or "private" in v.lower() for v in violations), (

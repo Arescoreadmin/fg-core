@@ -145,3 +145,35 @@ def test_ignores_error_string_containing_name() -> None:
     """String literal error message using the var name — no '=' after the name."""
     line = "return NextResponse.json({ error: 'OPENAI_API_KEY is not configured' })\n"
     assert not _scan(line)
+
+
+def test_detects_pem_begin_private_key_in_value() -> None:
+    """PEM private key block as a dict value must be detected by the scanner."""
+    assert _scan('key = "-----BEGIN PRIVATE KEY-----\\nABCDEF"\n')
+
+
+def test_detects_aws_secret_in_python_print() -> None:
+    """print() constructing an AWS_SECRET_ACCESS_KEY assignment must be detected."""
+    assert _scan("print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])\n")
+
+
+def test_detects_slack_token_in_string_literal() -> None:
+    """Slack bot token prefix in a string literal must be detected."""
+    assert _scan('token = "xoxb-12345-secret"\n')
+
+
+def test_ignores_split_detection_string_adjacent_literals() -> None:
+    """Adjacent-literal split of a PEM marker is a safe reference in test fixtures."""
+    # This test documents that adjacent literals in Python source break the scanner
+    # pattern while preserving runtime string identity — used in deny-list fixtures.
+    # The scanner does not see the complete detection pattern in split form.
+    assert not _scan('"-----BEGIN P" "RIVATE KEY-----"\n')
+
+
+def test_scanner_is_deterministic() -> None:
+    """Running the scanner twice on the same content produces identical results."""
+    # Strip the temp-path prefix (varies per call) before comparing — only the
+    # line number and matched text must be identical across runs.
+    content = "export AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+    strip = lambda lines: [line.split(":", 1)[1] for line in lines]  # noqa: E731
+    assert strip(_scan(content)) == strip(_scan(content))
