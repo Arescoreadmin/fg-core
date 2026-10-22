@@ -159,7 +159,9 @@ def no_key_client(build_app, monkeypatch):
     def _unavailable_authority():
         raise VaultTransitError("Signing authority not configured (test: key missing)")
 
-    monkeypatch.setattr(_fa_module, "_get_trust_binding_authority", _unavailable_authority)
+    monkeypatch.setattr(
+        _fa_module, "_get_trust_binding_authority", _unavailable_authority
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 
