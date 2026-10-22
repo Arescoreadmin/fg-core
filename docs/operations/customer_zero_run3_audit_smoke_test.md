@@ -77,26 +77,29 @@ Within 60 seconds of the Vault operation:
    echo "Reader role ARN: ${READER_ROLE_ARN}"
    ```
 
-2. Assume the reader role as the human IAM user (MFA required) and load credentials into a named profile:
+2. Assume the reader role as the human IAM user (MFA required) and load credentials into a temporary file:
    ```bash
+   # Create a temporary credentials file — never written to ~/.aws/credentials
+   _CEREMONY_CREDS_FILE=$(mktemp)
+   chmod 600 "$_CEREMONY_CREDS_FILE"
    CREDS=$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
      --role-arn "${READER_ROLE_ARN}" \
      --role-session-name "smoke-test-$(date +%s)" \
      --serial-number "arn:aws:iam::ACCOUNT_ID:mfa/DEVICE" \
      --token-code "MFA_CODE")
 
-   # Credentials loaded into a named profile — not printed to terminal or logs
-   aws configure set aws_access_key_id \
-       "$(jq -r '.Credentials.AccessKeyId' <<< "$CREDS")" --profile ceremony-reader
-   aws configure set aws_secret_access_key \
-       "$(jq -r '.Credentials.SecretAccessKey' <<< "$CREDS")" --profile ceremony-reader
-   aws configure set aws_session_token \
-       "$(jq -r '.Credentials.SessionToken' <<< "$CREDS")" --profile ceremony-reader
+   # Write credentials to temp file in AWS INI format (never written to ~/.aws/credentials)
+   jq -r '.Credentials | "[ceremony-reader]\naws_access_key_id = \(.AccessKeyId)\naws_secret_access_key = \(.SecretAccessKey)\naws_session_token = \(.SessionToken)\n"' \
+       <<< "$CREDS" > "$_CEREMONY_CREDS_FILE"
    unset CREDS
+   export AWS_SHARED_CREDENTIALS_FILE="$_CEREMONY_CREDS_FILE"
    export AWS_PROFILE=ceremony-reader
    ```
-   Reader credentials are now active via the `ceremony-reader` named profile. Credentials are
-   loaded directly into the profile and never printed to the terminal or logs.
+   Reader credentials are now active via `AWS_SHARED_CREDENTIALS_FILE` pointing to a
+   temporary file — NOT `~/.aws/credentials`. Remove after use:
+   ```bash
+   unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE && rm -f "$_CEREMONY_CREDS_FILE" && unset _CEREMONY_CREDS_FILE
+   ```
 
 3. Query CloudWatch for events after the recorded timestamp:
    ```bash
