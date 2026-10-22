@@ -8,9 +8,9 @@
   ],
   "gaps": [],
   "governance": {
-    "contract_count": 1022,
+    "contract_count": 1028,
     "contract_only": [],
-    "runtime_count": 1235,
+    "runtime_count": 1241,
     "runtime_only": [
       "DELETE /admin/tenants/{tenant_id}/bundles/{bundle_key}",
       "DELETE /admin/tenants/{tenant_id}/credential-administration/{credential_id}",
@@ -227,7 +227,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8eec1b57f186f6b661fe0ada87f2e94c0399165a780f80460289ada7cbfdb6a3",
+  "governance_fingerprint": "9659f0f1c0264122803e3822605de892ce51b95a02d24ed935c4d5604751066a",
   "planes": [
     {
       "compat": {
@@ -781,6 +781,7 @@
       "GET /field-assessment/engagements/{engagement_id}/readiness-drift",
       "GET /field-assessment/engagements/{engagement_id}/remediation-roadmap",
       "GET /field-assessment/engagements/{engagement_id}/reports",
+      "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify",
       "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
       "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}",
       "GET /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/history",
@@ -1265,7 +1266,12 @@
       "POST /field-assessment/engagements/{engagement_id}/questionnaires",
       "POST /field-assessment/engagements/{engagement_id}/questionnaires/{questionnaire_id}/submit",
       "POST /field-assessment/engagements/{engagement_id}/reports",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/governed-delivery",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/governed-delivery/{delivery_request_id}/execute",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-approve",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/request",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/attest",
+      "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify/{qual_request_id}/finalize",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/approve",
       "POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/deliver",

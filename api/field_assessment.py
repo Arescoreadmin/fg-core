@@ -9578,21 +9578,18 @@ def create_engagement_report_route(
             ),
         )
 
-    # Signing-key gate: FG_REPORT_SIGNING_KEY must be present before any report is
-    # finalized.  Fail closed unconditionally (not just in prod/staging) so that
-    # test environments surface misconfiguration before it reaches production.
-    from services.governance.report.signing import ReportSigningKeyError  # noqa: PLC0415
+    # Validate signing authority before acquiring the version lock.
+    # Catches Vault misconfiguration cheaply before any DB work.
+    from services.cgin.key_management.vault_transit import VaultTransitError  # noqa: PLC0415
 
     try:
-        from services.governance.report.signing import get_public_key_hex as _gpkh_pre  # noqa: PLC0415
-
-        _gpkh_pre()
-    except ReportSigningKeyError:
+        _get_trust_binding_authority()
+    except (VaultTransitError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=api_error(
                 "REPORT_SIGNING_KEY_MISSING",
-                "FG_REPORT_SIGNING_KEY is required for report finalization but is not configured.",
+                "Signing authority is not configured or unavailable.",
             ),
         )
 
