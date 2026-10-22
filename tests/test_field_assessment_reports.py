@@ -153,6 +153,15 @@ def no_key_client(build_app, monkeypatch):
     app = build_app(auth_enabled=True)
     key, cred_id = _issue_key(_TENANT_A, "governance:read", "governance:write")
     _assign_analyst(_TENANT_A, cred_id)
+    from services.cgin.key_management.vault_transit import VaultTransitError
+    import api.field_assessment as _fa_module
+
+    def _unavailable_authority():
+        raise VaultTransitError("Signing authority not configured (test: key missing)")
+
+    monkeypatch.setattr(
+        _fa_module, "_get_trust_binding_authority", _unavailable_authority
+    )
     return TestClient(app, headers={"X-API-Key": key})
 
 

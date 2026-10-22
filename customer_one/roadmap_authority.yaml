@@ -110,7 +110,8 @@ blocked:
       (verifier-contract), PR #753 (final-readiness), PR #754 (roadmap
       reconciliation), PR #755 (Run-3 preauth), PR #756 (integration repair),
       PR #757 (preauth closeout), PR #758 (operator preflight) — all merged.
-      Offline readiness independently verified (READY, 0 blockers).
+      CUSTOMER-ZERO-FINAL-READINESS-001 (PR #753) is a completed prerequisite;
+      all offline readiness gates are satisfied (READY, 0 blockers).
       Operator preflight manifest complete: 16 deferred live checks catalogued,
       source/candidate rebinding procedure documented, 21-resource Terraform
       inventory reviewed, 4 preserved AWS audit resources verified,
@@ -129,15 +130,20 @@ blocked:
     title: "CUSTOMER-ZERO-ACCEPT-001 — Current-SHA production acceptance evidence"
     reason: >
       Blocked pending genuine trust proof from CUSTOMER-ZERO-TRUST-003.
-      Customer acceptance cannot precede live ceremony execution and independent
-      verification. TRUST-003 remains blocked on explicit human cost authorization,
-      live Vault/HCP ceremony execution, live CloudWatch audit proof, and all 16
-      deferred live checks. Completed offline preparation (PRs #750, #751, #753,
-      #754, #755, #756, #757, #758) including operator preflight manifest
-      (preflight_status=PREPARED_FOR_HUMAN_REVIEW) is necessary but not sufficient —
-      offline readiness is READY (0 blockers) and operator preflight is prepared
-      for human review, but live ceremony evidence is outstanding and cannot be
-      substituted. No acceptance transition until trust is proven live.
+      CUSTOMER-ZERO-TRUST-001 is ATTEMPTED_NOT_PROVEN: two ceremony runs completed,
+      trust was NOT proven due to two P0 defects (DEFECT-PROVENANCE-INTEGRITY and
+      DEFECT-VERIFIER-CONTRACT). Both defects are repaired (PRs #750, #751), but
+      a third paid ceremony (TRUST-003) must execute and prove trust live before
+      acceptance is possible. Customer acceptance cannot precede live ceremony
+      execution and independent verification. TRUST-003 remains blocked on explicit
+      human cost authorization, live Vault/HCP ceremony execution, live CloudWatch
+      audit proof, and all 16 deferred live checks. Completed offline preparation
+      (PRs #750, #751, #753, #754, #755, #756, #757, #758) including operator
+      preflight manifest (preflight_status=PREPARED_FOR_HUMAN_REVIEW) is necessary
+      but not sufficient — offline readiness is READY (0 blockers) and operator
+      preflight is prepared for human review, but live ceremony evidence is
+      outstanding and cannot be substituted. No acceptance transition until trust
+      is proven live.
 
 deferred:
   - id: "RAG-RETRY"

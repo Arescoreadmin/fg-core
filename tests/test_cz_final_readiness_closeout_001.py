@@ -274,29 +274,28 @@ def test_e3_final_readiness_001_completed_blocks_reopening() -> None:
 def test_e4_prerequisite_enforcement_fail_closed() -> None:
     """next_sequence items with unmet blocked_by must not be authorized.
 
-    Post-closeout: CUSTOMER-ZERO-RUN3-PREAUTH-001 is now in completed. This test
-    verifies prerequisite enforcement on CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001,
-    the new next_sequence item registered by CZ-RUN3-PREAUTH-CLOSEOUT-001, which
-    has an empty blocked_by (its dependency PREAUTH-001 is now complete and it
-    carries no further listed prerequisites).
+    Post-closeout: CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 is now in completed
+    (PR #758). The current next_sequence item is CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001,
+    which lists CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 as a prerequisite. Since
+    OPERATOR-PREFLIGHT-001 is completed, the unmet-prerequisite set is empty.
 
     Note: test name preserved for diff stability.
     """
     authority = _load_roadmap_authority()
-    # PREAUTH is now complete; the new next item is OPERATOR-PREFLIGHT-001
+    # OPERATOR-PREFLIGHT is now complete; the current next item is HUMAN-COST-REVIEW-001
     item = _find_item(
-        authority, "next_sequence", "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001"
+        authority, "next_sequence", "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001"
     )
     assert item is not None, (
-        "CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 must be in next_sequence "
-        "(registered by CZ-RUN3-PREAUTH-CLOSEOUT-001)"
+        "CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 must be in next_sequence "
+        "(OPERATOR-PREFLIGHT-001 is completed; HUMAN-COST-REVIEW-001 is the current next item)"
     )
-    # Its blocked_by is empty — PREAUTH-001 dependency is satisfied (completed)
-    blocked_by = item.get("blocked_by", [])
+    # Its prerequisites list OPERATOR-PREFLIGHT-001 which is now in completed
+    prerequisites = item.get("prerequisites", [])
     completed_ids = {e.get("id") for e in authority.get("completed", [])}
-    unmet = [dep for dep in blocked_by if dep not in completed_ids]
+    unmet = [dep for dep in prerequisites if dep not in completed_ids]
     assert unmet == [], (
-        f"CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001 has unmet blocked_by dependencies: {unmet}"
+        f"CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001 has unmet prerequisites: {unmet}"
     )
 
 

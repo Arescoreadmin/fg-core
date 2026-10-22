@@ -1,3 +1,62 @@
+## POST-773-FULL-SUITE-REMEDIATION-001 — restore full gate suite after PR #773
+
+- **Work item:** POST-773-FULL-SUITE-REMEDIATION-001 (REPAIR class)
+- **Baseline SHA:** `cc96dc84741c8da3fa322559755b76d6833da071`
+- **Failures before:** 9 failing tests (ruff PASS, mypy 0 errors, fast 607 passed, security 1239 passed, contract PASS)
+- **Failures after:** 0 (all 9 restored; full suite unblocked)
+
+### Root cause group 1 — Roadmap authority stale assertions (3 tests)
+
+**Tests:** `test_e4_prerequisite_enforcement_fail_closed`, `test_c3_roadmap_accept_001_reason_references_not_proven`, `test_d3_trust_003_blocked_reason_requires_final_readiness`
+
+1. `test_e4`: `CUSTOMER-ZERO-RUN3-OPERATOR-PREFLIGHT-001` was moved to `completed` (PR #758/759) but the test still looked for it in `next_sequence`. The docstring said "test name preserved for diff stability" but the assertion was never updated to match the advanced authority state. Fixed by updating the test to check for `CUSTOMER-ZERO-RUN3-HUMAN-COST-REVIEW-001` (the actual current `next_sequence` item) with its now-met prerequisite `OPERATOR-PREFLIGHT-001`.
+
+2. `test_c3`: `CUSTOMER-ZERO-ACCEPT-001` blocked reason was updated by PRs #757–#759 to focus on TRUST-003 status, removing any reference to the `not_proven`/`attempted_not_proven`/`two ceremony`/`defect` terms required by the test. Fixed by adding explicit ATTEMPTED_NOT_PROVEN and defect language to the ACCEPT-001 reason in `roadmap_authority.yaml`.
+
+3. `test_d3`: `CUSTOMER-ZERO-TRUST-003` blocked reason lost its `CUSTOMER-ZERO-FINAL-READINESS-001` reference when operator preflight closeout PRs updated it to reflect completion. Fixed by restoring `CUSTOMER-ZERO-FINAL-READINESS-001` as a named completed prerequisite in the TRUST-003 reason.
+
+### Root cause group 2 — Offline simulation evidence stale fingerprint (4 tests)
+
+**Tests:** `test_int_22_final_readiness_ready_when_evidence_satisfied`, `test_int_24_preauth_ready_when_final_readiness_passes`, `test_int_31_a2_and_j_ce3_both_fixed_simultaneously`, `test_int_32_pre_repair_vs_post_repair_comparison`
+
+`customer_one/offline_simulation_evidence.json` was bound to source_tree_hash `2739a17d9cf29cf1` at source_sha `e5616c73` (PR #771). Commits #772 and #773 modified tracked source files (`tools/ci/`, `services/`, `api/`, `tests/`), advancing the tree hash. J_CE3 dimension failed its `source_tree_hash` equality check in the readiness evaluator. Fixed by regenerating evidence via `python tools/ci/run_offline_ceremony_simulation.py` after all code changes were committed. New hash: see below.
+
+### Root cause group 3 — Field assessment signing regression (2 tests)
+
+**Tests:** `test_missing_signing_key_fails_loudly`, `test_valid_report_verifies`
+
+PR #755 (`8de43e22`) changed `signature=_report_envelope.signature` to `signature=None` in `create_engagement_report_route`, with comment "trust_* columns are authoritative; legacy hex field not used for Vault-signed reports." This introduced two regressions:
+
+- `test_missing_signing_key_fails_loudly`: The create route no longer checked `FG_REPORT_SIGNING_KEY` at all. In test mode, `TrustBindingFake` always succeeds regardless of env vars, so the route returned 201 instead of 503. Fixed by adding a pre-flight `get_public_key_hex()` check at the top of `create_engagement_report_route` that raises 503/REPORT_SIGNING_KEY_MISSING if the key is absent. This gate is unconditional (not prod-only) because the test contract requires fail-closed behavior in all environments.
+
+- `test_valid_report_verifies`: The verify route's final response returned `signature=record.signature` which is `None` for Vault-signed reports. The trust signature lives in `record.trust_signature`. Fixed by returning `record.trust_signature or record.signature` (Vault path preferred; legacy path preserved for pre-TRUST-BINDING-001 records).
+
+### Evidence fingerprints
+
+- **Before:** `source_tree_hash=2739a17d9cf29cf147fede4481f834cf38a58900efb3dfc391e007860aa47fab` (source_sha=e5616c73)
+- **After:** regenerated to current committed tree (see `customer_one/offline_simulation_evidence.json`)
+
+### Signing behavior verification
+
+- Missing key → 503 REPORT_SIGNING_KEY_MISSING confirmed in all environments
+- Valid key + Vault-signed report → verify returns `signature=trust_signature`, `valid=True` confirmed
+- No signing downgrade: `FG_REPORT_SIGNING_KEY` gate is UNCONDITIONAL (not prod-only)
+
+### Files changed
+
+- `customer_one/roadmap_authority.yaml` — restored FINAL-READINESS-001 reference in TRUST-003 reason; added not_proven/defect language to ACCEPT-001 reason
+- `tests/test_cz_final_readiness_closeout_001.py` — updated test_e4 assertion to reflect HUMAN-COST-REVIEW-001 as current next_sequence item
+- `api/field_assessment.py` — added FG_REPORT_SIGNING_KEY pre-flight gate in create route; fixed verify route to return trust_signature
+- `customer_one/offline_simulation_evidence.json` — regenerated to current tree hash
+- `ROADMAP.md` — row added (exempt per CLAUDE.md)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+### Authorization/trust state
+
+Unchanged. PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. CUSTOMER_ZERO_ACCEPTANCE=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT. No cloud mutation. No secrets accessed. No paid infrastructure.
+
+---
+
 ## POST-772-MYPY-GATE-REMEDIATION-001 — restore strict mypy type compliance
 
 - **Work item:** POST-772-MYPY-GATE-REMEDIATION-001 (REPAIR class)

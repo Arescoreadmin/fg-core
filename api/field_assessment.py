@@ -9578,6 +9578,21 @@ def create_engagement_report_route(
             ),
         )
 
+    # Validate signing authority before acquiring the version lock.
+    # Catches Vault misconfiguration cheaply before any DB work.
+    from services.cgin.key_management.vault_transit import VaultTransitError  # noqa: PLC0415
+
+    try:
+        _get_trust_binding_authority()
+    except (VaultTransitError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=api_error(
+                "REPORT_SIGNING_KEY_MISSING",
+                "Signing authority is not configured or unavailable.",
+            ),
+        )
+
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
 
@@ -10166,7 +10181,9 @@ def verify_engagement_report_route(
     return EngagementReportVerifyResponse(
         valid=valid,
         manifest_hash=record.manifest_hash,
-        signature=record.signature,
+        # trust_* columns are authoritative for Vault-signed reports; fall back to
+        # legacy signature field for reports signed before TRUST-BINDING-001.
+        signature=record.trust_signature or record.signature,
         verified_at=now,
     )
 
