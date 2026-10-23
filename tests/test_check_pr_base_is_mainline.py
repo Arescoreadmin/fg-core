@@ -474,16 +474,79 @@ def test_H2_local_no_ci_no_base_ref_skips(
     assert "skipped" in result.stdout
 
 
-def test_H3_ci_missing_base_ref_non_push_fails(
+def test_H3_ci_missing_base_ref_pull_request_fails(
     repos: tuple[_Repo, _Repo], tmp_path: pathlib.Path
 ) -> None:
+    """pull_request event WITHOUT a base ref must still fail closed.
+
+    This is the real failure mode the checker is defending against: a PR
+    where the workflow forgot to pass base metadata. The non-PR events
+    (push/schedule/workflow_dispatch) are handled separately — see
+    test_H3b/test_H3c.
+    """
     _, clone = repos
     runner = _make_runner(tmp_path, clone.root)
     env = {
         "CI": "true",
         "GITHUB_BASE_REF": "",
         "GITHUB_PR_BASE_SHA": "",
-        "GITHUB_EVENT_NAME": "workflow_dispatch",  # not a push
+        "GITHUB_EVENT_NAME": "pull_request",
+    }
+    result = _run(runner, env)
+    assert result.returncode == 1
+    assert "GITHUB_BASE_REF is missing in CI" in result.stdout
+
+
+def test_H3b_ci_schedule_event_skips_check(
+    repos: tuple[_Repo, _Repo], tmp_path: pathlib.Path
+) -> None:
+    """schedule event has no PR context; checker must skip (not fail)."""
+    _, clone = repos
+    runner = _make_runner(tmp_path, clone.root)
+    env = {
+        "CI": "true",
+        "GITHUB_BASE_REF": "",
+        "GITHUB_PR_BASE_SHA": "",
+        "GITHUB_EVENT_NAME": "schedule",
+    }
+    result = _run(runner, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "pr-base-mainline: skipped" in result.stdout
+    assert "schedule" in result.stdout
+
+
+def test_H3c_ci_workflow_dispatch_event_skips_check(
+    repos: tuple[_Repo, _Repo], tmp_path: pathlib.Path
+) -> None:
+    """workflow_dispatch (operator-triggered) has no PR context; skip."""
+    _, clone = repos
+    runner = _make_runner(tmp_path, clone.root)
+    env = {
+        "CI": "true",
+        "GITHUB_BASE_REF": "",
+        "GITHUB_PR_BASE_SHA": "",
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+    }
+    result = _run(runner, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "pr-base-mainline: skipped" in result.stdout
+    assert "workflow_dispatch" in result.stdout
+
+
+def test_H3d_ci_unknown_event_still_fails_closed(
+    repos: tuple[_Repo, _Repo], tmp_path: pathlib.Path
+) -> None:
+    """Unknown events without base ref must fail closed (default-deny).
+
+    Only an explicit allow-list (push/schedule/workflow_dispatch) may skip.
+    """
+    _, clone = repos
+    runner = _make_runner(tmp_path, clone.root)
+    env = {
+        "CI": "true",
+        "GITHUB_BASE_REF": "",
+        "GITHUB_PR_BASE_SHA": "",
+        "GITHUB_EVENT_NAME": "release",  # not in the non-PR allow-list
     }
     result = _run(runner, env)
     assert result.returncode == 1

@@ -1488,6 +1488,76 @@ spine-wait:
 	./scripts/spine_wait.sh 180
 
 # =============================================================================
+# Release image build + push (invoked by .github/workflows/release-images.yml)
+# -----------------------------------------------------------------------------
+# Image coordinates (override in CI or at the make command line):
+#   REGISTRY=ghcr.io
+#   IMAGE_OWNER=Arescoreadmin
+#   VERSION=edge-<sha12>   (or v-tag on tag builds)
+# -----------------------------------------------------------------------------
+
+REGISTRY           ?= ghcr.io
+IMAGE_OWNER        ?= your-org-or-user
+CORE_IMAGE_NAME    ?= frostgate-core
+SIDE_IMAGE_NAME    ?= frostgate-supervisor-sidecar
+VERSION            ?= dev
+
+# OCI / GHCR require lowercase repository names. GitHub repository_owner may be
+# mixed-case (e.g. "Arescoreadmin"), so normalize deterministically.
+IMAGE_OWNER_LC := $(shell printf '%s' '$(IMAGE_OWNER)' | tr '[:upper:]' '[:lower:]')
+CORE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER_LC)/$(CORE_IMAGE_NAME)
+SIDE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER_LC)/$(SIDE_IMAGE_NAME)
+
+RELEASE_META_DIR := artifacts/release
+
+.PHONY: docker-build docker-push docker-release print-images
+
+## docker-build: build core + supervisor-sidecar images with the computed VERSION
+##   Records image digests to artifacts/release/image-digests.txt.
+##   Fails closed: any `docker build` failure aborts and prevents docker-push.
+docker-build:
+	@$(MAKE) -s require-docker
+	@echo "==> docker-build: $(CORE_IMAGE):$(VERSION) + $(SIDE_IMAGE):$(VERSION)"
+	@mkdir -p "$(RELEASE_META_DIR)"
+	docker build \
+		-t "$(CORE_IMAGE):$(VERSION)" \
+		-t "$(CORE_IMAGE):latest" \
+		.
+	docker build \
+		-t "$(SIDE_IMAGE):$(VERSION)" \
+		-t "$(SIDE_IMAGE):latest" \
+		supervisor-sidecar
+	@{ \
+		printf 'core_image=%s\n' "$(CORE_IMAGE):$(VERSION)"; \
+		docker image inspect --format '{{index .RepoDigests 0}}' "$(CORE_IMAGE):$(VERSION)" 2>/dev/null \
+			| awk 'NF {print "core_digest="$$0}' || true; \
+		printf 'sidecar_image=%s\n' "$(SIDE_IMAGE):$(VERSION)"; \
+		docker image inspect --format '{{index .RepoDigests 0}}' "$(SIDE_IMAGE):$(VERSION)" 2>/dev/null \
+			| awk 'NF {print "sidecar_digest="$$0}' || true; \
+	} | tee "$(RELEASE_META_DIR)/image-digests.txt"
+
+## docker-push: push both images (VERSION + latest) to $(REGISTRY)
+##   Depends on docker-build to prevent push-without-build races.
+docker-push: docker-build
+	@$(MAKE) -s require-docker
+	@echo "==> docker-push: $(CORE_IMAGE):$(VERSION) + $(SIDE_IMAGE):$(VERSION)"
+	docker push "$(CORE_IMAGE):$(VERSION)"
+	docker push "$(CORE_IMAGE):latest"
+	docker push "$(SIDE_IMAGE):$(VERSION)"
+	docker push "$(SIDE_IMAGE):latest"
+
+## docker-release: build + push in one shot
+docker-release: docker-build docker-push
+
+## print-images: show computed image coordinates (debug aid for release workflow)
+print-images:
+	@echo "REGISTRY=$(REGISTRY)"
+	@echo "IMAGE_OWNER=$(IMAGE_OWNER)"
+	@echo "VERSION=$(VERSION)"
+	@echo "Core: $(CORE_IMAGE):$(VERSION)"
+	@echo "Sidecar: $(SIDE_IMAGE):$(VERSION)"
+
+# =============================================================================
 # Keycloak / IdP Validation (Task 6.1)
 # =============================================================================
 .PHONY: fg-idp-validate

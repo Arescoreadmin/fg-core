@@ -1,3 +1,89 @@
+## POST-775-CI-WORKFLOW-REMEDIATION-001 — repair release-images and scheduled fg-fast CI gates
+
+- **Work item:** POST-775-CI-WORKFLOW-REMEDIATION-001 (REPAIR class)
+- **Baseline SHA:** `2c033434` (HEAD after PR #775 merged)
+- **Failures before:** 2 independent GitHub Actions failures
+  - `frostgate-release-images` run 39876102679 — `make docker-build` target absent
+  - `testing-module` scheduled run 39924785474 — `pr-base-mainline-check` demands `GITHUB_BASE_REF` on schedule
+- **Failures after:** 0 (both gates green by construction; see validation below)
+
+### Failure A root cause
+
+`.github/workflows/release-images.yml` invokes `make docker-build` after Buildx + GHCR login succeed, but no `docker-build` target exists in `Makefile`. The target was removed in commit `804033f9` (2026-01-04 Makefile rewrite). All subsequent release-image runs have been failing at the "Build images" step. Image push was unreachable.
+
+### Failure A fix
+
+Added `docker-build`, `docker-push`, `docker-release`, and `print-images` targets to `Makefile` under the existing Docker Command Center section:
+
+- `docker-build` — invokes real `docker build` against the root `Dockerfile` and `supervisor-sidecar/Dockerfile`; tags with both `:$(VERSION)` and `:latest`; records `core_image`, `sidecar_image`, and resolved `RepoDigests` into `artifacts/release/image-digests.txt` for release traceability.
+- `docker-push` — explicitly depends on `docker-build` so a push-without-build is structurally impossible.
+- `docker-release` — composite build + push.
+- `IMAGE_OWNER` is lowercased before interpolation into image coordinates because GHCR rejects uppercase repository names and `github.repository_owner` can be mixed-case (`Arescoreadmin`).
+- Both targets gate on `require-docker` so a runner without the docker CLI fails fast with a clear message rather than silently succeeding.
+
+### Failure B root cause
+
+`tools/ci/check_pr_base_is_mainline.py` previously treated any CI event other than `push` without `GITHUB_BASE_REF` as a failure. Scheduled (`schedule`) and operator-triggered (`workflow_dispatch`) runs structurally lack PR-base metadata, so the testing-module workflow's `fg-fast` lane failed at `make pr-base-mainline-check` on every nightly scheduled run. All downstream jobs (`fg-full`, `fg-flake-detect`) were skipped.
+
+### Failure B fix
+
+Extended the non-PR allow-list in `check_pr_base_is_mainline.py` from `{push}` to `{push, schedule, workflow_dispatch}`. These three events have no PR context by construction, so the check skips with an explicit message naming the event — not a silent bypass. All other unknown events still fail closed (default-deny preserved).
+
+### Security controls preserved
+
+- `pull_request` events still FAIL CLOSED when `GITHUB_BASE_REF` is missing (asserted by renamed `test_H3_ci_missing_base_ref_pull_request_fails`).
+- Unknown event names still FAIL CLOSED (new `test_H3d_ci_unknown_event_still_fails_closed`).
+- Immutable base SHA requirement for PR CI is unchanged (`GITHUB_PR_BASE_SHA` still required).
+- `docker-push` requires `docker-build` as a Make dependency (no push without build).
+- `docker-build` requires `require-docker` precondition (no silent no-op).
+- No governance invariant flipped: `CUSTOMER_ZERO_TRUST=NOT_PROVEN`, `CUSTOMER_ZERO_ACCEPTANCE=BLOCKED`, `THIRD_PAID_CEREMONY=NOT_AUTHORIZED`, `COST_AUTHORIZATION=NOT_AUTHORIZED`, `PAID_HCP_INFRASTRUCTURE=ABSENT`, `PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN`.
+
+### Regression tests added
+
+**`tests/test_check_pr_base_is_mainline.py`** — 3 new tests + 1 renamed:
+- `test_H3_ci_missing_base_ref_pull_request_fails` (renamed from `..._non_push_fails`): PR event without base ref must still fail
+- `test_H3b_ci_schedule_event_skips_check`: schedule skips
+- `test_H3c_ci_workflow_dispatch_event_skips_check`: workflow_dispatch skips
+- `test_H3d_ci_unknown_event_still_fails_closed`: default-deny for unknown events
+
+**`tests/test_release_images_workflow_contract.py`** (new file) — 18 tests covering:
+- A1–A3: Makefile exposes `docker-build`, `docker-push`, `docker-release`
+- B1–B4: Dockerfiles exist and `docker-build` references them (no echo stubs)
+- C1–C2: `docker-push` and `docker-release` have correct dependencies
+- D1–D4: Release workflow invokes `make docker-build` + `make docker-push` with REGISTRY/IMAGE_OWNER/VERSION
+- E1: `IMAGE_OWNER` is lowercased for GHCR
+- F1–F2: Image coordinates resolve deterministically from overrides
+- G1–G2: Both `docker-build` and `docker-push` recipes require the docker CLI
+
+Static Makefile parsing is used instead of `make -n` because `.ONESHELL` + `$(MAKE) -s require-docker` sub-make invocation triggers real execution under `-n` by GNU Make's command-recursion rule.
+
+### Files changed
+
+- `Makefile` — added `docker-build`, `docker-push`, `docker-release`, `print-images` targets + `REGISTRY/IMAGE_OWNER/IMAGE_OWNER_LC/CORE_IMAGE/SIDE_IMAGE/VERSION/RELEASE_META_DIR` variables (76 lines added)
+- `tools/ci/check_pr_base_is_mainline.py` — extended non-PR event allow-list from `{push}` to `{push, schedule, workflow_dispatch}` with explicit per-event skip message (12 lines changed)
+- `tests/test_check_pr_base_is_mainline.py` — renamed H3 + 3 new regression tests (H3b, H3c, H3d)
+- `tests/test_release_images_workflow_contract.py` — new file, 18 tests
+- `customer_one/offline_simulation_evidence.json` — rebound to new source tree hash after fix commit
+- `docs/ai/PR_FIX_LOG.md` — this entry
+- `ROADMAP.md` — new row under Customer-Zero reconciliation table
+
+### Validation
+
+- `pytest tests/test_check_pr_base_is_mainline.py tests/test_release_images_workflow_contract.py` — 38 passed in 4.25s
+- `ruff check` — All checks passed
+- `ruff format --check` — 2192 files already formatted
+- `mypy` changed files — 0 errors
+- `pytest tests/test_secret_scan_gate.py` — 25 passed (no secret scan regression)
+- `make fg-audit-make` — Makefile audit clean (no duplicate targets)
+- `tools/ci/run_offline_ceremony_simulation.py` — 6/6 GREEN
+- Manual simulation of failing cases:
+  - `CI=true GITHUB_EVENT_NAME=schedule GITHUB_BASE_REF="" make pr-base-mainline-check` → `pr-base-mainline: skipped (schedule — no PR context)` (exit 0)
+  - `CI=true GITHUB_EVENT_NAME=workflow_dispatch GITHUB_BASE_REF="" make pr-base-mainline-check` → skipped (exit 0)
+  - `CI=true GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF="" make pr-base-mainline-check` → FAILED (exit 1, invariant preserved)
+  - `make print-images REGISTRY=ghcr.io IMAGE_OWNER=Arescoreadmin VERSION=edge-abc123` → `ghcr.io/arescoreadmin/frostgate-core:edge-abc123` (lowercase normalization verified)
+
+---
+
 ## POST-774-SECRET-SCAN-REMEDIATION-001 — fix 11 secret-scan gate hits without weakening detection
 
 - **Work item:** POST-774-SECRET-SCAN-REMEDIATION-001 (REPAIR class)
