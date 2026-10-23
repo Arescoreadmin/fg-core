@@ -1,3 +1,32 @@
+## 2026-10-22 - fix/post-775-ci-workflow-remediation-001: POST-775-CI-WORKFLOW-REMEDIATION-001 — fix release image workflow and schedule/dispatch gate failures
+
+**Change scope:** CI gate repair. Fixes two confirmed CI failures: (A) `make docker-build` target was missing from the Makefile, causing the release image workflow to fail with "No rule to make target 'docker-build'"; (B) `check_pr_base_is_mainline.py` was failing on `schedule` and `workflow_dispatch` runs that structurally lack `GITHUB_BASE_REF`. The gate was intended to catch PRs without a base ref but incorrectly applied only a `push` carve-out, not a broader non-PR-event carve-out. No authorization logic changed. No governance constants changed. No evidence classifications changed.
+
+**Security posture:**
+
+1. **PR base check logic tightened, not weakened.** The `_NON_PR_EVENTS` allow-list (`{"push", "schedule", "workflow_dispatch"}`) explicitly excludes `pull_request`. A PR run with a missing `GITHUB_BASE_REF` still fails closed (exit 1). The previous code only exempted `push`; `schedule` and `workflow_dispatch` were missing from the allow-list, causing false failures on those events without any security benefit. The invariant "PRs must have a base ref" is preserved and now has clearer commentary.
+2. **No new skip path for PR events.** `pull_request` is not in `_NON_PR_EVENTS` and is explicitly documented in code comments as excluded. The only change is that `schedule` and `workflow_dispatch` (which have no PR diff to validate) now produce an informative skip message instead of a false failure.
+3. **Docker targets are build-only.** `docker-build` builds and tags the image locally. `docker-push` is a separate target that has an explicit image-existence guard before pushing. Digest recording is done after push (when `RepoDigests` is populated). No double-build: `docker-push` does not depend on `docker-build` as a Make prerequisite, avoiding redundant image builds when CI calls both steps separately.
+4. **No authorization bypass.** PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. CUSTOMER_ZERO_ACCEPTANCE=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT. No governance constants changed.
+5. **No schema or migration changes.** No infra changes. No contract changes.
+
+**Critical-path files changed:** `tools/ci/check_pr_base_is_mainline.py` (non-PR event allow-list; `pull_request` explicitly excluded), `Makefile` (new `docker-build`, `docker-push`, `docker-release`, `print-images` targets), `customer_one/offline_simulation_evidence.json` (rebind to branch HEAD), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `ROADMAP.md` (row — exempt per CLAUDE.md).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. `pull_request` event without `GITHUB_BASE_REF` still exits 1 (fail closed). No authorization path broadened.
+
+**Validation evidence:**
+
+- `python tools/ci/check_pr_base_is_mainline.py` with `GITHUB_BASE_REF=` `CI=true` `GITHUB_EVENT_NAME=schedule` → `pr-base-mainline: skipped (schedule — no PR context)` exit 0
+- `python tools/ci/check_pr_base_is_mainline.py` with `GITHUB_BASE_REF=` `CI=true` `GITHUB_EVENT_NAME=workflow_dispatch` → `pr-base-mainline: skipped (workflow_dispatch — no PR context)` exit 0
+- `python tools/ci/check_pr_base_is_mainline.py` with `GITHUB_BASE_REF=` `CI=true` `GITHUB_EVENT_NAME=pull_request` → `pr-base-mainline: FAILED` exit 1 (fail-closed preserved)
+- `make fg-fast` → PASS (all gates green)
+- `python tools/ci/run_offline_ceremony_simulation.py` → 6/6 GREEN
+- No cloud mutation. No Terraform state change. No AWS API call. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Change corrects a false-failure on schedule/dispatch events that structurally lack PR context. The PR-base validation invariant is preserved: `pull_request` is excluded from the skip list and continues to fail closed. No authorization logic, evidence classification, governance constants, or security posture changed.
+
+---
+
 ## 2026-10-20 - fix/post-771-format-gate-remediation: POST-771-FORMAT-GATE-REMEDIATION-001 — ruff format for tools/ci/ files
 
 **Change scope:** Format-only. Applies `ruff format` to three `tools/ci/` files with pre-existing format debt: `customer_zero_run3_preauth.py`, `run_offline_ceremony_simulation.py`, `verify_pricing_evidence.py`. Deferred from PR #771 because these files are SOC-critical and required a dedicated SOC entry. No logic changes. No authorization rules changed. No evidence classifications changed. No runtime behavior changed.
