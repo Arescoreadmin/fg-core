@@ -1,3 +1,33 @@
+## POST-776-RELEASE-CONTRACT-REGRESSION-001 — align build-push invariants with canonical release design
+
+- **Work item:** POST-776-RELEASE-CONTRACT-REGRESSION-001 (REPAIR class)
+- **Baseline SHA:** `4d9b7f7d` (HEAD after PR #776 merged)
+- **Failures before:** 1 test failure in `codex_gates.sh` full suite
+  - `tests/test_release_images_workflow_contract.py::test_C1_docker_push_depends_on_docker_build`
+  - Assertion: `docker-push must depend on docker-build; got deps=[]`
+- **Failures after:** 0 (all 18 tests in the contract file pass)
+
+### Root cause
+
+PR #776 introduced `docker-push` without a Make-level prerequisite on `docker-build` (deliberate: a P2 bot finding flagged double-build when the workflow calls both steps separately). The test `test_C1_docker_push_depends_on_docker_build` was written expecting a Make-level dependency, which contradicts the canonical release design where:
+
+1. The workflow enforces build→push ordering at the step level (sequential `make docker-build` / `make docker-push` steps in the same job — step failure stops execution before push).
+2. The `docker-push` recipe has a belt-and-suspenders existence guard (`docker image inspect ... || exit 1`) that fails closed if invoked directly without a prior build.
+
+The test was checking an implementation detail (Make prereq) that contradicts the design, not the actual safety property (push is structurally prevented when no image exists).
+
+### Fix
+
+Rewrote `test_C1` to verify the real invariants:
+- `docker-push` recipe contains `docker image inspect` before any push command.
+- The absent-image branch calls `exit 1` (fail closed, not silent skip).
+- The error message references `docker-build` so the operator knows what to run.
+- The `release-images.yml` workflow invokes `make docker-build` at a file position strictly before `make docker-push` (workflow step ordering).
+
+No Makefile or workflow changes. The safety properties from requirements 1–3 remain fully enforced.
+
+---
+
 ## POST-775-CI-WORKFLOW-REMEDIATION-001 — repair release-images and scheduled fg-fast CI gates
 
 - **Work item:** POST-775-CI-WORKFLOW-REMEDIATION-001 (REPAIR class)
