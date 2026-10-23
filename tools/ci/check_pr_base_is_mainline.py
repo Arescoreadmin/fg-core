@@ -46,15 +46,22 @@ def _resolve_base_sha(sha: str) -> bool:
 def main() -> int:
     base_ref = (os.getenv("GITHUB_BASE_REF") or "").strip()
     is_ci = (os.getenv("CI") or "").strip().lower() in {"1", "true", "yes"}
+    event_name = (os.getenv("GITHUB_EVENT_NAME") or "").strip()
+
+    # Events that structurally lack PR-base metadata. For these the check has
+    # no diff to validate, so we skip rather than fail closed. We MUST NOT add
+    # 'pull_request' here — PRs without a base ref are a real failure mode.
+    _NON_PR_EVENTS = {"push", "schedule", "workflow_dispatch"}
 
     if not base_ref:
-        # Push events (direct push to main) have no GITHUB_BASE_REF.
-        is_push = (os.getenv("GITHUB_EVENT_NAME") or "").strip() == "push"
-        if is_ci and not is_push:
+        if is_ci and event_name not in _NON_PR_EVENTS:
             print("pr-base-mainline: FAILED")
             print(" - GITHUB_BASE_REF is missing in CI; cannot validate PR base diff")
             return 1
-        print("pr-base-mainline: skipped (no base ref)")
+        if event_name in _NON_PR_EVENTS:
+            print(f"pr-base-mainline: skipped ({event_name} — no PR context)")
+        else:
+            print("pr-base-mainline: skipped (no base ref)")
         return 0
 
     if is_ci:
