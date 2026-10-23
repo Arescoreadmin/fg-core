@@ -1513,7 +1513,6 @@ RELEASE_META_DIR := artifacts/release
 .PHONY: docker-build docker-push docker-release print-images
 
 ## docker-build: build core + supervisor-sidecar images with the computed VERSION
-##   Records image digests to artifacts/release/image-digests.txt.
 ##   Fails closed: any `docker build` failure aborts and prevents docker-push.
 docker-build:
 	@$(MAKE) -s require-docker
@@ -1527,6 +1526,22 @@ docker-build:
 		-t "$(SIDE_IMAGE):$(VERSION)" \
 		-t "$(SIDE_IMAGE):latest" \
 		supervisor-sidecar
+
+## docker-push: push pre-built images and record post-push repository digests.
+##   Requires docker-build to have run first; images must exist locally.
+##   Repository digests are recorded after push — they are unavailable before push.
+docker-push:
+	@$(MAKE) -s require-docker
+	@echo "==> docker-push: $(CORE_IMAGE):$(VERSION) + $(SIDE_IMAGE):$(VERSION)"
+	@if ! docker image inspect "$(CORE_IMAGE):$(VERSION)" >/dev/null 2>&1; then \
+		echo "ERROR: $(CORE_IMAGE):$(VERSION) not found locally — run docker-build first"; \
+		exit 1; \
+	fi
+	@mkdir -p "$(RELEASE_META_DIR)"
+	docker push "$(CORE_IMAGE):$(VERSION)"
+	docker push "$(CORE_IMAGE):latest"
+	docker push "$(SIDE_IMAGE):$(VERSION)"
+	docker push "$(SIDE_IMAGE):latest"
 	@{ \
 		printf 'core_image=%s\n' "$(CORE_IMAGE):$(VERSION)"; \
 		docker image inspect --format '{{index .RepoDigests 0}}' "$(CORE_IMAGE):$(VERSION)" 2>/dev/null \
@@ -1535,16 +1550,6 @@ docker-build:
 		docker image inspect --format '{{index .RepoDigests 0}}' "$(SIDE_IMAGE):$(VERSION)" 2>/dev/null \
 			| awk 'NF {print "sidecar_digest="$$0}' || true; \
 	} | tee "$(RELEASE_META_DIR)/image-digests.txt"
-
-## docker-push: push both images (VERSION + latest) to $(REGISTRY)
-##   Depends on docker-build to prevent push-without-build races.
-docker-push: docker-build
-	@$(MAKE) -s require-docker
-	@echo "==> docker-push: $(CORE_IMAGE):$(VERSION) + $(SIDE_IMAGE):$(VERSION)"
-	docker push "$(CORE_IMAGE):$(VERSION)"
-	docker push "$(CORE_IMAGE):latest"
-	docker push "$(SIDE_IMAGE):$(VERSION)"
-	docker push "$(SIDE_IMAGE):latest"
 
 ## docker-release: build + push in one shot
 docker-release: docker-build docker-push
