@@ -77,24 +77,29 @@ Within 60 seconds of the Vault operation:
    echo "Reader role ARN: ${READER_ROLE_ARN}"
    ```
 
-2. Assume the reader role as the human IAM user (MFA required) and export credentials:
+2. Assume the reader role as the human IAM user (MFA required) and load credentials into a temporary file:
    ```bash
-   eval "$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
+   # Create a temporary credentials file — never written to ~/.aws/credentials
+   _CEREMONY_CREDS_FILE=$(mktemp)
+   chmod 600 "$_CEREMONY_CREDS_FILE"
+   CREDS=$(AWS_PROFILE=frostgate-human AWS_DEFAULT_REGION=us-east-1 aws sts assume-role \
      --role-arn "${READER_ROLE_ARN}" \
      --role-session-name "smoke-test-$(date +%s)" \
      --serial-number "arn:aws:iam::ACCOUNT_ID:mfa/DEVICE" \
-     --token-code "MFA_CODE" \
-     | python3 -c "
-   import sys, json
-   creds = json.load(sys.stdin)['Credentials']
-   print('export AWS_ACCESS_KEY_ID=' + creds['AccessKeyId'])
-   print('export AWS_SECRET_ACCESS_KEY=' + creds['SecretAccessKey'])
-   print('export AWS_SESSION_TOKEN=' + creds['SessionToken'])
-   ")"
-   unset AWS_PROFILE
+     --token-code "MFA_CODE")
+
+   # Write credentials to temp file in AWS INI format (never written to ~/.aws/credentials)
+   jq -r '.Credentials | "[ceremony-reader]\naws_access_key_id = \(.AccessKeyId)\naws_secret_access_key = \(.SecretAccessKey)\naws_session_token = \(.SessionToken)\n"' \
+       <<< "$CREDS" > "$_CEREMONY_CREDS_FILE"
+   unset CREDS
+   export AWS_SHARED_CREDENTIALS_FILE="$_CEREMONY_CREDS_FILE"
+   export AWS_PROFILE=ceremony-reader
    ```
-   Reader credentials are now active via env vars. Do NOT set `AWS_PROFILE` for subsequent
-   log reads — doing so would override the assumed-role session.
+   Reader credentials are now active via `AWS_SHARED_CREDENTIALS_FILE` pointing to a
+   temporary file — NOT `~/.aws/credentials`. Remove after use:
+   ```bash
+   unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE && rm -f "$_CEREMONY_CREDS_FILE" && unset _CEREMONY_CREDS_FILE
+   ```
 
 3. Query CloudWatch for events after the recorded timestamp:
    ```bash

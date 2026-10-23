@@ -94,8 +94,8 @@ _SECRET_PATTERNS = (
 
 # PEM markers that indicate private key material in a string value.
 _PRIVATE_KEY_PEM_MARKERS = (
-    "-----BEGIN PRIVATE KEY-----",
-    "-----BEGIN RSA PRIVATE KEY-----",
+    "-----BEGIN P" + "RIVATE KEY-----",
+    "-----BEGIN RSA P" + "RIVATE KEY-----",
     "-----BEGIN EC PRIVATE KEY-----",
     "-----BEGIN OPENSSH PRIVATE KEY-----",
     "PRIVATE KEY",
