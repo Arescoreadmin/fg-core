@@ -10,7 +10,7 @@ already succeeded.
 Scope:
     A — Makefile exposes docker-build / docker-push / docker-release
     B — docker-build recipe references the actual Dockerfiles (no echo stub)
-    C — docker-push depends on docker-build (push-without-build is prevented)
+    C — push-without-build is prevented (existence guard + workflow ordering)
     D — release-images workflow calls `make docker-build` and `make docker-push`
     E — docker-build normalizes IMAGE_OWNER to lowercase (GHCR requirement)
     F — print-images resolves REGISTRY/IMAGE_OWNER/VERSION deterministically
@@ -132,19 +132,50 @@ def test_B4_docker_build_is_not_an_echo_stub() -> None:
 
 
 # ---------------------------------------------------------------------------
-# C — docker-push depends on docker-build (push-without-build prevented)
+# C — push-without-build is prevented (existence guard + workflow ordering)
 # ---------------------------------------------------------------------------
 
 
-def test_C1_docker_push_depends_on_docker_build() -> None:
-    """A docker-push that does not depend on docker-build could push stale
-    tags. The Makefile must declare the dependency explicitly."""
-    text = _read(_MAKEFILE)
-    match = re.search(r"(?m)^docker-push\s*:([^\n]*)$", text)
-    assert match, "docker-push target line not found"
-    deps = match.group(1).strip().split()
-    assert "docker-build" in deps, (
-        f"docker-push must depend on docker-build; got deps={deps!r}"
+def test_C1_docker_push_fails_closed_without_prior_build() -> None:
+    """docker-push must fail immediately if the core image is absent locally.
+
+    The canonical release workflow enforces build→push ordering at the workflow
+    step level: the "Build images" step (`make docker-build`) runs before the
+    "Push images" step (`make docker-push`) in the same job; step failure stops
+    execution before push is attempted.  The Makefile target provides a
+    belt-and-suspenders guard for direct invocations: if someone calls
+    `make docker-push` without a prior `make docker-build`, the recipe detects
+    the absent image via `docker image inspect` and exits non-zero immediately
+    with an actionable error — no push attempt is made.
+    """
+    recipe = _extract_recipe(_read(_MAKEFILE), "docker-push")
+    # Guard must inspect the image and branch on its absence.
+    assert re.search(r"docker\s+image\s+inspect", recipe), (
+        "docker-push must check image existence via `docker image inspect` "
+        "before attempting any push"
+    )
+    # The absent-image branch must call `exit 1` (fail closed, not silently skip).
+    assert "exit 1" in recipe, (
+        "docker-push must call `exit 1` when the image is not found locally — "
+        "silent return would allow a stale or missing image to go undetected"
+    )
+    # Error message must be actionable — the operator must know what to run.
+    assert "docker-build" in recipe, (
+        "docker-push error path must reference docker-build so the operator "
+        "knows which target to run first"
+    )
+
+    # Workflow-level ordering: the release-images workflow must call
+    # `make docker-build` in a step that appears before `make docker-push`.
+    workflow_text = _read(_WORKFLOW)
+    build_pos = workflow_text.find("make docker-build")
+    push_pos = workflow_text.find("make docker-push")
+    assert build_pos != -1, "release-images workflow must call `make docker-build`"
+    assert push_pos != -1, "release-images workflow must call `make docker-push`"
+    assert build_pos < push_pos, (
+        "release-images workflow must invoke `make docker-build` before "
+        "`make docker-push` — current ordering would allow push to run "
+        "against an unbuilt image"
     )
 
 
