@@ -1,3 +1,43 @@
+## POST-777-SCHEDULED-FULL-SUITE-001 — deterministic GitHub Actions matrix sharding for fg-full
+
+- **Work item:** POST-777-SCHEDULED-FULL-SUITE-001 (INFRA class)
+- **Baseline SHA:** `edd2c1d3` (HEAD after PR #777 merged)
+- **Failures before:** `fg-full` job cancelled by GitHub Actions at 60-minute hard limit (run 40076496083, 14% pytest progress, 23,693 tests / ~3h21m local)
+- **Failures after:** 0 — 6 parallel shards × ~55-min budget; fail-closed aggregation gate on every artifact gap
+
+### Root cause
+
+The `fg-full` pytest invocation runs 23,693 tests in a single serial process. GitHub Actions imposes a 60-minute job timeout (`timeout-minutes: 60`). The full suite runs ~3h21m locally, 3× the budget. At 14% progress the runner exhausted its wall-clock budget and the job was hard-cancelled, producing no JUnit artifact and no gate signal.
+
+### Fix
+
+Deterministic file-level matrix sharding:
+
+1. **`tools/ci/fg_full_shard.py`** — collects all `tests/test_*.py` files under `tests/`, sorts lexicographically by relative path, assigns each file to a shard via `i % total_shards`. Pure stdlib, no pytest-xdist. `--validate` flag proves no omissions and no duplicates before each run.
+
+2. **`tools/ci/fg_full_aggregate.py`** — fail-closed aggregation gate. For each shard: verifies directory present, JUnit XML present and parseable, no failures or errors, non-zero tests. Then verifies total tests in [22000, 26000] (guards against collection failure and duplicate assignment). Returns structured `(passed, results, summary)` tuple; emits JSON summary for downstream consumption.
+
+3. **`.github/workflows/testing-module.yml`** — replaces single `fg-full` + `fg-flake-detect` jobs with 4 jobs:
+   - `fg-full-gates` (20 min): non-pytest components (fg-fast-ci, compliance, canonicalization, audit/exam gates)
+   - `fg-full-shard` (55 min, matrix 0-5, `fail-fast: false`): each shard runs `SHARD_INDEX=$N make fg-full-shard`; uploads `fg-full-shard-{N}-{run_attempt}` artifact
+   - `fg-full-complete` (`if: always()`, 10 min): downloads all shard artifacts, runs aggregate script, fails CI if any shard missing/failed/empty or total out-of-bounds
+   - `fg-flake-detect` (15 min): depends on `fg-full-complete`; merges per-shard JUnit XMLs via inline Python, then runs `flake_detect`
+
+4. **`Makefile`** — new `fg-full-gates`, `fg-full-shard`, `fg-full-aggregate` targets.
+
+### Regression tests
+
+`tests/tools/test_fg_full_shard.py` — 35 tests covering:
+- `TestShardPartitionCorrectness`: no omissions, no duplicates, count preserved, exhaustive union (parametrized 6 sizes)
+- `TestShardDeterminism`: repeated calls identical, shard independent of call order, sorted-input required
+- `TestShardRealRepo`: real file count ≥100, 6-shard validation on actual repo, stable relative paths, sorted-order invariant
+- `TestAggregateGate`: all-pass, missing dir, missing JUnit, corrupt JUnit, failures, errors, empty shard, below-min, above-max, skipped aggregation, duration aggregation, JSON structure
+- `TestCLIInterface`: flat `--shard-index`/`--total-shards`/`--fmt json` flags, `--validate` flag, `--fmt pytest-args` single-line format
+
+All 35 pass.
+
+---
+
 ## POST-776-RELEASE-CONTRACT-REGRESSION-001 — align build-push invariants with canonical release design
 
 - **Work item:** POST-776-RELEASE-CONTRACT-REGRESSION-001 (REPAIR class)
