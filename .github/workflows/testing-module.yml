@@ -296,7 +296,7 @@ jobs:
   fg-full-gates:
     name: fg-full-gates
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30  # billing/OPA/compliance/audit gates only (fg-fast already ran in prior lane)
     permissions:
       contents: read
     needs: [fg-fast, fg-contract, fg-security, detect-high-risk-paths]
@@ -359,7 +359,7 @@ jobs:
       - name: Run non-pytest fg-full gates
         run: |
           set -euo pipefail
-          make fg-full-gates
+          make fg-full-gates-ci
 
       - name: Upload artifacts (fg-full-gates)
         if: always()
@@ -429,8 +429,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fg-full-shard-${{ matrix.shard_index }}-${{ github.run_attempt }}
+          # Upload artifacts/fg-full-shards/ (the parent) so the shard-N/ directory
+          # is preserved as a subdirectory inside the artifact. With merge-multiple:true
+          # on download, each artifact's shard-N/ lands at artifacts/fg-full-shards/shard-N/
+          # which is the layout expected by fg_full_aggregate.py.
           path: |
-            artifacts/fg-full-shards/shard-${{ matrix.shard_index }}/
+            artifacts/fg-full-shards/
           if-no-files-found: warn
           retention-days: 14
 

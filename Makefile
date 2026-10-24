@@ -905,6 +905,14 @@ FG_FULL_GATES_JUNIT ?= artifacts/ci/junit/fg-full-gates.xml
 fg-full-gates: venv fg-fast-ci compliance-chain-verify canonicalization-guard \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 
+## fg-full-gates-ci: CI-only variant of fg-full-gates that omits fg-fast-ci to avoid
+##   re-running the fast pytest suite (already proven by the fg-fast job).
+##   Runs billing/OPA/control-plane checks + compliance + audit gates only.
+.PHONY: fg-full-gates-ci
+fg-full-gates-ci: venv billing-ledger-verify billing-invoice-verify opa-check control-plane-check \
+	compliance-chain-verify canonicalization-guard \
+	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
+
 ## fg-full-shard: run one pytest shard of the full suite.
 ##   SHARD_INDEX and TOTAL_SHARDS must be set. JUNIT output goes to
 ##   artifacts/fg-full-shards/shard-$(SHARD_INDEX)/junit-shard-$(SHARD_INDEX).xml

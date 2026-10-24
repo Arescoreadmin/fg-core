@@ -38,23 +38,30 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TESTS_DIR = REPO_ROOT / "tests"
+# All pytest testpaths (matches pytest.ini / pyproject.toml testpaths).
+TEST_ROOTS = [REPO_ROOT / "tests", REPO_ROOT / "backend" / "tests"]
 
 
 def _collect_test_files() -> list[Path]:
-    """Return all test files under tests/, sorted lexicographically.
+    """Return all test files under all pytest testpaths, sorted lexicographically.
 
     Uses pathlib glob, not pytest collection, so this is fast and has no side
     effects. The sort is stable across platforms because it is based on
     POSIX-normalised relative path strings, not inode order.
     """
     files = sorted(
-        (p for p in TESTS_DIR.rglob("test_*.py") if p.is_file()),
+        (
+            p
+            for root in TEST_ROOTS
+            if root.exists()
+            for p in root.rglob("test_*.py")
+            if p.is_file()
+        ),
         key=lambda p: str(p.relative_to(REPO_ROOT)),
     )
     if not files:
         print(
-            "ERROR: fg_full_shard: no test files found under tests/ — "
+            "ERROR: fg_full_shard: no test files found under test roots — "
             "check that REPO_ROOT is correct or that tests/ has not been deleted",
             file=sys.stderr,
         )

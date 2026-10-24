@@ -178,7 +178,9 @@ class TestShardRealRepo:
         for f in files[:10]:
             rel = _relative(f)
             assert "\\" not in rel, f"Backslash in relative path: {rel}"
-            assert rel.startswith("tests/"), f"Expected tests/ prefix: {rel}"
+            assert rel.startswith("tests/") or rel.startswith("backend/tests/"), (
+                f"Expected tests/ or backend/tests/ prefix: {rel}"
+            )
 
     def test_all_files_in_sorted_order(self) -> None:
         files = _collect_test_files()
@@ -467,4 +469,6 @@ class TestCLIInterface:
         assert "\n" not in output, "pytest-args must be a single line"
         parts = output.split()
         assert len(parts) > 1, "Expected multiple file paths"
-        assert all(p.startswith("tests/") for p in parts)
+        assert all(
+            p.startswith("tests/") or p.startswith("backend/tests/") for p in parts
+        )
