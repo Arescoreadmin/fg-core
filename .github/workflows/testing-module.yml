@@ -267,25 +267,39 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  fg-full:
-    name: fg-full
+  # ---------------------------------------------------------------------------
+  # fg-full: replaced with three-job sharded execution (POST-777).
+  #
+  # Background: the single fg-full job observed ~14% pytest progress before
+  # GitHub's 60-min job cancellation. The full local suite is ~3h21m
+  # (23,793 tests). To fit within GitHub's hard 60-min job limit we partition
+  # the pytest portion into 6 parallel shards using fg_full_shard.py.
+  #
+  # Design:
+  #   fg-full-gates  — non-pytest components of fg-full (billing, OPA,
+  #                    compliance-chain, canonicalization, audit-* tests).
+  #                    Runs once, fast (~10 min).
+  #   fg-full-shard  — matrix(6): each shard runs ~1/6 of the pytest files.
+  #                    Timeout 55 min; expected ~32-40 min CI wall-clock.
+  #   fg-full-complete — aggregation gate: verifies all 6 shards delivered
+  #                    JUnit XML, no shard failed, inventory in bounds.
+  #                    This check is the canonical "full suite passed" signal.
+  #
+  # Invariants preserved:
+  #   * Every test file in tests/ belongs to exactly one shard (no omissions,
+  #     no duplicates) — enforced by fg_full_shard.py --validate.
+  #   * fg-full-complete fails if any shard directory or JUnit is absent.
+  #   * fg-full-complete fails if total test count is outside [22000, 26000].
+  #   * fg-flake-detect depends on fg-full-complete, not individual shards.
+  # ---------------------------------------------------------------------------
+
+  fg-full-gates:
+    name: fg-full-gates
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # raised from 30→40→60: make fg-full (full test suite) observed running 35+ min before being cancelled at 40-min ceiling; 60 min gives headroom for suite + setup + flake-detect
+    timeout-minutes: 20
     permissions:
       contents: read
     needs: [fg-fast, fg-contract, fg-security, detect-high-risk-paths]
-    # Run fg-full only on:
-    #   (a) schedule / workflow_dispatch — nightly and manual runs always run fg-full
-    #   (b) PRs where detect-high-risk-paths found changed files in CI workflows,
-    #       security/middleware/auth API, admin gateway, migrations, contracts,
-    #       plane registry, or security tests
-    #   (c) PRs from release/*, hotfix/*, or any branch containing "security"
-    # High-risk path detection uses git diff (not branch name) so a PR from any
-    # branch that touches .github/workflows/ or api/security/ correctly triggers fg-full.
-    # For normal tools/testing/policy/** PRs (runtime budget adjustments, quarantine
-    # changes, policy YAML) fg-fast+contract+security already provide sufficient coverage.
-    # This removes ~40 min from the critical path of non-high-risk policy PRs.
-    # See docs/ci/CI_OPTIMIZATION_PLAN.md Priority 2.
     if: |
       ${{
         (needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success' && needs.fg-security.result == 'success')
@@ -300,6 +314,79 @@ jobs:
           ))
         )
       }}
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base (origin/main) for drift comparisons
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune --depth=200 origin main
+
+      - name: Setup Python + pip cache
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+
+      - name: Create venv + install deps
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          make venv
+
+      - name: Prepare artifacts dir
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/testing
+          test -f artifacts/testing/_upload_notice.txt || \
+            echo "fg-full-gates artifacts" > artifacts/testing/_upload_notice.txt
+
+      - name: Validate shard inventory (fail closed)
+        run: |
+          set -euo pipefail
+          .venv/bin/python tools/ci/fg_full_shard.py --validate --total-shards 6
+
+      - name: Run non-pytest fg-full gates
+        run: |
+          set -euo pipefail
+          make fg-full-gates
+
+      - name: Upload artifacts (fg-full-gates)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fg-full-gates-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/testing/**
+            artifacts/**/_upload_notice.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  fg-full-shard:
+    name: "fg-full-shard (${{ matrix.shard_index }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 55  # 6 shards × ~32-40 min CI time each; 55 min gives headroom
+    permissions:
+      contents: read
+    needs: [fg-full-gates]
+    if: ${{ needs.fg-full-gates.result == 'success' }}
+    strategy:
+      fail-fast: false  # collect all shard results before declaring failure
+      matrix:
+        shard_index: [0, 1, 2, 3, 4, 5]
+
+    env:
+      TOTAL_SHARDS: "6"
 
     steps:
       - name: Checkout (full history)
@@ -324,23 +411,76 @@ jobs:
           python -m venv .venv
           make venv
 
-      - name: Prepare artifacts dir + fallback notice
+      - name: Prepare shard artifact directory
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p artifacts/testing
-          test -f artifacts/testing/_upload_notice.txt || \
-            echo "testing-module artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
+          mkdir -p "artifacts/fg-full-shards/shard-${{ matrix.shard_index }}"
 
-      - name: Run fg-full
+      - name: Run pytest shard ${{ matrix.shard_index }}
         run: |
           set -euo pipefail
-          make fg-full
+          SHARD_INDEX=${{ matrix.shard_index }} \
+          TOTAL_SHARDS=${TOTAL_SHARDS} \
+          make fg-full-shard
 
-      - name: Flake detection junit (non-blocking)
+      - name: Upload shard artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fg-full-shard-${{ matrix.shard_index }}-${{ github.run_attempt }}
+          path: |
+            artifacts/fg-full-shards/shard-${{ matrix.shard_index }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+  fg-full-complete:
+    name: fg-full-complete
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    needs: [fg-full-shard]
+    # Run even when some shards failed so the aggregator can report all failures.
+    if: ${{ always() && needs.fg-full-shard.result != 'skipped' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python + pip cache
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
-          .venv/bin/python -m pytest -q tests/tools/test_flake_detection.py --junitxml artifacts/testing/junit.xml || true
+          python -m venv .venv
+          make venv
+
+      - name: Download all shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fg-full-shard-*-${{ github.run_attempt }}
+          path: artifacts/fg-full-shards
+          merge-multiple: true
+
+      - name: Aggregate shard results (fail closed)
+        run: |
+          set -euo pipefail
+          .venv/bin/python tools/ci/fg_full_aggregate.py \
+            --artifacts-dir artifacts/fg-full-shards \
+            --total-shards 6 \
+            --expected-min-tests 22000 \
+            --expected-max-tests 26000 \
+            --out-json artifacts/fg-full-shards/aggregate-result.json
 
       - name: Update runtime baseline (main only)
         if: ${{ github.ref_name == 'main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
@@ -352,16 +492,15 @@ jobs:
             --branch "${{ github.ref_name }}" \
             --event "${{ github.event_name }}"
 
-      - name: Upload artifacts (fg-full)
+      - name: Upload aggregate artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fg-full-artifacts-${{ github.run_attempt }}
+          name: fg-full-complete-artifacts-${{ github.run_attempt }}
           path: |
-            artifacts/testing/**
-            artifacts/**/_upload_notice.txt
+            artifacts/fg-full-shards/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
 
   fg-flake-detect:
     name: fg-flake-detect
@@ -369,8 +508,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    needs: [fg-full]
-    if: ${{ needs.fg-full.result == 'success' }}
+    needs: [fg-full-complete]
+    if: ${{ needs.fg-full-complete.result == 'success' }}
 
     steps:
       - name: Checkout
@@ -401,17 +540,35 @@ jobs:
           test -f artifacts/testing/_upload_notice.txt || \
             echo "flake-detect artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
-      - name: Download fg-full artifacts
+      - name: Download aggregate artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fg-full-artifacts-${{ github.run_attempt }}
-          path: artifacts/testing
+          name: fg-full-complete-artifacts-${{ github.run_attempt }}
+          path: artifacts/fg-full-shards
 
-      - name: Ensure junit exists
+      - name: Collect JUnit files for flake detection
         run: |
           set -euo pipefail
-          test -f artifacts/testing/junit.xml || \
-            printf '%s\n' '<testsuites><testsuite name="empty" tests="0" failures="0"/></testsuites>' > artifacts/testing/junit.xml
+          # Merge per-shard JUnit files into a single file for flake_detect.
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          root = ET.Element("testsuites")
+          shard_dir = Path("artifacts/fg-full-shards")
+          for junit in sorted(shard_dir.rglob("junit-shard-*.xml")):
+              tree = ET.parse(junit)
+              for ts in tree.getroot().iter("testsuite"):
+                  root.append(ts)
+
+          out = shard_dir / "junit-merged.xml"
+          ET.ElementTree(root).write(str(out), encoding="utf-8", xml_declaration=True)
+          print(f"Merged JUnit written to {out}")
+          PY
+          mkdir -p artifacts/testing
+          cp artifacts/fg-full-shards/junit-merged.xml artifacts/testing/junit.xml || \
+            printf '%s\n' '<testsuites><testsuite name="empty" tests="0" failures="0"/></testsuites>' \
+              > artifacts/testing/junit.xml
 
       - name: Run flake detect
         run: |

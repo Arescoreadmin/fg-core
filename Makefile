@@ -897,6 +897,44 @@ fg-full: fg-fast-full fg-full-pytest \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 	@$(MAKE) -s fg-full-record || true
 
+## fg-full-gates: non-pytest components of fg-full (billing, OPA, compliance chain,
+##   canonicalization, audit-specific tests). Run once per fg-full-shard matrix execution
+##   in CI; does NOT run the main pytest suite. Safe for local use.
+FG_FULL_GATES_JUNIT ?= artifacts/ci/junit/fg-full-gates.xml
+.PHONY: fg-full-gates
+fg-full-gates: venv fg-fast-ci compliance-chain-verify canonicalization-guard \
+	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
+
+## fg-full-shard: run one pytest shard of the full suite.
+##   SHARD_INDEX and TOTAL_SHARDS must be set. JUNIT output goes to
+##   artifacts/fg-full-shards/shard-$(SHARD_INDEX)/junit-shard-$(SHARD_INDEX).xml
+SHARD_INDEX    ?= 0
+TOTAL_SHARDS   ?= 6
+SHARD_JUNIT    := artifacts/fg-full-shards/shard-$(SHARD_INDEX)/junit-shard-$(SHARD_INDEX).xml
+.PHONY: fg-full-shard
+fg-full-shard: venv _require-pytest-venv
+	@mkdir -p "$(dir $(SHARD_JUNIT))"
+	@echo "==> fg-full-shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"
+	@SHARD_FILES="$$(.venv/bin/python tools/ci/fg_full_shard.py \
+		--shard-index $(SHARD_INDEX) --total-shards $(TOTAL_SHARDS) --fmt pytest-args)"; \
+	if [ -z "$$SHARD_FILES" ]; then \
+		echo "ERROR: fg_full_shard returned no files for shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"; \
+		exit 1; \
+	fi; \
+	FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q --durations=25 \
+		--junitxml "$(SHARD_JUNIT)" \
+		$$SHARD_FILES
+
+## fg-full-aggregate: verify all shards completed and aggregate results.
+##   TOTAL_SHARDS must match the value used for the shard jobs.
+FG_FULL_AGGREGATE_OUT ?= artifacts/fg-full-shards/aggregate-result.json
+.PHONY: fg-full-aggregate
+fg-full-aggregate: venv
+	@.venv/bin/python tools/ci/fg_full_aggregate.py \
+		--artifacts-dir artifacts/fg-full-shards \
+		--total-shards $(TOTAL_SHARDS) \
+		--out-json "$(FG_FULL_AGGREGATE_OUT)"
+
 fg-required-summary:
 	@mkdir -p artifacts/fg-required
 	@echo '{"status":"ok"}' > artifacts/fg-required/summary.json

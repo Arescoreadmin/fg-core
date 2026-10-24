@@ -1,3 +1,32 @@
+## 2026-10-23 - fix/post-777-scheduled-full-suite-001: POST-777-SCHEDULED-FULL-SUITE-001 — deterministic GitHub Actions matrix sharding for fg-full
+
+**Change scope:** CI performance fix. The `fg-full` job was being cancelled at GitHub Actions' 60-minute hard limit (confirmed: run 40076496083, 14% progress, 23,693 tests). Fix: introduces deterministic file-level sharding (6 parallel matrix jobs × ~122 test files, ~55-min budget per shard) with a fail-closed aggregation gate. New files: `tools/ci/fg_full_shard.py` (partitioner), `tools/ci/fg_full_aggregate.py` (aggregation gate). Workflow restructured: single `fg-full` job → 4 jobs (`fg-full-gates`, `fg-full-shard[0-5]`, `fg-full-complete`, updated `fg-flake-detect`). Makefile gains `fg-full-gates`, `fg-full-shard`, `fg-full-aggregate` targets. No authorization logic changed. No evidence classifications changed. No governance constants changed.
+
+**Security posture:**
+
+1. **Fail-closed aggregation replaces the single timeout.** `fg-full-complete` verifies every shard directory present, every JUnit XML present and parseable, no failures or errors, and total test count in [22000, 26000]. A missing shard, cancelled shard, or empty shard fails the gate. The old gate was failing open (GitHub cancellation = no gate failure). The new gate fails closed on any gap.
+2. **Shard partitioning is deterministic and auditable.** `fg_full_shard.py` uses lexicographic sort of relative `tests/` paths + round-robin modulo. Same source tree always produces the same partition. `--validate` flag verifies no omissions and no duplicates before every shard run; the workflow runs it as a preflight step.
+3. **No authorization bypass.** No changes to auth evaluators, governance evaluators, evidence schema, or security gates. PRODUCTION_AUTH_VERIFICATION=NOT_PROVEN. CUSTOMER_ZERO_TRUST=NOT_PROVEN. CUSTOMER_ZERO_ACCEPTANCE=BLOCKED. THIRD_PAID_CEREMONY=NOT_AUTHORIZED. COST_AUTHORIZATION=NOT_AUTHORIZED. PAID_HCP_INFRASTRUCTURE=ABSENT.
+4. **No new permissions required.** The matrix jobs use the same `actions/upload-artifact` / `actions/download-artifact` pattern as existing jobs. No additional repository secrets or environment secrets are required. `fg-full-complete` runs with `if: always()` to ensure the gate fires even when individual shards fail — this is a correctness requirement, not a privilege escalation.
+5. **Non-pytest gates are unchanged.** `fg-full-gates` runs all non-pytest components (`fg-fast-ci`, `compliance-chain-verify`, `canonicalization-guard`, `audit-export-test`, `audit-repro-test`, `compliance-registry-test`, `exam-export-test`, `exam-reproduce-test`) in a single job, identical to the components previously run inside `fg-full`. These gates must pass before any shard runs.
+
+**Critical-path files changed:** `tools/ci/fg_full_shard.py` (new — deterministic partitioner), `tools/ci/fg_full_aggregate.py` (new — fail-closed aggregation gate), `tests/tools/test_fg_full_shard.py` (new — 35 regression tests), `.github/workflows/testing-module.yml` (restructured `fg-full` → 4-job sharded pipeline), `Makefile` (new `fg-full-gates`, `fg-full-shard`, `fg-full-aggregate` targets), `customer_one/offline_simulation_evidence.json` (rebind to branch HEAD), `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry), `docs/ai/PR_FIX_LOG.md` (entry), `ROADMAP.md` (row — exempt per CLAUDE.md).
+
+**Required invariant preserved:** CUSTOMER_ZERO_TRUST=NOT_PROVEN; TRUST-003=BLOCKED; THIRD_PAID_CEREMONY=NOT_AUTHORIZED; PAID_HCP_INFRASTRUCTURE=ABSENT; COST_AUTHORIZATION=NOT_AUTHORIZED. Any shard failure, missing shard, or test-count out-of-bounds causes `fg-full-complete` to fail (fail closed). `pull_request` events continue to require a valid `GITHUB_BASE_REF`. No authorization path broadened.
+
+**Validation evidence:**
+
+- `python tools/ci/fg_full_shard.py --validate --total-shards 6` → `fg_full_shard validate: PASS (732 files, 6 shards, no omissions, no duplicates)`
+- `python -m pytest tests/tools/test_fg_full_shard.py -q` → 35 passed
+- `ruff check tools/ci/fg_full_shard.py tools/ci/fg_full_aggregate.py` → All checks passed
+- `mypy tools/ci/fg_full_shard.py tools/ci/fg_full_aggregate.py` → Success: no issues found in 2 source files
+- `make fg-fast` (after SOC entry added) → PASS expected
+- No cloud mutation. No Terraform state change. No AWS API call. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Change replaces a single long-running job that was timing out with a deterministic sharded pipeline that is fail-closed at every stage. No evaluator logic changed. No authorization rules changed. No evidence classifications changed. No schema changes. No migrations. Security posture improved: the old timeout failure mode was silent (CI cancellation did not fail the gate); the new aggregation gate fails explicitly on any missing shard, empty shard, or test-count anomaly.
+
+---
+
 ## 2026-10-22 - fix/post-775-ci-workflow-remediation-001: POST-775-CI-WORKFLOW-REMEDIATION-001 — fix release image workflow and schedule/dispatch gate failures
 
 **Change scope:** CI gate repair. Fixes two confirmed CI failures: (A) `make docker-build` target was missing from the Makefile, causing the release image workflow to fail with "No rule to make target 'docker-build'"; (B) `check_pr_base_is_mainline.py` was failing on `schedule` and `workflow_dispatch` runs that structurally lack `GITHUB_BASE_REF`. The gate was intended to catch PRs without a base ref but incorrectly applied only a `push` carve-out, not a broader non-PR-event carve-out. No authorization logic changed. No governance constants changed. No evidence classifications changed.
