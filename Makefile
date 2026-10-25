@@ -917,7 +917,7 @@ fg-full-gates-ci: venv billing-ledger-verify billing-invoice-verify opa-check co
 ##   SHARD_INDEX and TOTAL_SHARDS must be set. JUNIT output goes to
 ##   artifacts/fg-full-shards/shard-$(SHARD_INDEX)/junit-shard-$(SHARD_INDEX).xml
 SHARD_INDEX    ?= 0
-TOTAL_SHARDS   ?= 6
+TOTAL_SHARDS   ?= 8
 SHARD_JUNIT    := artifacts/fg-full-shards/shard-$(SHARD_INDEX)/junit-shard-$(SHARD_INDEX).xml
 .PHONY: fg-full-shard
 fg-full-shard: venv _require-pytest-venv
