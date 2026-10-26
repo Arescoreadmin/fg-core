@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -176,7 +177,7 @@ def test_a1_authorized_work_item_passes() -> None:
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             str(REPO / "tools" / "ci" / "check_customer_one_roadmap.py"),
             "--work-item",
             WORK_ITEM,
@@ -198,7 +199,7 @@ def test_a2_missing_roadmap_authority_fails() -> None:
     """Test 2: Roadmap checker fails gracefully when authority file is absent."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             str(REPO / "tools" / "ci" / "check_customer_one_roadmap.py"),
             "--authority",
             "/nonexistent/roadmap_authority.yaml",
@@ -218,7 +219,7 @@ def test_a3_incomplete_prerequisite_fails() -> None:
     # CUSTOMER-ZERO-TRUST-003 is in blocked; should not be authorized
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             str(REPO / "tools" / "ci" / "check_customer_one_roadmap.py"),
             "--work-item",
             "CUSTOMER-ZERO-TRUST-003",

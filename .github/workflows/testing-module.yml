@@ -279,9 +279,9 @@ jobs:
   #   fg-full-gates  — non-pytest components of fg-full (billing, OPA,
   #                    compliance-chain, canonicalization, audit-* tests).
   #                    Runs once, fast (~10 min).
-  #   fg-full-shard  — matrix(6): each shard runs ~1/6 of the pytest files.
-  #                    Timeout 55 min; expected ~32-40 min CI wall-clock.
-  #   fg-full-complete — aggregation gate: verifies all 6 shards delivered
+  #   fg-full-shard  — matrix(8): each shard runs ~1/8 of the pytest files.
+  #                    Timeout 45 min; expected ~24-30 min CI wall-clock.
+  #   fg-full-complete — aggregation gate: verifies all 8 shards delivered
   #                    JUnit XML, no shard failed, inventory in bounds.
   #                    This check is the canonical "full suite passed" signal.
   #
@@ -354,7 +354,7 @@ jobs:
       - name: Validate shard inventory (fail closed)
         run: |
           set -euo pipefail
-          .venv/bin/python tools/ci/fg_full_shard.py --validate --total-shards 6
+          .venv/bin/python tools/ci/fg_full_shard.py --validate --total-shards 8
 
       - name: Run non-pytest fg-full gates
         run: |
@@ -375,7 +375,7 @@ jobs:
   fg-full-shard:
     name: "fg-full-shard (${{ matrix.shard_index }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 55  # 6 shards × ~32-40 min CI time each; 55 min gives headroom
+    timeout-minutes: 45  # 8 shards × ~24-30 min CI time each; 45 min gives headroom
     permissions:
       contents: read
     needs: [fg-full-gates]
@@ -383,10 +383,10 @@ jobs:
     strategy:
       fail-fast: false  # collect all shard results before declaring failure
       matrix:
-        shard_index: [0, 1, 2, 3, 4, 5]
+        shard_index: [0, 1, 2, 3, 4, 5, 6, 7]
 
     env:
-      TOTAL_SHARDS: "6"
+      TOTAL_SHARDS: "8"
 
     steps:
       - name: Checkout (full history)
@@ -416,6 +416,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "artifacts/fg-full-shards/shard-${{ matrix.shard_index }}"
+
+      - name: Write shard manifest (partial evidence on timeout)
+        run: |
+          set -euo pipefail
+          .venv/bin/python tools/ci/fg_full_shard.py \
+            --shard-index ${{ matrix.shard_index }} \
+            --total-shards ${TOTAL_SHARDS} \
+            --fmt json \
+            > "artifacts/fg-full-shards/shard-${{ matrix.shard_index }}/shard-manifest.json"
 
       - name: Run pytest shard ${{ matrix.shard_index }}
         run: |
@@ -481,7 +490,7 @@ jobs:
           set -euo pipefail
           .venv/bin/python tools/ci/fg_full_aggregate.py \
             --artifacts-dir artifacts/fg-full-shards \
-            --total-shards 6 \
+            --total-shards 8 \
             --expected-min-tests 22000 \
             --expected-max-tests 26000 \
             --out-json artifacts/fg-full-shards/aggregate-result.json

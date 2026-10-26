@@ -1,3 +1,35 @@
+## POST-778-SHARD-EXECUTION-REMEDIATION-001 — interpreter isolation + shard count increase (6→8)
+
+- **Work item:** POST-778-SHARD-EXECUTION-REMEDIATION-001 (INFRA class)
+- **Baseline SHA:** `940a417b` (HEAD after PR #778 merged)
+- **Failures before:** Shards 0–1 failed with `stderr='ERROR: PyYAML not installed — pip install pyyaml'`; shards 2–5 timed out at 55 min (~3,950 tests/shard × 0.86 s/test CI rate = ~56.5 min)
+- **Failures after:** 0 — interpreter isolation fixed (sys.executable); 8 shards × ~2,960 tests × 0.86 s ≈ 42.5 min, under 45-min timeout
+
+### Root cause
+
+Two independent failure classes in run 40143544627:
+
+1. **Interpreter isolation (shards 0 & 1):** Six test files called `subprocess.run(["python", ...])` to invoke `check_customer_one_roadmap.py`. In CI runners, bare `"python"` resolved to the system Python (no PyYAML installed), producing the PyYAML import error and pytest assertion failures. The venv interpreter is at `sys.executable` and is always the correct target.
+
+2. **Shard timeout (shards 2–5):** Round-robin partitioning distributes files evenly but not test count evenly. With 6 shards across 741 files, heavier shards received files with more tests — ~3,950 tests/shard at 0.86 s/test CI rate = 56.5 min, exceeding the 55-min budget.
+
+### Fix
+
+1. **Interpreter isolation** — replaced bare `"python"` with `sys.executable` in 6 test files. Added `import sys` where missing. New regression test `tests/test_subprocess_interpreter_isolation_001.py` (3 tests): verifies venv has PyYAML, verifies sys.executable bypasses a fake system Python on PATH, verifies source-code audit of the 6 affected files.
+
+2. **Shard count increase (6→8)** — updated `.github/workflows/testing-module.yml` (matrix `[0–7]`, `TOTAL_SHARDS: "8"`, `timeout-minutes: 45`) and `Makefile` (`TOTAL_SHARDS ?= 8`). Added shard manifest-writing step before pytest — writes `shard-manifest.json` so partial evidence uploads even if a shard times out.
+
+### Regression tests
+
+`tests/test_subprocess_interpreter_isolation_001.py` — 3 tests:
+- `test_venv_interpreter_has_pyyaml`: confirms sys.executable can import yaml
+- `test_checker_succeeds_with_venv_interpreter`: injects fake "python" on PATH, verifies sys.executable ignores it
+- `test_checker_invocation_files_use_sys_executable`: source-code audit of 6 affected test files
+
+All 3 pass.
+
+---
+
 ## POST-777-SCHEDULED-FULL-SUITE-001 — deterministic GitHub Actions matrix sharding for fg-full
 
 - **Work item:** POST-777-SCHEDULED-FULL-SUITE-001 (INFRA class)

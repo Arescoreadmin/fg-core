@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -627,7 +628,7 @@ def test_l1_roadmap_checker_marks_cz_reconcile_001_completed() -> None:
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CZ-RECONCILE-001",
@@ -648,7 +649,7 @@ def test_l2_roadmap_checker_reports_provenance_integrity_001_completed() -> None
     """check_customer_one_roadmap.py --work-item PROVENANCE-INTEGRITY-001 must exit 1 (COMPLETED)."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "PROVENANCE-INTEGRITY-001",
@@ -669,7 +670,7 @@ def test_l3_roadmap_checker_reports_vault_verify_contract_001_completed() -> Non
     """check_customer_one_roadmap.py --work-item VAULT-VERIFY-CONTRACT-001 must exit 1 (COMPLETED)."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "VAULT-VERIFY-CONTRACT-001",
@@ -696,7 +697,7 @@ def test_l4_roadmap_checker_authorizes_final_readiness_when_deps_complete() -> N
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-FINAL-READINESS-001",
@@ -719,7 +720,7 @@ def test_l5_roadmap_checker_blocks_trust_003() -> None:
     """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-TRUST-003 must exit 1 (blocked)."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-TRUST-003",
@@ -739,7 +740,7 @@ def test_l6_roadmap_checker_blocks_accept_001() -> None:
     """check_customer_one_roadmap.py --work-item CUSTOMER-ZERO-ACCEPT-001 must exit 1 (blocked)."""
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-ACCEPT-001",
@@ -764,7 +765,7 @@ def test_l7_roadmap_checker_blocks_customer_zero_trust_001() -> None:
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-TRUST-001",
@@ -791,7 +792,7 @@ def test_l8_checker_authorizes_when_blocked_by_deps_complete() -> None:
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-FINAL-READINESS-001",

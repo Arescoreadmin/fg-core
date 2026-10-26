@@ -22,6 +22,7 @@ No Railway mutations. No HCP API calls. No paid infrastructure of any kind.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -58,7 +59,7 @@ def _ids_in_section(authority: dict, section: str) -> list[str]:
 
 def _run_checker(*extra_args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python", "tools/ci/check_customer_one_roadmap.py", *extra_args],
+        [sys.executable, "tools/ci/check_customer_one_roadmap.py", *extra_args],
         cwd=REPO,
         capture_output=True,
         text=True,

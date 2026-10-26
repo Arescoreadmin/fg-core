@@ -21,6 +21,7 @@ No Railway mutations. No HCP API calls. No paid infrastructure of any kind.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -170,7 +171,7 @@ def test_c1_checker_authorizes_final_readiness() -> None:
     """
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "tools/ci/check_customer_one_roadmap.py",
             "--work-item",
             "CUSTOMER-ZERO-FINAL-READINESS-001",
