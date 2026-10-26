@@ -354,7 +354,7 @@ jobs:
       - name: Validate shard inventory (fail closed)
         run: |
           set -euo pipefail
-          .venv/bin/python tools/ci/fg_full_shard.py --validate --total-shards 8
+          .venv/bin/python tools/ci/fg_full_shard.py --validate --total-shards 10
 
       - name: Run non-pytest fg-full gates
         run: |
@@ -375,9 +375,11 @@ jobs:
   fg-full-shard:
     name: "fg-full-shard (${{ matrix.shard_index }})"
     runs-on: ubuntu-latest
-    # 10 shards × greedy-balanced ~2384 tests × 0.95 s/test ≈ 39 min; 45 min gives headroom.
-    # Previously 8 shards × round-robin imbalance hit 53 min on shard 6 (3349 tests).
-    timeout-minutes: 45
+    # 10 shards × duration-balanced ~1500 s/shard (fg_test_durations.json weights) ≈ 25 min;
+    # 55 min gives headroom for the heaviest shards (worst-case observed: 46 min before fix).
+    # Previously 45 min timed out shards 0+1 because greedy count-balancing ignored per-test
+    # runtime variance (e.g. test_ea_canonical_14_6_1.py runs at 4.6 s/test vs 0.3 s/test avg).
+    timeout-minutes: 55
     permissions:
       contents: read
     needs: [fg-full-gates]
@@ -413,6 +415,18 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends ripgrep
           rg --version
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Terraform version preflight (fail closed)
+        run: |
+          set -euo pipefail
+          terraform version
+          echo "terraform: OK"
 
       - name: Create venv + install deps
         run: |
