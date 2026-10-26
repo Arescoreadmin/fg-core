@@ -1,3 +1,37 @@
+## POST-780-FINAL-SHARD-CORRECTION-001 — Terraform CLI install, duration-weighted shard rebalancing, timeout 45→55 min
+
+- **Work item:** POST-780-FINAL-SHARD-CORRECTION-001 (REPAIR class)
+- **Baseline SHA:** `08de9c90` (HEAD after PR #780 merged)
+- **Failures before:** Run 40366143888 — shard 9: 4 failures (`FileNotFoundError: [Errno 2] No such file or directory: 'terraform'`); shard 0: 46m27s timeout; shard 1: 45m18s timeout. 7/10 shards passed.
+- **Failures after:** 0 — terraform installed; duration-weighted balancing gives 1571–1572 s/shard (1.00× duration-imbalance); all shards ≈ 26 min estimated, well within 55-min timeout.
+
+### Root cause
+
+Three independent failure classes:
+
+1. **Terraform missing (shard 9):** `test_generated_stage_configuration_is_terraform_formatted` (4 parametrized cases) in `tests/test_customer_zero_narrow_cost_teardown.py` calls `subprocess.run(["terraform", "fmt", "-check", "-recursive"])` directly. `terraform` was never installed in the `fg-full-shard` job — ripgrep was added in #780 but terraform was not. Failure mode: `FileNotFoundError: [Errno 2] No such file or directory: 'terraform'`.
+
+2. **Slow-shard timeouts (shard 0: 46m27s, shard 1: 45m18s):** Count-only greedy bin-packing (from #780) achieved 1.00× count-imbalance but could not account for per-test runtime variance. Shard 0 held `test_governance_orchestration.py` (482 tests × 2.1 s ≈ 17 min), `test_ea_canonical_14_6_1.py` (117 tests × 4.6 s ≈ 9 min), and `test_h16_5_control_effectiveness.py` (147 tests × 3.6 s ≈ 9 min) simultaneously. Shard 1 held `test_remediation_authority.py` (472 tests × 2.0 s ≈ 16 min), `test_h14_6_5a_evidence_hardening.py` (116 tests × 4.2 s ≈ 8 min), and `test_h14_6_6_verification_workflow.py` (151 tests × 4.0 s ≈ 10 min) simultaneously. These 6 files are 4–15× slower per test than the suite median (~0.5 s/test).
+
+3. **Validate/shard-count mismatch:** `fg-full-gates` ran `--validate --total-shards 8` against the 10-shard matrix introduced in #780, validating the wrong configuration. Also: `Makefile TOTAL_SHARDS ?= 8` gave a wrong local default that diverged silently from CI.
+
+### Fix
+
+1. **Terraform** — added `hashicorp/setup-terraform@v3` (version `1.9.8`, `terraform_wrapper: false`) step after "Install OS dependencies" in `fg-full-shard` job. Added fail-closed `terraform version` preflight step. Terraform 1.9.8 is sufficient for `fmt -check` (no provider auth, no state, no apply). Added regression guard `test_terraform_cli_is_available_for_fmt_tests` to `tests/test_customer_zero_narrow_cost_teardown.py` using `shutil.which("terraform")` — fails before parametrized fmt tests with an actionable message.
+
+2. **Duration-weighted shard balancing** — created `tools/ci/fg_test_durations.json` with 9 measured per-file CI durations derived from run 40366143888. Rewrote `_assign_shards_greedy()` in `tools/ci/fg_full_shard.py` to use `float` shard loads and `_duration_weight()` (prefers `fg_test_durations.json`; falls back to `count × 0.5 s` for unmeasured files). Files sorted heaviest-first before assignment. Each of the 9 measured heavy files now lands alone in its own shard. Achieved 1.00× duration-imbalance (1571–1572 s/shard vs 1.05× count-imbalance). Timeout raised `45 → 55` min (evidenced worst-case 46m27s; 55 min provides ~9 min margin). `_expected_tests()` and manifest `expected_tests` field unchanged — still uses actual test counts for aggregation accuracy.
+
+3. **Validate fix + Makefile parity** — changed `fg-full-gates` validation step from `--validate --total-shards 8` to `--validate --total-shards 10`. Changed `Makefile` `TOTAL_SHARDS ?= 8` to `?= 10`.
+
+### Tests
+
+- `tests/tools/test_fg_full_shard.py` — 35 passed
+- `tests/test_customer_zero_narrow_cost_teardown.py` — 47 passed (incl. 4 terraform fmt + 1 availability + 42 existing)
+
+All pass.
+
+---
+
 ## POST-779-CI-EXECUTION-HARDENING-001 — ripgrep, remediation timeline fixtures, greedy shard balance, shard count 8→10
 
 - **Work item:** POST-779-CI-EXECUTION-HARDENING-001 (INFRA class)

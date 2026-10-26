@@ -564,6 +564,23 @@ def test_generated_hcp_stages_do_not_configure_or_authenticate_vault() -> None:
     assert 'data "hcp_project" "frostgate_production"' in hvn["hcp_project.tf"]
 
 
+def test_terraform_cli_is_available_for_fmt_tests() -> None:
+    """Regression guard: the parametrized fmt tests require terraform in PATH.
+
+    If this test fails, ensure the CI shard step installs terraform via
+    hashicorp/setup-terraform before running pytest (see testing-module.yml
+    fg-full-shard job).  Locally, install terraform >= 1.x from
+    https://developer.hashicorp.com/terraform/install.
+    """
+    import shutil
+
+    assert shutil.which("terraform") is not None, (
+        "terraform CLI is not in PATH — "
+        "test_generated_stage_configuration_is_terraform_formatted requires it. "
+        "Install terraform >= 1.x or ensure the CI setup-terraform step ran."
+    )
+
+
 @pytest.mark.parametrize(
     ("stage", "state"),
     [

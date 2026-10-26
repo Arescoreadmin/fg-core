@@ -3,11 +3,20 @@
 
 Collects all test files under tests/ (same environment as fg-full-pytest),
 sorts them deterministically (lexicographic path, PYTHONHASHSEED=0), and
-assigns files to shards using greedy bin-packing by test count.
+assigns files to shards using greedy bin-packing by estimated duration.
 
-If fg_test_counts.json is present, greedy bin-packing is used to balance
-shards by test count (minimises max-shard load). Otherwise falls back to
-round-robin modulo for forward-compat.
+Load weighting
+--------------
+Bin-packing uses fg_test_durations.json (per-file estimated CI seconds) when
+present, falling back to count × 0.5 s for unmeasured files.  The manifest
+and expected_tests fields always report actual test counts (from
+fg_test_counts.json) for aggregation accuracy — duration weights are used
+only for scheduling, not for result verification.
+
+Duration weights were derived from workflow run 40366143888 (2026-10-26),
+which showed that count-only balancing placed multi-second-per-test files
+(test_ea_canonical_14_6_1.py ≈ 4.6 s/test, test_governance_orchestration.py
+≈ 2.1 s/test) into the same shards, causing consistent 45-min timeouts.
 
 Invariants
 ----------
@@ -44,8 +53,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # All pytest testpaths (matches pytest.ini / pyproject.toml testpaths).
 TEST_ROOTS = [REPO_ROOT / "tests", REPO_ROOT / "backend" / "tests"]
-# Pre-computed per-file test counts for greedy bin-packing.
+# Pre-computed per-file test counts for manifest / expected-test reporting.
 TEST_COUNTS_PATH = Path(__file__).parent / "fg_test_counts.json"
+# Per-file estimated CI durations in seconds for bin-packing only.
+DURATIONS_PATH = Path(__file__).parent / "fg_test_durations.json"
 
 
 def _load_test_counts() -> dict[str, int]:
@@ -53,6 +64,17 @@ def _load_test_counts() -> dict[str, int]:
     if TEST_COUNTS_PATH.exists():
         try:
             return json.loads(TEST_COUNTS_PATH.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _load_test_durations() -> dict[str, float]:
+    """Load per-file estimated CI durations (seconds) from fg_test_durations.json."""
+    if DURATIONS_PATH.exists():
+        try:
+            raw = json.loads(DURATIONS_PATH.read_text())
+            return {k: float(v) for k, v in raw.items() if not k.startswith("_")}
         except Exception:
             return {}
     return {}
@@ -85,27 +107,46 @@ def _collect_test_files() -> list[Path]:
     return files
 
 
+def _duration_weight(f: Path, counts: dict[str, int], durations: dict[str, float]) -> float:
+    """Estimated CI duration for a file in seconds.
+
+    Uses fg_test_durations.json when present; falls back to count × 0.5 s for
+    unmeasured files.  The 0.5 s/test baseline is calibrated from run
+    40366143888 where fast shards ran at ~0.31 s/test and medium shards at
+    ~0.9–1.0 s/test (average ≈ 0.5 s/test across all unmeasured files).
+    """
+    rel = _relative(f)
+    if rel in durations:
+        return durations[rel]
+    return counts.get(rel, 1) * 0.5
+
+
 def _assign_shards_greedy(
     files: list[Path], total_shards: int
 ) -> dict[int, list[Path]]:
     """Greedy bin-packing: always assign next file (heaviest first) to least-loaded shard.
 
+    Load is measured in estimated CI seconds (fg_test_durations.json) to
+    balance wall-clock runtime rather than raw test count.  Files without a
+    duration entry fall back to count × 0.5 s (fg_test_counts.json).
+
     Returns a mapping of shard_index → list[Path].
     """
     counts = _load_test_counts()
-    # Sort files heaviest-first for better balance (greedy bin-packing heuristic).
+    durations = _load_test_durations()
+
     sorted_files = sorted(
         files,
-        key=lambda f: counts.get(_relative(f), 1),
+        key=lambda f: _duration_weight(f, counts, durations),
         reverse=True,
     )
-    shard_loads: list[int] = [0] * total_shards
+    shard_loads: list[float] = [0.0] * total_shards
     shard_files: dict[int, list[Path]] = {i: [] for i in range(total_shards)}
 
     for f in sorted_files:
         lightest = min(range(total_shards), key=lambda i: shard_loads[i])
         shard_files[lightest].append(f)
-        shard_loads[lightest] += counts.get(_relative(f), 1)
+        shard_loads[lightest] += _duration_weight(f, counts, durations)
 
     # Sort each shard's files lexicographically for determinism.
     for idx in shard_files:
@@ -188,15 +229,18 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     all_assigned: list[str] = []
     errors: list[str] = []
     counts = _load_test_counts()
+    durations = _load_test_durations()
 
     all_shards = _assign_shards_greedy(files, args.total_shards)
     shard_tests: list[int] = []
+    shard_weights: list[float] = []
     for idx in range(args.total_shards):
         shard = all_shards[idx]
         if not shard:
             errors.append(f"shard {idx} is empty")
         all_assigned.extend(_relative(f) for f in shard)
         shard_tests.append(sum(counts.get(_relative(f), 1) for f in shard))
+        shard_weights.append(sum(_duration_weight(f, counts, durations) for f in shard))
 
     # Duplicate check
     seen: set[str] = set()
@@ -225,12 +269,21 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     max_tests = max(shard_tests)
     min_tests = min(shard_tests)
     avg_tests = total_tests / args.total_shards
-    imbalance = max_tests / avg_tests if avg_tests > 0 else 0
+    count_imbalance = max_tests / avg_tests if avg_tests > 0 else 0
+
+    total_weight = sum(shard_weights)
+    max_weight = max(shard_weights)
+    min_weight = min(shard_weights)
+    avg_weight = total_weight / args.total_shards
+    dur_imbalance = max_weight / avg_weight if avg_weight > 0 else 0
+
     print(
         f"fg_full_shard validate: PASS "
         f"({len(files)} files, {args.total_shards} shards, no omissions, no duplicates)\n"
-        f"  tests: total={total_tests} min={min_tests} max={max_tests} "
-        f"avg={avg_tests:.0f} imbalance={imbalance:.2f}x"
+        f"  tests:    total={total_tests} min={min_tests} max={max_tests} "
+        f"avg={avg_tests:.0f} count-imbalance={count_imbalance:.2f}x\n"
+        f"  duration: total={total_weight:.0f}s min={min_weight:.0f}s max={max_weight:.0f}s "
+        f"avg={avg_weight:.0f}s duration-imbalance={dur_imbalance:.2f}x"
     )
     return 0
 

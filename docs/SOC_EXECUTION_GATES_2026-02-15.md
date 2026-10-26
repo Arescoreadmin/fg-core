@@ -7665,3 +7665,37 @@ SOC review outcome: APPROVED. Offline read-only gate; no runtime authority, no a
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. Offline read-only gate; no runtime authority weakening; no authentication path change; no tenant isolation bypass; no secret access; canonical Customer-Zero truth preserved and enforced; authorization_status hardcoded NOT_AUTHORIZED and cannot be overridden by this module.
+
+## 2026-10-26 - ci: POST-780-FINAL-SHARD-CORRECTION-001: Terraform install + duration-weighted shard rebalancing
+
+**Change scope:** POST-780-FINAL-SHARD-CORRECTION-001. Three CI-execution changes:
+
+1. **testing-module.yml** — `fg-full-shard` job: added `hashicorp/setup-terraform@v3` (pinned 1.9.8) and `terraform version` preflight step; raised timeout 45→55 min (justified by evidence: shards 0+1 observed at 46m27s and 45m18s before fix); corrected `--validate --total-shards 8` → `--validate --total-shards 10` in `fg-full-gates`.
+2. **tools/ci/fg_full_shard.py** — Bin-packing now uses `fg_test_durations.json` duration weights (seconds) instead of raw test counts; fallback is `count × 0.5 s` for unmeasured files. `_expected_tests()` still returns actual test counts for aggregation integrity. Duration weights derived from CI run 40366143888 timing evidence.
+3. **tools/ci/fg_test_durations.json** (new) — Per-file duration estimates for 9 identified slow files. No changes to test logic, tenant isolation, authentication, or secret handling.
+4. **Makefile** — `TOTAL_SHARDS ?= 8` → `?= 10` (local default now matches workflow).
+5. **tests/test_customer_zero_narrow_cost_teardown.py** — Added `test_terraform_cli_is_available_for_fmt_tests()` regression guard.
+
+**Security posture:**
+
+1. **No authentication path change.** The modified files are CI orchestration only (`testing-module.yml`, `Makefile`), the test partitioner (`fg_full_shard.py`), static data (`fg_test_durations.json`), and an additive test (`test_customer_zero_narrow_cost_teardown.py`).
+2. **No secrets accessed.** Terraform is installed for `terraform fmt -check` (a pure HCL formatter). No `terraform init`, `terraform apply`, or provider auth. No cloud mutation, no HCP/AWS/Vault contact.
+3. **No tenant isolation or security gate weakened.** All ten shards still produce JUnit XML; the aggregator still requires all shards present, all passing, inventory in [22500, 26000]. Missing or incomplete evidence remains fatal. The only change to shard assignment is which files land in which shard — every test file is still run exactly once.
+4. **No paid infrastructure.** Terraform CLI installation is idempotent and free. The `terraform version` preflight makes no API calls. hashicorp/setup-terraform@v3 downloads a CLI binary only.
+5. **Fail-closed preserved.** The timeout increase (45→55 min) gives more room for the worst-case shard without removing any correctness guards.
+6. **Shard count invariants preserved.** `fg_full_shard.py --validate --total-shards 10` passes: 741 files, 0 omissions, 0 duplicates, duration-imbalance=1.00x.
+
+**Critical-path files changed:** `.github/workflows/testing-module.yml` (CI orchestration), `tools/ci/fg_full_shard.py` (partitioner algorithm), `tools/ci/fg_test_durations.json` (new static data), `Makefile` (default variable), `tests/test_customer_zero_narrow_cost_teardown.py` (additive test).
+
+**Required invariant:** All 10 shards complete within 55 min; no test omitted; no duplicate execution; aggregator still fails closed on missing/failed shards; `terraform fmt -check` tests run and pass; new regression test fails clearly when terraform is absent.
+
+**Validation evidence:**
+
+- `python tools/ci/fg_full_shard.py --validate --total-shards 10` → PASS (741 files, duration-imbalance=1.00x)
+- `pytest tests/tools/test_fg_full_shard.py -q` → 35 passed
+- `pytest tests/test_customer_zero_narrow_cost_teardown.py -q -k "test_terraform"` → 5 passed (4 fmt + 1 availability)
+- `make fg-lint` → all checks passed
+- `mypy tools/ci/fg_full_shard.py tools/ci/fg_full_aggregate.py` → no issues
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. CI execution hardening only; no runtime authority change; no authentication path change; no tenant isolation bypass; no secret access; all fail-closed guards preserved and strengthened.

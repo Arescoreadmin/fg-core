@@ -1,0 +1,12 @@
+{
+  "_comment": "Per-file estimated CI duration in seconds. Used by fg_full_shard.py for duration-weighted greedy bin-packing. Derived from workflow run 40366143888 (2026-10-26). Fallback for unmeasured files: count * 0.5 s.",
+  "tests/test_governance_orchestration.py": 1010,
+  "tests/test_remediation_authority.py": 950,
+  "tests/test_h14_6_6_verification_workflow.py": 605,
+  "tests/test_ea_canonical_14_6_1.py": 540,
+  "tests/test_h14_6_5a_evidence_hardening.py": 490,
+  "tests/test_h16_5_control_effectiveness.py": 440,
+  "tests/test_h16_5_1_control_effectiveness_explainability.py": 375,
+  "tests/test_h14_6_7_evidence_freshness_authority.py": 243,
+  "tests/test_trust_enforcement_integration.py": 140
+}
