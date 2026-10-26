@@ -375,7 +375,9 @@ jobs:
   fg-full-shard:
     name: "fg-full-shard (${{ matrix.shard_index }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # 8 shards × ~24-30 min CI time each; 45 min gives headroom
+    # 10 shards × greedy-balanced ~2384 tests × 0.95 s/test ≈ 39 min; 45 min gives headroom.
+    # Previously 8 shards × round-robin imbalance hit 53 min on shard 6 (3349 tests).
+    timeout-minutes: 45
     permissions:
       contents: read
     needs: [fg-full-gates]
@@ -383,10 +385,10 @@ jobs:
     strategy:
       fail-fast: false  # collect all shard results before declaring failure
       matrix:
-        shard_index: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     env:
-      TOTAL_SHARDS: "8"
+      TOTAL_SHARDS: "10"
 
     steps:
       - name: Checkout (full history)
@@ -404,6 +406,13 @@ jobs:
             requirements-dev.txt
             constraints.txt
             pyproject.toml
+
+      - name: Install OS dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends ripgrep
+          rg --version
 
       - name: Create venv + install deps
         run: |
@@ -490,8 +499,8 @@ jobs:
           set -euo pipefail
           .venv/bin/python tools/ci/fg_full_aggregate.py \
             --artifacts-dir artifacts/fg-full-shards \
-            --total-shards 8 \
-            --expected-min-tests 22000 \
+            --total-shards 10 \
+            --expected-min-tests 22500 \
             --expected-max-tests 26000 \
             --out-json artifacts/fg-full-shards/aggregate-result.json
 

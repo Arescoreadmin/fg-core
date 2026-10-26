@@ -87,6 +87,8 @@ def _make_app():
     os.environ.setdefault(
         "FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     )
+    # Matches conftest build_app: entitlement enforcement must be off for test keys.
+    os.environ["FG_ENTITLEMENT_ENFORCEMENT"] = "false"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
     return build_app()
@@ -109,21 +111,21 @@ def client(app):
 
 
 @pytest.fixture(scope="module")
-def api_key():
+def api_key(app):  # noqa: ARG001 — ensures _make_app() runs before mint_key()
     from api.auth_scopes import mint_key
 
     return mint_key("governance:read", "governance:write", tenant_id=_TENANT_A)
 
 
 @pytest.fixture(scope="module")
-def alt_api_key():
+def alt_api_key(app):  # noqa: ARG001 — ensures _make_app() runs before mint_key()
     from api.auth_scopes import mint_key
 
     return mint_key("governance:read", "governance:write", tenant_id=_TENANT_B)
 
 
 @pytest.fixture(scope="module")
-def read_only_key():
+def read_only_key(app):  # noqa: ARG001 — ensures _make_app() runs before mint_key()
     from api.auth_scopes import mint_key
 
     return mint_key("governance:read", tenant_id=_TENANT_A)

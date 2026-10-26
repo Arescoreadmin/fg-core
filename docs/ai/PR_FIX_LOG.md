@@ -1,3 +1,42 @@
+## POST-779-CI-EXECUTION-HARDENING-001 — ripgrep, remediation timeline fixtures, greedy shard balance, shard count 8→10
+
+- **Work item:** POST-779-CI-EXECUTION-HARDENING-001 (INFRA class)
+- **Baseline SHA:** `f938a96e` (HEAD after PR #779 merged)
+- **Failures before:** Run 40294759135 — shard 0: 25 failures (`FileNotFoundError: [Errno 2] No such file or directory: 'rg'`); shard 3: 23 failures + 19 errors (`HTTP 400 "tenant_id required for unscoped keys"`); shards 1, 2, 5, 6: timeout (45 min); aggregator: FAIL (14,500 tests recorded vs ~23,829 expected)
+- **Failures after:** 0 — ripgrep installed; fixture ordering deterministic; 10 shards × 2,383 tests × 0.95 s ≈ 39.4 min; aggregator reconciles per-shard expected counts
+
+### Root cause
+
+Four independent failure classes:
+
+1. **Ripgrep missing (shard 0):** `test_secret_scan_gate.py` calls `subprocess.run(["rg", ...])`. The `fg-full-shard` job uses `actions/setup-python@v5` directly, not `fg-python-setup` composite action (which installs ripgrep). Bare `rg` not present on ubuntu-latest runners.
+
+2. **Remediation timeline HTTP 400 (shard 3):** `api_key`, `alt_api_key`, `read_only_key` fixtures were module-scoped without explicit `app` dependency. In certain pytest ordering scenarios, `mint_key()` executed before `_make_app()` reset the engine, causing key lookup to return `tenant_id=None` → `tenant_is_key_bound=False` → `require_bound_tenant()` raised HTTP 400. Additionally, `_make_app()` was missing `FG_ENTITLEMENT_ENFORCEMENT = "false"` (present in conftest `build_app`).
+
+3. **Shard timeouts (shards 1, 2, 5, 6):** Round-robin partition produced 1.36x imbalance (3,349 max / 2,456 min). Shard 6 at 3,349 tests × 0.95 s/test = 53 min exceeded the 45-min limit. Even perfect balance with 8 shards gives 23,829/8 = 2,979 × 0.95 = 47.2 min — still exceeds 45 min.
+
+4. **Aggregator false evidence (Workstream D):** Timed-out shards could produce partial JUnit XMLs. If partial counts happened to keep the global total above the 22,000 threshold, the aggregator could pass despite incomplete execution.
+
+### Fix
+
+1. **Ripgrep** — added `Install OS dependencies` step to `fg-full-shard` job in `testing-module.yml`: `sudo apt-get install -y --no-install-recommends ripgrep` followed by `rg --version` preflight.
+
+2. **Timeline fixtures** — added `app` parameter to `api_key`, `alt_api_key`, `read_only_key` fixtures in `test_remediation_timeline.py`. Added `os.environ["FG_ENTITLEMENT_ENFORCEMENT"] = "false"` to `_make_app()`.
+
+3. **Greedy shard balance + count 8→10** — replaced round-robin with greedy bin-packing in `tools/ci/fg_full_shard.py` using `tools/ci/fg_test_counts.json` (737 files, 23,829 tests pre-counted from `pytest --collect-only`). Shard count increased 8→10 (validated: 2,383 avg × 0.95 s = 39.4 min, 1.00x imbalance). Updated workflow matrix to `[0–9]`, `TOTAL_SHARDS: "10"`.
+
+4. **Aggregator manifest reconciliation** — shard manifest JSON now includes `expected_tests` field. Aggregator reads manifest and fails if `junit_tests < 90% * expected_tests` per shard — catches partial JUnit evidence from timed-out shards. Updated `--total-shards 10`, `--expected-min-tests 22500`.
+
+### Tests
+
+- `tests/test_remediation_timeline.py` — 41 passed, 1 skipped
+- `tests/test_secret_scan_gate.py` — 25 passed
+- `tests/tools/test_fg_full_shard.py` — 35 passed
+
+All pass.
+
+---
+
 ## POST-778-SHARD-EXECUTION-REMEDIATION-001 — interpreter isolation + shard count increase (6→8)
 
 - **Work item:** POST-778-SHARD-EXECUTION-REMEDIATION-001 (INFRA class)
