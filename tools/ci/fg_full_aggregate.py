@@ -49,6 +49,9 @@ class ShardResult:
     present: bool = False
     parse_ok: bool = False
     error_detail: str = ""
+    # From shard-manifest.json — present when the manifest was written pre-run.
+    manifest_expected_tests: int = 0
+    manifest_file_count: int = 0
 
 
 def _parse_junit(path: Path) -> tuple[int, int, int, int, float]:
@@ -72,6 +75,18 @@ def _parse_junit(path: Path) -> tuple[int, int, int, int, float]:
     return tests, failures, errors, skipped, duration
 
 
+def _load_shard_manifest(shard_dir: Path, idx: int) -> tuple[int, int]:
+    """Return (expected_tests, file_count) from shard-manifest.json, or (0, 0)."""
+    manifest_path = shard_dir / "shard-manifest.json"
+    if not manifest_path.exists():
+        return 0, 0
+    try:
+        m = json.loads(manifest_path.read_text())
+        return int(m.get("expected_tests", 0)), int(m.get("file_count", 0))
+    except Exception:
+        return 0, 0
+
+
 def aggregate(
     artifacts_dir: Path,
     total_shards: int,
@@ -90,6 +105,11 @@ def aggregate(
             results.append(r)
             continue
         r.present = True
+
+        # Load shard manifest for per-shard reconciliation (written before pytest).
+        r.manifest_expected_tests, r.manifest_file_count = _load_shard_manifest(
+            shard_dir, idx
+        )
 
         if not junit_path.exists():
             r.error_detail = f"JUnit XML missing: {junit_path}"
@@ -113,6 +133,16 @@ def aggregate(
             r.error_detail = (
                 "shard collected zero tests (empty shard or collection failure)"
             )
+        elif r.manifest_expected_tests > 0:
+            # Shard manifest present: check that JUnit count is within 10% of expected.
+            # A timed-out shard may write a partial JUnit — catch truncated evidence.
+            threshold = int(r.manifest_expected_tests * 0.90)
+            if r.tests < threshold:
+                r.error_detail = (
+                    f"shard ran {r.tests} tests but manifest expected "
+                    f"{r.manifest_expected_tests} "
+                    f"(< 90% threshold {threshold}) — possible timeout truncation"
+                )
 
         results.append(r)
 
@@ -142,6 +172,8 @@ def aggregate(
                 "errors": r.errors,
                 "skipped": r.skipped,
                 "duration_seconds": round(r.duration_seconds, 1),
+                "manifest_expected_tests": r.manifest_expected_tests,
+                "manifest_file_count": r.manifest_file_count,
                 "error_detail": r.error_detail,
             }
             for r in results
