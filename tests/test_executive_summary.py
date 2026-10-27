@@ -19,6 +19,9 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
+from fastapi.testclient import TestClient
+
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
 
@@ -361,70 +364,253 @@ def test_executive_summary_markdown_fences_stripped():
 
 
 # ---------------------------------------------------------------------------
-# test_report_includes_executive_summary_section (integration — HTTP)
+# Integration tests — HTTP create-and-readback for executive_summary reports
 # ---------------------------------------------------------------------------
 
+_TENANT_ES = "tenant-es-integration"
+_TENANT_ES_B = "tenant-es-integration-b"
 
-def test_report_includes_executive_summary_section():
-    """POST /engagements/{id}/reports with type=executive_summary returns executive_summary section."""
-    from fastapi.testclient import TestClient
-    from api.main import app
-    from unittest.mock import patch as _patch
+_ES_ENGAGEMENT_BODY = {
+    "client_name": "ES Integration Corp",
+    "assessor_id": "assessor-es-001",
+    "assessment_type": "ai_governance",
+}
 
-    valid_exec_summary = {
-        "narrative": "Integration test narrative.",
-        "risk_posture": "medium",
-        "key_concerns": ["Test concern"],
-        "generation_note": _GENERATION_NOTE,
-    }
+_ES_SUMMARY_STUB = {
+    "narrative": "Integration test narrative for executive summary.",
+    "risk_posture": "medium",
+    "key_concerns": ["Integration test concern"],
+    "generation_note": _GENERATION_NOTE,
+}
 
-    with (
-        _patch(
-            "services.field_assessment.executive_summary.generate_executive_summary",
-            return_value=valid_exec_summary,
-        ),
-        _patch(
-            "api.field_assessment.get_engagement",
-            return_value=MagicMock(id=_ENG, tenant_id=_TENANT),
-        ),
-        _patch(
-            "api.field_assessment.list_findings",
-            return_value=[],
-        ),
-        _patch(
-            "api.field_assessment.list_scan_results",
-            return_value=[],
-        ),
-        _patch(
-            "api.field_assessment._resolve_caller_tenant",
-            return_value=_TENANT,
-        ),
-        _patch(
-            "api.field_assessment._actor_from_context",
-            return_value="test-actor",
-        ),
-        _patch(
-            "services.governance.report.signing.sign_report",
-            return_value="mock-sig",
-        ),
-        _patch(
-            "services.governance.report.versioning.get_next_version",
-            return_value=1,
-        ),
-    ):
-        client = TestClient(app)
-        resp = client.post(
-            f"/field-assessment/engagements/{_ENG}/reports",
-            json={"report_type": "executive_summary"},
-            headers={"X-API-Key": "test", "X-Tenant-ID": _TENANT},
+
+def _issue_key_es(tenant_id: str, *scopes: str) -> tuple[str, str]:
+    import uuid as _uuid
+
+    from api.credential_authority import issue_credential
+    from api.db import get_engine
+    from sqlalchemy import text as sa_text
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa_text(
+                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state)"
+                " VALUES (:tid, 'active')"
+            ),
+            {"tid": tenant_id},
         )
+    result = issue_credential(
+        engine,
+        tenant_id=tenant_id,
+        credential_type="tenant_api_key",
+        credential_slot=f"test:{_uuid.uuid4()}",
+        scopes=list(scopes),
+    )
+    plaintext_secret = result.plaintext_secret
+    assert plaintext_secret is not None
+    return plaintext_secret, result.record.credential_id
 
-    # 201 or 503 (signing key missing in test env) are both acceptable;
-    # what we assert is that if 201, the executive_summary section is present.
-    if resp.status_code == 201:
-        body = resp.json()
-        assert "executive_summary" in body
-        assert body["executive_summary"]["narrative"] == "Integration test narrative."
-    else:
-        # Auth/signing unavailable in test env — section plumbing verified by unit tests
-        assert resp.status_code in (401, 403, 422, 500, 503)
+
+def _assign_analyst_es(tenant_id: str, credential_id: str) -> None:
+    from api.db import get_engine
+    from api.tenant_rbac import assign_role
+    from sqlalchemy.orm import Session
+
+    with Session(get_engine()) as db:
+        assign_role(
+            db,
+            tenant_id=tenant_id,
+            actor_key_prefix="pytest",
+            credential_id=credential_id,
+            role_name="analyst",
+        )
+        db.commit()
+
+
+@pytest.fixture()
+def client_es(build_app, monkeypatch):
+    """Tenant ES-A client with analyst permissions; TrustBindingFake active via FG_ENV=test."""
+    app = build_app(auth_enabled=True)
+    key, cred_id = _issue_key_es(_TENANT_ES, "governance:read", "governance:write")
+    _assign_analyst_es(_TENANT_ES, cred_id)
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+@pytest.fixture()
+def read_only_client_es(build_app, monkeypatch):
+    """Tenant ES-A client with governance:read only (no write)."""
+    app = build_app(auth_enabled=True)
+    key, cred_id = _issue_key_es(_TENANT_ES, "governance:read")
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+@pytest.fixture()
+def no_signing_key_client_es(build_app, monkeypatch):
+    """Analyst-scoped client whose signing authority always raises VaultTransitError."""
+    app = build_app(auth_enabled=True)
+    key, cred_id = _issue_key_es(_TENANT_ES, "governance:read", "governance:write")
+    _assign_analyst_es(_TENANT_ES, cred_id)
+
+    import api.field_assessment as _fa_module
+    from services.cgin.key_management.vault_transit import VaultTransitError
+
+    def _unavailable_authority():
+        raise VaultTransitError("Signing authority not configured (test: key missing)")
+
+    monkeypatch.setattr(
+        _fa_module, "_get_trust_binding_authority", _unavailable_authority
+    )
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+@pytest.fixture()
+def unauthed_client_es(build_app):
+    """Client with no API key."""
+    app = build_app(auth_enabled=True)
+    return TestClient(app)
+
+
+@pytest.fixture()
+def client_b_es(build_app):
+    """Tenant ES-B client — for cross-tenant isolation."""
+    app = build_app(auth_enabled=True)
+    key, cred_id = _issue_key_es(_TENANT_ES_B, "governance:read", "governance:write")
+    _assign_analyst_es(_TENANT_ES_B, cred_id)
+    return TestClient(app, headers={"X-API-Key": key})
+
+
+def _make_es_engagement(client: TestClient) -> str:
+    resp = client.post("/field-assessment/engagements", json=_ES_ENGAGEMENT_BODY)
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+def test_exec_summary_post_receipt_shape(client_es: TestClient) -> None:
+    """POST returns a 201 receipt with report_id, version, status, and compiled_at.
+
+    POST /engagements/{id}/reports returns ONLY a metadata receipt — the full
+    report (including executive_summary) lives in the GET response.
+    """
+    eid = _make_es_engagement(client_es)
+    with patch(
+        "services.field_assessment.executive_summary.generate_executive_summary",
+        return_value=_ES_SUMMARY_STUB,
+    ):
+        resp = client_es.post(
+            f"/field-assessment/engagements/{eid}/reports",
+            json={"report_type": "executive_summary"},
+        )
+    assert resp.status_code == 201, resp.text
+    receipt = resp.json()
+    assert "report_id" in receipt, "receipt must include report_id"
+    assert receipt["version"] == 1, (
+        f"first report must be version 1, got {receipt['version']}"
+    )
+    assert receipt["status"] == "finalized", (
+        f"status must be 'finalized', got {receipt['status']!r}"
+    )
+    assert "compiled_at" in receipt, "receipt must include compiled_at"
+    assert "executive_summary" not in receipt, (
+        "POST receipt must NOT include executive_summary — that field lives in the GET response"
+    )
+
+
+def test_exec_summary_readback_contains_section(client_es: TestClient) -> None:
+    """GET /engagements/{id}/reports/{version} returns report.executive_summary with grounded content."""
+    eid = _make_es_engagement(client_es)
+    with patch(
+        "services.field_assessment.executive_summary.generate_executive_summary",
+        return_value=_ES_SUMMARY_STUB,
+    ):
+        post_resp = client_es.post(
+            f"/field-assessment/engagements/{eid}/reports",
+            json={"report_type": "executive_summary"},
+        )
+    assert post_resp.status_code == 201, post_resp.text
+    version = post_resp.json()["version"]
+
+    get_resp = client_es.get(f"/field-assessment/engagements/{eid}/reports/{version}")
+    assert get_resp.status_code == 200, get_resp.text
+    body = get_resp.json()
+
+    assert "report" in body, "GET response must include a 'report' field"
+    report = body["report"]
+    assert "executive_summary" in report, (
+        "report.executive_summary must be present for report_type=executive_summary"
+    )
+    es = report["executive_summary"]
+    assert isinstance(es.get("narrative"), str) and es["narrative"], (
+        "executive_summary.narrative must be a non-empty string"
+    )
+    assert isinstance(es.get("risk_posture"), str), (
+        "executive_summary.risk_posture must be a string"
+    )
+    assert isinstance(es.get("key_concerns"), list), (
+        "executive_summary.key_concerns must be a list"
+    )
+    assert es["narrative"] == _ES_SUMMARY_STUB["narrative"], (
+        "executive_summary.narrative must match the stubbed value"
+    )
+
+
+def test_exec_summary_unauthenticated_rejected(unauthed_client_es: TestClient) -> None:
+    """POST without an API key must be rejected (fail closed)."""
+    resp = unauthed_client_es.post(
+        "/field-assessment/engagements/eng-fake/reports",
+        json={"report_type": "executive_summary"},
+    )
+    assert resp.status_code in (401, 403), (
+        f"unauthenticated POST must be rejected, got {resp.status_code}"
+    )
+
+
+def test_exec_summary_read_only_scope_rejected(read_only_client_es: TestClient) -> None:
+    """POST with governance:read but not governance:write must be rejected."""
+    resp = read_only_client_es.post(
+        "/field-assessment/engagements/eng-fake/reports",
+        json={"report_type": "executive_summary"},
+    )
+    assert resp.status_code in (401, 403), (
+        f"read-only scope must be rejected for POST, got {resp.status_code}"
+    )
+
+
+def test_exec_summary_no_signing_key_fails_loudly(
+    no_signing_key_client_es: TestClient,
+) -> None:
+    """POST when signing authority is unavailable must return 503 (fail closed)."""
+    eid = _make_es_engagement(no_signing_key_client_es)
+    resp = no_signing_key_client_es.post(
+        f"/field-assessment/engagements/{eid}/reports",
+        json={"report_type": "executive_summary"},
+    )
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["detail"]["code"] == "REPORT_SIGNING_KEY_MISSING"
+
+
+def test_exec_summary_cross_tenant_engagement_not_found(
+    client_b_es: TestClient, client_es: TestClient
+) -> None:
+    """Tenant B cannot generate a report for Tenant A's engagement (returns 404)."""
+    with patch(
+        "services.field_assessment.executive_summary.generate_executive_summary",
+        return_value=_ES_SUMMARY_STUB,
+    ):
+        eid = _make_es_engagement(client_es)
+        resp = client_b_es.post(
+            f"/field-assessment/engagements/{eid}/reports",
+            json={"report_type": "executive_summary"},
+        )
+    assert resp.status_code == 404, (
+        f"cross-tenant engagement access must return 404, got {resp.status_code}"
+    )
+
+
+def test_exec_summary_missing_version_not_found(client_es: TestClient) -> None:
+    """GET for a non-existent version must return 404 without leaking existence."""
+    eid = _make_es_engagement(client_es)
+    resp = client_es.get(f"/field-assessment/engagements/{eid}/reports/999")
+    assert resp.status_code == 404, (
+        f"missing version must return 404, got {resp.status_code}"
+    )
