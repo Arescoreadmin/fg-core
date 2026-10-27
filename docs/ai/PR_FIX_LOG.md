@@ -1,3 +1,45 @@
+## POST-782-EXECUTIVE-SUMMARY-TEST-CONTRACT-001 — Executive summary create-and-readback integration test contract
+
+- **Work item:** POST-782-EXECUTIVE-SUMMARY-TEST-CONTRACT-001 (REPAIR class)
+- **Baseline SHA:** `bd8f0670` (HEAD after PR #782 merged)
+- **Failures before:** Run 40513136883 — `tests/test_executive_summary.py::test_report_includes_executive_summary_section` FAILED. Test posted to `/field-assessment/engagements/{id}/reports` with `report_type=executive_summary`, received HTTP 201 (TrustBindingFake active in test env), then asserted `"executive_summary" in body` — wrong assertion target; executive_summary lives at `body["report"]["executive_summary"]` in the GET response, not in the POST receipt.
+- **Failures after:** 0 — all 23 tests pass including 7 new integration tests with deterministic happy-path and 6 negative-path cases.
+
+### Root cause
+
+The defective `test_report_includes_executive_summary_section` had three compounding defects:
+
+1. **Wrong assertion target:** POST `/engagements/{id}/reports` returns `{report_id, version, status, compiled_at}` — a metadata receipt. The `executive_summary` section lives at `body["report"]["executive_summary"]` in the GET response (`GET /engagements/{id}/reports/{version}`). The test asserted `"executive_summary" in body` on the POST receipt, which is structurally incorrect.
+
+2. **Dead patches:** The test patched `services.governance.report.signing.sign_report` and `services.governance.report.versioning.get_next_version` — neither is called by `create_engagement_report_route`. The live code path uses `_get_trust_binding_authority()` (→ TrustBindingFake in FG_ENV=test) and `acquire_next_version` (context manager). These patches had no effect, causing test reliability issues in previous CI runs that resulted in non-201 status codes masking the assertion bug.
+
+3. **Conditional-success guard:** `if resp.status_code == 201: ... else: assert resp.status_code in (401, 403, 422, 500, 503)` prevented the test from failing when it got non-201 responses (e.g., when dead patches prevented signing from working). When PR #782 resolved the signing path (TrustBindingFake now reliably returns 201), the hidden assertion bug surfaced.
+
+### Fix
+
+Replaced the defective function with a proper integration section in `tests/test_executive_summary.py`:
+
+- Added `import pytest` and `from fastapi.testclient import TestClient` to module imports.
+- Added helpers `_issue_key_es` / `_assign_analyst_es` following the pattern in `tests/test_field_assessment_reports.py`.
+- Added 5 pytest fixtures: `client_es` (analyst, TrustBindingFake), `read_only_client_es` (governance:read only), `no_signing_key_client_es` (monkeypatches `_get_trust_binding_authority` → VaultTransitError), `unauthed_client_es` (no API key), `client_b_es` (cross-tenant isolation).
+- `test_exec_summary_post_receipt_shape`: POST → assert 201 → assert receipt has `{report_id, version=1, status="finalized", compiled_at}` and explicitly does NOT have `executive_summary`.
+- `test_exec_summary_readback_contains_section`: POST → GET → assert `body["report"]["executive_summary"]` with non-empty narrative, risk_posture, key_concerns matching stub.
+- `test_exec_summary_unauthenticated_rejected`: no auth → 401/403.
+- `test_exec_summary_read_only_scope_rejected`: governance:read only → 401/403.
+- `test_exec_summary_no_signing_key_fails_loudly`: VaultTransitError → 503 + REPORT_SIGNING_KEY_MISSING code.
+- `test_exec_summary_cross_tenant_engagement_not_found`: tenant B cannot access tenant A's engagement → 404.
+- `test_exec_summary_missing_version_not_found`: GET version 999 → 404.
+
+`generate_executive_summary` patched to avoid real AI provider calls in all integration tests.
+
+### Tests
+
+- `tests/test_executive_summary.py` — 23 passed (16 existing unit tests + 7 new integration tests)
+- `ruff format --check .` — 2197 files already formatted
+- `mypy tests/test_executive_summary.py --ignore-missing-imports` — no issues found
+
+---
+
 ## POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001 — Stats fixture pepper/SQLite repair, evidence rebind, ruff format
 
 - **Work item:** POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001 (REPAIR class)
