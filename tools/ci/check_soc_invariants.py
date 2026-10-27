@@ -170,6 +170,7 @@ def _check_runtime_enforcement_mode(failures: list[str]) -> None:
             "FG_INTERNAL_GATEWAY_SECRET": "test-internal-gateway-secret",
             "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
             "FG_API_KEY": "test-api-key",
+            "FG_KEY_PEPPER": "soc-invariant-check-pepper",
             "STRIPE_SECRET_KEY": "test-stripe-secret-key",
             "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
             "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",

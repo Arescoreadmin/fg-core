@@ -85,18 +85,17 @@ jobs:
 
       - name: Dependency vulnerability audit (pip-audit)
         shell: bash
-        # continue-on-error: 107 known advisories across certifi, starlette, pypdf,
-        # python-multipart, dnspython, opentelemetry-api, pillow (via reportlab), and
-        # dev-only packages (uv, virtualenv, filelock, setuptools). Tracked as upgrade
-        # debt in tools/ci/pip-audit-ignore.txt. Non-blocking so existing gates pass;
-        # new advisories will surface here before they reach the test suite.
+        # continue-on-error: 107 known advisories (certifi, starlette, pypdf,
+        # python-multipart, dnspython, opentelemetry-api, pillow, and dev-only
+        # packages). Tracked as upgrade debt in tools/ci/pip-audit-ignore.txt.
+        # Non-blocking so existing gates pass; new advisories surface here.
+        # Note: requirements-dev.txt pins pip-audit==2.0.0 which lacks --ignore-vuln;
+        # run without ignore flags — || true ensures the step never breaks the job.
         continue-on-error: true
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required
           .venv/bin/python -m pip_audit \
-            --ignore-vuln CVE-2026-4539 \
-            --ignore-vuln PYSEC-2025-183 \
             2>&1 | tee artifacts/fg-required/pip-audit.txt || true
 
       - name: Run required-tests gate resolution tests

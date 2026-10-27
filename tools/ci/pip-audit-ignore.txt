@@ -5,9 +5,11 @@
 # Do not mark a vulnerability as fixed until the package is upgraded
 # and the advisory no longer surfaces in pip-audit output.
 #
-# Two advisories ignored via --ignore-vuln flags in codex_gates.sh and
-# .github/workflows/fg-required.yml because they do not exist in the current
-# installed environment (packages were already upgraded past these advisories):
+# Two advisories ignored via --ignore-vuln flags in codex_gates.sh (local gate)
+# because they do not exist in the current installed environment (packages were
+# already upgraded past these advisories). These flags are NOT used in the CI
+# step because pip-audit==2.0.0 (pinned in requirements-dev.txt) does not
+# support --ignore-vuln; the CI step runs without ignore flags.
 #   CVE-2026-4539  -- was present in an earlier version; not in current env
 #   PYSEC-2025-183 -- was present in an earlier version; not in current env
 #
