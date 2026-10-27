@@ -1,0 +1,68 @@
+# Dependency advisory tracking — fg-core
+# Updated: 2026-10-27 (run 40513136883 baseline, pip-audit 2.0.0)
+#
+# POLICY: Advisories in this file are KNOWN OPEN DEBT, not remediations.
+# Do not mark a vulnerability as fixed until the package is upgraded
+# and the advisory no longer surfaces in pip-audit output.
+#
+# Two advisories ignored via --ignore-vuln flags in codex_gates.sh and
+# .github/workflows/fg-required.yml because they do not exist in the current
+# installed environment (packages were already upgraded past these advisories):
+#   CVE-2026-4539  -- was present in an earlier version; not in current env
+#   PYSEC-2025-183 -- was present in an earlier version; not in current env
+#
+# 107 open advisories as of 2026-10-27 (after the two ignores above):
+# All surfaced by: python -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183
+#
+# ── PRODUCTION-REACHABLE ────────────────────────────────────────────────────
+#
+# starlette==1.1.0     fix: 1.3.1
+#   PYSEC-2026-248, PYSEC-2026-249
+#   Web framework core. Upgrade requires FastAPI compat audit.
+#   Tracking: upgrade starlette to >=1.3.1 with FastAPI pin update.
+#
+# python-multipart==0.0.27     fix: 0.0.31
+#   PYSEC-2026-3036, PYSEC-2026-3037, PYSEC-2026-3040
+#   File upload parsing. Drop-in upgrade expected.
+#   Tracking: upgrade python-multipart to >=0.0.31.
+#
+# pypdf==6.14.2     fix: 6.21.2
+#   PYSEC-2026-3655, PYSEC-2026-3656, PYSEC-2026-3910, PYSEC-2026-3911,
+#   PYSEC-2026-3912, PYSEC-2026-3913, PYSEC-2026-4153, PYSEC-2026-4154,
+#   PYSEC-2026-4155, PYSEC-2026-4156, PYSEC-2026-4157, PYSEC-2026-4158,
+#   PYSEC-2026-4159, PYSEC-2026-4160, CVE-2026-113786, CVE-2026-113789,
+#   CVE-2026-113790, CVE-2026-113791, CVE-2026-113792, CVE-2026-113793,
+#   CVE-2026-113794, CVE-2026-113795, CVE-2026-115572, CVE-2026-115580,
+#   CVE-2026-115585
+#   PDF parsing for report generation. Upgrade expected; API stable.
+#   Tracking: upgrade pypdf to >=6.21.2.
+#
+# certifi==2026.6.17     fix: 2026.10.18
+#   PYSEC-2026-4320
+#   CA bundle (transitive dep). Direct upgrade available.
+#   Tracking: upgrade certifi to >=2026.10.18.
+#
+# dnspython==2.8.0     fix: 2.9.0
+#   CVE-2026-114605
+#   DNS resolution. Direct upgrade expected.
+#   Tracking: upgrade dnspython to >=2.9.0.
+#
+# opentelemetry-api==1.44.0     fix: 1.45.1
+#   CVE-2026-114603
+#   Observability. Requires matching opentelemetry-sdk upgrade.
+#   Tracking: upgrade opentelemetry-* to >=1.45.1.
+#
+# pillow==12.3.0     fix: 13.0.0     (transitive via reportlab)
+#   CVE-2026-96636 through CVE-2026-96644, CVE-2026-112390 through
+#   CVE-2026-114501, PYSEC-2026-4326 through PYSEC-2026-4328, GHSA-78g4-xqwv-q3g8
+#   Image processing (not directly called; indirect via reportlab PDF rendering).
+#   Tracking: upgrade pillow to >=13.0.0 (check reportlab compat).
+#
+# ── DEV / BUILD TOOLING ONLY (not in production image) ──────────────────────
+#
+# setuptools==83.0.0     fix: 84.1.0     GHSA-xmj3-9gf7-h52w     [dev-only]
+# uv==0.12.22     fix: 0.13.4     PYSEC-2026-4321     [dev build tool]
+# virtualenv==21.6.1     fix: 21.14.9     CVE-2026-113714 et al.     [dev-only]
+# filelock==3.31.1     fix: 4.2.1     CVE-2026-112907/112913/112940     [dep of uv/virtualenv]
+# msgpack==1.2.1     fix: 1.2.3     CVE-2026-114613     [dep of dev tooling]
+# urllib3==2.7.0     fix: 2.8.0     PYSEC-2026-4175/4176/4177     [transitive; check if pinned]
