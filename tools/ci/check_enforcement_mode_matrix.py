@@ -27,6 +27,7 @@ def run_case(env_name: str, mode: str) -> tuple[int, str]:
     env["FG_INTERNAL_GATEWAY_SECRET"] = "test-internal-gateway-secret"
     env["FG_INTERNAL_AUTH_SECRET"] = "test-internal-secret"
     env["FG_API_KEY"] = "test-api-key"
+    env["FG_KEY_PEPPER"] = "enforcement-matrix-check-key"
     env["STRIPE_SECRET_KEY"] = "test-stripe-secret-key"
     env["STRIPE_WEBHOOK_SECRET"] = "test-stripe-webhook-secret"
     env["FG_ANTHROPIC_API_KEY"] = "test-anthropic-api-key"
