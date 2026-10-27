@@ -35,6 +35,7 @@ _VALID_PROD_ENV: dict[str, str] = {
     "FG_SIGNING_SECRET": "test-signing-secret",
     "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
     "FG_API_KEY": "test-api-key",
+    "FG_KEY_PEPPER": "prod-secret-00000001",
     "STRIPE_SECRET_KEY": "test-stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
     "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",

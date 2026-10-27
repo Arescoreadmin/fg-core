@@ -16,6 +16,7 @@ _VALID_PROD_ENV: dict[str, str] = {
     "FG_SIGNING_SECRET": "test-signing-secret",
     "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
     "FG_API_KEY": "test-api-key",
+    "FG_KEY_PEPPER": "prod-secret-00000001",
     "STRIPE_SECRET_KEY": "test-stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
     "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
@@ -94,6 +95,7 @@ def test_prod_invariants_allow_enforcement_mode_enforce(fg_env: str) -> None:
             "FG_SIGNING_SECRET": "test-signing-secret",
             "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
             "FG_API_KEY": "test-api-key",
+            "FG_KEY_PEPPER": "prod-secret-00000001",
             "STRIPE_SECRET_KEY": "test-stripe-secret-key",
             "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
             "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
@@ -335,4 +337,53 @@ def test_staging_passes_with_keycloak_derived_issuer() -> None:
         "FG_KEYCLOAK_BASE_URL": "https://idp.example.com",
         "FG_KEYCLOAK_REALM": "frostgate",
     }
+    assert_prod_invariants(env)
+
+
+# ---------------------------------------------------------------------------
+# FG_KEY_PEPPER startup enforcement (FG-PROD-010)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("fg_env", ["prod", "staging", "production"])
+def test_prod_rejects_ci_test_pepper(fg_env: str) -> None:
+    """Prod/staging must raise FG-PROD-010 when FG_KEY_PEPPER is the public CI literal."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": fg_env, "FG_KEY_PEPPER": "ci-test-pepper"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-010"
+
+
+def test_test_pepper_error_message_does_not_leak_pepper_value() -> None:
+    """FG-PROD-010 error must not include the actual pepper value (secret material)."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_KEY_PEPPER": "ci-test-pepper"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert "ci-test-pepper" not in str(exc.value)
+
+
+def test_test_pepper_error_message_is_stable() -> None:
+    """FG-PROD-010 message must contain TEST_PEPPER_IN_PROD for stable alerting."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_KEY_PEPPER": "ci-test-pepper"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert "TEST_PEPPER_IN_PROD" in str(exc.value)
+
+
+def test_dev_allows_ci_test_pepper() -> None:
+    """Dev environment must not raise FG-PROD-010 — test peppers are expected in dev/test."""
+    assert_prod_invariants({"FG_ENV": "dev", "FG_KEY_PEPPER": "ci-test-pepper"})
+
+
+def test_prod_missing_pepper_fails_on_required_env() -> None:
+    """Missing FG_KEY_PEPPER must raise RuntimeError (via enforce_required_env) in prod."""
+    env = {k: v for k, v in _VALID_PROD_ENV.items() if k != "FG_KEY_PEPPER"}
+    env["FG_ENV"] = "prod"
+    with pytest.raises(RuntimeError, match="Missing required production env vars"):
+        assert_prod_invariants(env)
+
+
+def test_prod_accepts_strong_pepper() -> None:
+    """A non-test FG_KEY_PEPPER must not raise FG-PROD-010."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_KEY_PEPPER": "a9f3c2e1d8b7a6f0"}
     assert_prod_invariants(env)
