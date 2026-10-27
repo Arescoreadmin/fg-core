@@ -7699,3 +7699,35 @@ SOC review outcome: APPROVED. Offline read-only gate; no runtime authority weake
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. CI execution hardening only; no runtime authority change; no authentication path change; no tenant isolation bypass; no secret access; all fail-closed guards preserved and strengthened.
+
+## 2026-10-26 - ci: POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001: Stats fixture repair + evidence rebind + ruff format
+
+**Change scope:** POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001. Three repair classes:
+
+1. **tools/ci/fg_full_shard.py** — One-line ruff format correction: `_duration_weight` function signature split across three lines to satisfy 88-char line-length limit. Zero logic change. No behavior change.
+2. **backend/tests/conftest.py** — Added `FG_KEY_PEPPER=ci-test-pepper` to module-level `setdefault`, `pytest_configure()`, and `_test_env_defaults` session fixture. Added `_backend_session_db` session fixture (mirrors `_session_env` pattern from `tests/conftest.py`) that pre-initializes a SQLite DB via `reset_engine_cache()` + `init_db()` before any test using `mint_key()` runs. Added `FG_KEY_PEPPER` to the `build_app` fixture.
+3. **backend/tests/test_stats_credentials_isolation.py** (new) — Negative tests: fail-closed pepper guard, pepper restoration across tests, tenant-scoped credential binding, distinct-key-per-tenant enforcement, unauthenticated stats rejection.
+4. **customer_one/offline_simulation_evidence.json** — Rebind to post-PR-#781 source tree hash. Simulation result 6/6 GREEN.
+
+**Security posture:**
+
+1. **No authentication path change.** `FG_KEY_PEPPER=ci-test-pepper` is a test-only default; `os.environ.setdefault` does not override any production value. Production pepper is never written to this file.
+2. **No secrets accessed or logged.** The session fixture uses a pytest-managed temp path for the SQLite DB; no path is shared with production.
+3. **No tenant isolation weakened.** Negative tests explicitly verify that (a) credentials fail without pepper, (b) tenant_id is bound in the issued credential, (c) unauthenticated stats requests are rejected.
+4. **No paid infrastructure.** Evidence regeneration is fully offline: `run_offline_ceremony_simulation.py` uses ephemeral Ed25519 keys, no Vault, no cloud API calls, no AWS. Six simulation checks all pass.
+5. **Fail-closed preserved.** All existing preauth/readiness blockers remain. `COST_AUTHORIZATION=NOT_AUTHORIZED` and `CUSTOMER_ZERO_TRUST=NOT_PROVEN` are unchanged.
+6. **Ruff format change is pure whitespace.** The `_duration_weight` signature line was 91 chars; split to three lines per ruff 88-char default. No semantic change, mypy still passes, 35 shard tests still pass.
+
+**Critical-path files changed:** `tools/ci/fg_full_shard.py` (whitespace only), `backend/tests/conftest.py` (test fixture hardening), `backend/tests/test_stats_credentials_isolation.py` (new negative tests), `customer_one/offline_simulation_evidence.json` (evidence rebind).
+
+**Required invariant:** Stats tests pass in isolation and in multi-module collection order. FG_KEY_PEPPER absence surfaces as RuntimeError (not silent credential bypass). Simulation evidence hash matches current committed tree. All prior negative-security tests still pass.
+
+**Validation evidence:**
+
+- `pytest backend/tests/test_stats_endpoint.py backend/tests/test_stats_credentials_isolation.py -v` → 9 passed
+- `python tools/ci/run_offline_ceremony_simulation.py` → 6/6 GREEN, evidence written
+- `ruff format --check tools/ci/fg_full_shard.py` → 1 file already formatted
+- `mypy tools/ci/fg_full_shard.py` → no issues
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Test infrastructure hardening only; no runtime authority change; no authentication path change; no tenant isolation bypass; no secret access; fail-closed guards preserved; evidence rebind is offline and produces genuine simulation output.
