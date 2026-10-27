@@ -1,3 +1,42 @@
+## POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001 — Stats fixture pepper/SQLite repair, evidence rebind, ruff format
+
+- **Work item:** POST-781-STATS-FIXTURE-AND-EVIDENCE-REPRODUCIBILITY-001 (REPAIR class)
+- **Baseline SHA:** `e721257a` (HEAD after PR #781 merged)
+- **Failures before:** Run 40416705418 — 2 stats failures (`RuntimeError: FG_KEY_PEPPER not configured`; `sqlite3.OperationalError: unable to open database file` at `/tmp/frostgate/fg-conftest.db`); stale evidence hash (`61d53846...` recorded vs `7a4252f1...` current); ruff format failure in `tools/ci/fg_full_shard.py` (91-char signature).
+- **Failures after:** 0 — FG_KEY_PEPPER configured in backend conftest; session DB fixture pre-initializes engine; evidence regenerated 6/6 GREEN; format corrected.
+
+### Root cause
+
+Three independent failure classes:
+
+1. **Stats credential pepper missing (`backend/tests/conftest.py`):** `FG_KEY_PEPPER` was set in `tests/conftest.py` (root conftest, applies only to `tests/` subtree) but never in `backend/tests/conftest.py`. When a CI shard collected `backend/tests/test_stats_endpoint.py` without any `tests/` files, `_session_env` from the root conftest never fired, leaving `FG_KEY_PEPPER` absent. On the first `mint_key()` call, `_get_pepper()` in `api/credential_authority.py:606` raised `RuntimeError: FG_KEY_PEPPER not configured`.
+
+2. **Stats SQLite engine stale (`backend/tests/conftest.py`):** No session-scoped DB fixture existed in the backend conftest. The root conftest's `_session_env` pre-initializes the engine with a session tmp_path (calling `reset_engine_cache()` + `init_db()`) — but this only applies to `tests/` subtree tests. For `backend/tests/` tests, `FG_SQLITE_PATH` defaulted to `/tmp/frostgate/fg-conftest.db` via the root conftest's module-level `setdefault`. `_sqlite_url()` lazily creates the parent directory, but if the engine was cached from a prior session-fixture run (pointing at a different path), the cached engine's path and the env var drifted, causing `sqlite3.OperationalError: unable to open database file`.
+
+3. **Evidence stale hash:** PR #781 (`e721257a`) changed 7 files not in `_TREE_HASH_EXCLUDED`: `tools/ci/fg_full_shard.py`, `tools/ci/fg_test_durations.json`, `.github/workflows/testing-module.yml`, `Makefile`, `tests/test_customer_zero_narrow_cost_teardown.py`, `docs/SOC_EXECUTION_GATES_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`. Evidence recorded `source_tree_hash=61d53846...` (generated on pre-#781 tree `08de9c90`). Post-merge computed hash was `7a4252f1...`. `J_CE3` dimension failed → final_result=BLOCKED → preauth returned BLOCKED → `test_14_preauth_evaluator_returns_ready_for_authorization` and related tests failed.
+
+4. **Ruff format discrepancy:** `tools/ci/fg_full_shard.py` line 110 had a 91-char function signature (`_duration_weight`). `make fg-lint` → `fmt-check` only checks `api tests scripts` (not `tools/ci/`), so `make fg-fast` passed. Direct `ruff format --check .` (run by `codex_gates.sh` and standalone) catches all files and reported the failure. The Codex gate was not run in the previous session; only `make fg-fast` was used, so the format issue was missed.
+
+### Fix
+
+1. **Stats pepper + SQLite** — `backend/tests/conftest.py`: added `FG_KEY_PEPPER=ci-test-pepper` at module level (before any import), in `pytest_configure()`, and in `_test_env_defaults` session fixture. Added `_backend_session_db` session fixture (autouse, session-scoped) that creates a pytest tmp_path DB, sets `FG_SQLITE_PATH` + `FG_KEY_PEPPER`, calls `reset_engine_cache()` + `init_db()`. Added `FG_KEY_PEPPER` to `build_app` fixture. Added `backend/tests/test_stats_credentials_isolation.py` with 6 negative tests: pepper fail-closed, pepper restoration, success-with-pepper, tenant binding, distinct keys per tenant, unauthenticated rejection.
+
+2. **Evidence rebind** — Ran `python tools/ci/run_offline_ceremony_simulation.py` after committing all code changes; 6/6 GREEN; `customer_one/offline_simulation_evidence.json` updated. Regeneration is fully offline (ephemeral Ed25519, no Vault, no cloud). `ROADMAP.md` and `docs/ai/PR_FIX_LOG.md` in `_TREE_HASH_EXCLUDED` so evidence rebind does not self-invalidate.
+
+3. **Ruff format** — Split `_duration_weight` signature in `tools/ci/fg_full_shard.py` from one 91-char line to three lines. Zero logic change. mypy still passes, 35 shard tests still pass.
+
+### Tests
+
+- `backend/tests/test_stats_endpoint.py` — 3 passed
+- `backend/tests/test_stats_credentials_isolation.py` — 6 passed
+- `tests/test_cz_run3_readiness_integration_repair_001.py` — pass
+- `tests/test_cz_run3_preauth_closeout_001.py` — pass (after commit + evidence rebind)
+- `tests/tools/test_fg_full_shard.py` — 35 passed
+
+All pass.
+
+---
+
 ## POST-780-FINAL-SHARD-CORRECTION-001 — Terraform CLI install, duration-weighted shard rebalancing, timeout 45→55 min
 
 - **Work item:** POST-780-FINAL-SHARD-CORRECTION-001 (REPAIR class)

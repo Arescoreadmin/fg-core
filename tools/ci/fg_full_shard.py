@@ -107,7 +107,9 @@ def _collect_test_files() -> list[Path]:
     return files
 
 
-def _duration_weight(f: Path, counts: dict[str, int], durations: dict[str, float]) -> float:
+def _duration_weight(
+    f: Path, counts: dict[str, int], durations: dict[str, float]
+) -> float:
     """Estimated CI duration for a file in seconds.
 
     Uses fg_test_durations.json when present; falls back to count × 0.5 s for
