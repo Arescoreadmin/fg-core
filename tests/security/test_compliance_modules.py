@@ -69,6 +69,9 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_EVIDENCE_SIGNING_KEY_B64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
         # PR-CORE-002: delegation proof required in prod (startup guard).
         "FG_GATEWAY_DELEGATION_SECRET_CURRENT": "x" * 32,
+        # FG-PROD-010: override ambient ci-test-pepper so prod startup doesn't
+        # reject the test value before this helper's intended invariant fires.
+        "FG_KEY_PEPPER": "a" * 32,
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

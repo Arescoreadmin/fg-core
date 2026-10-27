@@ -9,6 +9,11 @@ from api.config.required_env import enforce_required_env
 _PROD_ENVS = {"prod", "production", "staging"}
 _TRUE = {"1", "true", "yes", "y", "on"}
 
+# Peppers committed in public CI config (.github/workflows/fg-required.yml) that
+# must never appear in a real deployment. Do NOT log the actual pepper value in
+# error messages — only the stable error code and label are safe to surface.
+_KNOWN_TEST_PEPPERS: frozenset[str] = frozenset({"ci-test-pepper"})
+
 
 @dataclass
 class ProdInvariantViolation(RuntimeError):
@@ -111,4 +116,14 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
         )
 
     # Enforce the shared required-env list (single source of truth).
+    # FG_KEY_PEPPER is in REQUIRED_PROD_ENV_VARS; absence raises RuntimeError here.
     enforce_required_env(env)
+
+    # FG-PROD-010: reject known test/CI pepper values in prod/staging.
+    # Do NOT include the actual pepper value in the error — stable code + label only.
+    _pepper = (env.get("FG_KEY_PEPPER") or "").strip()
+    if _pepper and _pepper in _KNOWN_TEST_PEPPERS:
+        raise ProdInvariantViolation(
+            "FG-PROD-010",
+            "TEST_PEPPER_IN_PROD: FG_KEY_PEPPER is a known test/CI value; rotate to a production secret",
+        )

@@ -19,6 +19,9 @@ REQUIRED_PROD_ENV_VARS: tuple[str, ...] = (
     "FG_SIGNING_SECRET",
     "FG_INTERNAL_AUTH_SECRET",
     "FG_API_KEY",
+    # Credential HMAC pepper — must be set so mint_key / validate_credential
+    # fail closed at startup rather than on first API key operation.
+    "FG_KEY_PEPPER",
     # Revenue + AI provider requirements — must be set before accepting payments
     # or generating AI reports in any prod/staging deployment.
     "STRIPE_SECRET_KEY",

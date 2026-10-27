@@ -1,3 +1,53 @@
+## P0-SECURITY-BASELINE-001 — Production credential security hardening
+
+- **Work item:** P0-SECURITY-BASELINE-001 (SECURITY class)
+- **Baseline SHA:** `68a98d9a` (HEAD after PR #783 merged)
+- **Failures before:** Launch readiness audit (P0-LAUNCH-001) identified FG_KEY_PEPPER absent from REQUIRED_PROD_ENV_VARS — startup validation did not fail-close on missing pepper until first credential operation. Known CI test pepper literal (`ci-test-pepper`) present in public repo without a prod-rejection guard. pip-audit run only locally in codex_gates.sh; not surfaced in CI on every PR.
+- **Failures after:** 0 regressions. 8 new tests for FG-PROD-010. FG_KEY_PEPPER now covered by REQUIRED_PROD_ENV_VARS parametrized tests automatically.
+
+### Root cause
+
+Three independent gaps:
+
+1. **FG_KEY_PEPPER absent from REQUIRED_PROD_ENV_VARS:** `api/config/required_env.py` listed DATABASE_URL, FG_SIGNING_SECRET, FG_INTERNAL_AUTH_SECRET, FG_API_KEY, STRIPE_*, FG_ANTHROPIC_API_KEY — but not FG_KEY_PEPPER. Prod startup would reach `enforce_required_env()` without catching a missing pepper; the first call to `mint_key` or `validate_credential` would raise `RuntimeError("FG_KEY_PEPPER not configured")` at request time, not at startup. Fail-closed should fire at startup.
+
+2. **No test-pepper rejection in prod:** `.github/workflows/fg-required.yml` line 26 contains `FG_KEY_PEPPER: "ci-test-pepper"` as a plain literal in a public repository. Without a prod-rejection guard, an operator who accidentally deploys with this value gets no explicit error — the credential system would operate (incorrectly) with a well-known pepper. This is a defense-in-depth gap.
+
+3. **pip-audit runs locally but not in CI:** `codex_gates.sh` runs `python -m pip_audit` but `fg-required.yml` had no equivalent step. Advisory findings were invisible in CI until a local gate run.
+
+### Fix
+
+**`api/config/required_env.py`:** Added `"FG_KEY_PEPPER"` to `REQUIRED_PROD_ENV_VARS` tuple with explanatory comment.
+
+**`api/config/prod_invariants.py`:** Added `_KNOWN_TEST_PEPPERS = frozenset({"ci-test-pepper"})` module constant and FG-PROD-010 check at end of `assert_prod_invariants()` (after `enforce_required_env(env)`): if pepper is set and equals a known test value, raises `ProdInvariantViolation("FG-PROD-010", "TEST_PEPPER_IN_PROD: ...")`. Error message does NOT include the actual pepper value (secret material must not appear in logs).
+
+**`tests/security/test_prod_invariants.py`:** Added `"FG_KEY_PEPPER": "prod-secret-00000001"` to `_VALID_PROD_ENV` and inline dict in `test_prod_invariants_allow_enforcement_mode_enforce`. Added 8 new tests (section: FG_KEY_PEPPER startup enforcement):
+- `test_prod_rejects_ci_test_pepper[prod/staging/production]` (3 parametrized)
+- `test_test_pepper_error_message_does_not_leak_pepper_value`
+- `test_test_pepper_error_message_is_stable`
+- `test_dev_allows_ci_test_pepper`
+- `test_prod_missing_pepper_fails_on_required_env`
+- `test_prod_accepts_strong_pepper`
+
+**`tests/security/test_required_env_enforcement.py`:** Added `"FG_KEY_PEPPER": "prod-secret-00000001"` to `_VALID_PROD_ENV`. Existing parametrized test `test_required_env_prod_fails_when_var_missing` now automatically covers FG_KEY_PEPPER.
+
+**`.github/workflows/fg-required.yml`:** Added `Dependency vulnerability audit (pip-audit)` step (after `Record toolchain snapshot`, before `Run required-tests gate resolution tests`). Uses `--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183` (matching codex_gates.sh). `continue-on-error: true` — 107 open advisories are tracked as upgrade debt in `tools/ci/pip-audit-ignore.txt`.
+
+**`tools/ci/pip-audit-ignore.txt`** (new): Documents all 107 current advisories categorized as prod-reachable vs dev-only. Prod-reachable: starlette 1.1.0 (fix: 1.3.1), python-multipart 0.0.27 (fix: 0.0.31), pypdf 6.14.2 (fix: 6.21.2), certifi (fix: 2026.10.18), dnspython 2.8.0 (fix: 2.9.0), opentelemetry-api 1.44.0 (fix: 1.45.1), pillow 12.3.0 (fix: 13.0.0, via reportlab). Dev-only: uv, virtualenv, filelock, msgpack, setuptools, urllib3. **No advisory is claimed as remediated** — these are open items for separate upgrade PRs.
+
+### Advisory policy
+
+The two `--ignore-vuln` flags (CVE-2026-4539, PYSEC-2025-183) are retained from the existing codex_gates.sh policy. Both advisory IDs do not surface in the current pip-audit output (the packages they targeted were already upgraded past those advisories). They are harmless stale ignores.
+
+### Tests
+
+- `tests/security/test_prod_invariants.py` — 52 passed (44 existing + 8 new)
+- `tests/security/test_required_env_enforcement.py` — 32 passed (unchanged count; FG_KEY_PEPPER auto-covered by parametrized tests now spanning 8 required vars instead of 7)
+- Combined: 84/84 PASS in 4.69s
+- `ruff check` + `ruff format --check` — CLEAN on all changed files
+
+---
+
 ## POST-782-EXECUTIVE-SUMMARY-TEST-CONTRACT-001 — Executive summary create-and-readback integration test contract
 
 - **Work item:** POST-782-EXECUTIVE-SUMMARY-TEST-CONTRACT-001 (REPAIR class)
