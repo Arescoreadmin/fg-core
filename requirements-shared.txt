@@ -2,7 +2,7 @@
 # to frostgate-core and admin_gateway. Update here; service-specific
 # additions belong in requirements.txt or admin_gateway/requirements.txt.
 fastapi==0.136.3
-starlette==1.1.0
+starlette==1.3.1
 uvicorn[standard]==0.30.0
 pydantic==2.9.0
 typing-extensions==4.16.0
