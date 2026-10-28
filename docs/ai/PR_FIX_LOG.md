@@ -1,3 +1,50 @@
+## P0-DEPENDENCY-REMEDIATION-001 — Production dependency vulnerability remediation
+
+- **Work item:** P0-DEPENDENCY-REMEDIATION-001 (SECURITY class)
+- **Baseline SHA:** `42e37bb8` (HEAD after PR #785 merged)
+- **Failures before:** 108 known advisories across 13 packages; CI pip-audit gate was `continue-on-error: true` (non-blocking); pip-audit pinned at 2.0.0 (lacks `--ignore-vuln`); 3 active exceptions (EXC-DEP-001/002/004) with open CVEs; no minimum-version floors for production transitive deps (certifi, pillow, urllib3).
+- **Failures after:** 0 production advisories. CI gate is blocking (`continue-on-error` removed). All 3 active exceptions closed. 14 regression tests pass.
+
+### Root cause
+
+Compounding structural gaps:
+1. **Deferred upgrades**: starlette (1.1.0), python-multipart (0.0.27), dnspython, pypdf, opentelemetry-* were pinned at vulnerable versions with formal exception records, but no remediation PR was triggered.
+2. **Non-blocking CI gate**: pip-audit ran with `continue-on-error: true` — a failing audit never blocked a merge.
+3. **pip-audit 2.0.0 pinned**: the dev requirement pinned an old version lacking `--ignore-vuln` support; the Makefile worked around this with runtime `--upgrade pip-audit`.
+4. **No transitive dep floors**: certifi, pillow, urllib3 had no minimum constraints, so transitive resolution could silently pull in vulnerable versions.
+
+### Fix
+
+**`requirements-shared.txt`**: `starlette==1.1.0` → `1.3.1` (closes EXC-DEP-002: CVE-2026-54283/54282).
+
+**`requirements.txt`**: `python-multipart==0.0.27` → `0.0.31` (closes EXC-DEP-004: CVE-2026-53540/53539/53538); `dnspython>=2.6.0` → `>=2.9.0`; `pypdf>=6.10.2` → `>=6.21.2`; `opentelemetry-*>=1.20.0` → `>=1.45.1`.
+
+**`requirements-dev.txt`**: `pip-audit==2.0.0` → `2.10.1` (adds `--ignore-vuln` support); `setuptools>=84.1.0` added (forces upgrade of venv-bundled setuptools past GHSA-xmj3-9gf7-h52w).
+
+**`constraints.txt`**: Added minimum-version floors for production transitive deps — `certifi>=2026.10.23`, `pillow>=13.0.0`, `urllib3>=2.8.0` — and dev transitive dep floors — `virtualenv>=21.14.9`, `filelock>=4.2.1`, `msgpack>=1.2.3`.
+
+**`docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md`**: EXC-DEP-001 closed (MAL-2026-4750 no longer reported by pip-audit 2.10.1); EXC-DEP-002 closed (starlette upgraded); EXC-DEP-004 closed (python-multipart upgraded). Active exceptions section now explicitly states zero active exceptions.
+
+**`Makefile` pip-audit target**: removed runtime `pip-audit --upgrade`, removed all 8 stale `--ignore-vuln` flags (CVE-2026-54283/54282/53540/53539/53538/4539, PYSEC-2025-183, MAL-2026-4750). Gate now runs clean with no suppressions.
+
+**`.github/workflows/fg-required.yml`**: CI pip-audit step converted from `continue-on-error: true` to blocking. Scoped to `-r requirements.txt` (production deps only) to exclude standalone dev tools from blocking builds.
+
+### Tests
+
+- `tests/security/test_dependency_audit_enforcement.py` — 14 passed (10 tests, test_04 parametrized × 5 packages)
+  - test_01: production pip-audit clean
+  - test_02: pip-audit version >=2.10.1
+  - test_03: Makefile --ignore-vuln matches active exceptions
+  - test_04[starlette/multipart/certifi/pillow/urllib3]: minimum versions met
+  - test_05: stale CVE suppressions removed from Makefile
+  - test_06: constraints.txt encodes transitive dep floors
+  - test_07: starlette >=1.3.1 in requirements-shared.txt
+  - test_08: python-multipart >=0.0.31 in requirements.txt
+  - test_09: CI pip-audit gate has no continue-on-error
+  - test_10: exception doc has no active entries
+
+---
+
 ## CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 — Offline simulation evidence lifecycle enforcement
 
 - **Work item:** CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 (CI INTEGRITY class)
