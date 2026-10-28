@@ -182,6 +182,7 @@
   "tests/security/test_cross_tenant_regression.py": 7,
   "tests/security/test_dashboard_p0_hardening.py": 8,
   "tests/security/test_decision_immutability.py": 2,
+  "tests/security/test_dependency_audit_enforcement.py": 22,
   "tests/security/test_docx_ingestion_security.py": 16,
   "tests/security/test_embedding_tenant_isolation.py": 13,
   "tests/security/test_enterprise_capability_enforcement.py": 44,

@@ -375,10 +375,10 @@ jobs:
   fg-full-shard:
     name: "fg-full-shard (${{ matrix.shard_index }})"
     runs-on: ubuntu-latest
-    # 10 shards × duration-balanced ~1500 s/shard (fg_test_durations.json weights) ≈ 25 min;
-    # 55 min gives headroom for the heaviest shards (worst-case observed: 46 min before fix).
-    # Previously 45 min timed out shards 0+1 because greedy count-balancing ignored per-test
-    # runtime variance (e.g. test_ea_canonical_14_6_1.py runs at 4.6 s/test vs 0.3 s/test avg).
+    # POST-786-SHARD-RUNTIME-001: fg_test_durations.json now has 734 empirically measured files
+    # (run 40720279440, all 10 shards). Duration-imbalance = 1.00x; max predicted = 2269 s (~38 min).
+    # 55 min gives 17-min headroom for the heaviest shard. Empirical max before fix: 3033 s (50 min,
+    # shard 7 with 2832 tests, all on 0.5 s/test fallback). Cancelled run 40765517264 shard 9: 55 min.
     timeout-minutes: 55
     permissions:
       contents: read
