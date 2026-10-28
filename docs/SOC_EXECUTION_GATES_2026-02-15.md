@@ -1,3 +1,33 @@
+## 2026-10-27 - fix/customer-zero-evidence-lifecycle-001: CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 — offline simulation evidence lifecycle enforcement
+
+**Change scope:** CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 (CI INTEGRITY class). Evidence freshness enforcement with three concrete items:
+
+1. **tools/ci/verify_offline_simulation_evidence.py** (new) — Read-only CLI that validates `customer_one/offline_simulation_evidence.json` against the current source tree. Imports `_validate_offline_simulation_evidence` from `services.governance.customer_zero_readiness` (canonical validator). Exits 0 only when evidence is fresh, GREEN, and all 6 mandatory checks passed. Exits 1 on stale/missing/malformed/failed evidence. Exits 2 on internal import error. Never modifies the evidence file.
+2. **.github/workflows/fg-required.yml** — Added `Verify offline simulation evidence freshness` step (genuinely blocking, no `continue-on-error`) before the fg-required harness. Uses `.venv/bin/python tools/ci/verify_offline_simulation_evidence.py --repo .`. If evidence is stale, the CI job fails immediately with an actionable remediation message. No secrets accessed. No auth path changed.
+3. **Makefile** — Added `verify-offline-simulation-evidence` target (`PYTHONPATH=. $(PY) tools/ci/verify_offline_simulation_evidence.py --repo .`) and added it to the `fg-fast` dependency list so `make fg-fast` enforces evidence freshness locally.
+
+**Security posture:**
+
+1. **Verifier is strictly read-only.** The CLI tool never modifies the evidence file. It only reads the committed file and computes the current tree hash using `git ls-files -z`. No filesystem mutations, no network calls, no cloud contact.
+2. **Assurance boundary is documented and enforced.** `source_tree_hash` covers every git-tracked file except `customer_one/offline_simulation_evidence.json` (circular dependency) and `ROADMAP.md` (tracking ledger). These exclusions are consistent with the runner (`run_offline_ceremony_simulation.py`) and validator (`customer_zero_readiness.py`).
+3. **CI step is genuinely blocking.** No `continue-on-error`. No `|| true`. A stale or missing evidence file will fail the PR gate before the expensive test harness runs. This closes the structural gap where PRs could merge with stale evidence, advancing the tree hash without updating the committed file.
+4. **Twelve regression tests added** to `tests/security/test_offline_simulation_evidence_lifecycle.py` covering: fresh evidence passes, stale hash fails, ROADMAP.md exclusion, missing file, malformed JSON, result=FAILED, forged GREEN, dry-run output accepted, preauthorization blocked when stale, no private key material in evidence, production env rejection, credential security invariants unchanged.
+5. **No authentication path changed.** Only new files in `tools/ci/` and one blocking step added to `fg-required.yml`. No changes to `api/`, `api/auth/`, `api/security/`, `admin_gateway/`, or `policy/opa/`.
+
+**Critical-path files changed:** `.github/workflows/fg-required.yml` (new blocking evidence freshness step), `tools/ci/verify_offline_simulation_evidence.py` (new read-only verifier CLI).
+
+**Required invariant:** Evidence freshness is verified in every PR before the harness runs; `make fg-fast` also enforces it locally; stale evidence causes an actionable failure (never a silent pass); the verifier never modifies the evidence file; production environments are rejected by the simulation runner; all 12 lifecycle regression tests pass.
+
+**Validation evidence:**
+
+- `PYTHONPATH=. .venv/bin/python tools/ci/verify_offline_simulation_evidence.py --repo .` → offline-simulation-evidence: OK
+- `PYTHONPATH=. .venv/bin/python tools/ci/run_offline_ceremony_simulation.py --repo .` → SIMULATION GREEN — all checks passed
+- `pytest tests/security/test_offline_simulation_evidence_lifecycle.py -v` → 14 passed
+- `PYTHONPATH=. make verify-offline-simulation-evidence` → offline-simulation-evidence: OK
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Evidence lifecycle enforcement is a CI integrity improvement — it closes the structural gap where stale evidence could persist silently across PRs. Verifier is read-only. Blocking step is additive (only fails when evidence is genuinely stale). No runtime authentication change. No tenant isolation bypass. No secret access.
+
 ## 2026-10-27 - fix/p0-security-baseline-001: P0-SECURITY-BASELINE-001 — FG_KEY_PEPPER startup enforcement + FG-PROD-010 + CI pip-audit integration
 
 **Change scope:** P0-SECURITY-BASELINE-001 (SECURITY class). Three hardening items:
