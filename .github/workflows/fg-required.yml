@@ -104,6 +104,12 @@ jobs:
           set -euo pipefail
           .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
 
+      - name: Verify offline simulation evidence freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv/bin/python tools/ci/verify_offline_simulation_evidence.py --repo .
+
       - name: Prepare artifact directories
         shell: bash
         run: |

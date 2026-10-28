@@ -1,3 +1,58 @@
+## CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 — Offline simulation evidence lifecycle enforcement
+
+- **Work item:** CUSTOMER-ZERO-EVIDENCE-LIFECYCLE-001 (CI INTEGRITY class)
+- **Baseline SHA:** `d9d548bb` (HEAD after PR #784 merged)
+- **Failures before:** No CI gate enforced that `customer_one/offline_simulation_evidence.json` was fresh relative to the current source tree. PRs adding or modifying tracked files advanced the source tree hash without updating the evidence, leaving J_CE3 (`offline_ceremony_simulation_green`) in FAIL state silently. The CI failure (run 40665210785, shard 6) surfaced 6 failures caused by stale evidence from pre-PR-#784 tree state.
+- **Failures after:** 0 regressions. 14 new regression tests pass. Verifier CLI exits 0/1/2 deterministically. Blocking CI step catches stale evidence before harness runs.
+
+### Root cause
+
+Single structural gap: no required CI gate verified that `source_tree_hash` in the committed evidence file matched the current source tree. The `_validate_offline_simulation_evidence()` validator in `customer_zero_readiness.py` would correctly reject stale evidence at runtime, but no gate called it. Every PR that added tracked files (e.g., PR #784 adding `tools/ci/pip-audit-ignore.txt`, modifying `api/config/required_env.py`) advanced the tree hash without triggering a regeneration requirement.
+
+Secondary issue: `git ls-files` only covers staged/tracked files — new files must be `git add`-ed BEFORE running the simulation so the hash covers them. Evidence regenerated against an unstaged working tree would mismatch after the commit.
+
+### Fix
+
+**`tools/ci/verify_offline_simulation_evidence.py`** (new): Read-only CLI verifier. Imports `_validate_offline_simulation_evidence` and `ReadinessStatus` from `services.governance.customer_zero_readiness`. Exits 0 (PASS), 1 (stale/missing/malformed/failed), 2 (internal import error). Never writes to evidence file. Assurance boundary documented: `source_tree_hash` covers all git-tracked files except `customer_one/offline_simulation_evidence.json` (circular) and `ROADMAP.md` (tracking ledger).
+
+**`.github/workflows/fg-required.yml`**: Added `Verify offline simulation evidence freshness` step with no `continue-on-error`, no `|| true`. Runs before the fg-required harness. Failure exits the job immediately with an actionable remediation message.
+
+**`Makefile`**: Added `verify-offline-simulation-evidence` target and wired it into the `fg-fast` dependency list for local enforcement parity with CI.
+
+**`customer_one/offline_simulation_evidence.json`**: Regenerated. Critical workflow: all new files `git add`-ed before running simulation so `git ls-files` includes them in the hash computation. SOC doc updated before simulation (SOC doc is inside hash coverage). ROADMAP.md updated after simulation (excluded from hash).
+
+### Regeneration workflow (institutional memory)
+
+When making code changes that include new files:
+1. Create all code and doc changes (including SOC doc update)
+2. `git add` all new and modified files
+3. `python tools/ci/run_offline_ceremony_simulation.py --repo .`
+4. `git add customer_one/offline_simulation_evidence.json`
+5. Commit
+
+ROADMAP.md is in `_TREE_HASH_EXCLUDED` and can be updated after step 4 without affecting the hash.
+
+### Tests
+
+- `tests/security/test_offline_simulation_evidence_lifecycle.py` — 14 passed (12 tests, test_11 parametrized over prod/staging/production)
+  - test_01: fresh evidence passes
+  - test_02: stale source_tree_hash fails
+  - test_03: ROADMAP.md exclusion does not invalidate
+  - test_04: missing evidence → NOT_PROVEN
+  - test_05: malformed JSON → FAIL
+  - test_06: result=FAILED → FAIL
+  - test_07: forged GREEN (empty checks) → FAIL
+  - test_08: --dry-run output accepted by J_CE3 validator
+  - test_09: stale evidence blocks preauthorization (J_CE3 FAIL)
+  - test_10: no private key material in committed evidence
+  - test_11[production/prod/staging]: simulation runner exits 2
+  - test_12: FG-PROD-010 credential security invariants intact
+- `tests/test_cz_run3_readiness_integration_repair_001.py -k j_ce3` — 14 passed (no regression)
+- `tests/security/` combined — 103 passed
+- `ruff check` + `ruff format --check` — CLEAN
+
+---
+
 ## P0-SECURITY-BASELINE-001 — Production credential security hardening
 
 - **Work item:** P0-SECURITY-BASELINE-001 (SECURITY class)
