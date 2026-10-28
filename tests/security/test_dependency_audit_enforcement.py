@@ -2,10 +2,10 @@
 P0-DEPENDENCY-REMEDIATION-001 — Dependency audit enforcement regression tests.
 
 Verifies that:
-  01  Production pip-audit is clean with no exceptions
+  01  Installed production packages are at patched minimum versions (offline, 9 packages)
   02  pip-audit version supports --ignore-vuln (>=2.10.1)
   03  Active exceptions doc matches Makefile --ignore-vuln flags
-  04  Production packages are at or above required minimum versions
+  04  Requirement specifier version floors are >= the patched minimum (5 packages)
   05  Stale exceptions are not present in Makefile
   06  constraints.txt encodes minimum versions for production transitive deps
   07  requirements-shared.txt pins starlette at >=1.3.1
@@ -13,7 +13,8 @@ Verifies that:
   09  pip-audit CI gate has no continue-on-error suppression
   10  Exception doc has no active entries
 
-Scope: OFFLINE ONLY. No network I/O. Reads local files only.
+Scope: OFFLINE ONLY. No network I/O. No subprocess network calls.
+The live pip-audit gate lives in the CI workflow step.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 REPO = Path(__file__).resolve().parents[2]
 REQUIREMENTS_PROD = REPO / "requirements.txt"
@@ -47,24 +49,46 @@ _STALE_SUPPRESSED = {
 }
 
 
+# Packages whose installed version must be at or above the patched minimum.
+# Verified offline by importing importlib.metadata — no network I/O required.
+_INSTALLED_VERSION_FLOORS: list[tuple[str, str]] = [
+    ("starlette", "1.3.1"),
+    ("python-multipart", "0.0.31"),
+    ("certifi", "2026.10.23"),
+    ("pillow", "13.0.0"),
+    ("urllib3", "2.8.0"),
+    ("dnspython", "2.9.0"),
+    ("pypdf", "6.21.2"),
+    ("opentelemetry-api", "1.45.1"),
+    ("opentelemetry-sdk", "1.45.1"),
+]
+
+
 # ===========================================================================
-# Test 01 — Production pip-audit is clean
+# Test 01 — Installed production packages are at patched minimum versions
 # ===========================================================================
 
 
-def test_enforcement_01_production_audit_clean() -> None:
-    """pip-audit -r requirements.txt must find no known vulnerabilities."""
-    result = subprocess.run(
-        [sys.executable, "-m", "pip_audit", "-r", str(REQUIREMENTS_PROD)],
-        cwd=str(REPO),
-        capture_output=True,
-        text=True,
-        timeout=120,
+@pytest.mark.parametrize("package,min_version", _INSTALLED_VERSION_FLOORS)
+def test_enforcement_01_installed_versions_at_minimum(
+    package: str, min_version: str
+) -> None:
+    """Installed venv package must be at or above the patched minimum.
+
+    Offline — reads importlib.metadata only; no network I/O, no subprocess.
+    The live pip-audit gate lives in the CI workflow step.
+    """
+    import importlib.metadata
+
+    try:
+        installed = importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip(f"{package} not installed in this venv")
+
+    assert Version(installed) >= Version(min_version), (
+        f"{package}=={installed} is below patched minimum {min_version}; "
+        f"run `make venv` to upgrade"
     )
-    assert result.returncode == 0, (
-        f"Production pip-audit found vulnerabilities:\n{result.stdout}\n{result.stderr}"
-    )
-    assert "No known vulnerabilities found" in result.stdout or result.returncode == 0
 
 
 # ===========================================================================
@@ -148,23 +172,47 @@ def test_enforcement_03_makefile_exceptions_match_active_doc() -> None:
 def test_enforcement_04_minimum_versions(
     package: str, min_version: str, requirement_file: str
 ) -> None:
-    """Key packages must be at or above patched minimum versions."""
+    """Requirement specifier for each package must enforce a version >= the patched minimum.
+
+    Parses the actual version specifier from the file and compares numerically —
+    a name-only presence check would pass even if the floor was lowered.
+    """
     path = REPO / requirement_file
     text = path.read_text(encoding="utf-8")
 
-    # Check that the file contains a reference to the package at the right version
-    found = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            continue
-        if package.lower() in stripped.lower():
-            found = True
-            break
-
-    assert found, (
-        f"{package!r} not found in {requirement_file}; expected minimum {min_version}"
+    # Collect all version specifiers for this package from the file
+    pkg_escaped = re.escape(package)
+    # Match lines like: pkg==1.2.3 or pkg>=1.2.3 or pkg>=1.2.3,<2.0
+    pattern = re.compile(
+        rf"^{pkg_escaped}([><=!][^#\s]+)",
+        re.IGNORECASE | re.MULTILINE,
     )
+    matches = pattern.findall(text)
+    assert matches, (
+        f"{package!r} not found in {requirement_file}; expected a specifier "
+        f">= {min_version}"
+    )
+
+    # Verify that every lower-bound (>= or ==) specifier is >= the patched minimum
+    min_ver = Version(min_version)
+    lower_bounds: list[Version] = []
+    for spec_str in matches:
+        # spec_str is e.g. ">=1.3.1" or "==1.3.1" or ">=1.3.1,<2.0"
+        for clause in spec_str.split(","):
+            clause = clause.strip()
+            m = re.match(r"^(>=|==|~=)(.+)$", clause)
+            if m:
+                lower_bounds.append(Version(m.group(2)))
+
+    assert lower_bounds, (
+        f"{package!r} in {requirement_file} has no lower-bound specifier (>=, ==, ~=); "
+        f"cannot verify minimum {min_version}"
+    )
+    for bound in lower_bounds:
+        assert bound >= min_ver, (
+            f"{package!r} lower bound {bound} in {requirement_file} is below "
+            f"patched minimum {min_version}"
+        )
 
 
 # ===========================================================================
