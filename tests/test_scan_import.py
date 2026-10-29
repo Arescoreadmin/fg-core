@@ -28,7 +28,7 @@ os.environ.setdefault("FG_ENV", "test")
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 from services.field_assessment.redaction import REDACT_SENTINEL, redact_payload
 from services.field_assessment.scan_registry import (

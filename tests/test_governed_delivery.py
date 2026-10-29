@@ -24,7 +24,7 @@ import uuid
 os.environ.setdefault("FG_ENV", "test")
 os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 
-import httpx
+import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 

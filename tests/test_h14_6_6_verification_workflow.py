@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 from api.auth_scopes import mint_key
 from services.verification_authority.models import (
