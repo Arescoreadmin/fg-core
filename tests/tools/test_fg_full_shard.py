@@ -445,7 +445,9 @@ class TestDurationWeighting:
         """fg_test_durations.json must carry a _source_run annotation."""
         raw_path = _REPO / "tools" / "ci" / "fg_test_durations.json"
         raw = json.loads(raw_path.read_text())
-        assert "_source_run" in raw, "fg_test_durations.json missing _source_run annotation"
+        assert "_source_run" in raw, (
+            "fg_test_durations.json missing _source_run annotation"
+        )
         assert raw["_source_run"], "_source_run must be non-empty"
 
     def test_fallback_weight_uses_count_times_half(self) -> None:
