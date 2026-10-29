@@ -1,3 +1,43 @@
+## 2026-10-29 - fix/post-788-httpx-response-typing-001: POST-788-HTTPX-RESPONSE-TYPING-001 — align TestClient response annotations to httpx2
+
+**Change scope:** POST-788-HTTPX-RESPONSE-TYPING-001 (REPAIR class). Six mypy `return-value` errors across five test helper functions — annotations imported `httpx.Response` but starlette 1.3.1 TestClient returns `httpx2.Response`.
+
+1. **tests/test_scan_import.py** — `from httpx import Response` → `from httpx2 import Response`. One annotation site (`_ingest` helper, line 73).
+2. **tests/test_field_assessment_gate_enforcement.py** — same single-symbol fix (`_transition` helper, line 55).
+3. **tests/test_h14_6_6_verification_workflow.py** — same fix; two annotation sites (`_submit`/`_assign` helpers, lines 97 and 105).
+4. **tests/test_production_qualification.py** — `import httpx` → `import httpx2 as httpx`; only use is `httpx.Response` annotation (line 173).
+5. **tests/test_governed_delivery.py** — same alias swap; only use is `httpx.Response` annotation (line 306).
+6. **customer_one/offline_simulation_evidence.json** — rebind to post-edit tree hash. Simulation 6/6 GREEN (fully offline).
+
+**Root cause:** starlette 1.3.1 `testclient.py` contains `import httpx2 as httpx` at its top level; all `-> httpx.Response` annotations on `TestClient` methods therefore resolve to `httpx2._models.Response`. Helper functions in the five test files annotated their return type with the `httpx._models.Response` class from the separate `httpx 0.27.2` package — a distinct class that mypy correctly flagged as incompatible. The `httpx2` package was introduced in P0-DEPENDENCY-REMEDIATION-001 (PR #786) to satisfy starlette 1.3.x's dependency on `httpx2`; the five test files were not updated at that time.
+
+**Security posture:**
+
+1. **No runtime behavior changed.** The `httpx2.Response` and `httpx.Response` classes expose identical HTTP semantics (status_code, json(), headers, etc.) at the call sites; the annotation fix brings the type signature into agreement with what starlette already returns.
+2. **No authentication, authorization, or tenant isolation path changed.** All five modified files are test-only helpers with no production code path. The annotation change affects only mypy's view.
+3. **No dependency version changes.** `httpx 0.27.2`, `httpx2 2.16.0`, starlette 1.3.1 are all unchanged. `pip check` passes. `pip-audit` reports zero advisories.
+4. **Evidence rebind is offline.** Simulation uses ephemeral Ed25519 keys; no Vault, no cloud APIs, no paid infrastructure.
+5. **No mypy suppression.** The fix corrects the import rather than adding `type: ignore` or disabling the `return-value` check category.
+
+**Critical-path files changed:** Five test helper files (annotation-only); `customer_one/offline_simulation_evidence.json` (tree rebind).
+
+**Required invariant:** `mypy .` reports zero errors across 2199 source files. Six targeted mypy errors gone. 293 tests in the five affected modules pass. Evidence freshness gate passes.
+
+**Validation evidence:**
+
+- `mypy tests/test_scan_import.py tests/test_production_qualification.py tests/test_h14_6_6_verification_workflow.py tests/test_field_assessment_gate_enforcement.py tests/test_governed_delivery.py` → Success: no issues found in 5 source files
+- `mypy .` → Success: no issues found in 2199 source files
+- `pytest tests/test_scan_import.py tests/test_production_qualification.py tests/test_h14_6_6_verification_workflow.py tests/test_field_assessment_gate_enforcement.py tests/test_governed_delivery.py -q` → 293 passed
+- `ruff check` + `ruff format --check` → all passed, 5 files already formatted
+- `pip check` → No broken requirements found
+- `make pip-audit` → No known vulnerabilities found
+- `make verify-offline-simulation-evidence` → OK (6/6 GREEN)
+- `python tools/ci/fg_full_shard.py --validate --total-shards 10` → PASS, duration-imbalance=1.00x
+- `pytest tests/test_secret_scan_gate.py` → 28 passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Pure annotation alignment — five test helper return types corrected from `httpx.Response` to `httpx2.Response` to match starlette 1.3.1's TestClient return type. No production code changed. No authentication, authorization, or security gate modified. mypy clean across the full codebase.
+
 ## 2026-10-28 - fix/post-779-ci-execution-hardening-001: POST-787-SECURITY-GATE-001 — CI security gate hardening: false-positive suppression, portal scope regression tests, prod startup isolation
 
 **Change scope:** POST-787-SECURITY-GATE-001 (REPAIR class). Three independent repair workstreams, each addressing a CI gate failure without changing authentication or authorization logic.

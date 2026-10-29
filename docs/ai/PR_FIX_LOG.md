@@ -1,3 +1,35 @@
+## POST-788-HTTPX-RESPONSE-TYPING-001 — align TestClient response annotations to httpx2
+
+- **Work item:** POST-788-HTTPX-RESPONSE-TYPING-001 (REPAIR class)
+- **Baseline SHA:** `6df3105a` (main after PR #788 merged)
+- **Failures before:** Six mypy `return-value` errors across five test files: `tests/test_scan_import.py:78`, `tests/test_production_qualification.py:177`, `tests/test_h14_6_6_verification_workflow.py:102`, `tests/test_h14_6_6_verification_workflow.py:109`, `tests/test_field_assessment_gate_enforcement.py:56`, `tests/test_governed_delivery.py:320`. Error: `Incompatible return value type (got "httpx2._models.Response", expected "httpx._models.Response")`.
+- **Failures after:** 0 mypy errors. `mypy .` → Success: no issues found in 2199 source files.
+
+### Root cause
+
+Starlette 1.3.1 `testclient.py` imports `httpx2 as httpx` at the module level, so all `-> httpx.Response` annotations on `TestClient` methods resolve to `httpx2._models.Response`. Five test helper functions annotated their return type with `httpx.Response` from the separate `httpx 0.27.2` package — a distinct class. Mypy correctly flagged each function body's `return client.get(...)` as returning the wrong type.
+
+The `httpx2` package was added in PR #786 (P0-DEPENDENCY-REMEDIATION-001) to satisfy starlette 1.3.x. The five test files were not updated at that time.
+
+### Fix
+
+Five one-line import changes:
+
+- `tests/test_scan_import.py`: `from httpx import Response` → `from httpx2 import Response`
+- `tests/test_field_assessment_gate_enforcement.py`: same
+- `tests/test_h14_6_6_verification_workflow.py`: same
+- `tests/test_production_qualification.py`: `import httpx` → `import httpx2 as httpx`
+- `tests/test_governed_delivery.py`: same
+
+Plus evidence rebind: `customer_one/offline_simulation_evidence.json` regenerated (6/6 GREEN, offline).
+
+### Tests
+
+- `mypy tests/test_scan_import.py ... (all 5 files)` → Success: no issues found in 5 source files
+- `mypy .` → Success: no issues found in 2199 source files
+- `pytest tests/test_scan_import.py tests/test_production_qualification.py tests/test_h14_6_6_verification_workflow.py tests/test_field_assessment_gate_enforcement.py tests/test_governed_delivery.py -q` → 293 passed
+- `make verify-offline-simulation-evidence` → OK (6/6 GREEN)
+
 ## POST-787-SECURITY-GATE-001 — CI security gate hardening: false-positive suppression, portal scope self-contained keys, prod startup isolation
 
 - **Work item:** POST-787-SECURITY-GATE-001 (REPAIR class)
