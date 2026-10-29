@@ -177,3 +177,43 @@ def test_scanner_is_deterministic() -> None:
     content = "export AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\n"
     strip = lambda lines: [line.split(":", 1)[1] for line in lines]  # noqa: E731
     assert strip(_scan(content)) == strip(_scan(content))
+
+
+# ── Bare PEM marker strings (false-positive source in test fixtures) ──────────
+# Tests that assert PEM markers are ABSENT from evidence files use strings like
+# "BEGIN PRIVATE KEY" as detection patterns.  The scanner correctly flags them
+# (the pattern is intentionally broad).  codex_gates.sh excludes such test files
+# from the scan; these tests document that the scanner DOES detect the bare form.
+
+
+def test_detects_bare_pem_begin_private_key() -> None:
+    """Bare 'BEGIN PRIVATE KEY' string (no dashes) is detected by the scanner.
+
+    This is the pattern present in test_offline_simulation_evidence_lifecycle.py
+    as an assertion-literal, which is why that file is excluded from the scan.
+    """
+    assert _scan('"BEGIN PRIVATE KEY",\n')
+
+
+def test_detects_bare_pem_begin_rsa_private_key() -> None:
+    """Bare 'BEGIN RSA PRIVATE KEY' string is detected by the scanner."""
+    assert _scan('"BEGIN RSA PRIVATE KEY",\n')
+
+
+def test_scanner_excludes_offline_simulation_lifecycle_file() -> None:
+    """codex_gates.sh excludes test_offline_simulation_evidence_lifecycle.py.
+
+    That file uses 'BEGIN PRIVATE KEY' / 'BEGIN RSA PRIVATE KEY' as assertion
+    literals (checking that evidence files do NOT contain private key material).
+    Without the exclusion, codex_gates.sh would false-positive on those lines.
+    """
+    gates = (
+        __file__.split("tests")[0].rstrip("/") if "tests" in __file__ else "."
+    ) + "/codex_gates.sh"
+    from pathlib import Path
+
+    gates_text = Path(gates).read_text()
+    assert "test_offline_simulation_evidence_lifecycle.py" in gates_text, (
+        "codex_gates.sh must exclude test_offline_simulation_evidence_lifecycle.py "
+        "to avoid false-positive on PEM marker assertion literals"
+    )

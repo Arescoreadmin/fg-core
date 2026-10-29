@@ -51,6 +51,8 @@ from services.identity_resolver import (
     membership_version_svc,
 )
 
+_CI_TEST_KEY = "ci-test-key-00000000000000000000000000000000"
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -61,6 +63,8 @@ def _make_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str = "mv"):
     db_path = str(tmp_path / f"{name}.db")
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", db_path)
+    # Explicit global key so tests are self-contained regardless of CI env.
+    monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)
     reset_engine_cache()
     init_db(sqlite_path=db_path)
     return get_sessionmaker(sqlite_path=db_path)()
@@ -637,6 +641,96 @@ def test_mv15_api_key_actor_no_version_check(tmp_path, monkeypatch):
     body = resp.json()
     assert body.get("detail", {}).get("code") != "SESSION_REVOKED"
     assert body.get("detail", {}).get("code") != "SESSION_REVOKED_VERSION_MISMATCH"
+
+    db.close()
+    reset_engine_cache()
+
+
+# ---------------------------------------------------------------------------
+# MV-R1: global key env must match the key sent by the BFF
+# ---------------------------------------------------------------------------
+
+
+def test_mvr1_portal_scope_tenant_missing_when_fg_api_key_unset(tmp_path, monkeypatch):
+    """MV-R1: Auth explicitly enabled + FG_API_KEY absent → invalid key returns 401.
+
+    Regression guard: _resolve_auth_enabled_from_env() returns bool(FG_API_KEY) when
+    FG_AUTH_ENABLED is unset, so deleting FG_API_KEY would silently disable auth.
+    This test sets FG_AUTH_ENABLED=1 explicitly before removing FG_API_KEY, ensuring
+    AuthGateMiddleware enforces key validation and returns 401 for an unrecognised key.
+    This confirms that _make_db must set FG_API_KEY explicitly.
+    """
+    db = _make_db(tmp_path, monkeypatch, "mvr1")
+    user = _user(db, subject="auth0|mvr1", membership_version=1, tenant_id="tenant-a")
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
+
+    # Explicitly enable auth, then remove FG_API_KEY so the global-key check has
+    # nothing to match against.  Without FG_AUTH_ENABLED=1 the auth gate would be
+    # disabled (because _resolve_auth_enabled_from_env falls back to bool(FG_API_KEY)).
+    monkeypatch.setenv("FG_AUTH_ENABLED", "1")
+    monkeypatch.delenv("FG_API_KEY", raising=False)
+    api_key = "orphan-test-key-00000000000000000000000000000000"
+    db.commit()
+
+    app = build_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get(
+        "/field-assessment/engagements/eng-999",
+        headers={
+            "X-API-Key": api_key,
+            "X-Tenant-ID": "tenant-a",
+            "X-Portal-Source": "client-portal",
+            "X-FG-Membership-ID": user.id,
+            "X-FG-Membership-Version": "1",
+        },
+    )
+    # Auth enabled, no valid FG_API_KEY, orphan key not in DB → 401.
+    assert resp.status_code == 401, (
+        f"expected 401 when auth enforced and FG_API_KEY absent, "
+        f"got {resp.status_code}: {resp.json()}"
+    )
+
+    db.close()
+    reset_engine_cache()
+
+
+# ---------------------------------------------------------------------------
+# MV-R2: FG_API_KEY matching the request key → global key auth succeeds
+# ---------------------------------------------------------------------------
+
+
+def test_mvr2_portal_scope_passes_when_fg_api_key_matches(tmp_path, monkeypatch):
+    """MV-R2: FG_API_KEY set to the sent key → global key recognised → tenant injected.
+
+    Regression guard: confirms that _make_db's explicit monkeypatch.setenv("FG_API_KEY")
+    is sufficient for the portal named-user path to work in an isolated test process.
+    """
+    db = _make_db(tmp_path, monkeypatch, "mvr2")
+    user = _user(db, subject="auth0|mvr2", membership_version=1, tenant_id="tenant-a")
+    monkeypatch.setenv("FG_AUTH0_DOMAIN", "test.auth0.com")
+    # _make_db already sets FG_API_KEY = _CI_TEST_KEY; read it back explicitly.
+    api_key = os.environ["FG_API_KEY"]
+    db.commit()
+
+    app = build_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get(
+        "/field-assessment/engagements/eng-999",
+        headers={
+            "X-API-Key": api_key,
+            "X-Tenant-ID": "tenant-a",
+            "X-Portal-Source": "client-portal",
+            "X-FG-Membership-ID": user.id,
+            "X-FG-Membership-Version": "1",
+        },
+    )
+    # Global key recognised, tenant injected, version matches → middleware passes.
+    # Core handler returns 404 (no such engagement) — not 403.
+    assert resp.status_code != 403, (
+        f"expected middleware pass (not 403), got: {resp.json()}"
+    )
 
     db.close()
     reset_engine_cache()
