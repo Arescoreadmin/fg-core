@@ -118,7 +118,7 @@ def _duration_weight(
     ~0.9–1.0 s/test (average ≈ 0.5 s/test across all unmeasured files).
     """
     rel = _relative(f)
-    if rel in durations:
+    if rel in durations and durations[rel] > 0:
         return durations[rel]
     return counts.get(rel, 1) * 0.5
 

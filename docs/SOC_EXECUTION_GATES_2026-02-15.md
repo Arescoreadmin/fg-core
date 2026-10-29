@@ -1,3 +1,33 @@
+## 2026-10-28 - fix/post-786-shard-runtime-001: POST-786-SHARD-RUNTIME-001 — empirical fg-full shard durations, duration-imbalance 1.00x
+
+**Change scope:** POST-786-SHARD-RUNTIME-001 (REPAIR class). fg-full shard timeout fix with three file changes flagged by soc-review-sync: `.github/workflows/testing-module.yml`, `tools/ci/fg_test_counts.json`, `tools/ci/fg_test_durations.json`.
+
+1. **tools/ci/fg_test_durations.json** — Replaced 9 model duration entries with 343 empirically measured entries (positive values only) derived from JUnit XML across all 10 shards of GitHub Actions run 40720279440 (2026-10-28). Zero-valued entries excluded so they use the count-based fallback in `_duration_weight`. P2 fix: `round(subsecond)` previously produced 0 for 391 fast-test files; those zeros were accepted as "measured" by `_duration_weight`, causing all 391 files to pile onto one shard with zero estimated load increase. No auth path, no secret, no production dependency changed.
+2. **tools/ci/fg_test_counts.json** — Added `tests/security/test_dependency_audit_enforcement.py: 22` (22 tests: 9 parametrized test_01, 5 parametrized test_04, 8 single tests). File was added in PR #786 after run 40720279440 so was absent from the counts table. No auth path changed.
+3. **.github/workflows/testing-module.yml** — Comment in the `fg-full-shard` job updated with empirical data from run 40720279440 (max predicted 2832 s; empirical max before fix 3033 s). No timeout change, no matrix change, no env variable change, no step logic change. Pure documentation comment update.
+
+**Security posture:**
+
+1. **No CI gate behavior changed.** `timeout-minutes: 55` is unchanged. The `matrix` configuration is unchanged. The `TOTAL_SHARDS: "10"` env variable is unchanged. The only workflow change is a comment reflecting empirical runtime evidence.
+2. **Shard balance is improved, not weakened.** Duration-imbalance = 1.00x; test count-imbalance = 1.23x (was 15.6x before P2 fix); max predicted shard time = 2832 s (~47 min, within 55-min timeout). No shard can be empty (regression test enforces this). No shard has zero-weight files piled up (P2 guard in `_duration_weight` + zero-entry exclusion from JSON).
+3. **pip-audit gate unchanged.** Fail-closed pip-audit gate from P0-DEPENDENCY-REMEDIATION-001 is intact. No `--ignore-vuln` flags added. No `continue-on-error` added.
+4. **Evidence rebind.** `customer_one/offline_simulation_evidence.json` regenerated against current tree (source_tree_hash `a0acbdb9`, simulation_id `eab4e060`, 6/6 GREEN).
+5. **No authentication path changed.** No changes to `api/`, `api/auth/`, `api/security/`, `admin_gateway/`, `policy/opa/`, or any secret/credential handling. No production env var added or removed.
+
+**Critical-path files changed:** `.github/workflows/testing-module.yml` (comment only — no functional change), `tools/ci/fg_test_durations.json` (9 → 343 positive entries), `tools/ci/fg_test_counts.json` (1 new entry).
+
+**Required invariant:** `fg_test_durations.json` contains only positive values; `_duration_weight` treats zero as fallback-eligible; 10-shard duration-imbalance ≤ 1.01x; all shard regression tests pass; evidence freshness gate passes.
+
+**Validation evidence:**
+
+- `python tools/ci/fg_full_shard.py --validate --total-shards 10` → PASS, duration-imbalance=1.00x
+- `pytest tests/tools/test_fg_full_shard.py -v` → 45 passed
+- `pytest tests/security/test_dependency_audit_enforcement.py -v` → 22 passed
+- `make verify-offline-simulation-evidence` → offline-simulation-evidence: OK (6/6 GREEN)
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. CI infrastructure quality improvement — replaces stale model-based shard duration estimates with empirical data and closes a P2 defect where zero-valued entries bypassed the scheduling fallback. No authentication path changed. No production dependencies modified. Workflow change is comment-only.
+
 ## 2026-10-28 - fix/p0-dependency-remediation-001: P0-DEPENDENCY-REMEDIATION-001 — production dependency vulnerability remediation + fail-closed pip-audit CI gate
 
 **Change scope:** P0-DEPENDENCY-REMEDIATION-001 (SECURITY class). Closes all active dependency exceptions (EXC-DEP-001/002/004). Critical-path file change: `.github/workflows/fg-required.yml`.

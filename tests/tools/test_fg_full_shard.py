@@ -410,15 +410,36 @@ class TestDurationWeighting:
     """Duration loading, fallback, and balance after the empirical-data update."""
 
     def test_duration_json_loads_cleanly(self) -> None:
-        """fg_test_durations.json must load without error and contain only numeric values."""
+        """fg_test_durations.json must load without error and all values must be positive.
+
+        Zero-valued entries are excluded at load time so they fall through to the
+        count-based fallback in _duration_weight.  Only positive, trustworthy values
+        are loaded; expect ≥300 such entries from run 40720279440.
+        """
         durations = _load_test_durations()
-        assert len(durations) >= 700, (
-            f"Expected ≥700 measured files; got {len(durations)}"
+        assert len(durations) >= 300, (
+            f"Expected ≥300 positive-duration files; got {len(durations)}"
         )
         for k, v in durations.items():
-            assert isinstance(v, float) and v >= 0, (
-                f"Non-positive duration for {k}: {v}"
+            assert isinstance(v, float) and v > 0, (
+                f"Non-positive duration in loaded dict for {k}: {v}"
             )
+
+    def test_duration_json_has_no_zero_entries(self) -> None:
+        """fg_test_durations.json must not store zero-valued entries.
+
+        Zero values are indistinguishable from 'unmeasured' and would cause
+        _duration_weight to bypass the count-based fallback, piling zero-weight
+        files onto the lightest shard without raising its estimated load.
+        """
+        raw_path = _REPO / "tools" / "ci" / "fg_test_durations.json"
+        raw = json.loads(raw_path.read_text())
+        zeros = [k for k, v in raw.items() if not k.startswith("_") and v == 0]
+        assert not zeros, (
+            f"fg_test_durations.json contains {len(zeros)} zero-valued entries; "
+            "remove them so they use the count × 0.5 s fallback instead. "
+            f"First offenders: {zeros[:3]}"
+        )
 
     def test_duration_source_run_annotated(self) -> None:
         """fg_test_durations.json must carry a _source_run annotation."""
@@ -435,6 +456,20 @@ class TestDurationWeighting:
         weight = _duration_weight(f, counts, durations)
         assert weight == pytest.approx(21.0), (
             f"Fallback weight should be 42 × 0.5 = 21.0; got {weight}"
+        )
+
+    def test_zero_duration_in_dict_uses_fallback(self) -> None:
+        """A zero-valued duration entry must use the count-based fallback, not 0.
+
+        This guards against the P2 finding where round(subsecond_time) == 0
+        causes all such files to pile onto one shard with zero estimated load.
+        """
+        counts = {"tests/test_subsecond_file.py": 80}
+        durations = {"tests/test_subsecond_file.py": 0.0}
+        f = Path(_REPO / "tests" / "test_subsecond_file.py")
+        weight = _duration_weight(f, counts, durations)
+        assert weight == pytest.approx(40.0), (
+            f"Zero-valued duration should fall through to 80 × 0.5 = 40.0; got {weight}"
         )
 
     def test_measured_file_uses_duration_not_fallback(self) -> None:
