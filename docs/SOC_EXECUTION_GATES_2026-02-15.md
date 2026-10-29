@@ -1,3 +1,34 @@
+## 2026-10-28 - fix/post-779-ci-execution-hardening-001: POST-787-SECURITY-GATE-001 — CI security gate hardening: false-positive suppression, portal scope regression tests, prod startup isolation
+
+**Change scope:** POST-787-SECURITY-GATE-001 (REPAIR class). Three independent repair workstreams, each addressing a CI gate failure without changing authentication or authorization logic.
+
+1. **codex_gates.sh** — Added `--glob '!tests/security/test_offline_simulation_evidence_lifecycle.py'` to the secret scanner exclusion list. The lifecycle test file contains bare PEM_PRIVATE_KEY header strings as assertion literals (checking that evidence files do NOT contain PEM material). The scanner's `BEGIN_(RSA_)?PRIVATE_KEY` pattern matched these strings as false positives. Exclusion is analogous to the existing `tests/test_secret_scan_gate.py` exclusion. Comment block updated with justification. No detection pattern changed; no real secret path excluded.
+2. **tests/test_secret_scan_gate.py** — Three new regression tests: `test_detects_bare_pem_begin_private_key` (bare pem-private-key header string IS detected), `test_detects_bare_pem_begin_rsa_private_key` (bare pem-rsa-private-key header string IS detected), `test_scanner_excludes_offline_simulation_lifecycle_file` (asserts the exclusion is present in `codex_gates.sh`). Removed unused `import re`.
+3. **tests/security/test_membership_versioning.py** — Added `_CI_TEST_KEY` constant; updated `_make_db()` to call `monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)` so every portal-scope test gets an explicit global key regardless of CI environment state. Root cause: `_resolve_auth_enabled_from_env()` returns `bool(FG_API_KEY)` when `FG_AUTH_ENABLED` is absent; in CI without a pre-set key, auth was silently disabled, leaving `request.state.tenant_id` unset → `PORTAL_TENANT_MISSING` instead of expected codes. Two regression tests added: `test_mvr1_portal_scope_tenant_missing_when_fg_api_key_unset` (explicit `FG_AUTH_ENABLED=1` + orphan key → 401) and `test_mvr2_portal_scope_passes_when_fg_api_key_matches` (key matches → portal scope passes). No authentication behavior changed.
+4. **tests/security/test_compliance_modules.py** — Updated `test_ui_disabled_by_default_in_prod_returns_404` to use `TestClient` without context manager, skipping the lifespan startup. Root cause: the test patched `api.main.init_db` but `validate_startup_config()` in the lifespan independently probes the Postgres auth store via `probe_auth_store()` — a separate SQLAlchemy engine, unaffected by the `api.db` module-level cache patch. Since route registration (including the conditional UI inclusion check) happens at `build_app()` time, not during startup, skipping the lifespan is correct: the 404 for absent UI routes is deterministic without a DB connection. Added `test_prod_startup_rejects_unreachable_auth_store` to preserve the fail-closed production guarantee as a separate test (no engine patch, `pytest.raises(Exception)` when lifespan runs against unreachable Postgres).
+
+**Security posture:**
+
+1. **No authentication path changed.** `_make_db()` now sets `FG_API_KEY` via monkeypatch so test isolation is self-contained. The key value (`ci-test-key-000...`) is identical to the session-level value from `conftest.py`; no production key is written or exposed.
+2. **Secret scanner not weakened.** Only one test file is added to the exclusion list. The exclusion is scoped to a single specific file with a documented justification (assertion literals, not secrets). Two new regression tests confirm the bare PEM marker strings ARE detected — the scanner is not blind to the pattern.
+3. **Production startup fail-closed guarantee preserved.** `test_prod_startup_rejects_unreachable_auth_store` explicitly tests that startup raises when the Postgres auth store is unreachable. The new test calls `_reset()` before building the app to ensure no cached SQLite engine is present. It `pytest.raises(Exception)` — not `RuntimeError` — to catch all failure modes.
+4. **No CI workflow files changed.** No timeout, matrix, or step logic modified.
+5. **No test isolation weakened.** `_restore_env` autouse fixture in `conftest.py` restores `os.environ` after each test. The new `monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)` in `_make_db()` is correctly scoped to the current test and restored by monkeypatch teardown.
+
+**Critical-path files changed:** `codex_gates.sh` (exclusion list only — no detection pattern change), `tests/test_secret_scan_gate.py` (3 new regression tests), `tests/security/test_membership_versioning.py` (self-contained key setup + 2 regression tests), `tests/security/test_compliance_modules.py` (lifespan-free UI route test + fail-closed DB test).
+
+**Required invariant:** Secret scanner finds no hits (verified). 52 tests in the three modified test files pass. 1289 tests in `tests/security/` pass (1 skipped). `codex_gates.sh` exclusion list does not suppress real secrets — regression tests confirm bare PEM markers are still detected.
+
+**Validation evidence:**
+
+- `python -m pytest tests/security/test_membership_versioning.py tests/security/test_compliance_modules.py tests/test_secret_scan_gate.py -q` → 52 passed
+- `python -m pytest tests/security/ -q` → 1289 passed, 1 skipped
+- Secret scan (exact `rg` command from `codex_gates.sh`) → No secrets found
+- `python -m ruff check` → 0 errors on all modified files
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Test infrastructure hardening only; no runtime auth path change; no detection pattern weakened; scanner exclusion is documented and regression-tested; fail-closed production startup guarantee preserved as a dedicated test. All 1289 security tests pass.
+
 ## 2026-10-28 - fix/post-786-shard-runtime-001: POST-786-SHARD-RUNTIME-001 — empirical fg-full shard durations, duration-imbalance 1.00x
 
 **Change scope:** POST-786-SHARD-RUNTIME-001 (REPAIR class). fg-full shard timeout fix with three file changes flagged by soc-review-sync: `.github/workflows/testing-module.yml`, `tools/ci/fg_test_counts.json`, `tools/ci/fg_test_durations.json`.

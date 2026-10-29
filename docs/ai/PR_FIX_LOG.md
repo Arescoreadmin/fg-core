@@ -1,3 +1,37 @@
+## POST-787-SECURITY-GATE-001 — CI security gate hardening: false-positive suppression, portal scope self-contained keys, prod startup isolation
+
+- **Work item:** POST-787-SECURITY-GATE-001 (REPAIR class)
+- **Baseline SHA:** `98a98553` (HEAD of `fix/post-779-ci-execution-hardening-001` before this PR)
+- **Failures before:** (A) `codex_gates.sh` secret scan failed: `tests/security/test_offline_simulation_evidence_lifecycle.py` contains `"BEGIN PRIVATE KEY"` and `"BEGIN RSA PRIVATE KEY"` as assertion literals — PEM detection literals used in negative tests, not secrets. (B) 7 failures in `test_membership_versioning.py`: MV-9/10/11/16 returned `PORTAL_TENANT_MISSING` (403) instead of expected auth error codes; MV-13/14 returned HTTP 400 instead of 200. (C) `test_ui_disabled_by_default_in_prod_returns_404` failed with `auth_store_unreachable:OperationalError` — `validate_startup_config()` in the lifespan independently probes the Postgres auth store, bypassing the `api.db` cache patch.
+- **Failures after:** 0 failures. 52 tests in modified files pass. 1289/1289 security tests pass (1 skipped).
+
+### Root causes
+
+**Workstream A — false-positive scanner hit:**
+`codex_gates.sh` scanner pattern `BEGIN( RSA)? PRIVATE KEY` matches bare strings like `"BEGIN PRIVATE KEY"` used as assertion literals in `test_offline_simulation_evidence_lifecycle.py` (lines 342–343 check that evidence files do NOT contain PEM material). Fix: add file to exclusion list (same pattern as `tests/test_secret_scan_gate.py`).
+
+**Workstream B — portal scope tests: `PORTAL_TENANT_MISSING` instead of expected codes:**
+`_resolve_auth_enabled_from_env()` returns `bool(FG_API_KEY)` when `FG_AUTH_ENABLED` is absent from env. In CI without a pre-set `FG_API_KEY`, auth is silently disabled: `AuthGateMiddleware` passes requests through without setting `request.state.tenant_id`; `PortalClientScopeMiddleware` then returns `PORTAL_TENANT_MISSING` (403) instead of the expected version-mismatch or auth-invalid codes. Fix: `_make_db()` now calls `monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)` so each test is self-contained.
+
+**Workstream C — compliance test: PostgreSQL probe bypasses `api.db` cache:**
+`validate_startup_config()` in `build_app()`'s lifespan calls `probe_auth_store()` which creates its own SQLAlchemy engine from `FG_DB_URL` — completely separate from the `api.db` module-level engine cache. Patching `api.db._ENGINE` does not suppress this probe. Since route registration (including the `if _ui_enabled(): include_router(ui_router)`) happens at `build_app()` time, not during the lifespan, using `TestClient` without context manager correctly tests the routing behavior without running startup.
+
+### Fixes
+
+**`codex_gates.sh`**: Added `--glob '!tests/security/test_offline_simulation_evidence_lifecycle.py'` to exclusion list with justification comment.
+
+**`tests/test_secret_scan_gate.py`**: Added `test_detects_bare_pem_begin_private_key`, `test_detects_bare_pem_begin_rsa_private_key`, `test_scanner_excludes_offline_simulation_lifecycle_file`. Removed unused `import re`.
+
+**`tests/security/test_membership_versioning.py`**: Added `_CI_TEST_KEY` constant; updated `_make_db()` to call `monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)`; added `test_mvr1_portal_scope_tenant_missing_when_fg_api_key_unset` (explicit `FG_AUTH_ENABLED=1` + orphan key → 401) and `test_mvr2_portal_scope_passes_when_fg_api_key_matches` (key matches → portal passes).
+
+**`tests/security/test_compliance_modules.py`**: Changed `test_ui_disabled_by_default_in_prod_returns_404` to use `TestClient(build_app(), raise_server_exceptions=False)` without context manager (skips lifespan). Added `test_prod_startup_rejects_unreachable_auth_store` using `_reset()` + `pytest.raises(Exception)` with context manager to preserve fail-closed startup guarantee.
+
+### Tests
+
+- `pytest tests/security/test_membership_versioning.py tests/security/test_compliance_modules.py tests/test_secret_scan_gate.py -q` → 52 passed
+- `pytest tests/security/ -q` → 1289 passed, 1 skipped
+- Secret scan (exact `rg` command from `codex_gates.sh`) → no hits
+
 ## POST-786-SHARD-RUNTIME-001 — fg-full shard timeout fix, empirical durations
 
 - **Work item:** POST-786-SHARD-RUNTIME-001 (REPAIR class)

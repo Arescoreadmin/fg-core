@@ -64,6 +64,9 @@ echo "==> Gates: basic secret scan (cheap tripwire)"
 # detection strings as code/fixture data rather than actual credentials):
 #   codex_gates.sh                    contains the detection pattern strings
 #   tests/test_secret_scan_gate.py    contains fixture strings with the patterns
+#   tests/security/test_offline_simulation_evidence_lifecycle.py
+#                                     asserts PEM markers are ABSENT from evidence;
+#                                     the pattern strings are detector literals, not keys
 #   .claude/worktrees/**              scratch space may hold stale detector regexes
 #   services/ai_plane_extension/policy_engine.py  re.compile deny-list, not secrets
 #   .venv/**                          Python virtualenv — third-party code
@@ -75,6 +78,7 @@ _SAFE_REF='=\.\.\.(\s|$)|=<[^>]*>|\$\{\{[^}]*\}\}'
 _SECRET_HITS=$(rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
   --glob '!tests/test_secret_scan_gate.py' \
+  --glob '!tests/security/test_offline_simulation_evidence_lifecycle.py' \
   --glob '!.claude/worktrees/**' \
   --glob '!services/ai_plane_extension/policy_engine.py' \
   --glob '!.venv/**' \

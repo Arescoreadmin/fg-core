@@ -119,8 +119,30 @@ def test_ui_disabled_by_default_in_prod_returns_404(monkeypatch, tmp_path):
     _seed_prod_env(monkeypatch, tmp_path)
     monkeypatch.delenv("FG_UI_ENABLED", raising=False)
 
-    monkeypatch.setattr("api.main.init_db", lambda: None)
+    # UI route registration happens at build_app() time, not during the lifespan.
+    # Use TestClient without context manager to skip startup (which would need a
+    # real PostgreSQL connection in prod mode) and test only the routing layer.
+    client = TestClient(build_app(), raise_server_exceptions=False)
+    resp = client.get("/ui")
+    assert resp.status_code == 404
 
-    with TestClient(build_app()) as client:
-        resp = client.get("/ui")
-        assert resp.status_code == 404
+
+def test_prod_startup_rejects_unreachable_auth_store(monkeypatch, tmp_path):
+    """Production startup must fail closed when the auth store is unreachable.
+
+    Verifies that the DB init block re-raises on PostgreSQL connection failure
+    in production mode, rather than silently falling back to a degraded state.
+    """
+    from api.db import reset_engine_cache as _reset
+
+    _seed_prod_env(monkeypatch, tmp_path)
+    # Clear any cached SQLite engine from prior tests so the startup creates
+    # a fresh PostgreSQL engine from FG_DB_URL and attempts a real connection.
+    _reset()
+
+    with pytest.raises(Exception):
+        with TestClient(build_app()) as client:
+            client.get("/health")
+
+    # Clean up the engine reference left by the failing startup attempt.
+    _reset()
