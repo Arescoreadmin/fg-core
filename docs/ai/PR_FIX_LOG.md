@@ -1,3 +1,43 @@
+## POST-786-SHARD-RUNTIME-001 — fg-full shard timeout fix, empirical durations
+
+- **Work item:** POST-786-SHARD-RUNTIME-001 (REPAIR class)
+- **Baseline SHA:** `6b6399fb` (HEAD after PR #786 merged)
+- **Failures before:** fg-full shard 9 cancelled at 55 min (run 40765517264, 91% complete, estimated full pytest time ~3251 s). Root cause: `fg_test_durations.json` had only 9 model entries; 735 files used 0.5 s/test fallback (actual CI rates: 1.2–5.8 s/t for governance tests). Secondary defect (P2): `round(subsecond_time)` produced 0 for 391 fast-test files; `_duration_weight` accepted those zeros instead of applying fallback, causing all 391 files to pile onto the lightest shard with zero estimated load increase.
+- **Failures after:** 0 shard timeouts expected. Duration-imbalance = 1.00x; max shard = 2832 s predicted (empirical max from run 40720279440 was 3033 s before rebalancing). 45 regression tests pass (8 new in `TestDurationWeighting`).
+
+### Root cause
+
+`fg_test_durations.json` was populated with 9 manually estimated entries from a single observed run (run 40366143888). The remaining 735 test files used a `count × 0.5 s` fallback that systematically underestimated integration-heavy files (actual 1.2–5.8 s/t). The greedy bin-packing algorithm achieved 1.00x predicted duration-imbalance but the underlying weights were wrong: shard 7 took 3033 s actual (predicted 1572 s), shard 9 timed out at 55 min in run 40765517264.
+
+Secondary P2 defect: the initial fix (Phase B) stored `round(actual_seconds)` for all 733 JUnit-measured files. Files whose JUnit total was < 0.5 s rounded to `0`. `_duration_weight` checked `if rel in durations` and returned `0`, bypassing the fallback. All 391 zero-valued files were then assigned to whichever shard had the minimum load, with zero load increase per file — creating a 427-file shard with 12,611 tests and reported 1.00x imbalance that hid a real runtime skew.
+
+### Fix
+
+**`tools/ci/fg_test_durations.json`**: Replaced 9 model entries with 343 empirically measured entries (positive values only) from JUnit XML across all 10 shards of run 40720279440 (2026-10-28). Zero-valued entries excluded — they use the count-based fallback for proper distribution.
+
+**`tools/ci/fg_full_shard.py`** `_duration_weight`: Added `and durations[rel] > 0` guard. Zero values in the dict now fall through to `counts.get(rel, 1) * 0.5`, ensuring every file contributes nonzero scheduling weight.
+
+**`tools/ci/fg_test_counts.json`**: Added `test_dependency_audit_enforcement.py` (22 tests, file added in PR #786 after run 40720279440).
+
+**`.github/workflows/testing-module.yml`**: Comment updated with empirical evidence. No config change (timeout remains 55 min, max predicted = 2832 s = 47 min).
+
+### Tests
+
+- `tests/tools/test_fg_full_shard.py::TestDurationWeighting` — 10 new tests pass:
+  - `test_duration_json_loads_cleanly`: ≥300 positive-duration files, all > 0
+  - `test_duration_json_has_no_zero_entries`: no zero values in the JSON file
+  - `test_duration_source_run_annotated`: `_source_run` field present and non-empty
+  - `test_fallback_weight_uses_count_times_half`: fallback = count × 0.5 s
+  - `test_zero_duration_in_dict_uses_fallback`: zero value in dict falls through
+  - `test_measured_file_uses_duration_not_fallback`: positive recorded value used
+  - `test_real_validate_10_shards`: `--validate --total-shards 10` exits 0
+  - `test_10_shard_duration_imbalance_at_most_1_percent`: imbalance ≤ 1.01x
+  - `test_10_shard_no_empty_shard`: every shard ≥ 1 file
+  - `test_security_test_file_has_duration_entry`: `test_dependency_audit_enforcement.py` explicitly present
+- Full suite: 45 tests pass
+
+---
+
 ## P0-DEPENDENCY-REMEDIATION-001 — Production dependency vulnerability remediation
 
 - **Work item:** P0-DEPENDENCY-REMEDIATION-001 (SECURITY class)

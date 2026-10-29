@@ -30,7 +30,15 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from tools.ci.fg_full_shard import _assign_shard, _collect_test_files, _relative  # noqa: E402
+from tools.ci.fg_full_shard import (  # noqa: E402
+    _assign_shard,
+    _assign_shards_greedy,
+    _collect_test_files,
+    _duration_weight,
+    _load_test_counts,
+    _load_test_durations,
+    _relative,
+)
 from tools.ci.fg_full_aggregate import aggregate  # noqa: E402
 
 
@@ -391,6 +399,147 @@ class TestAggregateGate:
             "shards",
         }
         assert required_keys <= set(summary.keys())
+
+
+# ---------------------------------------------------------------------------
+# Duration weighting — POST-786-SHARD-RUNTIME-001
+# ---------------------------------------------------------------------------
+
+
+class TestDurationWeighting:
+    """Duration loading, fallback, and balance after the empirical-data update."""
+
+    def test_duration_json_loads_cleanly(self) -> None:
+        """fg_test_durations.json must load without error and all values must be positive.
+
+        Zero-valued entries are excluded at load time so they fall through to the
+        count-based fallback in _duration_weight.  Only positive, trustworthy values
+        are loaded; expect ≥300 such entries from run 40720279440.
+        """
+        durations = _load_test_durations()
+        assert len(durations) >= 300, (
+            f"Expected ≥300 positive-duration files; got {len(durations)}"
+        )
+        for k, v in durations.items():
+            assert isinstance(v, float) and v > 0, (
+                f"Non-positive duration in loaded dict for {k}: {v}"
+            )
+
+    def test_duration_json_has_no_zero_entries(self) -> None:
+        """fg_test_durations.json must not store zero-valued entries.
+
+        Zero values are indistinguishable from 'unmeasured' and would cause
+        _duration_weight to bypass the count-based fallback, piling zero-weight
+        files onto the lightest shard without raising its estimated load.
+        """
+        raw_path = _REPO / "tools" / "ci" / "fg_test_durations.json"
+        raw = json.loads(raw_path.read_text())
+        zeros = [k for k, v in raw.items() if not k.startswith("_") and v == 0]
+        assert not zeros, (
+            f"fg_test_durations.json contains {len(zeros)} zero-valued entries; "
+            "remove them so they use the count × 0.5 s fallback instead. "
+            f"First offenders: {zeros[:3]}"
+        )
+
+    def test_duration_source_run_annotated(self) -> None:
+        """fg_test_durations.json must carry a _source_run annotation."""
+        raw_path = _REPO / "tools" / "ci" / "fg_test_durations.json"
+        raw = json.loads(raw_path.read_text())
+        assert "_source_run" in raw, (
+            "fg_test_durations.json missing _source_run annotation"
+        )
+        assert raw["_source_run"], "_source_run must be non-empty"
+
+    def test_fallback_weight_uses_count_times_half(self) -> None:
+        """An unmeasured file falls back to count × 0.5 s."""
+        counts = {"tests/test_unmeasured_synthetic.py": 42}
+        durations: dict[str, float] = {}
+        f = Path(_REPO / "tests" / "test_unmeasured_synthetic.py")
+        weight = _duration_weight(f, counts, durations)
+        assert weight == pytest.approx(21.0), (
+            f"Fallback weight should be 42 × 0.5 = 21.0; got {weight}"
+        )
+
+    def test_zero_duration_in_dict_uses_fallback(self) -> None:
+        """A zero-valued duration entry must use the count-based fallback, not 0.
+
+        This guards against the P2 finding where round(subsecond_time) == 0
+        causes all such files to pile onto one shard with zero estimated load.
+        """
+        counts = {"tests/test_subsecond_file.py": 80}
+        durations = {"tests/test_subsecond_file.py": 0.0}
+        f = Path(_REPO / "tests" / "test_subsecond_file.py")
+        weight = _duration_weight(f, counts, durations)
+        assert weight == pytest.approx(40.0), (
+            f"Zero-valued duration should fall through to 80 × 0.5 = 40.0; got {weight}"
+        )
+
+    def test_measured_file_uses_duration_not_fallback(self) -> None:
+        """A file present in the durations dict uses that value, ignoring count."""
+        counts = {"tests/test_known.py": 100}
+        durations = {"tests/test_known.py": 999.0}
+        f = Path(_REPO / "tests" / "test_known.py")
+        weight = _duration_weight(f, counts, durations)
+        assert weight == pytest.approx(999.0), (
+            f"Measured weight should be 999.0; got {weight}"
+        )
+
+    def test_real_validate_10_shards(self) -> None:
+        """Production 10-shard layout must pass the validate invariants."""
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "tools/ci/fg_full_shard.py",
+                "--validate",
+                "--total-shards",
+                "10",
+            ],
+            cwd=_REPO,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert "PASS" in result.stdout
+
+    def test_10_shard_duration_imbalance_at_most_1_percent(self) -> None:
+        """With empirical durations, 10-shard duration-imbalance must be ≤ 1.01x."""
+        files = _collect_test_files()
+        counts = _load_test_counts()
+        durations = _load_test_durations()
+
+        all_shards = _assign_shards_greedy(files, 10)
+        shard_loads = [
+            sum(_duration_weight(f, counts, durations) for f in all_shards[i])
+            for i in range(10)
+        ]
+        max_load = max(shard_loads)
+        min_load = min(shard_loads)
+        # Avoid division by zero for a perfectly balanced set.
+        if min_load > 0:
+            imbalance = max_load / min_load
+            assert imbalance <= 1.01, (
+                f"10-shard duration imbalance {imbalance:.4f}x exceeds 1.01x; "
+                f"re-run Phase B to update fg_test_durations.json"
+            )
+
+    def test_10_shard_no_empty_shard(self) -> None:
+        """Every shard must contain at least one test file."""
+        files = _collect_test_files()
+        all_shards = _assign_shards_greedy(files, 10)
+        for i in range(10):
+            assert len(all_shards[i]) >= 1, f"Shard {i} is empty"
+
+    def test_security_test_file_has_duration_entry(self) -> None:
+        """test_dependency_audit_enforcement.py must have an explicit duration entry."""
+        durations = _load_test_durations()
+        key = "tests/security/test_dependency_audit_enforcement.py"
+        assert key in durations, (
+            f"{key} not in fg_test_durations.json; "
+            "add a conservative estimate to prevent it landing in a slow shard"
+        )
+        assert durations[key] > 0
 
 
 # ---------------------------------------------------------------------------
