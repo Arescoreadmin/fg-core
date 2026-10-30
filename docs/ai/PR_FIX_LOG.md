@@ -1,3 +1,38 @@
+## POST-789-COLLECTION-ENV-LEAK-001 — eliminate collection-time env mutation in test_ops_governance_manager.py
+
+- **Work item:** POST-789-COLLECTION-ENV-LEAK-001 (REPAIR class)
+- **Baseline SHA:** `98a98553` (main after PR #789 merged)
+- **Failures before:** 8 failures in `tests/security/test_membership_versioning.py` (MV-9, MV-10, MV-11, MV-13, MV-14, MV-16, MV-R1, MV-R2) when collected in shard 2 alongside `tests/test_ops_governance_manager.py`. All 8 failures were auth-gating errors: `PORTAL_TENANT_MISSING` (403) or HTTP 400 instead of 200/201.
+- **Failures after:** 0. Minimal reproducer: `pytest tests/security/test_membership_versioning.py tests/test_ops_governance_manager.py -k "test_mv or test_mvr"` → 18 passed, 0 failed.
+
+### Root cause
+
+`tests/test_ops_governance_manager.py` lines 28-31 contained four module-level `os.environ.setdefault()` calls:
+
+```python
+os.environ.setdefault("FG_ENV", "dev")
+os.environ.setdefault("FG_AUTH_ENABLED", "0")
+os.environ.setdefault("FG_SQLITE_PATH", "state/test_ops_governance_manager.db")
+os.environ.setdefault("FG_RL_ENABLED", "0")
+```
+
+pytest collects all test modules before running tests. Module-level code executes during collection, before any `monkeypatch`/`_restore_env` fixture captures environment state. When shard 2 collected `test_ops_governance_manager.py` before `test_membership_versioning.py`, `FG_AUTH_ENABLED=0` was set permanently in the process environment.
+
+`_resolve_auth_enabled_from_env()` in `api/main.py` checks: if `FG_AUTH_ENABLED` is explicitly set (even to "0"), use its value and ignore `FG_API_KEY`. So even though the MV fixtures called `monkeypatch.setenv("FG_API_KEY", _CI_TEST_KEY)`, the leaked `FG_AUTH_ENABLED=0` took precedence and `build_app()` returned an app with `auth_enabled=False`. With auth disabled, `AuthGateMiddleware` passes all requests without populating `request.state.tenant_id`, which then causes `PortalClientScopeMiddleware` to return `PORTAL_TENANT_MISSING` (403) on every portal-scoped route.
+
+### Fix
+
+- Removed `import os` and all four `os.environ.setdefault()` lines from `tests/test_ops_governance_manager.py`. The `api_client` fixture already handles all env setup via `monkeypatch.setenv`; pure store and state-machine tests use in-memory SQLite and need no env vars at all.
+- Added `test_module_does_not_mutate_fg_auth_enabled_at_collection_time` regression guard: evicts the module from `sys.modules`, re-imports it, and asserts `FG_AUTH_ENABLED` is unchanged.
+
+### Tests
+
+- Minimal reproducer: `pytest tests/security/test_membership_versioning.py tests/test_ops_governance_manager.py -k "test_mv or test_mvr"` → 18 passed (was 8 failed)
+- `pytest tests/test_ops_governance_manager.py -q` → 67 passed
+- `ruff check tests/test_ops_governance_manager.py` → All checks passed
+- `mypy tests/test_ops_governance_manager.py` → Success: no issues found
+- `make verify-offline-simulation-evidence` → OK (6/6 GREEN)
+
 ## POST-788-HTTPX-RESPONSE-TYPING-001 — align TestClient response annotations to httpx2
 
 - **Work item:** POST-788-HTTPX-RESPONSE-TYPING-001 (REPAIR class)

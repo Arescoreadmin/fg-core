@@ -1,3 +1,20 @@
+## 2026-10-29 - fix/post-789-collection-env-leak-001: POST-789-COLLECTION-ENV-LEAK-001 — eliminate collection-time env mutation in test_ops_governance_manager.py
+
+**Change scope:** POST-789-COLLECTION-ENV-LEAK-001 (REPAIR class). Remove four module-level `os.environ.setdefault()` calls from `tests/test_ops_governance_manager.py` that executed during pytest collection, before any isolation fixture could capture environment state. The mutation `FG_AUTH_ENABLED=0` propagated into `tests/security/test_membership_versioning.py` when both modules were collected in the same shard, disabling authentication and causing 8 test failures (MV-9/10/11/13/14/16 and MV-R1/MV-R2).
+
+1. **tests/test_ops_governance_manager.py** — Removed `import os` and four module-level `os.environ.setdefault()` calls (lines 26-31 in pre-edit file). The `api_client` fixture already handles all env setup via `monkeypatch.setenv`; pure store and state-machine tests use in-memory SQLite and need no env vars.
+2. **tests/test_ops_governance_manager.py** — Added `test_module_does_not_mutate_fg_auth_enabled_at_collection_time` regression guard: forces a re-import of the module and asserts `FG_AUTH_ENABLED` is unchanged before and after.
+
+**Root cause:** pytest collects all test modules before running any tests. Module-level code — including `os.environ.setdefault()` calls outside any function or fixture — executes during collection. The `_restore_env` autouse fixture in `conftest.py` captures env state per-test, not per-collection; mutations that happen during collection are permanently set for all tests collected after them in the same worker. Shard 2 collected `test_ops_governance_manager.py` before `test_membership_versioning.py`, so `FG_AUTH_ENABLED=0` was present when those tests called `build_app()`. `_resolve_auth_enabled_from_env()` in `api/main.py` gives `FG_AUTH_ENABLED` precedence over `FG_API_KEY` when `FG_AUTH_ENABLED` is explicitly set, so auth was disabled even though `FG_API_KEY` was present.
+
+**Security posture:**
+
+1. **No production code changed.** Only `tests/test_ops_governance_manager.py` is modified.
+2. **Auth is now stricter.** Removing the module-level `FG_AUTH_ENABLED=0` means that collection of `test_ops_governance_manager.py` no longer silently disables authentication for any other test collected in the same process.
+3. **No fixture isolation changed.** The `api_client` fixture already called `build_app(auth_enabled=True)` and used `monkeypatch.setenv` — this PR does not alter that fixture.
+4. **Regression guard is purely observational.** The new test re-imports the module and checks that env is unchanged; it does not suppress any error path or weaken any auth check.
+5. **No schema, migration, or CI config changed.**
+
 ## 2026-10-29 - fix/post-788-httpx-response-typing-001: POST-788-HTTPX-RESPONSE-TYPING-001 — align TestClient response annotations to httpx2
 
 **Change scope:** POST-788-HTTPX-RESPONSE-TYPING-001 (REPAIR class). Six mypy `return-value` errors across five test helper functions — annotations imported `httpx.Response` but starlette 1.3.1 TestClient returns `httpx2.Response`.
