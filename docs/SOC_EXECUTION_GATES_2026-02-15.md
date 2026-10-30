@@ -1,3 +1,22 @@
+## 2026-10-30 - fix/shard2-collection-isolation-002: SHARD2-COLLECTION-ISOLATION-002 — systemic collection-time env contamination elimination
+
+**Change scope:** SHARD2-COLLECTION-ISOLATION-002 (REPAIR class). Eliminates all `FG_AUTH_ENABLED` module-scope `os.environ.setdefault()` calls across 25 test files (12 with `=0`, 13 with `=1`). Adds `tools/ci/check_collection_purity.py` AST-based guard wired into `codex_gates.sh`. Confirmed contaminating module: `test_readiness_gap_analysis_manager.py` causing 8 MV failures in shard 3.
+
+1. **12 files with `FG_AUTH_ENABLED=0` removed**: `test_readiness_gap_analysis_manager.py`, `test_deployment_manager.py`, `test_provisioning_manager.py`, `test_observability.py`, `test_request_tracing_task72.py`, `test_readiness_alerting.py`, `test_readiness_manager.py`, `test_readiness_monitoring.py`, `test_readiness_simulation.py`, `test_r1_remediation_authority_canonical.py`, `test_security_middleware.py`, `test_p1_provisioning_deterministic.py`. All used explicit `build_app(auth_enabled=...)` in fixtures — module-level mutation was redundant noise.
+2. **13 files with `FG_AUTH_ENABLED=1` removed**: security and lifecycle test files. Belt-and-suspenders — `conftest.py` already ensures auth enabled via `FG_API_KEY`.
+3. **`tools/ci/check_collection_purity.py`**: AST scanner. Hard-fails on `FG_AUTH_ENABLED` at module scope (any value). Permits 9 documented safe vars. 774 files, 0 violations.
+4. **`tests/security/test_collection_purity_gate.py`**: 16 unit tests for the guard.
+5. **`codex_gates.sh`**: collection-purity gate step added.
+6. **`customer_one/offline_simulation_evidence.json`**: evidence rebind (6/6 GREEN).
+
+**Security posture:**
+
+1. **No production code changed.** All 25 modified files are test-only.
+2. **Auth is now exclusively explicit.** No module-scope mutation can disable auth for other tests. The only mechanism for auth state in tests is `build_app(auth_enabled=...)` (explicit) or `conftest.py`'s `FG_API_KEY` setdefault (auth enabled by default). 
+3. **Collection-purity guard is permanent.** Any future `FG_AUTH_ENABLED=0` at module scope fails `codex_gates.sh` immediately (exit 1), before the full test suite runs.
+4. **No authentication, authorization, or tenant isolation path changed.** All changes are to test infrastructure only.
+5. **No schema, migration, or CI config changed.** `codex_gates.sh` has a new step added; no existing steps modified.
+
 ## 2026-10-29 - fix/post-789-collection-env-leak-001: POST-789-COLLECTION-ENV-LEAK-001 — eliminate collection-time env mutation in test_ops_governance_manager.py
 
 **Change scope:** POST-789-COLLECTION-ENV-LEAK-001 (REPAIR class). Remove four module-level `os.environ.setdefault()` calls from `tests/test_ops_governance_manager.py` that executed during pytest collection, before any isolation fixture could capture environment state. The mutation `FG_AUTH_ENABLED=0` propagated into `tests/security/test_membership_versioning.py` when both modules were collected in the same shard, disabling authentication and causing 8 test failures (MV-9/10/11/13/14/16 and MV-R1/MV-R2).

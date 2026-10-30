@@ -22,7 +22,6 @@ import pytest
 from unittest.mock import MagicMock
 
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 
 def _make_request(key_tenant: str | None = None, cached: bool = False) -> MagicMock:

@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from typing import Iterator
 
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 import pytest
 from sqlalchemy import text

@@ -22,7 +22,6 @@ import pytest
 
 # Set test environment (safe defaults for unit tests)
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 
 # =============================================================================

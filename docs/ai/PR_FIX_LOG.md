@@ -1,3 +1,46 @@
+## SHARD2-COLLECTION-ISOLATION-002 — eliminate systemic collection-time env contamination across FrostGate tests
+
+- **Work item:** SHARD2-COLLECTION-ISOLATION-002 (REPAIR class)
+- **Baseline SHA:** `4435562f` (main after PR #790 merged)
+- **Failures before:** 8 failures in `tests/security/test_membership_versioning.py` (MV-9/10/11/12/13/14/16/R2) when shard 3 collected `tests/test_readiness_gap_analysis_manager.py` before `test_membership_versioning.py`. Same mechanism as POST-789 but a different contaminating module. Full shard 3: 8 failed, 2710 passed, 5 skipped.
+- **Failures after:** 0. Shard 3: 2718 passed, 5 skipped, 0 failed.
+
+### Root cause
+
+**Phase 1 — Static audit**: AST scan of 773 test files found 186 module-scope `os.environ.setdefault()` calls in non-conftest files. Of those, 25 set `FG_AUTH_ENABLED` (12 to "0", 13 to "1") — the auth-critical variable. `_resolve_auth_enabled_from_env()` in `api/main.py` gives explicit `FG_AUTH_ENABLED` precedence over `FG_API_KEY` presence, so any module-scope `FG_AUTH_ENABLED=0` silently disabled auth for all subsequently-collected tests in the same shard worker.
+
+**Mechanism** (identical to POST-789): Collection executes module-level code. `_restore_env` autouse fixture in `conftest.py` captures per-test, not per-collection. Once `FG_AUTH_ENABLED=0` is in the environment, `monkeypatch.setenv("FG_API_KEY", ...)` in MV fixtures has no effect because the explicit `FG_AUTH_ENABLED` wins.
+
+**MV-9/10/11/12/16/R2 (PORTAL_TENANT_MISSING)**: `build_app()` called without `auth_enabled` parameter. With auth disabled, `AuthGateMiddleware` skips `tenant_id` injection → `PortalClientScopeMiddleware` returns 403.
+
+**MV-13/14 (HTTP 400)**: Portal login route calls `/portal/identity/login` which requires `request.state.tenant_id` set by the auth gate. Without it, the route returns 400.
+
+### Fix
+
+**Phase 2 — 25 files fixed**: Removed all `FG_AUTH_ENABLED` module-scope `os.environ.setdefault()` mutations:
+- 12 files with `FG_AUTH_ENABLED=0`: `test_readiness_gap_analysis_manager.py`, `test_deployment_manager.py`, `test_provisioning_manager.py`, `test_observability.py`, `test_request_tracing_task72.py`, `test_readiness_alerting.py`, `test_readiness_manager.py`, `test_readiness_monitoring.py`, `test_readiness_simulation.py`, `test_r1_remediation_authority_canonical.py`, `test_security_middleware.py`, `test_p1_provisioning_deterministic.py`
+- 13 files with `FG_AUTH_ENABLED=1`: `test_admin_engagement_selector.py`, `test_cross_tenant_regression.py`, `test_portal_grant_ownership.py`, `test_resolve_authoritative_tenant.py`, `test_client_e2e_001.py`, `test_client_lifecycle_001.py`, `test_client_lifecycle_002.py`, `test_core_invariants.py`, `test_framework_authority.py`, `test_tenant_access_001.py`, `test_tenant_admin_001.py`, `test_tenant_invariant.py`, `test_timeline_authority.py`
+
+All 25 files used explicit `build_app(auth_enabled=...)` in their fixtures — the module-level mutation was redundant and harmful. `conftest.py` already ensures auth is enabled via `FG_API_KEY`. Also removed `FG_ENV`, `FG_SQLITE_PATH`, `FG_RL_ENABLED` from the same blocks where present (55 lines total from Phase 2 target files; 13 more in Phase 3 FG_AUTH_ENABLED=1 files).
+
+**Phase 3 — Collection-purity guard**: New `tools/ci/check_collection_purity.py` — AST-based scanner that detects prohibited module-scope env mutations in all test files. Hard-fails on `FG_AUTH_ENABLED` (any value) and other unknown vars at module scope. Permits 9 documented safe variables (`FG_ENV`, `FG_ACKNOWLEDGMENT_KEY`, `FG_REPORT_SIGNING_KEY`, `FG_API_KEY`, `FG_KEY_PEPPER`, `FG_RL_ENABLED`, `FG_COMPLIANCE_HMAC_KEY_ID_CURRENT`, `FG_COMPLIANCE_HMAC_KEY_CURRENT`, `FG_MSAL_CLIENT_ID`). Wired into `codex_gates.sh`. Currently passes: 774 files, 0 violations.
+
+### Tests
+
+- **A** Membership alone: 18 passed
+- **B** Membership + ops governance: 18 passed
+- **C** Membership + readiness gap analysis: 18 passed (was 8 failed)
+- **D** Membership + all 12 fixed auth-disabling modules: 18 passed
+- **E** Full shard 3 collection, membership tests: 18 passed, 2705 deselected
+- **F** All 25 fixed modules individually: 177+365+62+30+310 = 944 passed
+- **G** Complete shard 3: **2718 passed, 5 skipped, 0 failed** (16m43s)
+- Collection-purity gate: 16/16 unit tests pass; live scan: 774 files, 0 violations
+- `mypy .` → 2201 files, 0 errors
+- `ruff check` + `ruff format --check` → all passed
+- `pip-audit` → no known vulnerabilities
+- `fg_full_shard --validate --total-shards 10` → PASS (745 files, 1.00x)
+- `make verify-offline-simulation-evidence` → OK (6/6 GREEN)
+
 ## POST-789-COLLECTION-ENV-LEAK-001 — eliminate collection-time env mutation in test_ops_governance_manager.py
 
 - **Work item:** POST-789-COLLECTION-ENV-LEAK-001 (REPAIR class)

@@ -15,15 +15,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import uuid
 from io import StringIO
 
-os.environ.setdefault("FG_ENV", "dev")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_SQLITE_PATH", "state/test_tracing.db")
-os.environ.setdefault("FG_RL_ENABLED", "0")
 
 _UUID4_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

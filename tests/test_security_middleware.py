@@ -19,10 +19,6 @@ from fastapi.testclient import TestClient
 
 
 # Set test environment before imports
-os.environ.setdefault("FG_ENV", "dev")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_SQLITE_PATH", "state/test_security.db")
-os.environ.setdefault("FG_RL_ENABLED", "0")  # Disable rate limiting for most tests
 
 
 class TestSecurityHeaders:

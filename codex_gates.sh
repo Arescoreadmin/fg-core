@@ -102,6 +102,9 @@ if [ -f Makefile ]; then
   fi
 fi
 
+echo "==> Gates: collection purity (no module-scope env mutations in test files)"
+PYTHONPATH=. python tools/ci/check_collection_purity.py --repo .
+
 echo "==> Gates: authority integration (wiring completeness)"
 PYTHONPATH=. python tools/ci/check_authority_integration.py
 

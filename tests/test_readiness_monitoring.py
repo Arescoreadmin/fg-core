@@ -18,12 +18,6 @@ All API tests run offline against an in-memory SQLite DB.
 
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("FG_ENV", "dev")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_SQLITE_PATH", "state/test_readiness_monitoring.db")
-os.environ.setdefault("FG_RL_ENABLED", "0")
 
 import json
 from datetime import datetime, timedelta, timezone
