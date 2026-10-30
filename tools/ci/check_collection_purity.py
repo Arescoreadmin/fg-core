@@ -161,6 +161,37 @@ def _check_statement(node: ast.stmt) -> str | None:
     return None
 
 
+def _nested_stmt_lists(node: ast.stmt) -> list[list[ast.stmt]]:
+    """Return the child statement lists from control-flow nodes.
+
+    Used to recurse into if/try/with/for/while bodies while keeping the walk
+    limited to module scope (function/class defs stop the descent).
+    """
+    if isinstance(node, ast.If):
+        return [node.body, node.orelse]
+    if isinstance(node, (ast.For, ast.While)):
+        return [node.body, node.orelse]
+    if isinstance(node, ast.With):
+        return [node.body]
+    if isinstance(node, ast.Try):
+        parts: list[list[ast.stmt]] = [node.body, node.orelse, node.finalbody]
+        for h in node.handlers:
+            parts.append(h.body)
+        return parts
+    # ast.TryStar: try/except* (Python 3.11+, ExceptionGroup syntax)
+    _TryStar = getattr(ast, "TryStar", None)
+    if _TryStar is not None and isinstance(node, _TryStar):
+        parts = [node.body, node.orelse, node.finalbody]
+        for h in node.handlers:
+            parts.append(h.body)
+        return parts
+    # ast.Match: structural pattern matching (Python 3.10+)
+    _Match = getattr(ast, "Match", None)
+    if _Match is not None and isinstance(node, _Match):
+        return [case.body for case in node.cases]
+    return []
+
+
 def check_file(path: Path) -> list[tuple[int, str]]:
     """Return list of (line, description) for module-scope violations."""
     try:
@@ -170,15 +201,19 @@ def check_file(path: Path) -> list[tuple[int, str]]:
         return []
 
     violations: list[tuple[int, str]] = []
-    # Only examine top-level statements (module scope)
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            continue
-        if not isinstance(node, ast.stmt):
-            continue
-        desc = _check_statement(node)
-        if desc:
-            violations.append((node.lineno, desc))
+
+    def _walk(stmts: list[ast.stmt]) -> None:
+        for node in stmts:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue  # fixture-scoped; mutations inside are permitted
+            desc = _check_statement(node)
+            if desc:
+                violations.append((node.lineno, desc))
+            for child_stmts in _nested_stmt_lists(node):
+                _walk(child_stmts)
+
+    top = [n for n in ast.iter_child_nodes(tree) if isinstance(n, ast.stmt)]
+    _walk(top)
     return violations
 
 

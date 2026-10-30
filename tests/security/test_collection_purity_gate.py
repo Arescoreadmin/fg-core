@@ -130,6 +130,91 @@ class TestModuleScopeRejected:
 
 
 # ---------------------------------------------------------------------------
+# Control-flow at module scope (bot finding: traverse if/try/with/for bodies)
+# ---------------------------------------------------------------------------
+
+
+class TestControlFlowAtModuleScope:
+    def test_rejects_if_block_setdefault(self, tmp_path: Path) -> None:
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            if True:
+                os.environ.setdefault("FG_AUTH_ENABLED", "0")
+            """,
+        )
+        violations = check_file(f)
+        assert len(violations) == 1
+        assert "FG_AUTH_ENABLED" in violations[0][1]
+
+    def test_rejects_try_body_setdefault(self, tmp_path: Path) -> None:
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            try:
+                os.environ.setdefault("FG_AUTH_ENABLED", "0")
+            except Exception:
+                pass
+            """,
+        )
+        violations = check_file(f)
+        assert len(violations) == 1
+
+    def test_rejects_except_handler_setdefault(self, tmp_path: Path) -> None:
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            try:
+                pass
+            except Exception:
+                os.environ.setdefault("FG_AUTH_ENABLED", "0")
+            """,
+        )
+        violations = check_file(f)
+        assert len(violations) == 1
+
+    def test_rejects_with_block_setdefault(self, tmp_path: Path) -> None:
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            with open("/dev/null") as _f:
+                os.environ.setdefault("FG_AUTH_ENABLED", "0")
+            """,
+        )
+        violations = check_file(f)
+        assert len(violations) == 1
+
+    def test_rejects_for_loop_setdefault(self, tmp_path: Path) -> None:
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            for _ in []:
+                os.environ.setdefault("FG_AUTH_ENABLED", "0")
+            """,
+        )
+        violations = check_file(f)
+        assert len(violations) == 1
+
+    def test_permits_function_def_inside_if_block(self, tmp_path: Path) -> None:
+        """Function body inside a module-level if is still fixture-scoped."""
+        f = _write(
+            tmp_path,
+            """\
+            import os
+            if True:
+                def helper():
+                    os.environ["FG_AUTH_ENABLED"] = "0"
+            """,
+        )
+        assert check_file(f) == []
+
+
+# ---------------------------------------------------------------------------
 # Permit tests
 # ---------------------------------------------------------------------------
 
