@@ -23,13 +23,6 @@ All tests run offline against an in-memory SQLite DB.
 
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("FG_ENV", "dev")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_SQLITE_PATH", "state/test_ops_governance_manager.db")
-os.environ.setdefault("FG_RL_ENABLED", "0")
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -1288,3 +1281,33 @@ def test_ops_router_has_required_routes():
     missing = required - paths
     assert not missing, f"Missing ops routes: {missing}"
     assert len(router.routes) >= 20, f"Expected ≥20 routes, got {len(router.routes)}"
+
+
+# ---------------------------------------------------------------------------
+# Regression: collection-time env leak guard (POST-789-COLLECTION-ENV-LEAK-001)
+# ---------------------------------------------------------------------------
+
+
+def test_module_does_not_mutate_fg_auth_enabled_at_collection_time():
+    """Importing this module must not set FG_AUTH_ENABLED in the environment.
+
+    A module-level os.environ.setdefault("FG_AUTH_ENABLED", "0") would execute
+    before pytest isolation fixtures run, disabling auth for all subsequently
+    collected tests in the same shard.
+    """
+    import importlib
+    import os
+    import sys
+
+    # Remove any prior import from cache so we get a clean re-import
+    mod_name = "tests.test_ops_governance_manager"
+    sys.modules.pop(mod_name, None)
+
+    before = os.environ.get("FG_AUTH_ENABLED")
+    importlib.import_module(mod_name)
+    after = os.environ.get("FG_AUTH_ENABLED")
+
+    assert before == after, (
+        f"Importing test_ops_governance_manager mutated FG_AUTH_ENABLED: "
+        f"{before!r} → {after!r}"
+    )
