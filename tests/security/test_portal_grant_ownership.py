@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 _TENANT_A = "h0pr4-own-a-01"
 _TENANT_B = "h0pr4-own-b-01"

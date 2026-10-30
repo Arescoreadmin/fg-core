@@ -61,7 +61,6 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 import pytest
 from sqlalchemy import text

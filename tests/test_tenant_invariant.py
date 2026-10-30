@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 
 # Set test environment before imports
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 
 
 class TestTenantIsolationInvariants:

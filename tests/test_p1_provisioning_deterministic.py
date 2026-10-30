@@ -19,11 +19,6 @@ SQLite transaction-atomicity regression tests (fix/portal-provisioning-sqlite-tr
 
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_RL_ENABLED", "0")
 
 import pytest
 from fastapi.testclient import TestClient

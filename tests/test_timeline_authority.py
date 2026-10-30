@@ -11,7 +11,6 @@ import os
 import pytest
 
 os.environ.setdefault("FG_ENV", "test")
-os.environ.setdefault("FG_AUTH_ENABLED", "1")
 os.environ.setdefault("FG_API_KEY", "")
 os.environ.setdefault("FG_KEY_PEPPER", "timeline-authority-test-pepper")
 os.environ.setdefault(

@@ -19,10 +19,6 @@ import os
 import re
 import uuid
 
-os.environ.setdefault("FG_ENV", "dev")
-os.environ.setdefault("FG_AUTH_ENABLED", "0")
-os.environ.setdefault("FG_SQLITE_PATH", "state/test_observability.db")
-os.environ.setdefault("FG_RL_ENABLED", "0")
 
 import pytest
 
