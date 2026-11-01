@@ -1,6 +1,13 @@
 import type { NextAuthConfig } from 'next-auth';
 import { getSessionClaims } from '@/lib/consoleAccess';
 
+// AUTH-TENANT-CONTEXT-001: The Auth0 Post-Login Action (login-claim-projection/index.js)
+// projects https://frostgate.ai/principal_id into the JWT but explicitly never projects
+// tenant_id (invariant 10). We store principal_id in the NextAuth JWT token here so that
+// auth.ts can perform a server-side tenant resolution at sign-in without any Edge calls.
+const _PRINCIPAL_ID_CLAIM = 'https://frostgate.ai/principal_id';
+const _UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_SESSION_UPDATE_AGE_SECONDS = 15 * 60;
 
@@ -67,6 +74,19 @@ export const authConfig = {
       token.roles = bootstrapped ? ['Administrator'] : claims.roles;
       token.tenantId = claims.tenantId;
       token.experienceClass = bootstrapped ? 'internal_console' : claims.experienceClass;
+
+      // AUTH-TENANT-CONTEXT-001: Persist principal_id from the Auth0 claim.
+      // Only set on initial sign-in (profile present); persists across refreshes
+      // because the token is stored in the signed JWT cookie. Never re-set from
+      // stale token data; only from trusted Auth0-issued profile fields.
+      if (!token.principalId) {
+        const rawPrincipalId =
+          (profile as Record<string, unknown> | undefined)?.[_PRINCIPAL_ID_CLAIM] ??
+          (user as Record<string, unknown> | undefined)?.[_PRINCIPAL_ID_CLAIM];
+        if (typeof rawPrincipalId === 'string' && _UUID_V4_RE.test(rawPrincipalId)) {
+          token.principalId = rawPrincipalId;
+        }
+      }
 
       // email_verified: set from Auth0 id_token at sign-in; retained across token refreshes.
       // profile is only present on initial OAuth sign-in, not on session refresh.
