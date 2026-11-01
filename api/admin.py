@@ -3163,8 +3163,9 @@ def get_principal_tenant_binding(
     Auth0 Post-Login Action invariant 10: "tenant_id is never projected by Auth0
     — FrostGate resolves it from principal_id."
 
-    Queries tenant_users without RLS context because the caller does not yet
-    know which tenant the principal belongs to (that is the whole point of this
+    Uses the resolve_principal_tenant() SECURITY DEFINER function (migration 0195)
+    to query tenant_users across RLS boundaries — the caller does not yet know
+    which tenant the principal belongs to (that is the whole point of this
     endpoint). Returns exactly one active, bound membership.
 
     Auth: Router-level X-FG-Internal-Token (require_internal_admin_gateway).
@@ -3181,20 +3182,34 @@ def get_principal_tenant_binding(
 
     engine = get_engine()
     with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                """
-                SELECT id         AS membership_id,
-                       tenant_id,
-                       role
-                FROM tenant_users
-                WHERE principal_id           = :principal_id
-                  AND identity_binding_status = 'bound'
-                  AND active                  = 1
-                """
-            ),
-            {"principal_id": principal_id},
-        ).fetchall()
+        try:
+            # PostgreSQL: SECURITY DEFINER function bypasses FORCE ROW LEVEL
+            # SECURITY on tenant_users (migration 0195). The caller does not yet
+            # know which tenant the principal belongs to — that is the whole point
+            # of this lookup — so no tenant context can be set before querying.
+            rows = conn.execute(
+                text(
+                    "SELECT membership_id, tenant_id, role"
+                    " FROM resolve_principal_tenant(:principal_id)"
+                ),
+                {"principal_id": principal_id},
+            ).fetchall()
+        except Exception:
+            # SQLite (test env) / function absent: no RLS enforced, direct query safe.
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT id         AS membership_id,
+                           tenant_id,
+                           role
+                    FROM tenant_users
+                    WHERE principal_id            = :principal_id
+                      AND identity_binding_status = 'bound'
+                      AND active IS TRUE
+                    """
+                ),
+                {"principal_id": principal_id},
+            ).fetchall()
 
     if len(rows) == 0:
         raise HTTPException(

@@ -14,7 +14,7 @@
  *
  * Security properties:
  *   - Validates UUID v4 format before making any request.
- *   - Uses X-FG-Internal-Token (never exposed to browser).
+ *   - Uses X-API-Key + X-FG-Internal-Token (never exposed to browser).
  *   - Ambiguous results (>1 active bound membership) resolve to null; Core API enforces.
  *   - Network failures resolve to null; Core API enforces.
  *   - Never logs principalId in error paths.
@@ -60,6 +60,7 @@ export async function resolvePrincipalTenant(
       {
         method: 'GET',
         headers: {
+          'X-API-Key': token,
           'X-FG-Internal-Token': token,
           'X-Admin-Gateway-Internal': 'true',
         },
