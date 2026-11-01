@@ -566,6 +566,14 @@
           "method": "PATCH",
           "path": "/admin/billing/meters/{meter_code}",
           "permanent": true
+        },
+        {
+          "class_name": "allowed_internal",
+          "expires_at": "",
+          "justification": "AUTH-TENANT-CONTEXT-001: Console BFF JWT callback resolves tenant_id from principal_id at sign-in. Uses X-API-Key + X-FG-Internal-Token (both = FG_INTERNAL_GATEWAY_SECRET) — never exposed to browser. Cross-tenant by design: tenant_id is the output, not an input. Standard require_scopes dependency does not apply; require_internal_admin_gateway() is the auth gate.",
+          "method": "GET",
+          "path": "/admin/identity/principal-tenant/{principal_id}",
+          "permanent": true
         }
       ],
       "maturity_tag": "production-grade",
@@ -1334,7 +1342,7 @@
       ]
     }
   ],
-  "generated_at": "2026-11-01T18:58:09.442581+00:00",
+  "generated_at": "2026-11-01T22:51:53.236201+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
