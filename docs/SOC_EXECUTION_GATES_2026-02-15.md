@@ -8002,3 +8002,40 @@ SOC review outcome: APPROVED. CI execution hardening only; no runtime authority 
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. Test infrastructure hardening only; no runtime authority change; no authentication path change; no tenant isolation bypass; no secret access; fail-closed guards preserved; evidence rebind is offline and produces genuine simulation output.
+
+## 2026-11-02 - auth: MODE-B-PROOF-HARDENING-001 + PORTAL-COMPATIBILITY-001 — fail-closed client authentication verification
+
+**Change scope:** MODE-B-PROOF-HARDENING-001. CI workflow change is `.github/workflows/prod-auth-smoke.yml` — adds `actor_profile` dispatch input and a hard-fail `Verify evidence` step. No new secrets, no new stored credentials, no new cloud infrastructure.
+
+1. **`.github/workflows/prod-auth-smoke.yml`** — Adds `actor_profile` workflow_dispatch input (choices: `internal_operator`, `client_executive`; default: `internal_operator`). Passes `--actor-profile` to the Mode B harness. Adds `Verify evidence` step that runs `verify_evidence.py` and exits nonzero if acceptance is not ACCEPTED or if fingerprint mismatches. Evidence artifact upload extended to include both profile paths. Mode B remains gated behind `FG_PROD_AUTH_TEST_ENABLED=true`; CI does NOT set this variable. No automatic production execution.
+2. **`tools/testing/production/evidence.py`** — Schema v2: `EvidenceResult.BLOCKED`, `AcceptanceDecision` (ACCEPTED/REJECTED_FAIL/REJECTED_INCOMPLETE/REJECTED_EMPTY), `verify_acceptance()` implementing 15 explicit acceptance semantics including semantic 15 (manifest completeness against canonical actor profile). `CANONICAL_CHECK_MANIFESTS` is the single source of truth for required checks per profile. `VALID_PROFILES` exported.
+3. **`tools/testing/production/auth_harness_001.py`** — `--actor-profile` arg; `_REQUIRED_CHECKS` now re-exports `CANONICAL_CHECK_MANIFESTS` from `evidence.py`; MFA interruption → `BLOCKED` status; `client_executive` adds CLIENT-001–007 checks.
+4. **`tools/testing/production/verify_evidence.py`** (new) — Standalone verifier; exit 4 on SHA-256 fingerprint mismatch; enforces semantic 15 by calling `verify_acceptance()`.
+5. **`apps/console/tests/portal-console-boundary.test.js`** (new) — 56 negative-path boundary tests confirming Console/Portal isolation. Test-only; no runtime code.
+6. **`docs/plans/portal-auth-e2e-001.md`** (new) — PORTAL-AUTH-E2E-001 specification. Documentation only; no code change.
+7. **`customer_one/offline_simulation_evidence.json`** — Rebind to current source tree hash (`69e1bb437e415b6c...`). Simulation result 6/6 GREEN.
+
+**Security posture:**
+
+1. **No production code modified.** All changes are in test tooling (`tools/testing/production/`), test files, CI workflow, and documentation. Core API, Console application, and Portal application are untouched.
+2. **No new credential storage.** The CI workflow change does not add any secrets, tokens, or stored credentials. Mode B still requires `FG_PROD_AUTH_TEST_ENABLED=true` which CI does not set.
+3. **Fail-closed strengthened.** Semantic 15 closes the P1 bot finding: a reduced manifest for a known profile now produces `REJECTED_INCOMPLETE` rather than `ACCEPTED`. SHA-256 fingerprint mismatch exits 4 (new, not previously enforced at the verifier level). `CANONICAL_CHECK_MANIFESTS` is the single authority — harness and verifier share it.
+4. **Console/Portal isolation unchanged.** The boundary test file confirms existing isolation; no production isolation logic was modified.
+5. **No authentication path change.** The Mode B harness is test tooling. `auth_harness_001.py` is not invoked during normal application operation.
+6. **No paid infrastructure.** Evidence regeneration is fully offline. Six simulation checks all pass. `COST_AUTHORIZATION=NOT_AUTHORIZED` unchanged.
+
+**Critical-path files changed:** `.github/workflows/prod-auth-smoke.yml` (CI workflow — adds actor_profile input and hard-fail verify step; no automatic production execution), `customer_one/offline_simulation_evidence.json` (evidence rebind, offline only).
+
+**Required invariant:** Mode B remains gated behind `FG_PROD_AUTH_TEST_ENABLED=true`. A reduced manifest for `client_executive` or `internal_operator` cannot produce ACCEPTED. Fingerprint mismatch exits 4. All 127 Python tests pass. All 56 JS boundary tests pass. `fg-lint`: PASS. `fg-security`: 1311/1311. `fg-contract`: PASS.
+
+**Validation evidence:**
+
+- `pytest tests/test_prod_auth_automation_001.py -q` → 127 passed
+- `node --test apps/console/tests/portal-console-boundary.test.js` → 56 pass
+- `make fg-lint` → All checks passed
+- `make fg-security` → 1311/1311 PASS
+- `make fg-contract` → PASS
+- `python tools/ci/verify_offline_simulation_evidence.py --repo .` → OK, 6/6 GREEN
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. CI workflow change extends Mode B dispatch with actor_profile input and adds independent evidence verification step — both are enforcement hardening for an already-gated optional flow. No production code changed. No new authentication paths. No new stored credentials. Fail-closed guarantee strengthened via semantic 15 and independent fingerprint verification.

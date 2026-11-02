@@ -381,9 +381,11 @@ def check_vercel_deployment(base_url: str) -> tuple[CheckResult, str]:
                 description="Vercel deployment SHA resolution via API",
                 expected="READY deployment with gitSource.sha",
                 observed=f"state={state} sha={sha[:12] if sha not in ('NOT_PROVEN', 'UNKNOWN') else sha} id={deploy_id}",
-                result=EvidenceResult.PASS
-                if (sha != "NOT_PROVEN" and ready)
-                else EvidenceResult.NOT_PROVEN,
+                result=(
+                    EvidenceResult.PASS
+                    if (sha != "NOT_PROVEN" and ready)
+                    else EvidenceResult.NOT_PROVEN
+                ),
                 timestamp=ts,
                 diagnostic=None if ready else f"Latest deployment state is {state!r}",
             ),
