@@ -1,7 +1,8 @@
-"""tools/testing/production/evidence.py — PROD-AUTH-AUTOMATION-001 evidence schema.
+"""tools/testing/production/evidence.py — MODE-B-PROOF-HARDENING-001 evidence schema v2.
 
 Machine-readable evidence records for production authentication verification.
-PASS / FAIL / NOT_PROVEN classification. Fingerprinted with SHA-256.
+PASS / FAIL / NOT_PROVEN / BLOCKED classification with deterministic acceptance logic.
+Fingerprinted with SHA-256.
 
 Never write tokens, cookies, passwords, or authorization headers into evidence.
 """
@@ -17,8 +18,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-
-SCHEMA_VERSION = "prod-auth-automation-001/v1"
+SCHEMA_VERSION = "mode-b-proof-hardening-001/v2"
+# Backward-compat alias used by historical consumers reading old artifacts
+SCHEMA_VERSION_V1 = "prod-auth-automation-001/v1"
 WORK_ITEM = "PROD-AUTH-AUTOMATION-001"
 
 
@@ -26,6 +28,19 @@ class EvidenceResult(str, Enum):
     PASS = "PASS"
     FAIL = "FAIL"
     NOT_PROVEN = "NOT_PROVEN"
+    # Prerequisite prevents execution; harness cannot establish the check.
+    BLOCKED = "BLOCKED"
+
+
+class AcceptanceDecision(str, Enum):
+    # All required checks PASS.
+    ACCEPTED = "ACCEPTED"
+    # One or more checks are FAIL.
+    REJECTED_FAIL = "REJECTED_FAIL"
+    # Required checks are NOT_PROVEN, BLOCKED, or missing.
+    REJECTED_INCOMPLETE = "REJECTED_INCOMPLETE"
+    # Check collection is empty — no evidence was produced.
+    REJECTED_EMPTY = "REJECTED_EMPTY"
 
 
 @dataclass
@@ -54,36 +69,160 @@ class CheckResult:
 
 @dataclass
 class EvidenceRecord:
-    schema_version: str = SCHEMA_VERSION
-    work_item: str = WORK_ITEM
+    schema_version: str = field(default_factory=lambda: SCHEMA_VERSION)
+    work_item: str = field(default_factory=lambda: WORK_ITEM)
+    # Actor profile that this record was produced for.
+    verification_profile: str = "unknown"
+    # Target environment (production, staging, preview).
+    environment: str = "production"
+    # Console origin URL (e.g. https://console.frostgate.ai).
+    console_origin: str = ""
+    # Core service identifier when applicable.
+    core_service_id: str = "NOT_APPLICABLE"
     timestamp: str = ""
     run_id: str = ""
+    # GitHub Actions run ID (or empty for local runs).
+    workflow_run_id: str = ""
+    # Source commit SHA of the code under test.
     repo_sha: str = "UNKNOWN"
+    # Deployed SHA resolved via Vercel API (or NOT_PROVEN).
     deployed_sha: str = "NOT_PROVEN"
     deployment_id: str = "NOT_PROVEN"
+    # Broad environment descriptor: public_smoke | authenticated_playwright | simulation.
     verification_environment: str = "public_smoke"
+    # How this evidence was produced: automated | operator_assisted | simulation.
+    test_execution_mode: str = "automated"
+    # Human-readable provenance note.
+    evidence_provenance: str = ""
+    # Sanitized reference to the test identity (never the real email or credentials).
     test_identity_ref: str = "NOT_APPLICABLE"
+    # Ordered list of check IDs that MUST be PASS for acceptance.
+    # Empty list: fall back to all-PASS semantics over all recorded checks.
+    required_check_manifest: list[str] = field(default_factory=list)
     checks: list[CheckResult] = field(default_factory=list)
     unverified_production_checks: list[str] = field(default_factory=list)
-    overall_result: EvidenceResult = EvidenceResult.NOT_PROVEN
+    # Summary over individual check statuses.
+    overall_result: EvidenceResult = field(default=EvidenceResult.NOT_PROVEN)
+    # Authoritative launch-gate decision produced by verify_acceptance().
+    acceptance_decision: str = field(
+        default=AcceptanceDecision.REJECTED_INCOMPLETE.value
+    )
     evidence_fingerprint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "work_item": self.work_item,
+            "verification_profile": self.verification_profile,
+            "environment": self.environment,
+            "console_origin": self.console_origin,
+            "core_service_id": self.core_service_id,
             "timestamp": self.timestamp,
             "run_id": self.run_id,
+            "workflow_run_id": self.workflow_run_id,
             "repo_sha": self.repo_sha,
             "deployed_sha": self.deployed_sha,
             "deployment_id": self.deployment_id,
             "verification_environment": self.verification_environment,
+            "test_execution_mode": self.test_execution_mode,
+            "evidence_provenance": self.evidence_provenance,
             "test_identity_ref": self.test_identity_ref,
+            "required_check_manifest": self.required_check_manifest,
             "checks": [c.to_dict() for c in self.checks],
             "unverified_production_checks": self.unverified_production_checks,
             "overall_result": self.overall_result.value,
+            "acceptance_decision": self.acceptance_decision,
             "evidence_fingerprint": self.evidence_fingerprint,
         }
+
+
+# ---------------------------------------------------------------------------
+# Acceptance logic — Phase 1 semantics
+# ---------------------------------------------------------------------------
+
+
+def verify_acceptance(record: EvidenceRecord) -> AcceptanceDecision:
+    """Central deterministic acceptance function.
+
+    Implements all 14 required semantics:
+    1.  Overall PASS requires every required, applicable check to be PASS.
+    2.  Any FAIL causes overall failure.
+    3.  Any NOT_PROVEN causes overall nonacceptance.
+    4.  Any BLOCKED causes overall nonacceptance.
+    5.  Missing evidence causes overall nonacceptance.
+    6.  Empty check collections cannot pass.
+    7.  Unknown check IDs cannot satisfy required checks.
+    8.  Duplicate check IDs cannot hide a failure.
+    9.  Unexpected exceptions cannot produce PASS (enforced at harness level).
+    10. Authentication failure cannot produce PASS (enforced at harness level).
+    11. MFA challenge cannot produce PASS without completed auth (harness level).
+    12. Workflow cancellation/timeout/missing artifacts not recordable as PASS.
+    13. Check status evaluated by this central deterministic function.
+    14. Exit status must agree with the acceptance state (enforced by caller).
+    """
+    checks = record.checks
+
+    # Semantic 6: Empty check collections cannot pass.
+    if not checks:
+        return AcceptanceDecision.REJECTED_EMPTY
+
+    # Semantic 8: Duplicate check IDs cannot hide a failure.
+    seen_ids: dict[str, list[EvidenceResult]] = {}
+    for c in checks:
+        seen_ids.setdefault(c.id, []).append(c.result)
+    for cid, results in seen_ids.items():
+        if len(results) > 1:
+            return AcceptanceDecision.REJECTED_INCOMPLETE
+
+    result_by_id: dict[str, EvidenceResult] = {c.id: c.result for c in checks}
+
+    # Semantic 2: Any FAIL causes overall failure — check ALL checks, not just manifest.
+    if any(r == EvidenceResult.FAIL for r in result_by_id.values()):
+        return AcceptanceDecision.REJECTED_FAIL
+
+    required = list(record.required_check_manifest)
+
+    if required:
+        # Semantics 1, 3, 4, 5, 7: Each required check must exist and be PASS.
+        for req_id in required:
+            # Semantic 7: Unknown check IDs cannot satisfy required checks.
+            # Semantic 5: Missing evidence causes nonacceptance.
+            if req_id not in result_by_id:
+                return AcceptanceDecision.REJECTED_INCOMPLETE
+            result = result_by_id[req_id]
+            # Semantic 3: Any NOT_PROVEN causes nonacceptance.
+            if result == EvidenceResult.NOT_PROVEN:
+                return AcceptanceDecision.REJECTED_INCOMPLETE
+            # Semantic 4: Any BLOCKED causes nonacceptance.
+            if result == EvidenceResult.BLOCKED:
+                return AcceptanceDecision.REJECTED_INCOMPLETE
+            # Semantic 1: Required check must be PASS.
+            if result != EvidenceResult.PASS:
+                return AcceptanceDecision.REJECTED_INCOMPLETE
+    else:
+        # No manifest: all recorded checks must PASS.
+        for r in result_by_id.values():
+            if r in (EvidenceResult.NOT_PROVEN, EvidenceResult.BLOCKED):
+                return AcceptanceDecision.REJECTED_INCOMPLETE
+
+    return AcceptanceDecision.ACCEPTED
+
+
+def _compute_overall_result(checks: list[CheckResult]) -> EvidenceResult:
+    """Summarise individual check results."""
+    results = [c.result for c in checks]
+    if not results:
+        return EvidenceResult.NOT_PROVEN
+    if any(r == EvidenceResult.FAIL for r in results):
+        return EvidenceResult.FAIL
+    if all(r == EvidenceResult.PASS for r in results):
+        return EvidenceResult.PASS
+    return EvidenceResult.NOT_PROVEN
+
+
+# ---------------------------------------------------------------------------
+# Fingerprinting and serialisation
+# ---------------------------------------------------------------------------
 
 
 def _canonical_json(obj: Any) -> bytes:
@@ -113,14 +252,10 @@ def fingerprint(record: EvidenceRecord) -> str:
 
 
 def finalize(record: EvidenceRecord) -> EvidenceRecord:
-    """Compute overall_result and evidence_fingerprint. Mutates in place."""
-    results = [c.result for c in record.checks]
-    if any(r == EvidenceResult.FAIL for r in results):
-        record.overall_result = EvidenceResult.FAIL
-    elif all(r == EvidenceResult.PASS for r in results) and results:
-        record.overall_result = EvidenceResult.PASS
-    else:
-        record.overall_result = EvidenceResult.NOT_PROVEN
+    """Compute overall_result, acceptance_decision, and evidence_fingerprint. Mutates in place."""
+    record.overall_result = _compute_overall_result(record.checks)
+    decision = verify_acceptance(record)
+    record.acceptance_decision = decision.value
     record.evidence_fingerprint = fingerprint(record)
     return record
 
@@ -131,6 +266,56 @@ def write_evidence(record: EvidenceRecord, path: Path) -> None:
         json.dumps(record.to_dict(), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def load_evidence(path: Path) -> EvidenceRecord:
+    """Load and reconstruct an EvidenceRecord from a JSON file (for verification)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    checks = [
+        CheckResult(
+            id=c["id"],
+            description=c.get("description", ""),
+            expected=c.get("expected", ""),
+            observed=c.get("observed", ""),
+            result=EvidenceResult(c["result"]),
+            timestamp=c.get("timestamp", ""),
+            diagnostic=c.get("diagnostic"),
+        )
+        for c in data.get("checks", [])
+    ]
+    return EvidenceRecord(
+        schema_version=data.get("schema_version", SCHEMA_VERSION),
+        work_item=data.get("work_item", WORK_ITEM),
+        verification_profile=data.get("verification_profile", "unknown"),
+        environment=data.get("environment", "production"),
+        console_origin=data.get("console_origin", ""),
+        core_service_id=data.get("core_service_id", "NOT_APPLICABLE"),
+        timestamp=data.get("timestamp", ""),
+        run_id=data.get("run_id", ""),
+        workflow_run_id=data.get("workflow_run_id", ""),
+        repo_sha=data.get("repo_sha", "UNKNOWN"),
+        deployed_sha=data.get("deployed_sha", "NOT_PROVEN"),
+        deployment_id=data.get("deployment_id", "NOT_PROVEN"),
+        verification_environment=data.get("verification_environment", "public_smoke"),
+        test_execution_mode=data.get("test_execution_mode", "automated"),
+        evidence_provenance=data.get("evidence_provenance", ""),
+        test_identity_ref=data.get("test_identity_ref", "NOT_APPLICABLE"),
+        required_check_manifest=data.get("required_check_manifest", []),
+        checks=checks,
+        unverified_production_checks=data.get("unverified_production_checks", []),
+        overall_result=EvidenceResult(
+            data.get("overall_result", EvidenceResult.NOT_PROVEN.value)
+        ),
+        acceptance_decision=data.get(
+            "acceptance_decision", AcceptanceDecision.REJECTED_INCOMPLETE.value
+        ),
+        evidence_fingerprint=data.get("evidence_fingerprint", ""),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
 
 
 def now_iso() -> str:
