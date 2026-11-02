@@ -83,7 +83,6 @@ from tools.testing.production.evidence import (  # noqa: E402
     finalize,
     now_iso,
     repo_sha,
-    verify_acceptance,
     write_evidence,
 )
 
@@ -1375,7 +1374,7 @@ def _print_summary(record: EvidenceRecord, output_json: bool = False) -> None:
 
     profile = record.verification_profile
     print("=" * 64)
-    print(f"MODE-B-PROOF-HARDENING-001 — Mode B: Authenticated Playwright")
+    print("MODE-B-PROOF-HARDENING-001 — Mode B: Authenticated Playwright")
     print(f"Actor profile: {profile}")
     print("=" * 64)
     print(f"Run ID:        {record.run_id}")
