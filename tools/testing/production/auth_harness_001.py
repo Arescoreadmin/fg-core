@@ -75,9 +75,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 from tools.testing.production.evidence import (  # noqa: E402
     AcceptanceDecision,
+    CANONICAL_CHECK_MANIFESTS,
     CheckResult,
     EvidenceRecord,
     EvidenceResult,
+    VALID_PROFILES,
     finalize,
     now_iso,
     repo_sha,
@@ -117,38 +119,9 @@ _SESSION_COOKIE_NAMES = (
 
 PLAYWRIGHT_TIMEOUT_MS = 30_000
 
-# Required check manifests per actor profile
-_REQUIRED_CHECKS: dict[str, list[str]] = {
-    "internal_operator": [
-        "AUTH-001",
-        "AUTH-002",
-        "AUTH-003",
-        "AUTH-004",
-        "AUTH-005",
-        "AUTH-006",
-        "AUTH-007",
-        "AUTH-008",
-        "AUTH-009",
-    ],
-    "client_executive": [
-        "AUTH-001",
-        "AUTH-002",
-        "AUTH-003",
-        "CLIENT-001",
-        "CLIENT-002",
-        "CLIENT-003",
-        "CLIENT-004",
-        "CLIENT-005",
-        "CLIENT-006",
-        "CLIENT-007",
-        "AUTH-006",
-        "AUTH-007",
-        "AUTH-008",
-        "AUTH-009",
-    ],
-}
-
-VALID_PROFILES = list(_REQUIRED_CHECKS.keys())
+# Canonical required check manifests live in evidence.py (CANONICAL_CHECK_MANIFESTS).
+# Re-export as _REQUIRED_CHECKS for local use; harness and verifier share the same source.
+_REQUIRED_CHECKS: dict[str, list[str]] = CANONICAL_CHECK_MANIFESTS
 
 
 # ---------------------------------------------------------------------------

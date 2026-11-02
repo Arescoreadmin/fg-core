@@ -31,6 +31,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from tools.testing.production.evidence import (  # noqa: E402
     AcceptanceDecision,
+    CANONICAL_CHECK_MANIFESTS,
     EvidenceResult,
     fingerprint,
     load_evidence,
@@ -73,7 +74,16 @@ def main(argv: list[str] | None = None) -> int:
 
     fp_valid = stored_fp == computed_fp
 
-    # Independently recompute acceptance decision
+    # Semantic 15: Check manifest completeness against the canonical actor profile.
+    canonical = CANONICAL_CHECK_MANIFESTS.get(record.verification_profile)
+    stored_manifest_set = set(record.required_check_manifest)
+    missing_canonical = (
+        [cid for cid in canonical if cid not in stored_manifest_set]
+        if canonical
+        else []
+    )
+
+    # Independently recompute acceptance decision (includes semantic 15 internally).
     computed_decision = verify_acceptance(record)
     stored_decision = record.acceptance_decision
 
@@ -98,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         "verification_ok": fp_valid and stored_decision == computed_decision.value,
         "checks": [{"id": c.id, "result": c.result.value} for c in record.checks],
         "required_check_manifest": record.required_check_manifest,
+        "canonical_manifest": list(canonical) if canonical else None,
+        "missing_canonical_checks": missing_canonical,
+        "manifest_complete": len(missing_canonical) == 0,
     }
 
     if args.output_json:
@@ -117,6 +130,14 @@ def main(argv: list[str] | None = None) -> int:
         if not fp_valid:
             print(f"  Stored:   {stored_fp}")
             print(f"  Computed: {computed_fp}")
+        if canonical:
+            manifest_ok = len(missing_canonical) == 0
+            print(f"Manifest:     {'COMPLETE' if manifest_ok else 'INCOMPLETE'}")
+            if missing_canonical:
+                print(
+                    f"  Missing canonical checks for profile "
+                    f"'{record.verification_profile}': {missing_canonical}"
+                )
         print(f"Stored decision:   {stored_decision}")
         print(f"Computed decision: {computed_decision.value}")
         if stored_decision != computed_decision.value:

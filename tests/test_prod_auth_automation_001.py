@@ -198,6 +198,66 @@ class TestVerifyAcceptanceSemantics(unittest.TestCase):
     # Semantic 14: Exit status agrees with acceptance state
     # Validated in TestExitCodes below.
 
+    # Semantic 15: Stored manifest must cover all canonical checks for the profile.
+    def test_semantic_15_reduced_client_executive_manifest_rejected(self) -> None:
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        full_manifest = CANONICAL_CHECK_MANIFESTS["client_executive"]
+        # Drop CLIENT-002 through CLIENT-007 — exactly what the bot found
+        stripped_manifest = [
+            cid for cid in full_manifest if not cid.startswith("CLIENT-0")
+        ]
+        checks = [_pass(cid) for cid in stripped_manifest]
+        r = EvidenceRecord()
+        r.verification_profile = "client_executive"
+        r.checks = checks
+        r.required_check_manifest = stripped_manifest
+        assert verify_acceptance(r) == AcceptanceDecision.REJECTED_INCOMPLETE
+
+    def test_semantic_15_reduced_internal_operator_manifest_rejected(self) -> None:
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        full_manifest = CANONICAL_CHECK_MANIFESTS["internal_operator"]
+        stripped_manifest = full_manifest[:5]  # only AUTH-001 through AUTH-005
+        checks = [_pass(cid) for cid in stripped_manifest]
+        r = EvidenceRecord()
+        r.verification_profile = "internal_operator"
+        r.checks = checks
+        r.required_check_manifest = stripped_manifest
+        assert verify_acceptance(r) == AcceptanceDecision.REJECTED_INCOMPLETE
+
+    def test_semantic_15_unknown_profile_not_enforced(self) -> None:
+        # Profiles not in CANONICAL_CHECK_MANIFESTS skip enforcement (forward-compat).
+        r = _record_with_checks([_pass("A"), _pass("B")], manifest=["A", "B"])
+        r.verification_profile = "unknown"
+        assert verify_acceptance(r) == AcceptanceDecision.ACCEPTED
+
+    def test_semantic_15_complete_manifest_accepted(self) -> None:
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        full_manifest = CANONICAL_CHECK_MANIFESTS["client_executive"]
+        checks = [_pass(cid) for cid in full_manifest]
+        r = EvidenceRecord()
+        r.verification_profile = "client_executive"
+        r.checks = checks
+        r.required_check_manifest = full_manifest
+        assert verify_acceptance(r) == AcceptanceDecision.ACCEPTED
+
+    def test_semantic_15_fail_plus_incomplete_manifest_returns_rejected_fail(
+        self,
+    ) -> None:
+        # FAIL takes priority over incomplete manifest.
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        full_manifest = CANONICAL_CHECK_MANIFESTS["client_executive"]
+        stripped_manifest = [full_manifest[0]]  # only AUTH-001
+        checks = [_fail(full_manifest[0])]
+        r = EvidenceRecord()
+        r.verification_profile = "client_executive"
+        r.checks = checks
+        r.required_check_manifest = stripped_manifest
+        assert verify_acceptance(r) == AcceptanceDecision.REJECTED_FAIL
+
 
 # ---------------------------------------------------------------------------
 # Phase 1 — Additional acceptance edge cases
@@ -455,16 +515,18 @@ class TestEvidenceResult(unittest.TestCase):
     def test_write_and_load_evidence_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             r = EvidenceRecord(run_id="rtrip", timestamp="2026-01-01T00:00:00Z")
-            r.verification_profile = "client_executive"
-            r.required_check_manifest = ["AUTH-001", "AUTH-002"]
-            r.checks = [_pass("AUTH-001"), _pass("AUTH-002")]
+            # Use unknown profile so semantic-15 manifest enforcement does not apply;
+            # this test validates serialisation/deserialisation, not acceptance logic.
+            r.verification_profile = "smoke_only"
+            r.required_check_manifest = ["SMOKE-001", "SMOKE-002"]
+            r.checks = [_pass("SMOKE-001"), _pass("SMOKE-002")]
             finalize(r)
             path = Path(tmpdir) / "evidence.json"
             write_evidence(r, path)
             loaded = load_evidence(path)
             assert loaded.run_id == "rtrip"
-            assert loaded.verification_profile == "client_executive"
-            assert loaded.required_check_manifest == ["AUTH-001", "AUTH-002"]
+            assert loaded.verification_profile == "smoke_only"
+            assert loaded.required_check_manifest == ["SMOKE-001", "SMOKE-002"]
             assert loaded.acceptance_decision == AcceptanceDecision.ACCEPTED.value
             assert loaded.evidence_fingerprint == r.evidence_fingerprint
 
@@ -923,6 +985,19 @@ class TestActorProfiles(unittest.TestCase):
         from tools.testing.production.auth_harness_001 import VALID_PROFILES
 
         assert "unknown_actor" not in VALID_PROFILES
+
+    def test_harness_required_checks_is_canonical(self) -> None:
+        # _REQUIRED_CHECKS in the harness must be the canonical source in evidence.py.
+        from tools.testing.production.auth_harness_001 import _REQUIRED_CHECKS
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        assert _REQUIRED_CHECKS is CANONICAL_CHECK_MANIFESTS
+
+    def test_valid_profiles_matches_canonical_keys(self) -> None:
+        from tools.testing.production.auth_harness_001 import VALID_PROFILES
+        from tools.testing.production.evidence import CANONICAL_CHECK_MANIFESTS
+
+        assert set(VALID_PROFILES) == set(CANONICAL_CHECK_MANIFESTS.keys())
         assert "internal_operator" in VALID_PROFILES
         assert "client_executive" in VALID_PROFILES
 

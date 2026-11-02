@@ -23,6 +23,42 @@ SCHEMA_VERSION = "mode-b-proof-hardening-001/v2"
 SCHEMA_VERSION_V1 = "prod-auth-automation-001/v1"
 WORK_ITEM = "PROD-AUTH-AUTOMATION-001"
 
+# Canonical minimum check sets per actor profile (semantic 15).
+# The stored required_check_manifest must be a superset of this set.
+# Evidence with a profile not listed here is not subject to completeness
+# enforcement — allowing forward-compat with future profiles.
+CANONICAL_CHECK_MANIFESTS: dict[str, list[str]] = {
+    "internal_operator": [
+        "AUTH-001",
+        "AUTH-002",
+        "AUTH-003",
+        "AUTH-004",
+        "AUTH-005",
+        "AUTH-006",
+        "AUTH-007",
+        "AUTH-008",
+        "AUTH-009",
+    ],
+    "client_executive": [
+        "AUTH-001",
+        "AUTH-002",
+        "AUTH-003",
+        "CLIENT-001",
+        "CLIENT-002",
+        "CLIENT-003",
+        "CLIENT-004",
+        "CLIENT-005",
+        "CLIENT-006",
+        "CLIENT-007",
+        "AUTH-006",
+        "AUTH-007",
+        "AUTH-008",
+        "AUTH-009",
+    ],
+}
+
+VALID_PROFILES: list[str] = list(CANONICAL_CHECK_MANIFESTS.keys())
+
 
 class EvidenceResult(str, Enum):
     PASS = "PASS"
@@ -144,7 +180,7 @@ class EvidenceRecord:
 def verify_acceptance(record: EvidenceRecord) -> AcceptanceDecision:
     """Central deterministic acceptance function.
 
-    Implements all 14 required semantics:
+    Implements all 15 required semantics:
     1.  Overall PASS requires every required, applicable check to be PASS.
     2.  Any FAIL causes overall failure.
     3.  Any NOT_PROVEN causes overall nonacceptance.
@@ -159,6 +195,9 @@ def verify_acceptance(record: EvidenceRecord) -> AcceptanceDecision:
     12. Workflow cancellation/timeout/missing artifacts not recordable as PASS.
     13. Check status evaluated by this central deterministic function.
     14. Exit status must agree with the acceptance state (enforced by caller).
+    15. Manifest completeness: stored manifest must cover all canonical checks
+        for the declared verification_profile. A reduced manifest cannot clear
+        the gate with incomplete proof.
     """
     checks = record.checks
 
@@ -179,6 +218,18 @@ def verify_acceptance(record: EvidenceRecord) -> AcceptanceDecision:
     # Semantic 2: Any FAIL causes overall failure — check ALL checks, not just manifest.
     if any(r == EvidenceResult.FAIL for r in result_by_id.values()):
         return AcceptanceDecision.REJECTED_FAIL
+
+    # Semantic 15: Manifest completeness against the canonical actor profile.
+    # If the profile is known, every canonical check ID must appear in the
+    # stored manifest. Evidence produced with a stripped manifest (e.g. by
+    # a manual operator template that omits CLIENT-002 through CLIENT-007)
+    # cannot clear the gate even if all listed checks are PASS.
+    canonical = CANONICAL_CHECK_MANIFESTS.get(record.verification_profile)
+    if canonical:
+        stored_manifest_set = set(record.required_check_manifest)
+        for canonical_id in canonical:
+            if canonical_id not in stored_manifest_set:
+                return AcceptanceDecision.REJECTED_INCOMPLETE
 
     required = list(record.required_check_manifest)
 
