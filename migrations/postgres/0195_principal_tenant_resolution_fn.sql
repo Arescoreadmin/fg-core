@@ -9,9 +9,9 @@
 -- token.tenantId. The caller (get_principal_tenant_binding) enforces internal-token
 -- auth; this function performs no authentication of its own.
 --
--- Rollback: DROP FUNCTION IF EXISTS resolve_principal_tenant(TEXT);
+-- Rollback: DROP FUNCTION IF EXISTS resolve_principal_tenant(UUID);
 
-CREATE OR REPLACE FUNCTION resolve_principal_tenant(p_principal_id TEXT)
+CREATE OR REPLACE FUNCTION resolve_principal_tenant(p_principal_id UUID)
 RETURNS TABLE(
     membership_id TEXT,
     tenant_id     TEXT,

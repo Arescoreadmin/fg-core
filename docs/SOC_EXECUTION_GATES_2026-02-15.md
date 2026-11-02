@@ -1,3 +1,41 @@
+## 2026-11-01 - fix/auth-tenant-context-001: AUTH-TENANT-CONTEXT-001 — internal principal-to-tenant resolution endpoint; route inventory and plane registry regeneration
+
+**Change scope:** AUTH-TENANT-CONTEXT-001 (NEW FEATURE class). Adds `GET /admin/identity/principal-tenant/{principal_id}` — an internal-only Core API endpoint that resolves tenant_id from principal_id at Console BFF sign-in. Adds a PostgreSQL SECURITY DEFINER function (migration 0195) that performs a cross-RLS query against `tenant_users` because the caller does not yet know which tenant the principal belongs to. Updates five `tools/ci/` derived artifacts that track route topology.
+
+1. **`api/admin.py`** — New endpoint `GET /admin/identity/principal-tenant/{principal_id}`. Auth gate: router-level `require_internal_admin_gateway` (X-API-Key + X-FG-Internal-Token, both set to `FG_INTERNAL_GATEWAY_SECRET`). Standard `require_scopes` does not apply — caller is the Console BFF JWT callback, not a human API consumer. Returns `{tenant_id, role, membership_id}`. UUID v4 format enforced on `principal_id` path parameter. SQLite fallback for test env (no SECURITY DEFINER).
+2. **`migrations/postgres/0195_principal_tenant_resolution_fn.sql`** — `resolve_principal_tenant(UUID)` SECURITY DEFINER function. Parameter is `UUID` (matching `tenant_users.principal_id UUID` column type; `TEXT` parameter would produce "operator does not exist: uuid = text"). Queries `tenant_users` with `FORCE ROW LEVEL SECURITY` bypass, filtered to `identity_binding_status = 'bound'` and `active = TRUE`. Returns zero or one row.
+3. **`tools/ci/check_route_scopes.py`** — Added `/admin/identity/principal-tenant/{principal_id}` to `_EXEMPTIONS` frozenset with a comment explaining the internal-token-only auth model. No other exemptions changed.
+4. **`services/plane_registry/registry.py`** — Registered the new route under `class_name="allowed_internal"` with a comment documenting the auth model and cross-tenant-by-design rationale.
+5. **`tools/ci/plane_registry_snapshot.json`**, **`tools/ci/route_inventory.json`**, **`tools/ci/route_inventory_summary.json`**, **`tools/ci/topology.sha256`** — Regenerated via `make route-inventory-generate` after registry.py changed. No logic change; pure snapshot updates.
+6. **`apps/console/`** — Console BFF changes: `auth.ts`, `auth.config.ts`, `lib/tenantResolution.ts`, `types/next-auth.d.ts` — JWT callback now calls the Core API principal-tenant endpoint instead of the old `principal_id → tenant_id` projection. `tests/tenant-context-resolution.test.js` added (18 tests).
+7. **`tests/test_principal_tenant_lookup.py`** — 13 Python tests for the new endpoint (auth enforcement, UUID validation, bound-only filter, SQLite/Postgres path, cross-tenant isolation).
+8. **`customer_one/offline_simulation_evidence.json`** — Rebound to post-PR tree hash (6/6 GREEN, fully offline).
+
+**Security posture:**
+
+1. **Auth is enforced at the router level.** `require_internal_admin_gateway` checks both `X-API-Key` and `X-FG-Internal-Token` against `FG_INTERNAL_GATEWAY_SECRET`. The endpoint is never accessible from a browser or user-facing path. It is exempted from `require_scopes` for the same reason as other internal callbacks (e.g. `/portal/named-users/me`).
+2. **Cross-tenant query is intentional and bounded.** The SECURITY DEFINER function bypasses RLS exactly because the caller does not yet have a tenant context — that is the output of this call, not an input. The function is constrained to `identity_binding_status = 'bound'` and `active = TRUE`; it returns at most one row.
+3. **No existing route auth changed.** The `_EXEMPTIONS` addition is additive-only; all 220+ existing exempted and non-exempted routes are unchanged.
+4. **Derived artifacts are snapshots, not logic.** `plane_registry_snapshot.json`, `route_inventory.json`, `route_inventory_summary.json`, and `topology.sha256` are regenerated deterministically by `make route-inventory-generate`; they contain no executable logic.
+5. **No secret access.** `FG_INTERNAL_GATEWAY_SECRET` is read from environment; it is not written to or logged by the new endpoint.
+6. **Evidence rebind is offline.** Simulation uses ephemeral Ed25519 keys; no Vault, no cloud APIs, no paid infrastructure.
+
+**Critical-path files changed:** `tools/ci/check_route_scopes.py` (new exemption), `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` (all regenerated snapshots).
+
+**Required invariant:** `check_route_scopes.py` passes (all non-public routes declare explicit scope dependencies or are exempted with justification). `control-plane-check` passes (new route registered in plane registry). Offline simulation evidence is fresh (6/6 GREEN). Principal-tenant tests pass (13/13).
+
+**Validation evidence:**
+
+- `python tools/ci/check_route_scopes.py` → OK: all non-public routes declare explicit scope dependencies.
+- `make route-inventory-generate` → plane_registry_snapshot.json, route_inventory.json, topology.sha256 regenerated.
+- `python tools/ci/verify_offline_simulation_evidence.py --repo .` → OK (6/6 GREEN, simulation_id=d81c8876).
+- `python -m unittest -q tests.tools_minimal.test_fg_required_minimal` → 11 passed.
+- `python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution` → 1 passed.
+- `make fg-fast-full` → 607 passed, 2 skipped; plane registry check: OK; control-plane-check: OK.
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. New internal-only endpoint with router-level auth gate; SECURITY DEFINER function constrained to bound+active memberships; standard scope exemption justified by internal-token-only caller model; all derived CI artifacts regenerated deterministically; no existing route auth changed; no authentication, tenant isolation, or security gate weakened.
+
 ## 2026-10-30 - fix/shard2-collection-isolation-002: SHARD2-COLLECTION-ISOLATION-002 — systemic collection-time env contamination elimination
 
 **Change scope:** SHARD2-COLLECTION-ISOLATION-002 (REPAIR class). Eliminates all `FG_AUTH_ENABLED` module-scope `os.environ.setdefault()` calls across 25 test files (12 with `=0`, 13 with `=1`). Adds `tools/ci/check_collection_purity.py` AST-based guard wired into `codex_gates.sh`. Confirmed contaminating module: `test_readiness_gap_analysis_manager.py` causing 8 MV failures in shard 3.
