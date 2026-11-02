@@ -1,3 +1,12 @@
+## POST-793-RUFF-GATES-001 — remove unused verify_acceptance import and fix empty f-string in auth_harness_001.py (PR #794)
+
+- **Work item:** POST-793-RUFF-GATES-001 (REPAIR class)
+- **Baseline SHA:** `7bef55a4` (PR #793 merged — MODE-B-PROOF-HARDENING-001)
+- **Failures before:** Two ruff lint violations in `tools/testing/production/auth_harness_001.py` introduced by PR #793: (1) `F401 verify_acceptance imported but unused` — `verify_acceptance` was imported but the harness calls it only indirectly via `finalize()`; (2) `F541 f-string without any placeholders` — `f"MODE-B-PROOF-HARDENING-001 — Mode B: Authenticated Playwright"` had no format expression.
+- **Fix:** Removed `verify_acceptance` from the import list; changed f-string to plain string literal. Zero behavior change.
+- **Files changed (1):** `tools/testing/production/auth_harness_001.py`
+- **Tests:** 127 Python tests pass. `fg-lint`: PASS.
+
 ## MODE-B-PROOF-HARDENING-001 + PORTAL-COMPATIBILITY-001 — fail-closed client auth verification, actor-aware Mode B, Console/Portal boundary tests (PR open)
 
 - **Work items:** MODE-B-PROOF-HARDENING-001 (AUTH/TEST-TOOLING class) + PORTAL-COMPATIBILITY-001 addendum
