@@ -3134,4 +3134,111 @@ async def revert_config_change(
     )
 
 
+# ─── AUTH-TENANT-CONTEXT-001: Principal → tenant binding resolution ──────────
+
+_PRINCIPAL_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+class PrincipalTenantBindingResponse(BaseModel):
+    tenant_id: str
+    role: str
+    membership_id: str
+
+
+@router.get(
+    "/identity/principal-tenant/{principal_id}",
+    response_model=PrincipalTenantBindingResponse,
+)
+def get_principal_tenant_binding(
+    principal_id: str,
+    request: Request,
+) -> PrincipalTenantBindingResponse:
+    """Resolve the active tenant binding for a canonical principal.
+
+    AUTH-TENANT-CONTEXT-001: Called by the Console BFF JWT callback to resolve
+    tenant_id from principal_id at sign-in time. Implements the design intent of
+    Auth0 Post-Login Action invariant 10: "tenant_id is never projected by Auth0
+    — FrostGate resolves it from principal_id."
+
+    Uses the resolve_principal_tenant() SECURITY DEFINER function (migration 0195)
+    to query tenant_users across RLS boundaries — the caller does not yet know
+    which tenant the principal belongs to (that is the whole point of this
+    endpoint). Returns exactly one active, bound membership.
+
+    Auth: Router-level X-FG-Internal-Token (require_internal_admin_gateway).
+    Never accessible from browser or user-facing code paths.
+    """
+    if not _PRINCIPAL_ID_RE.match(principal_id):
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "PRINCIPAL_ID_INVALID",
+                "principal_id must be a valid UUID v4",
+            ),
+        )
+
+    engine = get_engine()
+    with engine.connect() as conn:
+        try:
+            # PostgreSQL: SECURITY DEFINER function bypasses FORCE ROW LEVEL
+            # SECURITY on tenant_users (migration 0195). The caller does not yet
+            # know which tenant the principal belongs to — that is the whole point
+            # of this lookup — so no tenant context can be set before querying.
+            rows = conn.execute(
+                text(
+                    "SELECT membership_id, tenant_id, role"
+                    " FROM resolve_principal_tenant(:principal_id)"
+                ),
+                {"principal_id": principal_id},
+            ).fetchall()
+        except Exception:
+            # SQLite (test env) / function absent: no RLS enforced, direct query safe.
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT id         AS membership_id,
+                           tenant_id,
+                           role
+                    FROM tenant_users
+                    WHERE principal_id            = :principal_id
+                      AND identity_binding_status = 'bound'
+                      AND active IS TRUE
+                    """
+                ),
+                {"principal_id": principal_id},
+            ).fetchall()
+
+    if len(rows) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "MEMBERSHIP_NOT_FOUND",
+                "No active bound membership found for this principal",
+            ),
+        )
+
+    if len(rows) > 1:
+        log.warning(
+            "principal_tenant.ambiguous",
+            extra={"principal_prefix": principal_id[:8], "count": len(rows)},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "MEMBERSHIP_AMBIGUOUS",
+                "Principal has multiple active bound memberships",
+            ),
+        )
+
+    row = rows[0]
+    return PrincipalTenantBindingResponse(
+        tenant_id=str(row.tenant_id),
+        role=str(row.role),
+        membership_id=str(row.membership_id),
+    )
+
+
 __all__ = ["router"]

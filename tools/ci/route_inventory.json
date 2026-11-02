@@ -1084,6 +1084,20 @@
     },
     {
       "dependency_categories": [
+        "rate"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/identity/principal-tenant/{principal_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "rate",
         "tenant"
@@ -21165,7 +21179,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-09-30T10:09:07.719984+00:00",
+  "generated_at": "2026-11-01T18:58:09.425522+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

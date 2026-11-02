@@ -21,6 +21,12 @@ _EXEMPTIONS: frozenset[str] = frozenset(
         # validate_session() enforces auth_version, membership state, and sets RLS
         # context. Standard require_scopes dependency does not apply to this flow.
         "/portal/named-users/me",
+        # ptl1. AUTH-TENANT-CONTEXT-001 internal server-to-server endpoint. Credential
+        # is X-FG-Internal-Token + X-API-Key (both set to FG_INTERNAL_GATEWAY_SECRET).
+        # The router-level require_internal_admin_gateway dependency enforces auth;
+        # standard require_scopes does not apply because the caller is the Console BFF
+        # JWT callback, not a human API consumer. Never accessible from browser.
+        "/admin/identity/principal-tenant/{principal_id}",
     ]
 )
 

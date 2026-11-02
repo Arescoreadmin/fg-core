@@ -300,6 +300,17 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "global_admin",
                 "P1.5 usage meter catalog update — global operator action, no tenant scope.",
             ),
+            ex(
+                "GET",
+                "/admin/identity/principal-tenant/{principal_id}",
+                "allowed_internal",
+                "AUTH-TENANT-CONTEXT-001: Console BFF JWT callback resolves tenant_id "
+                "from principal_id at sign-in. Uses X-API-Key + X-FG-Internal-Token "
+                "(both = FG_INTERNAL_GATEWAY_SECRET) — never exposed to browser. "
+                "Cross-tenant by design: tenant_id is the output, not an input. "
+                "Standard require_scopes dependency does not apply; "
+                "require_internal_admin_gateway() is the auth gate.",
+            ),
         ),
     ),
     PlaneDef(

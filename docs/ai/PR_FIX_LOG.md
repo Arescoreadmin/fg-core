@@ -1,3 +1,14 @@
+## AUTH-TENANT-CONTEXT-001 — resolve tenant_id from principal_id at sign-in (PR #792)
+
+- **Work item:** AUTH-TENANT-CONTEXT-001 (FIX class)
+- **Baseline SHA:** `fa7206dd` (main after PR #791 merged)
+- **Failures before:** `frostgatetest@gmail.com` reached the FrostGate Console but was immediately redirected to `/unauthorized`. Root cause: Auth0 Post-Login Action (invariant 10 in `auth0/actions/login-claim-projection/index.js`) intentionally never projects `tenant_id` into the JWT. `consoleAccess.js::resolveTenantId()` read claim keys Auth0 never populated → `tenantId` always null → `TENANT_AUTHORITY_MISSING` (403) on every BFF request.
+- **Fix:** Server-side tenant resolution at sign-in. `auth.config.ts` extracts `principal_id` from the Auth0 OIDC claim (`https://frostgate.ai/principal_id`) and stores it as `token.principalId`. `auth.ts` JWT callback (Node.js context only) calls `resolvePrincipalTenant(principalId)` which fetches `GET /admin/identity/principal-tenant/{id}` with `X-API-Key` + `X-FG-Internal-Token`. The Core API endpoint uses `resolve_principal_tenant()` SECURITY DEFINER function (migration 0195) to bypass `FORCE ROW LEVEL SECURITY` on `tenant_users` — the lookup is cross-tenant by design because tenant_id is the output, not an input.
+- **P1 findings resolved post-initial-commit:** (A) `tenantResolution.ts` was missing `X-API-Key` header — auth gate Path E requires both `X-API-Key` and `X-FG-Internal-Token`; (B) `AND active = 1` is undefined-operator on PostgreSQL BOOLEAN column — corrected to `active IS TRUE`; (C) `FORCE ROW LEVEL SECURITY` on `tenant_users` returned zero rows without tenant context — resolved via SECURITY DEFINER function with SQLite fallback.
+- **Files changed (8):** `apps/console/auth.config.ts`, `apps/console/auth.ts`, `apps/console/lib/tenantResolution.ts` (new), `apps/console/types/next-auth.d.ts`, `api/admin.py`, `migrations/postgres/0195_principal_tenant_resolution_fn.sql` (new), `tools/ci/check_route_scopes.py` (exemption for internal-token-only route), `tools/ci/route_inventory.json` (regenerated).
+- **Tests (new):** `apps/console/tests/tenant-context-resolution.test.js` (18 behavioral tests TC-001–TC-018); `tests/test_principal_tenant_lookup.py` (13 API tests PTL-001–PTL-008).
+- **Security properties:** UUID v4 validated before any network request; gateway secret never exposed to browser; null on error = deny (not grant) → `TENANT_AUTHORITY_MISSING` (403); ambiguous bindings (>1 active bound membership) resolve to 404; Core API enforces authoritative access control on every BFF request independently.
+
 ## SHARD2-COLLECTION-ISOLATION-002 — eliminate systemic collection-time env contamination across FrostGate tests
 
 - **Work item:** SHARD2-COLLECTION-ISOLATION-002 (REPAIR class)

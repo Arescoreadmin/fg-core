@@ -28,5 +28,9 @@ declare module 'next-auth/jwt' {
     tenantId?: string | null;
     experienceClass?: string;
     emailVerified?: boolean;
+    // AUTH-TENANT-CONTEXT-001: canonical principal UUID, projected from
+    // https://frostgate.ai/principal_id by the Auth0 Post-Login Action.
+    // Used by auth.ts to resolve tenant_id server-side at sign-in.
+    principalId?: string | null;
   }
 }
