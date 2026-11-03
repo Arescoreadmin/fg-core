@@ -818,6 +818,7 @@ class TestLoginFailurePropagation(unittest.TestCase):
         assert len(checks) == 2
         for c in checks:
             assert c.result == EvidenceResult.BLOCKED
+            assert c.diagnostic is not None
             assert "MFA" in c.diagnostic
 
     def test_login_fail_nonzero_acceptance(self) -> None:
@@ -1041,6 +1042,7 @@ class TestClientDashboardDenied(unittest.TestCase):
         page = _make_page_mock(url="https://console.frostgate.ai/dashboard", status=200)
         c = check_internal_dashboard_denied(page, "https://console.frostgate.ai")
         assert c.result == EvidenceResult.FAIL
+        assert c.diagnostic is not None
         assert "ALLOWED" in c.diagnostic
 
     def test_pass_when_redirected_to_login(self) -> None:
@@ -1086,6 +1088,7 @@ class TestClientExecutiveRoute(unittest.TestCase):
         )
         c = check_client_executive_route(page, "https://console.frostgate.ai")
         assert c.result == EvidenceResult.FAIL
+        assert c.diagnostic is not None
         assert "denied" in c.diagnostic.lower()
 
 
@@ -1188,6 +1191,7 @@ class TestCrossTenantDenied(unittest.TestCase):
                 page, "https://console.frostgate.ai", "my-tenant"
             )
         assert c.result == EvidenceResult.FAIL
+        assert c.diagnostic is not None
         assert "boundary" in c.diagnostic.lower()
 
 
