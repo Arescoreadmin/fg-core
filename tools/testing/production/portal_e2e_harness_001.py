@@ -179,11 +179,16 @@ def _check_inv_001() -> CheckResult:
             )
         if record.raw_token and record.raw_token.startswith(INVITATION_TOKEN_PREFIX):
             return _pass(
-                cid, desc, f"token starts with {INVITATION_TOKEN_PREFIX}", record.raw_token[:12] + "…"
+                cid,
+                desc,
+                f"token starts with {INVITATION_TOKEN_PREFIX}",
+                record.raw_token[:12] + "…",
             )
         return _fail(
-            cid, desc, f"token starts with {INVITATION_TOKEN_PREFIX}",
-            f"got prefix: {record.raw_token[:6] if record.raw_token else 'None'}"
+            cid,
+            desc,
+            f"token starts with {INVITATION_TOKEN_PREFIX}",
+            f"got prefix: {record.raw_token[:6] if record.raw_token else 'None'}",
         )
     except Exception as exc:
         return _fail(cid, desc, "pni1.* token returned", f"exception: {exc}", str(exc))
@@ -278,10 +283,19 @@ def _check_enroll_001() -> CheckResult:
                 email="client@example.com",
             )
         if user is not None and membership is not None:
-            return _pass(cid, desc, "user and membership returned", "user and membership set")
-        return _fail(cid, desc, "user and membership returned", f"user={user}, membership={membership}")
+            return _pass(
+                cid, desc, "user and membership returned", "user and membership set"
+            )
+        return _fail(
+            cid,
+            desc,
+            "user and membership returned",
+            f"user={user}, membership={membership}",
+        )
     except Exception as exc:
-        return _fail(cid, desc, "user and membership returned", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "user and membership returned", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_enroll_002() -> CheckResult:
@@ -311,11 +325,16 @@ def _check_enroll_002() -> CheckResult:
             )
         if record.raw_token and record.raw_token.startswith(SESSION_TOKEN_PREFIX):
             return _pass(
-                cid, desc, f"token starts with {SESSION_TOKEN_PREFIX}", record.raw_token[:12] + "…"
+                cid,
+                desc,
+                f"token starts with {SESSION_TOKEN_PREFIX}",
+                record.raw_token[:12] + "…",
             )
         return _fail(
-            cid, desc, f"token starts with {SESSION_TOKEN_PREFIX}",
-            f"got prefix: {record.raw_token[:6] if record.raw_token else 'None'}"
+            cid,
+            desc,
+            f"token starts with {SESSION_TOKEN_PREFIX}",
+            f"got prefix: {record.raw_token[:6] if record.raw_token else 'None'}",
         )
     except Exception as exc:
         return _fail(cid, desc, "pnu1.* token returned", f"exception: {exc}", str(exc))
@@ -363,10 +382,17 @@ def _check_enroll_003() -> CheckResult:
                 email="client@example.com",
             )
         if user.oidc_subject == expected_subject:
-            return _pass(cid, desc, f"oidc_subject={expected_subject}", f"oidc_subject={user.oidc_subject}")
+            return _pass(
+                cid,
+                desc,
+                f"oidc_subject={expected_subject}",
+                f"oidc_subject={user.oidc_subject}",
+            )
         return _fail(cid, desc, expected_subject, str(user.oidc_subject))
     except Exception as exc:
-        return _fail(cid, desc, "portal user with oidc_subject", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "portal user with oidc_subject", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_enroll_004() -> CheckResult:
@@ -391,17 +417,21 @@ def _check_enroll_004() -> CheckResult:
             )
         if membership is not None and membership.engagement_id == _ENG_ALPHA:
             return _pass(
-                cid, desc,
+                cid,
+                desc,
                 f"engagement_id={_ENG_ALPHA}",
                 f"engagement_id={membership.engagement_id}",
             )
         return _fail(
-            cid, desc,
+            cid,
+            desc,
             f"engagement_id={_ENG_ALPHA}",
             f"engagement_id={getattr(membership, 'engagement_id', None)}",
         )
     except Exception as exc:
-        return _fail(cid, desc, "membership with engagement_id", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "membership with engagement_id", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_enroll_005() -> CheckResult:
@@ -451,15 +481,24 @@ def _check_enroll_005() -> CheckResult:
             except PortalInvitationAlreadyAcceptedError:
                 raised = True
         if raised:
-            return _pass(cid, desc, "PortalInvitationAlreadyAcceptedError raised", "error raised correctly")
-        return _fail(cid, desc, "PortalInvitationAlreadyAcceptedError raised", "no error raised")
+            return _pass(
+                cid,
+                desc,
+                "PortalInvitationAlreadyAcceptedError raised",
+                "error raised correctly",
+            )
+        return _fail(
+            cid, desc, "PortalInvitationAlreadyAcceptedError raised", "no error raised"
+        )
     except Exception as exc:
-        return _fail(cid, desc, "error raised for accepted token", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "error raised for accepted token", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_bind_001() -> CheckResult:
     import api.portal_user_authority as pua
-    from api.portal_user_authority import SESSION_TOKEN_PREFIX, create_session
+    from api.portal_user_authority import create_session
 
     cid = "BIND-001"
     desc = "Session is bound to exactly one tenant_id"
@@ -483,7 +522,9 @@ def _check_bind_001() -> CheckResult:
                 auth_version_snapshot=2,
             )
         if record.tenant_id == _TENANT_A:
-            return _pass(cid, desc, f"tenant_id={_TENANT_A}", f"tenant_id={record.tenant_id}")
+            return _pass(
+                cid, desc, f"tenant_id={_TENANT_A}", f"tenant_id={record.tenant_id}"
+            )
         return _fail(cid, desc, _TENANT_A, str(record.tenant_id))
     except Exception as exc:
         return _fail(cid, desc, "session with tenant_id", f"exception: {exc}", str(exc))
@@ -513,10 +554,22 @@ def _check_bind_002() -> CheckResult:
                 tenant_id=_TENANT_A,
             )
         if membership is not None and membership.engagement_id == _ENG_ALPHA:
-            return _pass(cid, desc, f"engagement_id={_ENG_ALPHA}", f"engagement_id={membership.engagement_id}")
-        return _fail(cid, desc, f"engagement_id={_ENG_ALPHA}", str(getattr(membership, "engagement_id", None)))
+            return _pass(
+                cid,
+                desc,
+                f"engagement_id={_ENG_ALPHA}",
+                f"engagement_id={membership.engagement_id}",
+            )
+        return _fail(
+            cid,
+            desc,
+            f"engagement_id={_ENG_ALPHA}",
+            str(getattr(membership, "engagement_id", None)),
+        )
     except Exception as exc:
-        return _fail(cid, desc, "membership with engagement_id", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "membership with engagement_id", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_bind_003() -> CheckResult:
@@ -547,13 +600,18 @@ def _check_bind_003() -> CheckResult:
             )
         if record.auth_version_snapshot == expected_version:
             return _pass(
-                cid, desc,
+                cid,
+                desc,
                 f"auth_version_snapshot={expected_version}",
                 f"auth_version_snapshot={record.auth_version_snapshot}",
             )
-        return _fail(cid, desc, str(expected_version), str(record.auth_version_snapshot))
+        return _fail(
+            cid, desc, str(expected_version), str(record.auth_version_snapshot)
+        )
     except Exception as exc:
-        return _fail(cid, desc, "auth_version_snapshot matches", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "auth_version_snapshot matches", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_revoke_001() -> CheckResult:
@@ -573,12 +631,16 @@ def _check_revoke_001() -> CheckResult:
             )
         ]
         with patch.object(pua, "_get_pepper", return_value=_TEST_PEPPER):
-            result = revoke_session(db, session_id=str(session_uuid), tenant_id=_TENANT_A)
+            result = revoke_session(
+                db, session_id=str(session_uuid), tenant_id=_TENANT_A
+            )
         if result is True:
             return _pass(cid, desc, "revoke_session returns True", "True")
         return _fail(cid, desc, "True", str(result))
     except Exception as exc:
-        return _fail(cid, desc, "revoke_session() returns True", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "revoke_session() returns True", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_logout_001() -> CheckResult:
@@ -603,10 +665,17 @@ def _check_logout_001() -> CheckResult:
             # revoke_session_by_token resolves tenant from the session record itself
             result = revoke_session_by_token(db, raw_token=raw_token)
         if result.revoked is True:
-            return _pass(cid, desc, "revoke_session_by_token returns .revoked=True", "revoked=True")
+            return _pass(
+                cid,
+                desc,
+                "revoke_session_by_token returns .revoked=True",
+                "revoked=True",
+            )
         return _fail(cid, desc, "revoked=True", f"revoked={result.revoked}")
     except Exception as exc:
-        return _fail(cid, desc, "session revoked by token", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "session revoked by token", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_logout_002() -> CheckResult:
@@ -627,10 +696,19 @@ def _check_logout_002() -> CheckResult:
                 tenant_id=_TENANT_A,
             )
         if not vr.ok:
-            return _pass(cid, desc, "validate_session returns ok=False for revoked session", "ok=False")
-        return _fail(cid, desc, "ok=False", "ok=True — revoked session passed validation")
+            return _pass(
+                cid,
+                desc,
+                "validate_session returns ok=False for revoked session",
+                "ok=False",
+            )
+        return _fail(
+            cid, desc, "ok=False", "ok=True — revoked session passed validation"
+        )
     except Exception as exc:
-        return _fail(cid, desc, "revoked session fails validation", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "revoked session fails validation", f"exception: {exc}", str(exc)
+        )
 
 
 def _check_replay_001() -> CheckResult:
@@ -680,10 +758,19 @@ def _check_replay_001() -> CheckResult:
             except PortalInvitationAlreadyAcceptedError:
                 raised = True
         if raised:
-            return _pass(cid, desc, "PortalInvitationAlreadyAcceptedError raised", "error raised correctly")
-        return _fail(cid, desc, "PortalInvitationAlreadyAcceptedError raised", "no error raised")
+            return _pass(
+                cid,
+                desc,
+                "PortalInvitationAlreadyAcceptedError raised",
+                "error raised correctly",
+            )
+        return _fail(
+            cid, desc, "PortalInvitationAlreadyAcceptedError raised", "no error raised"
+        )
     except Exception as exc:
-        return _fail(cid, desc, "error raised for replayed token", f"exception: {exc}", str(exc))
+        return _fail(
+            cid, desc, "error raised for replayed token", f"exception: {exc}", str(exc)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -718,7 +805,9 @@ def _bootstrap_app(tmp_dir: str) -> tuple[Any, Any]:
     return app, engine
 
 
-def _make_tenant_user_sql(engine: Any, *, tenant_id: str, membership_version: int = 1) -> str:
+def _make_tenant_user_sql(
+    engine: Any, *, tenant_id: str, membership_version: int = 1
+) -> str:
     """Insert FgPrincipal + TenantUser into SQLite. Returns tenant_user id."""
     from api.db import get_sessionmaker
     from api.db_models import TenantUser
@@ -776,7 +865,9 @@ def _create_engagement(client: Any, *, tenant_id: str) -> str:
         headers={"X-API-Key": _CI_TEST_KEY, "X-Tenant-ID": tenant_id},
     )
     if resp.status_code != 201:
-        raise RuntimeError(f"Failed to create engagement: {resp.status_code} {resp.text[:200]}")
+        raise RuntimeError(
+            f"Failed to create engagement: {resp.status_code} {resp.text[:200]}"
+        )
     return resp.json()["id"]
 
 
@@ -800,7 +891,9 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
         # Setup: create engagement in TENANT_A
         try:
             eng_a_id = _create_engagement(client, tenant_id=_TENANT_A)
-            uid_a = _make_tenant_user_sql(engine, tenant_id=_TENANT_A, membership_version=1)
+            uid_a = _make_tenant_user_sql(
+                engine, tenant_id=_TENANT_A, membership_version=1
+            )
         except Exception as exc:
             blocked = f"TestClient setup failed: {exc}"
             for cid, desc in [
@@ -808,7 +901,10 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 ("ACCESS-002", "Findings accessible (HTTP 200)"),
                 ("ACCESS-003", "Response data scoped to bound engagement only"),
                 ("REPORT-001", "Only approved reports visible to portal viewer"),
-                ("REVOKE-002", "auth_version mismatch causes session invalidation (403)"),
+                (
+                    "REVOKE-002",
+                    "auth_version mismatch causes session invalidation (403)",
+                ),
                 ("XTENANT-001", "Cross-tenant engagement access denied (403)"),
                 ("XENGAG-001", "Cross-engagement access denied (403)"),
             ]:
@@ -833,11 +929,34 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code == 200:
-                checks.append(_pass("ACCESS-001", "Engagement data accessible (HTTP 200) — legacy membership path", "200", "200"))
+                checks.append(
+                    _pass(
+                        "ACCESS-001",
+                        "Engagement data accessible (HTTP 200) — legacy membership path",
+                        "200",
+                        "200",
+                    )
+                )
             else:
-                checks.append(_fail("ACCESS-001", "Engagement data accessible (HTTP 200) — legacy membership path", "200", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "ACCESS-001",
+                        "Engagement data accessible (HTTP 200) — legacy membership path",
+                        "200",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("ACCESS-001", "Engagement data accessible (HTTP 200) — legacy membership path", "200", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "ACCESS-001",
+                    "Engagement data accessible (HTTP 200) — legacy membership path",
+                    "200",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # ACCESS-002: GET /field-assessment/engagements/{id}/findings
         # Tested via legacy X-FG-Membership-ID path (pnu1.* requires PG).
@@ -847,11 +966,34 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code == 200:
-                checks.append(_pass("ACCESS-002", "Findings accessible (HTTP 200) — legacy membership path", "200", "200"))
+                checks.append(
+                    _pass(
+                        "ACCESS-002",
+                        "Findings accessible (HTTP 200) — legacy membership path",
+                        "200",
+                        "200",
+                    )
+                )
             else:
-                checks.append(_fail("ACCESS-002", "Findings accessible (HTTP 200) — legacy membership path", "200", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "ACCESS-002",
+                        "Findings accessible (HTTP 200) — legacy membership path",
+                        "200",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("ACCESS-002", "Findings accessible (HTTP 200)", "!= 403", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "ACCESS-002",
+                    "Findings accessible (HTTP 200)",
+                    "!= 403",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # ACCESS-003: non-existent engagement not accessible
         try:
@@ -861,11 +1003,34 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code in (403, 404):
-                checks.append(_pass("ACCESS-003", "Response data scoped to bound engagement only", "403 or 404", str(resp.status_code)))
+                checks.append(
+                    _pass(
+                        "ACCESS-003",
+                        "Response data scoped to bound engagement only",
+                        "403 or 404",
+                        str(resp.status_code),
+                    )
+                )
             else:
-                checks.append(_fail("ACCESS-003", "Response data scoped to bound engagement only", "403 or 404", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "ACCESS-003",
+                        "Response data scoped to bound engagement only",
+                        "403 or 404",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("ACCESS-003", "Response data scoped to bound engagement only", "403 or 404", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "ACCESS-003",
+                    "Response data scoped to bound engagement only",
+                    "403 or 404",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # REPORT-001: GET /field-assessment/engagements/{id}/reports
         # Verifies the reports endpoint is accessible (HTTP 200, returns list).
@@ -877,25 +1042,77 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code == 200:
-                checks.append(_pass("REPORT-001", "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation", "200", "200"))
+                checks.append(
+                    _pass(
+                        "REPORT-001",
+                        "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation",
+                        "200",
+                        "200",
+                    )
+                )
             else:
-                checks.append(_fail("REPORT-001", "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation", "200", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "REPORT-001",
+                        "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation",
+                        "200",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("REPORT-001", "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation", "200", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "REPORT-001",
+                    "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation",
+                    "200",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # REVOKE-002: stale auth_version → 403
         try:
-            uid_stale = _make_tenant_user_sql(engine, tenant_id=_TENANT_A, membership_version=3)
+            uid_stale = _make_tenant_user_sql(
+                engine, tenant_id=_TENANT_A, membership_version=3
+            )
             resp = client.get(
                 f"/field-assessment/engagements/{eng_a_id}",
-                headers=_portal_headers(uid=uid_stale, tenant_id=_TENANT_A, version="1"),
+                headers=_portal_headers(
+                    uid=uid_stale, tenant_id=_TENANT_A, version="1"
+                ),
             )
-            if resp.status_code == 403 and resp.json().get("code") == "SESSION_REVOKED_VERSION_MISMATCH":
-                checks.append(_pass("REVOKE-002", "auth_version mismatch causes session invalidation (403)", "403 SESSION_REVOKED_VERSION_MISMATCH", f"403 {resp.json().get('code')}"))
+            if (
+                resp.status_code == 403
+                and resp.json().get("code") == "SESSION_REVOKED_VERSION_MISMATCH"
+            ):
+                checks.append(
+                    _pass(
+                        "REVOKE-002",
+                        "auth_version mismatch causes session invalidation (403)",
+                        "403 SESSION_REVOKED_VERSION_MISMATCH",
+                        f"403 {resp.json().get('code')}",
+                    )
+                )
             else:
-                checks.append(_fail("REVOKE-002", "auth_version mismatch causes session invalidation (403)", "403 SESSION_REVOKED_VERSION_MISMATCH", f"{resp.status_code} {resp.text[:100]}"))
+                checks.append(
+                    _fail(
+                        "REVOKE-002",
+                        "auth_version mismatch causes session invalidation (403)",
+                        "403 SESSION_REVOKED_VERSION_MISMATCH",
+                        f"{resp.status_code} {resp.text[:100]}",
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("REVOKE-002", "auth_version mismatch causes session invalidation (403)", "403", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "REVOKE-002",
+                    "auth_version mismatch causes session invalidation (403)",
+                    "403",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # XTENANT-001: cross-tenant engagement → 403 or 404
         try:
@@ -905,11 +1122,34 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code in (403, 404):
-                checks.append(_pass("XTENANT-001", "Cross-tenant engagement access denied (403)", "403 or 404", str(resp.status_code)))
+                checks.append(
+                    _pass(
+                        "XTENANT-001",
+                        "Cross-tenant engagement access denied (403)",
+                        "403 or 404",
+                        str(resp.status_code),
+                    )
+                )
             else:
-                checks.append(_fail("XTENANT-001", "Cross-tenant engagement access denied (403)", "403 or 404", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "XTENANT-001",
+                        "Cross-tenant engagement access denied (403)",
+                        "403 or 404",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("XTENANT-001", "Cross-tenant engagement access denied (403)", "403 or 404", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "XTENANT-001",
+                    "Cross-tenant engagement access denied (403)",
+                    "403 or 404",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
         # XENGAG-001: non-existent engagement → 403 or 404
         try:
@@ -919,11 +1159,34 @@ def _run_testclient_checks(app: Any, engine: Any) -> list[CheckResult]:
                 headers=_portal_headers(uid=uid_a, tenant_id=_TENANT_A),
             )
             if resp.status_code in (403, 404):
-                checks.append(_pass("XENGAG-001", "Cross-engagement access denied (403)", "403 or 404", str(resp.status_code)))
+                checks.append(
+                    _pass(
+                        "XENGAG-001",
+                        "Cross-engagement access denied (403)",
+                        "403 or 404",
+                        str(resp.status_code),
+                    )
+                )
             else:
-                checks.append(_fail("XENGAG-001", "Cross-engagement access denied (403)", "403 or 404", str(resp.status_code), resp.text[:200]))
+                checks.append(
+                    _fail(
+                        "XENGAG-001",
+                        "Cross-engagement access denied (403)",
+                        "403 or 404",
+                        str(resp.status_code),
+                        resp.text[:200],
+                    )
+                )
         except Exception as exc:
-            checks.append(_fail("XENGAG-001", "Cross-engagement access denied (403)", "403 or 404", f"exception: {exc}", str(exc)))
+            checks.append(
+                _fail(
+                    "XENGAG-001",
+                    "Cross-engagement access denied (403)",
+                    "403 or 404",
+                    f"exception: {exc}",
+                    str(exc),
+                )
+            )
 
     return checks
 
@@ -1056,7 +1319,11 @@ def _print_summary(record: EvidenceRecord, output_json: bool = False) -> None:
     for c in record.checks:
         symbol = _SYMBOLS.get(c.result.value, f"[{c.result.value[:4]}]")
         req = " *" if c.id in record.required_check_manifest else ""
-        diag = f"  ({c.diagnostic})" if c.diagnostic and c.result != EvidenceResult.PASS else ""
+        diag = (
+            f"  ({c.diagnostic})"
+            if c.diagnostic and c.result != EvidenceResult.PASS
+            else ""
+        )
         print(f"  {symbol} {c.id}{req}{diag}")
     print(
         f"\n  * = required for acceptance ({len(record.required_check_manifest)} required)"
@@ -1109,7 +1376,9 @@ def main(argv: list[str] | None = None) -> int:
     _print_summary(record, output_json=args.output_json)
 
     if args.write_evidence or args.evidence_path:
-        evidence_path = Path(args.evidence_path) if args.evidence_path else _EVIDENCE_PATH
+        evidence_path = (
+            Path(args.evidence_path) if args.evidence_path else _EVIDENCE_PATH
+        )
         write_evidence(record, evidence_path)
         if not args.output_json:
             print(f"Evidence written: {evidence_path}")
