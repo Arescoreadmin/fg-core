@@ -55,6 +55,31 @@ CANONICAL_CHECK_MANIFESTS: dict[str, list[str]] = {
         "AUTH-008",
         "AUTH-009",
     ],
+    # Portal named-user profile (PORTAL-AUTH-E2E-001 / MODE-B-E2E-ACCEPTANCE-001)
+    # 21 checks spanning the invitation → enrollment → access → revocation lifecycle.
+    "portal_named_user": [
+        "INV-001",
+        "ENROLL-001",
+        "ENROLL-002",
+        "ENROLL-003",
+        "ENROLL-004",
+        "ENROLL-005",
+        "BIND-001",
+        "BIND-002",
+        "BIND-003",
+        "ACCESS-001",
+        "ACCESS-002",
+        "ACCESS-003",
+        "REPORT-001",
+        "DELIV-001",
+        "REVOKE-001",
+        "REVOKE-002",
+        "LOGOUT-001",
+        "LOGOUT-002",
+        "XTENANT-001",
+        "XENGAG-001",
+        "REPLAY-001",
+    ],
 }
 
 VALID_PROFILES: list[str] = list(CANONICAL_CHECK_MANIFESTS.keys())
