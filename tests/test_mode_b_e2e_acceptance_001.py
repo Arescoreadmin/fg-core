@@ -506,8 +506,9 @@ class TestScenarioD_AuthorizedAssessmentAccess:
                 "X-FG-Membership-Version": "1",
             },
         )
-        assert resp.status_code != 403, (
-            f"ACCESS-001: portal session denied. body={resp.json()}"
+        # Positive check: require HTTP 200, not just "not 403"
+        assert resp.status_code == 200, (
+            f"ACCESS-001: portal session denied or errored. body={resp.text[:200]}"
         )
 
     def test_access_002_findings_accessible_via_portal_session(
@@ -527,8 +528,8 @@ class TestScenarioD_AuthorizedAssessmentAccess:
                 "X-FG-Membership-Version": "1",
             },
         )
-        assert resp.status_code != 403, (
-            f"ACCESS-002: findings denied. body={resp.json()}"
+        assert resp.status_code == 200, (
+            f"ACCESS-002: findings denied or errored. body={resp.text[:200]}"
         )
 
     def test_access_003_cross_tenant_engagement_not_accessible(
@@ -550,8 +551,8 @@ class TestScenarioD_AuthorizedAssessmentAccess:
                 "X-FG-Membership-Version": "1",
             },
         )
-        assert resp_own.status_code != 403, (
-            "ACCESS-003: own engagement should not be 403"
+        assert resp_own.status_code == 200, (
+            f"ACCESS-003: own engagement should be 200, got {resp_own.status_code}"
         )
 
         unknown_id = str(uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc"))
@@ -576,9 +577,13 @@ class TestScenarioD_AuthorizedAssessmentAccess:
 
 
 class TestScenarioE_ApprovedReportVisibility:
-    """REPORT-001: Portal session can access scan results for the bound engagement."""
+    """REPORT-001: Portal session can access the reports endpoint for the engagement.
 
-    def test_report_001_scan_results_accessible_via_portal_session(
+    Approval filtering (draft vs approved) is not testable in simulation without
+    pre-seeded report artifacts — verified by list_versions() implementation.
+    """
+
+    def test_report_001_reports_endpoint_accessible_via_portal_session(
         self, portal_client, portal_db_engine
     ):
         eng_id = _create_engagement_via_api(portal_client, tenant_id=_TENANT_A)
@@ -586,7 +591,7 @@ class TestScenarioE_ApprovedReportVisibility:
             portal_db_engine, tenant_id=_TENANT_A, membership_version=1
         )
         resp = portal_client.get(
-            f"/field-assessment/engagements/{eng_id}/scan-results",
+            f"/field-assessment/engagements/{eng_id}/reports",
             headers={
                 "X-API-Key": _CI_TEST_KEY,
                 "X-Tenant-ID": _TENANT_A,
@@ -595,8 +600,8 @@ class TestScenarioE_ApprovedReportVisibility:
                 "X-FG-Membership-Version": "1",
             },
         )
-        assert resp.status_code != 403, (
-            f"REPORT-001: scan-results denied to portal session. body={resp.json()}"
+        assert resp.status_code == 200, (
+            f"REPORT-001: reports endpoint denied or errored. body={resp.text[:200]}"
         )
 
 

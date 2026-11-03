@@ -5,10 +5,10 @@
   "environment": "simulation",
   "console_origin": "NOT_APPLICABLE",
   "core_service_id": "fg-core",
-  "timestamp": "2026-11-03T03:01:08.534684Z",
-  "run_id": "55d364bb-3d42-4be0-9db3-416e6c6ee133",
+  "timestamp": "2026-11-03T12:26:48.501123Z",
+  "run_id": "a3662ba2-24b5-4fda-bf40-e044c353e08c",
   "workflow_run_id": "",
-  "repo_sha": "ddd4748ab288cfa23c13971616e5c8dfdfbd0fdd",
+  "repo_sha": "a41c6677737dd4ec5adcc4e61279b21523df9bb0",
   "deployed_sha": "NOT_PROVEN",
   "deployment_id": "NOT_PROVEN",
   "verification_environment": "simulation",
@@ -43,9 +43,9 @@
       "id": "INV-001",
       "description": "Portal invitation issued with pni1.* token format",
       "expected": "token starts with pni1.",
-      "observed": "pni1.fd63a47…",
+      "observed": "pni1.999461e…",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.758006Z"
+      "timestamp": "2026-11-03T12:26:48.727747Z"
     },
     {
       "id": "ENROLL-001",
@@ -53,15 +53,15 @@
       "expected": "user and membership returned",
       "observed": "user and membership set",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.759195Z"
+      "timestamp": "2026-11-03T12:26:48.728937Z"
     },
     {
       "id": "ENROLL-002",
       "description": "Session token has pnu1.* prefix (HttpOnly fg_portal_session cookie)",
       "expected": "token starts with pnu1.",
-      "observed": "pnu1.ee21232…",
+      "observed": "pnu1.c82c69a…",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.759434Z"
+      "timestamp": "2026-11-03T12:26:48.729189Z"
     },
     {
       "id": "ENROLL-003",
@@ -69,7 +69,7 @@
       "expected": "oidc_subject=auth0|enroll-003-harness",
       "observed": "oidc_subject=auth0|enroll-003-harness",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.760200Z"
+      "timestamp": "2026-11-03T12:26:48.729957Z"
     },
     {
       "id": "ENROLL-004",
@@ -77,7 +77,7 @@
       "expected": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "observed": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.761251Z"
+      "timestamp": "2026-11-03T12:26:48.731009Z"
     },
     {
       "id": "ENROLL-005",
@@ -85,7 +85,7 @@
       "expected": "PortalInvitationAlreadyAcceptedError raised",
       "observed": "error raised correctly",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.761632Z"
+      "timestamp": "2026-11-03T12:26:48.731392Z"
     },
     {
       "id": "BIND-001",
@@ -93,7 +93,7 @@
       "expected": "tenant_id=e2e-portal-harness-tenant-a",
       "observed": "tenant_id=e2e-portal-harness-tenant-a",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.761885Z"
+      "timestamp": "2026-11-03T12:26:48.731641Z"
     },
     {
       "id": "BIND-002",
@@ -101,7 +101,7 @@
       "expected": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "observed": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.762103Z"
+      "timestamp": "2026-11-03T12:26:48.731857Z"
     },
     {
       "id": "BIND-003",
@@ -109,7 +109,7 @@
       "expected": "auth_version_snapshot=5",
       "observed": "auth_version_snapshot=5",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.762328Z"
+      "timestamp": "2026-11-03T12:26:48.732086Z"
     },
     {
       "id": "REVOKE-001",
@@ -117,7 +117,7 @@
       "expected": "revoke_session returns True",
       "observed": "True",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.762553Z"
+      "timestamp": "2026-11-03T12:26:48.732314Z"
     },
     {
       "id": "LOGOUT-001",
@@ -125,7 +125,7 @@
       "expected": "revoke_session_by_token returns .revoked=True",
       "observed": "revoked=True",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.762782Z"
+      "timestamp": "2026-11-03T12:26:48.732545Z"
     },
     {
       "id": "LOGOUT-002",
@@ -133,7 +133,7 @@
       "expected": "validate_session returns ok=False for revoked session",
       "observed": "ok=False",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.763022Z"
+      "timestamp": "2026-11-03T12:26:48.732783Z"
     },
     {
       "id": "REPLAY-001",
@@ -141,7 +141,7 @@
       "expected": "PortalInvitationAlreadyAcceptedError raised",
       "observed": "error raised correctly",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:08.763637Z"
+      "timestamp": "2026-11-03T12:26:48.733396Z"
     },
     {
       "id": "DELIV-001",
@@ -149,24 +149,24 @@
       "expected": "N/A — simulation cannot produce approved report artifacts",
       "observed": "NOT_PROVEN: Simulation cannot produce pre-approved report artifacts. Run PORTAL-AUTH-E2E-001 operator runbook against production to prove this check.",
       "result": "NOT_PROVEN",
-      "timestamp": "2026-11-03T03:01:08.763640Z",
+      "timestamp": "2026-11-03T12:26:48.733400Z",
       "diagnostic": "Simulation cannot produce pre-approved report artifacts. Run PORTAL-AUTH-E2E-001 operator runbook against production to prove this check."
     },
     {
       "id": "ACCESS-001",
-      "description": "Engagement data accessible (HTTP 200)",
-      "expected": "!= 403",
+      "description": "Engagement data accessible (HTTP 200) — legacy membership path",
+      "expected": "200",
       "observed": "200",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.658130Z"
+      "timestamp": "2026-11-03T12:26:53.620198Z"
     },
     {
       "id": "ACCESS-002",
-      "description": "Findings accessible (HTTP 200)",
-      "expected": "!= 403",
+      "description": "Findings accessible (HTTP 200) — legacy membership path",
+      "expected": "200",
       "observed": "200",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.663362Z"
+      "timestamp": "2026-11-03T12:26:53.625416Z"
     },
     {
       "id": "ACCESS-003",
@@ -174,15 +174,15 @@
       "expected": "403 or 404",
       "observed": "404",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.665467Z"
+      "timestamp": "2026-11-03T12:26:53.627986Z"
     },
     {
       "id": "REPORT-001",
-      "description": "Only approved reports visible to portal viewer",
-      "expected": "!= 403",
+      "description": "Reports endpoint accessible (HTTP 200) — approval filtering verified by list_versions() implementation",
+      "expected": "200",
       "observed": "200",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.668568Z"
+      "timestamp": "2026-11-03T12:26:53.631478Z"
     },
     {
       "id": "REVOKE-002",
@@ -190,7 +190,7 @@
       "expected": "403 SESSION_REVOKED_VERSION_MISMATCH",
       "observed": "403 SESSION_REVOKED_VERSION_MISMATCH",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.670170Z"
+      "timestamp": "2026-11-03T12:26:53.633464Z"
     },
     {
       "id": "XTENANT-001",
@@ -198,7 +198,7 @@
       "expected": "403 or 404",
       "observed": "404",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.675155Z"
+      "timestamp": "2026-11-03T12:26:53.638631Z"
     },
     {
       "id": "XENGAG-001",
@@ -206,11 +206,11 @@
       "expected": "403 or 404",
       "observed": "404",
       "result": "PASS",
-      "timestamp": "2026-11-03T03:01:13.677315Z"
+      "timestamp": "2026-11-03T12:26:53.640610Z"
     }
   ],
   "unverified_production_checks": [],
   "overall_result": "NOT_PROVEN",
   "acceptance_decision": "REJECTED_INCOMPLETE",
-  "evidence_fingerprint": "sha256:3e0223ae99107b28d86b3166c4ee51d515797f167f6f0e5716b1c3c17e4ac167"
+  "evidence_fingerprint": "sha256:7d74813523bb698d183f74600ef1a8b7361c98c446910f55b12a0b02b2a3832e"
 }
