@@ -1,3 +1,11 @@
+## fix(ci): repair Portal E2E harness lint and formatting (PR #796)
+
+- **Work item:** POST-795-RUFF-GATES-001 (REPAIR class)
+- **Baseline SHA:** `c34704b3` (PR #795 merged — MODE-B-E2E-ACCEPTANCE-001)
+- **Failures before:** Ruff lint (F401) and formatting violations in `tools/testing/production/portal_e2e_harness_001.py` introduced by PR #795.
+- **Fix:** Removed unused imports and applied ruff formatting corrections to the portal E2E harness. No behavioral changes — 154 passed, 1 skipped (DELIV-001). Offline simulation evidence rebound to reflect updated harness content.
+- **Scope:** `tools/testing/production/portal_e2e_harness_001.py` only. No production routes, API contracts, migrations, or test logic modified.
+
 ## POST-793-RUFF-GATES-001 — remove unused verify_acceptance import and fix empty f-string in auth_harness_001.py (PR #794)
 
 - **Work item:** POST-793-RUFF-GATES-001 (REPAIR class)
