@@ -270,6 +270,65 @@ All items below are fully merged and production-proven unless otherwise noted.
 
 ---
 
+## 9. OFFER A / OFFER B Boundary — Addendum (2026-11-03)
+
+> **Source:** `docs/plans/revenue_first_roadmap_20261103.md` (REVENUE-FIRST-ROADMAP-001)
+
+This addendum clarifies a structural ambiguity introduced by the statement in Section 5
+("L14 cannot close until `FG_RESULT_TRUTH_GATE` and all mandatory production gates pass").
+That statement created an implicit chain:
+
+> first paid client → FG_RESULT_TRUTH_GATE → CUSTOMER-ZERO-ACCEPT-001 → CUSTOMER-ZERO-TRUST-003 → cost authorization
+
+That chain is architecturally necessary for **OFFER B** (Cryptographically Verifiable
+Assurance) but NOT for **OFFER A** (Paid Assessment). This addendum makes the distinction
+explicit.
+
+### Two Commercial Offers
+
+**OFFER A — Paid Assessment (Conventional)**
+
+A complete, QA-governed, delivered field assessment. Reports are signed with the Ed25519
+`FG_REPORT_SIGNING_KEY` (operator-held single authority). Provides integrity and provenance;
+does not promise independent cryptographic verifiability or three-authority signing.
+
+L14 may close for OFFER A without `FG_RESULT_TRUTH_GATE` operational acceptance, provided:
+1. Mode B production authentication runbook is executed (PRODAUTH-RUN-001).
+2. PORTAL-AUTH-E2E-001 operator runbook is executed with DELIV-001=PASS (PORTAL-RUN-001).
+3. All L14 commercial items are closed (design partner, price, Stripe, invoice).
+
+**Vault ceremony required: NO.**
+
+**OFFER B — Cryptographically Verifiable Assurance**
+
+Everything in OFFER A, plus a report signed by three independent authorities (assessor,
+reviewer, FrostGate seal) with keys protected by HashiCorp Vault Transit. The signing is
+independently verifiable using the published verification bundle.
+
+L14 for OFFER B requires `FG_RESULT_TRUTH_GATE` operational acceptance (depends on
+CUSTOMER-ZERO-ACCEPT-001, which depends on CUSTOMER-ZERO-TRUST-003).
+
+**Vault ceremony required: YES — `CUSTOMER-ZERO-TRUST-003` must close first.**
+**Current state: BLOCKED. COST_AUTHORIZATION=NOT_AUTHORIZED.**
+
+### Reconciled Sequencing Rule
+
+The Level-2 sequencing statement "L14 cannot close until `FG_RESULT_TRUTH_GATE` passes"
+applies only to OFFER B. For OFFER A, the equivalent statement is:
+
+> L14 may close when PRODAUTH-RUN-001 and PORTAL-RUN-001 produce ACCEPTED evidence and
+> all commercial conditions are met. No Vault ceremony. No CUSTOMER-ZERO-TRUST-003.
+> No FG_RESULT_TRUTH_GATE operational acceptance.
+
+### No Security Invariants Weakened
+
+This addendum does not change safety gates, CI policy, or the Freeze Law. It clarifies
+which gates are prerequisites for which commercial offer. OFFER B gates remain unchanged.
+Existing NOT_PROVEN status records (`INTERACTIVE_AUTH_VERIFICATION`, `PORTAL_LIVE_VERIFICATION`,
+`CUSTOMER_ZERO_TRUST`, `COST_AUTHORIZATION`) remain accurate and unchanged.
+
+---
+
 ## 8. How to Propose a New Item
 
 If you believe a new capability must enter the critical path, follow this process:

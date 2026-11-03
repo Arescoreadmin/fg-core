@@ -1,3 +1,13 @@
+## docs(roadmap): REVENUE-FIRST-ROADMAP-001 — two-offer framing, OFFER A launch blockers, Vault as P1 (PR open)
+
+- **Work item:** REVENUE-FIRST-ROADMAP-001 (REPAIR class)
+- **Baseline SHA:** `76520b9c` (main after PR #797)
+- **Failures before:** None — documentation PR. Level-2 sequencing authority contained implicit chain (first paid client → Vault ceremony) that conflated OFFER A and OFFER B prerequisites.
+- **Root cause:** Level-2 doc stated "L14 cannot close until FG_RESULT_TRUTH_GATE passes." FG_RESULT_TRUTH_GATE depends on CUSTOMER-ZERO-ACCEPT-001 → CUSTOMER-ZERO-TRUST-003 (cost NOT_AUTHORIZED). This chain is architecturally necessary only for OFFER B.
+- **Fix:** New planning doc (`docs/plans/revenue_first_roadmap_20261103.md`) establishes two-offer framing. Level-2 addendum (Section 9) explicitly de-couples OFFER A L14 from FG_RESULT_TRUTH_GATE operational acceptance. ROADMAP.md tracking row added.
+- **No behavior change:** No product code, schema, CI policy, or infra changes. Documentation only. All NOT_PROVEN and NOT_AUTHORIZED status records unchanged.
+- **Scope:** `docs/plans/revenue_first_roadmap_20261103.md` (new), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (Section 9 addendum), `ROADMAP.md` (tracking row). `customer_one/offline_simulation_evidence.json` rebound.
+
 ## fix(types): POST-796 resolve Mode B optional-string mypy regressions (PR #797)
 
 - **Work item:** POST-796-MODE-B-MYPY-001 (REPAIR class)
