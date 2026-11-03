@@ -270,6 +270,89 @@ All items below are fully merged and production-proven unless otherwise noted.
 
 ---
 
+## 9. OFFER A / OFFER B Boundary — Addendum (2026-11-03, corrected)
+
+> **Source:** `docs/plans/revenue_first_roadmap_20261103.md` (REVENUE-FIRST-ROADMAP-001)
+> **Correction:** Initial draft of this addendum over-stated the OFFER A exemption. This
+> version preserves all mandatory production gates and corrects the signing description.
+
+This addendum identifies which L14 prerequisites are **exclusively** OFFER B-specific and
+which apply to any client engagement.
+
+### Mandatory Gates — Apply to ALL Offers
+
+FG_RESULT_TRUTH_GATE defines four mandatory acceptance gates in runtime code
+(`services/governance/report/result_truth_gate.py:_REQUIRED_PRODUCTION_GATES` and
+`services/governance/report/qualification_authority.py:PRODUCTION_GATES`). The Level-2 doc
+Section 5 states these "must pass before customer data access, report issuance, or L14
+closure" — not "before OFFER B closure." All four apply regardless of offer type:
+
+| Gate | Vault-dependent | Current status |
+|------|----------------|----------------|
+| `PRODUCTION_DEPENDENCY_SECURITY` | No | COMPLETE — P0-DEP-REM-001 (#786) |
+| `PRODUCTION_SCHEMA_AND_RLS` | No | NOT_PROVEN — operator attestation required |
+| `CANONICAL_ASSESSMENT_PROOF` | No | NOT_PROVEN — current-SHA proof required |
+| `DURABLE_EXECUTION_AND_RECOVERY` | No | NOT_PROVEN — restore drill required |
+
+Gates 2–4 are human operator attestations. They require operator verification work at
+current SHA but do NOT require Vault, HCP, or infrastructure spending.
+
+### Vault Transit — Required for ALL Offers
+
+TRUST-BINDING-001 (PR #731) established that report generation, production qualification,
+and governed delivery authorization all require Vault Transit signing. The legacy
+`FG_REPORT_SIGNING_KEY` env-key path is **explicitly rejected** in the canonical production
+path (`trust_binding.py:19`). Three signing domains are required:
+
+| Signing domain | Trust role | Required for |
+|----------------|-----------|--------------|
+| IDENTITY | `generate_report_route` | Report generation |
+| APPROVAL | `qualify_report_finalize_route` | QUALIFIED decision |
+| ACCEPTANCE | `governed_delivery_route` | Delivery authorization |
+
+**Any Vault Transit-compatible instance satisfies this requirement.** HCP Vault Dedicated is
+NOT required for OFFER A. Options subject to founder approval before provisioning:
+see `docs/plans/revenue_first_roadmap_20261103.md` Section 12.
+
+### OFFER B-Specific Requirements (not required for OFFER A)
+
+| Requirement | Why OFFER B-specific |
+|-------------|----------------------|
+| CUSTOMER-ZERO-TRUST-003 | HCP Vault Dedicated ceremony — required for HSM-backed key custody and independent verifiability claims |
+| CUSTOMER-ZERO-ACCEPT-001 | Current-SHA production acceptance ceremony proof |
+| Three-authority signing | Assessor Ed25519 + reviewer Ed25519 + FrostGate seal (requires all three trust ceremony participants) |
+| Independent verifiability bundle | Offline-replayable triple-signed verification bundle for auditors |
+| Key custody guarantees | HSM-backed key storage, rotation, revocation with chain-of-custody |
+
+### Reconciled L14 Sequencing
+
+L14 for **OFFER A** may proceed when ALL of the following are complete:
+
+1. Vault Transit provisioned with IDENTITY, APPROVAL, ACCEPTANCE keys (any compliant
+   instance — HCP Vault Dedicated not required; subject to founder approval).
+2. Human attestation of `PRODUCTION_SCHEMA_AND_RLS` (operator verification, no infra cost).
+3. Human attestation of `CANONICAL_ASSESSMENT_PROOF` (current-SHA proof, can run in
+   pre-prod).
+4. Human attestation of `DURABLE_EXECUTION_AND_RECOVERY` (restore drill at current schema).
+5. `PRODUCTION_DEPENDENCY_SECURITY` already attestable (P0-DEP-REM-001 #786 complete).
+6. Mode B authentication runbook executed in production (PRODAUTH-RUN-001).
+7. Portal enrollment runbook executed with DELIV-001=PASS (PORTAL-RUN-001).
+8. All L14 commercial conditions met (design partner, price, Stripe, invoice).
+
+CUSTOMER-ZERO-TRUST-003 and CUSTOMER-ZERO-ACCEPT-001 are NOT prerequisites for OFFER A.
+
+L14 for **OFFER B** additionally requires CUSTOMER-ZERO-TRUST-003 (cost NOT_AUTHORIZED)
+and CUSTOMER-ZERO-ACCEPT-001.
+
+### No Security Invariants Weakened
+
+Production gate attestations are preserved. Vault signing requirement is preserved. The
+Freeze Law is not modified. All NOT_PROVEN and NOT_AUTHORIZED status records remain
+unchanged (`INTERACTIVE_AUTH_VERIFICATION`, `PORTAL_LIVE_VERIFICATION`,
+`CUSTOMER_ZERO_TRUST`, `COST_AUTHORIZATION`).
+
+---
+
 ## 8. How to Propose a New Item
 
 If you believe a new capability must enter the critical path, follow this process:

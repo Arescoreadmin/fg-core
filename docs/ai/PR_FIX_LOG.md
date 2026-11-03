@@ -1,3 +1,14 @@
+## docs(roadmap): REVENUE-FIRST-ROADMAP-001 — two-offer framing, corrected OFFER A blockers, Vault Transit vs HCP separation (PR open)
+
+- **Work item:** REVENUE-FIRST-ROADMAP-001 (REPAIR class)
+- **Baseline SHA:** `76520b9c` (main after PR #797)
+- **Failures before:** None — documentation PR. Initial draft contained two factual errors found during release-authority review: (1) incorrectly stated FG_RESULT_TRUTH_GATE operational acceptance is exclusively an OFFER B prerequisite; (2) described OFFER A as using `FG_REPORT_SIGNING_KEY` when TRUST-BINDING-001 (#731) changed all three signing steps to require Vault Transit.
+- **Root cause (error 1):** `FG_RESULT_TRUTH_GATE` has four mandatory gates defined in `result_truth_gate.py:_REQUIRED_PRODUCTION_GATES`. Three are Vault-independent operator attestations (PRODUCTION_SCHEMA_AND_RLS, CANONICAL_ASSESSMENT_PROOF, DURABLE_EXECUTION_AND_RECOVERY) that apply to ALL offers. Only the CUSTOMER-ZERO-ACCEPT-001 ceremony is OFFER B-specific.
+- **Root cause (error 2):** `trust_binding.py:19` explicitly rejects `FG_REPORT_SIGNING_KEY` in canonical production path. `generate_report_route` calls `sign_report()` via Vault Transit; `qualify_report_finalize_route` calls `sign_qualification()`; `governed_delivery_route` calls `sign_delivery_authorization()`. All three require Vault Transit env vars. Without Vault, report generation fails.
+- **Fix:** Corrected planning doc and Level-2 Section 9 addendum. OFFER A/OFFER B separation is now: OFFER A exempted from CUSTOMER-ZERO-TRUST-003 (HCP Vault Dedicated ceremony) and CUSTOMER-ZERO-ACCEPT-001 only. OFFER A still requires: (a) Vault Transit (any compliant instance); (b) three Vault-independent production gate attestations. Section 12 added: minimum Vault options (self-hosted Vault OSS on Railway ~$5–10/mo is lowest cost; subject to founder approval).
+- **No behavior change:** No product code, schema, CI policy, or infra changes. Documentation only. All NOT_PROVEN and NOT_AUTHORIZED status records unchanged.
+- **Scope:** `docs/plans/revenue_first_roadmap_20261103.md` (corrected sections 2, 3.2, 4, 5, 6, 7, 10; new section 12), `docs/plans/customer_one_verified_governance_roadmap_20260910.md` (Section 9 addendum rewritten), `ROADMAP.md` (tracking row corrected). `customer_one/offline_simulation_evidence.json` rebound.
+
 ## fix(types): POST-796 resolve Mode B optional-string mypy regressions (PR #797)
 
 - **Work item:** POST-796-MODE-B-MYPY-001 (REPAIR class)
