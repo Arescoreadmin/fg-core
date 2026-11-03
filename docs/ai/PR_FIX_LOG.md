@@ -1,3 +1,13 @@
+## fix(types): POST-796 resolve Mode B optional-string mypy regressions (PR #797)
+
+- **Work item:** POST-796-MODE-B-MYPY-001 (REPAIR class)
+- **Baseline SHA:** `ffbd6f98` (PR #796 merged — Portal E2E harness lint/formatting)
+- **Failures before:** Four mypy errors in `tests/test_prod_auth_automation_001.py` — `EvidenceCheck.diagnostic` is `Optional[str]`; two sites used `in c.diagnostic` (unsupported operand on `None`) and two used `c.diagnostic.lower()` (attribute on `None`).
+- **Root cause:** `EvidenceCheck.diagnostic: Optional[str] = None`. The four assertions were written assuming `diagnostic` is always populated in failure paths, which is true at runtime but not provable to mypy without an explicit guard.
+- **Fix:** Added `assert c.diagnostic is not None` immediately before each content check (lines 821, 1044, 1089, 1191). This narrows the type for mypy, keeps the test fail-closed (a `None` diagnostic now fails the test explicitly rather than raising `TypeError`), and preserves the original assertion intent.
+- **No behavior change:** Production code untouched. No `type: ignore`, no `cast()`, no `""` substitution.
+- **Scope:** `tests/test_prod_auth_automation_001.py` only (4 one-line guard insertions). `customer_one/offline_simulation_evidence.json` rebound.
+
 ## fix(ci): repair Portal E2E harness lint and formatting (PR #796)
 
 - **Work item:** POST-795-RUFF-GATES-001 (REPAIR class)
