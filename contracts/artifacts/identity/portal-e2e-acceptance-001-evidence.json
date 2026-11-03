@@ -1,0 +1,216 @@
+{
+  "schema_version": "mode-b-proof-hardening-001/v2",
+  "work_item": "PROD-AUTH-AUTOMATION-001",
+  "verification_profile": "portal_named_user",
+  "environment": "simulation",
+  "console_origin": "NOT_APPLICABLE",
+  "core_service_id": "fg-core",
+  "timestamp": "2026-11-03T03:01:08.534684Z",
+  "run_id": "55d364bb-3d42-4be0-9db3-416e6c6ee133",
+  "workflow_run_id": "",
+  "repo_sha": "ddd4748ab288cfa23c13971616e5c8dfdfbd0fdd",
+  "deployed_sha": "NOT_PROVEN",
+  "deployment_id": "NOT_PROVEN",
+  "verification_environment": "simulation",
+  "test_execution_mode": "simulation",
+  "evidence_provenance": "Simulation harness — mock_db (protocol-level) + TestClient+SQLite (access-control). DELIV-001 is NOT_PROVEN: simulation cannot produce approved report artifacts. Production verification requires PORTAL-AUTH-E2E-001 operator runbook.",
+  "test_identity_ref": "synthetic:portal-harness-001@[simulation]",
+  "required_check_manifest": [
+    "INV-001",
+    "ENROLL-001",
+    "ENROLL-002",
+    "ENROLL-003",
+    "ENROLL-004",
+    "ENROLL-005",
+    "BIND-001",
+    "BIND-002",
+    "BIND-003",
+    "ACCESS-001",
+    "ACCESS-002",
+    "ACCESS-003",
+    "REPORT-001",
+    "DELIV-001",
+    "REVOKE-001",
+    "REVOKE-002",
+    "LOGOUT-001",
+    "LOGOUT-002",
+    "XTENANT-001",
+    "XENGAG-001",
+    "REPLAY-001"
+  ],
+  "checks": [
+    {
+      "id": "INV-001",
+      "description": "Portal invitation issued with pni1.* token format",
+      "expected": "token starts with pni1.",
+      "observed": "pni1.fd63a47…",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.758006Z"
+    },
+    {
+      "id": "ENROLL-001",
+      "description": "Invitation consumed on acceptance — user and membership returned",
+      "expected": "user and membership returned",
+      "observed": "user and membership set",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.759195Z"
+    },
+    {
+      "id": "ENROLL-002",
+      "description": "Session token has pnu1.* prefix (HttpOnly fg_portal_session cookie)",
+      "expected": "token starts with pnu1.",
+      "observed": "pnu1.ee21232…",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.759434Z"
+    },
+    {
+      "id": "ENROLL-003",
+      "description": "portal_users record created with correct oidc_subject",
+      "expected": "oidc_subject=auth0|enroll-003-harness",
+      "observed": "oidc_subject=auth0|enroll-003-harness",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.760200Z"
+    },
+    {
+      "id": "ENROLL-004",
+      "description": "portal_user_memberships record created with engagement_id bound",
+      "expected": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "observed": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.761251Z"
+    },
+    {
+      "id": "ENROLL-005",
+      "description": "Replayed pni1.* token rejected — 409 INVITATION_ALREADY_ACCEPTED",
+      "expected": "PortalInvitationAlreadyAcceptedError raised",
+      "observed": "error raised correctly",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.761632Z"
+    },
+    {
+      "id": "BIND-001",
+      "description": "Session is bound to exactly one tenant_id",
+      "expected": "tenant_id=e2e-portal-harness-tenant-a",
+      "observed": "tenant_id=e2e-portal-harness-tenant-a",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.761885Z"
+    },
+    {
+      "id": "BIND-002",
+      "description": "Session is bound to the specific engagement_id",
+      "expected": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "observed": "engagement_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.762103Z"
+    },
+    {
+      "id": "BIND-003",
+      "description": "auth_version in session matches auth_version in membership",
+      "expected": "auth_version_snapshot=5",
+      "observed": "auth_version_snapshot=5",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.762328Z"
+    },
+    {
+      "id": "REVOKE-001",
+      "description": "HTTP 403/401 on next request after membership revocation",
+      "expected": "revoke_session returns True",
+      "observed": "True",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.762553Z"
+    },
+    {
+      "id": "LOGOUT-001",
+      "description": "fg_portal_session cookie cleared after logout",
+      "expected": "revoke_session_by_token returns .revoked=True",
+      "observed": "revoked=True",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.762782Z"
+    },
+    {
+      "id": "LOGOUT-002",
+      "description": "Protected Portal route returns 401/403 after session cleared",
+      "expected": "validate_session returns ok=False for revoked session",
+      "observed": "ok=False",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.763022Z"
+    },
+    {
+      "id": "REPLAY-001",
+      "description": "Replayed pni1.* token rejected with 409/410 INVITATION_ALREADY_ACCEPTED",
+      "expected": "PortalInvitationAlreadyAcceptedError raised",
+      "observed": "error raised correctly",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:08.763637Z"
+    },
+    {
+      "id": "DELIV-001",
+      "description": "Report download succeeds for approved engagement report",
+      "expected": "N/A — simulation cannot produce approved report artifacts",
+      "observed": "NOT_PROVEN: Simulation cannot produce pre-approved report artifacts. Run PORTAL-AUTH-E2E-001 operator runbook against production to prove this check.",
+      "result": "NOT_PROVEN",
+      "timestamp": "2026-11-03T03:01:08.763640Z",
+      "diagnostic": "Simulation cannot produce pre-approved report artifacts. Run PORTAL-AUTH-E2E-001 operator runbook against production to prove this check."
+    },
+    {
+      "id": "ACCESS-001",
+      "description": "Engagement data accessible (HTTP 200)",
+      "expected": "!= 403",
+      "observed": "200",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.658130Z"
+    },
+    {
+      "id": "ACCESS-002",
+      "description": "Findings accessible (HTTP 200)",
+      "expected": "!= 403",
+      "observed": "200",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.663362Z"
+    },
+    {
+      "id": "ACCESS-003",
+      "description": "Response data scoped to bound engagement only",
+      "expected": "403 or 404",
+      "observed": "404",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.665467Z"
+    },
+    {
+      "id": "REPORT-001",
+      "description": "Only approved reports visible to portal viewer",
+      "expected": "!= 403",
+      "observed": "200",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.668568Z"
+    },
+    {
+      "id": "REVOKE-002",
+      "description": "auth_version mismatch causes session invalidation (403)",
+      "expected": "403 SESSION_REVOKED_VERSION_MISMATCH",
+      "observed": "403 SESSION_REVOKED_VERSION_MISMATCH",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.670170Z"
+    },
+    {
+      "id": "XTENANT-001",
+      "description": "Cross-tenant engagement access denied (403)",
+      "expected": "403 or 404",
+      "observed": "404",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.675155Z"
+    },
+    {
+      "id": "XENGAG-001",
+      "description": "Cross-engagement access denied (403)",
+      "expected": "403 or 404",
+      "observed": "404",
+      "result": "PASS",
+      "timestamp": "2026-11-03T03:01:13.677315Z"
+    }
+  ],
+  "unverified_production_checks": [],
+  "overall_result": "NOT_PROVEN",
+  "acceptance_decision": "REJECTED_INCOMPLETE",
+  "evidence_fingerprint": "sha256:3e0223ae99107b28d86b3166c4ee51d515797f167f6f0e5716b1c3c17e4ac167"
+}
