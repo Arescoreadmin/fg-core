@@ -1,3 +1,14 @@
+## fix(stripe): L14-STRIPE-TEST-001 P1 — preserve valid session bindings across repeated checkout requests (branch fix/l14-stripe-test-001)
+
+- **Work item:** P1 bot finding on PR #801 (L14-STRIPE-TEST-001)
+- **Baseline SHA:** `9b3c01fd` (branch HEAD before this fix)
+- **Finding:** `create_checkout_session` created a new Stripe session on every call and immediately overwrote `rec.stripe_session_id`. If a customer requested the checkout URL twice, the second call replaced the recorded session ID with a new one. When the customer paid via the first URL, the webhook handler's `STRIPE_SESSION_ID_MISMATCH` check rejected the payment — customer is charged, assessment stays unpaid.
+- **Correction:**
+  - `api/assessments.py` `create_checkout_session`: before creating a new session, retrieve the existing one via `stripe.checkout.Session.retrieve(rec.stripe_session_id)`; if `status == 'open'`, return its URL without overwriting `rec.stripe_session_id`. Expired/cancelled sessions fall through to normal session creation.
+  - `tests/test_stripe_assessment_payment_001.py`: added `test_16_second_checkout_reuses_open_session` and `test_17_second_checkout_expired_creates_new`; total test count 18/18 passing.
+- **Scope:** `api/assessments.py` (10-line insertion), `tests/test_stripe_assessment_payment_001.py` (2 new tests + updated docstring). No schema change. No migration.
+- **Security note:** The `STRIPE_SESSION_ID_MISMATCH` check in `_validate_payment_binding` is correct and must be preserved — it protects against cross-assessment session reuse. The P1 bug was on the creation side, not the validation side.
+
 ## feat(stripe): L14-STRIPE-TEST-001 — Stripe payment binding hardening, migration 0196, 16 adversarial tests, operator runbook (branch fix/auth-tenant-context-001)
 
 - **Work item:** L14-STRIPE-TEST-001 (STRIPE class — L14 is NEXT in `customer_one/roadmap_authority.yaml`)

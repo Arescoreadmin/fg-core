@@ -1,7 +1,7 @@
 """
 tests/test_stripe_assessment_payment_001.py — L14-STRIPE-TEST-001 adversarial tests.
 
-15 adversarial tests for Stripe payment-to-assessment verification.
+17 adversarial tests for Stripe payment-to-assessment verification.
 
 Invariants proven:
  1.  Happy path: valid signature + correct binding + correct amount → 200 + paid
@@ -19,6 +19,8 @@ Invariants proven:
 13.  payment_status != 'paid' → STRIPE_PAYMENT_NOT_PAID (binding unit test)
 14.  assessment_id not found in DB → 400 STRIPE_ASSESSMENT_NOT_FOUND (HTTP test)
 15.  Direct _confirm_payment call with unpaid session → raises WebhookBindingError
+16.  Second checkout for unpaid assessment reuses open session (P1 fix)
+17.  Second checkout when prior session expired → creates a new session (P1 fix)
 
 All Stripe SDK calls are mocked. No live Stripe API calls.
 """
@@ -647,3 +649,126 @@ def test_15_unauthorized_payment_state_modification():
     assert exc_info.value.reason_code == STRIPE_PAYMENT_NOT_PAID
     # payment_status must remain unpaid
     assert mock_rec.payment_status == "unpaid"
+
+
+# ---------------------------------------------------------------------------
+# Test 16 — Second checkout reuses an open Stripe session  (P1 fix)
+# ---------------------------------------------------------------------------
+
+
+_CHECKOUT_API_KEY = "test-checkout-stripe-key-001"
+
+
+def test_16_second_checkout_reuses_open_session(monkeypatch):
+    """Repeated checkout for unpaid assessment reuses the existing open session.
+
+    Proves the P1 fix: calling the checkout endpoint twice does NOT overwrite
+    rec.stripe_session_id, so payment via the first URL still matches the DB
+    record and is accepted by the webhook handler.
+    Session.create must NOT be called when Session.retrieve returns status='open'.
+    """
+    from api.assessments import _get_db
+    from api.main import build_app
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_dummy")
+    monkeypatch.setenv("FG_API_KEY", _CHECKOUT_API_KEY)
+
+    _app = build_app(auth_enabled=False)
+    mock_db = MagicMock()
+
+    def _override_db():
+        yield mock_db
+
+    _app.dependency_overrides[_get_db] = _override_db
+
+    mock_rec = _make_assessment_record(
+        payment_status="unpaid", stripe_session_id=_SESSION_ID
+    )
+
+    existing = MagicMock()
+    existing.status = "open"
+    existing.url = "https://checkout.stripe.com/pay/cs_test_EXISTING"
+
+    with (
+        patch("api.assessments._resolve_caller_tenant", return_value=_TENANT_ID),
+        patch("api.assessments._get_assessment_or_404", return_value=mock_rec),
+        patch(
+            "stripe.checkout.Session.retrieve", return_value=existing
+        ) as mock_retrieve,
+        patch("stripe.checkout.Session.create") as mock_create,
+    ):
+        with TestClient(_app) as c:
+            resp = c.post(
+                f"/ingest/assessment/{_ASSESSMENT_ID}/checkout",
+                headers={"X-API-Key": _CHECKOUT_API_KEY},
+            )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["checkout_url"] == "https://checkout.stripe.com/pay/cs_test_EXISTING"
+    assert data["assessment_id"] == _ASSESSMENT_ID
+    mock_retrieve.assert_called_once_with(_SESSION_ID)
+    mock_create.assert_not_called()
+    assert mock_rec.stripe_session_id == _SESSION_ID
+
+
+# ---------------------------------------------------------------------------
+# Test 17 — Second checkout creates new session when prior one is expired  (P1 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_17_second_checkout_expired_creates_new(monkeypatch):
+    """When the existing session is expired, a fresh Stripe session is created.
+
+    Proves the fallback path: status != 'open' (e.g., 'expired') falls through
+    to Session.create, and the new session ID is bound to the record.
+    """
+    from api.assessments import _get_db
+    from api.main import build_app
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_dummy")
+    monkeypatch.setenv("FG_API_KEY", _CHECKOUT_API_KEY)
+
+    _app = build_app(auth_enabled=False)
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+
+    def _override_db():
+        yield mock_db
+
+    _app.dependency_overrides[_get_db] = _override_db
+
+    mock_rec = _make_assessment_record(
+        payment_status="unpaid", stripe_session_id=_SESSION_ID
+    )
+    mock_rec.profile_type = "enterprise"
+    mock_rec.org_profile_id = None
+    mock_rec.email = None
+
+    expired = MagicMock()
+    expired.status = "expired"
+
+    new_session = MagicMock()
+    new_session.id = "cs_test_NEW_SESSION"
+    new_session.url = "https://checkout.stripe.com/pay/cs_test_NEW_SESSION"
+
+    with (
+        patch("api.assessments._resolve_caller_tenant", return_value=_TENANT_ID),
+        patch("api.assessments._get_assessment_or_404", return_value=mock_rec),
+        patch("stripe.checkout.Session.retrieve", return_value=expired),
+        patch(
+            "stripe.checkout.Session.create", return_value=new_session
+        ) as mock_create,
+    ):
+        with TestClient(_app) as c:
+            resp = c.post(
+                f"/ingest/assessment/{_ASSESSMENT_ID}/checkout",
+                headers={"X-API-Key": _CHECKOUT_API_KEY},
+            )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["checkout_url"] == "https://checkout.stripe.com/pay/cs_test_NEW_SESSION"
+    assert data["assessment_id"] == _ASSESSMENT_ID
+    mock_create.assert_called_once()
+    assert mock_rec.stripe_session_id == "cs_test_NEW_SESSION"

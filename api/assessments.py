@@ -487,6 +487,28 @@ def create_checkout_session(
 
     stripe.api_key = stripe_key
 
+    # Reuse an existing active session rather than issuing a new URL.
+    # Without this, a repeated checkout request overwrites stripe_session_id;
+    # payment via the first URL then fails STRIPE_SESSION_ID_MISMATCH —
+    # the customer is charged but the assessment stays unpaid. (P1 — #801)
+    if rec.stripe_session_id:
+        try:
+            existing = stripe.checkout.Session.retrieve(rec.stripe_session_id)
+            if getattr(existing, "status", None) == "open":
+                log.info(
+                    "assessment.checkout_reused assessment_id=%s session_id=%s",
+                    assessment_id,
+                    rec.stripe_session_id,
+                )
+                return {"checkout_url": existing.url, "assessment_id": assessment_id}
+        except Exception as exc:
+            # Session expired, cancelled, or Stripe error — create a new one.
+            log.info(
+                "assessment.checkout_retrieve_failed assessment_id=%s error=%s",
+                assessment_id,
+                exc,
+            )
+
     # Amount is authoritative — determined server-side from profile_type only.
     # Never accept client-supplied amounts.
     amount = _TIER_PRICES.get(rec.profile_type, 29900)
