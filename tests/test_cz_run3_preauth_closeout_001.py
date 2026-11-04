@@ -164,6 +164,7 @@ def _run_preauth_evaluator_subprocess() -> dict:
             cwd=str(REPO),
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         ).stdout.strip()
         or "0" * 40
