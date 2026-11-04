@@ -1861,6 +1861,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON identity_projection_outbox (tenant_id)"
         )
 
+        # L14-STRIPE-P0-INTEGRITY-001 — payment_confirmed_at audit anchor
+        if "stripe_events" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "stripe_events", "payment_confirmed_at", "TEXT DEFAULT NULL"
+            )
+
 
 # ---------------------------------------------------------------------
 # Public API

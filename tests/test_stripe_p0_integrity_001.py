@@ -29,6 +29,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from api.db_models import AssessmentRecord
 from api.stripe_webhooks import (
     STRIPE_MISSING_AMOUNT_BINDING,
     STRIPE_MISSING_SESSION_BINDING,
@@ -295,8 +296,19 @@ def test_p05_concurrent_duplicate_events():
             fset=lambda self, v: _capture_confirmed_at(v),
         )
 
-        db_mock.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = mock_rec
-        # Second query (StripeEvent) also goes through the same chain mock
+        # Dispatch the two db.query() calls by model class so event_rec's
+        # instrumented setter is reachable by _confirm_payment.
+        def _query_dispatch(model_class):
+            q = MagicMock()
+            if model_class is AssessmentRecord:
+                q.filter.return_value.with_for_update.return_value.first.return_value = mock_rec
+            else:
+                # StripeEvent query — return pre-existing event_rec so
+                # payment_confirmed_at setter fires on the instrumented mock.
+                q.filter.return_value.with_for_update.return_value.first.return_value = event_rec
+            return q
+
+        db_mock.query.side_effect = _query_dispatch
         db_mock.add = MagicMock()
         return db_mock
 
@@ -320,10 +332,11 @@ def test_p05_concurrent_duplicate_events():
     for t in threads:
         t.join()
 
-    # At most one payment_confirmed_at should have been written.
-    # (The threading.Lock in the mock simulates DB row-level locking.)
-    assert len(confirmations) <= 1, (
-        f"Expected ≤1 payment_confirmed_at write, got {len(confirmations)}"
+    # All workers must have succeeded — no worker exceptions.
+    assert len(errors) == 0, f"Workers raised unexpected errors: {errors}"
+    # Exactly one payment_confirmed_at must have been written.
+    assert len(confirmations) == 1, (
+        f"Expected exactly 1 payment_confirmed_at write, got {len(confirmations)}"
     )
 
 
