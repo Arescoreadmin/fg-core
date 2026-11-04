@@ -206,7 +206,9 @@ def _run_preauth_evaluator_subprocess() -> dict:
         offline_checks, blockers = mod._run_offline_checks(REPO, source_sha)
 
     # Filter env-specific PORTABLE-VERIFICATION blockers before building artifact
-    filtered_blockers = [b for b in blockers if not b.startswith("PORTABLE-VERIFICATION")]
+    filtered_blockers = [
+        b for b in blockers if not b.startswith("PORTABLE-VERIFICATION")
+    ]
 
     with (
         patch(
@@ -228,7 +230,9 @@ def _run_preauth_evaluator_subprocess() -> dict:
         ),
         patch("subprocess.run", return_value=_pv_mock),
     ):
-        artifact = mod._build_artifact(REPO, offline_checks, filtered_blockers, source_sha)
+        artifact = mod._build_artifact(
+            REPO, offline_checks, filtered_blockers, source_sha
+        )
 
     return artifact
 
