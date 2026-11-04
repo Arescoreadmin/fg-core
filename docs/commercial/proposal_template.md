@@ -66,7 +66,7 @@ Operator-facilitated: NIST AI RMF questionnaire (69 controls).
 | Remediation roadmap (phased action plan) | With portal access |
 | 30-day check-in and re-scan summary | 30 days after portal delivery |
 
-**Delivery note:** Report delivery is conditioned on completion of FrostGate's production signing controls. If those controls are not complete at engagement start, the report will be delivered within 5 business days of control completion. All other deliverables — portal access, risk dashboard, and remediation roadmap — are available on the standard timeline regardless.
+**Delivery note:** All deliverables — including portal access, risk dashboard, remediation roadmap, and PDF report — require FrostGate's production signing infrastructure (Vault Transit) to be provisioned and production controls verified. Portal access is provisioned after report QA approval, which requires report generation, which requires Vault Transit. If production controls are not complete at engagement start, FrostGate will confirm a delivery timeline in writing at kickoff. FrostGate does not schedule data collection sessions until all mandatory production controls are confirmed.
 
 ---
 

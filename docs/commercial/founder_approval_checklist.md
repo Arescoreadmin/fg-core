@@ -69,7 +69,9 @@ The following production controls must be confirmed before any customer data is 
 | Portal live verification (PORTAL-RUN-001) executed | | |
 | DELIV-001 confirmed (approved report deliverable to portal named user in production) | | |
 
-**Gate policy:** No production report may be issued until all eight controls above are marked confirmed with evidence. If any control is NOT confirmed at the time of data collection, the engagement may proceed for data collection only — report issuance requires all controls to be confirmed first.
+**Gate policy:** No production assessment data may be collected and no production report may be issued until all eight controls above are marked confirmed with evidence. Commercial agreements may be signed and engagements may be scheduled before gates are confirmed. Data collection may not begin until all eight controls are confirmed and this checklist is signed by the founder.
+
+This policy aligns with `docs/commercial/production_delivery_boundary.md`. There is no exception allowing data collection while any control remains unconfirmed.
 
 ---
 

@@ -171,7 +171,7 @@ During the scheduled session:
 
 ### Portal Access Delivery Condition
 
-> **NOTE:** Portal named-user enrollment (invitation + first login) requires production verification via the PORTAL-RUN-001 runbook, which has not yet been executed. The 24-hour delivery commitment is conditioned on successful PORTAL-RUN-001 completion before the engagement session. If PORTAL-RUN-001 has not been verified at the time of engagement, portal delivery timing cannot be guaranteed and will be communicated to the client in writing at kickoff.
+> **NOTE:** Portal access is provisioned after QA approval, which follows report generation. Report generation in FrostGate's production environment requires Vault Transit (see Report Delivery Condition above). Therefore portal access — and all deliverables that follow it (risk dashboard, remediation roadmap, NIST coverage matrix) — also require Vault Transit to be provisioned. If Vault Transit is not provisioned at the time of the engagement, no portal deliverables can be provided on schedule. All deliverables will be delivered within 5 business days of Vault Transit provisioning and PORTAL-RUN-001 verification, in that order. This condition will be confirmed in writing at kickoff.
 
 ---
 
