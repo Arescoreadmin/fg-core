@@ -155,7 +155,7 @@ During the scheduled session:
 
 | Deliverable | Timing | Notes |
 |-------------|--------|-------|
-| Secure portal access | Within 24 hours of QA approval | Named-user invitation sent via Resend; password delivered via separate secure channel |
+| Secure portal access | Within 24 hours of QA approval (see delivery condition below) | Named-user invitation flow; password delivered via separate secure channel. Conditional on PORTAL-RUN-001 production verification — see delivery condition. |
 | PDF report | Within 5–7 business days of data collection session | Signed via Vault Transit (see delivery condition below) |
 | Risk posture dashboard | With portal access | Findings by severity, domain scores, remediation roadmap |
 | NIST AI RMF coverage matrix | With portal access | 69-control view of current governance posture |
@@ -167,7 +167,11 @@ During the scheduled session:
 
 > **IMPORTANT:** Report signing requires Vault Transit to be provisioned with the IDENTITY, APPROVAL, and ACCEPTANCE signing keys (per TRUST-BINDING-001, PR #731). Vault Transit is not currently running in production. If Vault Transit is not provisioned at the time of engagement, portal access, the risk dashboard, the remediation roadmap, and the NIST coverage matrix will be delivered on schedule. The signed PDF report will be delivered within 5 business days of Vault Transit provisioning. This condition will be disclosed in writing in the SOW and confirmed at engagement kickoff.
 >
-> Vault Transit provisioning is an operator decision (see `docs/plans/revenue_first_roadmap_20261103.md` Section 12 for options). The lowest-cost path (Vault OSS on Railway, ~$5–10/month) satisfies the OFFER A technical requirement.
+> Vault Transit provisioning requires explicit founder review and cost authorization before any infrastructure is provisioned. Available hosting options and costs are documented in `docs/plans/revenue_first_roadmap_20261103.md` Section 12; no option is currently authorized for production.
+
+### Portal Access Delivery Condition
+
+> **NOTE:** Portal named-user enrollment (invitation + first login) requires production verification via the PORTAL-RUN-001 runbook, which has not yet been executed. The 24-hour delivery commitment is conditioned on successful PORTAL-RUN-001 completion before the engagement session. If PORTAL-RUN-001 has not been verified at the time of engagement, portal delivery timing cannot be guaranteed and will be communicated to the client in writing at kickoff.
 
 ---
 
@@ -207,7 +211,7 @@ Before any report is delivered to a client:
 | Standard ($5,000) | 50% ($2,500) upon SOW execution; 50% ($2,500) upon portal delivery |
 | Design partner ($2,500) | 100% upfront; in exchange for feedback interview, reference call rights, and tolerance for minor manual touches |
 
-**Payment methods:** ACH, check, or Stripe-linked payment link (payment flow proven in test mode; see `docs/commercial/billing_verification_report.md` for L14-STRIPE gate status).
+**Payment methods:** ACH or check are confirmed. Stripe payment links are supported by FrostGate's webhook infrastructure but require the checkout session metadata to include `assessment_id` to automatically confirm payment in FrostGate's records. A bare Stripe Dashboard Payment Link without that metadata will receive funds but will NOT update the engagement payment status — payment must then be confirmed manually via the FrostGate console or by updating `AssessmentRecord.payment_status` via the admin API. L14-STRIPE gate status: test transaction NOT_PROVEN. Recommend ACH or check for the first engagement.
 
 **Invoice:** Issued via FrostGate. Remittance to jason@frostgate.ai (wire/ACH instructions on invoice).
 
@@ -243,7 +247,7 @@ This assessment is not a questionnaire. It is not a static PDF. It is not a Big 
 
 | Tier | Price | Conditions |
 |------|-------|-----------|
-| Design partner | $2,500 | First 1–2 clients; full scope; feedback interview + reference call rights required |
+| Design partner | $2,500 | Discretionary founder exception — requires explicit Jason Cosat approval before offer; not guaranteed to any prospect; full scope; feedback interview + reference call rights required; see `docs/commercial/founder_approval_checklist.md` |
 | Pilot | $5,000 | Standard commercial rate; full scope |
 | OFFER B premium | TBD | Requires cryptographic triple-signing (HCP Vault Dedicated); BLOCKED on cost authorization |
 

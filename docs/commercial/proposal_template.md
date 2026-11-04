@@ -60,7 +60,7 @@ Operator-facilitated: NIST AI RMF questionnaire (69 controls).
 
 | Deliverable | Timing |
 |-------------|--------|
-| Secure portal access (risk dashboard, findings, remediation roadmap) | Within 24 hours of QA approval |
+| Secure portal access (risk dashboard, findings, remediation roadmap) | Within 24 hours of QA approval (subject to production portal verification being confirmed at kickoff) |
 | PDF report (findings, severity, executive summary) | Within 5–7 business days of data collection session |
 | NIST AI RMF coverage matrix (69 controls) | With portal access |
 | Remediation roadmap (phased action plan) | With portal access |
@@ -92,9 +92,9 @@ Operator-facilitated: NIST AI RMF questionnaire (69 controls).
 |------|--------|-------|
 | [STANDARD / DESIGN PARTNER] | $[5,000 / 2,500] | [50% upon execution, 50% upon portal delivery / 100% upfront] |
 
-[IF DESIGN PARTNER: This engagement is offered at the design partner rate of $2,500 in exchange for a 30-minute feedback interview at close and reference call rights (subject to [CLIENT ORGANIZATION]'s approval).]
+[IF DESIGN PARTNER: This engagement is offered at the design partner rate of $2,500. This rate is a discretionary exception approved by FrostGate's founder and is not available to all prospects. It is offered in exchange for a 30-minute feedback interview at close and reference call rights (subject to [CLIENT ORGANIZATION]'s approval).]
 
-**Payment:** ACH, check, or Stripe payment link. Invoice issued by FrostGate upon SOW execution.
+**Payment:** ACH or check preferred. Stripe payment links are available but must be FrostGate-issued with the engagement identifier embedded — a generic Stripe payment link will not automatically record payment in FrostGate's systems. Invoice issued by FrostGate upon SOW execution.
 
 ---
 

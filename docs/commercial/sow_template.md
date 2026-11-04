@@ -65,7 +65,7 @@ FrostGate agrees to:
 1. Run all 13 connectors in scope during the data collection session.
 2. Generate the AI executive summary and compile the full report within 5–7 business days of the data collection session.
 3. QA review and approve the report before delivery.
-4. Provision portal access (named-user invitation) within 24 hours of QA approval.
+4. Provision portal access (named-user invitation) within 24 hours of QA approval, subject to production portal verification being complete at the time of engagement. If production portal verification has not been completed before the engagement session, FrostGate will notify Client at kickoff and provide an updated portal delivery timeline in writing.
 5. Deliver the portal URL and access credentials to [CLIENT CONTACT EMAIL] via secure channel (URL and password delivered separately).
 6. Conduct a 45–60 minute delivery meeting to walk through findings and demonstrate the portal.
 7. Conduct a 30-day check-in re-scan and deliver a delta summary.
@@ -79,7 +79,7 @@ FrostGate agrees to:
 | Deliverable | Timeline | Acceptance |
 |-------------|----------|------------|
 | Pre-meeting passive scans complete | Before data collection session | Scan status "complete" in FrostGate console |
-| Secure portal access | Within 24 hours of QA approval | Client logs into portal using named-user credentials |
+| Secure portal access | Within 24 hours of QA approval (see FrostGate Obligation 4 above) | Client logs into portal using named-user credentials |
 | Risk dashboard and remediation roadmap | With portal access | Visible in portal on first login |
 | NIST AI RMF coverage matrix | With portal access | Visible in portal |
 | PDF report | Within 5–7 business days of data collection session (see delivery condition below) | Client can download report from portal |
@@ -89,7 +89,7 @@ FrostGate agrees to:
 
 Report signing requires FrostGate's Vault Transit signing infrastructure to be provisioned with IDENTITY, APPROVAL, and ACCEPTANCE keys (per FrostGate's internal TRUST-BINDING-001 control). If Vault Transit is not provisioned at the time of engagement execution, the PDF report will be delivered within 5 business days of Vault Transit provisioning. All other deliverables — portal access, risk dashboard, and remediation roadmap — will be available on the standard timeline. FrostGate will notify Client in writing if this condition applies at engagement kickoff.
 
-**The existence of this condition does not change the payment schedule.** Portal delivery triggers the second payment installment regardless of report signing status, provided portal access, risk dashboard, and remediation roadmap are accessible.
+**The existence of the report signing condition does not change the payment schedule.** The second payment installment is triggered when: (a) Client can log into the portal; (b) at least one finding is visible in the remediation dashboard; and (c) Client confirms access in writing (email sufficient). The signed PDF report is a deliverable that follows separately and does not block the second payment trigger. If portal access itself is delayed due to the portal delivery condition described in FrostGate Obligation 4, the second payment trigger date shifts by the same number of business days.
 
 ---
 
@@ -104,7 +104,7 @@ Report signing requires FrostGate's Vault Transit signing infrastructure to be p
 
 [IF DESIGN PARTNER: This engagement is at the design partner rate of $2,500 paid in full at execution. Client agrees to: (a) a 30-minute feedback interview within 7 days of portal delivery, and (b) reference call rights subject to Client's reasonable approval.]
 
-Payment by ACH, check, or Stripe payment link. FrostGate will issue an invoice upon SOW execution.
+Payment by ACH or check preferred. Stripe payment links are supported but require FrostGate-issued links with the engagement identifier embedded in metadata — do not use a generic Stripe Dashboard payment link, as payment will not be automatically recorded in FrostGate's engagement records. FrostGate will issue an invoice upon SOW execution.
 
 ---
 
@@ -139,6 +139,20 @@ Any change to scope, timeline, or price requires a written change order signed b
 ## Limitations
 
 This assessment is a point-in-time evaluation based on evidence collected during the engagement session. It does not constitute a legal opinion, a regulatory compliance certification, or a guarantee that all security vulnerabilities have been identified. FrostGate is not a licensed attorney and this engagement does not create an attorney-client relationship.
+
+---
+
+## Termination and Refund
+
+Either party may terminate this SOW on written notice. Upon termination:
+
+- If Client terminates before the data collection session, FrostGate will refund the upfront payment in full, less any costs already incurred for pre-meeting passive scans (if any; estimated $0 for the first engagement).
+- If FrostGate is unable to deliver portal access within 90 calendar days of the data collection session due to unresolved production controls (including but not limited to report signing infrastructure not being provisioned), Client may request a full refund of all amounts paid. FrostGate's obligation in that circumstance is limited to a refund equal to fees received.
+- If Client terminates after the data collection session and portal access has been delivered, the second payment installment is due if the acceptance criteria in Section 4 are met.
+
+FrostGate's total liability under this SOW is limited to fees paid by Client in the preceding 12 months. This SOW does not constitute a warranty that all security vulnerabilities have been identified or that the assessment satisfies any regulatory requirement. This limitation of liability applies to the maximum extent permitted by applicable law.
+
+> **NOTE:** This liability limitation and termination clause has not been reviewed by legal counsel and should be reviewed before execution.
 
 ---
 

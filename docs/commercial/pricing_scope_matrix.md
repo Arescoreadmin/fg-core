@@ -74,14 +74,14 @@
 
 | Feature | OFFER A | OFFER B | Notes |
 |---------|---------|---------|-------|
-| Password-protected secure portal | Yes | Yes | COMPLETE — named-user invitation flow |
-| Risk posture dashboard | Yes | Yes | COMPLETE |
-| Findings with severity classification | Yes | Yes | COMPLETE |
-| Remediation roadmap | Yes | Yes | COMPLETE |
-| Finding explainers | Yes | Yes | COMPLETE |
-| Remediation tracking (mark resolved) | Yes | Yes | COMPLETE |
-| Report download | Yes | Yes | COMPLETE |
-| 90-day access window | Yes | Yes | COMPLETE |
+| Password-protected secure portal | Yes | Yes | Code complete; production delivery NOT_PROVEN (PORTAL-RUN-001 pending) |
+| Risk posture dashboard | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
+| Findings with severity classification | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
+| Remediation roadmap | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
+| Finding explainers | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
+| Remediation tracking (mark resolved) | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
+| Report download | Yes | Yes | Code complete; PORTAL-RUN-001 and DELIV-001 pending |
+| 90-day access window | Yes | Yes | Code complete; PORTAL-RUN-001 pending |
 | Verification bundle visible in portal | No | Yes | OFFER B only |
 
 ---
