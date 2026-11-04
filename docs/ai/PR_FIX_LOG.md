@@ -1,3 +1,35 @@
+## fix(stripe): L14-STRIPE-TEST-001 P1 — preserve valid session bindings across repeated checkout requests (branch fix/l14-stripe-test-001)
+
+- **Work item:** P1 bot finding on PR #801 (L14-STRIPE-TEST-001)
+- **Baseline SHA:** `9b3c01fd` (branch HEAD before this fix)
+- **Finding:** `create_checkout_session` created a new Stripe session on every call and immediately overwrote `rec.stripe_session_id`. If a customer requested the checkout URL twice, the second call replaced the recorded session ID with a new one. When the customer paid via the first URL, the webhook handler's `STRIPE_SESSION_ID_MISMATCH` check rejected the payment — customer is charged, assessment stays unpaid.
+- **Correction:**
+  - `api/assessments.py` `create_checkout_session`: before creating a new session, retrieve the existing one via `stripe.checkout.Session.retrieve(rec.stripe_session_id)`; if `status == 'open'`, return its URL without overwriting `rec.stripe_session_id`. Expired/cancelled sessions fall through to normal session creation.
+  - `tests/test_stripe_assessment_payment_001.py`: added `test_16_second_checkout_reuses_open_session` and `test_17_second_checkout_expired_creates_new`; total test count 18/18 passing.
+- **Scope:** `api/assessments.py` (10-line insertion), `tests/test_stripe_assessment_payment_001.py` (2 new tests + updated docstring). No schema change. No migration.
+- **Security note:** The `STRIPE_SESSION_ID_MISMATCH` check in `_validate_payment_binding` is correct and must be preserved — it protects against cross-assessment session reuse. The P1 bug was on the creation side, not the validation side.
+
+## feat(stripe): L14-STRIPE-TEST-001 — Stripe payment binding hardening, migration 0196, 16 adversarial tests, operator runbook (branch fix/auth-tenant-context-001)
+
+- **Work item:** L14-STRIPE-TEST-001 (STRIPE class — L14 is NEXT in `customer_one/roadmap_authority.yaml`)
+- **Baseline SHA:** `0e57fc44` (main after PR #800)
+- **Failures before:** None — baseline clean at 23,949 passed / 101 skipped / 0 failures.
+- **What changed:**
+  - `api/stripe_webhooks.py`: Full rewrite with hardened `_confirm_payment` — now validates payment_status=paid, currency=usd, tenant_id metadata, stripe_session_id, expected_amount_cents against DB before transitioning state. New `WebhookBindingError` exception class. 10 new stable rejection reason codes. `_audit_binding_rejection` and `_audit_payment_confirmed` audit helpers. `stripe_webhook` route catches `WebhookBindingError` and returns 400 with stable code.
+  - `api/assessments.py` `create_checkout_session`: records `expected_amount_cents`, `payment_purpose`, `checkout_idempotency_key` server-side before returning URL; includes `tenant_id` and `payment_purpose` in Stripe metadata. Dev bypass also sets `expected_amount_cents` and `payment_purpose` for consistency.
+  - `api/db_models.py` `AssessmentRecord`: 3 new fields — `expected_amount_cents`, `payment_purpose`, `checkout_idempotency_key`.
+  - `migrations/postgres/0196_assessment_payment_binding.sql`: new migration adding the 3 columns with appropriate indexes.
+  - `tests/test_stripe_assessment_payment_001.py`: 16 adversarial tests — all pass. No existing tests broken.
+  - `docs/operators/stripe_test_mode_runbook.md`: deterministic test-mode runbook with evidence schema; result marked OPERATOR_ACTION_REQUIRED.
+  - `ROADMAP.md`: L14-STRIPE-TEST-001 row added.
+- **Key findings (vulnerabilities closed):**
+  - **CRITICAL:** `_confirm_payment` previously trusted `assessment_id` from Stripe metadata alone — no DB-side tenant check, no payment_status check, no amount check. An attacker who knew any valid `assessment_id` could craft a fake webhook to set `payment_status='paid'` without paying.
+  - **MEDIUM:** `create_checkout_session` did not record the authoritative amount server-side, making webhook amount validation impossible.
+  - **INFO:** Dev bypass set `payment_status='paid'` without recording binding fields — now fixed.
+- **Schema change:** Yes — migration `0196_assessment_payment_binding.sql`. Columns are nullable/additive; no existing rows affected. Called out explicitly per repo rules.
+- **STRIPE_PAYMENT_FLOW:** NOT_PROVEN — requires live Stripe test account + Stripe CLI. See `docs/operators/stripe_test_mode_runbook.md`.
+- **CUSTOMER_ZERO_TRUST:** NOT_PROVEN. **COST_AUTHORIZATION:** NOT_AUTHORIZED. Zero cloud mutations. Zero spending.
+
 ## feat(commercial): L14-COMMERCIAL-ACTIVATION-001 — $5K pilot package, 9 client-ready assets, billing audit (branch fix/auth-tenant-context-001)
 
 - **Work item:** L14-COMMERCIAL-ACTIVATION-001 (COMMERCIAL class — L14 is NEXT in `customer_one/roadmap_authority.yaml`)

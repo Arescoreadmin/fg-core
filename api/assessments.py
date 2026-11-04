@@ -455,6 +455,11 @@ def create_checkout_session(
 
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if not stripe_key:
+        # Dev-only bypass: record binding fields so the existing record is
+        # consistent with what the webhook handler expects.
+        amount = _TIER_PRICES.get(rec.profile_type, 29900)
+        rec.expected_amount_cents = amount
+        rec.payment_purpose = "assessment_initial"
         rec.payment_status = "paid"
         rec.tier = rec.profile_type
         db.commit()
@@ -482,9 +487,34 @@ def create_checkout_session(
 
     stripe.api_key = stripe_key
 
+    # Reuse an existing active session rather than issuing a new URL.
+    # Without this, a repeated checkout request overwrites stripe_session_id;
+    # payment via the first URL then fails STRIPE_SESSION_ID_MISMATCH —
+    # the customer is charged but the assessment stays unpaid. (P1 — #801)
+    if rec.stripe_session_id:
+        try:
+            existing = stripe.checkout.Session.retrieve(rec.stripe_session_id)
+            if getattr(existing, "status", None) == "open":
+                log.info(
+                    "assessment.checkout_reused assessment_id=%s session_id=%s",
+                    assessment_id,
+                    rec.stripe_session_id,
+                )
+                return {"checkout_url": existing.url, "assessment_id": assessment_id}
+        except Exception as exc:
+            # Session expired, cancelled, or Stripe error — create a new one.
+            log.info(
+                "assessment.checkout_retrieve_failed assessment_id=%s error=%s",
+                assessment_id,
+                exc,
+            )
+
+    # Amount is authoritative — determined server-side from profile_type only.
+    # Never accept client-supplied amounts.
     amount = _TIER_PRICES.get(rec.profile_type, 29900)
     tier_label = _TIER_LABELS.get(rec.profile_type, rec.profile_type)
     base_url = os.environ.get("CONSOLE_BASE_URL", "https://app.frostgate.ai")
+    idempotency_key = f"checkout_{assessment_id}"
 
     org = db.query(OrgProfile).filter(OrgProfile.id == rec.org_profile_id).first()
     customer_email = (org.email if org else None) or rec.email or None
@@ -510,11 +540,21 @@ def create_checkout_session(
         mode="payment",
         success_url=f"{base_url}/assessment?id={assessment_id}&payment=success",
         cancel_url=f"{base_url}/onboarding",
-        metadata={"assessment_id": assessment_id},
+        # metadata carries identifiers only — amount is validated server-side,
+        # never trusted from metadata on the webhook path.
+        metadata={
+            "assessment_id": assessment_id,
+            "tenant_id": rec.tenant_id,
+            "payment_purpose": "assessment_initial",
+        },
         customer_email=customer_email,
     )
 
+    # Record the authoritative binding server-side before returning the URL.
     rec.stripe_session_id = session.id
+    rec.expected_amount_cents = amount
+    rec.payment_purpose = "assessment_initial"
+    rec.checkout_idempotency_key = idempotency_key
     rec.tier = rec.profile_type
     db.commit()
 

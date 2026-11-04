@@ -1809,6 +1809,12 @@ class AssessmentRecord(Base):
     stripe_session_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     payment_status: Mapped[Any] = mapped_column(Text, nullable=False, default="unpaid")
     tier: Mapped[Any] = mapped_column(Text, nullable=True)
+    # L14-STRIPE-TEST-001: server-side payment binding (migration 0196)
+    expected_amount_cents: Mapped[Any] = mapped_column(Integer, nullable=True)
+    payment_purpose: Mapped[Any] = mapped_column(Text, nullable=True)
+    checkout_idempotency_key: Mapped[Any] = mapped_column(
+        Text, nullable=True, unique=True
+    )
 
 
 class PromptVersion(Base):
