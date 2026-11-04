@@ -469,7 +469,8 @@ def test_10b_replayed_already_paid_no_validate():
     mock_rec = _make_assessment_record(payment_status="paid")
 
     db_mock = MagicMock()
-    db_mock.query.return_value.filter.return_value.first.return_value = mock_rec
+    # _confirm_payment now uses .with_for_update() on the query chain.
+    db_mock.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = mock_rec
 
     validate_calls: list = []
 

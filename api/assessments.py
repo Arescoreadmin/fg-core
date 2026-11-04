@@ -455,26 +455,10 @@ def create_checkout_session(
 
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if not stripe_key:
-        # Dev-only bypass: record binding fields so the existing record is
-        # consistent with what the webhook handler expects.
-        amount = _TIER_PRICES.get(rec.profile_type, 29900)
-        rec.expected_amount_cents = amount
-        rec.payment_purpose = "assessment_initial"
-        rec.payment_status = "paid"
-        rec.tier = rec.profile_type
-        db.commit()
-
-        log.info(
-            "assessment.checkout_dev_bypass assessment_id=%s profile=%s",
-            assessment_id,
-            rec.profile_type,
-        )
-
-        return {
-            "checkout_url": None,
-            "dev_bypass": True,
-            "assessment_id": assessment_id,
-        }
+        # Fail closed — missing Stripe configuration is never a payment bypass.
+        # Offline test workflows must set payment_status directly via fixtures,
+        # not through this production endpoint.
+        raise HTTPException(status_code=503, detail="STRIPE_NOT_CONFIGURED")
 
     if rec.payment_status == "paid":
         return {
@@ -575,11 +559,9 @@ def submit_assessment(
     caller_tenant = _resolve_caller_tenant(request)
     rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
 
-    if os.environ.get("STRIPE_SECRET_KEY") and rec.payment_status != "paid":
-        raise HTTPException(
-            status_code=402,
-            detail="Payment required. Complete checkout to unlock your assessment report.",
-        )
+    if rec.payment_status != "paid":
+        # Payment gate is unconditional — never bypassed by absent Stripe config.
+        raise HTTPException(status_code=402, detail="PAYMENT_REQUIRED")
 
     if rec.status in ("submitted", "scored"):
         return {
