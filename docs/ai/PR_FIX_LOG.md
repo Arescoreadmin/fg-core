@@ -1,3 +1,19 @@
+## feat(commercial): L14-COMMERCIAL-ACTIVATION-001 — $5K pilot package, 9 client-ready assets, billing audit (branch fix/auth-tenant-context-001)
+
+- **Work item:** L14-COMMERCIAL-ACTIVATION-001 (COMMERCIAL class — L14 is NEXT in `customer_one/roadmap_authority.yaml`)
+- **Baseline SHA:** `33964b27` (this branch HEAD)
+- **Failures before:** None — commercial documentation PR. No production code modified.
+- **What this creates:** 11 new files in `docs/commercial/`: canonical OFFER A product definition, one-page overview, proposal template, SOW template, MSA gap analysis, pricing/scope matrix, discovery call script, client onboarding checklist, prospect outreach templates, founder approval checklist, production delivery boundary. ROADMAP.md L14 row added.
+- **Key findings:**
+  - `api/billing_v2.py`: 15 routes covering billing accounts, subscription links, usage meters, usage events, Stripe webhook (idempotency via BillingEventLedger entity_type=stripe_webhook + entity_id=event_id), and billing explain. Webhook handler is signature-verified and idempotency-safe. Never grants or revokes entitlements. L14-STRIPE gap: webhook routes exist; live or test Stripe transaction NOT_PROVEN.
+  - `api/stripe_webhooks.py`: assessment payment path; handles `checkout.session.completed`; marks `AssessmentRecord.payment_status = 'paid'`; 4 stable rejection reason codes; audit events on rejection; 17 test cases covering all rejection paths. Missing: Stripe Checkout session creation route (payment link must be generated outside the platform or via Stripe Dashboard for first engagement).
+  - `services/billing/stripe_provider.py`: 6 Stripe API methods (create/update customer, create/update/cancel subscription, report usage, retrieve invoice, parse/verify webhook). All fail-closed on missing STRIPE_API_KEY. Lazy import — startup not broken if stripe package absent.
+  - `api/billing.py` (first 200 lines): billing run infrastructure with canonical contract hash, identity claims, device billing, invoice state events — comprehensive but scope is metered/subscription billing, not one-time assessment payment.
+  - Billing test suite (17 stripe_webhook tests) requires `fastapi` package — collection fails in bare worktree Python env. Tests are well-structured with mocked construct_event (no live Stripe calls).
+- **Report delivery condition:** Vault Transit not provisioned in production. All commercial assets disclose this condition honestly. Portal access, risk dashboard, and remediation roadmap are available immediately on delivery; signed PDF requires Vault Transit.
+- **No behavior change:** No product code, schema, CI policy, or infra changes. All NOT_PROVEN and NOT_AUTHORIZED status records unchanged.
+- **Scope:** 11 new files in `docs/commercial/` (new directory). `ROADMAP.md` updated (L14 row added). `docs/ai/PR_FIX_LOG.md` updated (this entry). No other files touched.
+
 ## docs(roadmap): REVENUE-FIRST-ROADMAP-001 — two-offer framing, corrected OFFER A blockers, Vault Transit vs HCP separation (PR open)
 
 - **Work item:** REVENUE-FIRST-ROADMAP-001 (REPAIR class)
