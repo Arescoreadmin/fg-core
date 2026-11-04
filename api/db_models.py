@@ -2143,7 +2143,13 @@ class KnowledgeRelationship(Base):
 
 
 class StripeEvent(Base):
-    """Raw Stripe webhook events — used for idempotency and audit."""
+    """Raw Stripe webhook events — idempotency anchor and payment audit record.
+
+    payment_confirmed_at: set atomically with AssessmentRecord.payment_status
+    transitioning to 'paid'.  A non-NULL value means payment was durably
+    confirmed.  NULL means the event was received but no payment was confirmed
+    (non-checkout event, binding failure, or pre-existing paid state).
+    """
 
     __tablename__ = "stripe_events"
 
@@ -2153,6 +2159,9 @@ class StripeEvent(Base):
     payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    payment_confirmed_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
     )
 
 

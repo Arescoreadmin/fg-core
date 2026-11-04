@@ -1,3 +1,20 @@
+## fix(stripe): L14-STRIPE-P0-INTEGRITY-001 — payment integrity regressions (branch fix/l14-stripe-p0-integrity-001)
+
+- **Work item:** L14-STRIPE-P0-INTEGRITY-001 — 8 confirmed payment integrity vulnerabilities
+- **Baseline SHA:** `2005913f` (main after PR #801)
+- **P0-1a (CRITICAL):** `create_checkout_session` set `payment_status="paid"` and committed to DB when `STRIPE_SECRET_KEY` was absent. Any misconfigured production environment (or deliberate key removal) bypassed payment entirely. Fix: return 503 `STRIPE_NOT_CONFIGURED`. No bypass path remains.
+- **P0-1b (CRITICAL):** `submit_assessment` enforced payment only when `STRIPE_SECRET_KEY` was set. Absent key skipped the gate. Fix: `if rec.payment_status != "paid": raise 402 PAYMENT_REQUIRED` — unconditional.
+- **P0-2 (HIGH):** `db.commit()` (payment confirmed) ran BEFORE `_audit_payment_confirmed()` in a separate DB session. Audit failure after commit left payment confirmed with no durable record. Additionally, `_persist_event` and `_confirm_payment` used independent DB sessions; concurrent delivery could both see unpaid state and both commit. Fix: StripeEvent write and AssessmentRecord.payment_status update now commit in a single atomic DB transaction. `SELECT ... FOR UPDATE` serialises concurrent delivery. `payment_confirmed_at` on StripeEvent is the durable audit anchor. External SecurityAuditLog is best-effort only. Unexpected exceptions re-raised → 500 → Stripe retries.
+- **P0-3a (HIGH):** Tenant check was conditional (`if metadata_tenant_id`); absent tenant_id in metadata passed silently. Fix: absent or mismatched tenant_id always raises `STRIPE_TENANT_BINDING_MISMATCH`.
+- **P0-3b (HIGH):** Session ID check was conditional (`if rec.stripe_session_id`); NULL in record (checkout never called) accepted any session. Fix: NULL record raises `STRIPE_MISSING_SESSION_BINDING`.
+- **P0-3c (HIGH):** Amount check was conditional (`if rec.expected_amount_cents`); NULL in record accepted any amount. Fix: NULL record raises `STRIPE_MISSING_AMOUNT_BINDING`.
+- **P0-4 (MEDIUM):** `payment_purpose` stored on record but never validated in webhook. Subscription renewals could confirm assessment payment. Fix: metadata `payment_purpose` must equal `"assessment_initial"`; mismatch raises `STRIPE_PAYMENT_PURPOSE_MISMATCH`.
+- **New error codes:** `STRIPE_MISSING_SESSION_BINDING`, `STRIPE_MISSING_AMOUNT_BINDING`, `STRIPE_PAYMENT_PURPOSE_MISMATCH`; `STRIPE_NOT_CONFIGURED` (checkout endpoint); `PAYMENT_REQUIRED` (submit endpoint).
+- **New model field:** `StripeEvent.payment_confirmed_at` — nullable timestamp set atomically with payment confirmation.
+- **Migration:** `0197_stripe_event_payment_confirmed.sql` — additive ALTER TABLE + partial index.
+- **Tests:** 12 new P0 adversarial regressions in `tests/test_stripe_p0_integrity_001.py`; 1 existing test updated for `with_for_update()` mock chain; 51/51 stripe tests pass.
+- **Scope:** `api/assessments.py`, `api/stripe_webhooks.py`, `api/db_models.py`, `migrations/postgres/0197_stripe_event_payment_confirmed.sql`, `tests/test_stripe_p0_integrity_001.py`, `tests/test_stripe_assessment_payment_001.py` (1 test fix), `docs/ai/PR_FIX_LOG.md`. Schema change called out explicitly.
+
 ## fix(stripe): L14-STRIPE-TEST-001 P1 — preserve valid session bindings across repeated checkout requests (branch fix/l14-stripe-test-001)
 
 - **Work item:** P1 bot finding on PR #801 (L14-STRIPE-TEST-001)

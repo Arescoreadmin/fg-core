@@ -7,17 +7,26 @@ a 400 error and an audit event.  The STRIPE_WEBHOOK_SECRET env var must be
 present and non-blank; if it is missing, the endpoint returns 503 rather than
 silently accepting unsigned payloads.
 
+Payment confirmation is ATOMIC: the StripeEvent record and the
+AssessmentRecord.payment_status update are committed in a single DB transaction.
+If either write fails the entire transaction is rolled back and payment_status
+remains unpaid.  The external SecurityAuditLog entry is best-effort after
+commit and does not affect payment authority.
+
 Stable rejection reason codes:
   STRIPE_WEBHOOK_SIGNATURE_MISSING       — Stripe-Signature header absent
   STRIPE_WEBHOOK_SIGNATURE_INVALID       — header present but signature bad
   STRIPE_WEBHOOK_TIMESTAMP_STALE        — signature valid but timestamp stale
   STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED  — STRIPE_WEBHOOK_SECRET not set (503)
   STRIPE_PAYMENT_NOT_PAID               — payment_status != 'paid' on session
-  STRIPE_TENANT_BINDING_MISMATCH        — session tenant_id doesn't match record
+  STRIPE_TENANT_BINDING_MISMATCH        — tenant_id absent or mismatched
   STRIPE_AMOUNT_MISMATCH                — amount_total != expected_amount_cents
+  STRIPE_MISSING_AMOUNT_BINDING         — expected_amount_cents not set on record
   STRIPE_CURRENCY_MISMATCH              — currency != 'usd'
   STRIPE_ASSESSMENT_NOT_FOUND           — assessment_id not in DB
   STRIPE_SESSION_ID_MISMATCH            — session.id != record.stripe_session_id
+  STRIPE_MISSING_SESSION_BINDING        — stripe_session_id not set on record
+  STRIPE_PAYMENT_PURPOSE_MISMATCH       — payment_purpose != 'assessment_initial'
   STRIPE_INVOICE_NOT_FOUND              — invoice_id not in DB
 """
 
@@ -25,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -48,13 +58,17 @@ STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED = "STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED"
 STRIPE_PAYMENT_NOT_PAID = "STRIPE_PAYMENT_NOT_PAID"
 STRIPE_TENANT_BINDING_MISMATCH = "STRIPE_TENANT_BINDING_MISMATCH"
 STRIPE_AMOUNT_MISMATCH = "STRIPE_AMOUNT_MISMATCH"
+STRIPE_MISSING_AMOUNT_BINDING = "STRIPE_MISSING_AMOUNT_BINDING"
 STRIPE_CURRENCY_MISMATCH = "STRIPE_CURRENCY_MISMATCH"
 STRIPE_ASSESSMENT_NOT_FOUND = "STRIPE_ASSESSMENT_NOT_FOUND"
 STRIPE_SESSION_ID_MISMATCH = "STRIPE_SESSION_ID_MISMATCH"
+STRIPE_MISSING_SESSION_BINDING = "STRIPE_MISSING_SESSION_BINDING"
+STRIPE_PAYMENT_PURPOSE_MISMATCH = "STRIPE_PAYMENT_PURPOSE_MISMATCH"
 STRIPE_INVOICE_NOT_FOUND = "STRIPE_INVOICE_NOT_FOUND"
 
-# Required currency for all assessments.
+# Required values for all assessment payments — never accept variations.
 _REQUIRED_CURRENCY = "usd"
+_REQUIRED_PAYMENT_PURPOSE = "assessment_initial"
 
 
 # ---------------------------------------------------------------------------
@@ -229,77 +243,71 @@ def _validate_payment_binding(
 ) -> None:
     """Validate Stripe session against authoritative DB record.
 
-    Checks:
+    All checks are strict and unconditional — missing server-side bindings
+    fail closed rather than passing.  Every check that was optional in the
+    previous implementation is now required.
+
+    Checks (in order):
       1. payment_status == 'paid' on the Stripe session
       2. currency == 'usd'
-      3. tenant_id from session metadata matches record.tenant_id
-      4. stripe_session_id matches record (if already set)
-      5. expected_amount_cents matches session amount_total (if set on record)
+      3. tenant_id present in session metadata AND matches record.tenant_id
+      4. stripe_session_id set on record AND matches session.id
+      5. expected_amount_cents set on record AND matches session amount_total
+      6. payment_purpose in session metadata == 'assessment_initial'
 
     Raises:
-        WebhookBindingError with stable reason code on any mismatch.
+        WebhookBindingError with stable reason code on any failure.
     """
     assessment_id = rec.id
     tenant_id = rec.tenant_id
 
-    # 1. Confirm payment is actually paid
-    if session.get("payment_status") != "paid":
-        raise WebhookBindingError(
-            STRIPE_PAYMENT_NOT_PAID,
+    def _err(code: str) -> WebhookBindingError:
+        return WebhookBindingError(
+            code,
             {
                 "assessment_id": assessment_id,
                 "tenant_id": tenant_id,
                 "event_type": "checkout.session.completed",
             },
         )
+
+    # 1. Confirm payment is actually paid
+    if session.get("payment_status") != "paid":
+        raise _err(STRIPE_PAYMENT_NOT_PAID)
 
     # 2. Currency must be usd
     if session.get("currency") != _REQUIRED_CURRENCY:
-        raise WebhookBindingError(
-            STRIPE_CURRENCY_MISMATCH,
-            {
-                "assessment_id": assessment_id,
-                "tenant_id": tenant_id,
-                "event_type": "checkout.session.completed",
-            },
-        )
+        raise _err(STRIPE_CURRENCY_MISMATCH)
 
-    # 3. Tenant binding — session metadata must match DB record
-    metadata_tenant_id = session.get("metadata", {}).get("tenant_id")
-    if metadata_tenant_id and metadata_tenant_id != tenant_id:
-        raise WebhookBindingError(
-            STRIPE_TENANT_BINDING_MISMATCH,
-            {
-                "assessment_id": assessment_id,
-                "tenant_id": tenant_id,
-                "event_type": "checkout.session.completed",
-            },
-        )
+    # 3. Tenant binding — metadata must carry tenant_id AND it must match.
+    # Absent tenant_id in metadata is not a pass — it means the session was
+    # created outside the authoritative checkout path.
+    metadata = session.get("metadata") or {}
+    metadata_tenant_id = (metadata.get("tenant_id") or "").strip()
+    if not metadata_tenant_id or metadata_tenant_id != tenant_id:
+        raise _err(STRIPE_TENANT_BINDING_MISMATCH)
 
-    # 4. Session ID must match if already recorded server-side
-    session_id = session.get("id", "")
-    if rec.stripe_session_id and rec.stripe_session_id != session_id:
-        raise WebhookBindingError(
-            STRIPE_SESSION_ID_MISMATCH,
-            {
-                "assessment_id": assessment_id,
-                "tenant_id": tenant_id,
-                "event_type": "checkout.session.completed",
-            },
-        )
+    # 4. Session ID — must be set on record (checkout wrote it) and must match.
+    # An unset stripe_session_id means the checkout endpoint was never called;
+    # do not confirm payment for a session we never issued.
+    session_id = (session.get("id") or "").strip()
+    if not rec.stripe_session_id:
+        raise _err(STRIPE_MISSING_SESSION_BINDING)
+    if rec.stripe_session_id != session_id:
+        raise _err(STRIPE_SESSION_ID_MISMATCH)
 
-    # 5. Amount must match expected (if recorded server-side)
-    if rec.expected_amount_cents is not None:
-        amount_total = session.get("amount_total")
-        if amount_total != rec.expected_amount_cents:
-            raise WebhookBindingError(
-                STRIPE_AMOUNT_MISMATCH,
-                {
-                    "assessment_id": assessment_id,
-                    "tenant_id": tenant_id,
-                    "event_type": "checkout.session.completed",
-                },
-            )
+    # 5. Amount — must be set on record and must match exactly.
+    if rec.expected_amount_cents is None:
+        raise _err(STRIPE_MISSING_AMOUNT_BINDING)
+    if session.get("amount_total") != rec.expected_amount_cents:
+        raise _err(STRIPE_AMOUNT_MISMATCH)
+
+    # 6. Payment purpose — session metadata must declare 'assessment_initial'.
+    # Subscription renewals, refunds, or other events must not confirm
+    # an assessment payment.
+    metadata_purpose = (metadata.get("payment_purpose") or "").strip()
+    if metadata_purpose != _REQUIRED_PAYMENT_PURPOSE:
+        raise _err(STRIPE_PAYMENT_PURPOSE_MISMATCH)
 
 
 # ---------------------------------------------------------------------------
@@ -328,13 +336,13 @@ async def stripe_webhook(request: Request):
             detail=exc.reason_code,
         )
 
-    _persist_event(event)
-
     if event.get("type") == "checkout.session.completed":
         session = event.get("data", {}).get("object", {})
-        assessment_id = session.get("metadata", {}).get("assessment_id")
+        assessment_id = (session.get("metadata") or {}).get("assessment_id")
         if assessment_id:
             try:
+                # _confirm_payment writes the StripeEvent atomically —
+                # _persist_event is not called separately for checkout events.
                 _confirm_payment(assessment_id, session, event.get("id", ""))
             except WebhookBindingError as exc:
                 _audit_binding_rejection(exc.reason_code, exc.details)
@@ -342,6 +350,14 @@ async def stripe_webhook(request: Request):
                     status_code=400,
                     detail=exc.reason_code,
                 ) from exc
+            except Exception:
+                # DB or unexpected error — return 500 so Stripe retries.
+                raise HTTPException(
+                    status_code=500, detail="PAYMENT_CONFIRMATION_FAILED"
+                )
+    else:
+        # Non-checkout events: persist for observability only.
+        _persist_event(event)
 
     return {"received": True}
 
@@ -356,26 +372,35 @@ def _confirm_payment(
     session: dict[str, Any],
     event_id: str,
 ) -> None:
-    """Confirm an assessment payment after server-side binding validation.
+    """Confirm an assessment payment atomically.
 
-    Validates:
-      - Assessment exists in DB
-      - payment_status == 'paid' on the Stripe session object
-      - currency == 'usd'
-      - tenant_id metadata matches DB record (if present in metadata)
-      - stripe_session_id matches DB record (if already set)
-      - expected_amount_cents matches session amount_total (if set on record)
+    Atomicity guarantee: AssessmentRecord.payment_status and the StripeEvent
+    record (which is the durable payment audit anchor) are updated in a single
+    DB transaction.  If either write fails, the entire transaction is rolled
+    back and payment_status remains unpaid.  The external SecurityAuditLog
+    entry is written as best-effort AFTER commit and does not affect payment
+    authority.
 
-    Then atomically transitions payment_status → 'paid' and writes audit entry.
-    Idempotent: if already 'paid', returns without error.
+    Concurrency: AssessmentRecord is locked FOR UPDATE at the start.  On
+    PostgreSQL this serializes concurrent webhook deliveries for the same
+    assessment — the second delivery sees payment_status='paid' and returns
+    idempotently.  On SQLite the hint is ignored but the unique constraint on
+    stripe_event_id still prevents double-confirmation.
+
+    Idempotent: if payment_status is already 'paid', returns without error.
     """
-    stripe_session_id = session.get("id", "")
+    stripe_session_id = (session.get("id") or "").strip()
+    now = datetime.now(timezone.utc)
+
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
+    confirmed_tenant_id: str | None = None
     try:
+        # Lock the row to serialise concurrent webhook deliveries.
         rec = (
             db.query(AssessmentRecord)
             .filter(AssessmentRecord.id == assessment_id)
+            .with_for_update()
             .first()
         )
         if rec is None:
@@ -388,18 +413,42 @@ def _confirm_payment(
                 },
             )
 
-        # Idempotent — already confirmed
+        # Idempotent — already confirmed (safe under concurrent delivery).
         if rec.payment_status == "paid":
             return
 
-        # Validate binding server-side — raises WebhookBindingError on failure
+        # Full binding validation — all checks strict, no optional skips.
         _validate_payment_binding(session, rec)
 
+        confirmed_tenant_id = rec.tenant_id
+
+        # Update payment state.
         rec.payment_status = "paid"
         rec.stripe_session_id = stripe_session_id
+
+        # Write or update the StripeEvent in the SAME transaction.
+        # This record is the durable payment audit anchor; it commits
+        # atomically with payment_status so they cannot diverge.
+        event_record = (
+            db.query(StripeEvent)
+            .filter(StripeEvent.stripe_event_id == event_id)
+            .with_for_update()
+            .first()
+        )
+        if event_record is None:
+            event_record = StripeEvent(
+                stripe_event_id=event_id,
+                event_type="checkout.session.completed",
+                payload=session,
+            )
+            db.add(event_record)
+
+        event_record.payment_confirmed_at = now
+
+        # Single commit — payment state and audit record are atomic.
         db.commit()
         log.info("assessment.payment_confirmed assessment_id=%s", assessment_id)
-        _audit_payment_confirmed(assessment_id, rec.tenant_id, event_id)
+
     except WebhookBindingError:
         db.rollback()
         raise
@@ -410,8 +459,14 @@ def _confirm_payment(
             exc,
         )
         db.rollback()
+        # Re-raise so the webhook handler returns a retryable 500.
+        raise
     finally:
         db.close()
+
+    # Best-effort SecurityAuditLog — after commit, non-correctness-critical.
+    if confirmed_tenant_id:
+        _audit_payment_confirmed(assessment_id, confirmed_tenant_id, event_id)
 
 
 def _persist_event(event: dict) -> None:
