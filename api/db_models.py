@@ -1812,7 +1812,9 @@ class AssessmentRecord(Base):
     # L14-STRIPE-TEST-001: server-side payment binding (migration 0196)
     expected_amount_cents: Mapped[Any] = mapped_column(Integer, nullable=True)
     payment_purpose: Mapped[Any] = mapped_column(Text, nullable=True)
-    checkout_idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True, unique=True)
+    checkout_idempotency_key: Mapped[Any] = mapped_column(
+        Text, nullable=True, unique=True
+    )
 
 
 class PromptVersion(Base):
