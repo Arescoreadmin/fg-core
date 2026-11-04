@@ -455,6 +455,11 @@ def create_checkout_session(
 
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if not stripe_key:
+        # Dev-only bypass: record binding fields so the existing record is
+        # consistent with what the webhook handler expects.
+        amount = _TIER_PRICES.get(rec.profile_type, 29900)
+        rec.expected_amount_cents = amount
+        rec.payment_purpose = "assessment_initial"
         rec.payment_status = "paid"
         rec.tier = rec.profile_type
         db.commit()
@@ -482,9 +487,12 @@ def create_checkout_session(
 
     stripe.api_key = stripe_key
 
+    # Amount is authoritative — determined server-side from profile_type only.
+    # Never accept client-supplied amounts.
     amount = _TIER_PRICES.get(rec.profile_type, 29900)
     tier_label = _TIER_LABELS.get(rec.profile_type, rec.profile_type)
     base_url = os.environ.get("CONSOLE_BASE_URL", "https://app.frostgate.ai")
+    idempotency_key = f"checkout_{assessment_id}"
 
     org = db.query(OrgProfile).filter(OrgProfile.id == rec.org_profile_id).first()
     customer_email = (org.email if org else None) or rec.email or None
@@ -510,11 +518,21 @@ def create_checkout_session(
         mode="payment",
         success_url=f"{base_url}/assessment?id={assessment_id}&payment=success",
         cancel_url=f"{base_url}/onboarding",
-        metadata={"assessment_id": assessment_id},
+        # metadata carries identifiers only — amount is validated server-side,
+        # never trusted from metadata on the webhook path.
+        metadata={
+            "assessment_id": assessment_id,
+            "tenant_id": rec.tenant_id,
+            "payment_purpose": "assessment_initial",
+        },
         customer_email=customer_email,
     )
 
+    # Record the authoritative binding server-side before returning the URL.
     rec.stripe_session_id = session.id
+    rec.expected_amount_cents = amount
+    rec.payment_purpose = "assessment_initial"
+    rec.checkout_idempotency_key = idempotency_key
     rec.tier = rec.profile_type
     db.commit()
 
