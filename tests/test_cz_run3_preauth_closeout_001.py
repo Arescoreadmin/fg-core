@@ -29,13 +29,13 @@ No Railway mutations. No HCP API calls. No paid infrastructure of any kind.
 
 from __future__ import annotations
 
-import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 
@@ -138,36 +138,98 @@ def _run_final_readiness_api() -> ReadinessResult:
 
 
 def _run_preauth_evaluator_subprocess() -> dict:
-    """Run the preauth evaluator as a subprocess using saved Phase-1 JSON output.
+    """Run the preauth evaluator in-process with patches on git-state noise sources.
 
-    The Phase-1 run was performed on canonical main (clean, committed) before this
-    PR's changes. We read the cached output to avoid re-running on a dirty worktree.
-    If the cache is absent, fall back to running the subprocess.
+    Replaces the previous /tmp/cz-closeout-preauth.json cache approach, which was
+    unreliable in CI (the cache was never written by the codebase — it relied on a
+    manually generated file that only existed on the developer's machine).
+
+    Patches three pre-commit noise sources so authority-content dimensions are
+    evaluated against real disk state without branch-state false positives —
+    identical to what _run_final_readiness_api uses for the final-readiness evaluator:
+    - A4 (_git_status_clean): worktree may have uncommitted files on feature branch
+    - A3 (_git_origin_main): HEAD != origin/main on feature branch by design
+    - J_CE3 (_validate_offline_simulation_evidence): pre-commit state
+
+    The portable verification pytest subprocess in _build_artifact is mocked to avoid
+    running a full pytest session within the test suite.
     """
-    cached = Path("/tmp/cz-closeout-preauth.json")
-    if cached.exists():
-        with open(cached, encoding="utf-8") as f:
-            return json.load(f)
-    # Fallback: run subprocess (may fail if worktree is dirty)
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
-        out_path = tf.name
-    subprocess.run(
-        [
-            sys.executable,
-            "tools/ci/customer_zero_run3_preauth.py",
-            "--repo",
-            ".",
-            "--json",
-            "--output",
-            out_path,
-        ],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=False,
+    _repo_root = str(REPO)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+    _head = (
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+        or "0" * 40
     )
-    with open(out_path, encoding="utf-8") as f:
-        return json.load(f)
+
+    preauth_cli = REPO / "tools" / "ci" / "customer_zero_run3_preauth.py"
+    spec = importlib.util.spec_from_file_location("_preauth_cli_mod", preauth_cli)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+
+    source_sha = mod._get_source_sha(REPO)
+
+    from services.governance.customer_zero_readiness import ReadinessStatus
+
+    _pv_mock = MagicMock()
+    _pv_mock.returncode = 0
+    _pv_mock.stdout = "7 passed in 0.50s"
+    _pv_mock.stderr = ""
+
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_head,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._validate_offline_simulation_evidence",
+            return_value=(
+                ReadinessStatus.PASS,
+                "STATIC_VERIFIED: patched for pre-commit",
+                "",
+                None,
+            ),
+        ),
+    ):
+        offline_checks, blockers = mod._run_offline_checks(REPO, source_sha)
+
+    # Filter env-specific PORTABLE-VERIFICATION blockers before building artifact
+    filtered_blockers = [b for b in blockers if not b.startswith("PORTABLE-VERIFICATION")]
+
+    with (
+        patch(
+            "services.governance.customer_zero_readiness._git_status_clean",
+            return_value=True,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._git_origin_main",
+            return_value=_head,
+        ),
+        patch(
+            "services.governance.customer_zero_readiness._validate_offline_simulation_evidence",
+            return_value=(
+                ReadinessStatus.PASS,
+                "STATIC_VERIFIED: patched for pre-commit",
+                "",
+                None,
+            ),
+        ),
+        patch("subprocess.run", return_value=_pv_mock),
+    ):
+        artifact = mod._build_artifact(REPO, offline_checks, filtered_blockers, source_sha)
+
+    return artifact
 
 
 # ---------------------------------------------------------------------------
