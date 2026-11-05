@@ -104,6 +104,7 @@ export async function GET(req: NextRequest) {
     mode?: string;
     inviteToken?: string;
     tenantId?: string;
+    assessmentId?: string;
   };
   try {
     statePayload = JSON.parse(rawStateCookie);
@@ -138,6 +139,31 @@ export async function GET(req: NextRequest) {
     if (!accessToken) throw new Error('no access_token in response');
   } catch {
     return loginError(req, 'token_exchange_failed');
+  }
+
+  // ─── Assessment activation branch ──────────────────────────────────────────
+  // Hand the access_token to the activation handler via a short-lived
+  // HttpOnly cookie; do NOT put the access_token in the URL or in browser JS.
+  if (statePayload.mode === 'activate') {
+    const assessmentId = (statePayload.assessmentId || '').trim();
+    if (!assessmentId) {
+      return loginError(req, 'missing_assessment_id');
+    }
+
+    const dest = new URL('/assessment/activate', req.url);
+    dest.searchParams.set('id', assessmentId);
+    dest.searchParams.set('from', 'oidc');
+
+    const res = NextResponse.redirect(dest);
+    res.cookies.delete('fg_oidc_state');
+    res.cookies.set(OIDC_BOOTSTRAP_COOKIE, accessToken, {
+      httpOnly: true,
+      secure: IS_PROD,
+      sameSite: 'lax',
+      maxAge: OIDC_BOOTSTRAP_TTL_SECONDS,
+      path: '/',
+    });
+    return res;
   }
 
   // ─── Invitation-acceptance branch ──────────────────────────────────────────

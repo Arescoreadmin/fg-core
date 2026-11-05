@@ -1817,6 +1817,31 @@ class AssessmentRecord(Base):
     )
 
 
+class AssessmentActivation(Base):
+    """One activation token per assessment checkout session. L14-PORTAL-HANDOFF-001."""
+
+    __tablename__ = "assessment_activations"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    assessment_id: Mapped[Any] = mapped_column(
+        Text,
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    email_hint: Mapped[Any] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    provisioned_tenant_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
 class PromptVersion(Base):
     """AI prompt templates for report generation. Seeded by migration 0033."""
 

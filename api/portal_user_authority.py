@@ -383,6 +383,29 @@ def _create_membership(
     return membership
 
 
+def create_assessment_activation_membership(
+    db,
+    *,
+    portal_user_id: str,
+    tenant_id: str,
+    portal_role: str = "general",
+    assessment_id: str | None = None,
+) -> PortalMembershipRecord:
+    """Create a portal membership for a self-service assessment activation.
+
+    Called from the activation endpoint after payment verification and tenant
+    creation. The membership grants access to the customer's paid assessment.
+    """
+    _set_tenant_rls(db, tenant_id)
+    return _create_membership(
+        db,
+        portal_user_id=portal_user_id,
+        tenant_id=tenant_id,
+        portal_role=portal_role,
+        engagement_id=None,  # tenant-wide; customer navigates to their assessment by ID
+    )
+
+
 def get_active_membership(
     db,
     *,

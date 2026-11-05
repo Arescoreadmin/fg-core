@@ -79,6 +79,7 @@ from api.workforce import router as workforce_router
 from api.admin_identity import router as admin_identity_router
 from api.identity_acceptance import router as identity_acceptance_router
 from api.tenant_admin import router as tenant_admin_router
+from api.assessments import public_router as assessments_public_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
 from api.rag_corpus_console import router as rag_corpus_console_router
@@ -809,6 +810,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agents_ca_admin_router)
     app.include_router(agents_ca_device_router)
     app.include_router(agents_ca_agent_router)
+    # Public assessment routes (activation + payment-status) registered before the
+    # authenticated router so the AuthGate does not intercept them.
+    app.include_router(assessments_public_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(report_authority_router)
@@ -1274,6 +1278,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agents_ca_admin_router)
     app.include_router(agents_ca_device_router)
     app.include_router(agents_ca_agent_router)
+    app.include_router(assessments_public_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(report_authority_router)

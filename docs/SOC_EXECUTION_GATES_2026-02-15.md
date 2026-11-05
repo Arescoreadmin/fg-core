@@ -8039,3 +8039,46 @@ SOC review outcome: APPROVED. Test infrastructure hardening only; no runtime aut
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. CI workflow change extends Mode B dispatch with actor_profile input and adds independent evidence verification step — both are enforcement hardening for an already-gated optional flow. No production code changed. No new authentication paths. No new stored credentials. Fail-closed guarantee strengthened via semantic 15 and independent fingerprint verification.
+
+## 2026-11-05 - feat: L14-PORTAL-HANDOFF-001 — secure post-payment customer activation and assessment handoff
+
+**Change scope:** L14-PORTAL-HANDOFF-001. Introduces a secure post-payment customer activation pathway for the portal. Covers: new `assessment_activations` table (migration 0198), two new public API endpoints, portal activation page, BFF activation route, OIDC `mode=activate` flow, and updated route inventory artifacts.
+
+1. **`api/assessments.py`** — Added `public_router` (prefix `/ingest/assessment`, no auth dependency). New endpoints: `GET /{assessment_id}/payment-status` (unauthenticated, returns `{payment_status, has_activation}` only); `POST /{assessment_id}/activate` (consumes single-use activation token, validates OIDC access_token, atomically creates tenant + portal_user + membership + session, returns `pnu1.` session token). Modified `create_checkout_session` to generate HMAC-SHA256 activation token and embed raw token in Stripe success URL. Added `api/main.py` registration of `public_router`.
+2. **`api/db_models.py`** — Added `AssessmentActivation` ORM model. No existing model modified.
+3. **`api/portal_user_authority.py`** — Added `create_assessment_activation_membership()` public function. No existing function modified.
+4. **`migrations/postgres/0198_assessment_activations.sql`** (new) — `assessment_activations` table. Additive schema-only migration; no existing table altered.
+5. **`apps/portal/app/assessment/activate/page.tsx`** (new) — Activation landing page (public route). Strips activation token from URL via `history.replaceState`; stores in sessionStorage; polls payment-status; triggers OIDC with `mode=activate`.
+6. **`apps/portal/app/api/auth/activate/route.ts`** (new) — BFF activation POST endpoint. Reads `fg_oidc_bootstrap` HttpOnly cookie; calls Core API `/ingest/assessment/{id}/activate`; sets `fg_portal_session` on success; clears bootstrap cookie.
+7. **`apps/portal/app/api/auth/oidc/route.ts`** — Added `mode=activate` OIDC initiation branch. No existing branches modified.
+8. **`apps/portal/app/api/auth/oidc/callback/route.ts`** — Added `mode=activate` callback branch before `mode=accept`. No existing branches modified.
+9. **`apps/portal/middleware.ts`** — Added `/assessment` to `PUBLIC_PREFIXES`. Activation routes require no session (pre-auth flow by design).
+10. **`tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`** — Auto-generated tracking artifacts updated via `make route-inventory-generate` and `make fg-contract` to reflect the two new public endpoints. No manual edits; no security logic contained in these files.
+11. **`contracts/core/openapi.json`, `schemas/api/openapi.json`** — Regenerated via `make contracts-gen` to include new endpoint schemas. Contract authority SHA-256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+**Security posture:**
+
+1. **Payment status verified server-side only.** The `POST /activate` endpoint fetches `payment_status` directly from the `assessments` row; the Stripe success URL `payment=success` param is never trusted. A forged redirect without a paid assessment cannot claim a token.
+2. **Single-use activation token.** Token is `secrets.token_urlsafe(32)` raw; HMAC-SHA256 stored. Claim predicate is `used_at IS NULL` enforced with `SELECT FOR UPDATE`. Concurrent second claim sees `409 Conflict`.
+3. **Lead-tenant guard.** Activation rejects any assessment whose `tenant_id` does not start with `lead:`. An already-claimed assessment cannot be re-claimed.
+4. **OIDC identity validated before provisioning.** Core API validates the Auth0 `access_token` via JWKS before creating any tenant, user, or membership row. Identity binding is mandatory; anonymous activation is impossible.
+5. **Bootstrap cookie is HttpOnly, short-lived (5 min), path-scoped.** Auth0 `access_token` never reaches browser JS; consumed and cleared in `POST /api/auth/activate`. No token appears in URL or response body.
+6. **No existing auth path modified.** `mode=accept` and standard login branches in the OIDC callback are untouched. No existing scope, middleware guard, or tenant isolation rule is weakened.
+7. **No new secrets or credentials stored.** Activation tokens are HMAC-derived from the existing `FG_KEY_PEPPER`; no new secret material introduced.
+8. **Activation token stripped from URL.** `history.replaceState` removes `at=` from the browser URL after storing in sessionStorage, preventing token leakage in Referer headers or server logs.
+9. **Route inventory artifacts are read-only CI tracking files.** They contain no authentication logic, no credentials, and no executable policy. Their update reflects new endpoints added under the existing API surface.
+
+**Critical-path files changed:** `api/assessments.py` (new public endpoints, activation token generation in checkout), `api/db_models.py` (new ORM model), `api/portal_user_authority.py` (new membership function), `migrations/postgres/0198_assessment_activations.sql` (additive schema migration), `apps/portal/app/assessment/activate/page.tsx` (new public portal page), `apps/portal/app/api/auth/activate/route.ts` (new BFF endpoint), `apps/portal/middleware.ts` (added `/assessment` public prefix).
+
+**Required invariant:** Payment status is always read from the database, never from URL params. Activation token is single-use and expires at 24h. OIDC identity validation is mandatory before any tenant or user is provisioned. `tenant_id` must start with `lead:` before activation. Concurrent activation attempts are serialized by `SELECT FOR UPDATE`; the second returns 409.
+
+**Validation evidence:**
+
+- `pytest tests/test_portal_handoff_001.py -v` → 22/22 passed (PH-01 through PH-22)
+- `make fg-lint` → All checks passed (ruff, mypy, eslint)
+- `make fg-contract` → PASS (contract authority SHA-256 updated)
+- `make route-inventory-generate` → route inventory regenerated, 2 new routes registered
+- `python tools/ci/check_soc_review_sync.py` → soc-review-sync: OK
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Two new public endpoints add post-payment activation pathway under existing fail-closed OIDC and payment-verification controls. No existing authentication path, tenant isolation rule, or security scope is weakened. Activation token is HMAC-bound, single-use, and expires in 24h. Bootstrap cookie is HttpOnly and cleared on use. Route inventory artifacts are auto-generated tracking files with no executable security logic.

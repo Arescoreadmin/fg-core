@@ -459,6 +459,29 @@
         "title": "AcknowledgementResponse",
         "type": "object"
       },
+      "ActivateAssessmentRequest": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "activation_token": {
+            "title": "Activation Token",
+            "type": "string"
+          },
+          "oidc_provider": {
+            "default": "auth0",
+            "title": "Oidc Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "activation_token"
+        ],
+        "title": "ActivateAssessmentRequest",
+        "type": "object"
+      },
       "ActivityFeedItem": {
         "additionalProperties": false,
         "properties": {
@@ -100660,6 +100683,57 @@
         ]
       }
     },
+    "/ingest/assessment/{assessment_id}/activate": {
+      "post": {
+        "description": "Secure post-payment assessment activation. L14-PORTAL-HANDOFF-001.\n\nValidates: activation token (single-use, unexpired, bound to assessment),\n           OIDC access token, payment confirmed server-side.\nCreates: tenant, portal user, portal membership.\nMigrates: assessment tenant_id from lead:{id} to new tenant.\nReturns: pnu1. session token for the portal.\n\nFail-closed: any validation failure returns 403 without revealing\nwhich specific check failed (prevents oracle attacks).",
+        "operationId": "activate_assessment_ingest_assessment__assessment_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateAssessmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Assessment",
+        "tags": [
+          "assessment-public"
+        ]
+      }
+    },
     "/ingest/assessment/{assessment_id}/checkout": {
       "post": {
         "operationId": "create_checkout_session_ingest_assessment__assessment_id__checkout_post",
@@ -101053,6 +101127,47 @@
         "summary": "Replay Governance Report",
         "tags": [
           "governance-reports"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/payment-status": {
+      "get": {
+        "description": "Server-side payment status check \u2014 safe for unauthenticated callers.\n\nReturns only payment_status and whether an activation token exists.\nNever reveals assessment content or cross-tenant data.",
+        "operationId": "get_payment_status_ingest_assessment__assessment_id__payment_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Payment Status",
+        "tags": [
+          "assessment-public"
         ]
       }
     },
