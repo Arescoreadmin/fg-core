@@ -1,3 +1,24 @@
+## fix(stripe): L14-STRIPE-WEBHOOK-EVENT-CONVERSION — SDK 15.x event deserialization hotfix (branch fix/l14-stripe-webhook-event-conversion)
+
+- **Work item:** L14-STRIPE-WEBHOOK-EVENT-CONVERSION (P0 hotfix)
+- **Baseline SHA:** `5050393e` (main after PR #802)
+- **Incident:** Live Stripe sandbox Checkout (`acct_1TcAztB9b33yxnOR`) payment completed successfully in Stripe, but webhook returned HTTP 500. Assessment remained unpaid. Event: `evt_1UYQzkB9b33yxnORDWqVaVvw`. Amount: 29,900 cents. Confirmation timestamp after fix: `2026-11-05 14:05:44.711342+00:00`.
+- **Root cause:** `api/stripe_webhooks.py::_verify_webhook_signature()` called `dict(event)` on the `stripe.Event` returned by `stripe.Webhook.construct_event()`. In SDK 15.x, `stripe.Event` is a `StripeObject` whose `__iter__` is integer-indexed — `dict(event)` raises `KeyError: 0`. The exception propagated as HTTP 500, triggering Stripe retries that all failed identically.
+- **Fix:** Changed `return dict(event)` to `return event.to_dict()`. `StripeObject.to_dict()` is the public stable API method that returns a plain Python `dict` with all nested fields (including `data.object.metadata`) preserved.
+- **Automated regression:** `tests/test_stripe_sdk_regression_001.py` — 8 new tests:
+  - SDK-01: `event.to_dict()` returns a plain dict (real `construct_event`, no mock) — definitive regression
+  - SDK-02: `dict(event)` raises `KeyError: 0` on a real StripeObject — documents the production defect
+  - SDK-03: Nested checkout metadata fully preserved through `to_dict()`
+  - SDK-04: Full signed checkout webhook through endpoint → 200 (real HMAC, no SDK mock)
+  - SDK-05: Foreign session on unpaid assessment → 400 `STRIPE_SESSION_ID_MISMATCH`
+  - SDK-06: Already-paid replay → 200 idempotent, no second commit
+  - SDK-07: Missing `STRIPE_WEBHOOK_SECRET` → 503, no payment mutation
+  - SDK-08: Wrong HMAC → 400 `STRIPE_WEBHOOK_SIGNATURE_INVALID`, no mutation
+- **Sandbox evidence:** `docs/evidence/stripe_sandbox_acceptance_20261105.md` — operator-reported; 8/8 DB acceptance checks passed.
+- **Validation:** 59/59 stripe tests pass (17 + 16 + 18 + 8). Ruff lint+format clean.
+- **Scope:** `api/stripe_webhooks.py` (1-line change), `tests/test_stripe_sdk_regression_001.py` (new), `docs/evidence/stripe_sandbox_acceptance_20261105.md` (new), `docs/ai/PR_FIX_LOG.md`. No schema change. No migration.
+- **Security invariants preserved:** Signature verification unchanged. Fail-closed on missing secret unchanged. All binding checks (tenant, session, amount, currency, purpose) unchanged. Atomic commit unchanged.
+
 ## fix(stripe): L14-STRIPE-P0-INTEGRITY-001 — payment integrity regressions (branch fix/l14-stripe-p0-integrity-001)
 
 - **Work item:** L14-STRIPE-P0-INTEGRITY-001 — 8 confirmed payment integrity vulnerabilities

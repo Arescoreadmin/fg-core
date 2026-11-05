@@ -145,7 +145,7 @@ def _verify_webhook_signature(
             sig_header=sig_header,
             secret=secret,
         )
-        return dict(event)
+        return event.to_dict()
     except stripe.error.SignatureVerificationError as exc:
         _msg = str(exc).lower()
         if "outside the tolerance zone" in _msg or "timestamp outside" in _msg:
