@@ -440,6 +440,22 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "bootstrap",
                 "UUID-gated report download stub; org not yet enrolled as a tenant.",
             ),
+            ex(
+                "GET",
+                "/ingest/assessment/{assessment_id}/payment-status",
+                "bootstrap",
+                "UUID-gated payment status check; org not yet enrolled as a tenant. "
+                "assessment_id in URL is the implicit access credential (derived from "
+                "Stripe success URL). L14-PORTAL-HANDOFF-001.",
+            ),
+            ex(
+                "POST",
+                "/ingest/assessment/{assessment_id}/activate",
+                "bootstrap",
+                "UUID-gated post-payment account activation; org not yet enrolled as a tenant. "
+                "Credential is HMAC activation token + OIDC access token in request body. "
+                "L14-PORTAL-HANDOFF-001.",
+            ),
         ),
         auth_exempt_routes=(
             ex(
