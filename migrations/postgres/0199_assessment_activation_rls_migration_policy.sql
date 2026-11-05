@@ -14,9 +14,8 @@
 -- any one policy is sufficient. Normal tenant-scoped UPDATEs continue to satisfy
 -- the existing assessments_tenant_isolation WITH CHECK and are unaffected.
 --
--- Note: starts_with() is used rather than LIKE 'lead:%' to avoid bare-% in
--- LIKE string literals, which trips psycopg3's paramstyle parser when the SQL
--- is executed via exec_driver_sql in the migration runner.
+-- Note: starts_with() is used instead of LIKE to avoid psycopg3 paramstyle
+-- parser errors; bare percent characters in SQL text trip exec_driver_sql.
 
 CREATE POLICY assessments_activation_migration ON assessments
     AS PERMISSIVE
