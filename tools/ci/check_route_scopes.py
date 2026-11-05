@@ -27,6 +27,13 @@ _EXEMPTIONS: frozenset[str] = frozenset(
         # standard require_scopes does not apply because the caller is the Console BFF
         # JWT callback, not a human API consumer. Never accessible from browser.
         "/admin/identity/principal-tenant/{principal_id}",
+        # L14-PORTAL-HANDOFF-001: Both routes are served on public_router (no API-key
+        # auth dependency). AuthGate exempts them via PUBLIC_PATHS_SUFFIX (/payment-status,
+        # /activate). The assessment_id in the URL is the implicit access credential
+        # (derived from the Stripe success URL); /activate additionally requires a valid
+        # HMAC activation token + OIDC access token in the request body.
+        "/ingest/assessment/{assessment_id}/payment-status",
+        "/ingest/assessment/{assessment_id}/activate",
     ]
 )
 

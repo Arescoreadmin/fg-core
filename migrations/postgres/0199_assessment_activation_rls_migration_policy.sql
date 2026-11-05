@@ -13,9 +13,13 @@
 -- PostgreSQL combines PERMISSIVE policies with OR; a WITH CHECK that passes on
 -- any one policy is sufficient. Normal tenant-scoped UPDATEs continue to satisfy
 -- the existing assessments_tenant_isolation WITH CHECK and are unaffected.
+--
+-- Note: starts_with() is used rather than LIKE 'lead:%' to avoid bare-% in
+-- LIKE string literals, which trips psycopg3's paramstyle parser when the SQL
+-- is executed via exec_driver_sql in the migration runner.
 
 CREATE POLICY assessments_activation_migration ON assessments
     AS PERMISSIVE
     FOR UPDATE
-    USING  (tenant_id LIKE 'lead:%')
-    WITH CHECK (tenant_id NOT LIKE 'lead:%');
+    USING  (starts_with(tenant_id, 'lead:'))
+    WITH CHECK (NOT starts_with(tenant_id, 'lead:'));
