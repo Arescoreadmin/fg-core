@@ -1,3 +1,16 @@
+## feat(portal): L14-PORTAL-HANDOFF-001 addendum — assessment intake page + marketing site CTA update (branch feat/l14-portal-handoff-001)
+
+- **Work item:** L14-PORTAL-HANDOFF-001 (addendum to initial commit)
+- **Problem:** The initial L14-PORTAL-HANDOFF-001 implementation covered steps 2–3 of the customer journey (post-payment activation + account creation). Steps 0–1 were missing: (a) `app.frostgate.ai/assessment` had no intake page — customers visiting the portal to start a self-service assessment saw nothing; (b) `frostgate.ai` marketing site CTAs pointed to `console.frostgate.ai` (the operator console), which is wrong for new paying customers.
+- **Fix summary:** Added a self-service assessment intake form at `/assessment` on the portal. Added a BFF route `/api/assessment/start` that server-side creates the org + lead assessment via Core API and returns the Stripe checkout URL. Updated the marketing site to route customers to `app.frostgate.ai/assessment` instead of the operator console. The "Three steps" section now describes the customer journey, not the operator journey.
+- **Files changed:**
+  - `apps/portal/app/assessment/page.tsx` — new intake form (org name, email, industry, employee count → Stripe checkout)
+  - `apps/portal/app/api/assessment/start/route.ts` — public BFF endpoint: rate-limited (5/min), calls Core API org creation + checkout, returns `{checkout_url}`
+  - `apps/portal/middleware.ts` — `/api/assessment` added to PUBLIC_PREFIXES (pre-auth BFF route)
+  - `apps/web/app/page.tsx` — nav "Get started" → `app.frostgate.ai/assessment`; hero "Open console" → "Start your assessment" → `app.frostgate.ai/assessment`; bottom CTA updated; "Three steps" section now describes customer journey; "Sign in" relabeled "Operator sign in"
+- **Security:** BFF endpoint is public (pre-auth). Rate-limited at 5 intakes/IP/minute (in-memory). Email validated server-side before Core API call. No session, no credentials, no tenant isolation bypass — this is a lead-capture endpoint producing only a `lead:{id}` namespace record. Stripe checkout URL returned to browser for redirect; amount is determined server-side by Core API profile classification.
+- **Tests:** No new tests required — intake form calls existing endpoints covered by `tests/test_portal_handoff_001.py`. BFF logic is thin (validation + proxy).
+
 ## feat(portal): L14-PORTAL-HANDOFF-001 — post-payment portal identity binding (branch feat/l14-portal-handoff-001)
 
 - **Work item:** L14-PORTAL-HANDOFF-001

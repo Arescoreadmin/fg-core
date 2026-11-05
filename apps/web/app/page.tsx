@@ -29,18 +29,18 @@ const FEATURES = [
 const STEPS = [
   {
     n: '01',
-    title: 'Create an Engagement',
-    body: 'Spin up a client engagement, assign an assessor, and select your compliance framework.',
+    title: 'Tell us about your organization',
+    body: 'Answer a short profile questionnaire — industry, size, and compliance context. Takes less than 5 minutes.',
   },
   {
     n: '02',
-    title: 'Collect Evidence',
-    body: 'Run automated connector scans, complete the NIST questionnaire, and upload supporting documents — all anchored to findings.',
+    title: 'Complete the AI governance assessment',
+    body: 'Work through NIST AI RMF-mapped questions. Your responses drive the risk scoring and finding prioritization.',
   },
   {
     n: '03',
-    title: 'Deliver the Report',
-    body: 'Generate a signed PDF with executive summary, severity findings, remediation roadmap, and framework coverage matrix.',
+    title: 'Receive your personalized risk report',
+    body: 'Get an AI-generated executive summary, severity-sorted findings, and a remediation roadmap — delivered instantly.',
   },
 ];
 
@@ -70,11 +70,11 @@ export default function Home() {
             <a href="#how-it-works" className="hidden sm:block text-sm text-gray-400 hover:text-gray-200 transition-colors">
               How it works
             </a>
-            <a href="https://console.frostgate.ai" className="text-sm text-gray-300 hover:text-white transition-colors">
-              Sign in
+            <a href="https://console.frostgate.ai" className="text-sm text-gray-400 hover:text-gray-200 transition-colors">
+              Operator sign in
             </a>
             <a
-              href="https://console.frostgate.ai"
+              href="https://app.frostgate.ai/assessment"
               className="text-sm font-medium px-4 py-1.5 rounded bg-steel-600 text-white hover:bg-steel-500 transition-colors border border-steel-500/40"
             >
               Get started
@@ -123,10 +123,10 @@ export default function Home() {
 
             <div className="flex flex-wrap gap-3 justify-center pt-2">
               <a
-                href="https://console.frostgate.ai"
+                href="https://app.frostgate.ai/assessment"
                 className="px-6 py-2.5 rounded bg-steel-600 text-white font-medium hover:bg-steel-500 transition-colors border border-steel-500/30"
               >
-                Open console
+                Start your assessment
               </a>
               <a
                 href="#how-it-works"
@@ -224,14 +224,14 @@ export default function Home() {
               Trust but Verify
             </p>
             <p className="text-gray-400 text-sm max-w-sm mx-auto">
-              Get started with FrostGate. Connect your tenant and begin collecting evidence in
-              minutes.
+              Get a personalized AI governance risk report in minutes — no prior compliance
+              experience required.
             </p>
             <a
-              href="https://console.frostgate.ai"
+              href="https://app.frostgate.ai/assessment"
               className="inline-block px-8 py-3 rounded bg-steel-600 text-white font-medium hover:bg-steel-500 transition-colors border border-steel-500/30"
             >
-              Open the console
+              Start your assessment
             </a>
           </div>
         </section>
