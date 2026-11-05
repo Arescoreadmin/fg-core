@@ -657,6 +657,10 @@ def get_payment_status(assessment_id: str, db: Session = Depends(_get_db)):
     Returns only payment_status and whether an activation token exists.
     Never reveals assessment content or cross-tenant data.
     """
+    # Assessments in the activation flow carry tenant_id = "lead:{assessment_id}".
+    # PostgreSQL RLS enforces the tenant_id = app.tenant_id predicate on reads;
+    # bind the GUC before querying so the row is visible under the lead namespace.
+    set_tenant_context(db, f"lead:{assessment_id}")
     rec = (
         db.query(AssessmentRecord).filter(AssessmentRecord.id == assessment_id).first()
     )
@@ -721,7 +725,10 @@ def activate_assessment(
 
     now = datetime.now(timezone.utc)
 
-    # 2. Look up assessment — no tenant predicate (activation is pre-binding)
+    # 2. Look up assessment under the lead namespace.
+    # PostgreSQL RLS requires app.tenant_id = tenant_id; for a pre-activation
+    # assessment, tenant_id = "lead:{assessment_id}". Bind before querying.
+    set_tenant_context(db, f"lead:{assessment_id}")
     rec = (
         db.query(AssessmentRecord)
         .filter(AssessmentRecord.id == assessment_id)

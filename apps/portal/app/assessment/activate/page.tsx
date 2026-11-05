@@ -64,7 +64,7 @@ function ActivateForm() {
 
     async function poll() {
       try {
-        const res = await fetch(`/api/core/ingest/assessment/${encodeURIComponent(assessmentId)}/payment-status`, {
+        const res = await fetch(`/api/assessment/payment-status/${encodeURIComponent(assessmentId)}`, {
           cache: 'no-store',
         });
         if (cancelled) return;
