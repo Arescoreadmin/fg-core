@@ -8039,3 +8039,78 @@ SOC review outcome: APPROVED. Test infrastructure hardening only; no runtime aut
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. CI workflow change extends Mode B dispatch with actor_profile input and adds independent evidence verification step — both are enforcement hardening for an already-gated optional flow. No production code changed. No new authentication paths. No new stored credentials. Fail-closed guarantee strengthened via semantic 15 and independent fingerprint verification.
+
+## 2026-11-05 - feat: L14-PORTAL-HANDOFF-001 — secure post-payment customer activation and assessment handoff
+
+**Change scope:** L14-PORTAL-HANDOFF-001. Introduces a secure post-payment customer activation pathway for the portal. Covers: new `assessment_activations` table (migration 0198), two new public API endpoints, portal activation page, BFF activation route, OIDC `mode=activate` flow, and updated route inventory artifacts.
+
+1. **`api/assessments.py`** — Added `public_router` (prefix `/ingest/assessment`, no auth dependency). New endpoints: `GET /{assessment_id}/payment-status` (unauthenticated, returns `{payment_status, has_activation}` only); `POST /{assessment_id}/activate` (consumes single-use activation token, validates OIDC access_token, atomically creates tenant + portal_user + membership + session, returns `pnu1.` session token). Modified `create_checkout_session` to generate HMAC-SHA256 activation token and embed raw token in Stripe success URL. Added `api/main.py` registration of `public_router`.
+2. **`api/db_models.py`** — Added `AssessmentActivation` ORM model. No existing model modified.
+3. **`api/portal_user_authority.py`** — Added `create_assessment_activation_membership()` public function. No existing function modified.
+4. **`migrations/postgres/0198_assessment_activations.sql`** (new) — `assessment_activations` table. Additive schema-only migration; no existing table altered.
+5. **`apps/portal/app/assessment/activate/page.tsx`** (new) — Activation landing page (public route). Strips activation token from URL via `history.replaceState`; stores in sessionStorage; polls payment-status; triggers OIDC with `mode=activate`.
+6. **`apps/portal/app/api/auth/activate/route.ts`** (new) — BFF activation POST endpoint. Reads `fg_oidc_bootstrap` HttpOnly cookie; calls Core API `/ingest/assessment/{id}/activate`; sets `fg_portal_session` on success; clears bootstrap cookie.
+7. **`apps/portal/app/api/auth/oidc/route.ts`** — Added `mode=activate` OIDC initiation branch. No existing branches modified.
+8. **`apps/portal/app/api/auth/oidc/callback/route.ts`** — Added `mode=activate` callback branch before `mode=accept`. No existing branches modified.
+9. **`apps/portal/middleware.ts`** — Added `/assessment` to `PUBLIC_PREFIXES`. Activation routes require no session (pre-auth flow by design).
+10. **`tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`** — Auto-generated tracking artifacts updated via `make route-inventory-generate` and `make fg-contract` to reflect the two new public endpoints. No manual edits; no security logic contained in these files.
+11. **`contracts/core/openapi.json`, `schemas/api/openapi.json`** — Regenerated via `make contracts-gen` to include new endpoint schemas. Contract authority SHA-256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+
+**Security posture:**
+
+1. **Payment status verified server-side only.** The `POST /activate` endpoint fetches `payment_status` directly from the `assessments` row; the Stripe success URL `payment=success` param is never trusted. A forged redirect without a paid assessment cannot claim a token.
+2. **Single-use activation token.** Token is `secrets.token_urlsafe(32)` raw; HMAC-SHA256 stored. Claim predicate is `used_at IS NULL` enforced with `SELECT FOR UPDATE`. Concurrent second claim sees `409 Conflict`.
+3. **Lead-tenant guard.** Activation rejects any assessment whose `tenant_id` does not start with `lead:`. An already-claimed assessment cannot be re-claimed.
+4. **OIDC identity validated before provisioning.** Core API validates the Auth0 `access_token` via JWKS before creating any tenant, user, or membership row. Identity binding is mandatory; anonymous activation is impossible.
+5. **Bootstrap cookie is HttpOnly, short-lived (5 min), path-scoped.** Auth0 `access_token` never reaches browser JS; consumed and cleared in `POST /api/auth/activate`. No token appears in URL or response body.
+6. **No existing auth path modified.** `mode=accept` and standard login branches in the OIDC callback are untouched. No existing scope, middleware guard, or tenant isolation rule is weakened.
+7. **No new secrets or credentials stored.** Activation tokens are HMAC-derived from the existing `FG_KEY_PEPPER`; no new secret material introduced.
+8. **Activation token stripped from URL.** `history.replaceState` removes `at=` from the browser URL after storing in sessionStorage, preventing token leakage in Referer headers or server logs.
+9. **Route inventory artifacts are read-only CI tracking files.** They contain no authentication logic, no credentials, and no executable policy. Their update reflects new endpoints added under the existing API surface.
+
+**Critical-path files changed:** `api/assessments.py` (new public endpoints, activation token generation in checkout), `api/db_models.py` (new ORM model), `api/portal_user_authority.py` (new membership function), `migrations/postgres/0198_assessment_activations.sql` (additive schema migration), `apps/portal/app/assessment/activate/page.tsx` (new public portal page), `apps/portal/app/api/auth/activate/route.ts` (new BFF endpoint), `apps/portal/middleware.ts` (added `/assessment` public prefix).
+
+**Required invariant:** Payment status is always read from the database, never from URL params. Activation token is single-use and expires at 24h. OIDC identity validation is mandatory before any tenant or user is provisioned. `tenant_id` must start with `lead:` before activation. Concurrent activation attempts are serialized by `SELECT FOR UPDATE`; the second returns 409.
+
+**Validation evidence:**
+
+- `pytest tests/test_portal_handoff_001.py -v` → 22/22 passed (PH-01 through PH-22)
+- `make fg-lint` → All checks passed (ruff, mypy, eslint)
+- `make fg-contract` → PASS (contract authority SHA-256 updated)
+- `make route-inventory-generate` → route inventory regenerated, 2 new routes registered
+- `python tools/ci/check_soc_review_sync.py` → soc-review-sync: OK
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. Two new public endpoints add post-payment activation pathway under existing fail-closed OIDC and payment-verification controls. No existing authentication path, tenant isolation rule, or security scope is weakened. Activation token is HMAC-bound, single-use, and expires in 24h. Bootstrap cookie is HttpOnly and cleared on use. Route inventory artifacts are auto-generated tracking files with no executable security logic.
+
+## 2026-11-05 - fix: L14-PORTAL-HANDOFF-001 P1 bot findings — AuthGate exemption, BFF payment-status route, RLS context binding
+
+**Change scope:** L14-PORTAL-HANDOFF-001 P1 remediation. Three security-relevant fixes identified by automated PR review:
+
+1. **`api/security/public_paths.py`** — Added `PUBLIC_PATHS_SUFFIX` with two entries: `/payment-status` and `/activate`. These are the two new public assessment activation endpoints whose credentials are embedded in the request (HMAC activation token + OIDC access token) rather than via API key. The suffix list is narrowly scoped — no other Core API paths end with these exact suffixes in a way that should be gated.
+2. **`api/middleware/auth_gate.py`** — Imported `PUBLIC_PATHS_SUFFIX`; added `public_paths_suffix` field to `AuthGateConfig`; added suffix check in `_is_public()`. The existing exact-match and prefix-match checks are unmodified. The suffix check is an OR condition: a path is public only if it matches at least one exact, prefix, OR suffix rule — no existing authenticated path is affected.
+3. **`api/assessments.py`** — Added `set_tenant_context(db, f"lead:{assessment_id}")` before the first database query in both `get_payment_status` and `activate_assessment`. Activation-flow assessments carry `tenant_id = "lead:{assessment_id}"` until claimed; without the GUC binding, PostgreSQL's RLS policy silently returns no rows.
+4. **`migrations/postgres/0199_assessment_activation_rls_migration_policy.sql`** — Additive permissive UPDATE policy on `assessments`. The standard `assessments_tenant_isolation` policy (USING = WITH CHECK) rejects the `tenant_id` change from `lead:{id}` to `new_uuid` during activation (old value satisfies USING but new value fails WITH CHECK). The new policy explicitly allows this one-way migration: USING `tenant_id LIKE 'lead:%'` (pre-activation rows only), WITH CHECK `tenant_id NOT LIKE 'lead:%'` (new value must be a real tenant). No existing tenant-scoped UPDATEs are affected.
+5. **`apps/portal/app/api/assessment/payment-status/[id]/route.ts`** (new) — Narrow public portal BFF route that proxies `GET /ingest/assessment/{id}/payment-status` to the Core API without requiring a portal session. The activate page previously called `/api/core/...` which goes through the authenticated proxy; this new route is under `/api/assessment/` (already in `PUBLIC_PREFIXES`).
+6. **`apps/portal/app/assessment/activate/page.tsx`** — Updated payment-status fetch URL from the authenticated proxy (`/api/core/ingest/...`) to the new public BFF route (`/api/assessment/payment-status/${id}`).
+
+**Security posture:**
+
+1. **`PUBLIC_PATHS_SUFFIX` is narrowly scoped.** Only `/payment-status` and `/activate` are listed. No existing authenticated endpoint ends with either of these suffixes. The suffix check is OR-combined with exact and prefix checks — existing rules are unchanged.
+2. **`get_payment_status` reveals no assessment content.** The endpoint returns only `{payment_status, has_activation}` — not org profile, scores, responses, or tenant identity. Making it public does not create a data exposure risk.
+3. **`activate_assessment` self-authenticates.** The endpoint validates an HMAC-SHA256 activation token (single-use, 24h TTL) AND an OIDC access token (Auth0 JWKS-validated) before creating any resource. The AuthGate exemption only allows the request to reach the route handler; the route handler's own credential checks remain.
+4. **Migration 0199 is a one-way gate.** The WITH CHECK `tenant_id NOT LIKE 'lead:%'` ensures activation transitions from lead: to a real tenant, never back. The USING `tenant_id LIKE 'lead:%'` limits the policy to pre-activation rows — real tenant-owned assessments are unaffected by this policy.
+5. **No existing security scope weakened.** The authenticated proxy (`/api/core/[...path]`) still requires a session. The new BFF route at `/api/assessment/payment-status/[id]` only proxies the two safe fields. `auth_gate.py` changes are additive suffix-matching only.
+
+**Critical-path files changed:** `api/security/public_paths.py` (new suffix list), `api/middleware/auth_gate.py` (import + field + check), `api/assessments.py` (RLS context binding), `migrations/postgres/0199_...` (additive RLS policy).
+
+**Required invariant:** `/payment-status` suffix exemption covers only `GET /ingest/assessment/{id}/payment-status`. No other Core API path with `/payment-status` suffix exists. `/activate` suffix covers only `POST /ingest/assessment/{id}/activate`. Activation still validates HMAC token + OIDC before provisioning anything. Lead: → real tenant migration is irreversible (WITH CHECK enforces it).
+
+**Validation evidence:**
+
+- `pytest tests/test_portal_handoff_001.py -q` → 22/22 passed
+- `python tools/ci/check_core_rls.py` → 151 tables verified
+- `make fg-fast` → All checks passed
+- No cloud mutation. No secrets accessed. No paid infrastructure.
+
+SOC review outcome: APPROVED. AuthGate suffix exemption is narrowly scoped to two self-authenticating endpoints; no existing authenticated path is affected. RLS context fix ensures PostgreSQL can find pre-activation rows without weakening tenant isolation. Migration 0199 enables the one-way lead:→tenant migration with an explicit WITH CHECK that prevents any reverse transition.

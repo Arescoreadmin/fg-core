@@ -15328,6 +15328,18 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/activate",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
       "dependency_categories": [
         "auth",
         "tenant"
@@ -15428,6 +15440,18 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/payment-status",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
     },
     {
       "dependency_categories": [
@@ -21179,7 +21203,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-11-01T18:58:09.425522+00:00",
+  "generated_at": "2026-11-05T18:35:34.672305+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

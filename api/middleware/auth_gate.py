@@ -16,7 +16,11 @@ from api.auth_scopes import (
     redact_detail,
     verify_api_key_detailed,
 )
-from api.security.public_paths import PUBLIC_PATHS_EXACT, PUBLIC_PATHS_PREFIX
+from api.security.public_paths import (
+    PUBLIC_PATHS_EXACT,
+    PUBLIC_PATHS_PREFIX,
+    PUBLIC_PATHS_SUFFIX,
+)
 
 ROUTE_SCOPE_PREFIX: dict[str, tuple[str, ...]] = {
     "/stats": ("stats:read",),
@@ -67,6 +71,7 @@ def _route_is_registered(request: Request) -> bool:
 class AuthGateConfig:
     public_paths_exact: tuple[str, ...] = PUBLIC_PATHS_EXACT
     public_paths_prefix: tuple[str, ...] = PUBLIC_PATHS_PREFIX
+    public_paths_suffix: tuple[str, ...] = PUBLIC_PATHS_SUFFIX
     header_authgate: str = "x-fg-authgate"
     header_gate: str = "x-fg-gate"
     header_path: str = "x-fg-path"
@@ -88,7 +93,9 @@ class AuthGateConfig:
 def _is_public(path: str, config: AuthGateConfig) -> bool:
     if path in config.public_paths_exact:
         return True
-    return any(path.startswith(prefix) for prefix in config.public_paths_prefix)
+    if any(path.startswith(prefix) for prefix in config.public_paths_prefix):
+        return True
+    return any(path.endswith(suffix) for suffix in config.public_paths_suffix)
 
 
 class AuthGateMiddleware(BaseHTTPMiddleware):

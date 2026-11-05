@@ -16,11 +16,14 @@ all assessments for a tenant are gated by fg-core's existing auth system.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,7 +31,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.db import get_sessionmaker, set_tenant_context
-from api.db_models import AssessmentRecord, AssessmentSchema, OrgProfile
+from api.db_models import (
+    AssessmentActivation,
+    AssessmentRecord,
+    AssessmentSchema,
+    OrgProfile,
+)
 from api.auth_scopes.resolution import require_scopes
 
 log = logging.getLogger("frostgate.assessments")
@@ -37,6 +45,14 @@ router = APIRouter(
     prefix="/ingest/assessment",
     tags=["assessment"],
     dependencies=[Depends(require_scopes("ingest:assessment"))],
+)
+
+# Public router: no API-key dependency.
+# These endpoints carry their own credential (activation token or no secret at all).
+# Mounted separately in main.py so the AuthGate middleware does not block them.
+public_router = APIRouter(
+    prefix="/ingest/assessment",
+    tags=["assessment-public"],
 )
 
 
@@ -503,6 +519,30 @@ def create_checkout_session(
     org = db.query(OrgProfile).filter(OrgProfile.id == rec.org_profile_id).first()
     customer_email = (org.email if org else None) or rec.email or None
 
+    # Activation token for post-payment identity binding (L14-PORTAL-HANDOFF-001).
+    # Embedded in success_url — proves bearer was on the Stripe success page.
+    _pepper = os.environ.get("FG_KEY_PEPPER", "dev-pepper-unsafe")
+    _raw_activation_token = secrets.token_urlsafe(32)
+    _activation_token_hash = hmac.new(
+        _pepper.encode(), _raw_activation_token.encode(), hashlib.sha256
+    ).hexdigest()
+    _activation_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    # Revoke existing pending activations for this assessment before issuing a new one.
+    db.query(AssessmentActivation).filter(
+        AssessmentActivation.assessment_id == assessment_id,
+        AssessmentActivation.state == "pending",
+    ).update({"state": "revoked"})
+
+    activation_record = AssessmentActivation(
+        assessment_id=assessment_id,
+        token_hash=_activation_token_hash,
+        email_hint=customer_email,
+        expires_at=_activation_expires,
+        state="pending",
+    )
+    db.add(activation_record)
+
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
         line_items=[
@@ -522,7 +562,7 @@ def create_checkout_session(
             }
         ],
         mode="payment",
-        success_url=f"{base_url}/assessment?id={assessment_id}&payment=success",
+        success_url=f"{base_url}/assessment/activate?id={assessment_id}&at={_raw_activation_token}",
         cancel_url=f"{base_url}/onboarding",
         # metadata carries identifiers only — amount is validated server-side,
         # never trusted from metadata on the webhook path.
@@ -602,4 +642,232 @@ def submit_assessment(
         "overall_score": result["overall_score"],
         "risk_band": result["risk_band"],
         "domain_scores": result["domain_scores"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Public endpoints (no API key required)
+# ---------------------------------------------------------------------------
+
+
+@public_router.get("/{assessment_id}/payment-status")
+def get_payment_status(assessment_id: str, db: Session = Depends(_get_db)):
+    """Server-side payment status check — safe for unauthenticated callers.
+
+    Returns only payment_status and whether an activation token exists.
+    Never reveals assessment content or cross-tenant data.
+    """
+    # Assessments in the activation flow carry tenant_id = "lead:{assessment_id}".
+    # PostgreSQL RLS enforces the tenant_id = app.tenant_id predicate on reads;
+    # bind the GUC before querying so the row is visible under the lead namespace.
+    set_tenant_context(db, f"lead:{assessment_id}")
+    rec = (
+        db.query(AssessmentRecord).filter(AssessmentRecord.id == assessment_id).first()
+    )
+    if rec is None:
+        # Return 'not_found' rather than 404 to avoid enumeration oracle.
+        return {"payment_status": "not_found", "has_activation": False}
+
+    has_activation = (
+        db.query(AssessmentActivation)
+        .filter(
+            AssessmentActivation.assessment_id == assessment_id,
+            AssessmentActivation.state == "pending",
+        )
+        .first()
+        is not None
+    )
+
+    return {
+        "payment_status": rec.payment_status,  # "unpaid" | "paid"
+        "has_activation": has_activation,
+    }
+
+
+class ActivateAssessmentRequest(BaseModel):
+    access_token: str  # Auth0 OIDC access_token
+    activation_token: str  # Raw token from success URL
+    oidc_provider: str = "auth0"
+
+
+@public_router.post("/{assessment_id}/activate")
+def activate_assessment(
+    assessment_id: str,
+    body: ActivateAssessmentRequest,
+    request: Request,
+    db: Session = Depends(_get_db),
+):
+    """Secure post-payment assessment activation. L14-PORTAL-HANDOFF-001.
+
+    Validates: activation token (single-use, unexpired, bound to assessment),
+               OIDC access token, payment confirmed server-side.
+    Creates: tenant, portal user, portal membership.
+    Migrates: assessment tenant_id from lead:{id} to new tenant.
+    Returns: pnu1. session token for the portal.
+
+    Fail-closed: any validation failure returns 403 without revealing
+    which specific check failed (prevents oracle attacks).
+    """
+    import api.portal_user_authority as pua  # noqa: PLC0415
+    from api.identity_providers.auth0 import validate_auth0_token  # noqa: PLC0415
+    from api.tenant_repository import TenantRepository  # noqa: PLC0415
+    from api.db import get_engine  # noqa: PLC0415
+
+    _pepper = os.environ.get("FG_KEY_PEPPER", "dev-pepper-unsafe")
+
+    # 1. Validate activation token format (fail fast before DB hit)
+    if not body.activation_token or len(body.activation_token) < 20:
+        raise HTTPException(status_code=403, detail="ACTIVATION_DENIED")
+
+    token_hash = hmac.new(
+        _pepper.encode(), body.activation_token.encode(), hashlib.sha256
+    ).hexdigest()
+
+    now = datetime.now(timezone.utc)
+
+    # 2. Look up assessment under the lead namespace.
+    # PostgreSQL RLS requires app.tenant_id = tenant_id; for a pre-activation
+    # assessment, tenant_id = "lead:{assessment_id}". Bind before querying.
+    set_tenant_context(db, f"lead:{assessment_id}")
+    rec = (
+        db.query(AssessmentRecord)
+        .filter(AssessmentRecord.id == assessment_id)
+        .with_for_update()
+        .first()
+    )
+
+    if rec is None:
+        raise HTTPException(status_code=403, detail="ACTIVATION_DENIED")
+
+    # 3. Payment must be confirmed server-side before we grant access.
+    if rec.payment_status != "paid":
+        raise HTTPException(status_code=402, detail="PAYMENT_REQUIRED")
+
+    # 3.5. Check if assessment is already bound to a real tenant.
+    # Fail early before the activation lookup to avoid leaking information.
+    if not rec.tenant_id.startswith("lead:"):
+        raise HTTPException(status_code=409, detail="ASSESSMENT_ALREADY_CLAIMED")
+
+    # 4. Validate activation token: must exist, unexpired, unused, correct assessment.
+    activation = (
+        db.query(AssessmentActivation)
+        .filter(
+            AssessmentActivation.token_hash == token_hash,
+            AssessmentActivation.assessment_id == assessment_id,
+            AssessmentActivation.state == "pending",
+            AssessmentActivation.used_at.is_(None),
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if activation is None:
+        raise HTTPException(status_code=403, detail="ACTIVATION_DENIED")
+
+    if activation.expires_at < now:
+        activation.state = "expired"
+        db.commit()
+        raise HTTPException(status_code=410, detail="ACTIVATION_EXPIRED")
+
+    # 5. Validate OIDC access token and extract identity.
+    try:
+        actor = validate_auth0_token(body.access_token)
+    except (ValueError, Exception) as exc:
+        log.warning(
+            "assessment.activate.invalid_oidc assessment_id=%s error=%s",
+            assessment_id,
+            exc,
+        )
+        raise HTTPException(status_code=401, detail="OIDC_TOKEN_INVALID") from exc
+
+    oidc_sub = actor.subject or ""
+    oidc_email = actor.email or ""
+    if not oidc_sub:
+        raise HTTPException(status_code=401, detail="OIDC_TOKEN_INVALID")
+
+    # 7. Mark activation as claimed atomically (single-use enforcement)
+    activation.used_at = now
+    activation.state = "claimed"
+
+    # 8. Create new tenant for this customer
+    new_tenant_id = str(uuid.uuid4())
+    org = db.query(OrgProfile).filter(OrgProfile.id == rec.org_profile_id).first()
+    tenant_display = (
+        (org.name if org and hasattr(org, "name") else None)
+        or (org.org_name if org and hasattr(org, "org_name") else None)
+        or oidc_email
+        or f"Customer {assessment_id[:8]}"
+    )
+
+    tenant_repo = TenantRepository(get_engine())
+    try:
+        tenant_repo.create(
+            new_tenant_id,
+            display_name=str(tenant_display)[:255],
+            tenant_kind="customer",
+            created_by=f"activation:{assessment_id}",
+            metadata={
+                "source": "assessment_activation",
+                "assessment_id": assessment_id,
+            },
+        )
+    except ValueError:
+        # Tenant ID collision (astronomically unlikely with UUID)
+        raise HTTPException(status_code=503, detail="ACTIVATION_RETRY")
+
+    # 9. Migrate assessment to new tenant
+    rec.tenant_id = new_tenant_id
+    activation.provisioned_tenant_id = new_tenant_id
+
+    # 10. Create portal user + membership
+    domain = os.environ.get("FG_AUTH0_DOMAIN", "").strip().rstrip("/")
+    oidc_issuer = f"https://{domain}/" if domain else oidc_sub
+
+    # Set RLS context for portal operations
+    set_tenant_context(db, new_tenant_id)
+
+    portal_user = pua.find_or_create_portal_user(
+        db,
+        tenant_id=new_tenant_id,
+        oidc_provider=body.oidc_provider,
+        oidc_issuer=oidc_issuer,
+        oidc_subject=oidc_sub,
+        email=oidc_email,
+        display_name=getattr(actor, "name", None),
+    )
+
+    membership = pua.create_assessment_activation_membership(
+        db,
+        portal_user_id=portal_user.id,
+        tenant_id=new_tenant_id,
+        portal_role="general",
+        assessment_id=assessment_id,
+    )
+
+    session = pua.create_session(
+        db,
+        portal_user_id=portal_user.id,
+        portal_membership_id=membership.id,
+        tenant_id=new_tenant_id,
+        auth_version_snapshot=membership.auth_version,
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=(request.headers.get("user-agent") or "")[:512],
+    )
+
+    db.commit()
+
+    log.info(
+        "assessment.activated assessment_id=%s tenant_id=%s portal_user=%s",
+        assessment_id,
+        new_tenant_id,
+        portal_user.id,
+    )
+
+    return {
+        "activated": True,
+        "session_token": session.raw_token,
+        "expires_at": session.expires_at,
+        "tenant_id": new_tenant_id,
+        "assessment_id": assessment_id,
+        "portal_user_id": portal_user.id,
     }

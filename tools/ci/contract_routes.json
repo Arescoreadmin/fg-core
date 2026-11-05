@@ -4382,6 +4382,12 @@
     },
     {
       "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/activate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/ingest/assessment/{assessment_id}/checkout",
       "scopes": [],
       "source": "contract"
@@ -4413,6 +4419,12 @@
     {
       "method": "GET",
       "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/payment-status",
       "scopes": [],
       "source": "contract"
     },
@@ -6169,7 +6181,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-09-30T10:09:07.745775+00:00",
+  "generated_at": "2026-11-05T18:35:34.699958+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

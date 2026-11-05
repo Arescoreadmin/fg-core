@@ -49,6 +49,19 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/agents/enroll",
 )
 
+# Path-suffix exemptions: endpoints that are self-authenticating via their own
+# credential embedded in the request body (activation token + OIDC token), not
+# via an API key. Only narrow suffixes specific to the assessment activation
+# flow are listed — do not add generic suffixes here.
+PUBLIC_PATHS_SUFFIX: tuple[str, ...] = (
+    # GET /ingest/assessment/{id}/payment-status — unauthenticated payment check;
+    # returns only paid/unpaid status, no assessment content.
+    "/payment-status",
+    # POST /ingest/assessment/{id}/activate — self-authenticating via HMAC
+    # activation token + OIDC access token in the request body.
+    "/activate",
+)
+
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (
     "/health/",
     "/missions",

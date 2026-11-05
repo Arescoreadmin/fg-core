@@ -60,9 +60,13 @@ export async function GET(req: NextRequest) {
   // callback branches to /accept-invite instead of enrolling. inviteToken and
   // tenantId travel inside the HttpOnly fg_oidc_state cookie — never in the
   // OAuth `state` query param (Auth0 relays that to the browser URL bar).
-  const mode = req.nextUrl.searchParams.get('mode') === 'accept' ? 'accept' : 'login';
+  const rawMode = req.nextUrl.searchParams.get('mode') ?? '';
+  const mode: 'accept' | 'activate' | 'login' =
+    rawMode === 'accept' ? 'accept' : rawMode === 'activate' ? 'activate' : 'login';
   const inviteToken = (req.nextUrl.searchParams.get('inviteToken') || '').trim();
   const tenantIdHint = (req.nextUrl.searchParams.get('tenantId') || '').trim();
+  // Assessment activation: assessmentId travels in state cookie (never in OAuth state param).
+  const assessmentId = (req.nextUrl.searchParams.get('assessmentId') || '').trim();
   if (mode === 'accept') {
     // Format validation: pni1. prefix + 64 hex chars from portal_user_authority.
     // Reject anything else to bound state-cookie inflation and to fail fast
@@ -76,6 +80,15 @@ export async function GET(req: NextRequest) {
     if (tenantIdHint && !/^[a-zA-Z0-9_-]{1,128}$/.test(tenantIdHint)) {
       return NextResponse.json(
         { error: 'invalid tenant id', code: 'PORTAL_ACCEPT_TENANT_INVALID' },
+        { status: 400 },
+      );
+    }
+  }
+  if (mode === 'activate') {
+    // Basic UUID-shape validation; reject obviously bad values to bound state-cookie inflation.
+    if (!assessmentId || !/^[0-9a-f-]{32,36}$/i.test(assessmentId)) {
+      return NextResponse.json(
+        { error: 'invalid assessment id', code: 'PORTAL_ACTIVATE_ASSESSMENT_INVALID' },
         { status: 400 },
       );
     }
@@ -106,7 +119,9 @@ export async function GET(req: NextRequest) {
     returnTo,
     ...(mode === 'accept'
       ? { mode: 'accept', inviteToken, tenantId: tenantIdHint || undefined }
-      : {}),
+      : mode === 'activate'
+        ? { mode: 'activate', assessmentId }
+        : {}),
   });
   const res = NextResponse.redirect(authUrl);
   res.cookies.set('fg_oidc_state', statePayload, {

@@ -859,6 +859,22 @@
           "method": "GET",
           "path": "/ingest/assessment/reports/{report_id}/download",
           "permanent": true
+        },
+        {
+          "class_name": "bootstrap",
+          "expires_at": "",
+          "justification": "UUID-gated payment status check; org not yet enrolled as a tenant. assessment_id in URL is the implicit access credential (derived from Stripe success URL). L14-PORTAL-HANDOFF-001.",
+          "method": "GET",
+          "path": "/ingest/assessment/{assessment_id}/payment-status",
+          "permanent": true
+        },
+        {
+          "class_name": "bootstrap",
+          "expires_at": "",
+          "justification": "UUID-gated post-payment account activation; org not yet enrolled as a tenant. Credential is HMAC activation token + OIDC access token in request body. L14-PORTAL-HANDOFF-001.",
+          "method": "POST",
+          "path": "/ingest/assessment/{assessment_id}/activate",
+          "permanent": true
         }
       ],
       "docs_routes": [],
@@ -1342,7 +1358,7 @@
       ]
     }
   ],
-  "generated_at": "2026-11-01T22:51:53.236201+00:00",
+  "generated_at": "2026-11-05T21:55:49.235430+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
