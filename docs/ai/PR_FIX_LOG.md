@@ -1,3 +1,23 @@
+## audit(experience): L14 unified brand, navigation and customer journey verification (branch audit/l14-unified-experience-001)
+
+- **Work item:** L14-UNIFIED-EXPERIENCE-AUDIT-001
+- **Baseline SHA:** `083308c7` (main after PR #804)
+- **Problem:** After merging PR #803 (Stripe webhook event conversion) and PR #804 (portal handoff), no cross-property audit had been performed to verify that the full marketing → purchase → activation → portal journey was coherent across all three FrostGate properties.
+- **Fix summary:** Code-inspection audit of all three apps. Found and corrected four low-risk issues: (1) Stripe `cancel_url` pointed to `{base_url}/onboarding` — no `/onboarding` route exists in the portal, leaving cancelled checkout users on a 404; changed to `/assessment`. (2) Console landing page displayed flat `$299` for Snapshot — API actually charges `$299–999` by profile type for FrostGate's target market; updated to `$299–999` with profile-based note. (3) Console landing page CTAs (`/onboarding`, `/onboarding?tier=intelligence`) targeted a legacy console wizard instead of the portal's self-service flow; corrected to `https://app.frostgate.ai/assessment`. (4) BFF `activate/route.ts` missing `CORE_API_KEY` fail-closed guard (present in `start/route.ts` but absent here); added 503 guard.
+- **Files changed:**
+  - `api/assessments.py` — `cancel_url` fixed: `/onboarding` → `/assessment`
+  - `apps/console/app/page.tsx` — Snapshot price `$299` → `$299–999`; 5 CTA hrefs corrected from `/onboarding` to `https://app.frostgate.ai/assessment`
+  - `apps/portal/app/api/auth/activate/route.ts` — CORE_API_KEY fail-closed guard added
+  - `docs/audits/L14_UNIFIED_EXPERIENCE_AUDIT.md` — new audit report
+  - `docs/audits/L14_NAVIGATION_MATRIX.md` — full navigation inventory
+  - `docs/audits/L14_BRAND_CONSISTENCY.md` — token/font/logo divergence documentation
+  - `docs/audits/L14_CUSTOMER_JOURNEY.md` — step-by-step journey trace
+  - `docs/audits/L14_EXPERIENCE_REMEDIATION.md` — 9-item prioritized remediation backlog
+  - `docs/audits/L14_EVIDENCE_MANIFEST.json` — 20 evidence records
+- **Security note:** No auth flow changes. No schema changes. No migrations. The activate route guard is a defensive addition only — the public_router Core API endpoint does not require the key, so this is a correctness/consistency fix.
+- **Tests:** CI gates all pass: `check_route_scopes.py` OK, `check_plane_registry.py` OK, `guard_no_raw_percent_in_sql.py` OK. No test suite changes.
+- **Known limitations:** Live HTTP status was NOT_VERIFIED — network access blocked in execution environment. All live-site evidence records carry `NOT_VERIFIED`.
+
 ## feat(portal): L14-PORTAL-HANDOFF-001 addendum — assessment intake page + marketing site CTA update (branch feat/l14-portal-handoff-001)
 
 - **Work item:** L14-PORTAL-HANDOFF-001 (addendum to initial commit)

@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { COOKIE_NAME } from '@/lib/session';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const CORE_API_KEY = process.env.CORE_API_KEY || '';
 const IS_PROD = process.env.NODE_ENV === 'production';
 const OIDC_BOOTSTRAP_COOKIE = 'fg_oidc_bootstrap';
 
@@ -28,6 +29,13 @@ function badRequest(message: string, code: string, status = 400): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  if (!CORE_API_KEY) {
+    return NextResponse.json(
+      { error: 'Service not configured', code: 'SERVICE_NOT_CONFIGURED' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
   const body = await request.json().catch(() => ({}));
   const assessmentId = String(body?.assessment_id ?? '').trim();
   const activationToken = String(body?.activation_token ?? '').trim();

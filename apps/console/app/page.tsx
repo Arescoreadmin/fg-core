@@ -22,12 +22,12 @@ import { Badge } from '@/components/ui/badge';
 const TIERS = [
   {
     name: 'Snapshot',
-    price: '$299',
+    price: '$299–999',
     period: 'one-time',
-    description: 'Guided AI risk assessment + advisory PDF report for your leadership team.',
+    description: 'Guided AI risk assessment + advisory PDF report for your leadership team. Price depends on organization profile (industry, size, regulatory exposure).',
     badge: null,
     cta: 'Start Assessment',
-    href: '/onboarding',
+    href: 'https://app.frostgate.ai/assessment',
     features: [
       'AI governance assessment (35–130 questions)',
       'Risk scoring across 6 domains',
@@ -43,7 +43,7 @@ const TIERS = [
     description: 'Continuous monitoring, benchmarking, and RAG-grounded recommendations.',
     badge: 'Most Popular',
     cta: 'Get Intelligence',
-    href: '/onboarding?tier=intelligence',
+    href: 'https://app.frostgate.ai/assessment',
     features: [
       'Everything in Snapshot',
       'Live compliance dashboard',
@@ -154,7 +154,7 @@ export default function LandingPage() {
             <Link href="/login">
               <Button variant="outline" size="sm">Sign In</Button>
             </Link>
-            <Link href="/onboarding">
+            <Link href="https://app.frostgate.ai/assessment">
               <Button size="sm">Get Started</Button>
             </Link>
           </div>
@@ -180,7 +180,7 @@ export default function LandingPage() {
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <Link href="/onboarding">
+          <Link href="https://app.frostgate.ai/assessment">
             <Button size="lg" className="gap-2">
               Start Free Assessment <ArrowRight className="h-4 w-4" />
             </Button>
@@ -317,7 +317,7 @@ export default function LandingPage() {
             Get a defensible risk posture in 48 hours — starting at $299. No enterprise contract
             required to know where you stand.
           </p>
-          <Link href="/onboarding" className="mt-8 inline-block">
+          <Link href="https://app.frostgate.ai/assessment" className="mt-8 inline-block">
             <Button size="lg" className="gap-2">
               Start Your Assessment <ArrowRight className="h-4 w-4" />
             </Button>

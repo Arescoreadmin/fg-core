@@ -1,0 +1,222 @@
+[
+  {
+    "id": "EVD-001",
+    "domain": "frostgate.ai",
+    "route": "/",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Marketing homepage fully implemented in apps/web/app/page.tsx. All CTA links point to app.frostgate.ai/assessment. Navigation links to console.frostgate.ai and app.frostgate.ai are correct.",
+    "source_ref": "apps/web/app/page.tsx",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-002",
+    "domain": "frostgate.ai",
+    "route": "/",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "Live HTTP status not available — network access was blocked in the execution environment.",
+    "source_ref": "https://frostgate.ai/",
+    "classification": "NOT_TESTED"
+  },
+  {
+    "id": "EVD-003",
+    "domain": "frostgate.ai",
+    "route": "/pricing",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "No /pricing route found in apps/web/app/ directory. Expected 404 in production. Code confirms no pricing page exists.",
+    "source_ref": "apps/web/app/ (directory listing)",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-004",
+    "domain": "frostgate.ai",
+    "route": "/pricing",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "FAIL",
+    "finding": "No /pricing page exists in apps/web/app/. Only page.tsx (homepage), layout.tsx, and globals.css are present. This is a P2 conversion gap.",
+    "source_ref": "apps/web/app/",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-005",
+    "domain": "app.frostgate.ai",
+    "route": "/",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "Live HTTP status not available.",
+    "source_ref": "https://app.frostgate.ai/",
+    "classification": "NOT_TESTED"
+  },
+  {
+    "id": "EVD-006",
+    "domain": "app.frostgate.ai",
+    "route": "/",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Portal home page implemented at apps/portal/app/page.tsx. Full risk posture dashboard: engagement list, NIST coverage, findings severity strip, function heatmap, immediate actions, remediation center, attestation health cards.",
+    "source_ref": "apps/portal/app/page.tsx",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-007",
+    "domain": "app.frostgate.ai",
+    "route": "/assessment",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Assessment intake form at apps/portal/app/assessment/page.tsx. Collects org name, email, industry, employee_count. POSTs to /api/assessment/start BFF. No price shown before checkout.",
+    "source_ref": "apps/portal/app/assessment/page.tsx",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-008",
+    "domain": "app.frostgate.ai",
+    "route": "/assessment/activate",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Activation page at apps/portal/app/assessment/activate/page.tsx. Token scrubbed from URL into sessionStorage on landing. Payment poll, OIDC redirect, activation call all implemented. Single-use token enforced server-side.",
+    "source_ref": "apps/portal/app/assessment/activate/page.tsx",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-009",
+    "domain": "app.frostgate.ai",
+    "route": "/assessment/activate",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "Live HTTP status not available.",
+    "source_ref": "https://app.frostgate.ai/assessment/activate",
+    "classification": "NOT_TESTED"
+  },
+  {
+    "id": "EVD-010",
+    "domain": "app.frostgate.ai",
+    "route": "/api/assessment/payment-status/test123",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Route at apps/portal/app/api/assessment/payment-status/[id]/route.ts validates id against /^[a-zA-Z0-9_-]{8,}$/ and returns HTTP 400 for invalid IDs. 'test123' is 7 chars — would return 400 (not 500). Correct fail-closed behavior.",
+    "source_ref": "apps/portal/app/api/assessment/payment-status/[id]/route.ts:20",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-011",
+    "domain": "app.frostgate.ai",
+    "route": "/api/assessment/payment-status/test123",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "Live HTTP test not available.",
+    "source_ref": "https://app.frostgate.ai/api/assessment/payment-status/test123",
+    "classification": "NOT_TESTED"
+  },
+  {
+    "id": "EVD-012",
+    "domain": "console.frostgate.ai",
+    "route": "/",
+    "method": "HTTP_GET",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "NOT_VERIFIED",
+    "finding": "Live HTTP status not available.",
+    "source_ref": "https://console.frostgate.ai/",
+    "classification": "NOT_TESTED"
+  },
+  {
+    "id": "EVD-013",
+    "domain": "console.frostgate.ai",
+    "route": "/",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "WARNING",
+    "finding": "Console landing page (apps/console/app/page.tsx) renders marketing and pricing content at an operator-only domain. CTAs target /onboarding (console legacy flow, not portal). Snapshot price shown as flat $299 — API charges $299/$599/$999 by profile.",
+    "source_ref": "apps/console/app/page.tsx",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-014",
+    "domain": "api (Core API)",
+    "route": "POST /ingest/assessment/{id}/checkout",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "WARNING",
+    "finding": "cancel_url set to {base_url}/onboarding (api/assessments.py:566). base_url defaults to https://app.frostgate.ai. No /onboarding route exists in apps/portal/. Cancelled checkout users land on a 404.",
+    "source_ref": "api/assessments.py:566",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-015",
+    "domain": "api (Core API)",
+    "route": "POST /ingest/assessment/{id}/activate",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "Activation token: HMAC-SHA256 keyed with FG_KEY_PEPPER, single-use (atomic claimed state), 24h TTL, stored as hash only. Payment re-verified server-side. OIDC validated server-side. Fail-closed (403 ACTIVATION_DENIED for any failure).",
+    "source_ref": "api/assessments.py:693-820",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-016",
+    "domain": "app.frostgate.ai",
+    "route": "/api/auth/activate",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "WARNING",
+    "finding": "BFF activate route does not check for CORE_API_KEY before forwarding to Core API. Unlike /api/assessment/start which explicitly returns 503 when CORE_API_KEY is absent, activate route will forward with an empty key.",
+    "source_ref": "apps/portal/app/api/auth/activate/route.ts",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-017",
+    "domain": "apps/web + apps/portal + apps/console",
+    "route": "N/A (design system)",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "WARNING",
+    "finding": "Three-way brand split: web uses steel/rust Tailwind palette + Inter font; portal and console use CSS variable tokens (--primary: #FF5A1F orange) + system-UI font. No shared token authority between web and portal/console.",
+    "source_ref": "apps/web/tailwind.config.ts, apps/portal/app/globals.css, apps/console/app/globals.css",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-018",
+    "domain": "apps/web + apps/portal + apps/console",
+    "route": "N/A (framework)",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "WARNING",
+    "finding": "Next.js version mismatch: web=14.2.35, portal=14.2.5, console=14.2.35. Portal is on a lower minor version.",
+    "source_ref": "apps/web/package.json, apps/portal/package.json, apps/console/package.json",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-019",
+    "domain": "app.frostgate.ai",
+    "route": "/engagement",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "PORTAL_REGISTRY lists /engagement as a primary visible nav item. Initial scan missed directory — confirmed engagement/ subdirectory exists in apps/portal/app/. Route is present in filesystem.",
+    "source_ref": "packages/navigation/src/registrations/portal.ts:82-104, apps/portal/app/engagement/ (confirmed present)",
+    "classification": "CODE_INFERRED"
+  },
+  {
+    "id": "EVD-020",
+    "domain": "tools/ci",
+    "route": "N/A (CI gates)",
+    "method": "CODE_INSPECTION",
+    "timestamp": "2026-11-05T00:00:00Z",
+    "result": "PASS",
+    "finding": "All three CI gates pass on audit branch: check_route_scopes.py (OK), check_plane_registry.py (OK with runtime-only WARNING — pre-existing), guard_no_raw_percent_in_sql.py (OK).",
+    "source_ref": "tools/ci/check_route_scopes.py, tools/ci/check_plane_registry.py, tools/ci/guard_no_raw_percent_in_sql.py",
+    "classification": "LIVE_OBSERVED"
+  }
+]
