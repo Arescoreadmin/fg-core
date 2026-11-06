@@ -272,14 +272,26 @@ class TestAiGovernanceDpaUnknown:
             now_str=datetime.now(timezone.utc).isoformat(),
         )
 
-        # The finding 'no_dpa' may be generated — this is accurate:
-        # no DPA is on record. But it must NOT be described as 'DPA confirmed absent'.
+        # dpa_status="unknown" must produce a no_dpa finding with hedged language:
+        # "could not be verified" — NOT the definitive "is in place" / "confirmed absent"
+        # language reserved for cases where absence is established. DEF-004 root cause:
+        # the scanner previously fired the same definitive description for unknown and
+        # absent statuses alike, making an unsupported absence claim from unknown evidence.
         no_dpa_findings = [f for f in findings if "no_dpa" in f.get("type", "")]
-        if no_dpa_findings:
-            for f in no_dpa_findings:
-                # Finding should not claim DPA is confirmed absent
-                desc = f.get("description", "").lower()
-                assert "confirmed absent" not in desc
+        assert no_dpa_findings, (
+            "Expected a no_dpa governance gap finding for unknown DPA status"
+        )
+        for f in no_dpa_findings:
+            desc = f.get("description", "").lower()
+            # Must use hedged language for unknown status
+            assert "could not be verified" in desc, (
+                f"Unknown DPA status should produce hedged description, got: {desc!r}"
+            )
+            # Must NOT claim confirmed absence
+            assert "is in place" not in desc, (
+                f"Unknown DPA status must not assert absence; got: {desc!r}"
+            )
+            assert "confirmed absent" not in desc
 
 
 # ---------------------------------------------------------------------------

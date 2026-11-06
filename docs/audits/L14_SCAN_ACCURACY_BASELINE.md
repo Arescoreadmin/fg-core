@@ -300,5 +300,6 @@ Recall = 8/(8+0) = 1.0 (fixture-validated only; not population recall)
 | DEF-001 | dns_email | DNS timeout indistinguishable from genuine record absence in _check_spf/_check_dmarc | LOW | DOCUMENTED (known accuracy gap; collection_status enforcement deferred to L14-SCAN-COMPLETENESS-001) |
 | DEF-002 | endpoint_inventory | Unknown last_seen classified as not-stale instead of INDETERMINATE | LOW | DOCUMENTED (conservative behavior; fix deferred to L14-SCAN-COMPLETENESS-001) |
 | DEF-003 | all scanners | No `confidence` field in runner-level finding output | MEDIUM | DOCUMENTED (enforcement deferred to L14-ASSESSMENT-ASSURANCE-001) |
+| DEF-004 | ai_vendor_governance | `dpa_status="unknown"` emitted definitive "no DPA is in place" (unsupported absence claim) | MEDIUM | **FIXED** — governance_engine.py now emits hedged "could not be verified" language for unknown/None/not_assessed status; regression test added (SA-OAUTH-005) |
 
-No classification logic defects were found that required scanner code modification.
+DEF-004 is the only defect requiring scanner code modification in this PR. DEF-001–003 are documented and deferred.
