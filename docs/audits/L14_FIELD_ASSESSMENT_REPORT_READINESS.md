@@ -231,17 +231,19 @@ Idempotency enforced at multiple levels: `uq_fa_finding_hash` prevents duplicate
 
 ## 5. Key Findings
 
-### FINDING-001 [HIGH] — Dual-report-system gap creates operator friction
+### FINDING-001 [MEDIUM] — Console missing "Download PDF" button for FA export route
 
-There are two overlapping report authorities:
-1. `POST /field-assessment/engagements/{id}/reports` — FA-native, backed by `GovernanceReportEngine`, returns JSON only.
-2. `POST /reports/generate` — Report Authority, backed by `ReportAuthorityEngine`, supports PDF/HTML/JSON/ZIP download.
+There are two parallel report authorities, each with distinct content:
+1. `POST /field-assessment/engagements/{id}/reports` — FA-native, backed by `GovernanceReportEngine`. Produces a versioned JSON report containing engagement findings and domain health scores. **PDF export is available** via `GET /field-assessment/engagements/{id}/reports/{version}/export?format=pdf` which calls `export_pdf_bytes` from `services.governance.report`.
+2. `POST /reports/generate` — Report Authority, backed by `ReportAuthorityEngine`. Produces a separate delivery-metadata/quality report. This is **not** the engagement findings report — it does not contain domain scores or FA findings.
 
-The PDF renderer lives exclusively in the Report Authority. An operator must run two separate creation steps to go from "engagement complete" to "downloadable PDF." There is no single-step "generate and export" action in the console for the assessor's workflow.
+**Clarification (corrected from draft):** The FA route already supports PDF export natively. The Report Authority's `GenerateReportRequest` builds a different payload and must NOT be used to deliver the engagement findings PDF — it would produce an incomplete report without the engagement's actual domain scores or findings.
 
-**Root cause:** The Report Authority was designed to accept an `assessment_id` parameter but was not built to pull FA evidence automatically. It expects the caller to supply the engagement's assessment_id as a string.
+**Actual gap:** The console engagement detail page does not expose a "Download PDF" link for the FA export route. Operators must call the route directly.
 
-**Recommended fix:** Add a console action "Generate PDF Report" on the field assessment engagement page that calls `/reports/generate` with the engagement_id as the assessment_id.
+**Root cause:** Console integration for the FA export endpoint was not completed.
+
+**Recommended fix:** Add a "Download Report PDF" button to the field assessment engagement report panel (`apps/console/app/field-assessment/[engagementId]/`) that calls `GET /field-assessment/engagements/{engagement_id}/reports/{version}/export?format=pdf`. Do NOT call `/reports/generate` — that serves different data.
 
 ### FINDING-002 [HIGH] — Assessor authorization is not data-layer enforced
 

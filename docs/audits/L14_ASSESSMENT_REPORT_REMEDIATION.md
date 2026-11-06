@@ -17,31 +17,28 @@ Prioritized by launch impact. All items ranked by business risk to first paid en
   1. Create engagement via console
   2. Run each scan connector (or import scan results)
   3. Capture interview observations
-  4. Generate engagement report (FA-native)
+  4. Generate engagement report: `POST /field-assessment/engagements/{id}/reports`
   5. QA-approve the report
   6. Run production qualification (all 4 gate attestations)
-  7. Generate Report Authority report with PDF
-  8. Download PDF bundle
-  9. Deliver to client
+  7. Download PDF: `GET /field-assessment/engagements/{id}/reports/{version}/export?format=pdf`
+  8. Deliver to client
+  Note: Do NOT use `POST /reports/generate` (Report Authority) — that serves delivery-metadata, not engagement findings.
 **Effort:** Small (documentation only, ~4 hours)
 **Dependencies:** None
 **Acceptance criteria:** A new operator can deliver a complete engagement PDF to a client following the runbook without additional support.
 
 ---
 
-## REM-002 [HIGH] — Console lacks direct "Generate PDF" action
+## REM-002 [MEDIUM] — Console lacks "Download PDF" button for FA export route
 
-**Severity:** HIGH (significant friction for every engagement delivery)
-**Description:** The PDF download exists at `GET /reports/{report_id}/download/pdf` but requires the operator to: (a) call `POST /reports/generate` via API to create a Report Authority report record, (b) note the returned report_id, (c) call the download route. The console engagement view does not surface this workflow.
-**Root cause:** Report Authority was built as an API-first service; console integration was not completed for the PDF export pathway.
-**Fix:** Add a "Generate PDF Report" action to the field assessment engagement detail page (`apps/console/app/field-assessment/[engagementId]/page.tsx`) that:
-  1. Calls `POST /reports/generate` with the engagement_id as assessment_id
-  2. Polls until the report is in GENERATED state
-  3. Shows a "Download PDF Bundle" link targeting `/reports/{id}/bundle/download`
-**Effort:** Medium (console changes, ~1 day)
-**Dependencies:** REM-001 (runbook should describe the new console action)
+**Severity:** MEDIUM (friction for every engagement delivery, but workaround is a direct API call)
+**Description:** The FA-native PDF export route exists at `GET /field-assessment/engagements/{id}/reports/{version}/export?format=pdf` and returns the full engagement findings PDF via `export_pdf_bytes`. The console engagement detail page does not expose a download link for it, requiring the operator to call the route manually.
+**Root cause:** Console integration for the FA export endpoint was not completed. Note: `POST /reports/generate` (Report Authority) must NOT be used as a substitute — it serves delivery-metadata, not the engagement findings or domain scores.
+**Fix:** Add a "Download Report PDF" button to the field assessment engagement report panel (`apps/console/app/field-assessment/[engagementId]/page.tsx`) that calls `GET /field-assessment/engagements/{id}/reports/{version}/export?format=pdf` with `Content-Type: application/pdf`.
+**Effort:** Small (console UI change, ~half day)
+**Dependencies:** REM-001 (runbook should describe the button)
 **Schema changes:** None
-**Acceptance criteria:** Operator can download a PDF report bundle from the engagement detail page with one click.
+**Acceptance criteria:** Operator can download the FA engagement findings PDF directly from the engagement detail page.
 
 ---
 

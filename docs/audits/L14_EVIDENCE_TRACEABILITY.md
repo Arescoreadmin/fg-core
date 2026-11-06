@@ -197,14 +197,19 @@ def verify_evidence_chain(db: Session, tenant_id: str, engagement_id: str) -> di
             ).first() is not None
             for eid in evidence_ids
         )
-        if has_provenance or evidence_ids:
+        if has_provenance:
             results["findings_with_evidence"] += 1
         else:
+            # Counts both: findings with no evidence_ref_ids AND findings whose
+            # ref_ids exist but resolve to no provenance record (broken chain).
+            # Using `or` here would incorrectly count dangling references as
+            # evidence-backed — the exact failure mode this check must catch.
             results["findings_without_evidence"] += 1
             results["unlinked_findings"].append({
                 "finding_id": f.id,
                 "title": f.title,
                 "severity": f.severity,
+                "evidence_ref_ids": evidence_ids,  # [] = no refs; non-empty = broken chain
             })
 
     return results
