@@ -165,6 +165,32 @@ Add a Vercel log drain filter or Vercel Edge Middleware rule that redacts query 
 
 ---
 
+## L14-UX-010
+
+**Title:** Portal intake form missing compliance fields — mis-pricing for regulated industries
+**Severity:** P1 — Revenue / commercial accuracy
+**Affected property:** apps/portal/app/assessment/page.tsx + apps/portal/app/api/assessment/start/route.ts
+**Description:**
+The portal assessment intake form (`/assessment`) collects only `name`, `email`, `industry`, and `employee_count`. The Core API pricing tier table applies a multiplier based on `handles_phi`, `handles_cui`, `is_dod_contractor`, and `fedramp_required`. Because the portal BFF (`start/route.ts`) does not collect or forward these fields, all portal-originated assessments default these to `false`. A technology company (11–50 employees) handling CUI is priced at the `smb_basic` tier ($299) instead of `govcon` ($999). The console wizard previously collected these fields before the CTA was redirected to the portal.
+
+**Root cause:**
+The portal intake form was designed for a standard SMB customer. The console wizard was separately extended with compliance fields. When CTAs were corrected to redirect to the portal (L14-UX-003), the compliance field gap was exposed. The portal must now mirror the compliance inputs the console wizard previously collected.
+
+**Recommended fix:**
+1. Add an optional "Compliance & regulatory" accordion section to `apps/portal/app/assessment/page.tsx`:
+   - "Does your organization handle PHI (HIPAA)?" → `handles_phi: boolean`
+   - "Does your organization handle CUI?" → `handles_cui: boolean`
+   - "DoD contractor?" → `is_dod_contractor: boolean`
+   - "FedRAMP required?" → `fedramp_required: boolean`
+2. Update `apps/portal/app/api/assessment/start/route.ts` body parsing and Core API forwarding to include all four fields.
+3. Verify `OrgCreateRequest` in `api/ingest.py` already accepts these fields (the Core API backend already supports them).
+
+**Effort:** M
+**Dependencies:** Confirm Core API OrgCreateRequest schema; design accordion component in portal UI
+**Acceptance criteria:** A portal user who indicates CUI handling receives a Stripe checkout for the correct tier ($999 for govcon profile). Pricing is consistent whether the customer enters via portal or console.
+
+---
+
 ## L14-UX-009
 
 **Title:** Add empty-state guidance for new portal users post-activation
