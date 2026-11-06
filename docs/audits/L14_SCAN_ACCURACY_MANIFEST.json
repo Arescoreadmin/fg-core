@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "git_sha": "PENDING_COMMIT",
+  "git_sha": "4d0d1f415fcfadc84c46a5bbdfa52846de3ac0a0",
   "generated_at": "2026-11-06T00:00:00Z",
   "audit_id": "L14-SCAN-ACCURACY-001",
   "audit_branch": "test/l14-scan-accuracy-001",
