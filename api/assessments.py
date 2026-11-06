@@ -563,7 +563,7 @@ def create_checkout_session(
         ],
         mode="payment",
         success_url=f"{base_url}/assessment/activate?id={assessment_id}&at={_raw_activation_token}",
-        cancel_url=f"{base_url}/onboarding",
+        cancel_url=f"{base_url}/assessment",
         # metadata carries identifiers only — amount is validated server-side,
         # never trusted from metadata on the webhook path.
         metadata={
