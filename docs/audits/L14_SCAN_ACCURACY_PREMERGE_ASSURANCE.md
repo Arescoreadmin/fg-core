@@ -2,7 +2,7 @@
 
 **PR:** #808  
 **Branch:** test/l14-scan-accuracy-001  
-**Head SHA:** TBD — updated after final commit  
+**Head SHA:** 98bd233b9c83b9ed489f56e09d0ccaad25f76ad9  
 **Date:** 2026-11-06  
 **Reviewer:** Automated hardening pass (L14-SCAN-ACCURACY-001)
 
