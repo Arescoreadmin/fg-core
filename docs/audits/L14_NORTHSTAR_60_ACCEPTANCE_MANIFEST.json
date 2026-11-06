@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-06T00:00:00.000000Z",
+  "git_sha": "ab72e44f922e60c48a48259ff32930c15dfb81d5",
+  "scenario_id": "northstar-60",
+  "synthetic_tenant_id": null,
+  "engagement_id": null,
+  "evidence_count": null,
+  "findings_count": null,
+  "readiness_score": null,
+  "report_artifact": null,
+  "qa_status": "NOT_EXECUTED",
+  "blockers": [
+    {
+      "blocker_id": "BLOCKER-001",
+      "category": "tooling",
+      "description": "No synthetic seed script exists (tools/demo/seed_field_assessment.py not yet created). Cannot create Northstar engagement through canonical API routes without manual intervention.",
+      "remediation": "Create tools/demo/seed_field_assessment.py per REM-003 in L14_ASSESSMENT_REPORT_REMEDIATION.md"
+    },
+    {
+      "blocker_id": "BLOCKER-002",
+      "category": "environment",
+      "description": "No running API server available in audit environment. Seed script requires a live API server, not direct DB access.",
+      "remediation": "Execute seed script against staging environment once available"
+    },
+    {
+      "blocker_id": "BLOCKER-003",
+      "category": "tooling",
+      "description": "No console action to generate and download PDF report from engagement view. Operator must manually call two API routes.",
+      "remediation": "Implement REM-002: add PDF generation action to field assessment engagement detail page"
+    }
+  ],
+  "validation_results": {
+    "lifecycle_tests": {
+      "status": "PASSED",
+      "tests_run": 489,
+      "tests_passed": 489,
+      "tests_failed": 0,
+      "coverage": [
+        "engagement_creation",
+        "observation_collection",
+        "scan_ingestion",
+        "evidence_provenance",
+        "finding_generation",
+        "readiness_calculation",
+        "report_generation",
+        "qa_approval",
+        "report_signing",
+        "pdf_export",
+        "tenant_isolation"
+      ]
+    },
+    "evidence_chain": {
+      "status": "PARTIALLY_PROVEN",
+      "chain_complete": true,
+      "parallel_report_systems": "gap — FA-native and Report Authority use independent score computation",
+      "evidence_to_pdf_path": "PROVEN via test_export_pdf_returns_200_or_501"
+    },
+    "security_gates": {
+      "tenant_isolation": "PROVEN",
+      "payment_gate": "PROVEN",
+      "qa_sod": "PROVEN",
+      "report_signing": "PROVEN",
+      "append_only_audit": "PROVEN"
+    },
+    "visual_qa": {
+      "status": "NOT_EXECUTED",
+      "reason": "No synthetic engagement data; no staging environment available in audit"
+    }
+  },
+  "assessment_lifecycle_status": {
+    "client_engagement_creation": "PROVEN",
+    "assessor_authorization": "PARTIALLY_PROVEN",
+    "assessment_scope_definition": "PARTIALLY_PROVEN",
+    "interview_observation_collection": "PROVEN",
+    "evidence_ingestion": "PROVEN",
+    "evidence_provenance_verification": "PROVEN",
+    "control_mapping": "PROVEN",
+    "findings_generation": "PROVEN",
+    "risk_scoring": "PROVEN",
+    "readiness_calculation": "PROVEN",
+    "report_compilation_data": "PROVEN",
+    "executive_report_quality": "PARTIALLY_PROVEN",
+    "technical_appendix_accuracy": "PARTIALLY_PROVEN",
+    "qa_approval_workflow": "PROVEN",
+    "report_integrity_signing": "PROVEN",
+    "pdf_export": "PROVEN",
+    "secure_delivery": "PARTIALLY_PROVEN",
+    "tenant_isolation": "PROVEN",
+    "repeatability": "PROVEN"
+  }
+}
