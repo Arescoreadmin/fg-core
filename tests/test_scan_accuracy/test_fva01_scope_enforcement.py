@@ -39,7 +39,6 @@ from __future__ import annotations
 
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
-
 # ---------------------------------------------------------------------------
 # FVA-01-A: SSRF / private-IP rejection IS enforced (SafeTargetValidationService)
 # ---------------------------------------------------------------------------
@@ -89,12 +88,12 @@ class TestSsrfValidationEnforced:
     def test_all_blocked_ranges_produce_rejection(self):
         """Key RFC ranges that must be blocked."""
         blocked = [
-            "10.0.0.1",       # RFC1918
-            "172.16.0.1",     # RFC1918
-            "192.168.0.1",    # RFC1918
-            "127.0.0.1",      # Loopback
+            "10.0.0.1",  # RFC1918
+            "172.16.0.1",  # RFC1918
+            "192.168.0.1",  # RFC1918
+            "127.0.0.1",  # Loopback
             "169.254.169.254",  # Link-local / cloud metadata
-            "100.64.0.1",     # CGNAT
+            "100.64.0.1",  # CGNAT
         ]
         svc = SafeTargetValidationService()
         for ip in blocked:
@@ -127,6 +126,7 @@ class TestTenantIsolationDocumentation:
 
         # Verify the function signature requires tenant_id
         import inspect
+
         sig = inspect.signature(get_engagement)
         params = list(sig.parameters.keys())
         assert "engagement_id" in params
@@ -140,6 +140,7 @@ class TestTenantIsolationDocumentation:
         This prevents cross-tenant access and cross-engagement target injection.
         """
         from services.field_assessment.store import EngagementNotFound
+
         assert EngagementNotFound is not None
 
 
@@ -164,6 +165,7 @@ class TestClientAuthorizationGapDocumented:
         It only checks SSRF / private-range safety.
         """
         import inspect
+
         sig = inspect.signature(SafeTargetValidationService.validate)
         params = list(sig.parameters.keys())
         assert "engagement_id" not in params, (
@@ -205,6 +207,7 @@ class TestClientAuthorizationGapDocumented:
         """
         # Verify: DNS scan initiate request model has no receipt field
         from api.field_assessment import DnsEmailScanInitiateRequest
+
         fields = DnsEmailScanInitiateRequest.model_fields
         assert "acknowledgment_receipt_id" not in fields, (
             "DnsEmailScanInitiateRequest does not require acknowledgment_receipt_id. "

@@ -25,15 +25,17 @@ from services.connectors.dns_email.runner import (
     run,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — mock _dns_query at the module level
 # ---------------------------------------------------------------------------
 
+
 def _mock_dns_query_factory(response_map: dict[tuple[str, str], list[str]]):
     """Return a _dns_query mock that returns pre-defined answers."""
+
     def _mock(name: str, rdtype: str) -> list[str]:
         return response_map.get((name, rdtype), [])
+
     return _mock
 
 
@@ -41,39 +43,47 @@ def _mock_dns_query_factory(response_map: dict[tuple[str, str], list[str]]):
 # SA-DNS-001: valid_spf → no SPF finding
 # ---------------------------------------------------------------------------
 
+
 class TestValidSpf:
     def test_valid_spf_strict_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=spf1 include:_spf.google.com -all"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 include:_spf.google.com -all"'],
+                }
+            )
             result = _check_spf("example.com")
 
         assert result["present"] is True
-        assert result["finding"] is None, (
-            "v=spf1 ... -all is a valid strict SPF record; no finding should be emitted."
-        )
+        assert (
+            result["finding"] is None
+        ), "v=spf1 ... -all is a valid strict SPF record; no finding should be emitted."
 
 
 # ---------------------------------------------------------------------------
 # SA-DNS-002: permissive_spf → SPF_PERMISSIVE finding
 # ---------------------------------------------------------------------------
 
+
 class TestPermissiveSpf:
     def test_plus_all_produces_spf_permissive(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=spf1 include:_spf.google.com +all"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 include:_spf.google.com +all"'],
+                }
+            )
             result = _check_spf("example.com")
 
         assert result["finding"] == "spf_permissive"
 
     def test_question_all_produces_spf_permissive(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=spf1 ip4:1.2.3.4 ?all"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 ip4:1.2.3.4 ?all"'],
+                }
+            )
             result = _check_spf("example.com")
 
         assert result["finding"] == "spf_permissive"
@@ -83,12 +93,15 @@ class TestPermissiveSpf:
 # SA-DNS-003: missing_spf → SPF_MISSING finding
 # ---------------------------------------------------------------------------
 
+
 class TestMissingSpf:
     def test_no_spf_record_produces_missing_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=TXT some-other-record"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=TXT some-other-record"'],
+                }
+            )
             result = _check_spf("example.com")
 
         assert result["present"] is False
@@ -99,12 +112,17 @@ class TestMissingSpf:
 # SA-DNS-004: strong_dmarc → no finding (DMARC_ENFORCED)
 # ---------------------------------------------------------------------------
 
+
 class TestStrongDmarc:
     def test_dmarc_reject_produces_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=reject; rua=mailto:dmarc@example.com"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("_dmarc.example.com", "TXT"): [
+                        '"v=DMARC1; p=reject; rua=mailto:dmarc@example.com"'
+                    ],
+                }
+            )
             result = _check_dmarc("example.com")
 
         assert result["present"] is True
@@ -113,9 +131,13 @@ class TestStrongDmarc:
 
     def test_dmarc_quarantine_produces_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=quarantine; pct=100"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("_dmarc.example.com", "TXT"): [
+                        '"v=DMARC1; p=quarantine; pct=100"'
+                    ],
+                }
+            )
             result = _check_dmarc("example.com")
 
         assert result["present"] is True
@@ -127,12 +149,17 @@ class TestStrongDmarc:
 # SA-DNS-005: dmarc_none → DMARC_MONITOR_ONLY warning
 # ---------------------------------------------------------------------------
 
+
 class TestDmarcNone:
     def test_dmarc_p_none_produces_dmarc_policy_none_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=none; rua=mailto:dmarc@example.com"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("_dmarc.example.com", "TXT"): [
+                        '"v=DMARC1; p=none; rua=mailto:dmarc@example.com"'
+                    ],
+                }
+            )
             result = _check_dmarc("example.com")
 
         assert result["finding"] == "dmarc_policy_none"
@@ -142,12 +169,15 @@ class TestDmarcNone:
 # SA-DNS-006: missing_dmarc → DMARC_MISSING
 # ---------------------------------------------------------------------------
 
+
 class TestMissingDmarc:
     def test_no_dmarc_record_produces_missing_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("_dmarc.example.com", "TXT"): [],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("_dmarc.example.com", "TXT"): [],
+                }
+            )
             result = _check_dmarc("example.com")
 
         assert result["present"] is False
@@ -158,23 +188,29 @@ class TestMissingDmarc:
 # SA-DNS-007: valid_dkim → DKIM_PRESENT (selector found, record valid)
 # ---------------------------------------------------------------------------
 
+
 class TestValidDkim:
     def test_known_selector_found_produces_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("google._domainkey.example.com", "TXT"): ['"v=DKIM1; k=rsa; p=MIIBIjANBg..."'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("google._domainkey.example.com", "TXT"): [
+                        '"v=DKIM1; k=rsa; p=MIIBIjANBg..."'
+                    ],
+                }
+            )
             result = _check_dkim("example.com", ["google"])
 
         assert "google" in result["selectors_found"]
-        assert result["finding"] is None, (
-            "Known selector found with valid DKIM record must produce no finding."
-        )
+        assert (
+            result["finding"] is None
+        ), "Known selector found with valid DKIM record must produce no finding."
 
 
 # ---------------------------------------------------------------------------
 # SA-DNS-008: CRITICAL — unknown_dkim_selector does NOT imply DKIM_GLOBALLY_MISSING
 # ---------------------------------------------------------------------------
+
 
 class TestUnknownDkimSelector:
     """CRITICAL TRUTH CONDITION: Checking an unknown DKIM selector does NOT mean
@@ -190,33 +226,37 @@ class TestUnknownDkimSelector:
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
             # Only 'default' selector is checked; it's not present.
             # But domain may have DKIM under a custom selector we don't know.
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("default._domainkey.example.com", "TXT"): [],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("default._domainkey.example.com", "TXT"): [],
+                }
+            )
             result = _check_dkim("example.com", ["default"])
 
         # The finding is 'no_dkim_found' (under checked selectors) — not a global absence claim.
         assert result["finding"] == "no_dkim_found"
-        assert result["selectors_found"] == [], (
-            "No selector found in our check set, but this is NOT a global DKIM_MISSING claim."
-        )
+        assert (
+            result["selectors_found"] == []
+        ), "No selector found in our check set, but this is NOT a global DKIM_MISSING claim."
 
     def test_unknown_selector_scan_domain_does_not_claim_dkim_globally_missing(self):
         """The full scan_domain output must not use a finding type claiming global absence."""
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=spf1 -all"'],
-                ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=reject"'],
-                ("default._domainkey.example.com", "TXT"): [],
-                ("google._domainkey.example.com", "TXT"): [],
-                ("selector1._domainkey.example.com", "TXT"): [],
-                ("selector2._domainkey.example.com", "TXT"): [],
-                ("k1._domainkey.example.com", "TXT"): [],
-                ("mail._domainkey.example.com", "TXT"): [],
-                ("dkim._domainkey.example.com", "TXT"): [],
-                ("example.com", "MX"): ['"10 mail.example.com."'],
-                ("example.com", "DNSKEY"): [],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 -all"'],
+                    ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=reject"'],
+                    ("default._domainkey.example.com", "TXT"): [],
+                    ("google._domainkey.example.com", "TXT"): [],
+                    ("selector1._domainkey.example.com", "TXT"): [],
+                    ("selector2._domainkey.example.com", "TXT"): [],
+                    ("k1._domainkey.example.com", "TXT"): [],
+                    ("mail._domainkey.example.com", "TXT"): [],
+                    ("dkim._domainkey.example.com", "TXT"): [],
+                    ("example.com", "MX"): ['"10 mail.example.com."'],
+                    ("example.com", "DNSKEY"): [],
+                }
+            )
             result = scan_domain("example.com")
 
         # Finding types emitted
@@ -227,13 +267,16 @@ class TestUnknownDkimSelector:
         # This is a limitation, not a confirmed global absence.
         if "no_dkim_found" in finding_types:
             # Confirm it's the selector-scoped finding
-            dkim_findings = [f for f in result["findings"] if f["type"] == "no_dkim_found"]
+            dkim_findings = [
+                f for f in result["findings"] if f["type"] == "no_dkim_found"
+            ]
             assert len(dkim_findings) >= 1
 
 
 # ---------------------------------------------------------------------------
 # SA-DNS-009: CRITICAL — dnskey_present does NOT mean DNSSEC_CHAIN_VALIDATED
 # ---------------------------------------------------------------------------
+
 
 class TestDnssecObservation:
     """CRITICAL TRUTH CONDITION: Presence of DNSKEY record is an observation that
@@ -245,23 +288,27 @@ class TestDnssecObservation:
 
     def test_dnskey_present_does_not_claim_chain_validated(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "DNSKEY"): ['"257 3 13 (some-dnskey-data)"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "DNSKEY"): ['"257 3 13 (some-dnskey-data)"'],
+                }
+            )
             result = _check_dnssec("example.com")
 
         assert result["enabled"] is True
         # DNSSEC appears configured based on DNSKEY presence.
         # finding=None means no warning (presence is positive).
-        assert result["finding"] is None, (
-            "DNSKEY present = no negative finding; scanner reports enabled=True."
-        )
+        assert (
+            result["finding"] is None
+        ), "DNSKEY present = no negative finding; scanner reports enabled=True."
 
     def test_dnskey_absent_produces_dnssec_not_enabled_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "DNSKEY"): [],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "DNSKEY"): [],
+                }
+            )
             result = _check_dnssec("example.com")
 
         assert result["enabled"] is False
@@ -271,6 +318,7 @@ class TestDnssecObservation:
 # ---------------------------------------------------------------------------
 # SA-DNS-010: CRITICAL — dns_timeout does NOT produce SPF_MISSING or DMARC_MISSING
 # ---------------------------------------------------------------------------
+
 
 class TestDnsTimeout:
     """CRITICAL TRUTH CONDITION: When DNS resolution times out or fails,
@@ -330,6 +378,7 @@ class TestDnsTimeout:
 # SA-DNS-011: resolver_error → collection status FAILED, no findings emitted
 # ---------------------------------------------------------------------------
 
+
 class TestResolverError:
     def test_exception_in_scan_domain_captured_as_error_not_findings(self):
         """When scan_domain raises an exception, the run() wrapper captures it
@@ -349,12 +398,15 @@ class TestResolverError:
 # SA-DNS-012: mx_absent → MX_MISSING finding
 # ---------------------------------------------------------------------------
 
+
 class TestMxAbsent:
     def test_no_mx_produces_no_mx_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "MX"): [],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "MX"): [],
+                }
+            )
             result = _check_mx("example.com")
 
         assert result["present"] is False
@@ -362,9 +414,11 @@ class TestMxAbsent:
 
     def test_mx_present_produces_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "MX"): ['"10 mail.example.com."'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "MX"): ['"10 mail.example.com."'],
+                }
+            )
             result = _check_mx("example.com")
 
         assert result["present"] is True
@@ -375,24 +429,31 @@ class TestMxAbsent:
 # SA-DNS-013: scan_domain complete — provenance fields present
 # ---------------------------------------------------------------------------
 
+
 class TestScanDomainProvenance:
     """scan_domain must return structured result with all evidence fields."""
 
     def test_scan_domain_returns_all_check_fields(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            mock_q.side_effect = _mock_dns_query_factory({
-                ("example.com", "TXT"): ['"v=spf1 -all"'],
-                ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=reject; rua=mailto:r@example.com"'],
-                ("default._domainkey.example.com", "TXT"): ['"v=DKIM1; k=rsa; p=abc"'],
-                ("google._domainkey.example.com", "TXT"): [],
-                ("selector1._domainkey.example.com", "TXT"): [],
-                ("selector2._domainkey.example.com", "TXT"): [],
-                ("k1._domainkey.example.com", "TXT"): [],
-                ("mail._domainkey.example.com", "TXT"): [],
-                ("dkim._domainkey.example.com", "TXT"): [],
-                ("example.com", "MX"): ['"10 mail.example.com."'],
-                ("example.com", "DNSKEY"): ['"257 3 13 abc"'],
-            })
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 -all"'],
+                    ("_dmarc.example.com", "TXT"): [
+                        '"v=DMARC1; p=reject; rua=mailto:r@example.com"'
+                    ],
+                    ("default._domainkey.example.com", "TXT"): [
+                        '"v=DKIM1; k=rsa; p=abc"'
+                    ],
+                    ("google._domainkey.example.com", "TXT"): [],
+                    ("selector1._domainkey.example.com", "TXT"): [],
+                    ("selector2._domainkey.example.com", "TXT"): [],
+                    ("k1._domainkey.example.com", "TXT"): [],
+                    ("mail._domainkey.example.com", "TXT"): [],
+                    ("dkim._domainkey.example.com", "TXT"): [],
+                    ("example.com", "MX"): ['"10 mail.example.com."'],
+                    ("example.com", "DNSKEY"): ['"257 3 13 abc"'],
+                }
+            )
             result = scan_domain("example.com")
 
         assert "spf" in result
@@ -437,6 +498,7 @@ class TestDnsResolverTimeoutClass:
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
             # _dns_query calls dns.resolver.resolve; Timeout is caught → returns []
             from services.connectors.dns_email.runner import _dns_query
+
             result = _dns_query("timeout-domain.example.com", "TXT")
 
         # ACTUAL behavior: Timeout caught → empty list (same as genuine absence)
@@ -454,6 +516,7 @@ class TestDnsResolverTimeoutClass:
 
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
             from services.connectors.dns_email.runner import _check_spf
+
             result = _check_spf("timeout-domain.example.com")
 
         # ACTUAL (defective) behavior: timeout → empty records → missing_spf
@@ -477,6 +540,7 @@ class TestDnsResolverTimeoutClass:
 
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
             from services.connectors.dns_email.runner import _check_dmarc
+
             result = _check_dmarc("timeout-domain.example.com")
 
         # ACTUAL (defective) behavior

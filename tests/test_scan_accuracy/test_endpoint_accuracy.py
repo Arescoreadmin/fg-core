@@ -16,10 +16,10 @@ from unittest.mock import MagicMock, patch
 
 from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _engagement_id() -> str:
     return "test-engagement-endpoint-accuracy-001"
@@ -34,7 +34,9 @@ def _build_device(
 ) -> dict:
     last_seen = None
     if last_seen_days_ago is not None:
-        last_seen = (datetime.now(timezone.utc) - timedelta(days=last_seen_days_ago)).isoformat()
+        last_seen = (
+            datetime.now(timezone.utc) - timedelta(days=last_seen_days_ago)
+        ).isoformat()
     return {
         "id": dev_id,
         "displayName": display_name,
@@ -47,7 +49,9 @@ def _build_device(
     }
 
 
-def _run_with_devices(devices: list[dict], intune_devices: list[dict] | None = None) -> dict:
+def _run_with_devices(
+    devices: list[dict], intune_devices: list[dict] | None = None
+) -> dict:
     if intune_devices is None:
         intune_devices = []
 
@@ -78,9 +82,12 @@ def _run_with_devices(devices: list[dict], intune_devices: list[dict] | None = N
 # SA-EP-001: managed_compliant_encrypted → clean finding (no issue)
 # ---------------------------------------------------------------------------
 
+
 class TestManagedCompliantEncrypted:
     def test_compliant_managed_device_no_findings(self):
-        devices = [_build_device("dev-001", "GoodDevice", is_managed=True, is_compliant=True)]
+        devices = [
+            _build_device("dev-001", "GoodDevice", is_managed=True, is_compliant=True)
+        ]
         intune = [
             {
                 "id": "intune-001",
@@ -93,9 +100,9 @@ class TestManagedCompliantEncrypted:
         ]
         result = _run_with_devices(devices, intune)
 
-        assert result["findings"] == [], (
-            "Managed, compliant, encrypted device must produce no findings."
-        )
+        assert (
+            result["findings"] == []
+        ), "Managed, compliant, encrypted device must produce no findings."
         assert result["summary"]["total"] == 1
 
     def test_scan_id_always_present(self):
@@ -108,16 +115,21 @@ class TestManagedCompliantEncrypted:
 # SA-EP-002: managed_noncompliant → ENDPOINT_NONCOMPLIANT
 # ---------------------------------------------------------------------------
 
+
 class TestManagedNoncompliant:
     def test_non_compliant_device_produces_finding(self):
-        devices = [_build_device("dev-002", "BadDevice", is_managed=True, is_compliant=False)]
+        devices = [
+            _build_device("dev-002", "BadDevice", is_managed=True, is_compliant=False)
+        ]
         result = _run_with_devices(devices)
 
         finding_types = [f["finding_type"] for f in result["findings"]]
         assert "endpoint.non_compliant_devices" in finding_types
 
     def test_non_compliant_finding_severity(self):
-        devices = [_build_device("dev-002", "BadDevice", is_managed=True, is_compliant=False)]
+        devices = [
+            _build_device("dev-002", "BadDevice", is_managed=True, is_compliant=False)
+        ]
         result = _run_with_devices(devices)
 
         for f in result["findings"]:
@@ -129,9 +141,14 @@ class TestManagedNoncompliant:
 # SA-EP-003: unmanaged_device → UNMANAGED_DEVICE
 # ---------------------------------------------------------------------------
 
+
 class TestUnmanagedDevice:
     def test_unmanaged_device_produces_finding(self):
-        devices = [_build_device("dev-003", "UnmanagedDevice", is_managed=False, is_compliant=None)]
+        devices = [
+            _build_device(
+                "dev-003", "UnmanagedDevice", is_managed=False, is_compliant=None
+            )
+        ]
         result = _run_with_devices(devices)
 
         finding_types = [f["finding_type"] for f in result["findings"]]
@@ -142,6 +159,7 @@ class TestUnmanagedDevice:
 # SA-EP-004: CRITICAL — encryption_unknown != UNENCRYPTED
 # ---------------------------------------------------------------------------
 
+
 class TestEncryptionUnknown:
     """CRITICAL TRUTH CONDITION: When Intune data is unavailable (device not in Intune,
     or Intune not enrolled), the encryption status is UNKNOWN.
@@ -150,12 +168,17 @@ class TestEncryptionUnknown:
 
     def test_no_intune_data_does_not_produce_unencrypted_finding(self):
         """Device in Azure AD but not in Intune — encryption status is unknown."""
-        devices = [_build_device("dev-004", "NoIntuneDevice", is_managed=True, is_compliant=True)]
+        devices = [
+            _build_device(
+                "dev-004", "NoIntuneDevice", is_managed=True, is_compliant=True
+            )
+        ]
         # Empty intune_devices — no Intune enrollment
         result = _run_with_devices(devices, intune_devices=[])
 
         encryption_findings = [
-            f for f in result["findings"]
+            f
+            for f in result["findings"]
             if f["finding_type"] == "endpoint.unencrypted_devices"
         ]
         assert encryption_findings == [], (
@@ -168,6 +191,7 @@ class TestEncryptionUnknown:
 # SA-EP-005: CRITICAL — intune_access_denied != zero_compliant_devices
 # ---------------------------------------------------------------------------
 
+
 class TestIntuneAccessDenied:
     """CRITICAL TRUTH CONDITION: When Intune returns 403 (access denied),
     the scanner cannot determine device compliance from Intune.
@@ -175,11 +199,16 @@ class TestIntuneAccessDenied:
     """
 
     def test_intune_403_does_not_produce_zero_encrypted_devices(self):
-        devices = [_build_device("dev-005", "MaybeEncrypted", is_managed=True, is_compliant=True)]
+        devices = [
+            _build_device(
+                "dev-005", "MaybeEncrypted", is_managed=True, is_compliant=True
+            )
+        ]
         result = _run_with_devices(devices, intune_devices="403")
 
         encryption_findings = [
-            f for f in result["findings"]
+            f
+            for f in result["findings"]
             if f["finding_type"] == "endpoint.unencrypted_devices"
         ]
         assert encryption_findings == [], (
@@ -191,6 +220,7 @@ class TestIntuneAccessDenied:
 # ---------------------------------------------------------------------------
 # SA-EP-006: stale_device_known_date → STALE_DEVICE with date
 # ---------------------------------------------------------------------------
+
 
 class TestStaleDeviceKnownDate:
     def test_stale_device_120_days_produces_finding(self):
@@ -212,6 +242,7 @@ class TestStaleDeviceKnownDate:
 # SA-EP-007: stale_device_unknown_timestamp → STALE_DEVICE_INDETERMINATE
 # ---------------------------------------------------------------------------
 
+
 class TestStaleDeviceUnknownTimestamp:
     """CRITICAL TRUTH CONDITION: A device with no last-seen date is NOT classified
     as ACTIVE. The timestamp is unknown, so staleness is INDETERMINATE.
@@ -219,7 +250,9 @@ class TestStaleDeviceUnknownTimestamp:
 
     def test_unknown_last_seen_not_classified_as_active(self):
         """Device with empty last_seen — cannot determine if stale or active."""
-        devices = [_build_device("dev-008", "UnknownDateDevice", last_seen_days_ago=None)]
+        devices = [
+            _build_device("dev-008", "UnknownDateDevice", last_seen_days_ago=None)
+        ]
         result = _run_with_devices(devices)
 
         # Device appears in endpoints list
@@ -243,6 +276,7 @@ class TestStaleDeviceUnknownTimestamp:
 # ---------------------------------------------------------------------------
 # SA-EP-008: scan provenance
 # ---------------------------------------------------------------------------
+
 
 class TestEndpointScanProvenance:
     def test_scan_has_all_provenance_fields(self):

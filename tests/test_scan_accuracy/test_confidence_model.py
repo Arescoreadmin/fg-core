@@ -16,22 +16,25 @@ Rules enforced:
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # Confidence model definitions (pure logic, no external dependencies)
 # ---------------------------------------------------------------------------
 
-CONFIDENCE_LEVELS = frozenset({"CONFIRMED", "PROBABLE", "SUSPECTED", "UNKNOWN", "NOT_ASSESSED"})
+CONFIDENCE_LEVELS = frozenset(
+    {"CONFIRMED", "PROBABLE", "SUSPECTED", "UNKNOWN", "NOT_ASSESSED"}
+)
 SEVERITY_LEVELS = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"})
-VERIFICATION_METHODS = frozenset({
-    "DIRECT_TECHNICAL_OBSERVATION",
-    "AUTHORITATIVE_CONFIGURATION_EXPORT",
-    "INDEPENDENT_CORROBORATION",
-    "DOCUMENT_REVIEW",
-    "INTERVIEW_ASSERTION",
-    "INFERENCE",
-    "NOT_VERIFIED",
-})
+VERIFICATION_METHODS = frozenset(
+    {
+        "DIRECT_TECHNICAL_OBSERVATION",
+        "AUTHORITATIVE_CONFIGURATION_EXPORT",
+        "INDEPENDENT_CORROBORATION",
+        "DOCUMENT_REVIEW",
+        "INTERVIEW_ASSERTION",
+        "INFERENCE",
+        "NOT_VERIFIED",
+    }
+)
 
 
 def _validate_finding_confidence(finding: dict) -> list[str]:
@@ -59,7 +62,10 @@ def _validate_finding_confidence(finding: dict) -> list[str]:
 
     # Rule 4: CONFIRMED requires DIRECT_TECHNICAL_OBSERVATION or AUTHORITATIVE_CONFIGURATION_EXPORT
     if confidence == "CONFIRMED":
-        required = {"DIRECT_TECHNICAL_OBSERVATION", "AUTHORITATIVE_CONFIGURATION_EXPORT"}
+        required = {
+            "DIRECT_TECHNICAL_OBSERVATION",
+            "AUTHORITATIVE_CONFIGURATION_EXPORT",
+        }
         if not (methods & required):
             violations.append(
                 "CONFIRMED requires DIRECT_TECHNICAL_OBSERVATION or "
@@ -99,6 +105,7 @@ def _is_confirmed_absent_claim(finding: dict) -> bool:
 # SA-CONF-001: Confidence level enumeration validation
 # ---------------------------------------------------------------------------
 
+
 class TestConfidenceLevelValidation:
     def test_confirmed_with_direct_observation_is_valid(self):
         finding = {
@@ -131,7 +138,9 @@ class TestConfidenceLevelValidation:
             violations = _validate_finding_confidence(finding)
             # Only check that the confidence level itself is valid (not all rules pass)
             conf_violations = [v for v in violations if "Unknown confidence level" in v]
-            assert conf_violations == [], f"Level {level!r} produced violation: {conf_violations}"
+            assert (
+                conf_violations == []
+            ), f"Level {level!r} produced violation: {conf_violations}"
 
     def test_unknown_confidence_level_produces_violation(self):
         finding = {
@@ -147,6 +156,7 @@ class TestConfidenceLevelValidation:
 # ---------------------------------------------------------------------------
 # SA-CONF-002: CONFIRMED requires direct observation or authoritative export
 # ---------------------------------------------------------------------------
+
 
 class TestConfirmedRequiresDirectObservation:
     def test_confirmed_without_required_method_produces_violation(self):
@@ -180,6 +190,7 @@ class TestConfirmedRequiresDirectObservation:
 # SA-CONF-003: CONFIRMED with only INTERVIEW_ASSERTION is not permitted
 # ---------------------------------------------------------------------------
 
+
 class TestConfirmedInterviewAssertionNotPermitted:
     def test_confirmed_only_interview_produces_violation(self):
         finding = {
@@ -197,16 +208,22 @@ class TestConfirmedInterviewAssertionNotPermitted:
             "type": "test.finding",
             "confidence": "CONFIRMED",
             "severity": "HIGH",
-            "verification_methods": ["DIRECT_TECHNICAL_OBSERVATION", "INTERVIEW_ASSERTION"],
+            "verification_methods": [
+                "DIRECT_TECHNICAL_OBSERVATION",
+                "INTERVIEW_ASSERTION",
+            ],
         }
         violations = _validate_finding_confidence(finding)
-        interview_violations = [v for v in violations if "only INTERVIEW_ASSERTION" in v]
+        interview_violations = [
+            v for v in violations if "only INTERVIEW_ASSERTION" in v
+        ]
         assert interview_violations == []
 
 
 # ---------------------------------------------------------------------------
 # SA-CONF-004: Confidence != Severity (independence)
 # ---------------------------------------------------------------------------
+
 
 class TestConfidenceIndependentFromSeverity:
     """Confidence and severity are separately justified.
@@ -224,7 +241,9 @@ class TestConfidenceIndependentFromSeverity:
         }
         violations = _validate_finding_confidence(finding)
         # SUSPECTED + HIGH is valid (confidence != severity)
-        severity_violations = [v for v in violations if "severity" in v.lower() and "HIGH" in v]
+        severity_violations = [
+            v for v in violations if "severity" in v.lower() and "HIGH" in v
+        ]
         assert severity_violations == [], (
             "SUSPECTED confidence + HIGH severity is valid per policy. "
             "These are independent dimensions."
@@ -261,6 +280,7 @@ class TestConfidenceIndependentFromSeverity:
 # ---------------------------------------------------------------------------
 # SA-CONF-005: Missing data → UNKNOWN or NOT_ASSESSED, never CONFIRMED_ABSENT
 # ---------------------------------------------------------------------------
+
 
 class TestMissingDataNotConfirmedAbsent:
     """CRITICAL TRUTH CONDITION: When data is unavailable or collection failed,
@@ -304,13 +324,16 @@ class TestMissingDataNotConfirmedAbsent:
             "description": "AWS infrastructure was out of scope for this assessment.",
         }
         violations = _validate_finding_confidence(finding)
-        not_assessed_violations = [v for v in violations if "Unknown confidence level" in v]
+        not_assessed_violations = [
+            v for v in violations if "Unknown confidence level" in v
+        ]
         assert not_assessed_violations == []
 
 
 # ---------------------------------------------------------------------------
 # SA-CONF-006: PROBABLE is minimum for primary evidence without corroboration
 # ---------------------------------------------------------------------------
+
 
 class TestProbableMinimumForPartialEvidence:
     def test_primary_evidence_without_corroboration_is_at_least_probable(self):
@@ -324,9 +347,9 @@ class TestProbableMinimumForPartialEvidence:
             # No INDEPENDENT_CORROBORATION
         }
         violations = _validate_finding_confidence(finding)
-        assert violations == [], (
-            "PROBABLE with DIRECT_TECHNICAL_OBSERVATION (no corroboration) is valid."
-        )
+        assert (
+            violations == []
+        ), "PROBABLE with DIRECT_TECHNICAL_OBSERVATION (no corroboration) is valid."
 
     def test_suspected_is_valid_for_indirect_evidence(self):
         finding = {
@@ -343,6 +366,7 @@ class TestProbableMinimumForPartialEvidence:
 # SA-CONF-007: All 7 verification methods are valid
 # ---------------------------------------------------------------------------
 
+
 class TestVerificationMethodEnumeration:
     def test_all_verification_methods_are_valid(self):
         for method in VERIFICATION_METHODS:
@@ -353,10 +377,12 @@ class TestVerificationMethodEnumeration:
                 "verification_methods": [method],
             }
             violations = _validate_finding_confidence(finding)
-            method_violations = [v for v in violations if "Unknown verification method" in v]
-            assert method_violations == [], (
-                f"Method {method!r} produced a violation: {method_violations}"
-            )
+            method_violations = [
+                v for v in violations if "Unknown verification method" in v
+            ]
+            assert (
+                method_violations == []
+            ), f"Method {method!r} produced a violation: {method_violations}"
 
     def test_unknown_verification_method_produces_violation(self):
         finding = {

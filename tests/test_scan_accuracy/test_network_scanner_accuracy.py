@@ -14,10 +14,10 @@ from unittest.mock import MagicMock, patch
 from services.connectors.network_scan.runner import run_network_scan
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _engagement_id() -> str:
     return "test-engagement-net-accuracy-001"
@@ -25,16 +25,24 @@ def _engagement_id() -> str:
 
 def _run_with_open_ports(host: str, open_ports: set[int]) -> dict:
     """Run the scanner with mocked socket — specific ports 'open', all others closed."""
+
     def _mock_connect(addr, timeout=None):
         h, p = addr
         if p in open_ports:
-            return MagicMock(__enter__=MagicMock(return_value=MagicMock()), __exit__=MagicMock(return_value=False))
+            return MagicMock(
+                __enter__=MagicMock(return_value=MagicMock()),
+                __exit__=MagicMock(return_value=False),
+            )
         raise ConnectionRefusedError("port closed")
 
     with patch("socket.create_connection", side_effect=_mock_connect):
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
-            result = run_network_scan(target_hosts=[host], engagement_id=_engagement_id())
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
+            result = run_network_scan(
+                target_hosts=[host], engagement_id=_engagement_id()
+            )
     return result
 
 
@@ -43,10 +51,14 @@ def _run_with_tls_result(host: str, tls_state: str) -> dict:
 
     tls_state: 'valid' | 'expired' | 'error' | 'hostname_mismatch'
     """
+
     def _mock_connect(addr, timeout=None):
         h, p = addr
         if p == 443:
-            return MagicMock(__enter__=MagicMock(return_value=MagicMock()), __exit__=MagicMock(return_value=False))
+            return MagicMock(
+                __enter__=MagicMock(return_value=MagicMock()),
+                __exit__=MagicMock(return_value=False),
+            )
         raise ConnectionRefusedError("port closed")
 
     def _mock_wrap_socket(*args, **kwargs):
@@ -65,20 +77,27 @@ def _run_with_tls_result(host: str, tls_state: str) -> dict:
         elif tls_state == "error":
             raise ssl.SSLCertVerificationError("certificate verify failed")
         elif tls_state == "hostname_mismatch":
-            raise ssl.SSLCertVerificationError("hostname 'example.com' doesn't match 'other.com'")
+            raise ssl.SSLCertVerificationError(
+                "hostname 'example.com' doesn't match 'other.com'"
+            )
         return ctx_mock
 
     with patch("socket.create_connection", side_effect=_mock_connect):
         with patch.object(ssl.SSLContext, "wrap_socket", side_effect=_mock_wrap_socket):
             with patch.object(SafeTargetValidationService, "validate") as mock_val:
-                mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
-                result = run_network_scan(target_hosts=[host], engagement_id=_engagement_id())
+                mock_val.return_value = MagicMock(
+                    ok=True, rejection_code=None, rejection_reason=None
+                )
+                result = run_network_scan(
+                    target_hosts=[host], engagement_id=_engagement_id()
+                )
     return result
 
 
 # ---------------------------------------------------------------------------
 # SA-NET-001: open_port_administrative_service → observation, NOT confirmed vulnerability
 # ---------------------------------------------------------------------------
+
 
 class TestOpenPortAdministrativeService:
     """Port 22 (SSH) open = observation that SSH is reachable, not confirmed RCE."""
@@ -116,6 +135,7 @@ class TestOpenPortAdministrativeService:
 # SA-NET-002: open_port_plaintext_service → exposure observation (LOW/INFORMATIONAL)
 # ---------------------------------------------------------------------------
 
+
 class TestOpenPortPlaintextService:
     """Port 80 HTTP open = observed plaintext service.
 
@@ -134,9 +154,13 @@ class TestOpenPortPlaintextService:
         for f in result["findings"]:
             if f["finding_type"] == "network.plain_http_services":
                 # Severity must be explicitly stated, not implicit.
-                assert f["severity"] in ("high", "critical", "medium", "low", "info"), (
-                    "plain_http finding must have explicit severity"
-                )
+                assert f["severity"] in (
+                    "high",
+                    "critical",
+                    "medium",
+                    "low",
+                    "info",
+                ), "plain_http finding must have explicit severity"
 
     def test_port_80_with_443_does_not_produce_plain_http_finding(self):
         """When both 80 and 443 are open, HTTP redirect path may exist. No plain_http."""
@@ -150,6 +174,7 @@ class TestOpenPortPlaintextService:
 # ---------------------------------------------------------------------------
 # SA-NET-003: open_port_ai_inference → AI model serving port detected
 # ---------------------------------------------------------------------------
+
 
 class TestOpenPortAiInference:
     """Ports 8080/11434/5000/8888/7860 indicate AI model server presence."""
@@ -180,6 +205,7 @@ class TestOpenPortAiInference:
 # SA-NET-004: closed_port → no finding emitted
 # ---------------------------------------------------------------------------
 
+
 class TestClosedPort:
     """All ports closed = no findings. Result is structurally complete."""
 
@@ -200,6 +226,7 @@ class TestClosedPort:
 # ---------------------------------------------------------------------------
 # SA-NET-005: out_of_scope_target → rejected, no finding, error state
 # ---------------------------------------------------------------------------
+
 
 class TestOutOfScopeTarget:
     """Private IP targets rejected by SafeTargetValidationService."""
@@ -239,7 +266,9 @@ class TestOutOfScopeTarget:
         )
         rejections = result["rejected_targets"]
         assert len(rejections) >= 1
-        assert rejections[0].get("rejection_code"), "Every rejection must have a rejection_code"
+        assert rejections[0].get(
+            "rejection_code"
+        ), "Every rejection must have a rejection_code"
 
     def test_private_ip_does_not_produce_clean_host_finding(self):
         """Rejected target must NOT produce 'no findings = clean host' inference."""
@@ -257,6 +286,7 @@ class TestOutOfScopeTarget:
 # ---------------------------------------------------------------------------
 # SA-NET-006: unsafe_services (RDP/VNC/Telnet/FTP) → critical finding
 # ---------------------------------------------------------------------------
+
 
 class TestUnsafeServices:
     """Ports in _UNSAFE_EXPOSED (3389/5900/23/21) produce critical finding."""
@@ -287,6 +317,7 @@ class TestUnsafeServices:
 # SA-NET-007: TLS scenarios
 # ---------------------------------------------------------------------------
 
+
 class TestTlsScenarios:
     """TLS certificate analysis — expired, error, valid."""
 
@@ -316,6 +347,7 @@ class TestTlsScenarios:
 # ---------------------------------------------------------------------------
 # SA-NET-008: engagement_id and scan_id always present
 # ---------------------------------------------------------------------------
+
 
 class TestScanProvenance:
     """Every scan result must include scan_id and engagement_id for evidence chain."""

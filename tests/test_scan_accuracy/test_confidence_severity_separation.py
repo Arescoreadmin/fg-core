@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-
 # ---------------------------------------------------------------------------
 # Import the confidence validator from the existing test infrastructure
 # ---------------------------------------------------------------------------
@@ -30,7 +29,9 @@ from unittest.mock import patch
 # Reuse the same validation logic defined in test_confidence_model.py
 # by directly re-implementing the minimal rules here (pure logic, no dep).
 
-CONFIDENCE_LEVELS = frozenset({"CONFIRMED", "PROBABLE", "SUSPECTED", "UNKNOWN", "NOT_ASSESSED"})
+CONFIDENCE_LEVELS = frozenset(
+    {"CONFIRMED", "PROBABLE", "SUSPECTED", "UNKNOWN", "NOT_ASSESSED"}
+)
 SEVERITY_LEVELS = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"})
 
 
@@ -229,9 +230,11 @@ class TestRunnerConfidenceFieldAbsent:
         mock_response.url = "https://example.com"
         mock_response.headers = {}  # No security headers present
 
-        with patch("httpx.head", return_value=mock_response), \
-             patch("httpx.get", return_value=mock_response):
+        with patch("httpx.head", return_value=mock_response), patch(
+            "httpx.get", return_value=mock_response
+        ):
             from services.connectors.web_headers.runner import run as web_run
+
             result = web_run(["https://example.com"])
 
         findings = result.get("findings", [])
@@ -252,6 +255,7 @@ class TestRunnerConfidenceFieldAbsent:
             # Return empty to produce missing_spf finding
             mock_q.return_value = []
             from services.connectors.dns_email.runner import _check_spf
+
             result = _check_spf("example.com")
 
         # The result dict has no confidence field
@@ -285,7 +289,10 @@ class TestRunnerConfidenceFieldAbsent:
         mock_resp.json.return_value = {"value": [device]}
 
         with patch("httpx.get", return_value=mock_resp):
-            from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
+            from services.connectors.endpoint_inventory.runner import (
+                run_endpoint_inventory,
+            )
+
             result = run_endpoint_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",

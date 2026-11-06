@@ -28,10 +28,10 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
-
 # ---------------------------------------------------------------------------
 # Evidence chain structure validator
 # ---------------------------------------------------------------------------
+
 
 def _validate_scan_result_provenance(result: dict) -> list[str]:
     """Validate a scan result dict has required provenance fields.
@@ -52,7 +52,9 @@ def _validate_scan_result_provenance(result: dict) -> list[str]:
     return violations
 
 
-def _validate_finding_evidence_link(finding: dict, scan_id: str, engagement_id: str) -> list[str]:
+def _validate_finding_evidence_link(
+    finding: dict, scan_id: str, engagement_id: str
+) -> list[str]:
     """Validate that a finding has proper evidence linkage.
 
     In the fixture-validated model, findings within a scan result inherit
@@ -85,13 +87,18 @@ def _validate_tenant_isolation(result: dict, expected_tenant_id: str) -> list[st
 # SA-TRAC-001: Network scan result provenance chain
 # ---------------------------------------------------------------------------
 
+
 class TestNetworkScanProvenance:
     def test_network_scan_result_has_complete_provenance(self):
         from services.connectors.network_scan.runner import run_network_scan
-        from services.connectors.safe_target_validator import SafeTargetValidationService
+        from services.connectors.safe_target_validator import (
+            SafeTargetValidationService,
+        )
 
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
             with patch("socket.create_connection", side_effect=ConnectionRefusedError):
                 result = run_network_scan(
                     target_hosts=["93.184.216.34"],
@@ -103,17 +110,23 @@ class TestNetworkScanProvenance:
 
     def test_network_scan_findings_have_severity(self):
         from services.connectors.network_scan.runner import run_network_scan
-        from services.connectors.safe_target_validator import SafeTargetValidationService
+        from services.connectors.safe_target_validator import (
+            SafeTargetValidationService,
+        )
 
         def _mock_connect(addr, timeout=None):
             h, p = addr
             if p == 3389:
-                return MagicMock(__enter__=MagicMock(return_value=MagicMock()),
-                                 __exit__=MagicMock(return_value=False))
+                return MagicMock(
+                    __enter__=MagicMock(return_value=MagicMock()),
+                    __exit__=MagicMock(return_value=False),
+                )
             raise ConnectionRefusedError()
 
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
             with patch("socket.create_connection", side_effect=_mock_connect):
                 result = run_network_scan(
                     target_hosts=["93.184.216.34"],
@@ -121,7 +134,9 @@ class TestNetworkScanProvenance:
                 )
 
         for finding in result["findings"]:
-            violations = _validate_finding_evidence_link(finding, result["scan_id"], "eng-net-001")
+            violations = _validate_finding_evidence_link(
+                finding, result["scan_id"], "eng-net-001"
+            )
             assert violations == []
 
     def test_rejected_target_has_rejection_provenance(self):
@@ -143,6 +158,7 @@ class TestNetworkScanProvenance:
 # ---------------------------------------------------------------------------
 # SA-TRAC-002: DNS scan result provenance chain
 # ---------------------------------------------------------------------------
+
 
 class TestDnsScanProvenance:
     def test_dns_run_result_has_domain_level_provenance(self):
@@ -170,27 +186,35 @@ class TestDnsScanProvenance:
             result = run(["example.com"])
 
         for finding in result["findings"]:
-            assert finding.get("domain"), (
-                f"Finding {finding.get('type')} missing domain attribution"
-            )
+            assert finding.get(
+                "domain"
+            ), f"Finding {finding.get('type')} missing domain attribution"
 
 
 # ---------------------------------------------------------------------------
 # SA-TRAC-003: Web headers scan provenance chain
 # ---------------------------------------------------------------------------
 
+
 class TestWebHeadersProvenance:
     def test_scan_target_result_has_url_provenance(self):
         from services.connectors.web_headers.runner import scan_target
-        from services.connectors.safe_target_validator import SafeTargetValidationService
+        from services.connectors.safe_target_validator import (
+            SafeTargetValidationService,
+        )
 
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
             with patch("httpx.Client") as mock_client_class:
                 mock_client = MagicMock()
-                mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+                mock_client_class.return_value.__enter__ = MagicMock(
+                    return_value=mock_client
+                )
                 mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
                 import httpx
+
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 mock_resp.headers = httpx.Headers({})
@@ -205,6 +229,7 @@ class TestWebHeadersProvenance:
 # ---------------------------------------------------------------------------
 # SA-TRAC-004: Endpoint scan provenance chain
 # ---------------------------------------------------------------------------
+
 
 class TestEndpointScanProvenance:
     def test_endpoint_inventory_has_complete_provenance(self):
@@ -248,7 +273,9 @@ class TestEndpointScanProvenance:
                             "operatingSystemVersion": "10.0",
                             "isCompliant": False,
                             "isManaged": True,
-                            "approximateLastSignInDateTime": datetime.now(timezone.utc).isoformat(),
+                            "approximateLastSignInDateTime": datetime.now(
+                                timezone.utc
+                            ).isoformat(),
                             "trustType": "AzureAD",
                         }
                     ]
@@ -263,14 +290,15 @@ class TestEndpointScanProvenance:
             )
 
         for f in result["findings"]:
-            assert f.get("control_id"), (
-                f"Finding {f.get('finding_type')} missing control_id for framework traceability"
-            )
+            assert f.get(
+                "control_id"
+            ), f"Finding {f.get('finding_type')} missing control_id for framework traceability"
 
 
 # ---------------------------------------------------------------------------
 # SA-TRAC-005: Negative — finding missing evidence reference
 # ---------------------------------------------------------------------------
+
 
 class TestFindingMissingEvidenceReference:
     """When a finding has no evidence reference, it should be treated as
@@ -293,17 +321,22 @@ class TestFindingMissingEvidenceReference:
             # No scan_id, no engagement_id reference
         }
 
-        from tests.test_scan_accuracy.test_confidence_model import _validate_finding_confidence
+        from tests.test_scan_accuracy.test_confidence_model import (
+            _validate_finding_confidence,
+        )
+
         violations = _validate_finding_confidence(finding_without_provenance)
 
         # SUSPECTED + NOT_VERIFIED is valid — no violations.
-        assert violations == [], (
-            "SUSPECTED confidence with NOT_VERIFIED is valid per policy."
-        )
+        assert (
+            violations == []
+        ), "SUSPECTED confidence with NOT_VERIFIED is valid per policy."
 
     def test_confirmed_finding_without_direct_observation_is_policy_violation(self):
         """Policy test: claiming CONFIRMED without direct observation is a violation."""
-        from tests.test_scan_accuracy.test_confidence_model import _validate_finding_confidence
+        from tests.test_scan_accuracy.test_confidence_model import (
+            _validate_finding_confidence,
+        )
 
         finding_claiming_confirmed = {
             "type": "test.finding_claiming_confirmed",
@@ -314,14 +347,15 @@ class TestFindingMissingEvidenceReference:
         }
 
         violations = _validate_finding_confidence(finding_claiming_confirmed)
-        assert any("CONFIRMED requires" in v for v in violations), (
-            "CONFIRMED without DIRECT_TECHNICAL_OBSERVATION must be a policy violation."
-        )
+        assert any(
+            "CONFIRMED requires" in v for v in violations
+        ), "CONFIRMED without DIRECT_TECHNICAL_OBSERVATION must be a policy violation."
 
 
 # ---------------------------------------------------------------------------
 # SA-TRAC-006: Tenant isolation invariant
 # ---------------------------------------------------------------------------
+
 
 class TestTenantIsolationInvariant:
     """Findings must be attributed to the correct tenant.
@@ -357,6 +391,7 @@ class TestTenantIsolationInvariant:
 # SA-TRAC-007: OAuth scan provenance chain
 # ---------------------------------------------------------------------------
 
+
 class TestOAuthScanProvenance:
     def test_oauth_scan_has_complete_provenance(self):
         from services.connectors.oauth_inventory.runner import run_oauth_inventory
@@ -364,8 +399,10 @@ class TestOAuthScanProvenance:
         def _mock_get_all(access_token, path, params=None):
             return []
 
-        with patch("services.connectors.oauth_inventory.runner._get_all",
-                   side_effect=_mock_get_all):
+        with patch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -381,13 +418,19 @@ class TestOAuthScanProvenance:
         def _mock_get_all(access_token, path, params=None):
             if "oauth2PermissionGrants" in path:
                 return [
-                    {"clientId": "sp-x", "consentType": "AllPrincipals", "scope": "User.Read"}
+                    {
+                        "clientId": "sp-x",
+                        "consentType": "AllPrincipals",
+                        "scope": "User.Read",
+                    }
                     for _ in range(6)  # 6 grants trigger 'high' severity
                 ]
             return []
 
-        with patch("services.connectors.oauth_inventory.runner._get_all",
-                   side_effect=_mock_get_all):
+        with patch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -395,6 +438,6 @@ class TestOAuthScanProvenance:
             )
 
         for f in result["findings"]:
-            assert f.get("control_id"), (
-                f"OAuth finding {f.get('finding_type')} missing control_id"
-            )
+            assert f.get(
+                "control_id"
+            ), f"OAuth finding {f.get('finding_type')} missing control_id"

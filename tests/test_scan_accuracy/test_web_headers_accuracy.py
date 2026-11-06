@@ -28,10 +28,10 @@ from services.connectors.web_headers.runner import (
 )
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_response(
     status_code: int = 200,
@@ -62,10 +62,14 @@ def _run_scan_target_with_response(
     mock_resp.status_code = status_code
 
     with patch.object(SafeTargetValidationService, "validate") as mock_val:
-        mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+        mock_val.return_value = MagicMock(
+            ok=True, rejection_code=None, rejection_reason=None
+        )
         with patch("httpx.Client") as mock_client_class:
             mock_client = MagicMock()
-            mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_client_class.return_value.__enter__ = MagicMock(
+                return_value=mock_client
+            )
             mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
             mock_client.head.return_value = mock_resp
             result = scan_target(url)
@@ -76,6 +80,7 @@ def _run_scan_target_with_response(
 # SA-WEB-001: hsts_valid → HSTS_PRESENT, no HSTS finding
 # ---------------------------------------------------------------------------
 
+
 class TestHstsValid:
     def test_valid_hsts_produces_no_hsts_finding(self):
         findings = _check_hsts(f"max-age={_HSTS_MIN_MAX_AGE + 1}; includeSubDomains")
@@ -85,13 +90,16 @@ class TestHstsValid:
 
     def test_valid_hsts_no_findings_at_all(self):
         """Adequate max-age + includeSubDomains = zero HSTS findings."""
-        findings = _check_hsts(f"max-age={_HSTS_MIN_MAX_AGE * 2}; includeSubDomains; preload")
+        findings = _check_hsts(
+            f"max-age={_HSTS_MIN_MAX_AGE * 2}; includeSubDomains; preload"
+        )
         assert findings == []
 
 
 # ---------------------------------------------------------------------------
 # SA-WEB-002: hsts_absent → HSTS_MISSING
 # ---------------------------------------------------------------------------
+
 
 class TestHstsAbsent:
     def test_missing_hsts_produces_finding(self):
@@ -108,6 +116,7 @@ class TestHstsAbsent:
 # ---------------------------------------------------------------------------
 # SA-WEB-003: hsts_weak_duration → HSTS_SHORT_DURATION
 # ---------------------------------------------------------------------------
+
 
 class TestHstsWeakDuration:
     def test_short_max_age_produces_hsts_short_maxage_finding(self):
@@ -126,6 +135,7 @@ class TestHstsWeakDuration:
 # SA-WEB-004: csp_present → no CSP finding (informational)
 # ---------------------------------------------------------------------------
 
+
 class TestCspPresent:
     def test_basic_csp_no_unsafe_produces_no_csp_finding(self):
         findings = _check_csp("default-src 'self'; script-src 'self'")
@@ -138,6 +148,7 @@ class TestCspPresent:
 # ---------------------------------------------------------------------------
 # SA-WEB-005: csp_unsafe_directives → CSP_UNSAFE_DIRECTIVES
 # ---------------------------------------------------------------------------
+
 
 class TestCspUnsafeDirectives:
     def test_unsafe_inline_produces_finding(self):
@@ -160,6 +171,7 @@ class TestCspUnsafeDirectives:
 # SA-WEB-006: x_content_type_options_missing → XCTO_MISSING
 # ---------------------------------------------------------------------------
 
+
 class TestXContentTypeOptions:
     def test_missing_xcto_produces_finding(self):
         findings = _check_x_content_type(None)
@@ -178,6 +190,7 @@ class TestXContentTypeOptions:
 # ---------------------------------------------------------------------------
 # SA-WEB-007: referrer_policy_missing → RP_MISSING
 # ---------------------------------------------------------------------------
+
 
 class TestReferrerPolicy:
     def test_missing_referrer_policy_produces_finding(self):
@@ -199,6 +212,7 @@ class TestReferrerPolicy:
 # SA-WEB-008: CRITICAL — timeout does NOT produce HEADERS_ALL_MISSING findings
 # ---------------------------------------------------------------------------
 
+
 class TestTimeout:
     """CRITICAL TRUTH CONDITION: When the HTTP request times out, the scanner
     must NOT emit header findings. A timeout means we have NO header data.
@@ -207,10 +221,14 @@ class TestTimeout:
 
     def test_timeout_produces_error_not_header_findings(self):
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
             with patch("httpx.Client") as mock_client_class:
                 mock_client = MagicMock()
-                mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+                mock_client_class.return_value.__enter__ = MagicMock(
+                    return_value=mock_client
+                )
                 mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
                 # Simulate timeout
                 mock_client.head.side_effect = httpx.TimeoutException("timed out")
@@ -226,10 +244,14 @@ class TestTimeout:
 
     def test_connect_error_produces_error_not_header_findings(self):
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
-            mock_val.return_value = MagicMock(ok=True, rejection_code=None, rejection_reason=None)
+            mock_val.return_value = MagicMock(
+                ok=True, rejection_code=None, rejection_reason=None
+            )
             with patch("httpx.Client") as mock_client_class:
                 mock_client = MagicMock()
-                mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+                mock_client_class.return_value.__enter__ = MagicMock(
+                    return_value=mock_client
+                )
                 mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
                 mock_client.head.side_effect = httpx.ConnectError("connection refused")
                 result = scan_target("https://example.com")
@@ -242,11 +264,14 @@ class TestTimeout:
 # SA-WEB-009: redirect_blocked → rejected with UNSAFE_REDIRECT
 # ---------------------------------------------------------------------------
 
+
 class TestRedirectBlocked:
     """A redirect to a private IP must be rejected; no header findings emitted."""
 
     def test_unsafe_redirect_produces_blocked_result(self):
-        redirect_resp = _mock_response(status_code=301, headers={"location": "http://192.168.1.1/"})
+        redirect_resp = _mock_response(
+            status_code=301, headers={"location": "http://192.168.1.1/"}
+        )
         redirect_resp.status_code = 301
 
         with patch.object(SafeTargetValidationService, "validate") as mock_val:
@@ -265,21 +290,24 @@ class TestRedirectBlocked:
 
             with patch("httpx.Client") as mock_client_class:
                 mock_client = MagicMock()
-                mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+                mock_client_class.return_value.__enter__ = MagicMock(
+                    return_value=mock_client
+                )
                 mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
                 mock_client.head.return_value = redirect_resp
                 result = scan_target("https://example.com")
 
         assert result["blocked"] is True
-        assert result["findings"] == [], (
-            "Blocked redirect must NOT emit header findings — no headers were observed."
-        )
+        assert (
+            result["findings"] == []
+        ), "Blocked redirect must NOT emit header findings — no headers were observed."
         assert result.get("rejection_code") == "UNSAFE_REDIRECT"
 
 
 # ---------------------------------------------------------------------------
 # SA-WEB-010: missing_all_headers — aggregate but NOT classified CRITICAL
 # ---------------------------------------------------------------------------
+
 
 class TestMissingAllHeaders:
     """CRITICAL TRUTH CONDITION: Missing security headers alone are classified
@@ -328,6 +356,7 @@ class TestMissingAllHeaders:
 # SA-WEB-011: private_ip_target → rejected by validator, blocked=True
 # ---------------------------------------------------------------------------
 
+
 class TestPrivateIpTarget:
     def test_private_ip_target_is_blocked_no_findings(self):
         result = scan_target("https://192.168.1.1")
@@ -338,6 +367,7 @@ class TestPrivateIpTarget:
 # ---------------------------------------------------------------------------
 # SA-WEB-012: scan provenance — finding maps to observed response
 # ---------------------------------------------------------------------------
+
 
 class TestFindingProvenance:
     """Every finding must correspond to data actually observed in the HTTP response."""

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_app(
     app_id: str = "app-001",
@@ -34,6 +34,7 @@ def _build_app(
 # ---------------------------------------------------------------------------
 # SA-OAUTH-001: verified_publisher_app → no unverified finding
 # ---------------------------------------------------------------------------
+
 
 class TestVerifiedPublisherApp:
     def test_verified_publisher_does_not_produce_unverified_finding(self):
@@ -68,8 +69,10 @@ class TestVerifiedPublisherApp:
                 return []
             return []
 
-        with upatch("services.connectors.oauth_inventory.runner._get_all",
-                    side_effect=_mock_get_all):
+        with upatch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -84,6 +87,7 @@ class TestVerifiedPublisherApp:
 # ---------------------------------------------------------------------------
 # SA-OAUTH-002: unverified_publisher + sensitive scope → UNVERIFIED_PUBLISHER finding
 # ---------------------------------------------------------------------------
+
 
 class TestUnverifiedPublisherSensitiveScope:
     def test_unverified_publisher_produces_finding(self):
@@ -100,7 +104,12 @@ class TestUnverifiedPublisherSensitiveScope:
                         "createdDateTime": datetime.now(timezone.utc).isoformat(),
                         "signInAudience": "AzureADMyOrg",
                         "requiredResourceAccess": [
-                            {"resourceAccess": [{"id": f"scope{i}", "type": "Scope"} for i in range(5)]}
+                            {
+                                "resourceAccess": [
+                                    {"id": f"scope{i}", "type": "Scope"}
+                                    for i in range(5)
+                                ]
+                            }
                         ],
                     }
                 ]
@@ -116,8 +125,10 @@ class TestUnverifiedPublisherSensitiveScope:
                 ]
             return []
 
-        with upatch("services.connectors.oauth_inventory.runner._get_all",
-                    side_effect=_mock_get_all):
+        with upatch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -131,6 +142,7 @@ class TestUnverifiedPublisherSensitiveScope:
 # ---------------------------------------------------------------------------
 # SA-OAUTH-003: admin_consented_app → ADMIN_CONSENT_GRANT observation
 # ---------------------------------------------------------------------------
+
 
 class TestAdminConsentGrant:
     def test_admin_consent_produces_observation_finding(self):
@@ -162,12 +174,18 @@ class TestAdminConsentGrant:
             elif "oauth2PermissionGrants" in path:
                 # Admin-consented grant (AllPrincipals = tenant-wide)
                 return [
-                    {"clientId": "sp-003", "consentType": "AllPrincipals", "scope": "User.Read"}
+                    {
+                        "clientId": "sp-003",
+                        "consentType": "AllPrincipals",
+                        "scope": "User.Read",
+                    }
                 ]
             return []
 
-        with upatch("services.connectors.oauth_inventory.runner._get_all",
-                    side_effect=_mock_get_all):
+        with upatch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -181,6 +199,7 @@ class TestAdminConsentGrant:
 # ---------------------------------------------------------------------------
 # SA-OAUTH-004: CRITICAL — permission_granted != data_accessed != data_disclosed
 # ---------------------------------------------------------------------------
+
 
 class TestOAuthPermissionGrantedNotData:
     """CRITICAL TRUTH CONDITION: OAuth permission granted means the app HAS PERMISSION
@@ -203,12 +222,18 @@ class TestOAuthPermissionGrantedNotData:
                 return []
             elif "oauth2PermissionGrants" in path:
                 return [
-                    {"clientId": "sp-x", "consentType": "AllPrincipals", "scope": "Mail.Read"}
+                    {
+                        "clientId": "sp-x",
+                        "consentType": "AllPrincipals",
+                        "scope": "Mail.Read",
+                    }
                 ]
             return []
 
-        with upatch("services.connectors.oauth_inventory.runner._get_all",
-                    side_effect=_mock_get_all):
+        with upatch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -229,6 +254,7 @@ class TestOAuthPermissionGrantedNotData:
 # ---------------------------------------------------------------------------
 # SA-OAUTH-005: AI governance — dpa_status_unknown != confirmed DPA absent
 # ---------------------------------------------------------------------------
+
 
 class TestAiGovernanceDpaUnknown:
     """CRITICAL TRUTH CONDITION: If DPA status is unknown (not in registry),
@@ -278,25 +304,26 @@ class TestAiGovernanceDpaUnknown:
         # the scanner previously fired the same definitive description for unknown and
         # absent statuses alike, making an unsupported absence claim from unknown evidence.
         no_dpa_findings = [f for f in findings if "no_dpa" in f.get("type", "")]
-        assert no_dpa_findings, (
-            "Expected a no_dpa governance gap finding for unknown DPA status"
-        )
+        assert (
+            no_dpa_findings
+        ), "Expected a no_dpa governance gap finding for unknown DPA status"
         for f in no_dpa_findings:
             desc = f.get("description", "").lower()
             # Must use hedged language for unknown status
-            assert "could not be verified" in desc, (
-                f"Unknown DPA status should produce hedged description, got: {desc!r}"
-            )
+            assert (
+                "could not be verified" in desc
+            ), f"Unknown DPA status should produce hedged description, got: {desc!r}"
             # Must NOT claim confirmed absence
-            assert "is in place" not in desc, (
-                f"Unknown DPA status must not assert absence; got: {desc!r}"
-            )
+            assert (
+                "is in place" not in desc
+            ), f"Unknown DPA status must not assert absence; got: {desc!r}"
             assert "confirmed absent" not in desc
 
 
 # ---------------------------------------------------------------------------
 # SA-OAUTH-006: risk_acceptance_expired → EXPIRED_RISK_ACCEPTANCE finding
 # ---------------------------------------------------------------------------
+
 
 class TestRiskAcceptanceExpired:
     def test_expired_risk_acceptance_produces_finding(self):
@@ -343,6 +370,7 @@ class TestRiskAcceptanceExpired:
 # SA-OAUTH-007: restricted_ai_tool → RESTRICTED_TOOL_DETECTED
 # ---------------------------------------------------------------------------
 
+
 class TestRestrictedAiTool:
     def test_restricted_vendor_still_active_produces_finding(self):
         from services.connectors.ai_vendor_governance.governance_engine import (
@@ -385,6 +413,7 @@ class TestRestrictedAiTool:
 # ---------------------------------------------------------------------------
 # SA-OAUTH-008: approved_ai_tool → no adverse finding
 # ---------------------------------------------------------------------------
+
 
 class TestApprovedAiTool:
     def test_fully_governed_tool_produces_no_critical_findings(self):
@@ -429,14 +458,15 @@ class TestApprovedAiTool:
         # Fully governed tool should produce no critical findings.
         for f in findings:
             severity = f.get("severity", "")
-            assert severity not in ("critical",), (
-                f"Fully governed approved tool produced critical finding: {f}"
-            )
+            assert severity not in (
+                "critical",
+            ), f"Fully governed approved tool produced critical finding: {f}"
 
 
 # ---------------------------------------------------------------------------
 # SA-OAUTH-009: CRITICAL — AI vendor name match != unauthorized
 # ---------------------------------------------------------------------------
+
 
 class TestAiVendorMatchNotUnauthorized:
     """CRITICAL TRUTH CONDITION: Matching an app to an AI vendor in the registry

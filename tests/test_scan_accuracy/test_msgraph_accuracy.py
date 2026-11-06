@@ -19,10 +19,10 @@ from unittest.mock import MagicMock, patch
 from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
 from services.connectors.oauth_inventory.runner import run_oauth_inventory
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_mfa_client(
     users: list[dict],
@@ -65,6 +65,7 @@ def _engagement_id() -> str:
 # SA-MSG-001: MFA enrollment ≠ MFA enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestMfaEnrollmentVsEnforcement:
     """CRITICAL TRUTH CONDITION: MFA enrolled ≠ MFA enforced.
     A user may register MFA but have no Conditional Access policy requiring it.
@@ -102,9 +103,9 @@ class TestMfaEnrollmentVsEnforcement:
         result, findings, evidence = mfa.run(client, "tenant-001")
 
         # Unenrolled MFA must produce findings.
-        assert len(findings) > 0, (
-            "User with no MFA registration must produce MFA findings."
-        )
+        assert (
+            len(findings) > 0
+        ), "User with no MFA registration must produce MFA findings."
         # Check result reflects no-mfa state
         assert result.total_enabled_users >= 1
 
@@ -150,6 +151,7 @@ class TestMfaEnrollmentVsEnforcement:
 # SA-MSG-002: Privileged role = observation, NOT automatic EXCESSIVE_PRIVILEGE
 # ---------------------------------------------------------------------------
 
+
 class TestPrivilegedRoleObservation:
     """Global Admin permanent assignment is a configuration observation.
     It may warrant review, but the finding must be an OBSERVATION,
@@ -166,7 +168,13 @@ class TestPrivilegedRoleObservation:
             # pim_eligible
             [],
             # Role members for watched roles (10 roles watched)
-            [{"id": "user-ga", "displayName": "GA User", "userPrincipalName": "ga@example.com"}],
+            [
+                {
+                    "id": "user-ga",
+                    "displayName": "GA User",
+                    "userPrincipalName": "ga@example.com",
+                }
+            ],
             [],  # Security Admin
             [],  # Privileged Role Admin
             [],  # Privileged Auth Admin
@@ -183,7 +191,9 @@ class TestPrivilegedRoleObservation:
         # Result should be structured correctly (PrivilegedRoleResult dataclass).
         assert result is not None
         # PrivilegedRoleResult has global_admin_count, permanent_assignments, etc.
-        assert hasattr(result, "global_admin_count") or hasattr(result, "permanent_assignments")
+        assert hasattr(result, "global_admin_count") or hasattr(
+            result, "permanent_assignments"
+        )
 
     def test_no_privileged_accounts_produces_no_priv_findings(self):
         from services.connectors.msgraph.analyzers import privileged_roles
@@ -193,14 +203,19 @@ class TestPrivilegedRoleObservation:
         client.get_all.side_effect = [
             [],  # reg_details
             [],  # pim_eligible
-        ] + [[] for _ in range(10)]  # 10 watched roles, all empty
+        ] + [
+            [] for _ in range(10)
+        ]  # 10 watched roles, all empty
 
         result, findings, evidence = privileged_roles.run(client, "tenant-001")
 
         # No privileged accounts = no privileged-role findings.
         assert len(findings) == 0 or all(
-            "privileged" not in str(f.finding_type).lower()
-            if hasattr(f, "finding_type") else True
+            (
+                "privileged" not in str(f.finding_type).lower()
+                if hasattr(f, "finding_type")
+                else True
+            )
             for f in findings
         )
 
@@ -208,6 +223,7 @@ class TestPrivilegedRoleObservation:
 # ---------------------------------------------------------------------------
 # SA-MSG-003: HTTP 403 → collection DENIED, findings NOT emitted
 # ---------------------------------------------------------------------------
+
 
 class TestHttp403Response:
     """CRITICAL TRUTH CONDITION: 403 means access denied for that scope.
@@ -231,7 +247,9 @@ class TestHttp403Response:
                             "operatingSystemVersion": "10.0",
                             "isCompliant": True,
                             "isManaged": True,
-                            "approximateLastSignInDateTime": datetime.now(timezone.utc).isoformat(),
+                            "approximateLastSignInDateTime": datetime.now(
+                                timezone.utc
+                            ).isoformat(),
                             "trustType": "AzureAD",
                         }
                     ]
@@ -247,21 +265,29 @@ class TestHttp403Response:
 
         # 403 on Intune = cannot determine encryption from Intune.
         # Must NOT produce unencrypted_devices finding.
-        enc_findings = [f for f in result["findings"]
-                        if f["finding_type"] == "endpoint.unencrypted_devices"]
+        enc_findings = [
+            f
+            for f in result["findings"]
+            if f["finding_type"] == "endpoint.unencrypted_devices"
+        ]
         assert enc_findings == [], (
             "403 on Intune MUST NOT produce unencrypted_devices finding. "
             "403 = access denied, NOT zero encrypted devices."
         )
 
-    def test_oauth_inventory_app_collection_error_does_not_produce_zero_apps_findings(self):
+    def test_oauth_inventory_app_collection_error_does_not_produce_zero_apps_findings(
+        self,
+    ):
         """When app collection fails with an exception, no apps-related findings
         should claim 'zero apps means clean'."""
+
         def _mock_get_all_raises(access_token, path, params=None):
             raise Exception("403 Forbidden")
 
-        with patch("services.connectors.oauth_inventory.runner._get_all",
-                   side_effect=_mock_get_all_raises):
+        with patch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all_raises,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -277,6 +303,7 @@ class TestHttp403Response:
 # ---------------------------------------------------------------------------
 # SA-MSG-004: empty tenant 200 → COMPLETE, zero findings
 # ---------------------------------------------------------------------------
+
 
 class TestEmptyTenant:
     """Empty 200 response with valid perms = COMPLETE with zero findings.
@@ -306,8 +333,10 @@ class TestEmptyTenant:
         def _mock_get_all(access_token, path, params=None):
             return []
 
-        with patch("services.connectors.oauth_inventory.runner._get_all",
-                   side_effect=_mock_get_all):
+        with patch(
+            "services.connectors.oauth_inventory.runner._get_all",
+            side_effect=_mock_get_all,
+        ):
             result = run_oauth_inventory(
                 access_token="mock-token",
                 tenant_id="tenant-001",
@@ -321,6 +350,7 @@ class TestEmptyTenant:
 # ---------------------------------------------------------------------------
 # SA-MSG-005: unknown_last_seen != active device
 # ---------------------------------------------------------------------------
+
 
 class TestUnknownLastSeen:
     """CRITICAL TRUTH CONDITION: A device with no last-seen date cannot be
