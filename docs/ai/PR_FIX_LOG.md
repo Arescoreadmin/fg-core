@@ -1,3 +1,44 @@
+## test(scan): L14-SCAN-ACCURACY-001 — detection accuracy baseline, confidence model, audit truth corrections (branch test/l14-scan-accuracy-001)
+
+- **Work item:** L14-SCAN-ACCURACY-001
+- **Baseline SHA:** `a9b266ca` (main after PR #803)
+- **Failures before:** None — baseline clean at 846 passed.
+- **Problem:** No known-answer accuracy tests existed for any FrostGate scanner. The original L14 audit documents contained three material overclaims: (1) "SSRF-proof" / "completely secure" (not end-to-end field-proven); (2) SHA-256 UUID ≠ cryptographic integrity proof; (3) NIST AI RMF mapping ≠ NIST certification. No machine-readable accuracy baseline existed. No confidence model was defined or tested. No FrostGate Verified Assessment Standard document existed.
+- **Fix summary:** 8 new test files (138 new tests) establishing fixture-validated known-answer accuracy for 6 scanner connectors, plus confidence model rules and evidence traceability chain. All 138 tests pass. Created 3 audit/assurance documents (audit corrections, confidence policy, verified assessment standard) and 2 baseline artifacts (accuracy baseline Markdown and machine-readable manifest). Registered 12-item scanning remediation sequence in ROADMAP.md Phase 4.
+- **Files created:**
+  - `tests/test_scan_accuracy/__init__.py`
+  - `tests/test_scan_accuracy/test_network_scanner_accuracy.py` — 25 tests; mocks `socket.create_connection` and `SafeTargetValidationService.validate` only
+  - `tests/test_scan_accuracy/test_dns_email_accuracy.py` — 22 tests; mocks `_dns_query` only
+  - `tests/test_scan_accuracy/test_web_headers_accuracy.py` — 22 tests; mocks `httpx.Client` and `SafeTargetValidationService.validate` only
+  - `tests/test_scan_accuracy/test_msgraph_accuracy.py` — 15 tests; mocks `httpx.get` and `GraphClient.get_all` only
+  - `tests/test_scan_accuracy/test_oauth_ai_accuracy.py` — 15 tests; calls `generate_findings(record, now_str)` and `_risk_indicators(tool)` directly, no mocks
+  - `tests/test_scan_accuracy/test_endpoint_accuracy.py` — 15 tests; mocks `httpx.get` only
+  - `tests/test_scan_accuracy/test_confidence_model.py` — 17 tests; pure logic, no I/O
+  - `tests/test_scan_accuracy/test_evidence_traceability.py` — 11 tests; validates provenance chain
+  - `docs/audits/L14_SCAN_AUDIT_CORRECTIONS.md` — 8 corrections (COR-001 through COR-008)
+  - `docs/assurance/FROSTGATE_FINDING_CONFIDENCE_POLICY.md` — 5 confidence levels, 7 verification methods, 6 assignment rules
+  - `docs/assurance/FROSTGATE_VERIFIED_ASSESSMENT_STANDARD.md` — 6 FVA controls; explicit non-ISO/non-SOC-2/non-NIST-cert disclosures
+  - `docs/audits/L14_SCAN_ACCURACY_BASELINE.md` — per-scanner TP/FP/TN/FN tables, defect log, coverage limitations
+  - `docs/audits/L14_SCAN_ACCURACY_MANIFEST.json` — machine-readable manifest; `FIXTURE_VALIDATED` per scanner; `NOT_MEASURED` live effectiveness
+- **Files modified:**
+  - `ROADMAP.md` — Phase 4 scanning remediation sequence (12 items) registered
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Defects found (no scanner code changes required):**
+  - DEF-001 (LOW): DNS timeout indistinguishable from genuine record absence in `_check_spf`/`_check_dmarc` — documented gap, deferred to L14-SCAN-COMPLETENESS-001
+  - DEF-002 (LOW): Unknown `last_seen` classified as `is_stale=False` instead of INDETERMINATE — documented gap, deferred to L14-SCAN-COMPLETENESS-001
+  - DEF-003 (MEDIUM): No `confidence` field in runner-level finding output for any scanner — documented gap, deferred to L14-ASSESSMENT-ASSURANCE-001
+- **Accuracy summary (fixture-validated only; live effectiveness NOT_MEASURED):**
+  - `network_scan`: 8 TP, 7 TN, 0 FP, 0 FN (N=17 scenarios); precision=1.0, recall=1.0
+  - `dns_email`: 8 TP, 6 TN, 0 FP, 0 FN (N=14 scenarios); precision=1.0, recall=1.0
+  - `web_headers`: 8 TP, 8 TN, 0 FP, 0 FN (N=16 scenarios); precision=1.0, recall=1.0
+  - `microsoft_graph`: 1 TP, 5 TN, 0 FP, 0 FN (N=10; insufficient TP for recall measurement)
+  - `oauth_ai_governance`: 4 TP, 3 TN, 0 FP, 0 FN (N=9 scenarios); precision=1.0, recall=1.0
+  - `endpoint_inventory`: 3 TP, 5 TN, 0 FP, 0 FN (N=8 scenarios); precision=1.0, recall=1.0
+- **Security note:** No auth flow changes. No schema changes. No migrations. No production code changes — test and documentation PR only.
+- **Tests:** 138 new tests; 0 regressions. All 138 pass in 3.75s. Methodology: fixture-validated known-answer tests; real classification/finding-emitter logic called directly; scanner I/O mocked at single boundary point per scanner.
+
+---
+
 ## audit(field-assessment): L14 assessment-to-report readiness and synthetic demo foundation (branch audit/l14-field-assessment-report-readiness-001)
 
 - **Work item:** L14-FIELD-ASSESSMENT-REPORT-READINESS-001
