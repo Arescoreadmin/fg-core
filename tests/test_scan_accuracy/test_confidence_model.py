@@ -138,9 +138,9 @@ class TestConfidenceLevelValidation:
             violations = _validate_finding_confidence(finding)
             # Only check that the confidence level itself is valid (not all rules pass)
             conf_violations = [v for v in violations if "Unknown confidence level" in v]
-            assert (
-                conf_violations == []
-            ), f"Level {level!r} produced violation: {conf_violations}"
+            assert conf_violations == [], (
+                f"Level {level!r} produced violation: {conf_violations}"
+            )
 
     def test_unknown_confidence_level_produces_violation(self):
         finding = {
@@ -347,9 +347,9 @@ class TestProbableMinimumForPartialEvidence:
             # No INDEPENDENT_CORROBORATION
         }
         violations = _validate_finding_confidence(finding)
-        assert (
-            violations == []
-        ), "PROBABLE with DIRECT_TECHNICAL_OBSERVATION (no corroboration) is valid."
+        assert violations == [], (
+            "PROBABLE with DIRECT_TECHNICAL_OBSERVATION (no corroboration) is valid."
+        )
 
     def test_suspected_is_valid_for_indirect_evidence(self):
         finding = {
@@ -380,9 +380,9 @@ class TestVerificationMethodEnumeration:
             method_violations = [
                 v for v in violations if "Unknown verification method" in v
             ]
-            assert (
-                method_violations == []
-            ), f"Method {method!r} produced a violation: {method_violations}"
+            assert method_violations == [], (
+                f"Method {method!r} produced a violation: {method_violations}"
+            )
 
     def test_unknown_verification_method_produces_violation(self):
         finding = {

@@ -230,8 +230,9 @@ class TestRunnerConfidenceFieldAbsent:
         mock_response.url = "https://example.com"
         mock_response.headers = {}  # No security headers present
 
-        with patch("httpx.head", return_value=mock_response), patch(
-            "httpx.get", return_value=mock_response
+        with (
+            patch("httpx.head", return_value=mock_response),
+            patch("httpx.get", return_value=mock_response),
         ):
             from services.connectors.web_headers.runner import run as web_run
 

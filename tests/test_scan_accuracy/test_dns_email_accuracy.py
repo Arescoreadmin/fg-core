@@ -55,9 +55,9 @@ class TestValidSpf:
             result = _check_spf("example.com")
 
         assert result["present"] is True
-        assert (
-            result["finding"] is None
-        ), "v=spf1 ... -all is a valid strict SPF record; no finding should be emitted."
+        assert result["finding"] is None, (
+            "v=spf1 ... -all is a valid strict SPF record; no finding should be emitted."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +202,9 @@ class TestValidDkim:
             result = _check_dkim("example.com", ["google"])
 
         assert "google" in result["selectors_found"]
-        assert (
-            result["finding"] is None
-        ), "Known selector found with valid DKIM record must produce no finding."
+        assert result["finding"] is None, (
+            "Known selector found with valid DKIM record must produce no finding."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -235,9 +235,9 @@ class TestUnknownDkimSelector:
 
         # The finding is 'no_dkim_found' (under checked selectors) — not a global absence claim.
         assert result["finding"] == "no_dkim_found"
-        assert (
-            result["selectors_found"] == []
-        ), "No selector found in our check set, but this is NOT a global DKIM_MISSING claim."
+        assert result["selectors_found"] == [], (
+            "No selector found in our check set, but this is NOT a global DKIM_MISSING claim."
+        )
 
     def test_unknown_selector_scan_domain_does_not_claim_dkim_globally_missing(self):
         """The full scan_domain output must not use a finding type claiming global absence."""
@@ -298,9 +298,9 @@ class TestDnssecObservation:
         assert result["enabled"] is True
         # DNSSEC appears configured based on DNSKEY presence.
         # finding=None means no warning (presence is positive).
-        assert (
-            result["finding"] is None
-        ), "DNSKEY present = no negative finding; scanner reports enabled=True."
+        assert result["finding"] is None, (
+            "DNSKEY present = no negative finding; scanner reports enabled=True."
+        )
 
     def test_dnskey_absent_produces_dnssec_not_enabled_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:

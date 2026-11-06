@@ -103,9 +103,9 @@ class TestMfaEnrollmentVsEnforcement:
         result, findings, evidence = mfa.run(client, "tenant-001")
 
         # Unenrolled MFA must produce findings.
-        assert (
-            len(findings) > 0
-        ), "User with no MFA registration must produce MFA findings."
+        assert len(findings) > 0, (
+            "User with no MFA registration must produce MFA findings."
+        )
         # Check result reflects no-mfa state
         assert result.total_enabled_users >= 1
 
@@ -203,9 +203,7 @@ class TestPrivilegedRoleObservation:
         client.get_all.side_effect = [
             [],  # reg_details
             [],  # pim_eligible
-        ] + [
-            [] for _ in range(10)
-        ]  # 10 watched roles, all empty
+        ] + [[] for _ in range(10)]  # 10 watched roles, all empty
 
         result, findings, evidence = privileged_roles.run(client, "tenant-001")
 

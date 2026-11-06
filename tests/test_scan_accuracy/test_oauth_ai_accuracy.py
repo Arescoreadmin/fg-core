@@ -304,19 +304,19 @@ class TestAiGovernanceDpaUnknown:
         # the scanner previously fired the same definitive description for unknown and
         # absent statuses alike, making an unsupported absence claim from unknown evidence.
         no_dpa_findings = [f for f in findings if "no_dpa" in f.get("type", "")]
-        assert (
-            no_dpa_findings
-        ), "Expected a no_dpa governance gap finding for unknown DPA status"
+        assert no_dpa_findings, (
+            "Expected a no_dpa governance gap finding for unknown DPA status"
+        )
         for f in no_dpa_findings:
             desc = f.get("description", "").lower()
             # Must use hedged language for unknown status
-            assert (
-                "could not be verified" in desc
-            ), f"Unknown DPA status should produce hedged description, got: {desc!r}"
+            assert "could not be verified" in desc, (
+                f"Unknown DPA status should produce hedged description, got: {desc!r}"
+            )
             # Must NOT claim confirmed absence
-            assert (
-                "is in place" not in desc
-            ), f"Unknown DPA status must not assert absence; got: {desc!r}"
+            assert "is in place" not in desc, (
+                f"Unknown DPA status must not assert absence; got: {desc!r}"
+            )
             assert "confirmed absent" not in desc
 
 
@@ -458,9 +458,9 @@ class TestApprovedAiTool:
         # Fully governed tool should produce no critical findings.
         for f in findings:
             severity = f.get("severity", "")
-            assert severity not in (
-                "critical",
-            ), f"Fully governed approved tool produced critical finding: {f}"
+            assert severity not in ("critical",), (
+                f"Fully governed approved tool produced critical finding: {f}"
+            )
 
 
 # ---------------------------------------------------------------------------

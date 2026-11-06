@@ -186,9 +186,9 @@ class TestDnsScanProvenance:
             result = run(["example.com"])
 
         for finding in result["findings"]:
-            assert finding.get(
-                "domain"
-            ), f"Finding {finding.get('type')} missing domain attribution"
+            assert finding.get("domain"), (
+                f"Finding {finding.get('type')} missing domain attribution"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +290,9 @@ class TestEndpointScanProvenance:
             )
 
         for f in result["findings"]:
-            assert f.get(
-                "control_id"
-            ), f"Finding {f.get('finding_type')} missing control_id for framework traceability"
+            assert f.get("control_id"), (
+                f"Finding {f.get('finding_type')} missing control_id for framework traceability"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +328,9 @@ class TestFindingMissingEvidenceReference:
         violations = _validate_finding_confidence(finding_without_provenance)
 
         # SUSPECTED + NOT_VERIFIED is valid — no violations.
-        assert (
-            violations == []
-        ), "SUSPECTED confidence with NOT_VERIFIED is valid per policy."
+        assert violations == [], (
+            "SUSPECTED confidence with NOT_VERIFIED is valid per policy."
+        )
 
     def test_confirmed_finding_without_direct_observation_is_policy_violation(self):
         """Policy test: claiming CONFIRMED without direct observation is a violation."""
@@ -347,9 +347,9 @@ class TestFindingMissingEvidenceReference:
         }
 
         violations = _validate_finding_confidence(finding_claiming_confirmed)
-        assert any(
-            "CONFIRMED requires" in v for v in violations
-        ), "CONFIRMED without DIRECT_TECHNICAL_OBSERVATION must be a policy violation."
+        assert any("CONFIRMED requires" in v for v in violations), (
+            "CONFIRMED without DIRECT_TECHNICAL_OBSERVATION must be a policy violation."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +438,6 @@ class TestOAuthScanProvenance:
             )
 
         for f in result["findings"]:
-            assert f.get(
-                "control_id"
-            ), f"OAuth finding {f.get('finding_type')} missing control_id"
+            assert f.get("control_id"), (
+                f"OAuth finding {f.get('finding_type')} missing control_id"
+            )

@@ -266,9 +266,9 @@ class TestOutOfScopeTarget:
         )
         rejections = result["rejected_targets"]
         assert len(rejections) >= 1
-        assert rejections[0].get(
-            "rejection_code"
-        ), "Every rejection must have a rejection_code"
+        assert rejections[0].get("rejection_code"), (
+            "Every rejection must have a rejection_code"
+        )
 
     def test_private_ip_does_not_produce_clean_host_finding(self):
         """Rejected target must NOT produce 'no findings = clean host' inference."""

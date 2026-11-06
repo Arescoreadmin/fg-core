@@ -298,9 +298,9 @@ class TestRedirectBlocked:
                 result = scan_target("https://example.com")
 
         assert result["blocked"] is True
-        assert (
-            result["findings"] == []
-        ), "Blocked redirect must NOT emit header findings — no headers were observed."
+        assert result["findings"] == [], (
+            "Blocked redirect must NOT emit header findings — no headers were observed."
+        )
         assert result.get("rejection_code") == "UNSAFE_REDIRECT"
 
 

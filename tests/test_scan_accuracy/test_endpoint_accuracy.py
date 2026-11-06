@@ -100,9 +100,9 @@ class TestManagedCompliantEncrypted:
         ]
         result = _run_with_devices(devices, intune)
 
-        assert (
-            result["findings"] == []
-        ), "Managed, compliant, encrypted device must produce no findings."
+        assert result["findings"] == [], (
+            "Managed, compliant, encrypted device must produce no findings."
+        )
         assert result["summary"]["total"] == 1
 
     def test_scan_id_always_present(self):
