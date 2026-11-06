@@ -24,12 +24,9 @@ the gap is documented for L14-ASSESSMENT-ASSURANCE-001.
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
-
-import pytest
 
 
 # ---------------------------------------------------------------------------

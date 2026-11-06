@@ -6,9 +6,9 @@
   "audit_branch": "test/l14-scan-accuracy-001",
   "methodology": "fixture_validated_known_answer_tests",
   "safety_boundary": "No live networks scanned. No external hosts contacted. All scanner I/O mocked. Real classification/finding-emitter logic called directly.",
-  "total_test_files": 8,
-  "total_tests": 138,
-  "tests_passed": 138,
+  "total_test_files": 10,
+  "total_tests": 162,
+  "tests_passed": 162,
   "tests_failed": 0,
   "live_effectiveness": "NOT_MEASURED",
   "scanners": [
@@ -16,7 +16,7 @@
       "id": "network_scan",
       "fixture_version": "1.0",
       "test_file": "tests/test_scan_accuracy/test_network_scanner_accuracy.py",
-      "scenarios": 17,
+      "scenarios": 33,
       "true_positives": 8,
       "false_positives": 0,
       "true_negatives": 7,
@@ -40,7 +40,7 @@
       "id": "dns_email",
       "fixture_version": "1.0",
       "test_file": "tests/test_scan_accuracy/test_dns_email_accuracy.py",
-      "scenarios": 14,
+      "scenarios": 22,
       "true_positives": 8,
       "false_positives": 0,
       "true_negatives": 6,
@@ -71,7 +71,7 @@
       "id": "web_headers",
       "fixture_version": "1.0",
       "test_file": "tests/test_scan_accuracy/test_web_headers_accuracy.py",
-      "scenarios": 16,
+      "scenarios": 24,
       "true_positives": 8,
       "false_positives": 0,
       "true_negatives": 8,
@@ -94,7 +94,7 @@
       "id": "microsoft_graph",
       "fixture_version": "1.0",
       "test_file": "tests/test_scan_accuracy/test_msgraph_accuracy.py",
-      "scenarios": 10,
+      "scenarios": 9,
       "true_positives": 1,
       "false_positives": 0,
       "true_negatives": 5,
@@ -149,7 +149,7 @@
       "id": "endpoint_inventory",
       "fixture_version": "1.0",
       "test_file": "tests/test_scan_accuracy/test_endpoint_accuracy.py",
-      "scenarios": 8,
+      "scenarios": 12,
       "true_positives": 3,
       "false_positives": 0,
       "true_negatives": 5,
@@ -171,7 +171,7 @@
   ],
   "confidence_model_tests": {
     "test_file": "tests/test_scan_accuracy/test_confidence_model.py",
-    "total_tests": 17,
+    "total_tests": 18,
     "rules_tested": [
       "CONFIRMED requires DIRECT_TECHNICAL_OBSERVATION or AUTHORITATIVE_CONFIGURATION_EXPORT",
       "CONFIRMED with only INTERVIEW_ASSERTION is prohibited",
@@ -183,9 +183,40 @@
     ],
     "all_rules_pass": true
   },
+  "confidence_severity_separation_tests": {
+    "test_file": "tests/test_scan_accuracy/test_confidence_severity_separation.py",
+    "total_tests": 10,
+    "rules_tested": [
+      "High-severity finding may have SUSPECTED confidence (independent axes)",
+      "Low-severity finding may have CONFIRMED confidence",
+      "Confidence is not calculated from severity",
+      "Missing confidence field defaults to NOT_ASSESSED (not CONFIRMED) — DEF-003",
+      "Runner outputs (web_headers, dns_email, endpoint_inventory) lack confidence field — DEF-003"
+    ],
+    "defect_documented": "DEF-003",
+    "deferred_to": "L14-SCAN-INTEGRITY-001"
+  },
+  "fva01_scope_enforcement_tests": {
+    "test_file": "tests/test_scan_accuracy/test_fva01_scope_enforcement.py",
+    "total_tests": 11,
+    "verdict": "PARTIALLY_IMPLEMENTED",
+    "enforcement_present": [
+      "require_permission(scan.trigger) — api/field_assessment.py:4582",
+      "get_engagement(engagement_id, tenant_id) compound WHERE — services/field_assessment/store.py:103",
+      "SafeTargetValidationService SSRF/private-range rejection — services/connectors/safe_target_validator.py",
+      "_c6_write_audit_event(scan.initiated) — api/field_assessment.py:4668",
+      "acknowledgment_receipt_id gate for Microsoft Graph only"
+    ],
+    "enforcement_absent": [
+      "No authorized target scope list per engagement",
+      "No engagement client_domain vs scan target domain check",
+      "No acknowledgment receipt gate for DNS/network/web scanners"
+    ],
+    "deferred_to": "L14-SCAN-SAFETY-001"
+  },
   "evidence_traceability_tests": {
     "test_file": "tests/test_scan_accuracy/test_evidence_traceability.py",
-    "total_tests": 11,
+    "total_tests": 14,
     "chains_tested": [
       "network_scan: raw observation -> scan result -> finding",
       "dns_email: raw observation -> scan result -> finding -> domain attribution",
@@ -213,13 +244,14 @@
   "assessment_standard": {
     "document": "docs/assurance/FROSTGATE_VERIFIED_ASSESSMENT_STANDARD.md",
     "controls_defined": 6,
-    "controls_implemented": 1,
-    "controls_partial": 2,
+    "controls_implemented": 0,
+    "controls_partial": 3,
     "controls_policy_only": 3,
     "enforcement_gaps_deferred_to": [
       "L14-ASSESSMENT-ASSURANCE-001",
       "L14-SCAN-REPORT-PROOF-001",
-      "L14-SCAN-COMPLETENESS-001"
+      "L14-SCAN-COMPLETENESS-001",
+      "L14-SCAN-SAFETY-001"
     ]
   }
 }

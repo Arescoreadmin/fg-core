@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from services.connectors.dns_email.runner import (
     _check_spf,
     _check_dmarc,
@@ -45,8 +43,6 @@ def _mock_dns_query_factory(response_map: dict[tuple[str, str], list[str]]):
 
 class TestValidSpf:
     def test_valid_spf_strict_no_finding(self):
-        spf = _check_spf.__wrapped__ if hasattr(_check_spf, "__wrapped__") else _check_spf
-
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
             mock_q.side_effect = _mock_dns_query_factory({
                 ("example.com", "TXT"): ['"v=spf1 include:_spf.google.com -all"'],
@@ -406,3 +402,86 @@ class TestScanDomainProvenance:
         assert "dnssec" in result
         assert "findings" in result
         assert result["domain"] == "example.com"
+
+
+# ---------------------------------------------------------------------------
+# SA-DNS-014: DEF-001 regression — dns.resolver.Timeout must not produce absence findings
+# ---------------------------------------------------------------------------
+
+
+class TestDnsResolverTimeoutClass:
+    """DEF-001 regression: when dns.resolver.resolve raises dns.resolver.Timeout
+    (the actual library exception), the scanner must NOT emit SPF_MISSING or
+    DMARC_MISSING findings.
+
+    ACTUAL behavior (defect): _dns_query catches Exception and returns [] →
+    empty records → missing_spf / missing_dmarc findings ARE emitted.
+    This is the documented accuracy gap: timeout is indistinguishable from genuine
+    record absence at the _dns_query wrapper level.
+
+    This test patches dns.resolver.resolve directly (not _dns_query) to confirm
+    that the LifetimeTimeout propagates as an Exception through the wrapper and
+    produces the defect behavior. The test asserts the ACTUAL behavior and documents
+    what the CORRECT behavior would be for L14-SCAN-COMPLETENESS-001.
+
+    Deferred to: L14-SCAN-COMPLETENESS-001
+    """
+
+    def test_dns_resolver_timeout_propagates_as_empty_result_via_wrapper(self):
+        """dns.resolver.LifetimeTimeout is an Exception subclass.
+        _dns_query's `except Exception: return []` catches it and returns [].
+        This produces missing_spf — which is the DEF-001 defect.
+        """
+        import dns.resolver
+
+        with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
+            # _dns_query calls dns.resolver.resolve; Timeout is caught → returns []
+            from services.connectors.dns_email.runner import _dns_query
+            result = _dns_query("timeout-domain.example.com", "TXT")
+
+        # ACTUAL behavior: Timeout caught → empty list (same as genuine absence)
+        assert result == [], (
+            "dns.resolver.LifetimeTimeout is caught by _dns_query's except Exception: "
+            "and returns []. This is the DEF-001 defect: timeout == absence at runner level."
+        )
+
+    def test_spf_check_on_dns_timeout_emits_missing_finding_defect_documented(self):
+        """DEF-001: DNS timeout → missing_spf emitted. INCORRECT per policy.
+        Correct behavior: timeout → collection_status=TIMEOUT, no finding emitted.
+        Current behavior documented here as regression fixture for L14-SCAN-COMPLETENESS-001.
+        """
+        import dns.resolver
+
+        with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
+            from services.connectors.dns_email.runner import _check_spf
+            result = _check_spf("timeout-domain.example.com")
+
+        # ACTUAL (defective) behavior: timeout → empty records → missing_spf
+        # This is DEF-001. The test documents it so it cannot silently change.
+        assert result["present"] is False
+        assert result["finding"] == "missing_spf", (
+            "DEF-001: DNS timeout produces missing_spf finding. "
+            "CORRECT behavior would produce collection_status=TIMEOUT with no finding. "
+            "Deferred to L14-SCAN-COMPLETENESS-001."
+        )
+        # DOES NOT assert collection_status == TIMEOUT — this field does not exist yet
+        assert "collection_status" not in result, (
+            "DEF-001: collection_status field not present in _check_spf result. "
+            "This field would distinguish timeout from genuine absence. "
+            "Pending L14-SCAN-COMPLETENESS-001."
+        )
+
+    def test_dmarc_check_on_dns_timeout_emits_missing_finding_defect_documented(self):
+        """DEF-001: DNS timeout → missing_dmarc emitted. Same defect as SPF."""
+        import dns.resolver
+
+        with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
+            from services.connectors.dns_email.runner import _check_dmarc
+            result = _check_dmarc("timeout-domain.example.com")
+
+        # ACTUAL (defective) behavior
+        assert result["present"] is False
+        assert result["finding"] == "missing_dmarc", (
+            "DEF-001: DNS timeout produces missing_dmarc finding. "
+            "Deferred to L14-SCAN-COMPLETENESS-001."
+        )

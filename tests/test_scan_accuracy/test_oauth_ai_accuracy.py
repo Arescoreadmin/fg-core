@@ -9,9 +9,6 @@ Critical truth conditions tested:
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -219,9 +216,8 @@ class TestOAuthPermissionGrantedNotData:
             )
 
         for f in result["findings"]:
-            # Finding titles and descriptions must NOT claim data was accessed.
+            # Finding titles must NOT claim data was accessed.
             title = f.get("title", "").lower()
-            description = f.get("description", "").lower()
             assert "data accessed" not in title, (
                 f"Finding title claims 'data accessed' — this is incorrect. "
                 f"Permission granted != data accessed. Title: {title}"

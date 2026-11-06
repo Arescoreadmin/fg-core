@@ -13,10 +13,8 @@ Critical truth conditions tested:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
 from services.connectors.oauth_inventory.runner import run_oauth_inventory
@@ -162,7 +160,6 @@ class TestPrivilegedRoleObservation:
         from services.connectors.msgraph.analyzers import privileged_roles
 
         client = MagicMock()
-        global_admin_id = "62e90394-69f5-4237-9190-012177145e10"
         client.get_all.side_effect = [
             # reg_details
             [],

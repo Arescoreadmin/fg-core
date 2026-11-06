@@ -4,7 +4,7 @@
 **Version:** 1.0  
 **Date:** 2026-11-06  
 **Authority:** FrostGate Internal Engineering Standard  
-**Status:** PARTIAL_IMPLEMENTATION — 6 controls defined; enforcement varies by control
+**Status:** PARTIAL_IMPLEMENTATION — 6 controls defined; 0 fully implemented, 3 partially implemented, 3 policy-only
 
 ---
 
@@ -41,17 +41,30 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - Scope approval (acknowledgment receipt with HMAC signature)
 - Assessor authorization (credential with assessor or platform_admin role)
 
-**Implementation status**: IMPLEMENTED
+**Implementation status**: PARTIALLY_IMPLEMENTED
+
+**What IS enforced (code-verified)**:
+
+1. Operator identity and permission: `require_permission("scan.trigger")` enforced at every scan initiation route — `api/field_assessment.py` lines 4582, 4857, 5067.
+2. Tenant-scoped engagement ownership: `get_engagement(db, engagement_id=..., tenant_id=...)` performs a compound WHERE on `(id, tenant_id)` — prevents cross-tenant scan initiation — `services/field_assessment/store.py:103`.
+3. SSRF / private-range blocking: `SafeTargetValidationService` (called via `_c6_validate_and_store_targets`) rejects RFC1918, loopback, link-local, cloud-metadata targets before any connection — `services/connectors/safe_target_validator.py`.
+4. Scan audit event emitted: `_c6_write_audit_event(event_type="scan.initiated")` on all scan dispatch paths — `api/field_assessment.py` lines 4668, 4876, 5153.
+5. Acknowledgment receipt gate: Microsoft Graph scan requires `acknowledgment_receipt_id` parameter — `api/field_assessment.py:3610 initiate_msgraph_scan`.
+
+**What is NOT enforced (gaps for L14-SCAN-SAFETY-001)**:
+
+1. No authorized target scope list per engagement. Any publicly routable host passes SSRF validation regardless of engagement's `client_domain`. An operator can scan `example.com` during an engagement for `acme.com` — the system does not detect or block this.
+2. Acknowledgment receipt gate is absent for DNS (`initiate_dns_email_scan`), network (`initiate_network_scan`), and web header (`initiate_web_headers_scan`) scanners — only Microsoft Graph has this gate.
+3. No pre-approved target allowlist stored per engagement or checked at scan dispatch time.
+4. Cloud provider scanners (AWS/GCP/Azure) not yet implemented.
 
 **Testable criteria**:
-- Scanner runner rejects execution without valid engagement_id
-- SafeTargetValidationService rejects out-of-scope targets (private IPs, unauthorized CIDRs)
-- Acknowledgment receipt gate enforced before Microsoft Graph scan
-- TenantLock prevents concurrent scans on the same tenant
-
-**Known gaps**:
-- Scope boundary enforcement for DNS/email domain targets relies on assessor input, not automated scope boundary check
-- Cloud provider scanners (AWS/GCP/Azure) not yet implemented
+- Scanner runner rejects execution without valid engagement_id — ENFORCED
+- SafeTargetValidationService rejects private-IP targets — ENFORCED (see `tests/test_scan_accuracy/test_fva01_scope_enforcement.py`)
+- Tenant-scoped engagement ownership check — ENFORCED
+- Audit event at scan start — ENFORCED
+- Acknowledgment receipt gate for all scanners — NOT ENFORCED (MsgGraph only)
+- Target domain validated against engagement client_domain — NOT ENFORCED
 
 **Future enforcement PR**: L14-SCAN-SAFETY-001
 
@@ -196,7 +209,7 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 
 | Control | ID | Description | Status | Deferred To |
 |---------|-----|-------------|--------|-------------|
-| Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | IMPLEMENTED | — |
+| Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 |
 | Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
 | Finding Accuracy | FVA-03 | Confidence and severity independently justified | POLICY_ONLY | L14-SCAN-REPORT-PROOF-001 |
 | Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIAL_IMPLEMENTATION | L14-SCAN-COMPLETENESS-001 |

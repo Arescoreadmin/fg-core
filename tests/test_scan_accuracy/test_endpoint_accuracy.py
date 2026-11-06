@@ -14,8 +14,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
 
 
@@ -52,8 +50,6 @@ def _build_device(
 def _run_with_devices(devices: list[dict], intune_devices: list[dict] | None = None) -> dict:
     if intune_devices is None:
         intune_devices = []
-
-    call_num = [0]
 
     def _mock_get(url, headers=None, timeout=None):
         resp = MagicMock()

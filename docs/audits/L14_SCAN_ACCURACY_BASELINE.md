@@ -85,15 +85,18 @@ Recall = 8/(8+0) = 1.0 (fixture-validated only; not population recall)
 | DNS exception per domain | Error captured, no cross-domain leakage | PASS | — |
 | Resolver error | error key set, no findings | PASS | — |
 
-**N=14 direct classification scenarios, 8 TP, 6 TN, 0 FP, 0 FN**
+**N=14 direct classification scenarios (original), 8 TP, 6 TN, 0 FP, 0 FN**  
+**Additional DEF-001 regression tests: 3 (SA-DNS-014) — test dns.resolver.LifetimeTimeout propagation; total file: 22 tests**
 
 **Critical truth conditions verified**:
 - Unknown DKIM selector does NOT produce dkim_globally_absent finding: PASS
 - DNSKEY presence does NOT become DNSSEC_CHAIN_VALIDATED: PASS (documented as observation only)
 - DNS error per domain does NOT corrupt other domain findings: PASS
 
+**DEF-001 regression fixture** (SA-DNS-014): dns.resolver.LifetimeTimeout propagates as Exception, is caught by `_dns_query`'s `except Exception: return []`, returns empty list. This produces `missing_spf` / `missing_dmarc` findings — identical to genuine record absence. ACTUAL behavior documented. CORRECT behavior (TIMEOUT state, no finding) deferred to L14-SCAN-COMPLETENESS-001.
+
 **Known accuracy gap documented**:
-- DNS timeout is indistinguishable from genuine record absence in `_check_spf`, `_check_dmarc`. Both produce the same "missing" result. This is a known accuracy limitation. Confidence must be SUSPECTED (not CONFIRMED) for timeout-derived findings. Filed for FVA-04 enforcement.
+- DNS timeout is indistinguishable from genuine record absence in `_check_spf`, `_check_dmarc`. Both produce the same "missing" result. This is a known accuracy limitation. Confidence must be SUSPECTED (not CONFIRMED) for timeout-derived findings. Filed for L14-SCAN-COMPLETENESS-001.
 
 **Fixture validation status**: FIXTURE_VALIDATED  
 **Live effectiveness**: NOT_MEASURED

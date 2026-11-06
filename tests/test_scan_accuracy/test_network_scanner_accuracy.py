@@ -8,18 +8,10 @@ Does NOT mock _probe_port, _check_tls, _scan_host, or the finding-emitter.
 from __future__ import annotations
 
 import ssl
-import socket
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # Import real scanner logic — these must NOT be mocked.
-from services.connectors.network_scan.runner import (
-    _UNSAFE_EXPOSED,
-    _PLAIN_HTTP,
-    _AI_PORTS,
-    run_network_scan,
-)
+from services.connectors.network_scan.runner import run_network_scan
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
 
@@ -65,7 +57,6 @@ def _run_with_tls_result(host: str, tls_state: str) -> dict:
             ctx_mock.__enter__ = MagicMock(return_value=sock)
             ctx_mock.__exit__ = MagicMock(return_value=False)
         elif tls_state == "expired":
-            import time
             sock = MagicMock()
             cert = {"notAfter": "Jan  1 00:00:00 2020 GMT"}
             sock.getpeercert.return_value = cert

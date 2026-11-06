@@ -16,8 +16,6 @@ Rules enforced:
 
 from __future__ import annotations
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Confidence model definitions (pure logic, no external dependencies)

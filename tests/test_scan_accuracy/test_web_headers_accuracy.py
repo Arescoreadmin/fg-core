@@ -17,16 +17,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 
 from services.connectors.web_headers.runner import (
     _check_hsts,
     _check_csp,
     _check_x_content_type,
     _check_referrer_policy,
-    _check_permissions_policy,
     scan_target,
-    run,
     _HSTS_MIN_MAX_AGE,
 )
 from services.connectors.safe_target_validator import SafeTargetValidationService
