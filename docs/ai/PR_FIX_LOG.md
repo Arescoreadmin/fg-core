@@ -1,3 +1,25 @@
+## audit(field-assessment): L14 assessment-to-report readiness and synthetic demo foundation (branch audit/l14-field-assessment-report-readiness-001)
+
+- **Work item:** L14-FIELD-ASSESSMENT-REPORT-READINESS-001
+- **Baseline SHA:** `ab72e44f` (main after PR #805)
+- **Problem:** No audit had been performed to verify that the complete assessor-operated engagement lifecycle — from client intake through evidence collection, findings generation, QA approval, and PDF delivery — was coherent, end-to-end proven, and free of critical gaps before the first paid engagement.
+- **Fix summary:** Code-inspection P0 audit across the full assessment pipeline. Ran 489 assessment-pipeline tests (engagement, evidence provenance, report QA, PDF export, forensic chain, tenant isolation) — all 489 passed. Classified 19 lifecycle categories. Found: (1) dual-report-system gap — FA-native JSON and Report Authority PDF are parallel, not bridged, requiring two operator steps for PDF export; (2) no synthetic seed script for demo preparation; (3) no assessment scope document model; (4) executive summary AI backend not verified in staging; (5) visual PDF QA not yet performed. PROVEN: 13/19. PARTIALLY_PROVEN: 6/19. NOT_IMPLEMENTED: 0. BLOCKED: 0.
+- **Files created:**
+  - `docs/audits/L14_FIELD_ASSESSMENT_REPORT_READINESS.md` — full audit report with scorecard
+  - `docs/audits/L14_ASSESSMENT_REPORT_AUTHORITY_MAP.md` — route and service authority map
+  - `docs/audits/L14_EVIDENCE_TRACEABILITY.md` — evidence-to-finding chain analysis
+  - `docs/audits/L14_REPORT_VISUAL_QA.md` — PDF visual QA checklist (blocked pending staging)
+  - `docs/audits/L14_ASSESSMENT_REPORT_REMEDIATION.md` — 9-item prioritized remediation backlog
+  - `docs/demo/L14_NORTHSTAR_60_SCENARIO.md` — Northstar synthetic scenario specification
+  - `docs/audits/L14_NORTHSTAR_60_ACCEPTANCE_MANIFEST.json` — machine-readable acceptance manifest
+- **Files modified:**
+  - `ROADMAP.md` — L14-FIELD-ASSESSMENT-REPORT-READINESS-001 row added
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Security note:** No auth flow changes. No schema changes. No migrations. No code changes — audit-only PR.
+- **Tests:** 489 assessment-pipeline tests run and passed. CI gates: `check_route_scopes.py` OK, `check_plane_registry.py` OK, `guard_no_raw_percent_in_sql.py` OK.
+
+---
+
 ## audit(experience): L14 unified brand, navigation and customer journey verification (branch audit/l14-unified-experience-001)
 
 - **Work item:** L14-UNIFIED-EXPERIENCE-AUDIT-001
