@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-06T00:00:00Z",
+  "git_sha": "b0f671cb7e82e3f7e56217efbd580582912e6fcc",
+  "audit_id": "L14-FIELD-SCAN-DEEP-AUDIT-001",
+  "audit_branch": "audit/l14-field-scan-deep-001",
+  "methodology": "source_inspection_only",
+  "safety_boundary": "No live networks scanned. No external hosts contacted. Source analysis, existing tests, and fixture inspection only.",
+  "scanners_inventoried": 14,
+  "connectors_with_full_runner_implementations": 10,
+  "connectors_registered_only_no_runner": 4,
+  "tests_executed": 476,
+  "tests_passed": 475,
+  "tests_skipped": 1,
+  "tests_failed": 0,
+  "test_suites_run": [
+    "tests/test_c6_scanner_containment.py (114 passed)",
+    "tests/test_scan_import.py + tests/test_ai_tool_discovery.py + tests/test_c6_scanner_containment.py (201 passed)",
+    "tests/test_fa_evidence_provenance.py + tests/test_fa_forensic_connector_lock.py + tests/test_fa_forensic_evidence_chain.py (25 passed)",
+    "tests/test_field_assessment.py + tests/test_field_assessment_gate_enforcement.py + tests/test_field_assessment_normalizer.py (106 passed)",
+    "tests/connectors/ (85 passed)",
+    "tests/test_r4_9b_connector_credentials.py + tests/test_connector_contract_gate.py + tests/test_connectors_idempotency.py (40 passed)",
+    "tests/test_h15_evidence_lifecycle.py (31 passed, 1 skipped)"
+  ],
+  "p0_findings": [],
+  "p1_findings": [
+    {
+      "id": "P1-001",
+      "title": "Four registered scan source types have no runner implementation",
+      "source_types": ["google_workspace", "aws", "azure", "gcp"],
+      "detail": "ScanSourceType enum, scan_registry schema versions, and required fields definitions exist for google_workspace, aws, azure, and gcp. No bridge in services/field_assessment/connectors/ and no runner in services/connectors/ exists for any of these. Manual scan import works but automated runner execution is impossible.",
+      "affected_modules": [
+        "services/field_assessment/models.py",
+        "services/field_assessment/scan_registry.py"
+      ],
+      "mitigation": "Operators can still upload external scan results via the manual ingest endpoint. Automated runner execution requires implementing the missing bridges."
+    },
+    {
+      "id": "P1-002",
+      "title": "DNS/Email connector does not validate domains through SafeTargetValidationService",
+      "detail": "The dns_email runner (services/connectors/dns_email/runner.py) performs DNS queries for domains passed directly without routing through SafeTargetValidationService. The validator is a pure Python library and does not validate domain names for DNS safety — it validates IP/hostname/URL targets for socket-opening safety. DNS lookups against arbitrary domains carry different risk than sockets, but the asymmetry between dns_email and network_scan/web_headers creates a coverage gap in the documentation of the safety model.",
+      "affected_modules": [
+        "services/connectors/dns_email/runner.py"
+      ],
+      "mitigation": "DNS queries are read-only passive operations. The practical exploit risk is low. Document the asymmetry explicitly in the safety architecture."
+    },
+    {
+      "id": "P1-003",
+      "title": "No ground-truth fixture tests for scanner detection accuracy",
+      "detail": "No tests validate scanner outputs against known-answer fixtures (e.g., a mock network scan result confirming that specific port configurations are classified as UNSAFE_EXPOSED, or that specific SPF record strings produce the expected finding severity). Tests focus on API contract, payload validation, and evidence chain integrity, not detection accuracy.",
+      "affected_modules": [
+        "services/connectors/network_scan/runner.py",
+        "services/connectors/dns_email/runner.py",
+        "services/connectors/web_headers/runner.py"
+      ]
+    }
+  ],
+  "coverage_classifications": {
+    "microsoft_graph": "IMPLEMENTED_AND_TESTED",
+    "msgraph_analyzers": "IMPLEMENTED_AND_TESTED",
+    "entra_governance": "IMPLEMENTED_AND_TESTED",
+    "endpoint_inventory": "IMPLEMENTED_AND_TESTED",
+    "oauth_inventory": "IMPLEMENTED_AND_TESTED",
+    "oauth_risk": "IMPLEMENTED_AND_TESTED",
+    "ai_tool_discovery": "IMPLEMENTED_AND_TESTED",
+    "ai_data_access_mapping": "IMPLEMENTED_AND_TESTED",
+    "external_ai_risk_register": "IMPLEMENTED_AND_TESTED",
+    "ai_vendor_governance": "IMPLEMENTED_AND_TESTED",
+    "network_scan": "IMPLEMENTED_AND_TESTED",
+    "web_headers": "IMPLEMENTED_AND_TESTED",
+    "dns_email": "IMPLEMENTED_AND_TESTED",
+    "sharepoint_onedrive": "IMPLEMENTED_AND_TESTED",
+    "google_workspace": "REGISTERED_NO_RUNNER",
+    "aws": "REGISTERED_NO_RUNNER",
+    "azure": "REGISTERED_NO_RUNNER",
+    "gcp": "REGISTERED_NO_RUNNER"
+  },
+  "safety_findings": {
+    "ssrf_protection": "STRONG",
+    "ssrf_validator": "services/connectors/safe_target_validator.py",
+    "layers_implemented": 6,
+    "cloud_metadata_blocked": true,
+    "dns_rebinding_protection": true,
+    "ipv6_mapped_ipv4_protection": true,
+    "redirect_revalidation": true,
+    "runner_level_defence_in_depth": true,
+    "rate_limiting": "3 concurrent per engagement, 10 per tenant",
+    "audit_trail": "every scan initiation, rejection, and completion logged to fa_scan_audit_events",
+    "target_persistence": "every validated/rejected target stored in fa_verified_targets"
+  },
+  "limitations": [
+    "Audit is source inspection only — no live scanning performed",
+    "Detection accuracy could not be verified without ground-truth fixtures",
+    "Microsoft Graph connector tests use mock tokens — no live tenant was tested",
+    "SharePoint connector scan limits (30 sites, 15 permission checks/drive) may undercount large tenants",
+    "AI tool vendor registry coverage not fully audited in this pass",
+    "No drift connector or Slack connector runners were inspected for this audit"
+  ]
+}

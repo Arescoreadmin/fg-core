@@ -24530,6 +24530,20 @@ qualification, or governed-delivery semantics changed. Focused proof is in
 - **DELIV-001 gap:** Simulation cannot produce pre-seeded approved report artifacts — marked NOT_PROVEN. Evidence decision is REJECTED_INCOMPLETE (honest, fail-closed). Production verification requires PORTAL-AUTH-E2E-001 operator runbook.
 - **Scope:** `tools/testing/production/evidence.py` (portal_named_user profile), `tools/testing/production/portal_e2e_harness_001.py` (new standalone harness), `tests/test_mode_b_e2e_acceptance_001.py` (new — 27 passed / 1 skipped), `contracts/artifacts/identity/portal-e2e-acceptance-001-evidence.json` (new simulation evidence, fingerprint VALID). No production routes, DB migrations, or API contracts modified.
 
+## L14-FIELD-SCAN-DEEP-AUDIT-001 — advanced technical assessment coverage and evidence integrity audit (branch audit/l14-field-scan-deep-001)
+
+- **Work item:** L14-FIELD-SCAN-DEEP-AUDIT-001 — Source-inspection-only P0 audit of all scanner and collector implementations.
+- **Methodology:** Source code inspection, static analysis, test execution. No live networks scanned. No external hosts contacted. No destructive operations performed.
+- **Scanners inventoried:** 14 connectors with runner implementations; 4 registered-only (google_workspace, aws, azure, gcp) with no runners.
+- **Tests executed:** 476 passed, 1 skipped, 0 failed across test_c6_scanner_containment.py (114), test_scan_import + test_ai_tool_discovery + test_c6 (201), evidence chain (25), field assessment (106), connectors/ (85), credentials/contract/idempotency (40), H15 lifecycle (31).
+- **P0 findings:** Zero. No SSRF bypass, no tenant isolation breach, no evidence chain break, no authentication bypass found.
+- **P1 findings:** (P1-001) google_workspace/aws/azure/gcp registered but no runner implementations exist; (P1-002) dns_email domain validation asymmetry vs SafeTargetValidationService undocumented; (P1-003) no ground-truth fixture tests for detection accuracy.
+- **SSRF status:** SECURE. 6-layer SafeTargetValidationService; DNS rebinding protection; cloud metadata endpoint blocking; IPv4-mapped IPv6 unwrapping; redirect chain re-validation in web_headers; defence-in-depth at both API and runner layers. 114 containment tests all passed.
+- **Evidence chain:** AI governance chain (ai_tool_discovery → ai_data_access_mapping → external_ai_risk_register → ai_vendor_governance) has EXCEPTIONAL provenance with 4-layer cross-references and stable SHA-256 record IDs. web_headers and dns_email runners lack self-describing scan_id/engagement_id/timestamps in their output payloads (minor gap).
+- **Northstar scenario (Northstar Regional Services, healthcare):** Microsoft Graph, endpoint_inventory, oauth_inventory, ai_tool_discovery, dns_email all coverable with existing connectors. AI audit log retention and bias/fairness require interview/document evidence only.
+- **Client readiness:** Microsoft 365 / AI governance — READY. Network/web/DNS — CONDITIONALLY READY (assessor pre-authorization required). AWS/GCP/Azure/Google Workspace — NOT READY (no runners).
+- **Scope:** 11 new audit artifacts in docs/audits/. ROADMAP.md updated. No production code, API contracts, DB migrations, or infra files modified.
+
 ## POST-799-CZ-PREAUTH-ISOLATION-001 — replace /tmp cache with in-process patched evaluator (PR #800)
 
 - **Finding:** `_run_preauth_evaluator_subprocess()` in `tests/test_cz_run3_preauth_closeout_001.py` read from `/tmp/cz-closeout-preauth.json` — a path never written by the codebase. Tests 8 and 14 (`test_08_preauth_completion_is_not_spending_authorization`, `test_14_preauth_evaluator_returns_ready_for_authorization`) passed in isolation only when this file was manually pre-populated on the developer's machine. In CI (fresh `/tmp`) the fallback subprocess ran `customer_zero_run3_preauth.py` which calls `evaluate()` without git-state patches; on any feature branch, A3 (`_git_origin_main`), A4 (`_git_status_clean`), and J_CE3 (`_validate_offline_simulation_evidence`) return NOT_PROVEN, causing READINESS-FINGERPRINT to fail and `preauth_result` to be BLOCKED.
