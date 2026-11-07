@@ -14731,6 +14731,29 @@
         "title": "EffectivenessRating",
         "type": "string"
       },
+      "EmergencyStopRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "reason"
+        ],
+        "title": "EmergencyStopRequest",
+        "type": "object"
+      },
       "EngagementListResponse": {
         "properties": {
           "cursor": {
@@ -37990,6 +38013,100 @@
           "responses"
         ],
         "title": "SaveResponsesRequest",
+        "type": "object"
+      },
+      "ScanAuthorizationActivateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          }
+        },
+        "title": "ScanAuthorizationActivateRequest",
+        "type": "object"
+      },
+      "ScanAuthorizationCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_targets": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Approved Targets",
+            "type": "array"
+          },
+          "authorization_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Authorization Ref",
+            "type": "string"
+          },
+          "authorization_type": {
+            "default": "rules_of_engagement",
+            "title": "Authorization Type",
+            "type": "string"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_ref",
+          "expires_at"
+        ],
+        "title": "ScanAuthorizationCreateRequest",
+        "type": "object"
+      },
+      "ScanAuthorizationRevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "revocation_reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Revocation Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revocation_reason"
+        ],
+        "title": "ScanAuthorizationRevokeRequest",
+        "type": "object"
+      },
+      "ScanCancelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ScanCancelRequest",
         "type": "object"
       },
       "ScanResultResponse": {
@@ -75423,6 +75540,49 @@
         ]
       }
     },
+    "/field-assessment/emergency-stop": {
+      "post": {
+        "description": "Activate a scan emergency stop.\n\nRequires scan.emergency_stop permission.\nPlatform-wide stop additionally requires scan.emergency_stop.platform.",
+        "operationId": "activate_emergency_stop_field_assessment_emergency_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyStopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Activate Emergency Stop Field Assessment Emergency Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Emergency Stop",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements": {
       "get": {
         "operationId": "list_engagements_route_field_assessment_engagements_get",
@@ -83941,6 +84101,228 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/scan-authorizations": {
+      "get": {
+        "description": "List scan authorizations for an engagement.",
+        "operationId": "list_scan_authorizations_field_assessment_engagements__engagement_id__scan_authorizations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Scan Authorizations Field Assessment Engagements  Engagement Id  Scan Authorizations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scan Authorizations",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "description": "Create a draft scan authorization (scope record) for an engagement.",
+        "operationId": "create_scan_authorization_field_assessment_engagements__engagement_id__scan_authorizations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanAuthorizationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scan Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/activate": {
+      "post": {
+        "description": "Activate a scan authorization, making it enforceable.",
+        "operationId": "activate_scan_authorization_field_assessment_engagements__engagement_id__scan_authorizations__auth_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "auth_id",
+            "required": true,
+            "schema": {
+              "title": "Auth Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanAuthorizationActivateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Activate Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations  Auth Id  Activate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Scan Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/revoke": {
+      "post": {
+        "description": "Revoke an active scan authorization. Blocks future scans immediately.",
+        "operationId": "revoke_scan_authorization_field_assessment_engagements__engagement_id__scan_authorizations__auth_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "auth_id",
+            "required": true,
+            "schema": {
+              "title": "Auth Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanAuthorizationRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Revoke Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations  Auth Id  Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Scan Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/scan-jobs": {
       "get": {
         "description": "List scan jobs for an engagement.  Supports optional ?status= filter.",
@@ -84219,6 +84601,69 @@
           }
         },
         "summary": "Get Scan Result Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scans/{scan_id}/cancel": {
+      "post": {
+        "description": "Request cancellation of an active scan job.",
+        "operationId": "cancel_scan_job_field_assessment_engagements__engagement_id__scans__scan_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scan_id",
+            "required": true,
+            "schema": {
+              "title": "Scan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Cancel Scan Job Field Assessment Engagements  Engagement Id  Scans  Scan Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Scan Job",
         "tags": [
           "field-assessment"
         ]

@@ -8659,6 +8659,23 @@
         "tenant"
       ],
       "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/emergency-stop",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
       "method": "GET",
       "path": "/field-assessment/engagements",
       "plane": "control",
@@ -10887,6 +10904,74 @@
       ],
       "file": "api/field_assessment.py",
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/activate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/revoke",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/scan-jobs",
       "plane": "control",
       "plane_id": "control",
@@ -10961,6 +11046,23 @@
       "scoped": true,
       "scopes": [
         "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/field_assessment.py",
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scans/{scan_id}/cancel",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
       ],
       "source": "runtime-ast",
       "tenant_bound": true
@@ -21203,7 +21305,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-11-05T18:35:34.672305+00:00",
+  "generated_at": "2026-11-07T02:58:24.703492+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
