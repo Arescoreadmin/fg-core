@@ -1,0 +1,257 @@
+{
+  "schema_version": "1.0",
+  "git_sha": "98bd233b9c83b9ed489f56e09d0ccaad25f76ad9",
+  "generated_at": "2026-11-06T00:00:00Z",
+  "audit_id": "L14-SCAN-ACCURACY-001",
+  "audit_branch": "test/l14-scan-accuracy-001",
+  "methodology": "fixture_validated_known_answer_tests",
+  "safety_boundary": "No live networks scanned. No external hosts contacted. All scanner I/O mocked. Real classification/finding-emitter logic called directly.",
+  "total_test_files": 10,
+  "total_tests": 162,
+  "tests_passed": 162,
+  "tests_failed": 0,
+  "live_effectiveness": "NOT_MEASURED",
+  "scanners": [
+    {
+      "id": "network_scan",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_network_scanner_accuracy.py",
+      "scenarios": 33,
+      "true_positives": 8,
+      "false_positives": 0,
+      "true_negatives": 7,
+      "false_negatives": 0,
+      "unknown": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "precision_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "recall_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [],
+      "coverage_limitations": [
+        "Partial scan completion (interrupted mid-scan) not tested",
+        "IPv6 target handling not tested",
+        "Hostname resolution failures not tested",
+        "TLS hostname mismatch uses same error path as expired cert"
+      ]
+    },
+    {
+      "id": "dns_email",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_dns_email_accuracy.py",
+      "scenarios": 22,
+      "true_positives": 8,
+      "false_positives": 0,
+      "true_negatives": 6,
+      "false_negatives": 0,
+      "unknown": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "precision_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "recall_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [
+        {
+          "id": "DEF-001",
+          "description": "DNS timeout indistinguishable from genuine record absence in _check_spf/_check_dmarc. Both produce 'missing' result. Confidence must be SUSPECTED not CONFIRMED for timeout-derived findings.",
+          "severity": "low",
+          "status": "documented_gap",
+          "deferred_to": "L14-SCAN-COMPLETENESS-001"
+        }
+      ],
+      "coverage_limitations": [
+        "DNSSEC full chain validation not performed (DNSKEY presence only)",
+        "DKIM global absence cannot be asserted (only checked selectors)",
+        "Timeout indistinguishable from genuine absence at runner level"
+      ]
+    },
+    {
+      "id": "web_headers",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_web_headers_accuracy.py",
+      "scenarios": 24,
+      "true_positives": 8,
+      "false_positives": 0,
+      "true_negatives": 8,
+      "false_negatives": 0,
+      "unknown": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "precision_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "recall_note": "fixture_validated_only_N=8_do_not_extrapolate",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [],
+      "coverage_limitations": [
+        "HEAD-unsupported servers (fallback to GET) not tested",
+        "TLS certificate inspection separate from HSTS not tested",
+        "Missing headers classified as HIGH not CRITICAL (documented as correct per methodology)"
+      ]
+    },
+    {
+      "id": "microsoft_graph",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_msgraph_accuracy.py",
+      "scenarios": 9,
+      "true_positives": 1,
+      "false_positives": 0,
+      "true_negatives": 5,
+      "false_negatives": 0,
+      "unknown": 4,
+      "precision": 1.0,
+      "recall": null,
+      "precision_note": "fixture_validated_only_N=1_do_not_extrapolate",
+      "recall_note": "insufficient_tp_count_for_recall_measurement",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [
+        {
+          "id": "DEF-002",
+          "description": "Unknown last_seen timestamp classified as not-stale instead of INDETERMINATE. Conservative but inaccurate.",
+          "severity": "low",
+          "status": "documented_gap",
+          "deferred_to": "L14-SCAN-COMPLETENESS-001"
+        }
+      ],
+      "coverage_limitations": [
+        "Full MFA enforcement vs enrollment distinction requires CA policy analysis (partially tested)",
+        "PIM eligible vs permanent role distinction tested structurally only",
+        "Identity Protection (P2 license) not testable in fixture environment",
+        "Pagination truncation not tested in this suite"
+      ]
+    },
+    {
+      "id": "oauth_ai_governance",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_oauth_ai_accuracy.py",
+      "scenarios": 9,
+      "true_positives": 4,
+      "false_positives": 0,
+      "true_negatives": 3,
+      "false_negatives": 0,
+      "unknown": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "precision_note": "fixture_validated_only_N=4_do_not_extrapolate",
+      "recall_note": "fixture_validated_only_N=4_do_not_extrapolate",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [],
+      "coverage_limitations": [
+        "ai_data_access_mapping and external_ai_risk_register not directly tested (covered via governance engine)",
+        "Vendor registry coverage (number of AI vendors covered) not audited in this pass",
+        "Missing discovery scan blocking AI governance not tested"
+      ]
+    },
+    {
+      "id": "endpoint_inventory",
+      "fixture_version": "1.0",
+      "test_file": "tests/test_scan_accuracy/test_endpoint_accuracy.py",
+      "scenarios": 12,
+      "true_positives": 3,
+      "false_positives": 0,
+      "true_negatives": 5,
+      "false_negatives": 0,
+      "unknown": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "precision_note": "fixture_validated_only_N=3_do_not_extrapolate",
+      "recall_note": "fixture_validated_only_N=3_do_not_extrapolate",
+      "fixture_validation_status": "FIXTURE_VALIDATED",
+      "live_effectiveness": "NOT_MEASURED",
+      "defects_found": [],
+      "coverage_limitations": [
+        "Stale threshold (90 days) is not configurable per engagement",
+        "Encryption status only available from Intune; Azure AD devices without Intune = unknown encryption",
+        "Platform type (iOS/Android) encryption detection not tested"
+      ]
+    }
+  ],
+  "confidence_model_tests": {
+    "test_file": "tests/test_scan_accuracy/test_confidence_model.py",
+    "total_tests": 18,
+    "rules_tested": [
+      "CONFIRMED requires DIRECT_TECHNICAL_OBSERVATION or AUTHORITATIVE_CONFIGURATION_EXPORT",
+      "CONFIRMED with only INTERVIEW_ASSERTION is prohibited",
+      "CONFIRMED with only INFERENCE is prohibited",
+      "Confidence and severity are independent",
+      "Missing data must produce UNKNOWN or NOT_ASSESSED (not CONFIRMED_ABSENT)",
+      "All 5 confidence levels are valid enum values",
+      "All 7 verification methods are valid enum values"
+    ],
+    "all_rules_pass": true
+  },
+  "confidence_severity_separation_tests": {
+    "test_file": "tests/test_scan_accuracy/test_confidence_severity_separation.py",
+    "total_tests": 10,
+    "rules_tested": [
+      "High-severity finding may have SUSPECTED confidence (independent axes)",
+      "Low-severity finding may have CONFIRMED confidence",
+      "Confidence is not calculated from severity",
+      "Missing confidence field defaults to NOT_ASSESSED (not CONFIRMED) — DEF-003",
+      "Runner outputs (web_headers, dns_email, endpoint_inventory) lack confidence field — DEF-003"
+    ],
+    "defect_documented": "DEF-003",
+    "deferred_to": "L14-SCAN-INTEGRITY-001"
+  },
+  "fva01_scope_enforcement_tests": {
+    "test_file": "tests/test_scan_accuracy/test_fva01_scope_enforcement.py",
+    "total_tests": 11,
+    "verdict": "PARTIALLY_IMPLEMENTED",
+    "enforcement_present": [
+      "require_permission(scan.trigger) — api/field_assessment.py:4582",
+      "get_engagement(engagement_id, tenant_id) compound WHERE — services/field_assessment/store.py:103",
+      "SafeTargetValidationService SSRF/private-range rejection — services/connectors/safe_target_validator.py",
+      "_c6_write_audit_event(scan.initiated) — api/field_assessment.py:4668",
+      "acknowledgment_receipt_id gate for Microsoft Graph only"
+    ],
+    "enforcement_absent": [
+      "No authorized target scope list per engagement",
+      "No engagement client_domain vs scan target domain check",
+      "No acknowledgment receipt gate for DNS/network/web scanners"
+    ],
+    "deferred_to": "L14-SCAN-SAFETY-001"
+  },
+  "evidence_traceability_tests": {
+    "test_file": "tests/test_scan_accuracy/test_evidence_traceability.py",
+    "total_tests": 14,
+    "chains_tested": [
+      "network_scan: raw observation -> scan result -> finding",
+      "dns_email: raw observation -> scan result -> finding -> domain attribution",
+      "web_headers: raw observation -> scan result -> finding -> URL attribution",
+      "endpoint_inventory: raw observation -> scan result -> finding -> control_id",
+      "oauth_inventory: raw observation -> scan result -> finding -> control_id",
+      "tenant isolation: correct tenant -> no violation",
+      "tenant isolation: wrong tenant -> isolation violation detected"
+    ],
+    "enforcement_gaps": [
+      "Full FaEvidenceLink enforcement deferred to L14-ASSESSMENT-ASSURANCE-001",
+      "confidence field not in runner-level finding output (all scanners)",
+      "FaNormalizedFinding schema does not enforce confidence classification"
+    ]
+  },
+  "audit_corrections": {
+    "document": "docs/audits/L14_SCAN_AUDIT_CORRECTIONS.md",
+    "corrections": 8,
+    "critical_corrections": [
+      "COR-004: Remove SSRF-proof/completely-secure overclaims",
+      "COR-005: SHA-256 UUID is not a cryptographic integrity proof",
+      "COR-006: NIST AI RMF mapping is not NIST certification"
+    ]
+  },
+  "assessment_standard": {
+    "document": "docs/assurance/FROSTGATE_VERIFIED_ASSESSMENT_STANDARD.md",
+    "controls_defined": 6,
+    "controls_implemented": 0,
+    "controls_partial": 3,
+    "controls_policy_only": 3,
+    "enforcement_gaps_deferred_to": [
+      "L14-ASSESSMENT-ASSURANCE-001",
+      "L14-SCAN-REPORT-PROOF-001",
+      "L14-SCAN-COMPLETENESS-001",
+      "L14-SCAN-SAFETY-001"
+    ]
+  }
+}

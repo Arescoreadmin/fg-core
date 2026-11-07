@@ -387,17 +387,21 @@ def generate_findings(
 
     dpa_required = record.get("dpa_required", False)
     regulated = record.get("regulated_data_present", False)
-    if (dpa_required or regulated) and record.get("dpa_status") not in (
-        "executed",
-        "not_required",
-    ):
-        findings.append(
-            _f(
-                "ai_vendor_governance.no_dpa",
-                f"{vendor} ({tool_name}) processes regulated data but no Data "
-                "Processing Agreement is in place.",
+    _dpa_status = record.get("dpa_status")
+    if (dpa_required or regulated) and _dpa_status not in ("executed", "not_required"):
+        if _dpa_status in (None, "unknown", "not_assessed"):
+            # Unknown status = governance gap (no DPA on record), but cannot assert
+            # confirmed absence. Use hedged language per evidence confidence policy.
+            _dpa_desc = (
+                f"{vendor} ({tool_name}) processes regulated data but DPA status "
+                "could not be verified — no executed DPA found in assessment records."
             )
-        )
+        else:
+            _dpa_desc = (
+                f"{vendor} ({tool_name}) processes regulated data but no Data "
+                "Processing Agreement is in place."
+            )
+        findings.append(_f("ai_vendor_governance.no_dpa", _dpa_desc))
 
     baa_required = record.get("baa_required", False)
     if baa_required and record.get("baa_status") not in ("executed", "not_required"):
