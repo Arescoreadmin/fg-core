@@ -7253,6 +7253,20 @@ def activate_emergency_stop(
             detail=api_error("EMERGENCY_STOP_DENIED", exc.reason),
         )
 
+    audit_atomicity_svc.emit(
+        db,
+        tenant_id=tenant_id or "platform",
+        engagement_id=body.scope,
+        event_type="scan.emergency_stop.activated",
+        actor=actor,
+        actor_type=_actor_type_from_context(actor_ctx),
+        reason_code="EMERGENCY_STOP_ACTIVATED",
+        entity_type="scan_emergency_stop",
+        entity_id=result["stop_id"],
+        payload={"scope": body.scope, "reason": body.reason},
+    )
+    db.commit()
+
     return result
 
 
