@@ -191,6 +191,10 @@ from api.db_models_field_assessment import (
 from services.connectors.safe_target_validator import (
     SafeTargetValidationService as _SafeValidator,
 )
+from services.field_assessment.scan_authorization import (
+    ScanAuthorizationError as _ScanAuthorizationError,
+    check_scan_authorized as _check_scan_authorized,
+)
 from api.db_models_portal import PortalGrant
 from services.portal_grant_service import (
     PortalGrantView as _PortalGrantView,
@@ -4237,6 +4241,102 @@ _MAX_CONCURRENT_JOBS_PER_ENGAGEMENT = 3
 _MAX_CONCURRENT_JOBS_PER_TENANT = 10
 
 
+def _c6_safe_type_to_auth_type(safe_type: str) -> str:
+    """Map SafeTargetValidationService target_type to scan_authorization target_type.
+
+    SafeTargetValidationService returns: "ip" | "hostname" | "cidr" | "url"
+    ScanAuthorization expects:          "ipv4" | "ipv6" | "fqdn" | "cidr" | "url"
+    """
+    if safe_type == "hostname":
+        return "fqdn"
+    if safe_type == "ip":
+        return "ipv4"
+    if safe_type == "cidr":
+        return "cidr"
+    if safe_type == "url":
+        return "url"
+    return safe_type
+
+
+def _c6_check_all_targets_authorized(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    raw_targets: list[str],
+    operation: str,
+    scanner_type: str,
+) -> list[dict] | None:
+    """Check all targets against scan authorization.  Returns list of denied targets,
+    or None if all are authorized.
+
+    Writes scan.authorization.denied audit events for each unauthorized target.
+    Caller should abort the scan if any denials are returned.
+
+    L14-SCAN-SAFETY-001: fail-closed authorization gate.  Any target not present in
+    an active fa_scan_authorizations record is denied.
+    """
+    import ipaddress
+
+    denied: list[dict] = []
+
+    for raw in raw_targets:
+        # Detect target type for authorization lookup.
+        t = raw.strip()
+        # Determine rough type for auth lookup (the SSRF validator will do precise
+        # detection; here we just need to route to the right normalization).
+        try:
+            ipaddress.IPv4Address(t)
+            target_type_for_auth = "ipv4"
+        except ValueError:
+            try:
+                ipaddress.IPv6Address(t)
+                target_type_for_auth = "ipv6"
+            except ValueError:
+                if "/" in t and not t.startswith("http"):
+                    target_type_for_auth = "cidr"
+                elif t.startswith("http://") or t.startswith("https://"):
+                    # For URL targets, extract the hostname for scope check.
+                    from urllib.parse import urlparse as _urlparse
+
+                    parsed = _urlparse(t)
+                    t = parsed.hostname or t
+                    target_type_for_auth = "fqdn"
+                else:
+                    target_type_for_auth = "fqdn"
+
+        try:
+            _check_scan_authorized(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                target=t,
+                target_type=target_type_for_auth,
+                operation=operation,
+            )
+        except _ScanAuthorizationError as exc:
+            denied.append(
+                {
+                    "target": raw,
+                    "denial_code": exc.audit_code,
+                }
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.authorization.denied",
+                actor=actor,
+                target=raw,
+                scanner_type=scanner_type,
+                rejection_reason=exc.audit_code,
+                rejection_code="SCAN_AUTHORIZATION_DENIED",
+            )
+
+    return denied if denied else None
+
+
 def _c6_count_active_jobs(
     db: Session, *, tenant_id: str, engagement_id: str
 ) -> tuple[int, int]:
@@ -4591,6 +4691,27 @@ def initiate_network_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
+    # L14-SCAN-SAFETY-001: authorized scope check — fail-closed before any scan dispatch.
+    denied = _c6_check_all_targets_authorized(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        raw_targets=body.target_hosts,
+        operation="network_scan",
+        scanner_type="network_scan",
+    )
+    if denied:
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "SCAN_TARGET_NOT_AUTHORIZED",
+                "message": "One or more scan targets are not authorized for this engagement",
+                "denied_targets": [d["target"] for d in denied],
+            },
+        )
+
     # Rate limit check.
     per_eng, per_ten = _c6_count_active_jobs(
         db, tenant_id=tenant_id, engagement_id=engagement_id
@@ -4866,6 +4987,27 @@ def initiate_dns_email_scan(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
+    # L14-SCAN-SAFETY-001: authorized scope check — fail-closed before any scan dispatch.
+    denied = _c6_check_all_targets_authorized(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        raw_targets=body.domains,
+        operation="dns_email",
+        scanner_type="dns_email",
+    )
+    if denied:
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "SCAN_TARGET_NOT_AUTHORIZED",
+                "message": "One or more scan targets are not authorized for this engagement",
+                "denied_targets": [d["target"] for d in denied],
+            },
+        )
+
     job = _c6_create_scan_job(
         db,
         tenant_id=tenant_id,
@@ -5074,6 +5216,27 @@ def initiate_web_headers_scan(
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # L14-SCAN-SAFETY-001: authorized scope check — fail-closed before any scan dispatch.
+    denied = _c6_check_all_targets_authorized(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        raw_targets=body.targets,
+        operation="web_headers",
+        scanner_type="web_headers",
+    )
+    if denied:
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "SCAN_TARGET_NOT_AUTHORIZED",
+                "message": "One or more scan targets are not authorized for this engagement",
+                "denied_targets": [d["target"] for d in denied],
+            },
         )
 
     # Rate limit check.
@@ -6631,6 +6794,420 @@ def get_scan_job(
             detail=api_error("JOB_NOT_FOUND", f"No scan job found for id {job_id}"),
         )
     return durable_job_svc.job_to_dict(job)
+
+
+# ---------------------------------------------------------------------------
+# Routes — L14-SCAN-SAFETY-001 Scan authorization management
+# ---------------------------------------------------------------------------
+# These routes allow operators to create, activate, revoke, and list per-engagement
+# authorized scan scope records (fa_scan_authorizations).  Scan cancellation and
+# emergency stop routes are also defined here.
+
+
+class ScanAuthorizationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authorization_ref: str = Field(..., min_length=1, max_length=512)
+    authorization_type: str = "rules_of_engagement"
+    approved_targets: list[dict] = Field(default_factory=list)
+    expires_at: str  # ISO8601 UTC timestamp
+    effective_from: str | None = None
+
+
+class ScanAuthorizationActivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    effective_from: str | None = None  # ISO8601; defaults to NOW()
+
+
+class ScanAuthorizationRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revocation_reason: str = Field(..., min_length=1, max_length=1024)
+
+
+class ScanCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1, max_length=1024)
+
+
+class EmergencyStopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: str = Field(..., min_length=1, max_length=256)
+    reason: str = Field(..., min_length=1, max_length=1024)
+
+
+@router.post(
+    "/engagements/{engagement_id}/scan-authorizations",
+    dependencies=[Depends(authz_scope("governance:write"))],
+    status_code=201,
+)
+def create_scan_authorization(
+    engagement_id: str,
+    request: Request,
+    body: ScanAuthorizationCreateRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.scope.manage")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Create a draft scan authorization (scope record) for an engagement."""
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    import json as _json
+
+    result = db.execute(
+        _text(
+            "INSERT INTO fa_scan_authorizations "
+            "    (tenant_id, engagement_id, authorization_ref, authorization_type, "
+            "     approved_targets, status, expires_at, effective_from) "
+            "VALUES (:tenant_id, :engagement_id::uuid, :auth_ref, :auth_type, "
+            "        :targets::jsonb, 'draft', :expires_at::timestamptz, "
+            "        :effective_from::timestamptz) "
+            "RETURNING id, status, created_at"
+        ),
+        {
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+            "auth_ref": body.authorization_ref,
+            "auth_type": body.authorization_type,
+            "targets": _json.dumps(body.approved_targets),
+            "expires_at": body.expires_at,
+            "effective_from": body.effective_from,
+        },
+    ).fetchone()
+    db.commit()
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.authorization.created",
+        actor=actor,
+        payload_summary={"authorization_id": str(result[0]), "status": str(result[1])},
+    )
+    db.commit()
+
+    return {
+        "authorization_id": str(result[0]),
+        "status": str(result[1]),
+        "created_at": str(result[2]),
+    }
+
+
+@router.post(
+    "/engagements/{engagement_id}/scan-authorizations/{auth_id}/activate",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def activate_scan_authorization(
+    engagement_id: str,
+    auth_id: str,
+    request: Request,
+    body: ScanAuthorizationActivateRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.scope.manage")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Activate a scan authorization, making it enforceable."""
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    result = db.execute(
+        _text(
+            "UPDATE fa_scan_authorizations "
+            "SET status = 'active', "
+            "    approved_by = :actor, "
+            "    approved_at = NOW(), "
+            "    effective_from = COALESCE(:effective_from::timestamptz, NOW()), "
+            "    version = version + 1, "
+            "    updated_at = NOW() "
+            "WHERE id = :auth_id::uuid "
+            "  AND tenant_id = :tenant_id "
+            "  AND engagement_id = :engagement_id::uuid "
+            "  AND status IN ('draft', 'pending_approval', 'approved') "
+            "RETURNING id, status, approved_at, effective_from"
+        ),
+        {
+            "auth_id": auth_id,
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+            "actor": actor,
+            "effective_from": body.effective_from,
+        },
+    ).fetchone()
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("AUTHORIZATION_NOT_FOUND", "Authorization not found or not in activatable state"),
+        )
+    db.commit()
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.authorization.activated",
+        actor=actor,
+        payload_summary={"authorization_id": auth_id},
+    )
+    db.commit()
+
+    return {
+        "authorization_id": str(result[0]),
+        "status": str(result[1]),
+        "approved_at": str(result[2]),
+        "effective_from": str(result[3]),
+    }
+
+
+@router.post(
+    "/engagements/{engagement_id}/scan-authorizations/{auth_id}/revoke",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def revoke_scan_authorization(
+    engagement_id: str,
+    auth_id: str,
+    request: Request,
+    body: ScanAuthorizationRevokeRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.scope.manage")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Revoke an active scan authorization. Blocks future scans immediately."""
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    result = db.execute(
+        _text(
+            "UPDATE fa_scan_authorizations "
+            "SET status = 'revoked', "
+            "    revoked_at = NOW(), "
+            "    revocation_reason = :reason, "
+            "    version = version + 1, "
+            "    updated_at = NOW() "
+            "WHERE id = :auth_id::uuid "
+            "  AND tenant_id = :tenant_id "
+            "  AND engagement_id = :engagement_id::uuid "
+            "  AND status = 'active' "
+            "RETURNING id, status, revoked_at"
+        ),
+        {
+            "auth_id": auth_id,
+            "tenant_id": tenant_id,
+            "engagement_id": engagement_id,
+            "reason": body.revocation_reason,
+        },
+    ).fetchone()
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("AUTHORIZATION_NOT_FOUND", "Active authorization not found"),
+        )
+    db.commit()
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.authorization.revoked",
+        actor=actor,
+        payload_summary={"authorization_id": auth_id, "reason": body.revocation_reason},
+    )
+    db.commit()
+
+    return {
+        "authorization_id": str(result[0]),
+        "status": str(result[1]),
+        "revoked_at": str(result[2]),
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/scan-authorizations",
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def list_scan_authorizations(
+    engagement_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.scope.manage")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """List scan authorizations for an engagement."""
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    rows = db.execute(
+        _text(
+            "SELECT id, status, authorization_ref, authorization_type, "
+            "       approved_by, approved_at, effective_from, expires_at, "
+            "       revoked_at, version, created_at "
+            "FROM fa_scan_authorizations "
+            "WHERE tenant_id = :tenant_id AND engagement_id = :engagement_id::uuid "
+            "ORDER BY created_at DESC "
+            "LIMIT 50"
+        ),
+        {"tenant_id": tenant_id, "engagement_id": engagement_id},
+    ).fetchall()
+
+    return {
+        "authorizations": [
+            {
+                "authorization_id": str(r[0]),
+                "status": str(r[1]),
+                "authorization_ref": str(r[2]),
+                "authorization_type": str(r[3]),
+                "approved_by": str(r[4]) if r[4] else None,
+                "approved_at": str(r[5]) if r[5] else None,
+                "effective_from": str(r[6]) if r[6] else None,
+                "expires_at": str(r[7]) if r[7] else None,
+                "revoked_at": str(r[8]) if r[8] else None,
+                "version": int(r[9]),
+                "created_at": str(r[10]),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post(
+    "/engagements/{engagement_id}/scans/{scan_id}/cancel",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def cancel_scan_job(
+    engagement_id: str,
+    scan_id: str,
+    request: Request,
+    body: ScanCancelRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.trigger")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Request cancellation of an active scan job."""
+    from services.field_assessment.scan_authorization import (
+        ScanAuthorizationError as _ScanAuthError,
+        cancel_scan as _cancel_scan,
+    )
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    try:
+        result = _cancel_scan(
+            db,
+            scan_job_id=scan_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            reason=body.reason,
+            actor=actor,
+        )
+    except _ScanAuthError as exc:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.cancel.denied",
+            actor=actor,
+            scan_job_id=scan_id,
+            rejection_reason=exc.audit_code,
+            rejection_code="SCAN_CANCEL_DENIED",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("SCAN_CANCEL_FAILED", exc.reason),
+        )
+
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.cancel.requested",
+        actor=actor,
+        scan_job_id=scan_id,
+    )
+    db.commit()
+
+    return result
+
+
+@router.post(
+    "/emergency-stop",
+    dependencies=[Depends(authz_scope("governance:write"))],
+    status_code=201,
+)
+def activate_emergency_stop(
+    request: Request,
+    body: EmergencyStopRequest,
+    actor_ctx: ActorContext = Depends(require_permission("scan.emergency_stop")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Activate a scan emergency stop.
+
+    Requires scan.emergency_stop permission.
+    Platform-wide stop additionally requires scan.emergency_stop.platform.
+    """
+    from services.field_assessment.scan_authorization import (
+        ScanAuthorizationError as _ScanAuthError,
+        request_emergency_stop as _request_emergency_stop,
+    )
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    permissions = list(actor_ctx.permissions or [])
+
+    try:
+        result = _request_emergency_stop(
+            db,
+            scope=body.scope,
+            reason=body.reason,
+            actor=actor,
+            actor_tenant_id=tenant_id,
+            permissions=permissions,
+        )
+    except _ScanAuthError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("EMERGENCY_STOP_DENIED", exc.reason),
+        )
+
+    return result
 
 
 # ---------------------------------------------------------------------------
