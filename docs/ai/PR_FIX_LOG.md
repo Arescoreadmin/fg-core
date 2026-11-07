@@ -1,3 +1,34 @@
+## feat(field-scan): L14-SCAN-SAFETY-001 — authorized scope and emergency cancellation (branch feat/l14-scan-safety-001)
+
+- **Work item:** L14-SCAN-SAFETY-001
+- **Baseline SHA:** `2c24dd88` (main after PR #808)
+- **Failures before:** None — existing tests pass cleanly.
+- **Problem:** FrostGate scanner dispatch had no per-engagement authorized target scope. Any publicly routable host passed SSRF validation regardless of whether it belonged to the assessed client. An operator with `scan.trigger` permission could use a legitimate client engagement to probe unrelated internet-routable systems. FVA-01 was PARTIALLY_IMPLEMENTED (5 of 9 criteria).
+- **Fix summary:** Added fail-closed authorization gate to `initiate_network_scan`, `initiate_dns_email_scan`, and `initiate_web_headers_scan` via `_c6_check_all_targets_authorized()`. Created `services/field_assessment/scan_authorization.py` with `check_scan_authorized()`, `normalize_target()`, `target_in_scope()`, `cancel_scan()`, `confirm_scan_cancelled()`, `request_emergency_stop()`, and `clear_emergency_stop()`. Added scope management, cancellation, and emergency stop API routes. Migration 0200 adds `fa_scan_authorizations`, `fa_scan_emergency_stops`, and cancellation columns to `fa_scan_jobs`. 89 adversarial tests pass covering all 12 domain invariants.
+- **Files created:**
+  - `migrations/postgres/0200_fa_scan_authorization.sql` — fa_scan_authorizations, fa_scan_emergency_stops, cancel columns
+  - `services/field_assessment/scan_authorization.py` — canonical fail-closed authorization service
+  - `tests/test_scan_safety/__init__.py`
+  - `tests/test_scan_safety/test_scope_authorization.py` — 29 tests; normalize_target and check_scan_authorized
+  - `tests/test_scan_safety/test_cancellation.py` — 15 tests; cancellation state machine
+  - `tests/test_scan_safety/test_emergency_stop.py` — 13 tests; emergency stop activation and clearing
+  - `tests/test_scan_safety/test_tenant_isolation.py` — 5 tests; cross-tenant isolation
+  - `tests/test_scan_safety/test_invariants.py` — 27 tests; domain invariants A-L
+  - `docs/assurance/L14_SCAN_AUTHORIZATION_AND_CANCELLATION.md` — threat model, state machine docs, enforcement matrix
+- **Files modified:**
+  - `api/field_assessment.py` — added `_c6_check_all_targets_authorized()` helper; authorization gates in 3 scanner routes; 7 new API routes (scope management, cancel, emergency stop); import of `scan_authorization` service
+  - `docs/assurance/FROSTGATE_VERIFIED_ASSESSMENT_STANDARD.md` — FVA-01 status update; code references to L14-SCAN-SAFETY-001
+  - `ROADMAP.md` — L14-SCAN-SAFETY-001 registered as IN_PROGRESS
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Scanner enforcement matrix:**
+  - `network_scan` — route-level fail-closed authorization check
+  - `dns_email` — route-level fail-closed authorization check
+  - `web_headers` — route-level fail-closed authorization check
+  - `msgraph/entra/oauth` — existing acknowledgment_receipt_id gate (not modified)
+- **FVA-01 status:** PARTIALLY_IMPLEMENTED — scope auth enforced at route boundary; async worker revalidation deferred to future worker architecture PR
+- **Residual risks:** (1) `authorization_ref` is free-text — no external document verification; (2) async workers not yet implemented but TODO noted; (3) cloud connector scope model not extended (different identity model)
+- **Test counts:** 89 new tests (all pass); 162 existing accuracy tests pass; 171 containment/SSRF tests pass
+
 ## test(scan): L14-SCAN-ACCURACY-001 — detection accuracy baseline, confidence model, audit truth corrections (branch test/l14-scan-accuracy-001)
 
 - **Work item:** L14-SCAN-ACCURACY-001

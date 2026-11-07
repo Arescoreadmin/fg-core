@@ -8114,3 +8114,37 @@ SOC review outcome: APPROVED. Two new public endpoints add post-payment activati
 - No cloud mutation. No secrets accessed. No paid infrastructure.
 
 SOC review outcome: APPROVED. AuthGate suffix exemption is narrowly scoped to two self-authenticating endpoints; no existing authenticated path is affected. RLS context fix ensures PostgreSQL can find pre-activation rows without weakening tenant isolation. Migration 0199 enables the one-way lead:→tenant migration with an explicit WITH CHECK that prevents any reverse transition.
+
+---
+
+## SOC-HIGH-002: L14-SCAN-SAFETY-001 — route inventory update for scan authorization + emergency stop routes (PR #809)
+
+**Date:** 2026-11-07
+
+**Critical files changed:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`
+
+**Change summary:** Route inventory regenerated (`make route-inventory-generate`) to register six new routes added by L14-SCAN-SAFETY-001 — per-engagement authorized scan scope and emergency cancellation. No CI gate logic, no policy OPA rules, no auth middleware, and no security configuration changed.
+
+**New routes registered:**
+
+1. `GET /field-assessment/engagements/{engagement_id}/scan-authorizations` — list active scan authorizations for an engagement
+2. `POST /field-assessment/engagements/{engagement_id}/scan-authorizations` — create a new scan authorization record (draft)
+3. `POST /field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/activate` — activate a pending authorization
+4. `POST /field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/revoke` — revoke an active authorization
+5. `POST /field-assessment/engagements/{engagement_id}/scans/{scan_id}/cancel` — request cancellation of a running scan job
+6. `POST /field-assessment/emergency-stop` — activate or clear a platform/tenant/engagement-scoped emergency halt
+
+**Security analysis:**
+
+1. **Inventory files are read-only CI metadata.** `route_inventory.json`, `route_inventory_summary.json`, and `contract_routes.json` are consumed by `route-inventory-audit` and `soc-manifest-verify` to detect unregistered routes. Updating them to include new routes is the required maintenance step after adding routes — omitting the update would cause the audit to fail (which it did, triggering this entry).
+2. **All six routes are authenticated.** They are under `/field-assessment/` which is behind the API key + tenant context auth gate. None are listed in `PUBLIC_PATHS` or `PUBLIC_PATHS_SUFFIX`. Route authorization is enforced at the route handler level via `require_permission()` with `scan.scope.manage`, `scan.emergency_stop`, and `scan.emergency_stop.platform` permissions (declared in `api/actor_context.py`).
+3. **No auth gate logic changed.** `api/middleware/auth_gate.py`, `api/security/public_paths.py`, and all OPA policies are unmodified.
+4. **No CI gate weakened.** The inventory tool (`make route-inventory-generate`) is a pure read of the live route table. The gate (`route-inventory-audit`) rejects any route not in the inventory — this entry records the inventory being brought up to date, not any weakening of the check.
+
+**Validation evidence:**
+
+- `make route-inventory-audit` → OK
+- `pytest tests/test_scan_safety/ -q` → 89/89 passed
+- `make fg-fast` → all checks passed
+
+SOC review outcome: APPROVED. Inventory-only update registering six new authenticated field-assessment routes. No authentication, authorization, middleware, or policy logic changed. The route inventory gate itself is unmodified and remains fail-closed against unregistered routes.

@@ -2029,6 +2029,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/emergency-stop",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements",
       "scopes": [],
@@ -2816,6 +2822,30 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/activate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scan-authorizations/{auth_id}/revoke",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/scan-jobs",
       "scopes": [],
       "source": "contract"
@@ -2841,6 +2871,12 @@
     {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/scans/{scan_id}/cancel",
       "scopes": [],
       "source": "contract"
     },
@@ -6181,7 +6217,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-11-05T18:35:34.699958+00:00",
+  "generated_at": "2026-11-07T02:58:24.728940+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
