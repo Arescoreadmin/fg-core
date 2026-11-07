@@ -1402,7 +1402,9 @@ class FaEvidenceCustodyEvent(Base):
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
-    actor_type: Mapped[str] = mapped_column(String(32), nullable=False, default="system")
+    actor_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="system"
+    )
     from_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
     to_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
