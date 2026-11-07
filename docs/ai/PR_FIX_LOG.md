@@ -1,3 +1,34 @@
+## feat(field-scan): L14-SCAN-INTEGRITY-001 — canonical evidence integrity and confidence enforcement (branch feat/l14-scan-integrity-001)
+
+- **Work item:** L14-SCAN-INTEGRITY-001
+- **Baseline SHA:** `4c490a45` (main after PR #809)
+- **Failures before:** None — existing tests pass cleanly.
+- **Problem:** Scanner payloads had no content digest bound to the scan record at runner level. The evidence chain from scanner to report was not tamper-evident (COR-005). The confidence model was policy-only (DEF-003) with no enforcement at classification time. No chain-of-custody log existed for scanner evidence records.
+- **Fix summary:** Added `services/field_assessment/evidence_integrity.py` (canonicalization, ProvenanceStatus, ScannerEvidenceEnvelope, EvidenceIntegrityService), `services/field_assessment/finding_confidence.py` (ConfidenceLevel, VerificationMethod, FindingConfidence, classify_confidence), `services/field_assessment/custody.py` (CustodyEventType, EvidenceCustodyService). Migration 0201 adds `fa_scan_evidence_envelopes`, `fa_evidence_custody_events`, and confidence columns on `fa_normalized_findings`. ORM models `FaScanEvidenceEnvelope` + `FaEvidenceCustodyEvent` appended to `api/db_models_field_assessment.py`. 92 adversarial tests in `tests/test_scan_integrity/` covering canonicalization, provenance, confidence, custody, and tenant isolation. AUTH-GAP-001 and AUTH-GAP-002 formally documented.
+- **Files created:**
+  - `migrations/postgres/0201_scan_evidence_integrity.sql` — fa_scan_evidence_envelopes, fa_evidence_custody_events, confidence columns, append-only DB trigger
+  - `services/field_assessment/evidence_integrity.py` — canonical envelope, canonicalization, ProvenanceStatus, EvidenceIntegrityService
+  - `services/field_assessment/finding_confidence.py` — ConfidenceLevel, VerificationMethod, FindingConfidence, classify_confidence
+  - `services/field_assessment/custody.py` — CustodyEventType, EvidenceCustodyService, custody_svc
+  - `tests/test_scan_integrity/__init__.py` — AUTH-GAP-001 and AUTH-GAP-002 formal declarations
+  - `tests/test_scan_integrity/test_canonicalization.py` — 19 tests
+  - `tests/test_scan_integrity/test_provenance.py` — 24 tests
+  - `tests/test_scan_integrity/test_confidence.py` — 30 tests
+  - `tests/test_scan_integrity/test_custody.py` — 13 tests
+  - `tests/test_scan_integrity/test_isolation.py` — 11 tests (tenant isolation)
+  - `docs/assurance/L14_SCANNER_EVIDENCE_INTEGRITY.md` — authority map, canonicalization rules, state model, confidence rules, scanner coverage matrix
+- **Files modified:**
+  - `api/db_models_field_assessment.py` — added FaScanEvidenceEnvelope and FaEvidenceCustodyEvent ORM classes with append-only SQLAlchemy event listeners
+  - `ROADMAP.md` — L14-SCAN-INTEGRITY-001 row updated to IN_PROGRESS
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **Cryptographic integrity:** SHA-256, canonicalization version 1.0 (sorted keys, NFC unicode, stable JSON). Vault Transit NOT_WIRED for scanner receipts (pending L14-SCAN-VAULT-001). provenance_status=VERIFIED_INTEGRITY_ONLY by default.
+- **DEF-003 closure:** classify_confidence() enforces: evidence_present=False → UNKNOWN (not NOT_ASSESSED); INVALID/MISSING provenance → max SUSPECTED; INTERVIEW_ASSERTION → max PROBABLE; INFERENCE → max SUSPECTED; collection_complete=False → max PROBABLE.
+- **AUTH-GAP-001:** Customer consent receipt missing. Owning PR: L14-SCAN-CONSENT-001.
+- **AUTH-GAP-002:** Background execution revalidation missing. FVA-01 remains PARTIALLY_IMPLEMENTED. Owning PR: L14-SCAN-AUTHZ-HARDENING-001.
+- **Test counts:** 92 new tests (all pass); 162 accuracy tests pass; 89 safety tests pass.
+
+---
+
 ## feat(field-scan): L14-SCAN-SAFETY-001 — authorized scope and emergency cancellation (branch feat/l14-scan-safety-001)
 
 - **Work item:** L14-SCAN-SAFETY-001
