@@ -4491,6 +4491,7 @@ def _c6_create_scan_job(
 
 def _c6_job_is_cancelled(db: Session, *, job_id: str) -> bool:
     """Return True if job has been cancelled or cancellation was requested."""
+    from sqlalchemy import text as _text
     from unittest.mock import Mock
 
     if isinstance(db, Mock):
@@ -4500,7 +4501,7 @@ def _c6_job_is_cancelled(db: Session, *, job_id: str) -> bool:
             "cancelled",
         )
     row = db.execute(
-        text("SELECT status FROM fa_scan_jobs WHERE id = :id"),
+        _text("SELECT status FROM fa_scan_jobs WHERE id = :id"),
         {"id": job_id},
     ).fetchone()
     return row is not None and row[0] in ("cancel_requested", "cancelled")
