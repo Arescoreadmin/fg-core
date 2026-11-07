@@ -223,8 +223,14 @@ class TestVerifyById:
         status = svc.verify_by_id(_MockDB(), "some-id", "tenant-abc")
         assert status == ProvenanceStatus.MISSING
 
-    def test_valid_digest_no_signature_returns_verified_integrity_only(self):
-        """Valid row without signature returns VERIFIED_INTEGRITY_ONLY."""
+    def test_valid_digest_no_signature_returns_unverified(self):
+        """verify_by_id without the payload cannot recompute the digest.
+
+        The stored digest may not match the current payload (tampered after
+        ingestion).  Returning VERIFIED_INTEGRITY_ONLY without re-hashing the
+        payload would be a false guarantee — UNVERIFIED is the honest answer.
+        Callers with the payload must use verify_envelope() directly.
+        """
         svc = EvidenceIntegrityService()
 
         class _Row:
@@ -241,10 +247,16 @@ class TestVerifyById:
                 return _Row()
 
         status = svc.verify_by_id(_MockDB(), "some-id", "tenant-abc")
-        assert status == ProvenanceStatus.VERIFIED_INTEGRITY_ONLY
+        assert status == ProvenanceStatus.UNVERIFIED
 
-    def test_valid_digest_with_signature_ref_returns_verified_authentic(self):
-        """Valid row with signature_ref returns VERIFIED_AUTHENTIC."""
+    def test_valid_digest_with_signature_ref_returns_unverified(self):
+        """signature_ref presence does not imply authenticity without verification.
+
+        Until Vault Transit is wired (L14-SCAN-VAULT-001), verify_by_id cannot
+        validate the signature.  Returning VERIFIED_AUTHENTIC for an unverified
+        signature — even one with a non-null reference — would be a false claim.
+        UNVERIFIED is the correct status when payload recomputation is unavailable.
+        """
         svc = EvidenceIntegrityService()
 
         class _Row:
@@ -261,7 +273,7 @@ class TestVerifyById:
                 return _Row()
 
         status = svc.verify_by_id(_MockDB(), "some-id", "tenant-abc")
-        assert status == ProvenanceStatus.VERIFIED_AUTHENTIC
+        assert status == ProvenanceStatus.UNVERIFIED
 
     def test_internal_error_returns_indeterminate(self):
         """DB exception must return INDETERMINATE (never raises to caller)."""

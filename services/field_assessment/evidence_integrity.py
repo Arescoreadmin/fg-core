@@ -320,10 +320,11 @@ class EvidenceIntegrityService:
             if expected != envelope.payload_digest:
                 return ProvenanceStatus.INVALID
             if envelope.signature_ref is not None:
-                # Future: validate Vault Transit signature here.
-                # Until Vault is wired, presence of signature_ref means a
-                # prior version did sign it — treat as VERIFIED_AUTHENTIC.
-                return ProvenanceStatus.VERIFIED_AUTHENTIC
+                # Vault Transit signature wiring is deferred to L14-SCAN-VAULT-001.
+                # Until actual signature verification is implemented, a non-null
+                # signature_ref cannot establish authenticity — return integrity-only
+                # rather than falsely claiming VERIFIED_AUTHENTIC.
+                pass
             return ProvenanceStatus.VERIFIED_INTEGRITY_ONLY
         except Exception:
             return ProvenanceStatus.INDETERMINATE
@@ -355,13 +356,10 @@ class EvidenceIntegrityService:
             if row.tenant_id != tenant_id:
                 return ProvenanceStatus.MISSING
 
-            # We only have the stored digest, not the original payload.
-            # Without the payload we cannot re-verify — return UNVERIFIED.
-            # Callers that have the payload should use verify_envelope() directly.
-            if row.payload_digest:
-                if row.signature_ref is not None:
-                    return ProvenanceStatus.VERIFIED_AUTHENTIC
-                return ProvenanceStatus.VERIFIED_INTEGRITY_ONLY
+            # Without the original payload we cannot recompute and compare the
+            # digest — returning VERIFIED_INTEGRITY_ONLY without recomputation
+            # would miss tampering of fa_scan_results.raw_payload after ingestion.
+            # Return UNVERIFIED; callers with the payload must use verify_envelope().
             return ProvenanceStatus.UNVERIFIED
         except Exception:
             return ProvenanceStatus.INDETERMINATE

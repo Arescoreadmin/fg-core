@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS fa_scan_evidence_envelopes (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id               TEXT NOT NULL,
     engagement_id           VARCHAR(64) NOT NULL REFERENCES fa_engagements(id) ON DELETE CASCADE,
-    scan_result_id          UUID REFERENCES fa_scan_results(id) ON DELETE SET NULL,
+    scan_result_id          VARCHAR(64) REFERENCES fa_scan_results(id) ON DELETE SET NULL,
     scan_job_id             UUID,  -- soft ref; no FK (jobs may be pruned)
 
     schema_version          TEXT NOT NULL DEFAULT '1.0',
@@ -147,7 +147,7 @@ RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' OR TG_OP = 'DELETE' THEN
         RAISE EXCEPTION
-            'fa_evidence_custody_events is append-only: % is not permitted',
+            'fa_evidence_custody_events is append-only: %% is not permitted',
             TG_OP;
     END IF;
     RETURN NEW;
