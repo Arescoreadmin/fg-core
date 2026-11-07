@@ -26,7 +26,7 @@
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS fa_scan_evidence_envelopes (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      VARCHAR(64) PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tenant_id               TEXT NOT NULL,
     engagement_id           VARCHAR(64) NOT NULL REFERENCES fa_engagements(id) ON DELETE CASCADE,
     scan_result_id          VARCHAR(64) REFERENCES fa_scan_results(id) ON DELETE SET NULL,
@@ -89,7 +89,7 @@ ALTER TABLE fa_normalized_findings
     ADD COLUMN IF NOT EXISTS confidence_level          TEXT,
     ADD COLUMN IF NOT EXISTS verification_method       TEXT,
     ADD COLUMN IF NOT EXISTS confidence_justification  TEXT,
-    ADD COLUMN IF NOT EXISTS evidence_envelope_id      UUID
+    ADD COLUMN IF NOT EXISTS evidence_envelope_id      VARCHAR(64)
         REFERENCES fa_scan_evidence_envelopes(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS fa_findings_confidence_level
@@ -105,8 +105,8 @@ CREATE INDEX IF NOT EXISTS fa_findings_evidence_envelope
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS fa_evidence_custody_events (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    evidence_id     UUID NOT NULL REFERENCES fa_scan_evidence_envelopes(id) ON DELETE CASCADE,
+    id              VARCHAR(64) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    evidence_id     VARCHAR(64) NOT NULL REFERENCES fa_scan_evidence_envelopes(id) ON DELETE CASCADE,
     tenant_id       TEXT NOT NULL,
     engagement_id   VARCHAR(64) NOT NULL,
     event_type      TEXT NOT NULL
