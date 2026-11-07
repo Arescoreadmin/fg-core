@@ -333,7 +333,7 @@ def check_scan_authorized(
                 "       status, effective_from, expires_at, revoked_at "
                 "FROM fa_scan_authorizations "
                 "WHERE tenant_id = :tenant_id "
-                "  AND engagement_id = :engagement_id::uuid "
+                "  AND engagement_id = :engagement_id "
                 "  AND status = 'active' "
                 "ORDER BY effective_from DESC NULLS LAST "
                 "LIMIT 1"
@@ -710,6 +710,19 @@ def request_emergency_stop(
                 reason="engagement emergency stop requires scan.emergency_stop permission",
                 audit_code="EMERGENCY_STOP_PERMISSION_DENIED",
             )
+        if actor_tenant_id:
+            engagement_id_from_scope = scope[len("engagement:") :]
+            eng_row = db.execute(
+                text(
+                    "SELECT id FROM fa_engagements WHERE id = :eid AND tenant_id = :tid"
+                ),
+                {"eid": engagement_id_from_scope, "tid": actor_tenant_id},
+            ).fetchone()
+            if eng_row is None:
+                raise ScanAuthorizationError(
+                    reason="engagement not found in actor's tenant",
+                    audit_code="EMERGENCY_STOP_CROSS_TENANT_DENIED",
+                )
     else:
         raise ScanAuthorizationError(
             reason=f"invalid emergency stop scope: {scope!r}",
@@ -750,7 +763,7 @@ def clear_emergency_stop(
     row = db.execute(
         text(
             "SELECT id, scope, is_active FROM fa_scan_emergency_stops "
-            "WHERE id = :stop_id::uuid"
+            "WHERE id = :stop_id"
         ),
         {"stop_id": stop_id},
     ).fetchone()
@@ -803,7 +816,7 @@ def clear_emergency_stop(
         text(
             "UPDATE fa_scan_emergency_stops "
             "SET is_active = FALSE, cleared_at = :now, cleared_by = :actor "
-            "WHERE id = :stop_id::uuid"
+            "WHERE id = :stop_id"
         ),
         {"stop_id": stop_id, "actor": actor, "now": now},
     )

@@ -48,6 +48,9 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         # Scans
         "scan.trigger",
         "scan.read",
+        "scan.scope.manage",
+        "scan.emergency_stop",
+        "scan.emergency_stop.platform",
         # Reports
         "report.generate",
         "report.read",
@@ -159,6 +162,21 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "display_name": "View Scan Results",
         "description": "Read scan results and job status",
         "risk_level": "low",
+    },
+    "scan.scope.manage": {
+        "display_name": "Manage Scan Authorization Scope",
+        "description": "Create, activate, and revoke per-engagement authorized scan scope records (L14-SCAN-SAFETY-001)",
+        "risk_level": "high",
+    },
+    "scan.emergency_stop": {
+        "display_name": "Emergency Stop (Engagement/Tenant)",
+        "description": "Activate or clear an emergency scan halt for the operator's tenant or a specific engagement",
+        "risk_level": "high",
+    },
+    "scan.emergency_stop.platform": {
+        "display_name": "Emergency Stop (Platform-wide)",
+        "description": "Activate or clear a platform-wide scanner emergency halt — platform_admin only",
+        "risk_level": "critical",
     },
     # Reports
     "report.generate": {
@@ -332,6 +350,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "finding.create",
             "evidence.upload",
             "scan.trigger",
+            "scan.scope.manage",
+            "scan.emergency_stop",
             "report.generate",
             "bundle.generate",  # mechanical; approve requires qa_reviewer
         }
@@ -388,6 +408,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "connector.manage",
             "tenant.configure",
             "governance.promote",
+            # scan scope and emergency stop management (tenant-scoped)
+            "scan.scope.manage",
+            "scan.emergency_stop",
             # actor attribution — admins can read the attribution audit trail
             "actor.read",
             # identity assurance — admins can read assurance levels/trust scores

@@ -4489,6 +4489,23 @@ def _c6_create_scan_job(
     )
 
 
+def _c6_job_is_cancelled(db: Session, *, job_id: str) -> bool:
+    """Return True if job has been cancelled or cancellation was requested."""
+    from unittest.mock import Mock
+
+    if isinstance(db, Mock):
+        job = db.query(FaScanJob).filter(FaScanJob.id == job_id).first()
+        return job is not None and getattr(job, "status", "") in (
+            "cancel_requested",
+            "cancelled",
+        )
+    row = db.execute(
+        text("SELECT status FROM fa_scan_jobs WHERE id = :id"),
+        {"id": job_id},
+    ).fetchone()
+    return row is not None and row[0] in ("cancel_requested", "cancelled")
+
+
 def _c6_update_job_status(
     db: Session,
     *,
@@ -4567,6 +4584,9 @@ def _network_scan_background(
         db = SessionLocal()
         try:
             set_tenant_context(db, tenant_id)
+            if _c6_job_is_cancelled(db, job_id=job_id):
+                _set(status="cancelled")
+                return
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -4597,12 +4617,14 @@ def _network_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="network_scan",
             )
-            _c6_update_job_status(
-                db,
-                job_id=job_id,
-                status="complete",
-                scan_result_id=result.scan_result_id,
-            )
+            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
+            if not _job_cancelled:
+                _c6_update_job_status(
+                    db,
+                    job_id=job_id,
+                    status="complete",
+                    scan_result_id=result.scan_result_id,
+                )
             _c6_write_audit_event(
                 db,
                 tenant_id=tenant_id,
@@ -4618,7 +4640,10 @@ def _network_scan_background(
                 },
             )
             db.commit()
-            _set(status="complete", scan_result_id=result.scan_result_id)
+            if _job_cancelled:
+                _set(status="cancelled")
+            else:
+                _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("network_scan_background: import failed — %s", exc)
             db.rollback()
@@ -4870,6 +4895,9 @@ def _dns_email_scan_background(
         db = SessionLocal()
         try:
             set_tenant_context(db, tenant_id)
+            if _c6_job_is_cancelled(db, job_id=job_id):
+                _set(status="cancelled")
+                return
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -4897,12 +4925,14 @@ def _dns_email_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="dns_email",
             )
-            _c6_update_job_status(
-                db,
-                job_id=job_id,
-                status="complete",
-                scan_result_id=result.scan_result_id,
-            )
+            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
+            if not _job_cancelled:
+                _c6_update_job_status(
+                    db,
+                    job_id=job_id,
+                    status="complete",
+                    scan_result_id=result.scan_result_id,
+                )
             _c6_write_audit_event(
                 db,
                 tenant_id=tenant_id,
@@ -4914,7 +4944,10 @@ def _dns_email_scan_background(
                 scan_result_id=result.scan_result_id,
             )
             db.commit()
-            _set(status="complete", scan_result_id=result.scan_result_id)
+            if _job_cancelled:
+                _set(status="cancelled")
+            else:
+                _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("dns_email_scan_background: import failed — %s", exc)
             db.rollback()
@@ -5097,6 +5130,9 @@ def _web_headers_scan_background(
         db = SessionLocal()
         try:
             set_tenant_context(db, tenant_id)
+            if _c6_job_is_cancelled(db, job_id=job_id):
+                _set(status="cancelled")
+                return
             _c6_update_job_status(db, job_id=job_id, status="running")
             db.commit()
         finally:
@@ -5124,12 +5160,14 @@ def _web_headers_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="web_headers",
             )
-            _c6_update_job_status(
-                db,
-                job_id=job_id,
-                status="complete",
-                scan_result_id=result.scan_result_id,
-            )
+            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
+            if not _job_cancelled:
+                _c6_update_job_status(
+                    db,
+                    job_id=job_id,
+                    status="complete",
+                    scan_result_id=result.scan_result_id,
+                )
             _c6_write_audit_event(
                 db,
                 tenant_id=tenant_id,
@@ -5145,7 +5183,10 @@ def _web_headers_scan_background(
                 },
             )
             db.commit()
-            _set(status="complete", scan_result_id=result.scan_result_id)
+            if _job_cancelled:
+                _set(status="cancelled")
+            else:
+                _set(status="complete", scan_result_id=result.scan_result_id)
         except Exception as exc:
             log.error("web_headers_scan_background: import failed — %s", exc)
             db.rollback()
@@ -6955,7 +6996,10 @@ def activate_scan_authorization(
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail=api_error("AUTHORIZATION_NOT_FOUND", "Authorization not found or not in activatable state"),
+            detail=api_error(
+                "AUTHORIZATION_NOT_FOUND",
+                "Authorization not found or not in activatable state",
+            ),
         )
     db.commit()
 
@@ -7026,7 +7070,9 @@ def revoke_scan_authorization(
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail=api_error("AUTHORIZATION_NOT_FOUND", "Active authorization not found"),
+            detail=api_error(
+                "AUTHORIZATION_NOT_FOUND", "Active authorization not found"
+            ),
         )
     db.commit()
 

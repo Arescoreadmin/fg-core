@@ -21,7 +21,7 @@
 CREATE TABLE fa_scan_authorizations (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id           TEXT NOT NULL,
-    engagement_id       UUID NOT NULL REFERENCES fa_engagements(id) ON DELETE CASCADE,
+    engagement_id       VARCHAR(64) NOT NULL REFERENCES fa_engagements(id) ON DELETE CASCADE,
 
     -- Authorization evidence (reference to external signed document or receipt)
     authorization_ref   TEXT NOT NULL,
@@ -80,3 +80,12 @@ ALTER TABLE fa_scan_jobs
     ADD COLUMN IF NOT EXISTS cancelled_at         TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS cancellation_reason  TEXT,
     ADD COLUMN IF NOT EXISTS cancelled_by         TEXT;
+
+-- Extend the status CHECK constraint from migration 0079 to include cancellation
+-- states. The original constraint only allowed queued/running/complete/failed.
+ALTER TABLE fa_scan_jobs
+    DROP CONSTRAINT IF EXISTS fa_scan_jobs_status_check;
+
+ALTER TABLE fa_scan_jobs
+    ADD CONSTRAINT fa_scan_jobs_status_check
+    CHECK (status IN ('queued', 'running', 'complete', 'failed', 'cancel_requested', 'cancelled'));
