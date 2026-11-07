@@ -1304,3 +1304,133 @@ def _block_governed_delivery_attempt_delete(mapper, connection, target):
     raise RuntimeError(
         "fa_governed_delivery_attempts is append-only — deletes are forbidden"
     )
+
+
+# ---------------------------------------------------------------------------
+# L14-SCAN-INTEGRITY-001 — canonical scanner evidence envelopes + custody
+# ---------------------------------------------------------------------------
+
+
+class FaScanEvidenceEnvelope(Base):
+    """Canonical scanner evidence envelope with SHA-256 payload digest.
+
+    One row per scanner execution.  The row binds the payload digest to the
+    scanner identity, tenant, engagement, and authorization reference.  The
+    raw payload itself is stored in fa_scan_results; this row carries only the
+    digest and provenance metadata.
+
+    payload_digest format: ``"sha256:<hex>"`` (algorithm-prefixed).
+    provenance_status lifecycle: UNVERIFIED → VERIFIED_INTEGRITY_ONLY or
+        VERIFIED_AUTHENTIC after digest check; INVALID on mismatch.
+
+    L14-SCAN-INTEGRITY-001 (migration 0201).
+    """
+
+    __tablename__ = "fa_scan_evidence_envelopes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    scanner_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    scanner_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    authorization_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    authorization_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    collection_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="complete"
+    )
+    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    payload_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    canonicalization_ver: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    provenance_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="UNVERIFIED"
+    )
+    signature_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    data_sensitivity: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="internal"
+    )
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_scan_evidence_env_tenant_eng",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index(
+            "ix_fa_scan_evidence_env_scan_result",
+            "scan_result_id",
+        ),
+        Index(
+            "ix_fa_scan_evidence_env_provenance",
+            "provenance_status",
+        ),
+    )
+
+
+class FaEvidenceCustodyEvent(Base):
+    """Append-only chain-of-custody event for scanner evidence envelopes.
+
+    One row per custody transition.  Records who handled evidence, when,
+    and what state transition occurred.  The DB trigger
+    ``fa_evidence_custody_append_only_trigger`` prevents UPDATE and DELETE
+    at the database level (defence in depth).
+
+    L14-SCAN-INTEGRITY-001 (migration 0201).
+    """
+
+    __tablename__ = "fa_evidence_custody_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="system"
+    )
+    from_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    to_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    digest_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_fa_evidence_custody_tenant_eng",
+            "tenant_id",
+            "engagement_id",
+        ),
+        Index("ix_fa_evidence_custody_evidence", "evidence_id"),
+    )
+
+
+@sa_event.listens_for(FaEvidenceCustodyEvent, "before_update")
+def _block_custody_event_update(mapper, connection, target):
+    raise RuntimeError(
+        "fa_evidence_custody_events is append-only — updates are forbidden"
+    )
+
+
+@sa_event.listens_for(FaEvidenceCustodyEvent, "before_delete")
+def _block_custody_event_delete(mapper, connection, target):
+    raise RuntimeError(
+        "fa_evidence_custody_events is append-only — deletes are forbidden"
+    )
