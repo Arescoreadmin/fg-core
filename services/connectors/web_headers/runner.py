@@ -3,6 +3,13 @@
 Redirect safety: follow_redirects=False is set on the httpx client. Each redirect
 Location is revalidated through SafeTargetValidationService before following, so
 a redirect chain cannot reach private infrastructure even if the initial URL is public.
+
+Collection status is emitted per-target and in the top-level summary. Errors
+(timeouts, refused connections) produce collection_status=FAILED for that target —
+they must not be treated as "no security headers found" or as evidence of a misconfigured
+server. Blocked targets (SafeTargetValidationService rejection) produce DENIED.
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from services.connectors.collection_status import CollectionStatus
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
 logger = logging.getLogger(__name__)
@@ -251,6 +259,7 @@ def scan_target(url: str) -> dict[str, Any]:
             "error": f"target blocked by scanner policy: [{pre_check.rejection_code}] {pre_check.rejection_reason}",
             "blocked": True,
             "rejection_code": pre_check.rejection_code,
+            "collection_status": CollectionStatus.DENIED.value,
         }
 
     findings: list[dict] = []
@@ -275,6 +284,7 @@ def scan_target(url: str) -> dict[str, Any]:
                     "error": redirect_block,
                     "blocked": True,
                     "rejection_code": "UNSAFE_REDIRECT",
+                    "collection_status": CollectionStatus.DENIED.value,
                 }
 
             final_url = str(resp.url)
@@ -311,6 +321,7 @@ def scan_target(url: str) -> dict[str, Any]:
                 "findings": findings,
                 "error": None,
                 "blocked": False,
+                "collection_status": CollectionStatus.COMPLETE.value,
             }
     except httpx.ConnectError:
         error = f"Connection refused or DNS resolution failed for {normalized}"
@@ -319,6 +330,8 @@ def scan_target(url: str) -> dict[str, Any]:
     except Exception as exc:
         error = str(exc)
 
+    # Collection failure: timeout or connection error — headers are NOT "absent",
+    # they are simply not collected. Do not emit missing-header findings.
     return {
         "url": normalized,
         "final_url": None,
@@ -329,6 +342,7 @@ def scan_target(url: str) -> dict[str, Any]:
         "findings": [],
         "error": error,
         "blocked": False,
+        "collection_status": CollectionStatus.FAILED.value,
     }
 
 
@@ -338,20 +352,42 @@ def run(targets: list[str]) -> dict[str, Any]:
     for target in targets:
         result = scan_target(target)
         results.append(result)
-        for f in result["findings"]:
-            all_findings.append({**f, "target": target})
+        # Only emit findings from successfully collected targets
+        if result.get("collection_status") == CollectionStatus.COMPLETE.value:
+            for f in result["findings"]:
+                all_findings.append({**f, "target": target})
 
     reachable = [r for r in results if r["error"] is None]
+    failed = [
+        r
+        for r in results
+        if r.get("collection_status") == CollectionStatus.FAILED.value
+    ]
+    denied = [
+        r
+        for r in results
+        if r.get("collection_status") == CollectionStatus.DENIED.value
+    ]
     avg_score = (
         int(sum(r["score"] for r in reachable) / len(reachable)) if reachable else 0
     )
 
+    if failed and len(failed) == len(targets):
+        overall_status = CollectionStatus.FAILED.value
+    elif failed or denied:
+        overall_status = CollectionStatus.PARTIAL.value
+    else:
+        overall_status = CollectionStatus.COMPLETE.value
+
     return {
         "targets": results,
         "findings": all_findings,
+        "collection_status": overall_status,
         "summary": {
             "total_targets": len(targets),
             "reachable": len(reachable),
+            "failed": len(failed),
+            "denied": len(denied),
             "avg_security_score": avg_score,
             "total_findings": len(all_findings),
         },

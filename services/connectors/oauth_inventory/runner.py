@@ -1,4 +1,12 @@
-"""OAuth Inventory connector — enumerates OAuth apps and grants via Microsoft Graph."""
+"""OAuth Inventory connector — enumerates OAuth apps and grants via Microsoft Graph.
+
+Collection status disclosure:
+- HTTP 403 on app registrations or service principals → DENIED recorded per-source.
+- Pagination capped at 20 pages; a hit on the cap produces PARTIAL.
+- Overall collection_status reflects the worst per-source status.
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +14,23 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from services.connectors.collection_status import CollectionStatus
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 _TIMEOUT = 30
 
 
 def _get_all(
-    access_token: str, path: str, params: dict[str, str] | None = None
-) -> list[dict[str, Any]]:
+    access_token: str,
+    path: str,
+    params: dict[str, str] | None = None,
+    *,
+    page_limit: int = 20,
+) -> tuple[list[dict[str, Any]], CollectionStatus]:
+    """Fetch paginated Graph results.
+
+    Returns (results, CollectionStatus) where status is COMPLETE, PARTIAL, DENIED, or FAILED.
+    """
     import httpx
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -24,14 +41,19 @@ def _get_all(
 
     results: list[dict[str, Any]] = []
     pages = 0
-    while url and pages < 20:
+    while url and pages < page_limit:
         resp = httpx.get(url, headers=headers, timeout=_TIMEOUT)
+        if resp.status_code in (403, 401):
+            return results, CollectionStatus.DENIED
         resp.raise_for_status()
         data = resp.json()
         results.extend(data.get("value", []))
         url = data.get("@odata.nextLink")
         pages += 1
-    return results
+
+    if url:
+        return results, CollectionStatus.PARTIAL
+    return results, CollectionStatus.COMPLETE
 
 
 def run_oauth_inventory(
@@ -47,8 +69,10 @@ def run_oauth_inventory(
     """
     scan_initiated_at = datetime.now(timezone.utc).isoformat()
 
+    app_regs: list[dict[str, Any]] = []
+    app_regs_status = CollectionStatus.FAILED
     try:
-        app_regs = _get_all(
+        app_regs, app_regs_status = _get_all(
             access_token,
             "/applications",
             {
@@ -56,27 +80,31 @@ def run_oauth_inventory(
             },
         )
     except Exception:
-        app_regs = []
+        app_regs_status = CollectionStatus.FAILED
 
+    sps: list[dict[str, Any]] = []
+    sp_status = CollectionStatus.FAILED
+    sp_by_app: dict[str, Any] = {}
     try:
-        sps = _get_all(
+        sps, sp_status = _get_all(
             access_token,
             "/servicePrincipals",
             {"$select": "id,appId,displayName,verifiedPublisher,createdDateTime"},
         )
         sp_by_app = {sp.get("appId", ""): sp for sp in sps}
     except Exception:
-        sps = []
-        sp_by_app = {}
+        sp_status = CollectionStatus.FAILED
 
+    grants: list[dict[str, Any]] = []
+    grants_status = CollectionStatus.FAILED
     try:
-        grants = _get_all(
+        grants, grants_status = _get_all(
             access_token,
             "/oauth2PermissionGrants",
             {"$select": "clientId,consentType,scope"},
         )
     except Exception:
-        grants = []
+        grants_status = CollectionStatus.FAILED
 
     apps: list[dict[str, Any]] = []
     for reg in app_regs:
@@ -162,6 +190,18 @@ def run_oauth_inventory(
 
     scan_completed_at = datetime.now(timezone.utc).isoformat()
 
+    # Overall status: worst of the three sources
+    _status_rank = {
+        CollectionStatus.FAILED: 0,
+        CollectionStatus.DENIED: 1,
+        CollectionStatus.PARTIAL: 2,
+        CollectionStatus.COMPLETE: 3,
+    }
+    overall_status = min(
+        [app_regs_status, sp_status, grants_status],
+        key=lambda s: _status_rank.get(s, 0),
+    )
+
     return {
         "scan_id": uuid.uuid4().hex,
         "scan_type": "oauth_inventory_v1",
@@ -170,6 +210,12 @@ def run_oauth_inventory(
         "scan_initiated_at": scan_initiated_at,
         "scan_completed_at": scan_completed_at,
         "scan_status": "completed",
+        "collection_status": overall_status.value,
+        "source_statuses": {
+            "app_registrations": app_regs_status.value,
+            "service_principals": sp_status.value,
+            "oauth2_permission_grants": grants_status.value,
+        },
         "apps": apps,
         "grants_summary": {
             "total": len(grants),

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
+from services.connectors.collection_status import CollectionStatus
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -43,31 +45,37 @@ class TestVerifiedPublisherApp:
 
         def _mock_get_all(access_token, path, params=None):
             if "applications" in path:
-                return [
-                    {
-                        "id": "reg-001",
-                        "appId": "app-001",
-                        "displayName": "VerifiedApp",
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                        "signInAudience": "AzureADMyOrg",
-                        "requiredResourceAccess": [
-                            {"resourceAccess": [{"id": "scope1", "type": "Scope"}]}
-                        ],
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "id": "reg-001",
+                            "appId": "app-001",
+                            "displayName": "VerifiedApp",
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                            "signInAudience": "AzureADMyOrg",
+                            "requiredResourceAccess": [
+                                {"resourceAccess": [{"id": "scope1", "type": "Scope"}]}
+                            ],
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
             elif "servicePrincipals" in path:
-                return [
-                    {
-                        "id": "sp-001",
-                        "appId": "app-001",
-                        "displayName": "VerifiedApp",
-                        "verifiedPublisher": {"displayName": "Microsoft"},
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "id": "sp-001",
+                            "appId": "app-001",
+                            "displayName": "VerifiedApp",
+                            "verifiedPublisher": {"displayName": "Microsoft"},
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
             elif "oauth2PermissionGrants" in path:
-                return []
-            return []
+                return ([], CollectionStatus.COMPLETE)
+            return ([], CollectionStatus.COMPLETE)
 
         with upatch(
             "services.connectors.oauth_inventory.runner._get_all",
@@ -96,34 +104,40 @@ class TestUnverifiedPublisherSensitiveScope:
 
         def _mock_get_all(access_token, path, params=None):
             if "applications" in path:
-                return [
-                    {
-                        "id": "reg-002",
-                        "appId": "app-002",
-                        "displayName": "UnknownApp",
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                        "signInAudience": "AzureADMyOrg",
-                        "requiredResourceAccess": [
-                            {
-                                "resourceAccess": [
-                                    {"id": f"scope{i}", "type": "Scope"}
-                                    for i in range(5)
-                                ]
-                            }
-                        ],
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "id": "reg-002",
+                            "appId": "app-002",
+                            "displayName": "UnknownApp",
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                            "signInAudience": "AzureADMyOrg",
+                            "requiredResourceAccess": [
+                                {
+                                    "resourceAccess": [
+                                        {"id": f"scope{i}", "type": "Scope"}
+                                        for i in range(5)
+                                    ]
+                                }
+                            ],
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
             elif "servicePrincipals" in path:
-                return [
-                    {
-                        "id": "sp-002",
-                        "appId": "app-002",
-                        "displayName": "UnknownApp",
-                        # No verifiedPublisher
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                    }
-                ]
-            return []
+                return (
+                    [
+                        {
+                            "id": "sp-002",
+                            "appId": "app-002",
+                            "displayName": "UnknownApp",
+                            # No verifiedPublisher
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
+            return ([], CollectionStatus.COMPLETE)
 
         with upatch(
             "services.connectors.oauth_inventory.runner._get_all",
@@ -151,36 +165,45 @@ class TestAdminConsentGrant:
 
         def _mock_get_all(access_token, path, params=None):
             if "applications" in path:
-                return [
-                    {
-                        "id": "reg-003",
-                        "appId": "app-003",
-                        "displayName": "AdminApp",
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                        "signInAudience": "AzureADMyOrg",
-                        "requiredResourceAccess": [],
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "id": "reg-003",
+                            "appId": "app-003",
+                            "displayName": "AdminApp",
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                            "signInAudience": "AzureADMyOrg",
+                            "requiredResourceAccess": [],
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
             elif "servicePrincipals" in path:
-                return [
-                    {
-                        "id": "sp-003",
-                        "appId": "app-003",
-                        "displayName": "AdminApp",
-                        "verifiedPublisher": {"displayName": "TrustCo"},
-                        "createdDateTime": datetime.now(timezone.utc).isoformat(),
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "id": "sp-003",
+                            "appId": "app-003",
+                            "displayName": "AdminApp",
+                            "verifiedPublisher": {"displayName": "TrustCo"},
+                            "createdDateTime": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
             elif "oauth2PermissionGrants" in path:
                 # Admin-consented grant (AllPrincipals = tenant-wide)
-                return [
-                    {
-                        "clientId": "sp-003",
-                        "consentType": "AllPrincipals",
-                        "scope": "User.Read",
-                    }
-                ]
-            return []
+                return (
+                    [
+                        {
+                            "clientId": "sp-003",
+                            "consentType": "AllPrincipals",
+                            "scope": "User.Read",
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
+            return ([], CollectionStatus.COMPLETE)
 
         with upatch(
             "services.connectors.oauth_inventory.runner._get_all",
@@ -217,18 +240,21 @@ class TestOAuthPermissionGrantedNotData:
 
         def _mock_get_all(access_token, path, params=None):
             if "applications" in path:
-                return []
+                return ([], CollectionStatus.COMPLETE)
             elif "servicePrincipals" in path:
-                return []
+                return ([], CollectionStatus.COMPLETE)
             elif "oauth2PermissionGrants" in path:
-                return [
-                    {
-                        "clientId": "sp-x",
-                        "consentType": "AllPrincipals",
-                        "scope": "Mail.Read",
-                    }
-                ]
-            return []
+                return (
+                    [
+                        {
+                            "clientId": "sp-x",
+                            "consentType": "AllPrincipals",
+                            "scope": "Mail.Read",
+                        }
+                    ],
+                    CollectionStatus.COMPLETE,
+                )
+            return ([], CollectionStatus.COMPLETE)
 
         with upatch(
             "services.connectors.oauth_inventory.runner._get_all",

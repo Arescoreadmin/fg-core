@@ -1,12 +1,16 @@
 """L14-SCAN-ACCURACY-001 — Endpoint inventory known-answer accuracy tests.
 
+Updated by L14-SCAN-COMPLETENESS-001: DEF-002 closed. Unknown/missing last-seen
+timestamps now produce is_stale=None and last_seen_timestamp_status=ABSENT/INVALID
+rather than silently defaulting to is_stale=False.
+
 Calls real endpoint_inventory runner classification logic.
 Mocks only httpx.get (external I/O to Graph API).
 
 Critical truth conditions tested:
 - Missing encryption data != confirmed encryption failure
 - Intune access denied != zero compliant devices
-- Unknown last-seen != active device
+- Unknown last-seen → INDETERMINATE (is_stale=None), NOT is_stale=False (DEF-002 closed)
 """
 
 from __future__ import annotations
@@ -239,38 +243,84 @@ class TestStaleDeviceKnownDate:
 
 
 # ---------------------------------------------------------------------------
-# SA-EP-007: stale_device_unknown_timestamp → STALE_DEVICE_INDETERMINATE
+# SA-EP-007: DEF-002 CLOSED — unknown timestamp → INDETERMINATE, not is_stale=False
 # ---------------------------------------------------------------------------
 
 
 class TestStaleDeviceUnknownTimestamp:
-    """CRITICAL TRUTH CONDITION: A device with no last-seen date is NOT classified
-    as ACTIVE. The timestamp is unknown, so staleness is INDETERMINATE.
+    """DEF-002 closed: A device with no last-seen timestamp produces:
+    - is_stale=None (INDETERMINATE), NOT is_stale=False
+    - last_seen_timestamp_status=ABSENT
+    - Device excluded from stale_count in summary
     """
 
-    def test_unknown_last_seen_not_classified_as_active(self):
-        """Device with empty last_seen — cannot determine if stale or active."""
+    def test_unknown_last_seen_produces_indeterminate_not_false(self):
+        """DEF-002 closed: empty last_seen → is_stale=None, not is_stale=False."""
         devices = [
             _build_device("dev-008", "UnknownDateDevice", last_seen_days_ago=None)
         ]
         result = _run_with_devices(devices)
 
-        # Device appears in endpoints list
         assert len(result["endpoints"]) == 1
         ep = result["endpoints"][0]
 
-        # is_stale=False because no date to compare (not because device is active).
-        # This is a known accuracy gap: unknown_last_seen != active.
-        # The scanner does NOT mark it as stale (conservative), but also cannot
-        # confirm it's active.
-        assert ep["last_seen"] == "", "No last_seen should produce empty string"
-        # Document the gap: is_stale=False here is a limitation, not a confirmation.
-        # A future accuracy improvement would classify this as INDETERMINATE.
-        assert ep["is_stale"] is False, (
-            "Known gap: scanner treats unknown last_seen as not-stale. "
-            "This is a conservative approach but not the same as 'active'. "
-            "Filed for L14-SCAN-ACCURACY-001 accuracy improvement."
+        assert ep["is_stale"] is None, (
+            "DEF-002 closed: unknown last_seen must produce is_stale=None "
+            "(INDETERMINATE), not is_stale=False (which implies the device is active)."
         )
+        assert ep["last_seen_timestamp_status"] == "ABSENT", (
+            "Missing timestamp must be classified as ABSENT, not KNOWN."
+        )
+        assert ep["last_seen"] is None
+
+    def test_unknown_last_seen_excluded_from_stale_count(self):
+        """Devices with unknown timestamps must not inflate the stale count."""
+        devices = [
+            _build_device("dev-008", "UnknownDateDevice", last_seen_days_ago=None)
+        ]
+        result = _run_with_devices(devices)
+
+        assert result["summary"]["stale"] == 0, (
+            "Device with unknown timestamp must not be counted as stale."
+        )
+        assert result["summary"]["unknown_last_seen"] == 1, (
+            "Device with unknown timestamp must be counted in unknown_last_seen."
+        )
+
+    def test_no_stale_finding_from_unknown_timestamp(self):
+        """Unknown timestamp must not produce a stale_devices finding."""
+        devices = [
+            _build_device("dev-009", "UnknownDateDevice2", last_seen_days_ago=None)
+        ]
+        result = _run_with_devices(devices)
+
+        finding_types = [f["finding_type"] for f in result["findings"]]
+        assert "endpoint.stale_devices" not in finding_types, (
+            "DEF-002: unknown last_seen must NOT produce stale_devices finding."
+        )
+
+    def test_invalid_timestamp_produces_indeterminate(self):
+        """Invalid/malformed timestamp → is_stale=None, last_seen_timestamp_status=INVALID."""
+        # Build a device with a bad timestamp
+        dev = {
+            "id": "dev-010",
+            "displayName": "BadTimestampDevice",
+            "operatingSystem": "Windows",
+            "operatingSystemVersion": "10.0",
+            "isCompliant": True,
+            "isManaged": True,
+            "approximateLastSignInDateTime": "not-a-date",
+            "trustType": "AzureAD",
+        }
+        result = _run_with_devices([dev])
+
+        assert len(result["endpoints"]) == 1
+        ep = result["endpoints"][0]
+
+        assert ep["is_stale"] is None, (
+            "Invalid timestamp must produce INDETERMINATE (is_stale=None)."
+        )
+        assert ep["last_seen_timestamp_status"] == "INVALID"
 
 
 # ---------------------------------------------------------------------------
@@ -286,8 +336,10 @@ class TestEndpointScanProvenance:
         assert "scan_initiated_at" in result
         assert "scan_completed_at" in result
         assert result["scan_type"] == "endpoint_inventory_v1"
+        assert "collection_status" in result
 
     def test_summary_always_present(self):
         result = _run_with_devices([])
         assert "summary" in result
         assert "total" in result["summary"]
+        assert "unknown_last_seen" in result["summary"]

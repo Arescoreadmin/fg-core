@@ -1,9 +1,27 @@
-"""DNS & Email Security connector — checks DMARC, SPF, DKIM, MX, DNSSEC per domain."""
+"""DNS & Email Security connector — checks DMARC, SPF, DKIM, MX, DNSSEC per domain.
+
+DEF-001 (closed): _dns_query() now returns a DnsQueryOutcome that distinguishes
+successful authoritative negative responses (NO_DATA, NXDOMAIN) from collection
+failures (TIMEOUT, SERVFAIL, REFUSED, RESOLVER_ERROR). A collection failure must
+NOT produce a missing-record finding; only an authoritative absence may do so.
+
+Collection status is propagated into the domain-level result and the top-level
+summary so downstream consumers can distinguish complete vs. failed collection.
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
+"""
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
+
+from services.connectors.collection_status import (
+    CollectionStatus,
+    DnsQueryStatus,
+    DNS_COLLECTION_FAILURE_STATUSES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,26 +38,127 @@ _DEFAULT_DKIM_SELECTORS = [
 _DMARC_POLICY_STRENGTH = {"reject": 3, "quarantine": 2, "none": 1}
 
 
-def _dns_query(name: str, rdtype: str) -> list[str]:
-    try:
-        import dns.resolver  # type: ignore
+# ---------------------------------------------------------------------------
+# DNS query with typed outcome
+# ---------------------------------------------------------------------------
 
+
+@dataclass
+class DnsQueryOutcome:
+    """Result of a single DNS query with error taxonomy."""
+
+    records: list[str]
+    status: DnsQueryStatus
+    raw_error: str | None = None
+
+
+def _dns_query(name: str, rdtype: str) -> DnsQueryOutcome:
+    """Perform a DNS query and return a typed outcome.
+
+    Distinguishes authoritative negative responses (NO_DATA, NXDOMAIN) from
+    collection failures (TIMEOUT, SERVFAIL, REFUSED, RESOLVER_ERROR).
+
+    Only NO_DATA and NXDOMAIN represent verified record absence.
+    TIMEOUT/SERVFAIL/REFUSED/RESOLVER_ERROR represent collection failure —
+    they must NOT be used as evidence of record absence.
+    """
+    try:
+        import dns.exception
+        import dns.resolver
+    except ImportError:
+        return DnsQueryOutcome(
+            records=[],
+            status=DnsQueryStatus.RESOLVER_ERROR,
+            raw_error="dnspython not installed",
+        )
+
+    try:
         answers = dns.resolver.resolve(name, rdtype, lifetime=5.0)
-        return [rdata.to_text() for rdata in answers]
-    except Exception:
-        return []
+        records = [rdata.to_text() for rdata in answers]
+        return DnsQueryOutcome(records=records, status=DnsQueryStatus.SUCCESS)
+
+    except dns.resolver.NXDOMAIN:
+        return DnsQueryOutcome(records=[], status=DnsQueryStatus.NXDOMAIN)
+
+    except dns.resolver.NoAnswer:
+        # NOERROR with no records for this type — authoritative negative
+        return DnsQueryOutcome(records=[], status=DnsQueryStatus.NO_DATA)
+
+    except dns.resolver.LifetimeTimeout:
+        return DnsQueryOutcome(
+            records=[],
+            status=DnsQueryStatus.TIMEOUT,
+            raw_error="DNS resolver timeout",
+        )
+
+    except dns.resolver.NoNameservers as exc:
+        raw = str(exc)
+        status = (
+            DnsQueryStatus.SERVFAIL
+            if "SERVFAIL" in raw.upper()
+            else DnsQueryStatus.RESOLVER_ERROR
+        )
+        return DnsQueryOutcome(records=[], status=status, raw_error=raw[:200])
+
+    except Exception as exc:
+        raw = str(exc).upper()
+        if "REFUSED" in raw:
+            status = DnsQueryStatus.REFUSED
+        elif "SERVFAIL" in raw:
+            status = DnsQueryStatus.SERVFAIL
+        elif "TIMEOUT" in raw:
+            status = DnsQueryStatus.TIMEOUT
+        else:
+            status = DnsQueryStatus.RESOLVER_ERROR
+        return DnsQueryOutcome(records=[], status=status, raw_error=str(exc)[:200])
+
+
+def _collection_failed(outcome: DnsQueryOutcome) -> bool:
+    """Return True if the query represents a collection failure (not verified absence)."""
+    return outcome.status in DNS_COLLECTION_FAILURE_STATUSES
+
+
+def _status_for(outcome: DnsQueryOutcome) -> str:
+    if outcome.status == DnsQueryStatus.TIMEOUT:
+        return CollectionStatus.TIMEOUT.value
+    if outcome.status in DNS_COLLECTION_FAILURE_STATUSES:
+        return CollectionStatus.FAILED.value
+    return CollectionStatus.COMPLETE.value
+
+
+# ---------------------------------------------------------------------------
+# Per-record check functions
+# ---------------------------------------------------------------------------
 
 
 def _check_spf(domain: str) -> dict[str, Any]:
-    records = _dns_query(domain, "TXT")
-    spf_records = [r for r in records if "v=spf1" in r]
+    outcome = _dns_query(domain, "TXT")
+
+    if _collection_failed(outcome):
+        return {
+            "present": None,
+            "record": None,
+            "all_mechanism": None,
+            "finding": None,
+            "collection_status": _status_for(outcome),
+            "dns_query_status": outcome.status.value,
+            "collection_failure": True,
+            "error": outcome.raw_error,
+        }
+
+    spf_records = [r for r in outcome.records if "v=spf1" in r]
     if not spf_records:
+        # Authoritative absence — record genuinely missing
         return {
             "present": False,
             "record": None,
             "all_mechanism": None,
             "finding": "missing_spf",
+            "collection_status": CollectionStatus.COMPLETE.value,
+            "dns_query_status": outcome.status.value,
+            "collection_failure": False,
         }
+
     record = spf_records[0].strip('"')
     all_mech = None
     for part in record.split():
@@ -55,12 +174,29 @@ def _check_spf(domain: str) -> dict[str, Any]:
         "record": record,
         "all_mechanism": all_mech,
         "finding": finding,
+        "collection_status": CollectionStatus.COMPLETE.value,
+        "dns_query_status": outcome.status.value,
+        "collection_failure": False,
     }
 
 
 def _check_dmarc(domain: str) -> dict[str, Any]:
-    records = _dns_query(f"_dmarc.{domain}", "TXT")
-    dmarc_records = [r for r in records if "v=DMARC1" in r]
+    outcome = _dns_query(f"_dmarc.{domain}", "TXT")
+
+    if _collection_failed(outcome):
+        return {
+            "present": None,
+            "record": None,
+            "policy": None,
+            "pct": None,
+            "finding": None,
+            "collection_status": _status_for(outcome),
+            "dns_query_status": outcome.status.value,
+            "collection_failure": True,
+            "error": outcome.raw_error,
+        }
+
+    dmarc_records = [r for r in outcome.records if "v=DMARC1" in r]
     if not dmarc_records:
         return {
             "present": False,
@@ -68,7 +204,11 @@ def _check_dmarc(domain: str) -> dict[str, Any]:
             "policy": None,
             "pct": None,
             "finding": "missing_dmarc",
+            "collection_status": CollectionStatus.COMPLETE.value,
+            "dns_query_status": outcome.status.value,
+            "collection_failure": False,
         }
+
     record = dmarc_records[0].strip('"')
     tags: dict[str, str] = {}
     for tag in record.split(";"):
@@ -89,27 +229,93 @@ def _check_dmarc(domain: str) -> dict[str, Any]:
         "policy": policy,
         "pct": pct,
         "finding": finding,
+        "collection_status": CollectionStatus.COMPLETE.value,
+        "dns_query_status": outcome.status.value,
+        "collection_failure": False,
     }
 
 
 def _check_dkim(domain: str, selectors: list[str]) -> dict[str, Any]:
-    found_selectors = []
+    found_selectors: list[str] = []
+    selector_statuses: dict[str, str] = {}
+    any_collection_failure = False
+
     for sel in selectors:
-        records = _dns_query(f"{sel}._domainkey.{domain}", "TXT")
-        if any("v=DKIM1" in r or "k=rsa" in r for r in records):
+        outcome = _dns_query(f"{sel}._domainkey.{domain}", "TXT")
+        selector_statuses[sel] = outcome.status.value
+        if _collection_failed(outcome):
+            any_collection_failure = True
+            continue
+        if any("v=DKIM1" in r or "k=rsa" in r for r in outcome.records):
             found_selectors.append(sel)
+
+    collection_status = (
+        CollectionStatus.PARTIAL.value
+        if any_collection_failure
+        else CollectionStatus.COMPLETE.value
+    )
+
+    # Only emit no_dkim_found if at least one selector completed successfully
+    checked_without_failure = [
+        sel
+        for sel in selectors
+        if selector_statuses.get(sel)
+        in (
+            DnsQueryStatus.SUCCESS.value,
+            DnsQueryStatus.NO_DATA.value,
+            DnsQueryStatus.NXDOMAIN.value,
+        )
+    ]
+    finding: str | None = None
+    if checked_without_failure and not found_selectors:
+        finding = "no_dkim_found"
+
     return {
         "selectors_checked": selectors,
         "selectors_found": found_selectors,
-        "finding": "no_dkim_found" if not found_selectors else None,
+        "selector_statuses": selector_statuses,
+        "finding": finding,
+        "collection_status": collection_status,
+        "collection_failure": any_collection_failure,
+        "coverage_note": (
+            "Some DKIM selector lookups failed; DKIM absence is indeterminate."
+            if any_collection_failure and not found_selectors
+            else None
+        ),
     }
 
 
 def _check_mx(domain: str) -> dict[str, Any]:
-    records = _dns_query(domain, "MX")
-    if not records:
-        return {"present": False, "records": [], "finding": "no_mx"}
-    return {"present": True, "records": records, "finding": None}
+    outcome = _dns_query(domain, "MX")
+
+    if _collection_failed(outcome):
+        return {
+            "present": None,
+            "records": [],
+            "finding": None,
+            "collection_status": _status_for(outcome),
+            "dns_query_status": outcome.status.value,
+            "collection_failure": True,
+            "error": outcome.raw_error,
+        }
+
+    if not outcome.records:
+        return {
+            "present": False,
+            "records": [],
+            "finding": "no_mx",
+            "collection_status": CollectionStatus.COMPLETE.value,
+            "dns_query_status": outcome.status.value,
+            "collection_failure": False,
+        }
+    return {
+        "present": True,
+        "records": outcome.records,
+        "finding": None,
+        "collection_status": CollectionStatus.COMPLETE.value,
+        "dns_query_status": outcome.status.value,
+        "collection_failure": False,
+    }
 
 
 def _check_dnssec(domain: str) -> dict[str, Any]:
@@ -119,15 +325,26 @@ def _check_dnssec(domain: str) -> dict[str, Any]:
     Use DNSKEY presence as a deterministic configuration signal instead of
     pretending full chain validation happened.
     """
-    try:
-        dnskey_records = _dns_query(domain, "DNSKEY")
-    except Exception:
-        dnskey_records = []
+    outcome = _dns_query(domain, "DNSKEY")
 
-    enabled = bool(dnskey_records)
+    if _collection_failed(outcome):
+        return {
+            "enabled": None,
+            "finding": None,
+            "collection_status": _status_for(outcome),
+            "dns_query_status": outcome.status.value,
+            "collection_failure": True,
+            "error": outcome.raw_error,
+            "coverage_note": "DNSSEC check failed; DNSSEC status is indeterminate.",
+        }
+
+    enabled = bool(outcome.records)
     return {
         "enabled": enabled,
         "finding": None if enabled else "dnssec_not_enabled",
+        "collection_status": CollectionStatus.COMPLETE.value,
+        "dns_query_status": outcome.status.value,
+        "collection_failure": False,
     }
 
 
@@ -146,6 +363,11 @@ def _check_dmarc_reporting(dmarc_result: dict[str, Any]) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Domain scan — aggregates per-record checks
+# ---------------------------------------------------------------------------
+
+
 def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[str, Any]:
     selectors = dkim_selectors or _DEFAULT_DKIM_SELECTORS
     spf = _check_spf(domain)
@@ -153,70 +375,77 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
     dkim = _check_dkim(domain, selectors)
     mx = _check_mx(domain)
     dnssec = _check_dnssec(domain)
-    reporting_finding = _check_dmarc_reporting(dmarc) if dmarc["present"] else None
+    reporting_finding = _check_dmarc_reporting(dmarc) if dmarc.get("present") else None
 
-    findings = []
-    if spf["finding"] == "missing_spf":
-        findings.append(
-            {
-                "type": "missing_spf",
-                "severity": "high",
-                "domain": domain,
-                "title": "No SPF Record",
-                "description": f"{domain} has no SPF TXT record, allowing any server to send email as this domain.",
-            }
-        )
-    elif spf["finding"] == "spf_permissive":
-        findings.append(
-            {
-                "type": "spf_permissive",
-                "severity": "high",
-                "domain": domain,
-                "title": "Permissive SPF (+all / ?all)",
-                "description": f"{domain} SPF ends with {spf['all_mechanism']}, which permits any sender.",
-            }
-        )
-    elif spf["finding"] == "spf_no_all":
-        findings.append(
-            {
-                "type": "spf_no_all",
-                "severity": "medium",
-                "domain": domain,
-                "title": "SPF Missing -all Terminator",
-                "description": f"{domain} SPF record has no explicit 'all' mechanism.",
-            }
-        )
+    any_collection_failure = any(
+        r.get("collection_failure") for r in [spf, dmarc, mx, dnssec]
+    ) or dkim.get("collection_failure", False)
 
-    if dmarc["finding"] == "missing_dmarc":
-        findings.append(
-            {
-                "type": "missing_dmarc",
-                "severity": "high",
-                "domain": domain,
-                "title": "No DMARC Record",
-                "description": f"{domain} has no DMARC policy, leaving email open to spoofing.",
-            }
-        )
-    elif dmarc["finding"] == "dmarc_policy_none":
-        findings.append(
-            {
-                "type": "dmarc_policy_none",
-                "severity": "medium",
-                "domain": domain,
-                "title": "DMARC Policy Set to None",
-                "description": f"{domain} DMARC is monitoring-only (p=none); unauthenticated mail is not rejected.",
-            }
-        )
-    elif dmarc["finding"] == "dmarc_partial_coverage":
-        findings.append(
-            {
-                "type": "dmarc_partial_coverage",
-                "severity": "low",
-                "domain": domain,
-                "title": f"DMARC Partial Coverage ({dmarc['pct']}%)",
-                "description": f"{domain} DMARC applies only to {dmarc['pct']}% of messages.",
-            }
-        )
+    findings: list[dict] = []
+
+    if not spf.get("collection_failure"):
+        if spf["finding"] == "missing_spf":
+            findings.append(
+                {
+                    "type": "missing_spf",
+                    "severity": "high",
+                    "domain": domain,
+                    "title": "No SPF Record",
+                    "description": f"{domain} has no SPF TXT record, allowing any server to send email as this domain.",
+                }
+            )
+        elif spf["finding"] == "spf_permissive":
+            findings.append(
+                {
+                    "type": "spf_permissive",
+                    "severity": "high",
+                    "domain": domain,
+                    "title": "Permissive SPF (+all / ?all)",
+                    "description": f"{domain} SPF ends with {spf['all_mechanism']}, which permits any sender.",
+                }
+            )
+        elif spf["finding"] == "spf_no_all":
+            findings.append(
+                {
+                    "type": "spf_no_all",
+                    "severity": "medium",
+                    "domain": domain,
+                    "title": "SPF Missing -all Terminator",
+                    "description": f"{domain} SPF record has no explicit 'all' mechanism.",
+                }
+            )
+
+    if not dmarc.get("collection_failure"):
+        if dmarc["finding"] == "missing_dmarc":
+            findings.append(
+                {
+                    "type": "missing_dmarc",
+                    "severity": "high",
+                    "domain": domain,
+                    "title": "No DMARC Record",
+                    "description": f"{domain} has no DMARC policy, leaving email open to spoofing.",
+                }
+            )
+        elif dmarc["finding"] == "dmarc_policy_none":
+            findings.append(
+                {
+                    "type": "dmarc_policy_none",
+                    "severity": "medium",
+                    "domain": domain,
+                    "title": "DMARC Policy Set to None",
+                    "description": f"{domain} DMARC is monitoring-only (p=none); unauthenticated mail is not rejected.",
+                }
+            )
+        elif dmarc["finding"] == "dmarc_partial_coverage":
+            findings.append(
+                {
+                    "type": "dmarc_partial_coverage",
+                    "severity": "low",
+                    "domain": domain,
+                    "title": f"DMARC Partial Coverage ({dmarc['pct']}%)",
+                    "description": f"{domain} DMARC applies only to {dmarc['pct']}% of messages.",
+                }
+            )
 
     if reporting_finding == "dmarc_no_reporting":
         findings.append(
@@ -240,7 +469,7 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
             }
         )
 
-    if mx["finding"] == "no_mx":
+    if not mx.get("collection_failure") and mx["finding"] == "no_mx":
         findings.append(
             {
                 "type": "no_mx",
@@ -251,7 +480,10 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
             }
         )
 
-    if dnssec["finding"] == "dnssec_not_enabled":
+    if (
+        not dnssec.get("collection_failure")
+        and dnssec.get("finding") == "dnssec_not_enabled"
+    ):
         findings.append(
             {
                 "type": "dnssec_not_enabled",
@@ -262,6 +494,21 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
             }
         )
 
+    # Aggregate domain-level collection_status
+    failure_checks = [
+        c for c in [spf, dmarc, mx, dnssec] if c.get("collection_failure")
+    ]
+    if dkim.get("collection_failure"):
+        failure_checks.append(dkim)
+
+    total_checks = 5  # spf, dmarc, dkim, mx, dnssec
+    if not failure_checks:
+        domain_collection_status = CollectionStatus.COMPLETE.value
+    elif len(failure_checks) < total_checks:
+        domain_collection_status = CollectionStatus.PARTIAL.value
+    else:
+        domain_collection_status = CollectionStatus.FAILED.value
+
     return {
         "domain": domain,
         "spf": spf,
@@ -270,31 +517,55 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
         "mx": mx,
         "dnssec": dnssec,
         "findings": findings,
+        "collection_status": domain_collection_status,
+        "any_collection_failure": any_collection_failure,
     }
 
 
 def run(domains: list[str], dkim_selectors: list[str] | None = None) -> dict[str, Any]:
     results = []
     all_findings: list[dict] = []
+    domains_with_failures: list[str] = []
+
     for domain in domains:
         try:
             result = scan_domain(domain, dkim_selectors)
             results.append(result)
             all_findings.extend(result["findings"])
+            if result.get("any_collection_failure"):
+                domains_with_failures.append(domain)
         except Exception as exc:
             logger.warning("DNS scan error for %s: %s", domain, exc)
-            results.append({"domain": domain, "error": str(exc), "findings": []})
+            results.append(
+                {
+                    "domain": domain,
+                    "error": str(exc),
+                    "findings": [],
+                    "collection_status": CollectionStatus.FAILED.value,
+                    "any_collection_failure": True,
+                }
+            )
+            domains_with_failures.append(domain)
+
+    if not domains_with_failures:
+        overall_status = CollectionStatus.COMPLETE.value
+    elif len(domains_with_failures) < len(domains):
+        overall_status = CollectionStatus.PARTIAL.value
+    else:
+        overall_status = CollectionStatus.FAILED.value
 
     return {
         "domains": results,
         "findings": all_findings,
+        "collection_status": overall_status,
         "summary": {
             "total_domains": len(domains),
+            "domains_with_collection_failures": len(domains_with_failures),
             "domains_with_spf": sum(
-                1 for r in results if r.get("spf", {}).get("present")
+                1 for r in results if r.get("spf", {}).get("present") is True
             ),
             "domains_with_dmarc": sum(
-                1 for r in results if r.get("dmarc", {}).get("present")
+                1 for r in results if r.get("dmarc", {}).get("present") is True
             ),
             "domains_with_dkim": sum(
                 1 for r in results if r.get("dkim", {}).get("selectors_found")

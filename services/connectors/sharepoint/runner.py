@@ -1,10 +1,21 @@
-"""SharePoint & OneDrive Data Exposure connector — external sharing, anonymous links, guest access."""
+"""SharePoint & OneDrive Data Exposure connector — external sharing, anonymous links, guest access.
+
+Collection status disclosure:
+- Sites are capped at _MAX_SITES. If the source has more sites, collection_status=TRUNCATED.
+- HTTP 403 on the sites list → collection_status=DENIED.
+- Site/drive-level 403s are recorded per-site but do not block global status.
+- Scan reports sites_discovered vs. sites_scanned so assessors know when the cap was hit.
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
+"""
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
 from typing import Any
+
+from services.connectors.collection_status import CollectionStatus
 
 log = logging.getLogger("frostgate.connectors.sharepoint.runner")
 
@@ -21,8 +32,16 @@ _MAX_PERMISSION_CHECKS_PER_DRIVE = 15
 _ANONYMOUS_CRITICAL_THRESHOLD = 10
 
 
+class _SharePointDenied(Exception):
+    """Raised when a SharePoint API call returns HTTP 403."""
+
+
 def _get(
-    access_token: str, path: str, params: dict[str, str] | None = None
+    access_token: str,
+    path: str,
+    params: dict[str, str] | None = None,
+    *,
+    raise_on_403: bool = False,
 ) -> list[dict[str, Any]]:
     import httpx
 
@@ -37,6 +56,8 @@ def _get(
     while url and pages < 10:
         resp = httpx.get(url, headers=headers, timeout=_TIMEOUT)
         if resp.status_code == 403:
+            if raise_on_403:
+                raise _SharePointDenied(f"403 on {path}")
             log.info("sharepoint: 403 on %s — skipping", path)
             return []
         resp.raise_for_status()
@@ -321,6 +342,10 @@ def run_sharepoint_scan(
     tenant_domain = _get_tenant_domain(access_token)
     log.info("sharepoint: tenant domain resolved as '%s'", tenant_domain)
 
+    # Fetch sites — record whether we hit the cap or were denied
+    sites_raw: list[dict[str, Any]] = []
+    sites_collection_status = CollectionStatus.FAILED
+    sites_denied = False
     try:
         sites_raw = _get(
             access_token,
@@ -328,15 +353,24 @@ def run_sharepoint_scan(
             {
                 "$search": "*",
                 "$select": "id,displayName,webUrl",
-                "$top": str(_MAX_SITES),
+                "$top": str(_MAX_SITES + 1),  # fetch one extra to detect truncation
             },
-        )[:_MAX_SITES]
+            raise_on_403=True,
+        )
+        if len(sites_raw) > _MAX_SITES:
+            # Source has more sites than cap — truncated
+            sites_raw = sites_raw[:_MAX_SITES]
+            sites_collection_status = CollectionStatus.TRUNCATED
+        else:
+            sites_collection_status = CollectionStatus.COMPLETE
+    except _SharePointDenied:
+        sites_collection_status = CollectionStatus.DENIED
+        sites_denied = True
     except Exception as exc:
         log.warning("sharepoint: failed to enumerate sites: %s", exc)
-        sites_raw = []
+        sites_collection_status = CollectionStatus.FAILED
 
-    # Also scan the root OneDrive (personal drives) via /drives if sites empty
-    if not sites_raw:
+    if not sites_raw and not sites_denied:
         log.info("sharepoint: no sites returned; attempting /me/drive fallback")
 
     sites_out: list[dict[str, Any]] = []
@@ -385,13 +419,31 @@ def run_sharepoint_scan(
         "sites": sites_out,
         "shared_items": all_shared_items,
         "findings": findings,
+        "collection_status": sites_collection_status.value,
         "summary": {
             "tenant_domain": tenant_domain,
             "sites_scanned": len(sites_out),
+            "site_cap": _MAX_SITES,
             "total_shared_items_found": len(all_shared_items),
             "anonymous_links": anonymous_count,
             "external_shares": external_count,
             "total_findings": len(findings),
+        },
+        "coverage_notes": {
+            "sites_collection_status": sites_collection_status.value,
+            "site_limit_note": (
+                f"Site enumeration is capped at {_MAX_SITES} sites. "
+                "If the tenant has more sites, the scan covers only the first "
+                f"{_MAX_SITES} returned. Additional sites were NOT assessed."
+            )
+            if sites_collection_status == CollectionStatus.TRUNCATED
+            else None,
+            "denied_note": (
+                "HTTP 403 on /sites — SharePoint site listing was denied. "
+                "No sites were assessed. This does NOT indicate that sharing is clean."
+            )
+            if sites_denied
+            else None,
         },
         "scan_initiated_at": scan_initiated_at,
         "tenant_id": tenant_id,

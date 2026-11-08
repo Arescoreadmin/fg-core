@@ -354,8 +354,8 @@ class TestUnknownLastSeen:
     """CRITICAL TRUTH CONDITION: A device with no last-seen date cannot be
     confirmed as active. The scanner must NOT classify it as active.
 
-    KNOWN GAP: Current implementation treats unknown last_seen as 'not stale'
-    (conservative). This is documented in L14_SCAN_AUDIT_CORRECTIONS.md.
+    DEF-002 CLOSED (L14-SCAN-COMPLETENESS-001): Unknown last_seen now produces
+    is_stale=None (INDETERMINATE) and last_seen_timestamp_status=ABSENT.
     """
 
     def test_unknown_last_seen_not_classified_active(self):
@@ -394,10 +394,12 @@ class TestUnknownLastSeen:
         assert len(eps) == 1
         ep = eps[0]
 
-        # is_stale=False because no date to compare (conservative, not because active)
-        # KNOWN GAP: should be INDETERMINATE but scanner treats as not-stale.
-        assert ep["last_seen"] == ""
-        assert ep["is_stale"] is False, (
-            "Known gap: scanner treats unknown last_seen as not-stale. "
-            "unknown_last_seen != active device — documented in L14_SCAN_AUDIT_CORRECTIONS.md"
+        # DEF-002 closed: absent timestamp → is_stale=None (INDETERMINATE)
+        assert ep["last_seen"] is None, (
+            "DEF-002 closed: absent last_seen must produce last_seen=None, not empty string."
         )
+        assert ep["is_stale"] is None, (
+            "DEF-002 closed: unknown last_seen must produce is_stale=None (INDETERMINATE). "
+            "unknown_last_seen != active device."
+        )
+        assert ep["last_seen_timestamp_status"] == "ABSENT"

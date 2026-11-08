@@ -1,4 +1,17 @@
-"""Endpoint Inventory connector — enumerates devices via Microsoft Graph."""
+"""Endpoint Inventory connector — enumerates devices via Microsoft Graph.
+
+DEF-002 (closed): Unknown/missing device last_seen timestamps now produce
+EndpointTimestampStatus.ABSENT and is_stale=None (INDETERMINATE) rather than
+silently defaulting to is_stale=False (treated as active/healthy).
+
+Additional corrections:
+- Invalid timestamp (parse failure) → INVALID, is_stale=None
+- HTTP 403 on device or Intune collection → DENIED, recorded explicitly
+- is_encrypted defaults removed: missing Intune data → encryption_status=UNKNOWN
+- collection_status emitted at the top level
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
+"""
 
 from __future__ import annotations
 
@@ -6,15 +19,35 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from services.connectors.collection_status import (
+    CollectionStatus,
+    EndpointTimestampStatus,
+)
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 _TIMEOUT = 30
 _STALE_DAYS = 90
 
 
+class _GraphPermissionDenied(Exception):
+    """Raised when the Graph API returns HTTP 403."""
+
+
 def _get_all(
-    access_token: str, path: str, params: dict[str, str] | None = None
-) -> list[dict[str, Any]]:
+    access_token: str,
+    path: str,
+    params: dict[str, str] | None = None,
+    *,
+    page_limit: int = 20,
+) -> tuple[list[dict[str, Any]], CollectionStatus]:
+    """Fetch all pages for a Graph API path.
+
+    Returns (results, status) where status is:
+    - COMPLETE   : all pages fetched within page_limit
+    - PARTIAL    : page_limit reached before source was exhausted
+    - DENIED     : HTTP 403
+    - FAILED     : non-403 error
+    """
     import httpx
 
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -25,16 +58,47 @@ def _get_all(
 
     results: list[dict[str, Any]] = []
     pages = 0
-    while url and pages < 20:
+    while url and pages < page_limit:
         resp = httpx.get(url, headers=headers, timeout=_TIMEOUT)
         if resp.status_code == 403:
-            break
+            return results, CollectionStatus.DENIED
+        if resp.status_code == 401:
+            return results, CollectionStatus.DENIED
         resp.raise_for_status()
         data = resp.json()
         results.extend(data.get("value", []))
         url = data.get("@odata.nextLink")
         pages += 1
-    return results
+
+    # If there's still a nextLink, we hit the page cap
+    if url:
+        return results, CollectionStatus.PARTIAL
+    return results, CollectionStatus.COMPLETE
+
+
+def _classify_timestamp(
+    raw: str | None,
+    stale_cutoff: datetime,
+) -> tuple[EndpointTimestampStatus, bool | None]:
+    """Classify a device last-seen timestamp.
+
+    Returns (timestamp_status, is_stale) where is_stale is:
+    - True   : timestamp is known and device is stale
+    - False  : timestamp is known and device is not stale
+    - None   : timestamp is absent, invalid, or indeterminate
+    """
+    if not raw:
+        return EndpointTimestampStatus.ABSENT, None
+
+    try:
+        last_seen = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        # Ensure timezone-aware comparison
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        is_stale = last_seen < stale_cutoff
+        return EndpointTimestampStatus.KNOWN, is_stale
+    except (ValueError, TypeError):
+        return EndpointTimestampStatus.INVALID, None
 
 
 def run_endpoint_inventory(
@@ -52,8 +116,11 @@ def run_endpoint_inventory(
     now_utc = datetime.now(timezone.utc)
     stale_cutoff = now_utc - timedelta(days=_STALE_DAYS)
 
+    # Device collection
+    devices: list[dict[str, Any]] = []
+    devices_collection_status = CollectionStatus.FAILED
     try:
-        devices = _get_all(
+        devices, devices_collection_status = _get_all(
             access_token,
             "/devices",
             {
@@ -64,12 +131,13 @@ def run_endpoint_inventory(
             },
         )
     except Exception:
-        devices = []
+        devices_collection_status = CollectionStatus.FAILED
 
     # Intune managed devices (requires DeviceManagementManagedDevices.Read.All)
-    # Attempt but gracefully skip if scope is absent.
+    intune_devices: list[dict[str, Any]] = []
+    intune_collection_status = CollectionStatus.FAILED
     try:
-        intune_devices = _get_all(
+        intune_devices, intune_collection_status = _get_all(
             access_token,
             "/deviceManagement/managedDevices",
             {
@@ -77,55 +145,77 @@ def run_endpoint_inventory(
             },
         )
     except Exception:
-        intune_devices = []
+        intune_collection_status = CollectionStatus.FAILED
 
     intune_by_name = {d.get("deviceName", "").lower(): d for d in intune_devices}
+    intune_available = intune_collection_status not in (
+        CollectionStatus.DENIED,
+        CollectionStatus.FAILED,
+    )
 
     endpoints: list[dict[str, Any]] = []
     stale_ids: list[str] = []
     non_compliant_ids: list[str] = []
     unmanaged_ids: list[str] = []
     unencrypted_ids: list[str] = []
+    unknown_timestamp_ids: list[str] = []
 
     for dev in devices:
         dev_id = dev.get("id", "")
-        last_seen_raw = dev.get("approximateLastSignInDateTime", "")
-        is_stale = False
-        if last_seen_raw:
-            try:
-                last_seen = datetime.fromisoformat(last_seen_raw.replace("Z", "+00:00"))
-                is_stale = last_seen < stale_cutoff
-            except ValueError:
-                pass
+        last_seen_raw = dev.get("approximateLastSignInDateTime") or ""
+
+        ts_status, is_stale = _classify_timestamp(last_seen_raw, stale_cutoff)
 
         is_managed = bool(dev.get("isManaged"))
         is_compliant = dev.get("isCompliant")
 
+        # Encryption status: only knowable from Intune data
         display_name = dev.get("displayName", "").lower()
-        intune = intune_by_name.get(display_name, {})
-        is_encrypted = bool(intune.get("isEncrypted", True))
+        intune = intune_by_name.get(display_name) if intune_available else None
 
-        endpoints.append(
-            {
-                "device_id": dev_id,
-                "display_name": dev.get("displayName", ""),
-                "os": dev.get("operatingSystem", ""),
-                "os_version": dev.get("operatingSystemVersion", ""),
-                "is_managed": is_managed,
-                "is_compliant": is_compliant,
-                "is_stale": is_stale,
-                "trust_type": dev.get("trustType", ""),
-                "last_seen": last_seen_raw,
-            }
-        )
+        if intune is not None and "isEncrypted" in intune:
+            # Intune data present with explicit field
+            is_encrypted: bool | None = bool(intune["isEncrypted"])
+        elif intune is not None:
+            # Intune record exists but isEncrypted field absent
+            is_encrypted = None
+        else:
+            # No Intune record for this device (or Intune not available)
+            is_encrypted = None
 
-        if is_stale:
+        endpoint: dict[str, Any] = {
+            "device_id": dev_id,
+            "display_name": dev.get("displayName", ""),
+            "os": dev.get("operatingSystem", ""),
+            "os_version": dev.get("operatingSystemVersion", ""),
+            "is_managed": is_managed,
+            "is_compliant": is_compliant,
+            "is_stale": is_stale,
+            "last_seen_timestamp_status": ts_status.value,
+            "trust_type": dev.get("trustType", ""),
+            "last_seen": last_seen_raw or None,
+            "encryption_status": (
+                "encrypted"
+                if is_encrypted is True
+                else "unencrypted"
+                if is_encrypted is False
+                else "UNKNOWN"
+            ),
+        }
+        endpoints.append(endpoint)
+
+        # Only classify stale when timestamp is definitively known
+        if is_stale is True:
             stale_ids.append(dev_id)
+        elif ts_status != EndpointTimestampStatus.KNOWN:
+            unknown_timestamp_ids.append(dev_id)
+
         if not is_managed:
             unmanaged_ids.append(dev_id)
         if is_compliant is False:
             non_compliant_ids.append(dev_id)
-        if not is_encrypted and intune:
+        # Only flag unencrypted when we have definitive evidence (is_encrypted=False)
+        if is_encrypted is False and intune:
             unencrypted_ids.append(dev_id)
 
     findings: list[dict[str, Any]] = []
@@ -208,6 +298,16 @@ def run_endpoint_inventory(
 
     scan_completed_at = datetime.now(timezone.utc).isoformat()
 
+    # Overall collection status
+    if devices_collection_status == CollectionStatus.DENIED:
+        overall_status = CollectionStatus.DENIED.value
+    elif devices_collection_status == CollectionStatus.FAILED:
+        overall_status = CollectionStatus.FAILED.value
+    elif devices_collection_status == CollectionStatus.PARTIAL:
+        overall_status = CollectionStatus.PARTIAL.value
+    else:
+        overall_status = CollectionStatus.COMPLETE.value
+
     return {
         "scan_id": uuid.uuid4().hex,
         "scan_type": "endpoint_inventory_v1",
@@ -216,6 +316,9 @@ def run_endpoint_inventory(
         "scan_initiated_at": scan_initiated_at,
         "scan_completed_at": scan_completed_at,
         "scan_status": "completed",
+        "collection_status": overall_status,
+        "devices_collection_status": devices_collection_status.value,
+        "intune_collection_status": intune_collection_status.value,
         "endpoints": endpoints,
         "summary": {
             "total": len(endpoints),
@@ -224,6 +327,19 @@ def run_endpoint_inventory(
             "compliant": len([e for e in endpoints if e.get("is_compliant") is True]),
             "non_compliant": len(non_compliant_ids),
             "stale": len(stale_ids),
+            "unknown_last_seen": len(unknown_timestamp_ids),
         },
         "findings": findings,
+        "coverage_notes": {
+            "intune_data_available": intune_available,
+            "intune_collection_status": intune_collection_status.value,
+            "devices_with_unknown_timestamp": len(unknown_timestamp_ids),
+            "stale_assessment_note": (
+                f"{len(unknown_timestamp_ids)} devices have no or invalid last-seen "
+                "timestamp; their staleness is INDETERMINATE and they are excluded from "
+                "the stale device count."
+            )
+            if unknown_timestamp_ids
+            else None,
+        },
     }
