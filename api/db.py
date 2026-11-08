@@ -1861,6 +1861,26 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON identity_projection_outbox (tenant_id)"
         )
 
+        # L14-SCAN-AUTH-HARDENING-001 — scan emergency stop authority.
+        # Defined only in Postgres migration 0200 and read via raw SQL by
+        # services/field_assessment/scan_authorization.py; no ORM model exists.
+        # Without it, SQLite test DBs cannot answer "is a stop active?" and every
+        # emergency-stop gate fails closed.  Mirrors the Postgres columns.
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS fa_scan_emergency_stops (
+                id           TEXT    PRIMARY KEY,
+                scope        TEXT    NOT NULL,
+                activated_by TEXT    NOT NULL,
+                reason       TEXT    NOT NULL,
+                activated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                cleared_at   TEXT,
+                cleared_by   TEXT,
+                is_active    BOOLEAN NOT NULL DEFAULT 1
+            )
+            """
+        )
+
         # L14-STRIPE-P0-INTEGRITY-001 — payment_confirmed_at audit anchor
         if "stripe_events" in tables:
             _sqlite_add_column_if_missing(

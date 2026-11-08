@@ -241,3 +241,16 @@ record per engagement before scans can proceed.
    approved → activate) for high-assurance environments.
 
 5. **L14-SCAN-INTEGRITY-001**: Runner-level content hash signatures. Deferred.
+
+---
+
+## Update — L14-SCAN-AUTH-HARDENING-001
+
+Limitations 1 (async worker revalidation), 2 (authorization reference verification, now a customer receipt) and 4 (two-party approval) are addressed for network, DNS/email and web-header scanners. Also fixed:
+
+- cross-tenant release of engagement-scoped emergency stops;
+- the `fa_scan_audit_events` event-type CHECK that rejected `scan.authorization.*` and `scan.cancel.*`;
+- `dead_letter` missing from the `fa_scan_jobs` status CHECK;
+- non-CAS job transitions.
+
+Details: `docs/assurance/L14_SCAN_AUTHORIZATION_HARDENING.md`.

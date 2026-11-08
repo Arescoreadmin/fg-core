@@ -245,6 +245,9 @@ def _bind_membership(actor: ActorContext, conn: Session) -> ActorContext:
             auth_source=actor.auth_source,
             tenant_id=principal.tenant_id,
             membership_id=principal.membership_id,
+            # Preserve the validated JWT claim; dropping it reset it to the
+            # fail-closed default False (L14-SCAN-AUTH-HARDENING-001 review).
+            email_verified=actor.email_verified,
         )
     except HTTPException:
         raise

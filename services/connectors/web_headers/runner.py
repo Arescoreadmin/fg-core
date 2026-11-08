@@ -21,6 +21,12 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from services.connectors.collection_status import CollectionStatus
+from services.connectors.execution_checkpoint import (
+    ScanCheckpoint,
+    ScanCheckpointHalt,
+    ScanTargetDenied,
+    interruption_record,
+)
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
 logger = logging.getLogger(__name__)
@@ -51,7 +57,9 @@ def _normalize_url(target: str) -> str:
 
 
 def _follow_redirects_safely(
-    client: httpx.Client, initial_url: str
+    client: httpx.Client,
+    initial_url: str,
+    checkpoint: ScanCheckpoint | None = None,
 ) -> tuple[httpx.Response, str | None]:
     """Follow redirects manually, re-validating every hop through the validator.
 
@@ -78,6 +86,17 @@ def _follow_redirects_safely(
                 f"redirect to {next_url!r} blocked: "
                 f"[{result.rejection_code}] {result.rejection_reason}"
             )
+        if checkpoint is not None:
+            # L14-SCAN-AUTH-HARDENING-001: a redirect must stay inside the
+            # authorized scope, and authority is re-read before the next hop.
+            # ScanCheckpointHalt propagates to stop all new outbound work.
+            try:
+                checkpoint("redirect", urlparse(next_url).hostname or next_url)
+            except ScanTargetDenied as denied:
+                return resp, (
+                    f"redirect to {next_url!r} blocked: "
+                    f"[{denied.reason_code}] destination outside authorized scope"
+                )
         current_url = next_url
 
     # Exceeded hop limit — treat as non-redirect final response.
@@ -242,7 +261,7 @@ def _check_plain_http(url: str, response_url: str) -> list[dict]:
     return []
 
 
-def scan_target(url: str) -> dict[str, Any]:
+def scan_target(url: str, checkpoint: ScanCheckpoint | None = None) -> dict[str, Any]:
     normalized = _normalize_url(url)
 
     # Validate the initial URL before opening any connection (Layer 1 + 2 + 3–5).
@@ -271,7 +290,9 @@ def scan_target(url: str) -> dict[str, Any]:
         with httpx.Client(
             timeout=_TIMEOUT, follow_redirects=False, verify=True
         ) as client:
-            resp, redirect_block = _follow_redirects_safely(client, normalized)
+            resp, redirect_block = _follow_redirects_safely(
+                client, normalized, checkpoint
+            )
             if redirect_block:
                 return {
                     "url": normalized,
@@ -323,6 +344,8 @@ def scan_target(url: str) -> dict[str, Any]:
                 "blocked": False,
                 "collection_status": CollectionStatus.COMPLETE.value,
             }
+    except ScanCheckpointHalt:
+        raise  # authority lost mid-target — never reported as a collection failure
     except httpx.ConnectError:
         error = f"Connection refused or DNS resolution failed for {normalized}"
     except httpx.TimeoutException:
@@ -346,11 +369,50 @@ def scan_target(url: str) -> dict[str, Any]:
     }
 
 
-def run(targets: list[str]) -> dict[str, Any]:
+def _denied_result(target: str, reason_code: str) -> dict[str, Any]:
+    return {
+        "url": _normalize_url(target),
+        "final_url": None,
+        "status_code": None,
+        "headers_present": [],
+        "headers_missing": list(_SECURITY_HEADERS),
+        "score": 0,
+        "findings": [],
+        "error": f"target not authorized at execution time: [{reason_code}]",
+        "blocked": True,
+        "rejection_code": reason_code,
+        "collection_status": CollectionStatus.DENIED.value,
+    }
+
+
+def run(targets: list[str], checkpoint: ScanCheckpoint | None = None) -> dict[str, Any]:
+    """Scan each target.  ``checkpoint`` is called before each target and each
+    redirect hop (L14-SCAN-AUTH-HARDENING-001); a halt keeps completed targets
+    and reports collection_status=CANCELLED."""
     results = []
     all_findings: list[dict] = []
-    for target in targets:
-        result = scan_target(target)
+    interrupted: dict[str, Any] | None = None
+    for idx, target in enumerate(targets):
+        if checkpoint is not None:
+            try:
+                checkpoint("target", target)
+            except ScanTargetDenied as denied:
+                results.append(_denied_result(target, denied.reason_code))
+                continue
+            except ScanCheckpointHalt as halt:
+                interrupted = interruption_record(
+                    halt, phase="target", remaining=len(targets) - idx
+                )
+                break
+        try:
+            result = scan_target(target, checkpoint)
+        except ScanCheckpointHalt as halt:
+            # Halted before the next redirect hop of this target: the target
+            # itself is incomplete and not counted as collected.
+            interrupted = interruption_record(
+                halt, phase="redirect", remaining=len(targets) - idx
+            )
+            break
         results.append(result)
         # Only emit findings from successfully collected targets
         if result.get("collection_status") == CollectionStatus.COMPLETE.value:
@@ -372,7 +434,9 @@ def run(targets: list[str]) -> dict[str, Any]:
         int(sum(r["score"] for r in reachable) / len(reachable)) if reachable else 0
     )
 
-    if failed and len(failed) == len(targets):
+    if interrupted is not None:
+        overall_status = CollectionStatus.CANCELLED.value
+    elif failed and len(failed) == len(targets):
         overall_status = CollectionStatus.FAILED.value
     elif failed or denied:
         overall_status = CollectionStatus.PARTIAL.value
@@ -383,6 +447,7 @@ def run(targets: list[str]) -> dict[str, Any]:
         "targets": results,
         "findings": all_findings,
         "collection_status": overall_status,
+        "interrupted": interrupted,
         "summary": {
             "total_targets": len(targets),
             "reachable": len(reachable),

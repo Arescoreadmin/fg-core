@@ -56,17 +56,31 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 9. Scan cancellation state machine: QUEUED/RUNNING → CANCEL_REQUESTED → CANCELLED. Atomic CAS transitions. Durable DB-backed state.
 10. Scope management API: Operators create/activate/revoke authorized scope via `POST /field-assessment/engagements/{id}/scan-authorizations` with `scan.scope.manage` permission.
 
-**What is NOT enforced (remaining gaps)**:
+**What IS enforced (code-verified, L14-SCAN-AUTH-HARDENING-001)** — see `docs/assurance/L14_SCAN_AUTHORIZATION_HARDENING.md`:
 
-1. Acknowledgment receipt gate remains absent for DNS (`initiate_dns_email_scan`), network (`initiate_network_scan`), and web header (`initiate_web_headers_scan`) scanners. The per-engagement scope authorization is a stronger gate but is not a signed receipt from the client. This is a documentation gap — acknowledgment receipts are an operator-workflow feature, not a technical enforcement gap.
-2. Cloud provider scanners (AWS/GCP/Azure): not yet implemented. The scope model defined in this PR (fa_scan_authorizations) is designed to accommodate cloud targets when those connectors are added.
-3. Async worker boundary revalidation: Scan runners are currently synchronous (called via FastAPI BackgroundTasks). The route-level `check_scan_authorized()` call is therefore sufficient. If async workers (Celery, task queues) are introduced, a revalidation call must be added at the worker execution boundary. This is documented in `api/field_assessment.py` with a TODO comment.
+11. Customer authorization receipts (`fa_customer_authorization_receipts`, migration 0203): an authenticated customer principal (interactive OIDC, verified email, `tenant_admin`/`client_security_owner`, same tenant, not the requester, never `platform_admin`) approves explicit targets, operations and a window. Every material field is bound by a canonical SHA-256 digest; server HMAC attestation under a trusted key id is required in production. Proof level is `SERVER_ATTESTED_AUTHENTICATED_APPROVAL` — a server attestation, **not** a customer-held signature.
+12. Scope ⊆ receipt is verified at scope create and activate; in production an unbound (legacy) scope cannot be activated or authorize scans (`CUSTOMER_AUTHORIZATION_REQUIRED`).
+13. `check_scan_authorized()` step 7 re-verifies the bound receipt (status, window, integrity, exact target + operation) on every call.
+14. Execution-time revalidation (`ScanExecutionGuard`) at worker start (fresh session, all targets, job state) and before every target and redirect hop for network, DNS/email and web-header scanners. Store unavailability fails closed.
+15. Compare-and-swap job transitions: a cancelled job cannot be revived or overwritten by a late success; late completion is rejected and audited; partial evidence is preserved with `CollectionStatus.CANCELLED`.
+16. Emergency stop enforced at dispatch and worker start for all scanner families (Graph-family gate after device-code token acquisition, before Graph I/O); cross-tenant engagement-stop release closed.
+17. Authorization decision records for dispatch, worker start, target denial, authority loss, cancellation, late completion and consent lifecycle.
+
+**What is NOT enforced (remaining gaps — FVA-01 stays PARTIALLY_IMPLEMENTED)**:
+
+1. Graph-family connectors (microsoft_graph, oauth_inventory, endpoint_inventory, entra_governance, sharepoint_onedrive, oauth_risk, ai_tool_discovery): no customer receipt binding and no per-page revalidation. Their authorization basis remains the customer administrator's interactive device-code login; the operator HMAC acknowledgment is not customer consent.
+2. No customer-verifiable (asymmetric) signature on receipts — L14-SCAN-VAULT-001.
+3. DNS-rebinding IP pinning between SSRF validation and connect — L14-SCAN-SAFETY-002.
+4. DNS/email revalidation is per domain, not per record phase.
+5. Cloud provider scanners (AWS/GCP/Azure): not implemented.
 
 **Code references**:
 - `services/field_assessment/scan_authorization.py` — canonical fail-closed authorization service
 - `api/field_assessment.py:_c6_check_all_targets_authorized()` — batch authorization check helper
 - `migrations/postgres/0200_fa_scan_authorization.sql` — fa_scan_authorizations, fa_scan_emergency_stops, cancel columns
 - `tests/test_scan_safety/` — 89 adversarial tests covering all 12 domain invariants
+- `services/field_assessment/customer_authorization.py`, `services/field_assessment/scan_execution_guard.py`, `migrations/postgres/0203_scan_customer_authorization.sql`
+- `tests/test_scan_authorization_hardening/` — 181 adversarial tests (consent, execution guard, worker lifecycle, CAS, migration/RBAC contract)
 
 **Testable criteria**:
 - Scanner runner rejects execution without valid engagement_id — ENFORCED
@@ -226,7 +240,7 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 
 | Control | ID | Description | Status | Deferred To |
 |---------|-----|-------------|--------|-------------|
-| Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 (scope auth implemented; async worker revalidation deferred) |
+| Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 + L14-SCAN-AUTH-HARDENING-001 (customer receipt + execution-time revalidation enforced for network/DNS/web scanners; Graph-family receipt binding, customer-held signature and rebinding pinning remain) |
 | Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
 | Finding Accuracy | FVA-03 | Confidence and severity independently justified | POLICY_ONLY | L14-SCAN-REPORT-PROOF-001 |
 | Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Closed by L14-SCAN-COMPLETENESS-001; report template wiring deferred to L14-SCAN-REPORT-PROOF-001 |

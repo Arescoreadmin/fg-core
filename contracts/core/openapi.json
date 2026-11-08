@@ -12972,6 +12972,110 @@
         "title": "CreditNoteCreateRequest",
         "type": "object"
       },
+      "CustomerAuthorizationDecisionBody": {
+        "additionalProperties": false,
+        "description": "Approval carries NO identity fields \u2014 approver comes from auth context.",
+        "properties": {
+          "acknowledge_consent_statement_version": {
+            "maxLength": 128,
+            "title": "Acknowledge Consent Statement Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acknowledge_consent_statement_version"
+        ],
+        "title": "CustomerAuthorizationDecisionBody",
+        "type": "object"
+      },
+      "CustomerAuthorizationReasonBody": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CustomerAuthorizationReasonBody",
+        "type": "object"
+      },
+      "CustomerAuthorizationRequestBody": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_targets": {
+            "items": {
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Approved Targets",
+            "type": "array"
+          },
+          "assessment_purpose": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Assessment Purpose",
+            "type": "string"
+          },
+          "authorized_operations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Authorized Operations",
+            "type": "array"
+          },
+          "customer_org_name": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Customer Org Name",
+            "type": "string"
+          },
+          "rules_of_engagement_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Rules Of Engagement Ref",
+            "type": "string"
+          },
+          "supersedes_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Receipt Id"
+          },
+          "window_end": {
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_org_name",
+          "assessment_purpose",
+          "rules_of_engagement_ref",
+          "approved_targets",
+          "authorized_operations",
+          "window_start",
+          "window_end"
+        ],
+        "title": "CustomerAuthorizationRequestBody",
+        "type": "object"
+      },
       "CycleRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -38053,6 +38157,18 @@
             "default": "rules_of_engagement",
             "title": "Authorization Type",
             "type": "string"
+          },
+          "customer_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Receipt Id"
           },
           "effective_from": {
             "anyOf": [
@@ -75583,6 +75699,50 @@
         ]
       }
     },
+    "/field-assessment/emergency-stop/{stop_id}/clear": {
+      "post": {
+        "description": "Release an emergency stop (L14-SCAN-AUTH-HARDENING-001).\n\nPermission rules mirror activation; platform stops need\nscan.emergency_stop.platform.  Release is audited.",
+        "operationId": "clear_scan_emergency_stop_field_assessment_emergency_stop__stop_id__clear_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stop_id",
+            "required": true,
+            "schema": {
+              "title": "Stop Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Clear Scan Emergency Stop Field Assessment Emergency Stop  Stop Id  Clear Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Scan Emergency Stop",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements": {
       "get": {
         "operationId": "list_engagements_route_field_assessment_engagements_get",
@@ -78497,6 +78657,341 @@
           }
         },
         "summary": "Create Connector Schedule",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/customer-authorizations": {
+      "get": {
+        "operationId": "list_customer_authorizations_field_assessment_engagements__engagement_id__customer_authorizations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Customer Authorizations Field Assessment Engagements  Engagement Id  Customer Authorizations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Customer Authorizations",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "description": "Operator requests customer approval for explicit targets/operations/window.",
+        "operationId": "request_customer_authorization_field_assessment_engagements__engagement_id__customer_authorizations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAuthorizationRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Request Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Customer Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}": {
+      "get": {
+        "operationId": "get_customer_authorization_field_assessment_engagements__engagement_id__customer_authorizations__receipt_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Customer Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/approve": {
+      "post": {
+        "description": "Customer representative approves.  Identity is taken ONLY from auth context.",
+        "operationId": "approve_customer_authorization_field_assessment_engagements__engagement_id__customer_authorizations__receipt_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAuthorizationDecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Approve Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Customer Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/reject": {
+      "post": {
+        "operationId": "reject_customer_authorization_field_assessment_engagements__engagement_id__customer_authorizations__receipt_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAuthorizationReasonBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Reject Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Customer Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/revoke": {
+      "post": {
+        "description": "Revocation only reduces authority; it takes effect at the next checkpoint.",
+        "operationId": "revoke_customer_authorization_field_assessment_engagements__engagement_id__customer_authorizations__receipt_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAuthorizationReasonBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Revoke Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Customer Authorization",
         "tags": [
           "field-assessment"
         ]
@@ -84192,6 +84687,50 @@
           }
         },
         "summary": "Create Scan Authorization",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-authorizations/effective-status": {
+      "get": {
+        "description": "Effective authorization as the execution guard would compute it now.",
+        "operationId": "get_effective_scan_authorization_status_field_assessment_engagements__engagement_id__scan_authorizations_effective_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Effective Scan Authorization Status Field Assessment Engagements  Engagement Id  Scan Authorizations Effective Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Effective Scan Authorization Status",
         "tags": [
           "field-assessment"
         ]

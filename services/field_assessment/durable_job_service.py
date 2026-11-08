@@ -56,6 +56,9 @@ from services.canonical import utc_iso8601_z_now
 LEASE_TTL_SECONDS = 300
 BASE_RETRY_SECONDS = 30
 
+# Only these statuses may transition to failed / dead_letter (CAS guard).
+_FAILABLE_STATUSES = ("queued", "running")
+
 # MSAL device-code scanner types require interactive user auth and cannot be
 # automatically retried after a process restart.
 _RETRYABLE_SCANNER_TYPES = frozenset(
@@ -176,10 +179,15 @@ class DurableJobService:
     # State transitions (called by background workers)
     # ------------------------------------------------------------------
 
-    def mark_running(self, db: Session, *, job_id: str) -> None:
-        db.execute(
+    # L14-SCAN-AUTH-HARDENING-001: every transition is compare-and-swap on the
+    # current status.  A cancel_requested / cancelled / terminal job can never be
+    # moved back to running or overwritten by a late completion.  Each method
+    # returns True only when this call performed the transition.
+
+    def mark_running(self, db: Session, *, job_id: str) -> bool:
+        result = db.execute(
             update(FaScanJob)
-            .where(FaScanJob.id == job_id)
+            .where(FaScanJob.id == job_id, FaScanJob.status == "queued")
             .values(
                 status="running",
                 started_at=utc_iso8601_z_now(),
@@ -189,6 +197,7 @@ class DurableJobService:
                 lease_expires_at=_future_iso(LEASE_TTL_SECONDS),
             )
         )
+        return bool(result.rowcount)
 
     def mark_complete(
         self,
@@ -196,10 +205,10 @@ class DurableJobService:
         *,
         job_id: str,
         scan_result_id: str | None = None,
-    ) -> None:
-        db.execute(
+    ) -> bool:
+        result = db.execute(
             update(FaScanJob)
-            .where(FaScanJob.id == job_id)
+            .where(FaScanJob.id == job_id, FaScanJob.status == "running")
             .values(
                 status="complete",
                 completed_at=utc_iso8601_z_now(),
@@ -209,6 +218,7 @@ class DurableJobService:
                 lease_expires_at=None,
             )
         )
+        return bool(result.rowcount)
 
     def mark_failed(
         self,
@@ -216,13 +226,16 @@ class DurableJobService:
         *,
         job_id: str,
         failure_reason: str,
-    ) -> None:
-        """Mark failed; schedule retry if retryable with remaining attempts."""
+    ) -> bool:
+        """Mark failed; schedule retry if retryable with remaining attempts.
+
+        Only queued/running jobs can fail.  A cancelled job stays cancelled.
+        """
         job = db.execute(
             select(FaScanJob).where(FaScanJob.id == job_id)
         ).scalar_one_or_none()
-        if job is None:
-            return
+        if job is None or job.status not in _FAILABLE_STATUSES:
+            return False
 
         can_retry = (
             job.scanner_type in _RETRYABLE_SCANNER_TYPES
@@ -230,9 +243,12 @@ class DurableJobService:
         )
         if can_retry:
             delay = BASE_RETRY_SECONDS * (2**job.attempt_count)
-            db.execute(
+            result = db.execute(
                 update(FaScanJob)
-                .where(FaScanJob.id == job_id)
+                .where(
+                    FaScanJob.id == job_id,
+                    FaScanJob.status.in_(_FAILABLE_STATUSES),
+                )
                 .values(
                     status="failed",
                     failure_reason=failure_reason[:2000],
@@ -243,9 +259,12 @@ class DurableJobService:
                 )
             )
         else:
-            db.execute(
+            result = db.execute(
                 update(FaScanJob)
-                .where(FaScanJob.id == job_id)
+                .where(
+                    FaScanJob.id == job_id,
+                    FaScanJob.status.in_(_FAILABLE_STATUSES),
+                )
                 .values(
                     status="dead_letter",
                     failure_reason=failure_reason[:2000],
@@ -255,6 +274,7 @@ class DurableJobService:
                     lease_expires_at=None,
                 )
             )
+        return bool(result.rowcount)
 
     # ------------------------------------------------------------------
     # Query helpers (used by status route + new list/detail routes)

@@ -1,3 +1,29 @@
+## 2026-11-08 — L14-SCAN-AUTH-HARDENING-001 customer consent and execution safety — security/l14-scan-auth-hardening-001
+
+**Reviewer:** Claude Code (pending human SOC review) | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).
+
+**Scope:** Generated route inventory regenerated (`make route-inventory-update`) for eight new Field Assessment routes. Security-relevant changes in this PR (called out for review, not hidden in the inventory):
+- **RBAC:** new permissions `scan.consent.approve` (granted to `tenant_admin`, `client_security_owner`) and `scan.consent.revoke` (those two plus `assessor`) in `api/actor_context.py`. Approval additionally rejects `platform_admin`, non-interactive auth sources, unverified email, service principals, cross-tenant actors and self-approval.
+- **Cryptography:** server HMAC-SHA256 attestation of customer consent receipts under an env-provided key ring (no key committed; production fails closed without a key). Documented as a server attestation, not a customer signature.
+- **Migration 0203:** new `fa_customer_authorization_receipts` (immutability trigger), nullable `fa_scan_authorizations.customer_receipt_id`, widened `fa_scan_audit_events.event_type` and `fa_scan_jobs_status_check` CHECKs (repairing latent defects).
+- **Authorization fix:** `clear_emergency_stop` previously allowed cross-tenant release of engagement-scoped stops.
+
+**New routes registered:**
+- `POST /field-assessment/engagements/{engagement_id}/customer-authorizations` — scope: `governance:write`, perm `scan.scope.manage`
+- `GET  /field-assessment/engagements/{engagement_id}/customer-authorizations` — scope: `governance:read`, perm `scan.read`
+- `GET  /field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}` — scope: `governance:read`, perm `scan.read`
+- `POST /field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/approve` — scope: `governance:write`, perm `scan.consent.approve`
+- `POST /field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/reject` — scope: `governance:write`, perm `scan.consent.approve`
+- `POST /field-assessment/engagements/{engagement_id}/customer-authorizations/{receipt_id}/revoke` — scope: `governance:write`, perm `scan.consent.revoke`
+- `GET  /field-assessment/engagements/{engagement_id}/scan-authorizations/effective-status` — scope: `governance:read`, perm `scan.read`
+- `POST /field-assessment/emergency-stop/{stop_id}/clear` — scope: `governance:write`, perm `scan.emergency_stop`
+
+**Security posture:** All routes are tenant-bound via `_resolve_caller_tenant` plus engagement ownership, scoped, permission-gated and audited (audit coverage 100%). No unauthenticated surface added. Details and threat model: `docs/assurance/L14_SCAN_AUTHORIZATION_HARDENING.md`.
+
+**Validation:** `make route-inventory-audit` passed; `make fg-security` 1324 passed / 1 skipped; `make fg-contract` passed; `make soc-review-sync` passes after this entry.
+
+---
+
 ## 2026-09-27 — PROD-QUAL-001 route inventory advance — feat/prod-qual-001
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).

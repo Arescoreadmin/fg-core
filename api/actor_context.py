@@ -51,6 +51,9 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "scan.scope.manage",
         "scan.emergency_stop",
         "scan.emergency_stop.platform",
+        # Customer scan consent (L14-SCAN-AUTH-HARDENING-001)
+        "scan.consent.approve",
+        "scan.consent.revoke",
         # Reports
         "report.generate",
         "report.read",
@@ -177,6 +180,16 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "display_name": "Emergency Stop (Platform-wide)",
         "description": "Activate or clear a platform-wide scanner emergency halt — platform_admin only",
         "risk_level": "critical",
+    },
+    "scan.consent.approve": {
+        "display_name": "Approve Customer Scan Authorization",
+        "description": "Approve or reject scanning of explicit targets/operations on behalf of the customer organization (customer roles only; never platform staff) — L14-SCAN-AUTH-HARDENING-001",
+        "risk_level": "high",
+    },
+    "scan.consent.revoke": {
+        "display_name": "Revoke Customer Scan Authorization",
+        "description": "Withdraw a customer scan authorization; blocks new scanner work at the next execution checkpoint",
+        "risk_level": "high",
     },
     # Reports
     "report.generate": {
@@ -352,6 +365,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "scan.trigger",
             "scan.scope.manage",
             "scan.emergency_stop",
+            # may withdraw consent (reduces authority); can NEVER approve it
+            "scan.consent.revoke",
             "report.generate",
             "bundle.generate",  # mechanical; approve requires qa_reviewer
         }
@@ -411,6 +426,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             # scan scope and emergency stop management (tenant-scoped)
             "scan.scope.manage",
             "scan.emergency_stop",
+            # customer organization admin may consent to / withdraw scanning
+            "scan.consent.approve",
+            "scan.consent.revoke",
             # actor attribution — admins can read the attribution audit trail
             "actor.read",
             # identity assurance — admins can read assurance levels/trust scores
@@ -484,6 +502,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "report.read",
             "bundle.read",
             "governance.read",
+            # delegated customer security owner may consent to scanning
+            "scan.consent.approve",
+            "scan.consent.revoke",
         }
     ),
     # platform_admin gets every permission — expanded explicitly, not via wildcard
