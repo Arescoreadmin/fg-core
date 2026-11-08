@@ -71,6 +71,84 @@ except ImportError:  # pragma: no cover
 from api.db_models import Base
 
 
+# ---------------------------------------------------------------------------
+# Schema-history-tolerant column types (L14-SCAN-RUNNER-INTEGRITY-001)
+#
+# SQLAlchemy's psycopg dialect renders an explicit cast on every bound String
+# parameter (BindTyping.RENDER_CASTS → ``%(x)s::VARCHAR``).  PostgreSQL cannot
+# assign VARCHAR to UUID, TIMESTAMPTZ or an enum, and the ORM sends unset columns
+# as ``NULL::VARCHAR`` too.
+#
+# The physical type of these columns depends on how the database was built:
+# init_db() runs ``Base.metadata.create_all()`` BEFORE numbered migrations, so a
+# fresh database gets VARCHAR from the ORM, while older databases have UUID /
+# TIMESTAMPTZ / fa_collection_status_enum from migrations 0201/0202.  These types
+# therefore keep the ORM DDL as VARCHAR (create_all never references a type that
+# a later migration creates) and bind parameters WITHOUT a cast, so PostgreSQL
+# infers the column's actual type.  Python always sees ``str``.  On SQLite they
+# are plain strings.
+# ---------------------------------------------------------------------------
+
+from datetime import datetime as _datetime  # noqa: E402
+
+from sqlalchemy.types import TypeDecorator, UserDefinedType  # noqa: E402
+
+
+class _PgUncastString(UserDefinedType):
+    """VARCHAR DDL; bound values are sent untyped (no ``::VARCHAR`` cast)."""
+
+    cache_ok = True
+
+    def __init__(self, length: int = 64) -> None:
+        self.length = length
+
+    def get_col_spec(self, **kw):
+        return f"VARCHAR({self.length})"
+
+
+class _SchemaTolerantString(TypeDecorator):
+    impl = String(64)
+    cache_ok = True
+    _length = 64
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(_PgUncastString(self._length))
+        return dialect.type_descriptor(String(self._length))
+
+
+class PgUuidString(_SchemaTolerantString):
+    """UUID (0201) or VARCHAR (create_all) column; always ``str`` in Python."""
+
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else str(value)
+
+
+class PgTimestamptzString(_SchemaTolerantString):
+    """TIMESTAMPTZ (0201) or VARCHAR (create_all) column; ISO-8601 ``str``."""
+
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, _datetime):
+            return value.isoformat()
+        return value
+
+
+class PgCollectionStatus(_SchemaTolerantString):
+    """fa_collection_status_enum (0202) or VARCHAR (create_all) column."""
+
+    cache_ok = True
+
+    impl = String(32)
+    _length = 32
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else str(value)
+
+
 class FaEngagement(Base):
     """Top-level field assessment engagement record."""
 
@@ -226,6 +304,16 @@ class FaNormalizedFinding(Base):
     evidence_ref_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     remediation_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
     asset_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Evidence confidence + collection truth (columns added by migrations 0201 and
+    # 0202; mapped by L14-SCAN-RUNNER-INTEGRITY-001).  NULL = legacy finding,
+    # never classified — must be treated as unverified, never upgraded silently.
+    confidence_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    verification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_envelope_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    collection_status: Mapped[str | None] = mapped_column(
+        PgCollectionStatus(), nullable=True
+    )
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
@@ -458,6 +546,11 @@ class FaScanJob(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scan_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
+    # Canonical CollectionStatus (migration 0202 adds the Postgres enum column;
+    # mapped by L14-SCAN-RUNNER-INTEGRITY-001).  NULL = legacy → treat as UNKNOWN.
+    collection_status: Mapped[str | None] = mapped_column(
+        PgCollectionStatus(), nullable=True
+    )
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -1332,17 +1425,17 @@ class FaScanEvidenceEnvelope(Base):
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    scan_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_job_id: Mapped[str | None] = mapped_column(PgUuidString(), nullable=True)
 
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
     scanner_id: Mapped[str] = mapped_column(String(128), nullable=False)
     scanner_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    authorization_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    authorization_ref: Mapped[str | None] = mapped_column(PgUuidString(), nullable=True)
     authorization_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
     collection_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="complete"
     )
@@ -1363,10 +1456,30 @@ class FaScanEvidenceEnvelope(Base):
     )
     correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    # L14-SCAN-RUNNER-INTEGRITY-001 (migration 0204): runtime capture metadata.
+    # observation_path locates the digested sub-payload inside the stored
+    # fa_scan_results.raw_payload (e.g. "hosts[2]"; "$" = whole payload).
+    observation_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_receipt_id: Mapped[str | None] = mapped_column(
+        PgUuidString(), nullable=True
+    )
+    authorization_proof_level: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    payload_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
+    updated_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
 
     __table_args__ = (
+        Index(
+            "uq_fa_scan_evidence_env_observation",
+            "tenant_id",
+            "scan_result_id",
+            "source_type",
+            "source_id",
+            unique=True,
+        ),
         Index(
             "ix_fa_scan_evidence_env_tenant_eng",
             "tenant_id",
@@ -1420,6 +1533,49 @@ class FaEvidenceCustodyEvent(Base):
         ),
         Index("ix_fa_evidence_custody_evidence", "evidence_id"),
     )
+
+
+_ENVELOPE_IMMUTABLE_FIELDS = (
+    "tenant_id",
+    "engagement_id",
+    "scan_job_id",
+    "scanner_id",
+    "source_type",
+    "source_id",
+    "observation_path",
+    "payload_digest",
+    "canonicalization_ver",
+    "schema_version",
+    "collected_at",
+    "collection_status",
+    "authorization_ref",
+    "authorization_version",
+    "customer_receipt_id",
+    "authorization_proof_level",
+)
+
+
+@sa_event.listens_for(FaScanEvidenceEnvelope, "before_update")
+def _block_envelope_digest_mutation(mapper, connection, target):
+    """Captured evidence identity and digest are immutable (mirrors the 0204 trigger).
+
+    The only permitted changes: provenance_status may move to INVALID (one-way)
+    and scan_result_id may become NULL (FK ON DELETE SET NULL).
+    """
+    from sqlalchemy import inspect as _sa_inspect
+
+    state = _sa_inspect(target)
+    for name in _ENVELOPE_IMMUTABLE_FIELDS:
+        hist = state.attrs[name].history
+        if hist.has_changes() and hist.deleted:
+            raise ValueError(f"fa_scan_evidence_envelopes.{name} is immutable")
+    prov = state.attrs["provenance_status"].history
+    if prov.has_changes() and prov.deleted:
+        if target.provenance_status != "INVALID" or prov.deleted[0] == "INVALID":
+            raise ValueError("provenance_status may only transition to INVALID")
+    sr = state.attrs["scan_result_id"].history
+    if sr.has_changes() and sr.deleted and target.scan_result_id is not None:
+        raise ValueError("fa_scan_evidence_envelopes.scan_result_id is immutable")
 
 
 @sa_event.listens_for(FaEvidenceCustodyEvent, "before_update")

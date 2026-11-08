@@ -244,6 +244,9 @@ def run_network_scan(
                 ),
                 "control_id": "NIST-AI-RMF-MANAGE-2.2",
                 "affected_count": len(unsafe_hosts),
+                # L14-SCAN-RUNNER-INTEGRITY-001: binds the finding to the host
+                # observations (evidence envelopes) that support it.
+                "affected_hosts": sorted(unsafe_hosts),
                 "recommendation": (
                     "Close or firewall-restrict RDP, VNC, Telnet, and FTP ports. "
                     "Replace with VPN-gated access or zero-trust network access."
@@ -270,6 +273,9 @@ def run_network_scan(
                 ),
                 "control_id": "NIST-AI-RMF-MANAGE-2.4",
                 "affected_count": len(plain_http_hosts),
+                # L14-SCAN-RUNNER-INTEGRITY-001: binds the finding to the host
+                # observations (evidence envelopes) that support it.
+                "affected_hosts": sorted(plain_http_hosts),
                 "recommendation": (
                     "Enable TLS on all HTTP services. Redirect port 80 to 443. "
                     "Use certificates from a trusted CA."
@@ -296,6 +302,9 @@ def run_network_scan(
                 ),
                 "control_id": "NIST-AI-RMF-MANAGE-2.4",
                 "affected_count": len(bad_tls_hosts),
+                # L14-SCAN-RUNNER-INTEGRITY-001: binds the finding to the host
+                # observations (evidence envelopes) that support it.
+                "affected_hosts": sorted(bad_tls_hosts),
                 "recommendation": (
                     "Renew expired certificates. Use certificates from a trusted public CA. "
                     "Implement automated certificate renewal (e.g. Let's Encrypt / ACME)."
@@ -323,6 +332,9 @@ def run_network_scan(
                 ),
                 "control_id": "NIST-AI-RMF-GOVERN-6.2",
                 "affected_count": len(ai_exposed_hosts),
+                # L14-SCAN-RUNNER-INTEGRITY-001: binds the finding to the host
+                # observations (evidence envelopes) that support it.
+                "affected_hosts": sorted(ai_exposed_hosts),
                 "recommendation": (
                     "Restrict AI model server ports behind authentication and network controls. "
                     "Do not expose model inference endpoints to the public internet without auth."

@@ -1,3 +1,43 @@
+## feat(field-scan): L14-SCAN-RUNNER-INTEGRITY-001 — runtime evidence provenance enforcement (branch feat/l14-scan-runner-integrity-001)
+
+- **Work item:** L14-SCAN-RUNNER-INTEGRITY-001, plus the customer-zero report preview readiness addendum.
+- **Baseline SHA:** `fa74a2c9` (main after PR #812).
+- **Failures before:** none in the scanner suites.
+- **Problems:**
+  - `EvidenceIntegrityService.build_envelope()`, the custody service and `classify_confidence()` had no production callers. Scanner findings had no canonical evidence, custody or confidence.
+  - The envelope `collection_status` CHECK rejected the canonical #811 vocabulary.
+  - The ORM did not map the 0201/0202 finding and job columns.
+  - `cancel_scan` and `confirm_scan_cancelled` assumed datetime RETURNING values.
+- **Fix summary:**
+  - `services/field_assessment/runtime_evidence.py`: capture adapter, observation extraction, finding↔evidence linkage with confidence, stored-evidence verification, and the report-facing manifest.
+  - `_c6_capture_runtime_evidence` wired into 8 worker functions (10 scanners) before completion.
+  - `custody.record(commit=False)` for atomic capture.
+  - Network findings carry `affected_hosts`.
+  - Migration 0204 (canonical status CHECK, capture columns, idempotency index, immutability trigger, audit event types).
+  - ORM listener for digest immutability.
+  - Dialect-portable job collection-status write and RETURNING timestamps.
+- **Review fixes (Codex P1/P2 on #813):**
+  - Under psycopg `RENDER_CASTS`, `String` columns bind `::VARCHAR`, which Postgres rejects for UUID, TIMESTAMPTZ and enum columns. It would have broken all finding and job inserts once their enum `collection_status` columns were mapped. Fixed with dialect-aware types, a typed custody `created_at` bind, and a real-Postgres round-trip test.
+  - The manifest now caps effective confidence for INDETERMINATE/UNVERIFIED evidence.
+  - Coverage is reconciled against persisted scan results and jobs.
+- **Addendum:** a synthetic report preview was generated through the existing routes (`tests/test_report_preview/`), and a visual-QA inventory written (`docs/assurance/L14_CUSTOMER_REPORT_PREVIEW_READINESS.md`).
+- **Files created:**
+  - `services/field_assessment/runtime_evidence.py`
+  - `migrations/postgres/0204_scan_runtime_evidence.sql`
+  - `tests/test_scan_runner_integrity/` (`_fixtures.py`, `test_capture.py`, `test_end_to_end.py`)
+  - `tests/test_report_preview/test_synthetic_report_preview.py`
+  - `docs/assurance/L14_SCANNER_RUNTIME_EVIDENCE_INTEGRITY.md`
+  - `docs/assurance/L14_CUSTOMER_REPORT_PREVIEW_READINESS.md`
+- **Files modified:**
+  - `api/field_assessment.py`
+  - `api/db_models_field_assessment.py`
+  - `services/field_assessment/custody.py`
+  - `services/field_assessment/scan_authorization.py`
+  - `services/connectors/network_scan/runner.py`
+  - `tests/test_scan_authorization_hardening/test_worker_lifecycle.py` (stubs capture in the fake-store harness)
+  - `tests/test_scan_authorization_hardening/test_migration_and_rbac.py` (reads the latest event-type migration)
+  - Docs: FVA standard, `L14_SCANNER_EVIDENCE_INTEGRITY.md`, `ROADMAP.md`
+
 ## security(field-scan): L14-SCAN-AUTH-HARDENING-001 — customer consent and execution safety (branch security/l14-scan-auth-hardening-001)
 
 - **Work item:** L14-SCAN-AUTH-HARDENING-001 (AUTH-GAP-001, AUTH-GAP-002)

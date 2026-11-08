@@ -46,6 +46,9 @@ def wired(store):
         patch("api.db.get_sessionmaker", return_value=store.session),
         patch.object(fa, "durable_job_svc", FakeDurableJobs(store)),
         patch.object(fa, "_auto_link_scan_evidence", lambda *a, **k: None),
+        # Runtime evidence capture is exercised against real SQLite persistence
+        # in tests/test_scan_runner_integrity/; this harness covers authorization.
+        patch.object(fa, "_c6_capture_runtime_evidence", lambda *a, **k: None),
     ):
         yield store
 

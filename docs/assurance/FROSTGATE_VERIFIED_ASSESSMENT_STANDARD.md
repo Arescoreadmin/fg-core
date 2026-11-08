@@ -106,7 +106,9 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - Confidence classification meeting CONFIRMED threshold (DIRECT_TECHNICAL_OBSERVATION or AUTHORITATIVE_CONFIGURATION_EXPORT)
 - Evidence link from finding to source observation
 
-**Implementation status**: POLICY_ONLY
+**Implementation status**: PARTIALLY_IMPLEMENTED
+
+**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** every scanner finding from the 10 wired worker paths is linked to canonical evidence envelopes (SHA-256 over stored evidence, append-only custody). If capture fails, the finding is explicitly UNKNOWN. **Not yet enforced:** report assembly and release do not consume the evidence manifest (L14-SCAN-REPORT-PROOF-001). Provenance is integrity-only, not authenticated (L14-SCAN-VAULT-001). See `docs/assurance/L14_SCANNER_RUNTIME_EVIDENCE_INTEGRITY.md`.
 
 **Testable criteria** (fixture level):
 - Scan result includes scan_id, engagement_id, timestamps (all scanners — IMPLEMENTED)
@@ -131,7 +133,9 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - Severity justification (severity field + control_id mapping)
 - Finding type documentation (finding type must be in the finding type registry)
 
-**Implementation status**: POLICY_ONLY
+**Implementation status**: PARTIALLY_IMPLEMENTED
+
+**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** `classify_confidence` is applied at capture using each finding's own collection status and evidence provenance. Severity is never modified. INVALID or MISSING evidence caps effective confidence at report-manifest time. **Not yet enforced:** the report PDF renders numeric scores, not canonical labels, and omits scanner findings (`L14_CUSTOMER_REPORT_PREVIEW_READINESS.md` V-1, V-6).
 
 **Testable criteria** (fixture level):
 - Confidence model rules enforced (`test_confidence_model.py`) — IMPLEMENTED at policy level
@@ -157,6 +161,8 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - Summary section that accurately counts total_hosts, rejected_target_count, skipped sources
 
 **Implementation status**: PARTIALLY_IMPLEMENTED
+
+**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** canonical collection status persists per evidence envelope and per finding, and the evidence manifest lists every coverage limitation. **Proven gap:** the current PDF hides partial, denied, timed-out and cancelled collection and shows 100% coverage (`L14_CUSTOMER_REPORT_PREVIEW_READINESS.md` V-2). Report disclosure enforcement is L14-SCAN-REPORT-PROOF-001.
 
 **Testable criteria** (all IMPLEMENTED as of L14-SCAN-COMPLETENESS-001):
 - Canonical `CollectionStatus` enum: COMPLETE/PARTIAL/DENIED/TIMEOUT/TRUNCATED/FAILED/CANCELLED/NOT_ASSESSED/UNKNOWN — IMPLEMENTED
@@ -241,9 +247,9 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 | Control | ID | Description | Status | Deferred To |
 |---------|-----|-------------|--------|-------------|
 | Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 + L14-SCAN-AUTH-HARDENING-001 (customer receipt + execution-time revalidation enforced for network/DNS/web scanners; Graph-family receipt binding, customer-held signature and rebinding pinning remain) |
-| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
-| Finding Accuracy | FVA-03 | Confidence and severity independently justified | POLICY_ONLY | L14-SCAN-REPORT-PROOF-001 |
-| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Closed by L14-SCAN-COMPLETENESS-001; report template wiring deferred to L14-SCAN-REPORT-PROOF-001 |
+| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | PARTIALLY_IMPLEMENTED | Runtime evidence links enforced by L14-SCAN-RUNNER-INTEGRITY-001; report-level sufficiency deferred to L14-SCAN-REPORT-PROOF-001 / L14-ASSESSMENT-ASSURANCE-001 |
+| Finding Accuracy | FVA-03 | Confidence and severity independently justified | PARTIALLY_IMPLEMENTED | Runtime confidence classification by L14-SCAN-RUNNER-INTEGRITY-001; report rendering deferred to L14-SCAN-REPORT-PROOF-001 |
+| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Runner-level by L14-SCAN-COMPLETENESS-001 and per-evidence by L14-SCAN-RUNNER-INTEGRITY-001; the PDF still hides gaps (preview V-2), so report disclosure is L14-SCAN-REPORT-PROOF-001 |
 | Independent Quality Review | FVA-05 | Qualified, non-conflicted reviewer approval | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
 | Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | L14-SCAN-REPORT-PROOF-001 |
 
