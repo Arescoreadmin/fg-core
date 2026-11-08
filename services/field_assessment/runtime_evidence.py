@@ -912,6 +912,38 @@ def verify_stored_evidence(
 # ---------------------------------------------------------------------------
 
 
+_CONFIDENCE_RANK = {
+    ConfidenceLevel.CONFIRMED.value: 4,
+    ConfidenceLevel.PROBABLE.value: 3,
+    ConfidenceLevel.SUSPECTED.value: 2,
+    ConfidenceLevel.UNKNOWN.value: 1,
+    ConfidenceLevel.NOT_ASSESSED.value: 0,
+}
+
+
+def _cap_confidence(stored: str, prov: ProvenanceStatus) -> str:
+    """Report-time cap from CURRENT verification (never raises a stored level).
+
+    INVALID / MISSING → max SUSPECTED (rule C-2).  INDETERMINATE / UNVERIFIED —
+    evidence exists but cannot be verified now (e.g. source scan result deleted,
+    verification error) → max PROBABLE (rule C-8: authoritative method with
+    unverified provenance).  Verified provenance keeps the stored level.
+    """
+    if prov in (
+        ProvenanceStatus.VERIFIED_INTEGRITY_ONLY,
+        ProvenanceStatus.VERIFIED_AUTHENTIC,
+    ):
+        return stored
+    cap = (
+        ConfidenceLevel.SUSPECTED.value
+        if prov in (ProvenanceStatus.INVALID, ProvenanceStatus.MISSING)
+        else ConfidenceLevel.PROBABLE.value
+    )
+    if _CONFIDENCE_RANK.get(stored, 0) > _CONFIDENCE_RANK[cap]:
+        return cap
+    return stored
+
+
 def build_evidence_manifest(
     db: Session, *, tenant_id: str, engagement_id: str
 ) -> dict[str, Any]:
@@ -986,16 +1018,8 @@ def build_evidence_manifest(
         stored = f.confidence_level
         if stored is None:
             effective = ConfidenceLevel.UNKNOWN.value  # legacy: never upgraded
-        elif prov in (
-            ProvenanceStatus.INVALID,
-            ProvenanceStatus.MISSING,
-        ) and stored in (
-            ConfidenceLevel.CONFIRMED.value,
-            ConfidenceLevel.PROBABLE.value,
-        ):
-            effective = ConfidenceLevel.SUSPECTED.value  # rule C-2 at report time
         else:
-            effective = stored
+            effective = _cap_confidence(stored, prov)
         env0 = envs.get(ev_ids[0]) if ev_ids else None
         findings_out.append(
             {
@@ -1043,13 +1067,39 @@ def build_evidence_manifest(
                 "evidence_id": e.id,
                 "provenance_status": integrity[e.id].value,
             }
-    limitations = sorted(
-        {
-            f"{e.scanner_id}:{e.source_id}:{e.collection_status}"
-            for e in envs.values()
-            if canonical_status(e.collection_status) != CollectionStatus.COMPLETE.value
-        }
-    )
+    limitation_set = {
+        f"{e.scanner_id}:{e.source_id}:{e.collection_status}"
+        for e in envs.values()
+        if canonical_status(e.collection_status) != CollectionStatus.COMPLETE.value
+    }
+    # Reconcile against persisted scan results and jobs: a scan whose capture
+    # failed (no envelope) or a job that produced no result is a coverage gap,
+    # never silently absent from the coverage decision.
+    for sr_id, source_type in db.execute(
+        select(FaScanResult.id, FaScanResult.source_type).where(
+            FaScanResult.tenant_id == tenant_id,
+            FaScanResult.engagement_id == engagement_id,
+        )
+    ).all():
+        if source_type in SCANNER_VERIFICATION_METHOD and sr_id not in scans:
+            scans[sr_id] = {
+                "scan_result_id": sr_id,
+                "scanner": source_type,
+                "collection_status": CollectionStatus.UNKNOWN.value,
+                "evidence_id": None,
+                "provenance_status": ProvenanceStatus.MISSING.value,
+            }
+            limitation_set.add(f"{source_type}:{sr_id}:EVIDENCE_NOT_CAPTURED")
+    captured_jobs = {e.scan_job_id for e in envs.values() if e.scan_job_id}
+    for job_id, scanner, job_status in db.execute(
+        select(FaScanJob.id, FaScanJob.scanner_type, FaScanJob.status).where(
+            FaScanJob.tenant_id == tenant_id,
+            FaScanJob.engagement_id == engagement_id,
+        )
+    ).all():
+        if job_id not in captured_jobs and job_status != "complete":
+            limitation_set.add(f"{scanner}:job:{job_id}:{str(job_status).upper()}")
+    limitations = sorted(limitation_set)
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "tenant_id": tenant_id,

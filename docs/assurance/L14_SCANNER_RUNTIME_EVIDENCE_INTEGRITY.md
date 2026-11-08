@@ -86,6 +86,13 @@ Migration 0204 makes envelopes idempotent and immutable:
 - **Allowed changes:** `provenance_status` may move only once, to `INVALID`. `scan_result_id` may only become NULL (via the FK `ON DELETE SET NULL`).
 - **Legacy rows:** unaffected. No historical envelope is manufactured.
 
+**Postgres binding (review fix):** SQLAlchemy's psycopg dialect renders a cast on every bound parameter (`BindTyping.RENDER_CASTS`), so a `String` column binds `::VARCHAR`. Postgres will not assign `varchar` to `UUID`, `TIMESTAMPTZ` or `fa_collection_status_enum`.
+
+- The dialect-aware types `PgUuidString`, `PgTimestamptzString` and `PgCollectionStatus` (in `api/db_models_field_assessment.py`) bind the correct Postgres types and stay plain strings on SQLite.
+- They cover the envelope UUID and timestamp columns and the `collection_status` enum columns on findings and jobs. Without them, *every* finding and job insert would fail, because unset columns are sent as `NULL::VARCHAR`.
+- The custody service's raw `created_at` bind is typed as well.
+- `test_postgres_runtime_evidence_round_trip` in `tests/test_migrations_postgres_smoke.py` runs in CI's `DB Postgres Verify` job against the migrated schema, inside a rolled-back transaction.
+
 ## 7. Custody lifecycle (real actions only)
 
 | Event | When | `reason` / state |
@@ -174,7 +181,13 @@ Per finding:
 - `authorization` (authorization id, version, customer receipt id, proof level);
 - `evidence_verified_at`.
 
-Top level: `scans`, `coverage_limitations`, and `report_constraints`:
+Top level: `scans`, `coverage_limitations`, and `report_constraints`.
+
+`scans` and `coverage_limitations` are reconciled against **persisted scan results and jobs**, not just envelopes. A wired scanner's result with no scan-level envelope (failed capture) is listed as `EVIDENCE_NOT_CAPTURED`, and a non-complete job with no evidence is listed as `<scanner>:job:<id>:<STATUS>`. Either blocks the full-coverage claim.
+
+Effective confidence is capped from **current** verification: INVALID/MISSING caps at SUSPECTED; INDETERMINATE/UNVERIFIED (for example, the source scan result was deleted) caps at PROBABLE.
+
+`report_constraints`:
 
 | Constraint | Rule |
 |---|---|

@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 # ---------------------------------------------------------------------------
@@ -121,6 +121,8 @@ class EvidenceCustodyService:
         event_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
+        from api.db_models_field_assessment import PgTimestamptzString
+
         db.execute(
             text(
                 """
@@ -133,6 +135,11 @@ class EvidenceCustodyService:
                      :actor, :actor_type, :from_state, :to_state, :reason,
                      :correlation_id, :digest_ref, :created_at)
                 """
+            ).bindparams(
+                # created_at is TIMESTAMPTZ in Postgres (0201).  An untyped str
+                # bind renders ::VARCHAR under psycopg, which Postgres refuses to
+                # assign to TIMESTAMPTZ (L14-SCAN-RUNNER-INTEGRITY-001).
+                bindparam("created_at", type_=PgTimestamptzString())
             ),
             {
                 "id": event_id,

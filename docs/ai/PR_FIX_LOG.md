@@ -16,6 +16,10 @@
   - Migration 0204 (canonical status CHECK, capture columns, idempotency index, immutability trigger, audit event types).
   - ORM listener for digest immutability.
   - Dialect-portable job collection-status write and RETURNING timestamps.
+- **Review fixes (Codex P1/P2 on #813):**
+  - Under psycopg `RENDER_CASTS`, `String` columns bind `::VARCHAR`, which Postgres rejects for UUID, TIMESTAMPTZ and enum columns. It would have broken all finding and job inserts once their enum `collection_status` columns were mapped. Fixed with dialect-aware types, a typed custody `created_at` bind, and a real-Postgres round-trip test.
+  - The manifest now caps effective confidence for INDETERMINATE/UNVERIFIED evidence.
+  - Coverage is reconciled against persisted scan results and jobs.
 - **Addendum:** a synthetic report preview was generated through the existing routes (`tests/test_report_preview/`), and a visual-QA inventory written (`docs/assurance/L14_CUSTOMER_REPORT_PREVIEW_READINESS.md`).
 - **Files created:**
   - `services/field_assessment/runtime_evidence.py`

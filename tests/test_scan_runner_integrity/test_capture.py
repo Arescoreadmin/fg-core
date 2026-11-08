@@ -706,3 +706,130 @@ class TestNetworkAndDnsLinkage:
             (f,) = findings(db, eid)
         assert f.confidence_level != ConfidenceLevel.CONFIRMED.value
         assert f.collection_status == CollectionStatus.TIMEOUT.value
+
+
+class TestReviewRegressions:
+    """Codex review on #813 (P1 Postgres binding, P2 manifest truth)."""
+
+    def test_postgres_binds_correct_types(self):
+        """psycopg RENDER_CASTS: String columns would bind ::VARCHAR, which
+        Postgres cannot assign to UUID / TIMESTAMPTZ / enum columns."""
+        from sqlalchemy import insert
+        from sqlalchemy.dialects.postgresql import psycopg as pgp
+
+        from api.db_models_field_assessment import FaNormalizedFinding, FaScanJob
+
+        d = pgp.dialect()
+        env_sql = str(
+            insert(rte.FaScanEvidenceEnvelope)
+            .values(
+                id="e",
+                scan_job_id="u",
+                authorization_ref="a",
+                customer_receipt_id="r",
+                collected_at="t",
+                created_at="c",
+                updated_at="c",
+            )
+            .compile(dialect=d)
+        )
+        for col, cast in (
+            ("scan_job_id", "UUID"),
+            ("authorization_ref", "UUID"),
+            ("customer_receipt_id", "UUID"),
+            ("collected_at", "TIMESTAMP WITH TIME ZONE"),
+            ("created_at", "TIMESTAMP WITH TIME ZONE"),
+            ("updated_at", "TIMESTAMP WITH TIME ZONE"),
+        ):
+            assert f"%({col})s::{cast}" in env_sql, col
+        for model in (FaNormalizedFinding, FaScanJob):
+            sql = str(
+                insert(model).values(id="x", collection_status=None).compile(dialect=d)
+            )
+            assert "%(collection_status)s::VARCHAR" not in sql, model.__name__
+
+    def test_unverifiable_evidence_caps_confirmed(self, env):
+        engine, Session, eid = env
+        job, sr, _ = _web_scan(Session, eid)
+        _capture(Session, eid, sr, job=job)
+        from sqlalchemy import text
+
+        with engine.begin() as conn:  # FK ON DELETE SET NULL path (source result gone)
+            conn.execute(
+                text("UPDATE fa_scan_evidence_envelopes SET scan_result_id = NULL")
+            )
+        with Session() as db:
+            m = rte.build_evidence_manifest(db, tenant_id=T1, engagement_id=eid)
+        (entry,) = m["findings"]
+        assert entry["confidence_stored"] == ConfidenceLevel.CONFIRMED.value
+        assert entry["evidence_integrity_status"] == "NOT_VERIFIABLE"
+        assert entry["confidence_effective"] == ConfidenceLevel.PROBABLE.value
+        assert m["report_constraints"]["confirmed_finding_ids"] == []
+
+    def test_uncaptured_scan_blocks_full_coverage(self, env):
+        _, Session, eid = env
+        # Scan 1: captured, COMPLETE.
+        job, sr, _ = _web_scan(Session, eid, collection_status="COMPLETE", targets=[])
+        _capture(Session, eid, sr, job=job)
+        with Session() as db:
+            first = rte.build_evidence_manifest(db, tenant_id=T1, engagement_id=eid)
+        assert first["report_constraints"]["may_claim_full_coverage"] is True
+        # A job that never produced a result is a coverage gap.
+        seed_job(
+            Session,
+            tenant_id=T1,
+            engagement_id=eid,
+            scanner_type="dns_email",
+            status="failed",
+        )
+        with Session() as db:
+            m0 = rte.build_evidence_manifest(db, tenant_id=T1, engagement_id=eid)
+        assert m0["report_constraints"]["may_claim_full_coverage"] is False
+        assert any(":FAILED" in x and ":job:" in x for x in m0["coverage_limitations"])
+        # Scan 2: persisted, but capture failed (no authorization context) → no envelopes.
+        sr2 = _import_web(
+            Session,
+            eid,
+            _web_payload(collection_status="COMPLETE", targets=[], findings=[]),
+        )
+        with pytest.raises(rte.EvidenceCaptureError):
+            _capture(Session, eid, sr2)
+        with Session() as db:
+            m = rte.build_evidence_manifest(db, tenant_id=T1, engagement_id=eid)
+        assert m["report_constraints"]["may_claim_full_coverage"] is False
+        assert f"web_headers:{sr2}:EVIDENCE_NOT_CAPTURED" in m["coverage_limitations"]
+        assert any(
+            s["scan_result_id"] == sr2 and s["provenance_status"] == "MISSING"
+            for s in m["scans"]
+        )
+
+    def test_custody_insert_binds_timestamptz_on_postgres(self):
+        """Untyped text() str binds render ::VARCHAR under psycopg; the custody
+        created_at bind must be typed for the TIMESTAMPTZ column (0201)."""
+        from unittest.mock import MagicMock
+
+        from sqlalchemy.dialects.postgresql import psycopg as pgp
+
+        from services.field_assessment.custody import CustodyEventType
+
+        seen = {}
+
+        def execute(stmt, params=None):
+            if "INSERT INTO fa_evidence_custody_events" in str(stmt):
+                seen["stmt"] = stmt
+                return MagicMock()
+            return MagicMock(fetchone=lambda: MagicMock(tenant_id=T1))
+
+        db = MagicMock()
+        db.execute.side_effect = execute
+        custody_svc.record(
+            db,
+            evidence_id="e",
+            tenant_id=T1,
+            engagement_id="g",
+            event_type=CustodyEventType.COLLECTED,
+            actor="a",
+            commit=False,
+        )
+        sql = str(seen["stmt"].compile(dialect=pgp.dialect()))
+        assert "%(created_at)s::TIMESTAMP WITH TIME ZONE" in sql

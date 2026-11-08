@@ -71,6 +71,96 @@ except ImportError:  # pragma: no cover
 from api.db_models import Base
 
 
+# ---------------------------------------------------------------------------
+# Dialect-aware column types (L14-SCAN-RUNNER-INTEGRITY-001)
+#
+# SQLAlchemy's psycopg dialect renders an explicit cast for every bound
+# parameter (BindTyping.RENDER_CASTS): a plain String becomes ``%(x)s::VARCHAR``.
+# PostgreSQL has no assignment cast from VARCHAR to UUID, TIMESTAMPTZ or an enum,
+# so String-mapped columns backed by those types fail on INSERT/UPDATE — including
+# unset columns, which the ORM still sends as ``NULL::VARCHAR``.  These types keep
+# the Python-side ``str`` contract while binding the correct Postgres type; on
+# SQLite (tests) they are plain strings.
+# ---------------------------------------------------------------------------
+
+from datetime import datetime as _datetime  # noqa: E402
+
+from sqlalchemy.dialects import postgresql as _pg  # noqa: E402
+from sqlalchemy.types import TypeDecorator  # noqa: E402
+
+
+class PgUuidString(TypeDecorator):
+    """UUID column on Postgres, string elsewhere; always ``str`` in Python."""
+
+    impl = String(64)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(_pg.UUID(as_uuid=False))
+        return dialect.type_descriptor(String(64))
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else str(value)
+
+
+class PgTimestamptzString(TypeDecorator):
+    """TIMESTAMPTZ on Postgres, ISO-8601 string elsewhere; always ``str`` in Python."""
+
+    impl = String(64)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(_pg.TIMESTAMP(timezone=True))
+        return dialect.type_descriptor(String(64))
+
+    def process_bind_param(self, value, dialect):
+        if (
+            value is None
+            or dialect.name != "postgresql"
+            or isinstance(value, _datetime)
+        ):
+            return value
+        return _datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, _datetime):
+            return value.isoformat()
+        return value
+
+
+COLLECTION_STATUS_VALUES = (
+    "COMPLETE",
+    "PARTIAL",
+    "DENIED",
+    "TIMEOUT",
+    "TRUNCATED",
+    "FAILED",
+    "CANCELLED",
+    "NOT_ASSESSED",
+    "UNKNOWN",
+)
+
+
+class PgCollectionStatus(TypeDecorator):
+    """``fa_collection_status_enum`` (migration 0202) on Postgres, string elsewhere."""
+
+    impl = String(32)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(
+                _pg.ENUM(
+                    *COLLECTION_STATUS_VALUES,
+                    name="fa_collection_status_enum",
+                    create_type=False,
+                )
+            )
+        return dialect.type_descriptor(String(32))
+
+
 class FaEngagement(Base):
     """Top-level field assessment engagement record."""
 
@@ -233,7 +323,9 @@ class FaNormalizedFinding(Base):
     verification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
     confidence_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence_envelope_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    collection_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    collection_status: Mapped[str | None] = mapped_column(
+        PgCollectionStatus(), nullable=True
+    )
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
@@ -468,7 +560,9 @@ class FaScanJob(Base):
     scan_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
     # Canonical CollectionStatus (migration 0202 adds the Postgres enum column;
     # mapped by L14-SCAN-RUNNER-INTEGRITY-001).  NULL = legacy → treat as UNKNOWN.
-    collection_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    collection_status: Mapped[str | None] = mapped_column(
+        PgCollectionStatus(), nullable=True
+    )
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -1343,17 +1437,17 @@ class FaScanEvidenceEnvelope(Base):
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     engagement_id: Mapped[str] = mapped_column(String(64), nullable=False)
     scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    scan_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scan_job_id: Mapped[str | None] = mapped_column(PgUuidString(), nullable=True)
 
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
     scanner_id: Mapped[str] = mapped_column(String(128), nullable=False)
     scanner_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    authorization_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    authorization_ref: Mapped[str | None] = mapped_column(PgUuidString(), nullable=True)
     authorization_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    collected_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    collected_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
     collection_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="complete"
     )
@@ -1378,14 +1472,16 @@ class FaScanEvidenceEnvelope(Base):
     # observation_path locates the digested sub-payload inside the stored
     # fa_scan_results.raw_payload (e.g. "hosts[2]"; "$" = whole payload).
     observation_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    customer_receipt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    customer_receipt_id: Mapped[str | None] = mapped_column(
+        PgUuidString(), nullable=True
+    )
     authorization_proof_level: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )
     payload_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
+    updated_at: Mapped[str] = mapped_column(PgTimestamptzString(), nullable=False)
 
     __table_args__ = (
         Index(
