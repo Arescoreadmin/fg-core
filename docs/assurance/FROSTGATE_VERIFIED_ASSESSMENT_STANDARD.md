@@ -142,22 +142,26 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - Explicit disclosure of non-COMPLETE collection states in the report
 - Summary section that accurately counts total_hosts, rejected_target_count, skipped sources
 
-**Implementation status**: PARTIAL_IMPLEMENTATION
+**Implementation status**: PARTIALLY_IMPLEMENTED
 
-**Testable criteria**:
-- Network scan: `rejected_targets` list records blocked targets — IMPLEMENTED
-- Network scan: `rejected_target_count` in summary — IMPLEMENTED
-- Endpoint inventory: 403 on Intune silently skipped (no explicit DENIED state) — GAP
-- DNS scan: timeout produces empty records (no explicit TIMEOUT state) — GAP
-- AI tool discovery: `skipped` count in sources — IMPLEMENTED
-- Microsoft Graph: scan_status recorded — IMPLEMENTED
+**Testable criteria** (all IMPLEMENTED as of L14-SCAN-COMPLETENESS-001):
+- Canonical `CollectionStatus` enum: COMPLETE/PARTIAL/DENIED/TIMEOUT/TRUNCATED/FAILED/CANCELLED/NOT_ASSESSED/UNKNOWN — IMPLEMENTED
+- DNS scan: timeout → `DnsQueryOutcome(status=TIMEOUT)` → no missing SPF/DMARC findings — IMPLEMENTED (DEF-001 closed)
+- Endpoint inventory: absent timestamp → `is_stale=None` (INDETERMINATE), not `is_stale=False` — IMPLEMENTED (DEF-002 closed)
+- Endpoint inventory: 403 on Intune → `intune_collection_status=DENIED`, no unencrypted_devices finding — IMPLEMENTED
+- Endpoint inventory: missing Intune record → `encryption_status=UNKNOWN`, not `encrypted` — IMPLEMENTED
+- Network scan: `collection_status` per run (COMPLETE/PARTIAL/FAILED) — IMPLEMENTED
+- Web headers: `collection_status` per target (COMPLETE/DENIED/FAILED) — IMPLEMENTED
+- SharePoint: `collection_status` with TRUNCATED/DENIED/COMPLETE; cap-aware — IMPLEMENTED
+- OAuth inventory: per-source status (app_registrations, service_principals, grants) + overall — IMPLEMENTED
+- `AssessmentCoverageSummary` machine-readable coverage record with `report_constraints` — IMPLEMENTED
+- `report_constraints.may_claim_no_risks_found` gated on COMPLETE status — IMPLEMENTED
+- `report_constraints.may_claim_fully_assessed` gated on COMPLETE status — IMPLEMENTED
 
-**Known gaps**:
-- No explicit `collection_status` enum in network/dns/web runners
-- Partial scan completion (e.g., scan interrupted mid-host) has no TRUNCATED state in network_scan
-- Coverage disclosure in report template not verified against scan collection_status
+**Remaining gap**:
+- Coverage disclosure in the report template is not yet wired to `report_constraints` from `AssessmentCoverageSummary`; a human operator must still apply the constraints to report language.
 
-**Future enforcement PR**: L14-SCAN-COMPLETENESS-001
+**Closed by**: L14-SCAN-COMPLETENESS-001
 
 ---
 
@@ -225,7 +229,7 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 | Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 (scope auth implemented; async worker revalidation deferred) |
 | Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
 | Finding Accuracy | FVA-03 | Confidence and severity independently justified | POLICY_ONLY | L14-SCAN-REPORT-PROOF-001 |
-| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIAL_IMPLEMENTATION | L14-SCAN-COMPLETENESS-001 |
+| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Closed by L14-SCAN-COMPLETENESS-001; report template wiring deferred to L14-SCAN-REPORT-PROOF-001 |
 | Independent Quality Review | FVA-05 | Qualified, non-conflicted reviewer approval | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
 | Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | L14-SCAN-REPORT-PROOF-001 |
 

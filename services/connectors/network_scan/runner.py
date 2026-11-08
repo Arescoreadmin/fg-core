@@ -3,6 +3,14 @@
 All targets are validated through SafeTargetValidationService before any socket
 is opened. This is defence-in-depth: the API layer validates first; the runner
 validates again so that it is safe regardless of how it is invoked.
+
+Port assessment note: _probe_port() returns False on both timeout and refused.
+A False result is "port not confirmed open" — it does NOT distinguish between
+"confirmed closed" and "timed out / unreachable". collection_status=PARTIAL is
+emitted when any host scan produced an error (worker failure), distinguishing
+partial execution from complete assessment.
+
+NOT_STANDALONE: Part of the FrostGate Core field assessment pipeline.
 """
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
+from services.connectors.collection_status import CollectionStatus
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
 _validator = SafeTargetValidationService()
@@ -170,10 +179,12 @@ def run_network_scan(
 
     expanded, rejections = _expand_targets(target_hosts)
     host_results: list[dict[str, Any]] = []
+    scan_error_count = 0
     for host in expanded:
         try:
             host_results.append(_scan_host(host))
         except Exception:
+            scan_error_count += 1
             host_results.append(
                 {"host": host, "open_ports": [], "tls": {}, "error": "scan_failed"}
             )
@@ -287,6 +298,15 @@ def run_network_scan(
 
     scan_completed_at = datetime.now(timezone.utc).isoformat()
 
+    # Collection status: PARTIAL if any host scan errored; COMPLETE otherwise.
+    # Rejected targets are authorized safety rejections, not collection failures.
+    if scan_error_count > 0 and scan_error_count < len(expanded):
+        collection_status = CollectionStatus.PARTIAL.value
+    elif scan_error_count > 0:
+        collection_status = CollectionStatus.FAILED.value
+    else:
+        collection_status = CollectionStatus.COMPLETE.value
+
     return {
         "scan_id": uuid.uuid4().hex,
         "scan_type": "network_scan_v1",
@@ -295,6 +315,7 @@ def run_network_scan(
         "scan_initiated_at": scan_initiated_at,
         "scan_completed_at": scan_completed_at,
         "scan_status": "completed",
+        "collection_status": collection_status,
         "hosts": host_results,
         "rejected_targets": rejections,  # provenance: targets blocked by validator
         "summary": {
@@ -304,6 +325,14 @@ def run_network_scan(
             ),
             "total_open_ports": sum(len(h.get("open_ports", [])) for h in host_results),
             "rejected_target_count": len(rejections),
+            "host_scan_error_count": scan_error_count,
         },
         "findings": findings,
+        "coverage_notes": {
+            "port_assessment_note": (
+                "Port probe results of False represent 'not confirmed open' — "
+                "this does NOT distinguish between confirmed closed and timed out. "
+                "Filtered or unreachable ports are indeterminate."
+            ),
+        },
     }

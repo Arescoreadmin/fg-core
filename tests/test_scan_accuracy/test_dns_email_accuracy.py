@@ -1,21 +1,27 @@
 """L14-SCAN-ACCURACY-001 — DNS/email scanner known-answer accuracy tests.
 
+Updated by L14-SCAN-COMPLETENESS-001: _dns_query now returns DnsQueryOutcome
+(not list[str]). Mock helper updated accordingly. SA-DNS-014 updated to test
+the FIXED behavior (DEF-001 closed: timeout → no finding emitted).
+
 Calls real scanner classification/finding-emitter logic.
-Mocks only dns.resolver.resolve (external I/O).
+Mocks only _dns_query (external I/O boundary).
 Does NOT mock _check_spf, _check_dmarc, _check_dkim, _check_mx, _check_dnssec,
 or scan_domain finding-emitter logic.
 
 Critical truth conditions tested:
 - Unknown DKIM selector does NOT produce DKIM_GLOBALLY_MISSING
 - DNSKEY presence does NOT become DNSSEC_CHAIN_VALIDATED
-- DNS timeout does NOT produce SPF_MISSING or DMARC_MISSING findings
+- DNS timeout does NOT produce SPF_MISSING or DMARC_MISSING findings (DEF-001 closed)
 """
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
+from services.connectors.collection_status import CollectionStatus, DnsQueryStatus
 from services.connectors.dns_email.runner import (
+    DnsQueryOutcome,
     _check_spf,
     _check_dmarc,
     _check_dkim,
@@ -30,13 +36,41 @@ from services.connectors.dns_email.runner import (
 # ---------------------------------------------------------------------------
 
 
-def _mock_dns_query_factory(response_map: dict[tuple[str, str], list[str]]):
-    """Return a _dns_query mock that returns pre-defined answers."""
+def _mock_dns_query_factory(
+    response_map: dict[tuple[str, str], list[str]],
+    *,
+    default_status: DnsQueryStatus = DnsQueryStatus.NO_DATA,
+):
+    """Return a _dns_query mock that returns pre-defined DnsQueryOutcome objects.
 
-    def _mock(name: str, rdtype: str) -> list[str]:
-        return response_map.get((name, rdtype), [])
+    Records present in response_map → SUCCESS status with those records.
+    Records absent from response_map → NO_DATA status (authoritative absence).
+    """
+
+    def _mock(name: str, rdtype: str) -> DnsQueryOutcome:
+        if (name, rdtype) in response_map:
+            records = response_map[(name, rdtype)]
+            if records:
+                return DnsQueryOutcome(records=records, status=DnsQueryStatus.SUCCESS)
+            else:
+                return DnsQueryOutcome(records=[], status=DnsQueryStatus.NO_DATA)
+        return DnsQueryOutcome(records=[], status=default_status)
 
     return _mock
+
+
+def _timeout_query(name: str, rdtype: str) -> DnsQueryOutcome:
+    """Mock that always returns TIMEOUT."""
+    return DnsQueryOutcome(
+        records=[], status=DnsQueryStatus.TIMEOUT, raw_error="timeout"
+    )
+
+
+def _servfail_query(name: str, rdtype: str) -> DnsQueryOutcome:
+    """Mock that always returns SERVFAIL."""
+    return DnsQueryOutcome(
+        records=[], status=DnsQueryStatus.SERVFAIL, raw_error="servfail"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +92,8 @@ class TestValidSpf:
         assert result["finding"] is None, (
             "v=spf1 ... -all is a valid strict SPF record; no finding should be emitted."
         )
+        assert result["collection_status"] == CollectionStatus.COMPLETE.value
+        assert result["collection_failure"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +126,7 @@ class TestPermissiveSpf:
 
 
 # ---------------------------------------------------------------------------
-# SA-DNS-003: missing_spf → SPF_MISSING finding
+# SA-DNS-003: missing_spf → SPF_MISSING finding (authoritative absence)
 # ---------------------------------------------------------------------------
 
 
@@ -106,6 +142,8 @@ class TestMissingSpf:
 
         assert result["present"] is False
         assert result["finding"] == "missing_spf"
+        assert result["collection_status"] == CollectionStatus.COMPLETE.value
+        assert result["collection_failure"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +204,7 @@ class TestDmarcNone:
 
 
 # ---------------------------------------------------------------------------
-# SA-DNS-006: missing_dmarc → DMARC_MISSING
+# SA-DNS-006: missing_dmarc → DMARC_MISSING (authoritative absence)
 # ---------------------------------------------------------------------------
 
 
@@ -182,6 +220,7 @@ class TestMissingDmarc:
 
         assert result["present"] is False
         assert result["finding"] == "missing_dmarc"
+        assert result["collection_status"] == CollectionStatus.COMPLETE.value
 
 
 # ---------------------------------------------------------------------------
@@ -216,16 +255,10 @@ class TestUnknownDkimSelector:
     """CRITICAL TRUTH CONDITION: Checking an unknown DKIM selector does NOT mean
     no DKIM exists for the domain. The domain may have DKIM configured under
     a different selector not in our check list.
-
-    The scanner must NOT produce a DKIM_GLOBALLY_MISSING finding when only
-    unknown selectors are checked. It must produce 'no_dkim_found' (checked selectors)
-    not a claim of global absence.
     """
 
     def test_unknown_selector_produces_no_dkim_found_not_global_missing(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            # Only 'default' selector is checked; it's not present.
-            # But domain may have DKIM under a custom selector we don't know.
             mock_q.side_effect = _mock_dns_query_factory(
                 {
                     ("default._domainkey.example.com", "TXT"): [],
@@ -233,7 +266,6 @@ class TestUnknownDkimSelector:
             )
             result = _check_dkim("example.com", ["default"])
 
-        # The finding is 'no_dkim_found' (under checked selectors) — not a global absence claim.
         assert result["finding"] == "no_dkim_found"
         assert result["selectors_found"] == [], (
             "No selector found in our check set, but this is NOT a global DKIM_MISSING claim."
@@ -259,14 +291,9 @@ class TestUnknownDkimSelector:
             )
             result = scan_domain("example.com")
 
-        # Finding types emitted
         finding_types = [f["type"] for f in result["findings"]]
-        # Must NOT claim DKIM is globally absent — only that our selectors weren't found.
         assert "dkim_globally_absent" not in finding_types
-        # The actual finding is 'no_dkim_found' (checked selectors)
-        # This is a limitation, not a confirmed global absence.
         if "no_dkim_found" in finding_types:
-            # Confirm it's the selector-scoped finding
             dkim_findings = [
                 f for f in result["findings"] if f["type"] == "no_dkim_found"
             ]
@@ -279,13 +306,6 @@ class TestUnknownDkimSelector:
 
 
 class TestDnssecObservation:
-    """CRITICAL TRUTH CONDITION: Presence of DNSKEY record is an observation that
-    DNSSEC appears configured. It does NOT mean the full DNSSEC chain is validated.
-    Chain validation requires a DNSSEC-aware resolver to verify the full chain of
-    trust from the root zone. The scanner uses DNSKEY presence as a configuration
-    signal, not full validation.
-    """
-
     def test_dnskey_present_does_not_claim_chain_validated(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
             mock_q.side_effect = _mock_dns_query_factory(
@@ -296,11 +316,7 @@ class TestDnssecObservation:
             result = _check_dnssec("example.com")
 
         assert result["enabled"] is True
-        # DNSSEC appears configured based on DNSKEY presence.
-        # finding=None means no warning (presence is positive).
-        assert result["finding"] is None, (
-            "DNSKEY present = no negative finding; scanner reports enabled=True."
-        )
+        assert result["finding"] is None
 
     def test_dnskey_absent_produces_dnssec_not_enabled_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
@@ -316,62 +332,127 @@ class TestDnssecObservation:
 
 
 # ---------------------------------------------------------------------------
-# SA-DNS-010: CRITICAL — dns_timeout does NOT produce SPF_MISSING or DMARC_MISSING
+# SA-DNS-010: DEF-001 CLOSED — dns timeout does NOT produce absence findings
 # ---------------------------------------------------------------------------
 
 
 class TestDnsTimeout:
-    """CRITICAL TRUTH CONDITION: When DNS resolution times out or fails,
-    the scanner must NOT produce findings that claim SPF or DMARC are missing.
-    Timeout means 'could not determine', not 'record is absent'.
+    """DEF-001 closed: DNS timeout → collection_status=TIMEOUT, NO findings emitted.
+
+    Previously (pre-L14-SCAN-COMPLETENESS-001): timeout → empty records → missing_spf.
+    Now: _dns_query returns DnsQueryOutcome with status=TIMEOUT →
+         _check_spf returns collection_failure=True, finding=None.
     """
 
-    def test_dns_exception_on_spf_does_not_produce_missing_finding(self):
-        """When DNS resolution raises an exception (timeout/resolver error),
-        _check_spf returns empty records, producing missing_spf.
-
-        DEFECT DOCUMENTED: The current implementation maps DNS timeout to the same
-        result as genuine absence. This is a known accuracy limitation.
-        When _dns_query raises/returns empty due to timeout, the scanner cannot
-        distinguish 'no record' from 'query failed'.
-
-        This test documents the ACTUAL behavior and flags it as a known gap.
-        """
-        with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            # Simulate DNS timeout by raising exception inside _dns_query.
-            # The _dns_query wrapper catches exceptions and returns [].
-            # We test the outer behavior when empty records are returned.
-            mock_q.return_value = []
+    def test_spf_timeout_does_not_produce_missing_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_timeout_query,
+        ):
             result = _check_spf("timeout-domain.example.com")
 
-        # ACTUAL behavior: empty records → missing_spf.
-        # KNOWN GAP: cannot distinguish timeout from genuine absence.
-        # This finding type is accurate from the data source perspective,
-        # but the confidence is SUSPECTED not CONFIRMED.
-        assert result["present"] is False
-        # Document: this is an accuracy limitation, not a defect to silently suppress.
+        assert result["collection_failure"] is True
+        assert result["finding"] is None, (
+            "DEF-001 closed: DNS timeout must NOT produce missing_spf finding. "
+            "Timeout is indeterminate, not verified absence."
+        )
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+        assert result["present"] is None
+
+    def test_dmarc_timeout_does_not_produce_missing_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_timeout_query,
+        ):
+            result = _check_dmarc("timeout-domain.example.com")
+
+        assert result["collection_failure"] is True
+        assert result["finding"] is None, (
+            "DEF-001 closed: DNS timeout must NOT produce missing_dmarc finding."
+        )
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+
+    def test_mx_timeout_does_not_produce_no_mx_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_timeout_query,
+        ):
+            result = _check_mx("timeout-domain.example.com")
+
+        assert result["collection_failure"] is True
+        assert result["finding"] is None
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+
+    def test_dnssec_timeout_does_not_produce_dnssec_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_timeout_query,
+        ):
+            result = _check_dnssec("timeout-domain.example.com")
+
+        assert result["collection_failure"] is True
+        assert result["finding"] is None
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+
+    def test_scan_domain_timeout_all_does_not_produce_findings(self):
+        """When all DNS queries time out, scan_domain must produce no findings."""
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_timeout_query,
+        ):
+            result = scan_domain("timeout.example.com")
+
+        assert result["findings"] == [], (
+            "All-timeout scan must produce no findings — collection was indeterminate."
+        )
+        assert result["any_collection_failure"] is True
 
     def test_run_error_per_domain_does_not_propagate_findings_to_other_domains(self):
         """An error scanning one domain must not corrupt findings for other domains."""
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
             call_count = [0]
 
-            def mock_responses(name: str, rdtype: str) -> list[str]:
+            def mock_responses(name: str, rdtype: str) -> DnsQueryOutcome:
                 call_count[0] += 1
-                # Second domain: raise exception (simulates timeout)
                 if "timeout" in name:
                     raise Exception("DNS resolution timeout")
-                return []
+                return DnsQueryOutcome(records=[], status=DnsQueryStatus.NO_DATA)
 
             mock_q.side_effect = mock_responses
             result = run(["good-domain.example.com", "timeout-domain.example.com"])
 
-        # Both domains should appear in results.
         assert result["summary"]["total_domains"] == 2
-        # Error domain should have error key, not findings from good domain.
         domain_results = {r["domain"]: r for r in result["domains"]}
         assert "timeout-domain.example.com" in domain_results
         assert "error" in domain_results["timeout-domain.example.com"]
+
+
+# ---------------------------------------------------------------------------
+# SA-DNS-010b: SERVFAIL → collection failure, no absence findings
+# ---------------------------------------------------------------------------
+
+
+class TestServfail:
+    def test_spf_servfail_does_not_produce_missing_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_servfail_query,
+        ):
+            result = _check_spf("example.com")
+
+        assert result["collection_failure"] is True
+        assert result["finding"] is None
+        assert result["collection_status"] == CollectionStatus.FAILED.value
+
+    def test_dmarc_servfail_does_not_produce_missing_finding(self):
+        with patch(
+            "services.connectors.dns_email.runner._dns_query",
+            side_effect=_servfail_query,
+        ):
+            result = _check_dmarc("example.com")
+
+        assert result["collection_failure"] is True
+        assert result["finding"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -381,21 +462,19 @@ class TestDnsTimeout:
 
 class TestResolverError:
     def test_exception_in_scan_domain_captured_as_error_not_findings(self):
-        """When scan_domain raises an exception, the run() wrapper captures it
+        """When scan_domain raises an unexpected exception, the run() wrapper captures it
         and returns an error entry without emitting findings for that domain."""
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
             mock_q.side_effect = Exception("resolver unreachable")
             result = run(["error-domain.example.com"])
 
         domain_result = result["domains"][0]
-        # The error should be captured.
         assert "error" in domain_result
-        # No findings should be emitted for an error domain.
         assert domain_result.get("findings", []) == []
 
 
 # ---------------------------------------------------------------------------
-# SA-DNS-012: mx_absent → MX_MISSING finding
+# SA-DNS-012: mx_absent → MX_MISSING finding (authoritative)
 # ---------------------------------------------------------------------------
 
 
@@ -411,6 +490,8 @@ class TestMxAbsent:
 
         assert result["present"] is False
         assert result["finding"] == "no_mx"
+        assert result["collection_status"] == CollectionStatus.COMPLETE.value
+        assert result["collection_failure"] is False
 
     def test_mx_present_produces_no_finding(self):
         with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
@@ -462,90 +543,103 @@ class TestScanDomainProvenance:
         assert "mx" in result
         assert "dnssec" in result
         assert "findings" in result
+        assert "collection_status" in result
         assert result["domain"] == "example.com"
 
 
 # ---------------------------------------------------------------------------
-# SA-DNS-014: DEF-001 regression — dns.resolver.Timeout must not produce absence findings
+# SA-DNS-014: DEF-001 — dns.resolver.LifetimeTimeout now produces TIMEOUT, not missing
 # ---------------------------------------------------------------------------
 
 
 class TestDnsResolverTimeoutClass:
-    """DEF-001 regression: when dns.resolver.resolve raises dns.resolver.Timeout
-    (the actual library exception), the scanner must NOT emit SPF_MISSING or
-    DMARC_MISSING findings.
-
-    ACTUAL behavior (defect): _dns_query catches Exception and returns [] →
-    empty records → missing_spf / missing_dmarc findings ARE emitted.
-    This is the documented accuracy gap: timeout is indistinguishable from genuine
-    record absence at the _dns_query wrapper level.
-
-    This test patches dns.resolver.resolve directly (not _dns_query) to confirm
-    that the LifetimeTimeout propagates as an Exception through the wrapper and
-    produces the defect behavior. The test asserts the ACTUAL behavior and documents
-    what the CORRECT behavior would be for L14-SCAN-COMPLETENESS-001.
-
-    Deferred to: L14-SCAN-COMPLETENESS-001
+    """DEF-001 closed: dns.resolver.LifetimeTimeout → DnsQueryOutcome(TIMEOUT) →
+    collection_failure=True, no missing-record finding emitted.
     """
 
-    def test_dns_resolver_timeout_propagates_as_empty_result_via_wrapper(self):
-        """dns.resolver.LifetimeTimeout is an Exception subclass.
-        _dns_query's `except Exception: return []` catches it and returns [].
-        This produces missing_spf — which is the DEF-001 defect.
+    def test_dns_resolver_timeout_returns_timeout_outcome(self):
+        """dns.resolver.LifetimeTimeout is now caught specifically and returns
+        DnsQueryOutcome(status=TIMEOUT). Not a list, and not empty-list-as-absence.
         """
         import dns.resolver
 
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
-            # _dns_query calls dns.resolver.resolve; Timeout is caught → returns []
             from services.connectors.dns_email.runner import _dns_query
 
             result = _dns_query("timeout-domain.example.com", "TXT")
 
-        # ACTUAL behavior: Timeout caught → empty list (same as genuine absence)
-        assert result == [], (
-            "dns.resolver.LifetimeTimeout is caught by _dns_query's except Exception: "
-            "and returns []. This is the DEF-001 defect: timeout == absence at runner level."
+        assert isinstance(result, DnsQueryOutcome), (
+            "_dns_query must return DnsQueryOutcome, not a list."
         )
+        assert result.status == DnsQueryStatus.TIMEOUT, (
+            "dns.resolver.LifetimeTimeout must map to DnsQueryStatus.TIMEOUT, "
+            "not to empty records (which implied absence)."
+        )
+        assert result.records == []
 
-    def test_spf_check_on_dns_timeout_emits_missing_finding_defect_documented(self):
-        """DEF-001: DNS timeout → missing_spf emitted. INCORRECT per policy.
-        Correct behavior: timeout → collection_status=TIMEOUT, no finding emitted.
-        Current behavior documented here as regression fixture for L14-SCAN-COMPLETENESS-001.
-        """
+    def test_spf_check_on_dns_timeout_does_not_emit_missing_finding(self):
+        """DEF-001 closed: DNS timeout → no missing_spf finding, collection_status=TIMEOUT."""
         import dns.resolver
 
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
-            from services.connectors.dns_email.runner import _check_spf
-
             result = _check_spf("timeout-domain.example.com")
 
-        # ACTUAL (defective) behavior: timeout → empty records → missing_spf
-        # This is DEF-001. The test documents it so it cannot silently change.
-        assert result["present"] is False
-        assert result["finding"] == "missing_spf", (
-            "DEF-001: DNS timeout produces missing_spf finding. "
-            "CORRECT behavior would produce collection_status=TIMEOUT with no finding. "
-            "Deferred to L14-SCAN-COMPLETENESS-001."
+        assert result["collection_failure"] is True
+        assert result["finding"] is None, (
+            "DEF-001 closed: DNS timeout must NOT produce missing_spf. "
+            "Timeout is indeterminate collection, not verified record absence."
         )
-        # DOES NOT assert collection_status == TIMEOUT — this field does not exist yet
-        assert "collection_status" not in result, (
-            "DEF-001: collection_status field not present in _check_spf result. "
-            "This field would distinguish timeout from genuine absence. "
-            "Pending L14-SCAN-COMPLETENESS-001."
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+        assert "collection_status" in result, (
+            "DEF-001 closed: collection_status field must be present in _check_spf result."
         )
 
-    def test_dmarc_check_on_dns_timeout_emits_missing_finding_defect_documented(self):
-        """DEF-001: DNS timeout → missing_dmarc emitted. Same defect as SPF."""
+    def test_dmarc_check_on_dns_timeout_does_not_emit_missing_finding(self):
+        """DEF-001 closed: DNS timeout → no missing_dmarc finding."""
         import dns.resolver
 
         with patch("dns.resolver.resolve", side_effect=dns.resolver.LifetimeTimeout):
-            from services.connectors.dns_email.runner import _check_dmarc
-
             result = _check_dmarc("timeout-domain.example.com")
 
-        # ACTUAL (defective) behavior
-        assert result["present"] is False
-        assert result["finding"] == "missing_dmarc", (
-            "DEF-001: DNS timeout produces missing_dmarc finding. "
-            "Deferred to L14-SCAN-COMPLETENESS-001."
+        assert result["collection_failure"] is True
+        assert result["finding"] is None, (
+            "DEF-001 closed: DNS timeout must NOT produce missing_dmarc."
         )
+        assert result["collection_status"] == CollectionStatus.TIMEOUT.value
+
+
+# ---------------------------------------------------------------------------
+# SA-DNS-015: collection_status propagated in run() summary
+# ---------------------------------------------------------------------------
+
+
+class TestRunCollectionStatus:
+    def test_complete_scan_has_complete_status(self):
+        with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
+            mock_q.side_effect = _mock_dns_query_factory(
+                {
+                    ("example.com", "TXT"): ['"v=spf1 -all"'],
+                    ("_dmarc.example.com", "TXT"): ['"v=DMARC1; p=reject"'],
+                    ("example.com", "MX"): ['"10 mx.example.com."'],
+                    ("example.com", "DNSKEY"): [],
+                }
+            )
+            result = run(["example.com"])
+
+        assert result["collection_status"] == CollectionStatus.COMPLETE.value
+
+    def test_timeout_domain_produces_partial_status(self):
+        with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
+            call_num = [0]
+
+            def mixed_response(name: str, rdtype: str) -> DnsQueryOutcome:
+                call_num[0] += 1
+                if "timeout" in name:
+                    return DnsQueryOutcome(records=[], status=DnsQueryStatus.TIMEOUT)
+                return DnsQueryOutcome(records=[], status=DnsQueryStatus.NO_DATA)
+
+            mock_q.side_effect = mixed_response
+            result = run(["good.example.com", "timeout.example.com"])
+
+        assert result["collection_status"] == CollectionStatus.PARTIAL.value
+        assert result["summary"]["domains_with_collection_failures"] == 1

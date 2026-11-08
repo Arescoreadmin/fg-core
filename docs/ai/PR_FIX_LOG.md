@@ -1,3 +1,43 @@
+## feat(field-scan): L14-SCAN-COMPLETENESS-001 — scanner collection completeness, DEF-001/DEF-002 fix, coverage summary (branch feat/l14-scan-completeness-001)
+
+- **Work item:** L14-SCAN-COMPLETENESS-001
+- **Baseline SHA:** `aff1f690` (main after PR #810)
+- **Failures before:** None — existing tests pass cleanly.
+- **Problem:** Scanners had no canonical collection status vocabulary. DNS timeout (LifetimeTimeout) silently swallowed into `[]` and produced false missing-SPF/DMARC findings (DEF-001). Unknown endpoint `approximateLastSignInDateTime` defaulted to `is_stale=False` (DEF-002a). Missing Intune data defaulted `encryption_status=encrypted` (DEF-002b). No machine-readable coverage summary existed for report constraint enforcement. FVA-04 remained PARTIAL_IMPLEMENTATION.
+- **Fix summary:** New canonical `CollectionStatus` enum + `DnsQueryOutcome`/`DnsQueryStatus`/`EndpointTimestampStatus` types in `services/connectors/collection_status.py`. `_dns_query()` now returns `DnsQueryOutcome` with typed status; check functions gate findings on `not collection_failure`. `_classify_timestamp()` returns `(EndpointTimestampStatus, bool|None)` — None = INDETERMINATE. Encryption default removed; absent Intune → `encryption_status=UNKNOWN`. All six scanners (DNS, endpoint, network, web_headers, SharePoint, OAuth) emit `collection_status`. New `services/field_assessment/coverage_summary.py` with `AssessmentCoverageSummary`, `report_constraints` dict, and per-scanner builder functions. Migration 0202 adds collection_status columns. 111 new adversarial tests. 173 accuracy tests pass.
+- **Files created:**
+  - `migrations/postgres/0202_scan_collection_status.sql` — fa_collection_status_enum, collection_status/collection_summary columns on fa_scan_jobs and fa_normalized_findings
+  - `services/connectors/collection_status.py` — canonical CollectionStatus, DnsQueryStatus, EndpointTimestampStatus, CollectionOutcome, DnsQueryOutcome
+  - `services/field_assessment/coverage_summary.py` — ScannerCoverageRecord, AssessmentCoverageSummary, build_coverage_summary, per-scanner builder functions
+  - `tests/test_scan_completeness/__init__.py`
+  - `tests/test_scan_completeness/test_collection_status.py`
+  - `tests/test_scan_completeness/test_def001_dns_timeout.py`
+  - `tests/test_scan_completeness/test_def002_endpoint_timestamp.py`
+  - `tests/test_scan_completeness/test_coverage_summary.py`
+  - `tests/test_scan_completeness/test_sharepoint_collection.py`
+  - `docs/assurance/L14_SCAN_COLLECTION_COMPLETENESS.md`
+- **Files modified:**
+  - `services/connectors/dns_email/runner.py` — DEF-001 fix: DnsQueryOutcome return, collection_failure gating
+  - `services/connectors/endpoint_inventory/runner.py` — DEF-002 fix: _classify_timestamp(), encryption_status=UNKNOWN default
+  - `services/connectors/network_scan/runner.py` — collection_status (COMPLETE/PARTIAL/FAILED)
+  - `services/connectors/web_headers/runner.py` — per-target collection_status, findings gated on COMPLETE
+  - `services/connectors/sharepoint/runner.py` — TRUNCATED/DENIED/COMPLETE, coverage_notes
+  - `services/connectors/oauth_inventory/runner.py` — per-source status tuple from _get_all, overall worst-case
+  - `tests/test_scan_accuracy/test_dns_email_accuracy.py` — DnsQueryOutcome mock update, SA-DNS-014 rewrite
+  - `tests/test_scan_accuracy/test_endpoint_accuracy.py` — DEF-002 assertion update (is_stale=None)
+  - `tests/test_scan_accuracy/test_confidence_severity_separation.py` — DnsQueryOutcome mock update
+  - `tests/test_scan_accuracy/test_msgraph_accuracy.py` — DEF-002 assertion update
+  - `tests/test_scan_accuracy/test_oauth_ai_accuracy.py` — _mock_get_all returns tuple (list, CollectionStatus)
+  - `docs/assurance/FROSTGATE_VERIFIED_ASSESSMENT_STANDARD.md` — FVA-04 updated to PARTIALLY_IMPLEMENTED
+  - `ROADMAP.md` — L14-SCAN-COMPLETENESS-001 row
+  - `docs/ai/PR_FIX_LOG.md` — this entry
+- **DEF-001 closed:** DNS timeout/SERVFAIL/REFUSED/RESOLVER_ERROR → no missing-SPF/DMARC findings; collection_failure=True, present=None.
+- **DEF-002 closed:** Absent/invalid last-seen → is_stale=None (INDETERMINATE); missing Intune → encryption_status=UNKNOWN.
+- **FVA-04:** PARTIALLY_IMPLEMENTED — collection status infrastructure complete; report template wiring deferred to L14-SCAN-REPORT-PROOF-001.
+- **Test counts:** 111 new completeness tests (all pass); 173 accuracy tests pass; 181 integrity+safety tests pass; 136 containment+provenance tests pass; 31 lifecycle tests pass.
+
+---
+
 ## feat(field-scan): L14-SCAN-INTEGRITY-001 — canonical evidence integrity and confidence enforcement (branch feat/l14-scan-integrity-001)
 
 - **Work item:** L14-SCAN-INTEGRITY-001

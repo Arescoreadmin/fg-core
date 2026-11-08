@@ -251,19 +251,27 @@ class TestRunnerConfidenceFieldAbsent:
         # Note: this test documents the gap, not a full scanner accuracy test.
 
     def test_dns_runner_findings_lack_confidence_field(self):
-        """Document DEF-003: dns_email runner does not emit confidence field."""
-        with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
-            # Return empty to produce missing_spf finding
-            mock_q.return_value = []
-            from services.connectors.dns_email.runner import _check_spf
+        """Document DEF-003: dns_email runner does not emit confidence field.
 
+        Updated L14-SCAN-COMPLETENESS-001: _dns_query now returns DnsQueryOutcome.
+        Mock updated to return DnsQueryOutcome with NO_DATA (authoritative absence)
+        to produce a missing_spf finding.
+        """
+        from services.connectors.collection_status import DnsQueryStatus
+        from services.connectors.dns_email.runner import DnsQueryOutcome, _check_spf
+
+        with patch("services.connectors.dns_email.runner._dns_query") as mock_q:
+            # NO_DATA = authoritative absence → missing_spf finding
+            mock_q.return_value = DnsQueryOutcome(
+                records=[], status=DnsQueryStatus.NO_DATA
+            )
             result = _check_spf("example.com")
 
-        # The result dict has no confidence field
+        # The result dict has no confidence field (DEF-003 pending)
         assert "confidence" not in result, (
             "dns_email runner _check_spf result does not contain confidence field. "
             "DEF-003: confidence absent from runner output. "
-            "Pending L14-SCAN-INTEGRITY-001."
+            "Pending L14-ASSESSMENT-ASSURANCE-001."
         )
 
     def test_endpoint_runner_findings_lack_confidence_field(self):
