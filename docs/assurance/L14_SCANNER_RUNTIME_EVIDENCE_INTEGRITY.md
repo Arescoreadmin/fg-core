@@ -86,12 +86,15 @@ Migration 0204 makes envelopes idempotent and immutable:
 - **Allowed changes:** `provenance_status` may move only once, to `INVALID`. `scan_result_id` may only become NULL (via the FK `ON DELETE SET NULL`).
 - **Legacy rows:** unaffected. No historical envelope is manufactured.
 
-**Postgres binding (review fix):** SQLAlchemy's psycopg dialect renders a cast on every bound parameter (`BindTyping.RENDER_CASTS`), so a `String` column binds `::VARCHAR`. Postgres will not assign `varchar` to `UUID`, `TIMESTAMPTZ` or `fa_collection_status_enum`.
+**Postgres binding (review and CI fixes):** SQLAlchemy's psycopg dialect renders a cast on every bound `String` parameter (`BindTyping.RENDER_CASTS` → `::VARCHAR`), including unset columns sent as `NULL::VARCHAR`. Postgres will not assign `varchar` to `UUID`, `TIMESTAMPTZ` or `fa_collection_status_enum`.
 
-- The dialect-aware types `PgUuidString`, `PgTimestamptzString` and `PgCollectionStatus` (in `api/db_models_field_assessment.py`) bind the correct Postgres types and stay plain strings on SQLite.
-- They cover the envelope UUID and timestamp columns and the `collection_status` enum columns on findings and jobs. Without them, *every* finding and job insert would fail, because unset columns are sent as `NULL::VARCHAR`.
-- The custody service's raw `created_at` bind is typed as well.
-- `test_postgres_runtime_evidence_round_trip` in `tests/test_migrations_postgres_smoke.py` runs in CI's `DB Postgres Verify` job against the migrated schema, inside a rolled-back transaction.
+These columns' physical type depends on schema history. `init_db()` runs ORM `create_all()` **before** numbered migrations, so a fresh database gets VARCHAR, while older databases have the 0201/0202 types.
+
+- `PgUuidString`, `PgTimestamptzString` and `PgCollectionStatus` (in `api/db_models_field_assessment.py`) keep the ORM DDL as VARCHAR, so `create_all` never references a type that only a later migration creates.
+- They bind **uncast**, so Postgres infers each column's actual type, and Python always sees `str`.
+- The custody service's raw `created_at` bind uses the same type.
+- `test_postgres_runtime_evidence_round_trip` in `tests/test_migrations_postgres_replay.py` runs in CI's Migrations Replay job on a schema built in production order, inside a rolled-back transaction.
+- **Residual:** on fresh databases, the 0201 foreign keys on `fa_normalized_findings.evidence_envelope_id` and on the envelope table are not created, because the ORM creates those columns first. Application-level tenant and engagement checks still apply.
 
 ## 7. Custody lifecycle (real actions only)
 

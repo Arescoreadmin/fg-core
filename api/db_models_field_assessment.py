@@ -72,57 +72,64 @@ from api.db_models import Base
 
 
 # ---------------------------------------------------------------------------
-# Dialect-aware column types (L14-SCAN-RUNNER-INTEGRITY-001)
+# Schema-history-tolerant column types (L14-SCAN-RUNNER-INTEGRITY-001)
 #
-# SQLAlchemy's psycopg dialect renders an explicit cast for every bound
-# parameter (BindTyping.RENDER_CASTS): a plain String becomes ``%(x)s::VARCHAR``.
-# PostgreSQL has no assignment cast from VARCHAR to UUID, TIMESTAMPTZ or an enum,
-# so String-mapped columns backed by those types fail on INSERT/UPDATE — including
-# unset columns, which the ORM still sends as ``NULL::VARCHAR``.  These types keep
-# the Python-side ``str`` contract while binding the correct Postgres type; on
-# SQLite (tests) they are plain strings.
+# SQLAlchemy's psycopg dialect renders an explicit cast on every bound String
+# parameter (BindTyping.RENDER_CASTS → ``%(x)s::VARCHAR``).  PostgreSQL cannot
+# assign VARCHAR to UUID, TIMESTAMPTZ or an enum, and the ORM sends unset columns
+# as ``NULL::VARCHAR`` too.
+#
+# The physical type of these columns depends on how the database was built:
+# init_db() runs ``Base.metadata.create_all()`` BEFORE numbered migrations, so a
+# fresh database gets VARCHAR from the ORM, while older databases have UUID /
+# TIMESTAMPTZ / fa_collection_status_enum from migrations 0201/0202.  These types
+# therefore keep the ORM DDL as VARCHAR (create_all never references a type that
+# a later migration creates) and bind parameters WITHOUT a cast, so PostgreSQL
+# infers the column's actual type.  Python always sees ``str``.  On SQLite they
+# are plain strings.
 # ---------------------------------------------------------------------------
 
 from datetime import datetime as _datetime  # noqa: E402
 
-from sqlalchemy.dialects import postgresql as _pg  # noqa: E402
-from sqlalchemy.types import TypeDecorator  # noqa: E402
+from sqlalchemy.types import TypeDecorator, UserDefinedType  # noqa: E402
 
 
-class PgUuidString(TypeDecorator):
-    """UUID column on Postgres, string elsewhere; always ``str`` in Python."""
+class _PgUncastString(UserDefinedType):
+    """VARCHAR DDL; bound values are sent untyped (no ``::VARCHAR`` cast)."""
 
+    cache_ok = True
+
+    def __init__(self, length: int = 64) -> None:
+        self.length = length
+
+    def get_col_spec(self, **kw):
+        return f"VARCHAR({self.length})"
+
+
+class _SchemaTolerantString(TypeDecorator):
     impl = String(64)
     cache_ok = True
+    _length = 64
 
     def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
-            return dialect.type_descriptor(_pg.UUID(as_uuid=False))
-        return dialect.type_descriptor(String(64))
+            return dialect.type_descriptor(_PgUncastString(self._length))
+        return dialect.type_descriptor(String(self._length))
+
+
+class PgUuidString(_SchemaTolerantString):
+    """UUID (0201) or VARCHAR (create_all) column; always ``str`` in Python."""
+
+    cache_ok = True
 
     def process_result_value(self, value, dialect):
         return None if value is None else str(value)
 
 
-class PgTimestamptzString(TypeDecorator):
-    """TIMESTAMPTZ on Postgres, ISO-8601 string elsewhere; always ``str`` in Python."""
+class PgTimestamptzString(_SchemaTolerantString):
+    """TIMESTAMPTZ (0201) or VARCHAR (create_all) column; ISO-8601 ``str``."""
 
-    impl = String(64)
     cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(_pg.TIMESTAMP(timezone=True))
-        return dialect.type_descriptor(String(64))
-
-    def process_bind_param(self, value, dialect):
-        if (
-            value is None
-            or dialect.name != "postgresql"
-            or isinstance(value, _datetime)
-        ):
-            return value
-        return _datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
     def process_result_value(self, value, dialect):
         if isinstance(value, _datetime):
@@ -130,35 +137,16 @@ class PgTimestamptzString(TypeDecorator):
         return value
 
 
-COLLECTION_STATUS_VALUES = (
-    "COMPLETE",
-    "PARTIAL",
-    "DENIED",
-    "TIMEOUT",
-    "TRUNCATED",
-    "FAILED",
-    "CANCELLED",
-    "NOT_ASSESSED",
-    "UNKNOWN",
-)
+class PgCollectionStatus(_SchemaTolerantString):
+    """fa_collection_status_enum (0202) or VARCHAR (create_all) column."""
 
-
-class PgCollectionStatus(TypeDecorator):
-    """``fa_collection_status_enum`` (migration 0202) on Postgres, string elsewhere."""
-
-    impl = String(32)
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(
-                _pg.ENUM(
-                    *COLLECTION_STATUS_VALUES,
-                    name="fa_collection_status_enum",
-                    create_type=False,
-                )
-            )
-        return dialect.type_descriptor(String(32))
+    impl = String(32)
+    _length = 32
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else str(value)
 
 
 class FaEngagement(Base):

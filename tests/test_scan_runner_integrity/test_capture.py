@@ -711,11 +711,16 @@ class TestNetworkAndDnsLinkage:
 class TestReviewRegressions:
     """Codex review on #813 (P1 Postgres binding, P2 manifest truth)."""
 
-    def test_postgres_binds_correct_types(self):
-        """psycopg RENDER_CASTS: String columns would bind ::VARCHAR, which
-        Postgres cannot assign to UUID / TIMESTAMPTZ / enum columns."""
+    def test_postgres_binds_are_uncast_and_ddl_is_create_all_safe(self):
+        """psycopg RENDER_CASTS would bind String as ::VARCHAR, which Postgres
+        cannot assign to the UUID / TIMESTAMPTZ / enum columns created by
+        migrations 0201/0202.  These columns must bind UNCAST (Postgres infers
+        the real column type), and their ORM DDL must stay VARCHAR because
+        init_db() runs create_all() before migrations (a fresh database must
+        not reference fa_collection_status_enum before 0202 creates it)."""
         from sqlalchemy import insert
         from sqlalchemy.dialects.postgresql import psycopg as pgp
+        from sqlalchemy.schema import CreateTable
 
         from api.db_models_field_assessment import FaNormalizedFinding, FaScanJob
 
@@ -733,20 +738,27 @@ class TestReviewRegressions:
             )
             .compile(dialect=d)
         )
-        for col, cast in (
-            ("scan_job_id", "UUID"),
-            ("authorization_ref", "UUID"),
-            ("customer_receipt_id", "UUID"),
-            ("collected_at", "TIMESTAMP WITH TIME ZONE"),
-            ("created_at", "TIMESTAMP WITH TIME ZONE"),
-            ("updated_at", "TIMESTAMP WITH TIME ZONE"),
+        for col in (
+            "scan_job_id",
+            "authorization_ref",
+            "customer_receipt_id",
+            "collected_at",
+            "created_at",
+            "updated_at",
         ):
-            assert f"%({col})s::{cast}" in env_sql, col
+            assert f"%({col})s," in env_sql or f"%({col})s)" in env_sql, col
+            assert f"%({col})s::" not in env_sql, col
         for model in (FaNormalizedFinding, FaScanJob):
             sql = str(
                 insert(model).values(id="x", collection_status=None).compile(dialect=d)
             )
-            assert "%(collection_status)s::VARCHAR" not in sql, model.__name__
+            assert "%(collection_status)s::" not in sql, model.__name__
+            ddl = str(CreateTable(model.__table__).compile(dialect=d))
+            assert "fa_collection_status_enum" not in ddl, model.__name__
+        env_ddl = str(
+            CreateTable(rte.FaScanEvidenceEnvelope.__table__).compile(dialect=d)
+        )
+        assert "UUID" not in env_ddl and "TIMESTAMP" not in env_ddl
 
     def test_unverifiable_evidence_caps_confirmed(self, env):
         engine, Session, eid = env
@@ -805,7 +817,7 @@ class TestReviewRegressions:
 
     def test_custody_insert_binds_timestamptz_on_postgres(self):
         """Untyped text() str binds render ::VARCHAR under psycopg; the custody
-        created_at bind must be typed for the TIMESTAMPTZ column (0201)."""
+        created_at bind must be uncast so it fits TIMESTAMPTZ (0201) or VARCHAR."""
         from unittest.mock import MagicMock
 
         from sqlalchemy.dialects.postgresql import psycopg as pgp
@@ -832,4 +844,4 @@ class TestReviewRegressions:
             commit=False,
         )
         sql = str(seen["stmt"].compile(dialect=pgp.dialect()))
-        assert "%(created_at)s::TIMESTAMP WITH TIME ZONE" in sql
+        assert "%(created_at)s)" in sql and "%(created_at)s::" not in sql
