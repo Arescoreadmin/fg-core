@@ -24,6 +24,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.connectors.collection_status import CollectionStatus
+from services.connectors.execution_checkpoint import (
+    ScanCheckpoint,
+    ScanCheckpointHalt,
+    ScanTargetDenied,
+    interruption_record,
+)
 from services.connectors.safe_target_validator import SafeTargetValidationService
 
 _validator = SafeTargetValidationService()
@@ -169,18 +175,46 @@ def run_network_scan(
     *,
     target_hosts: list[str],
     engagement_id: str,
+    checkpoint: ScanCheckpoint | None = None,
 ) -> dict[str, Any]:
     """Run a port scan and TLS check against the provided target hosts.
 
     Returns a raw payload compatible with source_type=network_scan.
     Required top-level key: hosts (list).
+
+    ``checkpoint`` (L14-SCAN-AUTH-HARDENING-001) is called before each host.
+    A denied host is recorded and skipped; a halt stops all new probing,
+    keeps hosts already scanned, and reports collection_status=CANCELLED.
     """
     scan_initiated_at = datetime.now(timezone.utc).isoformat()
 
     expanded, rejections = _expand_targets(target_hosts)
     host_results: list[dict[str, Any]] = []
     scan_error_count = 0
-    for host in expanded:
+    denied_count = 0
+    interrupted: dict[str, Any] | None = None
+    for idx, host in enumerate(expanded):
+        if checkpoint is not None:
+            try:
+                checkpoint("target", host)
+            except ScanTargetDenied as denied:
+                denied_count += 1
+                host_results.append(
+                    {
+                        "host": host,
+                        "open_ports": [],
+                        "tls": {},
+                        "error": "not_authorized",
+                        "authorization_denial_code": denied.reason_code,
+                        "collection_status": CollectionStatus.DENIED.value,
+                    }
+                )
+                continue
+            except ScanCheckpointHalt as halt:
+                interrupted = interruption_record(
+                    halt, phase="target", remaining=len(expanded) - idx
+                )
+                break
         try:
             host_results.append(_scan_host(host))
         except Exception:
@@ -300,10 +334,15 @@ def run_network_scan(
 
     # Collection status: PARTIAL if any host scan errored; COMPLETE otherwise.
     # Rejected targets are authorized safety rejections, not collection failures.
-    if scan_error_count > 0 and scan_error_count < len(expanded):
+    # An interrupted scan can never claim COMPLETE coverage.
+    if interrupted is not None:
+        collection_status = CollectionStatus.CANCELLED.value
+    elif scan_error_count > 0 and scan_error_count < len(expanded):
         collection_status = CollectionStatus.PARTIAL.value
     elif scan_error_count > 0:
         collection_status = CollectionStatus.FAILED.value
+    elif denied_count > 0:
+        collection_status = CollectionStatus.PARTIAL.value
     else:
         collection_status = CollectionStatus.COMPLETE.value
 
@@ -314,8 +353,9 @@ def run_network_scan(
         "engagement_id": engagement_id,
         "scan_initiated_at": scan_initiated_at,
         "scan_completed_at": scan_completed_at,
-        "scan_status": "completed",
+        "scan_status": "interrupted" if interrupted is not None else "completed",
         "collection_status": collection_status,
+        "interrupted": interrupted,
         "hosts": host_results,
         "rejected_targets": rejections,  # provenance: targets blocked by validator
         "summary": {
@@ -326,6 +366,7 @@ def run_network_scan(
             "total_open_ports": sum(len(h.get("open_ports", [])) for h in host_results),
             "rejected_target_count": len(rejections),
             "host_scan_error_count": scan_error_count,
+            "host_authorization_denied_count": denied_count,
         },
         "findings": findings,
         "coverage_notes": {

@@ -255,7 +255,7 @@ Scanner evidence envelopes must be linked to report generation in a future PR (L
 
 ### AUTH-GAP-001: Customer Authorization Provenance Gap
 
-**Status:** OPEN — owning PR: L14-SCAN-CONSENT-001
+**Status:** CLOSED at server-attested proof level for network/DNS/web scanners by L14-SCAN-AUTH-HARDENING-001 (see `L14_SCAN_AUTHORIZATION_HARDENING.md`). Customer-held signature and Graph-family binding remain open.
 
 The current authorization model (`fa_scan_authorizations`, migration 0200) is operator-to-operator. Operators create scope records and activate them. There is no independently authenticated client consent receipt.
 
@@ -268,7 +268,7 @@ The current authorization model (`fa_scan_authorizations`, migration 0200) is op
 
 ### AUTH-GAP-002: Background Execution Revalidation Gap
 
-**Status:** OPEN — owning PR: L14-SCAN-AUTHZ-HARDENING-001
+**Status:** CLOSED for network/DNS/web scanners by L14-SCAN-AUTH-HARDENING-001 (worker-start + per-boundary revalidation). Graph-family connectors: emergency-stop/cancel gate only.
 
 **What is missing:**
 - Re-validation of authorization at worker execution start

@@ -194,6 +194,13 @@ from services.connectors.safe_target_validator import (
 from services.field_assessment.scan_authorization import (
     ScanAuthorizationError as _ScanAuthorizationError,
     check_scan_authorized as _check_scan_authorized,
+    classify_target_for_auth as _classify_target_for_auth,
+)
+from services.field_assessment import customer_authorization as _customer_auth
+from services.field_assessment.scan_execution_guard import (
+    ExecutionContext as _ScanExecutionContext,
+    ScanExecutionGuard as _ScanExecutionGuard,
+    ScanExecutionHalted as _ScanExecutionHalted,
 )
 from api.db_models_portal import PortalGrant
 from services.portal_grant_service import (
@@ -3504,6 +3511,17 @@ def _msgraph_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="microsoft_graph",
+        ):
+            return
         _set(status="scanning")
         scan_result = _run_msgraph_scan(
             tenant_id=tenant_id,
@@ -3627,6 +3645,15 @@ def initiate_msgraph_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="microsoft_graph",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -3791,6 +3818,17 @@ def _oauth_inventory_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="oauth_inventory",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.oauth_inventory.runner import run_oauth_inventory
 
@@ -3904,6 +3942,15 @@ def initiate_oauth_inventory_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="oauth_inventory",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -4041,6 +4088,17 @@ def _endpoint_inventory_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="endpoint_inventory",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.endpoint_inventory.runner import run_endpoint_inventory
 
@@ -4154,6 +4212,15 @@ def initiate_endpoint_inventory_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="endpoint_inventory",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -4277,43 +4344,21 @@ def _c6_check_all_targets_authorized(
     L14-SCAN-SAFETY-001: fail-closed authorization gate.  Any target not present in
     an active fa_scan_authorizations record is denied.
     """
-    import ipaddress
-
     denied: list[dict] = []
+    decisions: list[dict] = []
 
     for raw in raw_targets:
-        # Detect target type for authorization lookup.
-        t = raw.strip()
-        # Determine rough type for auth lookup (the SSRF validator will do precise
-        # detection; here we just need to route to the right normalization).
+        t, target_type_for_auth = _classify_target_for_auth(raw)
         try:
-            ipaddress.IPv4Address(t)
-            target_type_for_auth = "ipv4"
-        except ValueError:
-            try:
-                ipaddress.IPv6Address(t)
-                target_type_for_auth = "ipv6"
-            except ValueError:
-                if "/" in t and not t.startswith("http"):
-                    target_type_for_auth = "cidr"
-                elif t.startswith("http://") or t.startswith("https://"):
-                    # For URL targets, extract the hostname for scope check.
-                    from urllib.parse import urlparse as _urlparse
-
-                    parsed = _urlparse(t)
-                    t = parsed.hostname or t
-                    target_type_for_auth = "fqdn"
-                else:
-                    target_type_for_auth = "fqdn"
-
-        try:
-            _check_scan_authorized(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                target=t,
-                target_type=target_type_for_auth,
-                operation=operation,
+            decisions.append(
+                _check_scan_authorized(
+                    db,
+                    tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    target=t,
+                    target_type=target_type_for_auth,
+                    operation=operation,
+                )
             )
         except _ScanAuthorizationError as exc:
             denied.append(
@@ -4333,6 +4378,24 @@ def _c6_check_all_targets_authorized(
                 rejection_reason=exc.audit_code,
                 rejection_code="SCAN_AUTHORIZATION_DENIED",
             )
+
+    if not denied and decisions:
+        # L14-SCAN-AUTH-HARDENING-001: durable dispatch-time decision record.
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.authorization.dispatch_authorized",
+            actor=actor,
+            scanner_type=scanner_type,
+            payload_summary=_c6_decision_record(
+                decisions[0],
+                decision="AUTHORIZED",
+                reason_code="DISPATCH_AUTHORIZED",
+                boundary="dispatch",
+                target_count=len(decisions),
+            ),
+        )
 
     return denied if denied else None
 
@@ -4534,6 +4597,8 @@ def _c6_update_job_status(
                 job.completed_at = utc_iso8601_z_now()
         return
 
+    # Durable transitions are compare-and-swap (L14-SCAN-AUTH-HARDENING-001):
+    # a cancelled job is never revived or overwritten by a late result.
     if status == "running":
         durable_job_svc.mark_running(db, job_id=job_id)
     elif status == "complete":
@@ -4542,6 +4607,632 @@ def _c6_update_job_status(
         durable_job_svc.mark_failed(
             db, job_id=job_id, failure_reason=failure_reason or "unknown error"
         )
+
+
+# ---------------------------------------------------------------------------
+# L14-SCAN-AUTH-HARDENING-001 — execution-time authorization, cancellation and
+# authorization decision records for background scanner workers.
+# ---------------------------------------------------------------------------
+
+_SCAN_GUARD_ACTOR = "system:scan_execution_guard"
+_AUTHORIZATION_CONTEXT_SCHEMA = "fg.scan_authorization_context.v1"
+# Halt reasons that mean "this worker must not touch the job at all".
+_HALT_FOREIGN_JOB_CODES = frozenset(
+    {
+        "JOB_NOT_FOUND",
+        "JOB_NOT_EXECUTABLE",
+        "WORKER_TENANT_MISMATCH",
+        "WORKER_ENGAGEMENT_MISMATCH",
+    }
+)
+
+
+def _c6_decision_record(
+    auth: Mapping[str, Any] | None,
+    *,
+    decision: str,
+    reason_code: str,
+    boundary: str,
+    scan_job_id: str | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Structured authorization decision record (no secrets, no payloads)."""
+    d = dict(auth) if isinstance(auth, Mapping) else {}
+    return {
+        "decision": decision,
+        "reason_code": reason_code,
+        "boundary": boundary,
+        "authorization_id": d.get("authorization_id"),
+        "authorization_version": d.get("authorization_version"),
+        "customer_receipt_id": d.get("customer_receipt_id"),
+        "consent_status": d.get("consent_status"),
+        "proof_level": d.get("proof_level"),
+        "correlation_id": scan_job_id,
+        "decided_at": utc_iso8601_z_now(),
+        **extra,
+    }
+
+
+def _c6_set_job_collection_status(
+    db: Session, *, job_id: str, tenant_id: str, collection_status: str
+) -> None:
+    """Persist coverage truth on the job (column from migration 0202)."""
+    from sqlalchemy import text as _text
+
+    db.execute(
+        _text(
+            "UPDATE fa_scan_jobs SET collection_status = "
+            "CAST(:cs AS fa_collection_status_enum) "
+            "WHERE id = :id AND tenant_id = :tid"
+        ),
+        {"cs": collection_status, "id": job_id, "tid": tenant_id},
+    )
+
+
+def _c6_halt_job(
+    db: Session,
+    *,
+    job_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    reason_code: str,
+    scanner_type: str,
+    boundary: str,
+    auth: Mapping[str, Any] | None = None,
+    scan_result_id: str | None = None,
+) -> str:
+    """Move a job whose authority is gone to the canonical cancelled state.
+
+    Uses the canonical CAS functions: queued|running → cancel_requested →
+    cancelled.  A job already cancelled stays cancelled; a terminal job is
+    never rewritten.  Returns the resulting job status.
+    """
+    from api.db import set_tenant_context
+    from services.field_assessment.scan_authorization import (
+        cancel_scan as _cancel_scan,
+        confirm_scan_cancelled as _confirm_cancelled,
+    )
+
+    status = "unknown"
+    try:
+        if reason_code != "JOB_CANCELLED":
+            _cancel_scan(
+                db,
+                scan_job_id=job_id,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                reason=f"execution guard: {reason_code}",
+                actor=_SCAN_GUARD_ACTOR,
+            )
+            # Tenant context is transaction-local; cancel_scan committed.
+            set_tenant_context(db, tenant_id)
+        status = _confirm_cancelled(db, scan_job_id=job_id, tenant_id=tenant_id)[
+            "status"
+        ]
+    except _ScanAuthorizationError as exc:
+        # Terminal job (complete / failed / dead_letter): leave it untouched.
+        log.warning(
+            "scan_execution_guard: job %s not cancellable (%s)", job_id, exc.audit_code
+        )
+        status = "terminal"
+
+    set_tenant_context(db, tenant_id)
+    if status == "cancelled":
+        _c6_set_job_collection_status(
+            db, job_id=job_id, tenant_id=tenant_id, collection_status="CANCELLED"
+        )
+        if reason_code != "JOB_CANCELLED":
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.authorization.lost",
+                actor=_SCAN_GUARD_ACTOR,
+                scan_job_id=job_id,
+                scanner_type=scanner_type,
+                rejection_reason=reason_code,
+                rejection_code="SCAN_AUTHORIZATION_LOST",
+                payload_summary=_c6_decision_record(
+                    auth,
+                    decision="DENIED",
+                    reason_code=reason_code,
+                    boundary=boundary,
+                    scan_job_id=job_id,
+                ),
+            )
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.cancelled",
+            actor=_SCAN_GUARD_ACTOR,
+            scan_job_id=job_id,
+            scanner_type=scanner_type,
+            scan_result_id=scan_result_id,
+            rejection_reason=reason_code,
+            payload_summary={"boundary": boundary, "reason_code": reason_code},
+        )
+    db.commit()
+    return status
+
+
+def _c6_finalize_worker_start_denial(
+    session_factory: Any,
+    *,
+    halt: _ScanExecutionHalted,
+    job_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    scanner_type: str,
+) -> None:
+    """Record + apply a worker-startup denial.  Never raises."""
+    from api.db import set_tenant_context
+
+    try:
+        db = session_factory()
+    except Exception:  # noqa: BLE001
+        log.error(
+            "scan_execution_guard: cannot record worker-start denial for job %s (%s)",
+            job_id,
+            halt.reason_code,
+        )
+        return
+    try:
+        set_tenant_context(db, tenant_id)
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.authorization.worker_start_denied",
+            actor=_SCAN_GUARD_ACTOR,
+            scan_job_id=job_id,
+            scanner_type=scanner_type,
+            rejection_reason=halt.reason_code,
+            rejection_code="SCAN_WORKER_START_DENIED",
+            payload_summary=_c6_decision_record(
+                None,
+                decision="DENIED",
+                reason_code=halt.reason_code,
+                boundary="worker_start",
+                scan_job_id=job_id,
+            ),
+        )
+        db.commit()
+        if halt.reason_code not in _HALT_FOREIGN_JOB_CODES:
+            set_tenant_context(db, tenant_id)
+            _c6_halt_job(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                reason_code=halt.reason_code,
+                scanner_type=scanner_type,
+                boundary="worker_start",
+            )
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        log.error(
+            "scan_execution_guard: worker-start denial bookkeeping failed for job %s: %s",
+            job_id,
+            type(exc).__name__,
+        )
+    finally:
+        db.close()
+
+
+def _c6_run_guarded_target_scan(
+    *,
+    run_id: str,
+    job_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    scanner_type: str,
+    operation: str,
+    targets: list[str],
+    run_fn: Any,
+    import_fn: Any,
+    summary_fn: Any = None,
+) -> None:
+    """Shared, guarded execution path for target-based scanners.
+
+    1. Worker start: fresh-read authorization for every target + job state
+       (before any outbound I/O).  Denial → audited, job cancelled.
+    2. CAS queued → running.  Lost CAS (cancelled meanwhile) → stop.
+    3. Runner executes with ``guard.checkpoint`` before each target/redirect.
+    4. Collected evidence is ALWAYS persisted (partial evidence preserved),
+       stamped with its authorization context.
+    5. Terminal transition is CAS: interrupted → cancelled; normal →
+       running → complete; a late completion after cancellation is rejected
+       and audited, and the job stays cancelled.
+    """
+
+    def _set(**kw: Any) -> None:
+        with _MSGRAPH_RUNS_LOCK:
+            if run_id in _MSGRAPH_RUNS:
+                _MSGRAPH_RUNS[run_id].update(kw)
+
+    from api.db import get_sessionmaker, set_tenant_context
+
+    SessionLocal = get_sessionmaker()
+    guard = _ScanExecutionGuard(
+        SessionLocal,
+        _ScanExecutionContext(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            job_id=job_id,
+            operation=operation,
+            scanner_type=scanner_type,
+            actor=actor,
+            targets=list(targets),
+        ),
+        set_tenant_context=set_tenant_context,
+    )
+    _set(status="scanning")
+
+    # 1. Worker-start revalidation.
+    try:
+        start_decision = guard.worker_start()
+    except _ScanExecutionHalted as halt:
+        _c6_finalize_worker_start_denial(
+            SessionLocal,
+            halt=halt,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type=scanner_type,
+        )
+        _set(status="cancelled", error=halt.reason_code)
+        return
+    worker_start_at = utc_iso8601_z_now()
+
+    # 2. queued → running (CAS) + decision record.
+    db = SessionLocal()
+    try:
+        set_tenant_context(db, tenant_id)
+        started = durable_job_svc.mark_running(db, job_id=job_id)
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.authorization.worker_start_authorized"
+            if started
+            else "scan.authorization.worker_start_denied",
+            actor=_SCAN_GUARD_ACTOR,
+            scan_job_id=job_id,
+            scanner_type=scanner_type,
+            rejection_reason=None if started else "JOB_STATE_CHANGED",
+            payload_summary=_c6_decision_record(
+                start_decision,
+                decision="AUTHORIZED" if started else "DENIED",
+                reason_code="WORKER_START_AUTHORIZED"
+                if started
+                else "JOB_STATE_CHANGED",
+                boundary="worker_start",
+                scan_job_id=job_id,
+                target_count=len(targets),
+            ),
+        )
+        db.commit()
+        if not started:
+            set_tenant_context(db, tenant_id)
+            _c6_halt_job(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                reason_code="JOB_CANCELLED",
+                scanner_type=scanner_type,
+                boundary="worker_start",
+                auth=start_decision,
+            )
+            _set(status="cancelled")
+            return
+    finally:
+        db.close()
+
+    # 3. Execute with per-boundary checkpoints.
+    try:
+        scan_result = run_fn(guard.checkpoint)
+    except Exception as exc:  # noqa: BLE001
+        log.error("%s_background: scan failed — %s", scanner_type, exc)
+        db2 = SessionLocal()
+        try:
+            set_tenant_context(db2, tenant_id)
+            durable_job_svc.mark_failed(
+                db2, job_id=job_id, failure_reason=str(exc)[:2000]
+            )
+            _c6_write_audit_event(
+                db2,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type=scanner_type,
+                rejection_reason=str(exc)[:500],
+            )
+            db2.commit()
+        except Exception:  # noqa: BLE001
+            db2.rollback()
+        finally:
+            db2.close()
+        _set(status="failed", error=str(exc)[:200])
+        return
+
+    interrupted = (
+        scan_result.get("interrupted") if isinstance(scan_result, dict) else None
+    )
+    # Evidence provenance bridge: bind the effective authorization to the raw
+    # payload persisted in fa_scan_results (PR #810 envelope wiring is
+    # L14-SCAN-RUNNER-INTEGRITY-001).
+    scan_result["authorization_context"] = {
+        "schema": _AUTHORIZATION_CONTEXT_SCHEMA,
+        "scan_job_id": job_id,
+        "tenant_id": tenant_id,
+        "engagement_id": engagement_id,
+        "scanner_type": scanner_type,
+        "operation": operation,
+        "authorization_id": start_decision.get("authorization_id"),
+        "authorization_version": start_decision.get("authorization_version"),
+        "customer_receipt_id": start_decision.get("customer_receipt_id"),
+        "consent_status": start_decision.get("consent_status"),
+        "proof_level": start_decision.get("proof_level"),
+        "worker_start_authorized_at": worker_start_at,
+        "execution_checkpoints_passed": guard.checks_performed,
+        "execution_denied_targets": list(guard.denied_targets),
+        "interrupted": interrupted,
+    }
+
+    # 4. Persist evidence (always — partial evidence is preserved).
+    _set(status="importing")
+    db = SessionLocal()
+    try:
+        set_tenant_context(db, tenant_id)
+        result = import_fn(db, scan_result)
+        _auto_link_scan_evidence(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result_id=result.scan_result_id,
+            source_type=scanner_type,
+        )
+        for d in guard.denied_targets:
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.authorization.target_denied",
+                actor=_SCAN_GUARD_ACTOR,
+                scan_job_id=job_id,
+                target=d["target"],
+                scanner_type=scanner_type,
+                rejection_reason=d["code"],
+                rejection_code="SCAN_TARGET_DENIED_AT_EXECUTION",
+                payload_summary={"phase": d["phase"]},
+            )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.error("%s_background: import failed — %s", scanner_type, exc)
+        db.rollback()
+        set_tenant_context(db, tenant_id)
+        durable_job_svc.mark_failed(db, job_id=job_id, failure_reason=str(exc)[:2000])
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.failed",
+            actor=actor,
+            scan_job_id=job_id,
+            scanner_type=scanner_type,
+            rejection_reason=str(exc)[:500],
+        )
+        try:
+            db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+        db.close()
+        _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
+        return
+
+    # 5. Terminal transition (CAS).
+    try:
+        set_tenant_context(db, tenant_id)
+        if interrupted:
+            status = _c6_halt_job(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                reason_code=str(interrupted.get("reason_code") or "INTERRUPTED"),
+                scanner_type=scanner_type,
+                boundary=f"execution:{interrupted.get('phase')}",
+                auth=start_decision,
+                scan_result_id=result.scan_result_id,
+            )
+            _set(status="cancelled", scan_result_id=result.scan_result_id)
+            return
+
+        completed = durable_job_svc.mark_complete(
+            db, job_id=job_id, scan_result_id=result.scan_result_id
+        )
+        if completed:
+            _c6_set_job_collection_status(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                collection_status=str(
+                    scan_result.get("collection_status") or "UNKNOWN"
+                ),
+            )
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.completed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type=scanner_type,
+                scan_result_id=result.scan_result_id,
+                payload_summary=summary_fn(result) if summary_fn else None,
+            )
+            db.commit()
+            _set(status="complete", scan_result_id=result.scan_result_id)
+            return
+
+        # Late completion: the job was cancelled (or otherwise moved) while
+        # the runner was finishing.  Cancellation wins; evidence stays,
+        # attributed, with coverage marked CANCELLED.
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.late_completion_rejected",
+            actor=_SCAN_GUARD_ACTOR,
+            scan_job_id=job_id,
+            scanner_type=scanner_type,
+            scan_result_id=result.scan_result_id,
+            rejection_code="LATE_COMPLETION_REJECTED",
+        )
+        db.commit()
+        set_tenant_context(db, tenant_id)
+        status = _c6_halt_job(
+            db,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            reason_code="JOB_CANCELLED",
+            scanner_type=scanner_type,
+            boundary="before_persist",
+            auth=start_decision,
+            scan_result_id=result.scan_result_id,
+        )
+        _set(
+            status="cancelled" if status == "cancelled" else "failed",
+            scan_result_id=result.scan_result_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        log.error(
+            "%s_background: terminal transition failed — %s",
+            scanner_type,
+            type(exc).__name__,
+        )
+        _set(status="failed", error="terminal transition failed")
+    finally:
+        db.close()
+
+
+def _c6_emergency_stop_reason(
+    db: Session, *, tenant_id: str, engagement_id: str
+) -> str | None:
+    """Fail-closed emergency-stop probe for scanners without target scope."""
+    from services.field_assessment.scan_authorization import _emergency_stop_active
+
+    try:
+        if _emergency_stop_active(db, tenant_id=tenant_id, engagement_id=engagement_id):
+            return "EMERGENCY_STOP_ACTIVE"
+    except Exception:  # noqa: BLE001
+        return "EMERGENCY_STOP_CHECK_FAILED"
+    return None
+
+
+def _c6_require_no_emergency_stop(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    scanner_type: str,
+) -> None:
+    """Dispatch gate for Graph-family connectors (no target-scope model)."""
+    reason = _c6_emergency_stop_reason(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if reason is None:
+        return
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.authorization.denied",
+        actor=actor,
+        scanner_type=scanner_type,
+        rejection_reason=reason,
+        rejection_code="SCAN_AUTHORIZATION_DENIED",
+    )
+    db.commit()
+    raise HTTPException(
+        status_code=403,
+        detail=api_error(
+            "SCAN_EMERGENCY_STOP_ACTIVE", "Scanning is halted for this scope"
+        ),
+    )
+
+
+def _c6_graph_worker_halted(
+    session_factory: Any,
+    *,
+    run_id: str,
+    job_id: str,
+    tenant_id: str,
+    engagement_id: str,
+    scanner_type: str,
+) -> bool:
+    """Graph-family worker gate, after token acquisition and before Graph I/O.
+
+    Re-reads job state and emergency stop.  Returns True (and finalizes the
+    job as cancelled) when the worker must not proceed.  Fails closed.
+    """
+    from sqlalchemy import text as _text
+    from api.db import set_tenant_context
+
+    reason: str | None = None
+    try:
+        db = session_factory()
+    except Exception:  # noqa: BLE001
+        reason = "AUTHORIZATION_STORE_UNAVAILABLE"
+        db = None
+    if db is not None:
+        try:
+            set_tenant_context(db, tenant_id)
+            row = db.execute(
+                _text(
+                    "SELECT status, tenant_id, engagement_id FROM fa_scan_jobs "
+                    "WHERE id = :id"
+                ),
+                {"id": job_id},
+            ).fetchone()
+            if row is None:
+                reason = "JOB_NOT_FOUND"
+            elif str(row[1]) != tenant_id or str(row[2]) != engagement_id:
+                reason = "WORKER_TENANT_MISMATCH"
+            elif str(row[0]) in ("cancel_requested", "cancelled"):
+                reason = "JOB_CANCELLED"
+            elif str(row[0]) not in ("queued", "running"):
+                reason = "JOB_NOT_EXECUTABLE"
+            else:
+                reason = _c6_emergency_stop_reason(
+                    db, tenant_id=tenant_id, engagement_id=engagement_id
+                )
+        except Exception:  # noqa: BLE001
+            reason = "AUTHORIZATION_STORE_UNAVAILABLE"
+        finally:
+            db.close()
+    if reason is None:
+        return False
+    _c6_finalize_worker_start_denial(
+        session_factory,
+        halt=_ScanExecutionHalted(reason),
+        job_id=job_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type=scanner_type,
+    )
+    with _MSGRAPH_RUNS_LOCK:
+        if run_id in _MSGRAPH_RUNS:
+            _MSGRAPH_RUNS[run_id].update(status="cancelled", error=reason)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -4572,127 +5263,35 @@ def _network_scan_background(
     target_hosts: list[str],
     actor: str,
 ) -> None:
-    def _set(**kw: Any) -> None:
-        with _MSGRAPH_RUNS_LOCK:
-            _MSGRAPH_RUNS[run_id].update(kw)
+    """Network scan worker — guarded execution (L14-SCAN-AUTH-HARDENING-001)."""
+    from services.connectors.network_scan.runner import run_network_scan
 
-    from api.db import get_sessionmaker, set_tenant_context
-
-    SessionLocal = get_sessionmaker()
-
-    try:
-        _set(status="scanning")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            if _c6_job_is_cancelled(db, job_id=job_id):
-                _set(status="cancelled")
-                return
-            _c6_update_job_status(db, job_id=job_id, status="running")
-            db.commit()
-        finally:
-            db.close()
-
-        from services.connectors.network_scan.runner import run_network_scan
-
-        scan_result = run_network_scan(
+    _c6_run_guarded_target_scan(
+        run_id=run_id,
+        job_id=job_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="network_scan",
+        operation="network_scan",
+        targets=target_hosts,
+        run_fn=lambda checkpoint: run_network_scan(
             target_hosts=target_hosts,
             engagement_id=engagement_id,
-        )
-
-        _set(status="importing")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            result = import_network_scan(
-                db=db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result=scan_result,
-                actor=actor,
-            )
-            _auto_link_scan_evidence(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result_id=result.scan_result_id,
-                source_type="network_scan",
-            )
-            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
-            if not _job_cancelled:
-                _c6_update_job_status(
-                    db,
-                    job_id=job_id,
-                    status="complete",
-                    scan_result_id=result.scan_result_id,
-                )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.completed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="network_scan",
-                scan_result_id=result.scan_result_id,
-                payload_summary={
-                    "hosts_scanned": result.hosts_scanned,
-                    "findings_imported": result.findings_imported,
-                },
-            )
-            db.commit()
-            if _job_cancelled:
-                _set(status="cancelled")
-            else:
-                _set(status="complete", scan_result_id=result.scan_result_id)
-        except Exception as exc:
-            log.error("network_scan_background: import failed — %s", exc)
-            db.rollback()
-            set_tenant_context(db, tenant_id)
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="network_scan",
-                rejection_reason=str(exc)[:500],
-            )
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
-        finally:
-            db.close()
-    except Exception as exc:
-        log.error("network_scan_background: scan failed — %s", exc)
-        db2 = SessionLocal()
-        try:
-            set_tenant_context(db2, tenant_id)
-            _c6_update_job_status(
-                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db2,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="network_scan",
-                rejection_reason=str(exc)[:500],
-            )
-            db2.commit()
-        except Exception:
-            db2.rollback()
-        finally:
-            db2.close()
-        _set(status="failed", error=str(exc)[:200])
+            checkpoint=checkpoint,
+        ),
+        import_fn=lambda db, scan_result: import_network_scan(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=scan_result,
+            actor=actor,
+        ),
+        summary_fn=lambda result: {
+            "hosts_scanned": result.hosts_scanned,
+            "findings_imported": result.findings_imported,
+        },
+    )
 
 
 @router.post(
@@ -4883,120 +5482,29 @@ def _dns_email_scan_background(
     dkim_selectors: list[str] | None,
     actor: str,
 ) -> None:
-    def _set(**kw: Any) -> None:
-        with _MSGRAPH_RUNS_LOCK:
-            _MSGRAPH_RUNS[run_id].update(kw)
+    """DNS/email scan worker — guarded execution (L14-SCAN-AUTH-HARDENING-001)."""
+    from services.connectors.dns_email.runner import run as run_dns_email
 
-    from api.db import get_sessionmaker, set_tenant_context
-
-    SessionLocal = get_sessionmaker()
-
-    try:
-        _set(status="scanning")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            if _c6_job_is_cancelled(db, job_id=job_id):
-                _set(status="cancelled")
-                return
-            _c6_update_job_status(db, job_id=job_id, status="running")
-            db.commit()
-        finally:
-            db.close()
-
-        from services.connectors.dns_email.runner import run as run_dns_email
-
-        scan_result = run_dns_email(domains=domains, dkim_selectors=dkim_selectors)
-
-        _set(status="importing")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            result = import_dns_email_scan(
-                db=db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result=scan_result,
-                actor=actor,
-            )
-            _auto_link_scan_evidence(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result_id=result.scan_result_id,
-                source_type="dns_email",
-            )
-            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
-            if not _job_cancelled:
-                _c6_update_job_status(
-                    db,
-                    job_id=job_id,
-                    status="complete",
-                    scan_result_id=result.scan_result_id,
-                )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.completed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="dns_email",
-                scan_result_id=result.scan_result_id,
-            )
-            db.commit()
-            if _job_cancelled:
-                _set(status="cancelled")
-            else:
-                _set(status="complete", scan_result_id=result.scan_result_id)
-        except Exception as exc:
-            log.error("dns_email_scan_background: import failed — %s", exc)
-            db.rollback()
-            set_tenant_context(db, tenant_id)
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="dns_email",
-                rejection_reason=str(exc)[:500],
-            )
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
-        finally:
-            db.close()
-    except Exception as exc:
-        log.error("dns_email_scan_background: scan failed — %s", exc)
-        db2 = SessionLocal()
-        try:
-            set_tenant_context(db2, tenant_id)
-            _c6_update_job_status(
-                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db2,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="dns_email",
-                rejection_reason=str(exc)[:500],
-            )
-            db2.commit()
-        except Exception:
-            db2.rollback()
-        finally:
-            db2.close()
-        _set(status="failed", error=str(exc)[:200])
+    _c6_run_guarded_target_scan(
+        run_id=run_id,
+        job_id=job_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="dns_email",
+        operation="dns_email",
+        targets=domains,
+        run_fn=lambda checkpoint: run_dns_email(
+            domains=domains, dkim_selectors=dkim_selectors, checkpoint=checkpoint
+        ),
+        import_fn=lambda db, scan_result: import_dns_email_scan(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=scan_result,
+            actor=actor,
+        ),
+    )
 
 
 @router.post(
@@ -5118,124 +5626,33 @@ def _web_headers_scan_background(
     targets: list[str],
     actor: str,
 ) -> None:
-    def _set(**kw: Any) -> None:
-        with _MSGRAPH_RUNS_LOCK:
-            _MSGRAPH_RUNS[run_id].update(kw)
+    """Web-header scan worker — guarded execution (L14-SCAN-AUTH-HARDENING-001)."""
+    from services.connectors.web_headers.runner import run as run_web_headers
 
-    from api.db import get_sessionmaker, set_tenant_context
-
-    SessionLocal = get_sessionmaker()
-
-    try:
-        _set(status="scanning")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            if _c6_job_is_cancelled(db, job_id=job_id):
-                _set(status="cancelled")
-                return
-            _c6_update_job_status(db, job_id=job_id, status="running")
-            db.commit()
-        finally:
-            db.close()
-
-        from services.connectors.web_headers.runner import run as run_web_headers
-
-        scan_result = run_web_headers(targets=targets)
-
-        _set(status="importing")
-        db = SessionLocal()
-        try:
-            set_tenant_context(db, tenant_id)
-            result = import_web_headers_scan(
-                db=db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result=scan_result,
-                actor=actor,
-            )
-            _auto_link_scan_evidence(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                scan_result_id=result.scan_result_id,
-                source_type="web_headers",
-            )
-            _job_cancelled = _c6_job_is_cancelled(db, job_id=job_id)
-            if not _job_cancelled:
-                _c6_update_job_status(
-                    db,
-                    job_id=job_id,
-                    status="complete",
-                    scan_result_id=result.scan_result_id,
-                )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.completed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="web_headers",
-                scan_result_id=result.scan_result_id,
-                payload_summary={
-                    "targets_scanned": result.targets_scanned,
-                    "findings_imported": result.findings_imported,
-                },
-            )
-            db.commit()
-            if _job_cancelled:
-                _set(status="cancelled")
-            else:
-                _set(status="complete", scan_result_id=result.scan_result_id)
-        except Exception as exc:
-            log.error("web_headers_scan_background: import failed — %s", exc)
-            db.rollback()
-            set_tenant_context(db, tenant_id)
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="web_headers",
-                rejection_reason=str(exc)[:500],
-            )
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-            _set(status="failed", error=f"Import failed: {str(exc)[:200]}")
-        finally:
-            db.close()
-    except Exception as exc:
-        log.error("web_headers_scan_background: scan failed — %s", exc)
-        db2 = SessionLocal()
-        try:
-            set_tenant_context(db2, tenant_id)
-            _c6_update_job_status(
-                db2, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
-            )
-            _c6_write_audit_event(
-                db2,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="web_headers",
-                rejection_reason=str(exc)[:500],
-            )
-            db2.commit()
-        except Exception:
-            db2.rollback()
-        finally:
-            db2.close()
-        _set(status="failed", error=str(exc)[:200])
+    _c6_run_guarded_target_scan(
+        run_id=run_id,
+        job_id=job_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="web_headers",
+        operation="web_headers",
+        targets=targets,
+        run_fn=lambda checkpoint: run_web_headers(
+            targets=targets, checkpoint=checkpoint
+        ),
+        import_fn=lambda db, scan_result: import_web_headers_scan(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result=scan_result,
+            actor=actor,
+        ),
+        summary_fn=lambda result: {
+            "targets_scanned": result.targets_scanned,
+            "findings_imported": result.findings_imported,
+        },
+    )
 
 
 @router.post(
@@ -5464,6 +5881,17 @@ def _entra_governance_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="entra_governance",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.entra_governance.runner import run_entra_governance
 
@@ -5577,6 +6005,15 @@ def initiate_entra_governance_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="entra_governance",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -5720,6 +6157,17 @@ def _sharepoint_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="sharepoint_onedrive",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.sharepoint.runner import run_sharepoint_scan
 
@@ -5833,6 +6281,15 @@ def initiate_sharepoint_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="sharepoint_onedrive",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -5976,6 +6433,17 @@ def _oauth_risk_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="oauth_risk",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.oauth_risk.runner import run_oauth_risk
 
@@ -6089,6 +6557,15 @@ def initiate_oauth_risk_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="oauth_risk",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -6232,6 +6709,17 @@ def _ai_tool_discovery_scan_background(
                 db.close()
             return
 
+        # L14-SCAN-AUTH-HARDENING-001: device-code auth can take minutes —
+        # re-read cancellation + emergency stop before any Graph I/O.
+        if _c6_graph_worker_halted(
+            SessionLocal,
+            run_id=run_id,
+            job_id=job_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="ai_tool_discovery",
+        ):
+            return
         _set(status="scanning")
         from services.connectors.ai_tool_discovery.runner import run_ai_tool_discovery
 
@@ -6349,6 +6837,15 @@ def initiate_ai_tool_discovery_scan(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+
+    # L14-SCAN-AUTH-HARDENING-001: emergency stop blocks dispatch.
+    _c6_require_no_emergency_stop(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        actor=actor,
+        scanner_type="ai_tool_discovery",
+    )
 
     client_id = body.azure_client_id or os.environ.get("FG_MSAL_CLIENT_ID", "")
     if not client_id:
@@ -6854,6 +7351,9 @@ class ScanAuthorizationCreateRequest(BaseModel):
     approved_targets: list[dict] = Field(default_factory=list)
     expires_at: str  # ISO8601 UTC timestamp
     effective_from: str | None = None
+    # L14-SCAN-AUTH-HARDENING-001: bind this scope to an approved customer
+    # authorization receipt.  Scope must be a subset of the receipt.
+    customer_receipt_id: str | None = Field(default=None, max_length=64)
 
 
 class ScanAuthorizationActivateRequest(BaseModel):
@@ -6907,14 +7407,28 @@ def create_scan_authorization(
 
     import json as _json
 
+    if body.customer_receipt_id:
+        _c6_require_receipt_covers_scope(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor=actor,
+            receipt_id=body.customer_receipt_id,
+            scope_targets=body.approved_targets,
+            scope_expires_at=body.expires_at,
+            boundary="scope_create",
+        )
+
     result = db.execute(
         _text(
             "INSERT INTO fa_scan_authorizations "
             "    (tenant_id, engagement_id, authorization_ref, authorization_type, "
-            "     approved_targets, status, expires_at, effective_from) "
+            "     approved_targets, status, expires_at, effective_from, "
+            "     customer_receipt_id) "
             "VALUES (:tenant_id, :engagement_id::uuid, :auth_ref, :auth_type, "
             "        :targets::jsonb, 'draft', :expires_at::timestamptz, "
-            "        :effective_from::timestamptz) "
+            "        :effective_from::timestamptz, "
+            "        CAST(:customer_receipt_id AS uuid)) "
             "RETURNING id, status, created_at"
         ),
         {
@@ -6925,6 +7439,7 @@ def create_scan_authorization(
             "targets": _json.dumps(body.approved_targets),
             "expires_at": body.expires_at,
             "effective_from": body.effective_from,
+            "customer_receipt_id": body.customer_receipt_id,
         },
     ).fetchone()
     db.commit()
@@ -6968,6 +7483,56 @@ def activate_scan_authorization(
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    # L14-SCAN-AUTH-HARDENING-001: activation requires the bound customer
+    # receipt to still cover the scope (or no receipt when consent is optional).
+    scope_row = db.execute(
+        _text(
+            "SELECT approved_targets, expires_at, customer_receipt_id "
+            "FROM fa_scan_authorizations "
+            "WHERE id = :auth_id::uuid AND tenant_id = :tenant_id "
+            "  AND engagement_id = :engagement_id::uuid"
+        ),
+        {"auth_id": auth_id, "tenant_id": tenant_id, "engagement_id": engagement_id},
+    ).fetchone()
+    if scope_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "AUTHORIZATION_NOT_FOUND",
+                "Authorization not found or not in activatable state",
+            ),
+        )
+    if scope_row[2] is not None:
+        _c6_require_receipt_covers_scope(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor=actor,
+            receipt_id=str(scope_row[2]),
+            scope_targets=scope_row[0],
+            scope_expires_at=scope_row[1],
+            boundary="scope_activate",
+        )
+    elif _customer_auth.consent_required():
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.authorization.activation_denied",
+            actor=actor,
+            rejection_reason="CUSTOMER_AUTHORIZATION_REQUIRED",
+            rejection_code="SCAN_SCOPE_ACTIVATION_DENIED",
+            payload_summary={"authorization_id": auth_id},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "CUSTOMER_AUTHORIZATION_REQUIRED",
+                "Scope must be bound to an approved customer authorization",
+            ),
         )
 
     result = db.execute(
@@ -7148,6 +7713,472 @@ def list_scan_authorizations(
     }
 
 
+def _c6_require_receipt_covers_scope(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    actor: str,
+    receipt_id: str,
+    scope_targets: Any,
+    scope_expires_at: Any,
+    boundary: str,
+) -> None:
+    """409 unless the customer receipt is approved, valid, verified and covers scope."""
+    try:
+        receipt = _customer_auth.load_receipt(
+            db, receipt_id=receipt_id, tenant_id=tenant_id, engagement_id=engagement_id
+        )
+        if receipt is None:
+            raise _customer_auth.CustomerAuthorizationError(
+                reason="customer authorization not found",
+                audit_code="CUSTOMER_AUTHORIZATION_NOT_FOUND",
+            )
+        _customer_auth.evaluate_receipt_for_scope(
+            receipt,
+            scope_targets=_customer_auth._json_value(scope_targets),
+            scope_expires_at=scope_expires_at,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            now=datetime.now(timezone.utc),
+        )
+    except _ScanAuthorizationError as exc:
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.authorization.activation_denied",
+            actor=actor,
+            rejection_reason=exc.audit_code,
+            rejection_code="SCAN_SCOPE_BINDING_DENIED",
+            payload_summary={"customer_receipt_id": receipt_id, "boundary": boundary},
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("CUSTOMER_AUTHORIZATION_INVALID", exc.audit_code),
+        )
+
+
+class CustomerAuthorizationRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    customer_org_name: str = Field(..., min_length=1, max_length=512)
+    assessment_purpose: str = Field(..., min_length=1, max_length=2048)
+    rules_of_engagement_ref: str = Field(..., min_length=1, max_length=512)
+    approved_targets: list[dict] = Field(..., min_length=1, max_length=256)
+    authorized_operations: list[str] = Field(..., min_length=1, max_length=8)
+    window_start: str
+    window_end: str
+    supersedes_receipt_id: str | None = Field(default=None, max_length=64)
+
+
+class CustomerAuthorizationDecisionBody(BaseModel):
+    """Approval carries NO identity fields — approver comes from auth context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    acknowledge_consent_statement_version: str = Field(..., max_length=128)
+
+
+class CustomerAuthorizationReasonBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=1, max_length=1024)
+
+
+def _consent_http_error(exc: _ScanAuthorizationError) -> HTTPException:
+    if exc.audit_code in ("RECEIPT_NOT_FOUND",):
+        return HTTPException(
+            status_code=404,
+            detail=api_error("CUSTOMER_AUTHORIZATION_NOT_FOUND", "Not found"),
+        )
+    if exc.audit_code.startswith("APPROVER_"):
+        return HTTPException(
+            status_code=403, detail=api_error(exc.audit_code, exc.reason)
+        )
+    if exc.audit_code.startswith("RECEIPT_") and exc.audit_code.endswith("_INVALID"):
+        return HTTPException(
+            status_code=422, detail=api_error(exc.audit_code, exc.reason)
+        )
+    return HTTPException(status_code=409, detail=api_error(exc.audit_code, exc.reason))
+
+
+def _consent_audit_fields(
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    event_type: str,
+    actor: str,
+    receipt_id: str | None,
+    reason_code: str | None = None,
+    extra: dict | None = None,
+) -> dict[str, Any]:
+    """Keyword arguments for a consent decision record in fa_scan_audit_events."""
+    return {
+        "tenant_id": tenant_id,
+        "engagement_id": engagement_id,
+        "event_type": event_type,
+        "actor": actor,
+        "rejection_reason": reason_code,
+        "rejection_code": reason_code,
+        "payload_summary": {"customer_receipt_id": receipt_id, **(extra or {})},
+    }
+
+
+def _consent_engagement(db: Session, *, engagement_id: str, tenant_id: str) -> Any:
+    try:
+        return get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+
+@router.post(
+    "/engagements/{engagement_id}/customer-authorizations",
+    dependencies=[Depends(authz_scope("governance:write"))],
+    status_code=201,
+)
+def request_customer_authorization(
+    engagement_id: str,
+    request: Request,
+    body: CustomerAuthorizationRequestBody,
+    actor_ctx: ActorContext = Depends(require_permission("scan.scope.manage")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Operator requests customer approval for explicit targets/operations/window."""
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    try:
+        receipt = _customer_auth.create_request(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            requested_by_subject=str(actor_ctx.subject),
+            customer_org_name=body.customer_org_name,
+            assessment_purpose=body.assessment_purpose,
+            rules_of_engagement_ref=body.rules_of_engagement_ref,
+            approved_targets=body.approved_targets,
+            authorized_operations=body.authorized_operations,
+            window_start=body.window_start,
+            window_end=body.window_end,
+            supersedes_receipt_id=body.supersedes_receipt_id,
+        )
+    except _ScanAuthorizationError as exc:
+        db.rollback()
+        raise _consent_http_error(exc)
+    _c6_write_audit_event(
+        db,
+        **_consent_audit_fields(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.consent.requested",
+            actor=actor,
+            receipt_id=str(receipt["id"]),
+        ),
+    )
+    db.commit()
+    return _customer_auth.public_view(receipt)
+
+
+@router.get(
+    "/engagements/{engagement_id}/customer-authorizations",
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def list_customer_authorizations(
+    engagement_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    rows = db.execute(
+        _text(
+            f"SELECT {_customer_auth._RECEIPT_COLUMNS} "
+            "FROM fa_customer_authorization_receipts "
+            "WHERE tenant_id = :tid AND engagement_id = :eid "
+            "ORDER BY created_at DESC LIMIT 50"
+        ),
+        {"tid": tenant_id, "eid": engagement_id},
+    ).fetchall()
+    return {
+        "customer_authorizations": [
+            _customer_auth.public_view(_customer_auth._row_to_dict(r)) for r in rows
+        ]
+    }
+
+
+@router.get(
+    "/engagements/{engagement_id}/customer-authorizations/{receipt_id}",
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_customer_authorization(
+    engagement_id: str,
+    receipt_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    receipt = _customer_auth.load_receipt(
+        db, receipt_id=receipt_id, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if receipt is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("CUSTOMER_AUTHORIZATION_NOT_FOUND", "Not found"),
+        )
+    view = _customer_auth.public_view(receipt)
+    if receipt["status"] == _customer_auth.APPROVED:
+        try:
+            view["integrity_verified_proof_level"] = (
+                _customer_auth.verify_receipt_integrity(receipt).value
+            )
+        except _ScanAuthorizationError as exc:
+            view["integrity_verified_proof_level"] = None
+            view["integrity_failure"] = exc.audit_code
+    return view
+
+
+@router.post(
+    "/engagements/{engagement_id}/customer-authorizations/{receipt_id}/approve",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def approve_customer_authorization(
+    engagement_id: str,
+    receipt_id: str,
+    request: Request,
+    body: CustomerAuthorizationDecisionBody,
+    actor_ctx: ActorContext = Depends(require_permission("scan.consent.approve")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Customer representative approves.  Identity is taken ONLY from auth context."""
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    try:
+        if (
+            body.acknowledge_consent_statement_version
+            != _customer_auth.CONSENT_STATEMENT_VERSION
+        ):
+            raise _customer_auth.CustomerAuthorizationError(
+                reason="consent statement version mismatch",
+                audit_code="CONSENT_STATEMENT_VERSION_MISMATCH",
+            )
+        receipt = _customer_auth.approve(
+            db,
+            receipt_id=receipt_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor_ctx=actor_ctx,
+        )
+    except _ScanAuthorizationError as exc:
+        db.rollback()
+        _c6_write_audit_event(
+            db,
+            **_consent_audit_fields(
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.consent.approval_denied",
+                actor=actor,
+                receipt_id=receipt_id,
+                reason_code=exc.audit_code,
+            ),
+        )
+        db.commit()
+        raise _consent_http_error(exc)
+    _c6_write_audit_event(
+        db,
+        **_consent_audit_fields(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.consent.approved",
+            actor=actor,
+            receipt_id=receipt_id,
+            extra={
+                "proof_level": receipt.get("proof_level"),
+                "payload_digest": receipt.get("payload_digest"),
+                "attestation_kid": receipt.get("attestation_kid"),
+            },
+        ),
+    )
+    db.commit()
+    return _customer_auth.public_view(receipt)
+
+
+@router.post(
+    "/engagements/{engagement_id}/customer-authorizations/{receipt_id}/reject",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def reject_customer_authorization(
+    engagement_id: str,
+    receipt_id: str,
+    request: Request,
+    body: CustomerAuthorizationReasonBody,
+    actor_ctx: ActorContext = Depends(require_permission("scan.consent.approve")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    try:
+        receipt = _customer_auth.reject(
+            db,
+            receipt_id=receipt_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            actor_ctx=actor_ctx,
+            reason=body.reason,
+        )
+    except _ScanAuthorizationError as exc:
+        db.rollback()
+        raise _consent_http_error(exc)
+    _c6_write_audit_event(
+        db,
+        **_consent_audit_fields(
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.consent.rejected",
+            actor=actor,
+            receipt_id=receipt_id,
+        ),
+    )
+    db.commit()
+    return _customer_auth.public_view(receipt)
+
+
+@router.post(
+    "/engagements/{engagement_id}/customer-authorizations/{receipt_id}/revoke",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def revoke_customer_authorization(
+    engagement_id: str,
+    receipt_id: str,
+    request: Request,
+    body: CustomerAuthorizationReasonBody,
+    actor_ctx: ActorContext = Depends(require_permission("scan.consent.revoke")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Revocation only reduces authority; it takes effect at the next checkpoint."""
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    try:
+        receipt = _customer_auth.revoke(
+            db,
+            receipt_id=receipt_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            revoked_by_subject=str(actor_ctx.subject),
+            reason=body.reason,
+        )
+    except _ScanAuthorizationError as exc:
+        db.rollback()
+        raise _consent_http_error(exc)
+    if not receipt.get("idempotent"):
+        _c6_write_audit_event(
+            db,
+            **_consent_audit_fields(
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.consent.revoked",
+                actor=actor,
+                receipt_id=receipt_id,
+                extra={"reason": body.reason[:256]},
+            ),
+        )
+    db.commit()
+    return _customer_auth.public_view(receipt)
+
+
+@router.get(
+    "/engagements/{engagement_id}/scan-authorizations/effective-status",
+    dependencies=[Depends(authz_scope("governance:read"))],
+)
+def get_effective_scan_authorization_status(
+    engagement_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.read")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Effective authorization as the execution guard would compute it now."""
+    from sqlalchemy import text as _text
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    _consent_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    now = datetime.now(timezone.utc)
+    estop = _c6_emergency_stop_reason(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    scope = db.execute(
+        _text(
+            "SELECT id, expires_at, customer_receipt_id, version "
+            "FROM fa_scan_authorizations "
+            "WHERE tenant_id = :tid AND engagement_id = :eid::uuid "
+            "  AND status = 'active' AND revoked_at IS NULL "
+            "ORDER BY effective_from DESC NULLS LAST LIMIT 1"
+        ),
+        {"tid": tenant_id, "eid": engagement_id},
+    ).fetchone()
+    out: dict[str, Any] = {
+        "engagement_id": engagement_id,
+        "emergency_stop": estop,
+        "consent_required": _customer_auth.consent_required(),
+        "scope_authorization_id": str(scope[0]) if scope else None,
+        "scope_authorization_version": int(scope[3]) if scope else None,
+        "customer_receipt_id": str(scope[2]) if scope and scope[2] else None,
+        "consent_status": None,
+        "proof_level": None,
+        "effective": False,
+        "reason_code": None,
+    }
+    if estop:
+        out["reason_code"] = estop
+        return out
+    if scope is None:
+        out["reason_code"] = "NO_ACTIVE_AUTHORIZATION"
+        return out
+    if scope[1] is not None and _customer_auth._as_utc(scope[1]) <= now:
+        out["reason_code"] = "AUTHORIZATION_EXPIRED"
+        return out
+    if scope[2] is None:
+        out["consent_status"] = "LEGACY_OPERATOR_ASSERTED"
+        out["proof_level"] = _customer_auth.ProofLevel.LEGACY_OPERATOR_ASSERTED.value
+        if out["consent_required"]:
+            out["reason_code"] = "CUSTOMER_AUTHORIZATION_REQUIRED"
+            return out
+        out["effective"] = True
+        return out
+    receipt = _customer_auth.load_receipt(
+        db, receipt_id=str(scope[2]), tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    if receipt is None:
+        out["reason_code"] = "CUSTOMER_AUTHORIZATION_NOT_FOUND"
+        return out
+    try:
+        proof = _customer_auth._require_usable(
+            receipt, tenant_id=tenant_id, engagement_id=engagement_id, now=now
+        )
+    except _ScanAuthorizationError as exc:
+        out["reason_code"] = exc.audit_code
+        return out
+    out.update(
+        consent_status="CUSTOMER_APPROVED",
+        proof_level=proof.value,
+        effective=True,
+        customer_authorization_window_end=receipt["window_end"].isoformat()
+        if isinstance(receipt["window_end"], datetime)
+        else str(receipt["window_end"]),
+    )
+    return out
+
+
 @router.post(
     "/engagements/{engagement_id}/scans/{scan_id}/cancel",
     dependencies=[Depends(authz_scope("governance:write"))],
@@ -7268,6 +8299,65 @@ def activate_emergency_stop(
     )
     db.commit()
 
+    return result
+
+
+@router.post(
+    "/emergency-stop/{stop_id}/clear",
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def clear_scan_emergency_stop(
+    stop_id: str,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("scan.emergency_stop")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict:
+    """Release an emergency stop (L14-SCAN-AUTH-HARDENING-001).
+
+    Permission rules mirror activation; platform stops need
+    scan.emergency_stop.platform.  Release is audited.
+    """
+    from services.field_assessment.scan_authorization import (
+        ScanAuthorizationError as _ScanAuthError,
+        clear_emergency_stop as _clear_emergency_stop,
+    )
+
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    try:
+        _uuid_module.UUID(stop_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=404, detail=api_error("EMERGENCY_STOP_NOT_FOUND", "Not found")
+        )
+    try:
+        result = _clear_emergency_stop(
+            db,
+            stop_id=stop_id,
+            actor=actor,
+            actor_tenant_id=tenant_id,
+            permissions=list(actor_ctx.permissions or []),
+        )
+    except _ScanAuthError as exc:
+        status_code = 404 if exc.audit_code == "EMERGENCY_STOP_NOT_FOUND" else 403
+        raise HTTPException(
+            status_code=status_code,
+            detail=api_error("EMERGENCY_STOP_CLEAR_DENIED", exc.audit_code),
+        )
+    if not result.get("idempotent"):
+        audit_atomicity_svc.emit(
+            db,
+            tenant_id=tenant_id or "platform",
+            engagement_id=str(result["scope"]),
+            event_type="scan.emergency_stop.released",
+            actor=actor,
+            actor_type=_actor_type_from_context(actor_ctx),
+            reason_code="EMERGENCY_STOP_RELEASED",
+            entity_type="scan_emergency_stop",
+            entity_id=stop_id,
+            payload={"scope": result["scope"]},
+        )
+        db.commit()
     return result
 
 

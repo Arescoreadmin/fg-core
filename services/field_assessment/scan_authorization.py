@@ -267,13 +267,16 @@ def _emergency_stop_active(
     """Return True if any active emergency stop applies to this scope."""
     scopes = _scopes_for(tenant_id=tenant_id, engagement_id=engagement_id)
     # Raw SQL for performance; uses parameterized query (no string interpolation).
+    # Explicit IN over the three fixed scopes is dialect-portable (Postgres and
+    # the SQLite test DB) — L14-SCAN-AUTH-HARDENING-001.
     result = db.execute(
         text(
             "SELECT 1 FROM fa_scan_emergency_stops "
-            "WHERE scope = ANY(:scopes) AND is_active = TRUE "
+            "WHERE scope IN (:s_platform, :s_tenant, :s_engagement) "
+            "AND is_active = TRUE "
             "LIMIT 1"
         ),
-        {"scopes": scopes},
+        {"s_platform": scopes[0], "s_tenant": scopes[1], "s_engagement": scopes[2]},
     ).fetchone()
     return result is not None
 
@@ -306,6 +309,13 @@ def check_scan_authorized(
     4. Authorization not revoked
     5. Target normalized and matched in approved_targets
     6. Operation permitted for the matched target entry
+    7. Customer authorization receipt (if bound) approves this target +
+       operation now; when consent is required, an unbound scope is denied
+       (L14-SCAN-AUTH-HARDENING-001)
+
+    Reads current database state on every call — no cached decision is ever
+    reused, so this is safe to call at dispatch, worker startup, and every
+    execution boundary.
     """
     _now = now or datetime.now(timezone.utc)
 
@@ -330,7 +340,8 @@ def check_scan_authorized(
         row = db.execute(
             text(
                 "SELECT id, tenant_id, engagement_id, approved_targets, "
-                "       status, effective_from, expires_at, revoked_at "
+                "       status, effective_from, expires_at, revoked_at, "
+                "       customer_receipt_id, version "
                 "FROM fa_scan_authorizations "
                 "WHERE tenant_id = :tenant_id "
                 "  AND engagement_id = :engagement_id "
@@ -360,6 +371,9 @@ def check_scan_authorized(
     effective_from = row[5]
     expires_at = row[6]
     revoked_at = row[7]
+    # Columns added by migration 0203 (L14-SCAN-AUTH-HARDENING-001).
+    customer_receipt_id = row[8] if len(row) > 8 else None
+    authorization_version = row[9] if len(row) > 9 else None
 
     # Tenant isolation: the row tenant must match the caller's tenant.
     if auth_tenant_id != tenant_id:
@@ -479,13 +493,89 @@ def check_scan_authorized(
             audit_code="OPERATION_NOT_PERMITTED",
         )
 
+    # 7. Customer consent binding (AUTH-GAP-001).  The scope record alone is an
+    # operator assertion; the customer receipt must independently approve this
+    # exact target + operation, now, for this tenant + engagement.
+    from services.field_assessment import customer_authorization as _ca
+
+    if customer_receipt_id is not None:
+        try:
+            receipt = _ca.load_receipt(
+                db,
+                receipt_id=str(customer_receipt_id),
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ScanAuthorizationError(
+                reason=f"customer authorization lookup failed: {exc}",
+                audit_code="CUSTOMER_AUTHORIZATION_LOOKUP_FAILED",
+            ) from exc
+        if receipt is None:
+            raise ScanAuthorizationError(
+                reason="bound customer authorization not found for this engagement",
+                audit_code="CUSTOMER_AUTHORIZATION_NOT_FOUND",
+            )
+        proof = _ca.evaluate_receipt_for_target(
+            receipt,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            target=norm_candidate,
+            target_type=target_type,
+            operation=operation,
+            now=_now,
+        )
+        consent_status = "CUSTOMER_APPROVED"
+        proof_level = proof.value
+        receipt_id: str | None = str(customer_receipt_id)
+    else:
+        if _ca.consent_required():
+            raise ScanAuthorizationError(
+                reason="customer authorization receipt is required for this scope",
+                audit_code="CUSTOMER_AUTHORIZATION_REQUIRED",
+            )
+        consent_status = "LEGACY_OPERATOR_ASSERTED"
+        proof_level = _ca.ProofLevel.LEGACY_OPERATOR_ASSERTED.value
+        receipt_id = None
+
     return {
         "authorization_id": auth_id,
         "tenant_id": auth_tenant_id,
         "engagement_id": auth_engagement_id,
         "matched_target": matched_entry,
         "operation": operation,
+        "authorization_version": authorization_version,
+        "customer_receipt_id": receipt_id,
+        "consent_status": consent_status,
+        "proof_level": proof_level,
     }
+
+
+def classify_target_for_auth(raw: str) -> tuple[str, str]:
+    """Route a raw scanner target to (target, target_type) for check_scan_authorized.
+
+    URL targets are reduced to their hostname.  Precise SSRF validation is the
+    job of SafeTargetValidationService; this only selects the normalizer.
+    """
+    t = raw.strip()
+    try:
+        ipaddress.IPv4Address(t)
+        return t, "ipv4"
+    except ValueError:
+        pass
+    try:
+        ipaddress.IPv6Address(t)
+        return t, "ipv6"
+    except ValueError:
+        pass
+    if t.startswith("http://") or t.startswith("https://"):
+        from urllib.parse import urlparse
+
+        host = urlparse(t).hostname or t
+        return classify_target_for_auth(host) if host != t else (t, "fqdn")
+    if "/" in t:
+        return t, "cidr"
+    return t, "fqdn"
 
 
 # ---------------------------------------------------------------------------
@@ -810,6 +900,26 @@ def clear_emergency_stop(
                 reason="clearing engagement emergency stop requires scan.emergency_stop",
                 audit_code="EMERGENCY_STOP_CLEAR_PERMISSION_DENIED",
             )
+        # L14-SCAN-AUTH-HARDENING-001: mirror activation — a tenant actor may
+        # only clear a stop on an engagement that belongs to its own tenant.
+        # Without this, any tenant could release another tenant's stop by id.
+        if _PLATFORM_STOP_PERMISSION not in permissions:
+            if not actor_tenant_id or not scope.startswith("engagement:"):
+                raise ScanAuthorizationError(
+                    reason="cannot clear emergency stop outside actor tenant",
+                    audit_code="EMERGENCY_STOP_CLEAR_CROSS_TENANT_DENIED",
+                )
+            eng_row = db.execute(
+                text(
+                    "SELECT id FROM fa_engagements WHERE id = :eid AND tenant_id = :tid"
+                ),
+                {"eid": scope[len("engagement:") :], "tid": actor_tenant_id},
+            ).fetchone()
+            if eng_row is None:
+                raise ScanAuthorizationError(
+                    reason="engagement not found in actor's tenant",
+                    audit_code="EMERGENCY_STOP_CLEAR_CROSS_TENANT_DENIED",
+                )
 
     now = datetime.now(timezone.utc)
     db.execute(

@@ -22,6 +22,12 @@ from services.connectors.collection_status import (
     DnsQueryStatus,
     DNS_COLLECTION_FAILURE_STATUSES,
 )
+from services.connectors.execution_checkpoint import (
+    ScanCheckpoint,
+    ScanCheckpointHalt,
+    ScanTargetDenied,
+    interruption_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -522,12 +528,41 @@ def scan_domain(domain: str, dkim_selectors: list[str] | None = None) -> dict[st
     }
 
 
-def run(domains: list[str], dkim_selectors: list[str] | None = None) -> dict[str, Any]:
+def run(
+    domains: list[str],
+    dkim_selectors: list[str] | None = None,
+    checkpoint: ScanCheckpoint | None = None,
+) -> dict[str, Any]:
+    """Scan each domain.  ``checkpoint`` is called before each domain
+    (L14-SCAN-AUTH-HARDENING-001); a halt keeps completed domains and reports
+    collection_status=CANCELLED."""
     results = []
     all_findings: list[dict] = []
     domains_with_failures: list[str] = []
+    interrupted: dict[str, Any] | None = None
 
-    for domain in domains:
+    for idx, domain in enumerate(domains):
+        if checkpoint is not None:
+            try:
+                checkpoint("target", domain)
+            except ScanTargetDenied as denied:
+                results.append(
+                    {
+                        "domain": domain,
+                        "error": "domain not authorized at execution time: "
+                        f"[{denied.reason_code}]",
+                        "findings": [],
+                        "collection_status": CollectionStatus.DENIED.value,
+                        "any_collection_failure": True,
+                    }
+                )
+                domains_with_failures.append(domain)
+                continue
+            except ScanCheckpointHalt as halt:
+                interrupted = interruption_record(
+                    halt, phase="target", remaining=len(domains) - idx
+                )
+                break
         try:
             result = scan_domain(domain, dkim_selectors)
             results.append(result)
@@ -547,7 +582,9 @@ def run(domains: list[str], dkim_selectors: list[str] | None = None) -> dict[str
             )
             domains_with_failures.append(domain)
 
-    if not domains_with_failures:
+    if interrupted is not None:
+        overall_status = CollectionStatus.CANCELLED.value
+    elif not domains_with_failures:
         overall_status = CollectionStatus.COMPLETE.value
     elif len(domains_with_failures) < len(domains):
         overall_status = CollectionStatus.PARTIAL.value
@@ -558,6 +595,7 @@ def run(domains: list[str], dkim_selectors: list[str] | None = None) -> dict[str
         "domains": results,
         "findings": all_findings,
         "collection_status": overall_status,
+        "interrupted": interrupted,
         "summary": {
             "total_domains": len(domains),
             "domains_with_collection_failures": len(domains_with_failures),

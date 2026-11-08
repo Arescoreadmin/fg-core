@@ -1,3 +1,44 @@
+## security(field-scan): L14-SCAN-AUTH-HARDENING-001 — customer consent and execution safety (branch security/l14-scan-auth-hardening-001)
+
+- **Work item:** L14-SCAN-AUTH-HARDENING-001 (AUTH-GAP-001, AUTH-GAP-002)
+- **Baseline SHA:** `94ff137e` (main after PR #811)
+- **Failures before:** none in the scanner suites. Pre-existing, unrelated, and not changed: `tests/test_h14_rbac.py::test_P17_critical_permissions_are_governance_or_platform` fails on main because `scan.emergency_stop.platform` is marked critical.
+- **Problems:**
+  - Scope records were operator assertions with no customer consent.
+  - Authorization was checked at dispatch only.
+  - `DurableJobService` transitions were unconditional, so a late success overwrote `cancel_requested`/`cancelled` and a cancelled job could be set back to `running`.
+  - Graph-family connectors ignored emergency stops.
+  - `clear_emergency_stop` allowed cross-tenant release of engagement-scoped stops.
+  - Latent schema defects: the 0079 `fa_scan_audit_events.event_type` CHECK rejected every event type added in #809, and 0200 dropped `dead_letter` from the job status CHECK.
+- **Fix summary:**
+  - Customer authorization receipts with authenticated-approver validation, a canonical digest and server HMAC attestation.
+  - Receipt binding in `check_scan_authorized()`.
+  - `ScanExecutionGuard` with fresh-session revalidation at worker start and per boundary, plus a runner checkpoint contract.
+  - Guarded worker path for network, DNS and web scanners.
+  - CAS job transitions.
+  - Graph-family e-stop/cancel gates at dispatch and after token acquisition.
+  - E-stop release route and cross-tenant release fix.
+  - Decision records.
+  - Migration 0203.
+  - SQLite `init_db()` creates `fa_scan_emergency_stops`.
+- **Files created:**
+  - `services/field_assessment/customer_authorization.py`
+  - `services/field_assessment/scan_execution_guard.py`
+  - `services/connectors/execution_checkpoint.py`
+  - `migrations/postgres/0203_scan_customer_authorization.sql`
+  - `docs/assurance/L14_SCAN_AUTHORIZATION_HARDENING.md`
+  - `tests/test_scan_authorization_hardening/` (`_harness.py`, `test_customer_consent.py`, `test_execution_guard.py`, `test_worker_lifecycle.py`, `test_job_state_cas.py`, `test_migration_and_rbac.py`)
+- **Files modified:**
+  - `api/field_assessment.py`: routes, guarded workers, Graph gates, dispatch decision record
+  - `api/actor_context.py`: `scan.consent.approve` / `scan.consent.revoke`
+  - `api/db.py`: SQLite `fa_scan_emergency_stops`
+  - `services/field_assessment/scan_authorization.py`: receipt step, `classify_target_for_auth`, portable stop query, cross-tenant clear fix
+  - `services/field_assessment/durable_job_service.py`: CAS
+  - `services/connectors/{network_scan,web_headers,dns_email}/runner.py`: checkpoint
+  - Generated: `contracts/core/openapi.json`, `schemas/api/openapi.json`, `tools/ci/{contract_routes,route_inventory,route_inventory_summary,plane_registry_snapshot}.json`, `tools/ci/topology.sha256`
+  - Contract authority markers: `BLUEPRINT_STAGED.md`, `CONTRACT.md`
+  - Docs: FVA standard, `L14_SCAN_AUTHORIZATION_AND_CANCELLATION.md`, `L14_SCANNER_EVIDENCE_INTEGRITY.md`, `ROADMAP.md`
+
 ## feat(field-scan): L14-SCAN-COMPLETENESS-001 — scanner collection completeness, DEF-001/DEF-002 fix, coverage summary (branch feat/l14-scan-completeness-001)
 
 - **Work item:** L14-SCAN-COMPLETENESS-001
