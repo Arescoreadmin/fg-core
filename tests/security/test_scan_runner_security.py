@@ -56,9 +56,7 @@ class TestDnsTimeoutFailClosed:
         )
 
     def test_servfail_does_not_produce_absence_findings(self) -> None:
-        servfail_outcome = DnsQueryOutcome(
-            records=[], status=DnsQueryStatus.SERVFAIL
-        )
+        servfail_outcome = DnsQueryOutcome(records=[], status=DnsQueryStatus.SERVFAIL)
         with patch(
             "services.connectors.dns_email.runner._dns_query",
             return_value=servfail_outcome,
