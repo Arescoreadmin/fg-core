@@ -19,7 +19,6 @@ from services.connectors.dns_email.runner import (
     DnsQueryOutcome,
     _check_spf,
     _check_dmarc,
-    _check_dkim,
     _check_mx,
     _check_dnssec,
     scan_domain,

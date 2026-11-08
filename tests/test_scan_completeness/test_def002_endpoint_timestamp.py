@@ -11,7 +11,6 @@ Tests call real endpoint_inventory runner logic; httpx.get is mocked.
 
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 

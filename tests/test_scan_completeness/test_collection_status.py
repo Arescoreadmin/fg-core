@@ -8,8 +8,6 @@ All tests are pure unit tests; no external I/O.
 
 from __future__ import annotations
 
-import pytest
-
 from services.connectors.collection_status import (
     CollectionOutcome,
     CollectionStatus,
