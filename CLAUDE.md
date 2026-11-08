@@ -27,3 +27,37 @@ When a PR ships a feature, fixes a product gap, or changes the client-facing sto
 3. If it introduces something not on the plan, add it — do not leave it untracked
 
 `ROADMAP.md` and `SYSTEM.md` are exempt from the `docs/ai/PR_FIX_LOG.md` requirement.
+
+## AI development resource safety (mandatory)
+
+Full policy: `docs/ai/AI_DEVELOPMENT_RESOURCE_SAFETY.md`
+
+**Established 2026-11-07** after three OOM events on the development workstation (32 GB RAM,
+8 GB swap) caused by concurrent unbounded `rg` processes during AI-assisted development.
+
+### Required operating rules
+
+**Search:**
+- Maximum 1 concurrent repository-wide `rg` operation.
+- Never run `rg ... &` (background). The pre-command hook blocks this.
+- Always exclude `.git/`, `.venv/`, `node_modules/`, `__pycache__/`, build artifacts.
+- If `pgrep -c rg` ≥ 20, stop issuing searches immediately.
+
+**Memory:**
+- Run `python tools/ci/check_dev_resource_guard.py` before heavy phases.
+- Do not start heavy test suites when available RAM < 6 GiB.
+- Warn and defer when available RAM < 8 GiB.
+- Do not run multiple memory-intensive suites simultaneously.
+
+**Processes:**
+- Default to sequential execution for builds, test runs, and type checks.
+- Do not spawn unbounded subprocesses or background jobs without exit conditions.
+- Do not start unnecessary Docker stacks; check `make compose-ps` first.
+
+**Recovery:**
+- On OOM or runaway processes: stop, identify the process, preserve uncommitted changes,
+  kill only the identified workload (`kill <PID>`), not `killall` or `pkill -9 rg`.
+- Never use destructive commands as an automatic recovery strategy.
+
+The hook enforcements are project-scoped (`.claude/hooks/`). These memory thresholds are
+advisory instructions, not OS-level limits. See the full policy for host-level options.
