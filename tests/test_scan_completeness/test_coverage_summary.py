@@ -10,20 +10,15 @@ Tests:
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone
 
 from services.connectors.collection_status import CollectionStatus
 from services.field_assessment.coverage_summary import (
-    AssessmentCoverageSummary,
     ScannerCoverageRecord,
     build_coverage_summary,
     coverage_record_from_dns_result,
     coverage_record_from_endpoint_result,
     coverage_record_from_sharepoint_result,
-    coverage_record_from_network_result,
-    coverage_record_from_web_headers_result,
 )
 
 
@@ -121,7 +116,12 @@ class TestCoverageSummaryReportConstraints:
             collection_status=status,
         )
 
-    def test_complete_allows_no_risks_found_claim(self):
+    def test_complete_does_not_allow_no_risks_found_claim(self):
+        """CRITICAL: collection COMPLETE != no findings found.
+        may_claim_no_risks_found is ALWAYS False from the coverage summary.
+        Only L14-SCAN-REPORT-PROOF-001 (finding authority) may assert this
+        after independently verifying finding_count == 0 within assessed scope.
+        """
         summary = build_coverage_summary(
             tenant_id="t1",
             engagement_id="e1",
@@ -129,9 +129,31 @@ class TestCoverageSummaryReportConstraints:
             scanner_records=[self._record(CollectionStatus.COMPLETE)],
         )
         d = summary.to_dict()
-        assert d["report_constraints"]["may_claim_no_risks_found"] is True
+        assert d["report_constraints"]["may_claim_no_risks_found"] is False, (
+            "COMPLETE collection status does NOT mean no findings exist. "
+            "Collection completed ≠ inventory coverage established ≠ no reportable "
+            "findings ≠ environment has no risks. These are four separate claims."
+        )
+
+    def test_no_risks_found_always_false_regardless_of_collection_status(self):
+        """may_claim_no_risks_found must be False for every collection status.
+        This is a finding-authority constraint, not a collection-status constraint.
+        """
+        for status in CollectionStatus:
+            summary = build_coverage_summary(
+                tenant_id="t1",
+                engagement_id="e1",
+                scan_id="s1",
+                scanner_records=[self._record(status)],
+            )
+            d = summary.to_dict()
+            assert d["report_constraints"]["may_claim_no_risks_found"] is False, (
+                f"may_claim_no_risks_found must be False for status={status.value}. "
+                "The coverage summary cannot assert finding absence."
+            )
 
     def test_partial_forbids_no_risks_found_claim(self):
+        """Retained as named regression guard: PARTIAL still produces False."""
         summary = build_coverage_summary(
             tenant_id="t1",
             engagement_id="e1",

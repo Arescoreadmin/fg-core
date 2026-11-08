@@ -145,7 +145,23 @@ class AssessmentCoverageSummary:
             "scanner_records": [r.to_dict() for r in self.scanner_records],
             # Report enforcement signals — read by L14-SCAN-REPORT-PROOF-001
             "report_constraints": {
-                "may_claim_no_risks_found": not self.has_incomplete_scanners,
+                # may_claim_no_risks_found is ALWAYS False from the coverage summary.
+                #
+                # Collection completed (COMPLETE status) proves the inventory was
+                # obtained. It does NOT prove that zero reportable findings exist
+                # within the defined scope, and it certainly does not prove the
+                # environment has no risks.
+                #
+                # The four claims are independent and must not be conflated:
+                #   1. Collection completed                 ← this summary knows this
+                #   2. Inventory coverage established       ← this summary knows this
+                #   3. No reportable findings in scope      ← requires finding authority
+                #   4. Entire environment has no risks      ← never machine-assertable
+                #
+                # Only L14-SCAN-REPORT-PROOF-001 (finding authority) may set this to
+                # True after independently verifying that finding_count == 0 within
+                # the assessed scope AND that collection_status == COMPLETE.
+                "may_claim_no_risks_found": False,
                 "may_claim_fully_assessed": self.overall_collection_status
                 == CollectionStatus.COMPLETE,
                 "must_disclose_incomplete_scanners": self.has_incomplete_scanners,

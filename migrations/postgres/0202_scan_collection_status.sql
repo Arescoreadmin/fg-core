@@ -16,8 +16,6 @@
 -- - No existing data is modified.
 -- - Compatible with Postgres 14+ row-level security and existing RLS policies.
 
-BEGIN;
-
 -- -------------------------------------------------------------------------
 -- 1. Collection status enum type
 -- -------------------------------------------------------------------------
@@ -104,15 +102,18 @@ $$;
 
 -- -------------------------------------------------------------------------
 -- 5. Indexes for coverage queries (tenant-scoped, non-unique)
+--
+-- NOTE: CREATE INDEX CONCURRENTLY cannot run inside a transaction block and
+-- is therefore incompatible with the migration executor (engine.begin()).
+-- Plain CREATE INDEX IF NOT EXISTS is correct here: the columns are new
+-- (all NULL), so the partial index scan is a no-op and completes instantly.
 -- -------------------------------------------------------------------------
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
     idx_fa_scan_jobs_collection_status
     ON fa_scan_jobs (tenant_id, collection_status)
     WHERE collection_status IS NOT NULL;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
     idx_fa_normalized_findings_collection_status
     ON fa_normalized_findings (engagement_id, collection_status)
     WHERE collection_status IS NOT NULL;
-
-COMMIT;
