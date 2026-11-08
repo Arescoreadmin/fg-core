@@ -22,17 +22,29 @@ MIG = ROOT / "migrations" / "postgres" / "0203_scan_customer_authorization.sql"
 SQL = MIG.read_text()
 
 
+def _latest_constraint_sql() -> str:
+    """The newest migration that (re)defines the scan audit event-type CHECK."""
+    marker = "ADD CONSTRAINT fa_scan_audit_events_event_type_check"
+    for path in sorted(MIG.parent.glob("0*.sql"), reverse=True):
+        text = path.read_text()
+        if marker in text:
+            return text
+    raise AssertionError("no event_type constraint found")
+
+
 def _allowed_event_types() -> set[str]:
-    block = SQL.split("ADD CONSTRAINT fa_scan_audit_events_event_type_check", 1)[1]
+    block = _latest_constraint_sql().split(
+        "ADD CONSTRAINT fa_scan_audit_events_event_type_check", 1
+    )[1]
     block = block.split(");", 1)[0]
     return set(re.findall(r"'(scan\.[a-z_.]+)'", block))
 
 
 class TestMigration:
-    def test_is_latest_and_sequential(self):
+    def test_is_sequential(self):
         names = sorted(p.name for p in MIG.parent.glob("0*.sql"))
-        assert names[-1] == MIG.name
-        assert names[-2].startswith("0202_")
+        i = names.index(MIG.name)
+        assert names[i - 1].startswith("0202_")
 
     def test_every_scan_audit_event_written_by_code_is_allowed(self):
         """Regression: 0079's CHECK rejected every event type added since 0200."""

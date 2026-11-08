@@ -242,8 +242,9 @@ Scanner evidence envelopes must be linked to report generation in a future PR (L
 1. **Vault Transit not wired for scanner receipts.** `provenance_status` is `VERIFIED_INTEGRITY_ONLY`, not `VERIFIED_AUTHENTIC`. Future PR: L14-SCAN-VAULT-001.
 
 2. **Scanner runner integration incomplete.** Only the envelope service is implemented; existing runners do not call `build_envelope()`. Follow-up: L14-SCAN-COMPLETENESS-001.
+   - **Update (L14-SCAN-RUNNER-INTEGRITY-001): CLOSED** for the 10 production worker paths. `build_envelope()` is now called at the post-import boundary, and envelopes, custody and finding links are persisted. Note that runner integration was not delivered by L14-SCAN-COMPLETENESS-001, despite the follow-up named above. See `L14_SCANNER_RUNTIME_EVIDENCE_INTEGRITY.md`.
 
-3. **`verify_by_id` cannot re-verify digest without the original payload.** The raw payload is stored in `fa_scan_results.payload`; a future enhancement should pass the payload through for full re-verification.
+3. **`verify_by_id` cannot re-verify digest without the original payload.** *(Update: `runtime_evidence.verify_stored_evidence()` now re-verifies runtime envelopes against `fa_scan_results.raw_payload` via `observation_path`. `verify_by_id` itself is unchanged.)* The raw payload is stored in `fa_scan_results.payload`; a future enhancement should pass the payload through for full re-verification.
 
 4. **Confidence fields on `fa_normalized_findings` are nullable.** Existing rows have `confidence_level=NULL`. Full enforcement requires a backfill strategy (deferred).
 

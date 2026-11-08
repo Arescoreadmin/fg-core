@@ -578,6 +578,13 @@ def classify_target_for_auth(raw: str) -> tuple[str, str]:
     return t, "fqdn"
 
 
+def _iso(value: Any) -> str | None:
+    """RETURNING timestamps are datetimes on Postgres and strings on SQLite."""
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 # ---------------------------------------------------------------------------
 # Cancellation helpers
 # ---------------------------------------------------------------------------
@@ -675,7 +682,7 @@ def cancel_scan(
     return {
         "scan_job_id": str(updated[0]),
         "status": str(updated[1]),
-        "cancel_requested_at": updated[2].isoformat() if updated[2] else None,
+        "cancel_requested_at": _iso(updated[2]),
     }
 
 
@@ -741,7 +748,7 @@ def confirm_scan_cancelled(
     return {
         "scan_job_id": str(updated[0]),
         "status": str(updated[1]),
-        "cancelled_at": updated[2].isoformat() if updated[2] else None,
+        "cancelled_at": _iso(updated[2]),
     }
 
 
@@ -834,7 +841,7 @@ def request_emergency_stop(
         "stop_id": str(result[0]),
         "scope": str(result[1]),
         "is_active": bool(result[2]),
-        "activated_at": result[3].isoformat() if result[3] else None,
+        "activated_at": _iso(result[3]),
     }
 
 

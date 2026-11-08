@@ -1171,6 +1171,89 @@ def _auto_link_scan_evidence(
         pass
 
 
+def _c6_capture_runtime_evidence(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    scan_result_id: str,
+    scanner_type: str,
+    scan_job_id: str | None,
+    actor: str,
+) -> Any:
+    """Canonical runtime evidence capture at the post-import boundary.
+
+    L14-SCAN-RUNNER-INTEGRITY-001.  Runs inside the import transaction, before
+    the job is marked complete, so envelopes + custody + finding links commit
+    with the scan result.  Never raises: a capture failure leaves the scan
+    result in place, marks its findings UNKNOWN (never evidence-backed), and
+    records ``scan.evidence.capture_failed``.
+    """
+    from services.field_assessment import runtime_evidence as _rte
+
+    try:
+        res = _rte.capture_with_retry(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result_id=scan_result_id,
+            scanner_id=scanner_type,
+            scan_job_id=scan_job_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — fail closed, never fail the import
+        code = (
+            exc.code
+            if isinstance(exc, _rte.EvidenceCaptureError)
+            else "CAPTURE_INTERNAL_ERROR"
+        )
+        log.warning(
+            "runtime_evidence.capture_failed scanner=%s scan_result=%s code=%s",
+            scanner_type,
+            scan_result_id,
+            code,
+        )
+        _rte.mark_findings_evidence_missing(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_id=scanner_type,
+            scan_result_id=scan_result_id,
+            code=code,
+        )
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.evidence.capture_failed",
+            actor=actor,
+            scan_job_id=scan_job_id,
+            scanner_type=scanner_type,
+            scan_result_id=scan_result_id,
+            rejection_reason=code,
+            rejection_code="EVIDENCE_CAPTURE_FAILED",
+        )
+        return None
+    _c6_write_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="scan.evidence.captured",
+        actor=actor,
+        scan_job_id=scan_job_id,
+        scanner_type=scanner_type,
+        scan_result_id=scan_result_id,
+        payload_summary={
+            "scan_evidence_id": res.scan_envelope_id,
+            "observation_evidence": len(res.observation_envelope_ids),
+            "created": res.created,
+            "reused": res.reused,
+            "findings_linked": res.findings_linked,
+            "collection_status": res.collection_status,
+        },
+    )
+    return res
+
+
 def _evidence_link_to_response(lnk: FaEvidenceLink) -> EvidenceLinkResponse:
     return EvidenceLinkResponse(
         id=lnk.id,
@@ -3556,6 +3639,16 @@ def _msgraph_scan_background(
                 scan_result_id=import_result.scan_result_id,
                 source_type="microsoft_graph",
             )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=import_result.scan_result_id,
+                scanner_type="microsoft_graph",
+                scan_job_id=job_id,
+                actor=actor,
+            )
             _c6_update_job_status(
                 db,
                 job_id=job_id,
@@ -3855,6 +3948,16 @@ def _oauth_inventory_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="oauth_inventory",
             )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="oauth_inventory",
+                scan_job_id=job_id,
+                actor=actor,
+            )
             _c6_update_job_status(
                 db,
                 job_id=job_id,
@@ -4124,6 +4227,16 @@ def _endpoint_inventory_scan_background(
                 engagement_id=engagement_id,
                 scan_result_id=result.scan_result_id,
                 source_type="endpoint_inventory",
+            )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="endpoint_inventory",
+                scan_job_id=job_id,
+                actor=actor,
             )
             _c6_update_job_status(
                 db,
@@ -4659,10 +4772,14 @@ def _c6_set_job_collection_status(
     """Persist coverage truth on the job (column from migration 0202)."""
     from sqlalchemy import text as _text
 
+    bind = getattr(db, "bind", None)
+    is_pg = getattr(getattr(bind, "dialect", None), "name", "") == "postgresql"
+    # Postgres column is the fa_collection_status_enum type (0202); SQLite test
+    # databases store text (an enum CAST there would coerce the value to 0).
+    value_sql = "CAST(:cs AS fa_collection_status_enum)" if is_pg else ":cs"
     db.execute(
         _text(
-            "UPDATE fa_scan_jobs SET collection_status = "
-            "CAST(:cs AS fa_collection_status_enum) "
+            f"UPDATE fa_scan_jobs SET collection_status = {value_sql} "
             "WHERE id = :id AND tenant_id = :tid"
         ),
         {"cs": collection_status, "id": job_id, "tid": tenant_id},
@@ -4996,6 +5113,16 @@ def _c6_run_guarded_target_scan(
             engagement_id=engagement_id,
             scan_result_id=result.scan_result_id,
             source_type=scanner_type,
+        )
+        # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+        _c6_capture_runtime_evidence(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scan_result_id=result.scan_result_id,
+            scanner_type=scanner_type,
+            scan_job_id=job_id,
+            actor=actor,
         )
         for d in guard.denied_targets:
             _c6_write_audit_event(
@@ -5918,6 +6045,16 @@ def _entra_governance_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="entra_governance",
             )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="entra_governance",
+                scan_job_id=job_id,
+                actor=actor,
+            )
             _c6_update_job_status(
                 db,
                 job_id=job_id,
@@ -6193,6 +6330,16 @@ def _sharepoint_scan_background(
                 engagement_id=engagement_id,
                 scan_result_id=result.scan_result_id,
                 source_type="sharepoint_onedrive",
+            )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="sharepoint_onedrive",
+                scan_job_id=job_id,
+                actor=actor,
             )
             _c6_update_job_status(
                 db,
@@ -6470,6 +6617,16 @@ def _oauth_risk_scan_background(
                 scan_result_id=result.scan_result_id,
                 source_type="oauth_risk",
             )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="oauth_risk",
+                scan_job_id=job_id,
+                actor=actor,
+            )
             _c6_update_job_status(
                 db,
                 job_id=job_id,
@@ -6745,6 +6902,16 @@ def _ai_tool_discovery_scan_background(
                 engagement_id=engagement_id,
                 scan_result_id=result.scan_result_id,
                 source_type="ai_tool_discovery",
+            )
+            # L14-SCAN-RUNNER-INTEGRITY-001: canonical evidence before completion.
+            _c6_capture_runtime_evidence(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                scan_result_id=result.scan_result_id,
+                scanner_type="ai_tool_discovery",
+                scan_job_id=job_id,
+                actor=actor,
             )
             _c6_update_job_status(
                 db,

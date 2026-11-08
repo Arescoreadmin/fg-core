@@ -102,6 +102,7 @@ class EvidenceCustodyService:
         reason: str | None = None,
         correlation_id: str | None = None,
         digest_ref: str | None = None,
+        commit: bool = True,
     ) -> str:
         """Insert a custody event.  Returns the new event UUID.
 
@@ -149,7 +150,10 @@ class EvidenceCustodyService:
                 "created_at": now,
             },
         )
-        db.commit()
+        # commit=False lets runtime capture persist the envelope and its custody
+        # events atomically in the caller's transaction (L14-SCAN-RUNNER-INTEGRITY-001).
+        if commit:
+            db.commit()
         return event_id
 
     def get_history(

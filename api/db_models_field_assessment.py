@@ -226,6 +226,14 @@ class FaNormalizedFinding(Base):
     evidence_ref_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     remediation_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
     asset_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Evidence confidence + collection truth (columns added by migrations 0201 and
+    # 0202; mapped by L14-SCAN-RUNNER-INTEGRITY-001).  NULL = legacy finding,
+    # never classified — must be treated as unverified, never upgraded silently.
+    confidence_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    verification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence_justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_envelope_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    collection_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
@@ -458,6 +466,9 @@ class FaScanJob(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     scan_result_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scan_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
+    # Canonical CollectionStatus (migration 0202 adds the Postgres enum column;
+    # mapped by L14-SCAN-RUNNER-INTEGRITY-001).  NULL = legacy → treat as UNKNOWN.
+    collection_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -1363,10 +1374,28 @@ class FaScanEvidenceEnvelope(Base):
     )
     correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # L14-SCAN-RUNNER-INTEGRITY-001 (migration 0204): runtime capture metadata.
+    # observation_path locates the digested sub-payload inside the stored
+    # fa_scan_results.raw_payload (e.g. "hosts[2]"; "$" = whole payload).
+    observation_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_receipt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    authorization_proof_level: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    payload_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (
+        Index(
+            "uq_fa_scan_evidence_env_observation",
+            "tenant_id",
+            "scan_result_id",
+            "source_type",
+            "source_id",
+            unique=True,
+        ),
         Index(
             "ix_fa_scan_evidence_env_tenant_eng",
             "tenant_id",
@@ -1420,6 +1449,49 @@ class FaEvidenceCustodyEvent(Base):
         ),
         Index("ix_fa_evidence_custody_evidence", "evidence_id"),
     )
+
+
+_ENVELOPE_IMMUTABLE_FIELDS = (
+    "tenant_id",
+    "engagement_id",
+    "scan_job_id",
+    "scanner_id",
+    "source_type",
+    "source_id",
+    "observation_path",
+    "payload_digest",
+    "canonicalization_ver",
+    "schema_version",
+    "collected_at",
+    "collection_status",
+    "authorization_ref",
+    "authorization_version",
+    "customer_receipt_id",
+    "authorization_proof_level",
+)
+
+
+@sa_event.listens_for(FaScanEvidenceEnvelope, "before_update")
+def _block_envelope_digest_mutation(mapper, connection, target):
+    """Captured evidence identity and digest are immutable (mirrors the 0204 trigger).
+
+    The only permitted changes: provenance_status may move to INVALID (one-way)
+    and scan_result_id may become NULL (FK ON DELETE SET NULL).
+    """
+    from sqlalchemy import inspect as _sa_inspect
+
+    state = _sa_inspect(target)
+    for name in _ENVELOPE_IMMUTABLE_FIELDS:
+        hist = state.attrs[name].history
+        if hist.has_changes() and hist.deleted:
+            raise ValueError(f"fa_scan_evidence_envelopes.{name} is immutable")
+    prov = state.attrs["provenance_status"].history
+    if prov.has_changes() and prov.deleted:
+        if target.provenance_status != "INVALID" or prov.deleted[0] == "INVALID":
+            raise ValueError("provenance_status may only transition to INVALID")
+    sr = state.attrs["scan_result_id"].history
+    if sr.has_changes() and sr.deleted and target.scan_result_id is not None:
+        raise ValueError("fa_scan_evidence_envelopes.scan_result_id is immutable")
 
 
 @sa_event.listens_for(FaEvidenceCustodyEvent, "before_update")
