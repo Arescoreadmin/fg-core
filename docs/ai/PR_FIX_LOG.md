@@ -21,6 +21,7 @@
   - Decision records.
   - Migration 0203.
   - SQLite `init_db()` creates `fa_scan_emergency_stops`.
+- **Review fixes (Codex P1/P2):** `api/auth_dispatch.py::_bind_membership` and `api/identity_authority/models.py::CanonicalIdentity.to_actor_context` rebuilt ActorContext without `email_verified` (reset to False), so every real customer approval failed closed. Both now propagate the validated claim. The effective-status endpoint now evaluates scope `effective_from`, matching `check_scan_authorized()`. Regression tests: `tests/security/test_scan_consent_identity_propagation.py`, `TestEffectiveStatus`.
 - **Files created:**
   - `services/field_assessment/customer_authorization.py`
   - `services/field_assessment/scan_execution_guard.py`

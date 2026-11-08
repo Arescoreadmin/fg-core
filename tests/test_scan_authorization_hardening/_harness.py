@@ -208,6 +208,33 @@ class FakeSession:
                 ]
             )
 
+        if sql.startswith(
+            "SELECT id, expires_at, customer_receipt_id, version, effective_from"
+        ):
+            rows = [
+                r
+                for r in s.scopes.values()
+                if r["tenant_id"] == p["tid"]
+                and r["engagement_id"] == p["eid"]
+                and r["status"] == "active"
+                and r["revoked_at"] is None
+            ]
+            rows.sort(key=lambda r: r["effective_from"], reverse=True)
+            if not rows:
+                return _Result([])
+            r = rows[0]
+            return _Result(
+                [
+                    (
+                        r["id"],
+                        r["expires_at"],
+                        r["customer_receipt_id"],
+                        r["version"],
+                        r["effective_from"],
+                    )
+                ]
+            )
+
         if (
             "FROM fa_customer_authorization_receipts WHERE id = CAST(:rid AS uuid)"
             in sql

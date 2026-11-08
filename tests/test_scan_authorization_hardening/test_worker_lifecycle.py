@@ -483,3 +483,57 @@ class TestEmergencyStopRelease:
                 permissions=["scan.emergency_stop"],
             )
         assert ei.value.audit_code == "EMERGENCY_STOP_CLEAR_CROSS_TENANT_DENIED"
+
+
+class TestEffectiveStatus:
+    """Effective-status endpoint must agree with check_scan_authorized()."""
+
+    def _status(self, store):
+        with (
+            patch.object(fa, "_resolve_caller_tenant", return_value=T1),
+            patch.object(fa, "get_engagement", return_value=SimpleNamespace(id=E1)),
+        ):
+            return fa.get_effective_scan_authorization_status(
+                engagement_id=E1,
+                request=SimpleNamespace(),
+                actor_ctx=SimpleNamespace(),
+                db=store.session(),
+            )
+
+    def test_effective_now(self, store):
+        out = self._status(store)
+        assert out["effective"] is True
+        assert out["consent_status"] == "CUSTOMER_APPROVED"
+
+    def test_future_effective_from_not_effective(self, store):
+        from datetime import timedelta
+
+        from services.field_assessment.scan_authorization import check_scan_authorized
+
+        store.scopes[store.scope_id]["effective_from"] = utcnow() + timedelta(hours=2)
+        out = self._status(store)
+        assert out["effective"] is False
+        assert out["reason_code"] == "AUTHORIZATION_NOT_YET_EFFECTIVE"
+        # Must agree with the execution authority.
+        with pytest.raises(ScanAuthorizationError) as ei:
+            check_scan_authorized(
+                store.session(),
+                tenant_id=T1,
+                engagement_id=E1,
+                target="app.example.com",
+                target_type="fqdn",
+                operation="web_headers",
+            )
+        assert ei.value.audit_code == "AUTHORIZATION_NOT_YET_EFFECTIVE"
+
+    def test_emergency_stop_reported(self, store):
+        store.stop("platform")
+        out = self._status(store)
+        assert out["effective"] is False
+        assert out["reason_code"] == "EMERGENCY_STOP_ACTIVE"
+
+    def test_revoked_receipt_reported(self, store):
+        store.receipts[store.receipt_id].update(status="revoked", revoked_at=utcnow())
+        out = self._status(store)
+        assert out["effective"] is False
+        assert out["reason_code"] == "RECEIPT_REVOKED"

@@ -8118,7 +8118,7 @@ def get_effective_scan_authorization_status(
     )
     scope = db.execute(
         _text(
-            "SELECT id, expires_at, customer_receipt_id, version "
+            "SELECT id, expires_at, customer_receipt_id, version, effective_from "
             "FROM fa_scan_authorizations "
             "WHERE tenant_id = :tid AND engagement_id = :eid::uuid "
             "  AND status = 'active' AND revoked_at IS NULL "
@@ -8146,6 +8146,13 @@ def get_effective_scan_authorization_status(
         return out
     if scope[1] is not None and _customer_auth._as_utc(scope[1]) <= now:
         out["reason_code"] = "AUTHORIZATION_EXPIRED"
+        return out
+    # Mirror check_scan_authorized(): a scheduled scope is not yet effective.
+    if scope[4] is not None and now < _customer_auth._as_utc(scope[4]):
+        out["reason_code"] = "AUTHORIZATION_NOT_YET_EFFECTIVE"
+        out["scope_effective_from"] = (
+            scope[4].isoformat() if isinstance(scope[4], datetime) else str(scope[4])
+        )
         return out
     if scope[2] is None:
         out["consent_status"] = "LEGACY_OPERATOR_ASSERTED"

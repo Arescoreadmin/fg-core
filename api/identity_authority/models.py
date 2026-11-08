@@ -116,6 +116,8 @@ class CanonicalIdentity:
             membership_id=self.tenant_binding.membership_id
             if self.tenant_binding
             else None,
+            # Carry the provider-verified email claim (default would be False).
+            email_verified=self.email_verified,
         )
 
 
