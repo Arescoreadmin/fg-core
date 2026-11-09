@@ -25,6 +25,15 @@
   - CZ-19 (P2): `/portal/engagement/*` reads a different report authority.
   - Graph affected resources are unrecorded (P2).
   - The login page shows authenticated navigation (P2).
+- **Portal acceptance completion:**
+  - **`apps/portal/package-lock.json`:** records the already-declared `@vercel/edge-config` (1.5.1 + `@vercel/global-config-fs` 0.1.0), so `npm ci` reproduces the tree. The local build failed without it. Verified offline: `npm ci --dry-run --offline`.
+  - **`apps/portal/app/api/core/[...path]/route.ts`:** CZ-29 fix.
+    - The BFF decoded every core response with `response.text()`, corrupting binary PDFs (U+FFFD in the binary header, invalid `startxref`).
+    - It now relays `arrayBuffer()` and the `content-disposition`, `x-report-state` and `x-manifest-hash` headers.
+    - 2 regression tests in `apps/portal/tests/portal-security.test.js`.
+    - `npm test` 79/79; `npm run lint` clean; `npm run build` 32/32 pages.
+  - **Authenticated browser run:** reproduced CZ-17 and CZ-18; recorded CZ-24 ("Finalized" for a draft), CZ-25 (dashboard/summary contract drift), CZ-26/27/28 (P2). `browser_acceptance.py` now captures console, network, the downloaded PDF and a derived matrix.
+  - **Separate follow-ups:** Next.js 14.2.5 security remediation; TypeScript parser compatibility; `@vercel/edge-config` deprecation.
 - **No migration. No CI, infra or contract change.** Synthetic data only. No scans, messages or billing actions.
 
 ## feat(field-assessment): L14-SCAN-REPORT-PROOF-001 — report completeness, coverage truth, evidence proof and draft rendering (branch feat/l14-scan-report-proof-001)

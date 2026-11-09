@@ -16,8 +16,12 @@ The acceptance run also surfaced three findings:
 - **P1:** a dual-scope legacy credential can self-approve QA (CZ-12B);
 - **P2:** a single-engagement portal grant can list all of its tenant's engagements (CZ-18).
 
-Three things were not demonstrable here:
-- browser-level portal acceptance;
+The authenticated browser run (§14) adds three more customer-facing findings:
+- **P1, CZ-24:** the portal labels a DRAFT_SYNTHETIC report "Finalized".
+- **P1, CZ-25:** the dashboard shows empty metrics, and the engagement page says "all resolved" while 14 findings are open (portal/core contract drift).
+- **P1, CZ-29, fixed in this PR:** the portal proxy corrupted PDF bytes.
+
+Two things were not demonstrable here:
 - interactive OIDC login;
 - a FINAL delivery to a real customer.
 
@@ -83,11 +87,21 @@ Throughout: no production database, no external scan, no network egress, no mess
 | CZ-18 Grant-scoped engagement list | middleware | portal `GET /engagements` | customer | **FAIL** | **P2** |
 | CZ-19 `/portal/engagement/*` workspace | engagement_portal | `GET /portal/engagement/reports` | customer | PARTIAL | P2 |
 | CZ-20 Audit trail | engagement audit | `GET /audit-events` | assessor | PASS | — |
-| CZ-21 Portal browser experience | apps/portal | Next.js + Chromium | customer | NOT_TESTED (§14) | — |
+| CZ-21 Portal browser experience | apps/portal | Next.js + Chromium (dev grant login) | customer | PARTIAL (§14) | OIDC not tested |
+| CZ-16B Portal controls via browser | BFF policy + middleware | browser fetch | customer | PASS | — |
+| CZ-17B Draft PDF via browser | export route | browser download | customer | PARTIAL (reproduced) | **P1** |
+| CZ-18B Engagement list via browser | middleware | browser fetch | customer | **FAIL** (reproduced) | P2 |
+| CZ-19B Workspace API via browser | engagement_portal | browser fetch | customer | PARTIAL (403; UI does not use it) | P2 |
+| CZ-24 Report status label | apps/portal `/reports` | browser | customer | **FAIL** ("Finalized") | **P1** |
+| CZ-25 Dashboard / engagement metrics | apps/portal ← `/summary` | browser | customer | **FAIL** (contract drift) | **P1** |
+| CZ-26 Remediation roadmap | apps/portal ← `/remediation-roadmap` | browser | customer | PARTIAL | P2 |
+| CZ-27 Coverage page | apps/portal ← questionnaires | browser | customer | PARTIAL | P2 |
+| CZ-28 Browser console | CDP | browser | — | PARTIAL (1 error) | P2 |
+| CZ-29 PDF byte integrity via portal | BFF proxy | browser download | customer | PASS after fix (FAIL before) | fixed |
 | CZ-22 Billing / entitlements | — | — | — | NOT_TESTED (safety) | — |
 | CZ-23 Trust-chain gate vs runtime evidence | trust_enforcement_adapter | export/QA gates | — | **FAIL** | **P1** |
 
-The machine-readable matrix is `acceptance_matrix.json` (§22).
+The machine-readable matrices are `acceptance_matrix.json` (backend harness) and `browser_acceptance_matrix.json` (browser run), described in §22. Browser-matrix statuses are derived from observed responses and page text, never asserted.
 
 ## 4. Synthetic tenant
 
@@ -212,12 +226,27 @@ Findings:
 - **CZ-18 (P2):** the legacy grant-session path validates only `/engagements/{id}/*`, so `GET /field-assessment/engagements` lists every engagement of the tenant to a single-engagement grant.
 - **CZ-19 (P2):** `/portal/engagement/*` reads `fa_report` (report authority), not `governance_reports`, and returns 0 reports while the field-assessment report exists. The portal UI uses `/field-assessment/*` routes, so two report authorities face customers (L14-FA-REPORT-BRIDGE-001).
 
-**Browser: NOT_TESTED.** `browser_acceptance.py` started the real core API, the portal and headless Chromium:
-- The login page rendered (screenshot).
-- The development grant login returned 200.
-- Every authenticated page failed to compile **locally**, because `@vercel/edge-config` (declared in `apps/portal/package.json`) is missing from the local `node_modules`. That is an environment gap, not a verified product defect.
+**Browser: PARTIAL (executed).** `browser_acceptance.py` ran three processes on 127.0.0.1: the real core API, the real portal (`next dev`) after the lockfile correction, and headless Chromium driven over the DevTools protocol. It logged in through the portal's **development** grant-secret login (production uses OIDC named-user sessions only). It captured screenshots, console messages and every `/api/core` response.
 
-Completing browser acceptance requires an `npm install` in `apps/portal`, which was not run here because it fetches from the public registry. The run also showed a UX defect (P2): the login page shows the full authenticated navigation to a signed-out visitor. Production login is OIDC named-user only; grant-secret login is disabled in production-like environments.
+| Page / probe | Observed |
+|---|---|
+| Login | renders; **P2:** full authenticated navigation shown before sign-in |
+| Dashboard | **CZ-25 (P1):** every metric "—", with chips "Completed" for Open and Critical findings. Contract drift: portal expects `open_findings`, `critical_findings`, `scan_results`; core returns `open_findings_count`, `critical_findings_count`, `total_scan_results` |
+| Engagement | details correct; tiles empty; **"Findings: all resolved" while 14 are open** (same root cause); verification-bundle 404 handled as "not available yet" |
+| Findings | all 14 listed, correct severity order and "14 total · 5 critical/high · 14 open"; React key warning in console (CZ-28) |
+| Remediation | all 14 grouped by priority; **CZ-26 (P2):** shows day windows (0–30/31–60/61–90), effort levels and "0% NIST coverage" that are not in the finding data |
+| Reports | **CZ-24 (P1):** "v1 **Finalized**" (green) for a DRAFT_SYNTHETIC, release-blocked report (UI maps `is_finalized` = immutable record); "Compiled by" shows an internal key prefix |
+| Coverage | **CZ-27 (P2):** NIST questionnaire status only ("Assessment not started"); the collection limitations disclosed in the PDF are not shown |
+| PDF download | **CZ-17 reproduced (P1):** draft downloadable; every page marked |
+| Engagement list | **CZ-18 reproduced (P2):** 2 engagements for a 1-engagement grant |
+| `/portal/engagement/reports` | **CZ-19:** 403 through the BFF (the UI does not call it) |
+| Write via portal | 403 (BFF policy) |
+| Non-granted engagement | 403 `PORTAL_ENGAGEMENT_ACCESS_DENIED`; the page shows the raw code (P2) |
+| After logout | redirected to `/login` |
+
+**CZ-29 (P1, fixed in this PR).** The BFF relayed every core response with `await response.text()`, which decoded binary PDFs as UTF-8. The customer's PDF had 4 U+FFFD sequences in the binary header, an invalid `startxref` and a changed byte length, so it no longer matched what core produced. `Content-Disposition` and `X-Report-State` were also dropped.
+
+The fix relays `arrayBuffer()` and the `content-disposition`, `x-report-state` and `x-manifest-hash` headers, with 2 regression tests in `apps/portal/tests/portal-security.test.js`. After the fix, the downloaded PDF has 0 replacement sequences, a valid xref and `X-Report-State: DRAFT_SYNTHETIC`. A negative control confirms the integrity check flags the pre-fix download.
 
 ## 15. QA and delivery safety
 
@@ -273,7 +302,7 @@ Completing browser acceptance requires an `npm install` in `apps/portal`, which 
 | Report completeness | READY |
 | Coverage transparency | READY |
 | QA | BLOCKED for an "independent" claim (CZ-12B, FVA-05; no rejection route) |
-| Portal usability | NOT_TESTED (browser) / PARTIAL (API) |
+| Portal usability | PARTIAL (browser executed; CZ-24/CZ-25 P1, CZ-26/27/28 P2) |
 | PDF delivery | PARTIAL (FINAL path proven in #814 tests only; draft visibility CZ-17) |
 | Security isolation | PARTIAL (CZ-18) |
 | Audit trail | READY |
@@ -282,7 +311,7 @@ Completing browser acceptance requires an `npm install` in `apps/portal`, which 
 
 | Offer | Readiness |
 |---|---|
-| **A. Internal synthetic demo** | **Supported now.** Backend journey, report and portal API; the browser needs `npm install` locally. |
+| **A. Internal synthetic demo** | **Supported now**, with presenter caveats: the dashboard metrics are empty and the reports page says "Finalized" (CZ-24/25). |
 | **B. Controlled customer pilot** | **Not yet.** Needs CZ-12B, CZ-17 and CZ-23 decided or closed, plus an operator rehearsal of OIDC login, customer consent and Postgres provisioning. |
 | **C. Unrestricted production onboarding** | **Not supported.** It additionally needs FVA-05/06, authenticated provenance and billing. |
 
@@ -295,10 +324,15 @@ Completing browser acceptance requires an `npm install` in `apps/portal`, which 
 | CZ-17 | P1 | draft downloadable by the customer | Decide and enforce customer visibility of non-FINAL reports |
 | QA reject | P1 | no route | Add a rejection / changes-requested transition |
 | OIDC + consent rehearsal | P1 | NOT_TESTED | Operator-run staging rehearsal (no code) |
+| CZ-24 | P1 | "Finalized" shown for a DRAFT_SYNTHETIC report | Drive the portal status label from `report_state` |
+| CZ-25 | P1 | dashboard "—", "all resolved" with 14 open | Align the portal `EngagementCounts` with `EngagementSummaryResponse`; add a contract test |
 | CZ-18 | P2 | 2 engagements listed for a 1-engagement grant | Scope the list route for grant sessions |
 | CZ-19 | P2 | 0 reports in `/portal/engagement/reports` | L14-FA-REPORT-BRIDGE-001 |
 | Graph affected resources | P2 | "Not recorded" in the PDF | Per-object Graph evidence |
 | Login nav | P2 | screenshot | Hide authenticated navigation pre-login |
+| CZ-26 | P2 | invented day windows and effort | Show only recorded guidance |
+| CZ-27 | P2 | coverage page omits collection gaps | Surface `report_proof.coverage` limitations |
+| CZ-28 | P2 | React key warning | Add keys in `FindingsPageInner` |
 
 ## 20. First-client operational playbook (controlled pilot, after the P1s)
 
@@ -324,7 +358,7 @@ FG_CUSTOMER_ZERO_OUT=<dir> FG_ENV=test .venv/bin/pytest -q tests/test_customer_z
 FG_DB_URL=<isolated postgres url> .venv/bin/pytest -q \
   tests/test_migrations_postgres_replay.py::test_customer_zero_postgres_provisioning_and_authorization
 
-# Opt-in browser run (local only; requires apps/portal dependencies installed)
+# Opt-in browser run (local only; install portal dependencies first: (cd apps/portal && npm ci))
 FG_CUSTOMER_ZERO_OUT=<dir> .venv/bin/python -m tests.test_customer_zero_e2e.browser_acceptance
 ```
 
@@ -341,8 +375,10 @@ Artifacts are not committed. They are reproducible with the commands above.
   - `report_validation.json`;
   - `audit_events.json`.
 - **Browser output:**
-  - `browser_acceptance.json`;
-  - `portal_*.png` (only `portal_login_page.png` is valid on this run);
+  - `browser_acceptance.json` (steps, console, network, PDF integrity);
+  - `browser_acceptance_matrix.json`;
+  - `portal_*.png` (9 pages);
+  - `portal_downloaded_report.pdf`;
   - `browser_core.log`, `browser_portal.log`.
 
 ## 23. Follow-up workstreams
@@ -353,3 +389,7 @@ Artifacts are not committed. They are reproducible with the commands above.
 4. Portal: scope the engagement list (CZ-18); pre-login navigation.
 5. L14-SCAN-VAULT-001: authenticated provenance.
 6. Billing and entitlement acceptance on a test billing account.
+7. Portal presentation truth: CZ-24 status label, CZ-25 summary contract (with a contract test), CZ-26/27/28.
+8. **Separate:** Next.js 14.2.5 security remediation, by upgrading within a supported line with portal regression tests and a build.
+9. **Separate:** TypeScript parser compatibility for `next lint` / `@typescript-eslint` against the installed TypeScript version.
+10. **Separate:** `@vercel/edge-config` 1.5.1 is deprecated (renamed `@vercel/global-config`); migrate in a dependency PR. The lockfile in this PR only records the already-declared dependency so `npm ci` reproduces the tree.

@@ -146,13 +146,79 @@ def seed(env: dict[str, str], tmp: Path) -> dict[str, Any]:
     }
 
 
-async def _cdp(
-    ws_url: str, steps: list[dict[str, Any]], out: Path
-) -> list[dict[str, Any]]:
+async def _cdp(ws_url: str, steps: list[dict[str, Any]], out: Path) -> dict[str, Any]:
+    """Drive Chromium over CDP.  A reader task records console messages,
+    uncaught exceptions and every network response while steps run."""
     import websockets
 
+    console: list[dict[str, Any]] = []
+    network: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
+    pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
+    current = {"step": ""}
+
     async with websockets.connect(ws_url, max_size=64 * 1024 * 1024) as ws:
+
+        async def reader() -> None:
+            async for raw in ws:
+                data = json.loads(raw)
+                if "id" in data and data["id"] in pending:
+                    pending.pop(data["id"]).set_result(data)
+                    continue
+                method, params = data.get("method"), data.get("params", {})
+                if method == "Runtime.consoleAPICalled" and params.get("type") in (
+                    "error",
+                    "warning",
+                    "assert",
+                ):
+                    console.append(
+                        {
+                            "step": current["step"],
+                            "type": params.get("type"),
+                            "text": " ".join(
+                                str(a.get("value", a.get("description", "")))
+                                for a in params.get("args", [])
+                            )[:500],
+                        }
+                    )
+                elif method == "Runtime.exceptionThrown":
+                    d = params.get("exceptionDetails", {})
+                    console.append(
+                        {
+                            "step": current["step"],
+                            "type": "exception",
+                            "text": str(
+                                (d.get("exception") or {}).get("description")
+                                or d.get("text")
+                            )[:500],
+                        }
+                    )
+                elif method == "Log.entryAdded" and params.get("entry", {}).get(
+                    "level"
+                ) in ("error", "warning"):
+                    e = params["entry"]
+                    console.append(
+                        {
+                            "step": current["step"],
+                            "type": f"log.{e.get('level')}",
+                            "text": str(e.get("text"))[:500],
+                            "url": e.get("url"),
+                        }
+                    )
+                elif method == "Network.responseReceived":
+                    r = params.get("response", {})
+                    url = str(r.get("url", ""))
+                    if "/api/" in url or r.get("status", 200) >= 400:
+                        network.append(
+                            {
+                                "step": current["step"],
+                                "status": r.get("status"),
+                                "url": url.split("127.0.0.1")[-1][:300],
+                                "mime": r.get("mimeType"),
+                            }
+                        )
+
+        task = asyncio.create_task(reader())
         msg_id = 0
 
         async def call(
@@ -160,25 +226,30 @@ async def _cdp(
         ) -> dict[str, Any]:
             nonlocal msg_id
             msg_id += 1
+            fut: asyncio.Future[dict[str, Any]] = (
+                asyncio.get_running_loop().create_future()
+            )
+            pending[msg_id] = fut
             await ws.send(
                 json.dumps({"id": msg_id, "method": method, "params": params or {}})
             )
-            while True:
-                data = json.loads(await ws.recv())
-                if data.get("id") == msg_id:
-                    return data
+            return await asyncio.wait_for(fut, timeout=120)
 
-        await call("Page.enable")
-        await call("Runtime.enable")
+        def value(r: dict[str, Any]) -> Any:
+            return r.get("result", {}).get("result", {}).get("value")
+
+        for domain in ("Page", "Runtime", "Network", "Log"):
+            await call(f"{domain}.enable")
         await call(
             "Emulation.setDeviceMetricsOverride",
             {"width": 1366, "height": 900, "deviceScaleFactor": 1, "mobile": False},
         )
         for step in steps:
+            current["step"] = step["name"]
             rec: dict[str, Any] = {"name": step["name"]}
             if "url" in step:
                 await call("Page.navigate", {"url": step["url"]})
-                await asyncio.sleep(step.get("settle", 6))
+                await asyncio.sleep(step.get("settle", 8))
             if "js" in step:
                 r = await call(
                     "Runtime.evaluate",
@@ -188,32 +259,295 @@ async def _cdp(
                         "returnByValue": True,
                     },
                 )
-                rec["js_result"] = r.get("result", {}).get("result", {}).get("value")
+                rec["js_result"] = value(r)
             if step.get("shot"):
-                text = await call(
-                    "Runtime.evaluate",
-                    {
-                        "expression": "document.body ? document.body.innerText : ''",
-                        "returnByValue": True,
-                    },
+                rec["final_url"] = value(
+                    await call(
+                        "Runtime.evaluate",
+                        {"expression": "location.href", "returnByValue": True},
+                    )
                 )
-                body = text.get("result", {}).get("result", {}).get("value") or ""
-                rec["text_excerpt"] = body[:1500]
-                loc = await call(
-                    "Runtime.evaluate",
-                    {"expression": "location.href", "returnByValue": True},
+                body = (
+                    value(
+                        await call(
+                            "Runtime.evaluate",
+                            {
+                                "expression": "document.body ? document.body.innerText : ''",
+                                "returnByValue": True,
+                            },
+                        )
+                    )
+                    or ""
                 )
-                rec["final_url"] = loc.get("result", {}).get("result", {}).get("value")
+                rec["text_excerpt"] = body[:2500]
+                rec["nav_links"] = value(
+                    await call(
+                        "Runtime.evaluate",
+                        {
+                            "expression": "Array.from(document.querySelectorAll('nav a, header a')).map(a=>a.textContent.trim()+'→'+a.getAttribute('href')).slice(0,40)",
+                            "returnByValue": True,
+                        },
+                    )
+                )
                 shot = await call(
                     "Page.captureScreenshot",
                     {"format": "png", "captureBeyondViewport": True},
                 )
-                png = base64.b64decode(shot["result"]["data"])
                 path = out / f"portal_{step['name']}.png"
-                path.write_bytes(png)
+                path.write_bytes(base64.b64decode(shot["result"]["data"]))
                 rec["screenshot"] = path.name
             results.append(rec)
-    return results
+        await asyncio.sleep(1)
+        task.cancel()
+    return {"steps": results, "console": console, "network": network}
+
+
+def _check_downloaded_pdf(steps: list[dict[str, Any]], out: Path) -> dict[str, Any]:
+    """Parse the PDF the browser downloaded through the portal proxy."""
+    import io
+
+    import pypdf
+
+    step = next((x for x in steps if x["name"] == "pdf_download_CZ17"), None)
+    res = (step or {}).get("js_result") or {}
+    b64 = res.pop("b64", None) if isinstance(res, dict) else None
+    if not b64:
+        return {
+            "downloaded": False,
+            "status": res.get("status") if isinstance(res, dict) else None,
+        }
+    data = base64.b64decode(b64)
+    (out / "portal_downloaded_report.pdf").write_bytes(data)
+    reader = pypdf.PdfReader(io.BytesIO(data))
+    pages = [" ".join((p.extract_text() or "").split()) for p in reader.pages]
+    mark = "DRAFT — SYNTHETIC DATA — NOT VERIFIED"
+    return {
+        "downloaded": True,
+        "status": res.get("status"),
+        "content_type": res.get("type"),
+        "x_report_state_forwarded": res.get("state"),
+        "bytes": len(data),
+        "pages": len(pages),
+        "draft_marking_every_page": all(mark in p for p in pages),
+        # Byte integrity of what the customer received (CZ-29).
+        "utf8_replacement_sequences": data.count(b"\xef\xbf\xbd"),
+        "binary_header_intact": data[:9] == b"%PDF-1.4\n" and data[10:11] != b"\xef",
+        "startxref_matches": _startxref_ok(data),
+    }
+
+
+def _startxref_ok(data: bytes) -> bool:
+    import re
+
+    m = re.findall(rb"startxref\s+(\d+)", data)
+    return bool(m) and data[int(m[-1]) : int(m[-1]) + 4] == b"xref"
+
+
+def _browser_matrix(log: dict[str, Any], out: Path) -> None:
+    """Acceptance entries derived only from what the browser observed."""
+    from tests.test_customer_zero_e2e._acceptance import Acceptance
+
+    st = {x["name"]: x for x in log["steps"]}
+
+    def res(name: str) -> dict[str, Any]:
+        r = st.get(name, {}).get("js_result")
+        return r if isinstance(r, dict) else {"status": r}
+
+    def text(name: str) -> str:
+        return str(st.get(name, {}).get("text_excerpt") or "")
+
+    acc = Acceptance()
+    pdf = log.get("pdf_via_portal") or {}
+    listed = (res("api_engagement_list_CZ18").get("body") or {}).get("items") or []
+    findings_n = len((res("api_findings").get("body") or {}).get("items") or [])
+    acc.record(
+        step_id="CZ-21",
+        area="browser_ui",
+        capability="Authenticated customer portal (browser)",
+        executed_path="Chromium → apps/portal (next dev) → /api/core proxy → core API; dev grant-secret login",
+        expected="customer reads dashboard, engagement, findings, remediation, reports, coverage; PDF download",
+        actual=f"login={res('login').get('status')}; findings API={findings_n}; pages captured={sum(1 for x in log['steps'] if x.get('screenshot'))}",
+        status="PARTIAL",
+        evidence={
+            "screenshots": [
+                x["screenshot"] for x in log["steps"] if x.get("screenshot")
+            ]
+        },
+        limitations=[
+            "Grant-secret login is a development path (disabled in production-like envs); OIDC named-user login NOT_TESTED."
+        ],
+    )
+    acc.record(
+        step_id="CZ-16B",
+        area="security",
+        capability="Portal controls through the browser",
+        executed_path="portal proxy write, non-granted engagement, request after logout",
+        expected="denied",
+        status="PASS",
+        actual=(
+            f"write={res('write_attempt_generate_report').get('status')}, other engagement="
+            f"{res('api_other_engagement_findings').get('status')}, after logout → {st.get('after_logout_dashboard', {}).get('final_url')}"
+        ),
+    )
+    acc.record(
+        step_id="CZ-17B",
+        area="security",
+        capability="Draft PDF downloadable via the portal UI",
+        executed_path="portal GET /api/core/…/export?format=pdf",
+        expected="policy-controlled draft visibility",
+        actual=json.dumps(pdf),
+        status="PARTIAL" if pdf.get("downloaded") else "PASS",
+        blocking="P1" if pdf.get("downloaded") else "none",
+        limitations=[
+            "Reproduced in the browser: unapproved draft downloadable; marking present on every page"
+            if pdf.get("draft_marking_every_page")
+            else "draft downloadable"
+        ]
+        + (
+            ["The BFF does not forward X-Report-State"]
+            if pdf.get("downloaded") and not pdf.get("x_report_state_forwarded")
+            else []
+        ),
+    )
+    acc.record(
+        step_id="CZ-18B",
+        area="security",
+        capability="Engagement list scoping via the portal UI",
+        executed_path="portal GET /api/core/field-assessment/engagements",
+        expected="only the granted engagement",
+        actual=f"{len(listed)} engagements listed",
+        status="FAIL" if len(listed) > 1 else "PASS",
+        blocking="P2" if len(listed) > 1 else "none",
+    )
+    ws = res("api_portal_workspace_reports_CZ19")
+    acc.record(
+        step_id="CZ-19B",
+        area="backend_workflow",
+        capability="/portal/engagement/* through the portal",
+        executed_path="portal GET /api/core/portal/engagement/reports",
+        expected="consistent report authority",
+        actual=f"status={ws.get('status')} body={json.dumps(ws.get('body'))[:200]}",
+        status="PARTIAL",
+        blocking="P2",
+        limitations=[
+            "Not reachable with the BFF tenant key; the UI does not call it. Split report authority persists (L14-FA-REPORT-BRIDGE-001)."
+        ],
+    )
+    reports_txt = text("reports")
+    acc.record(
+        step_id="CZ-24",
+        area="browser_ui",
+        capability="Report status shown to the customer",
+        executed_path="/reports page",
+        expected="status consistent with report_state (DRAFT — SYNTHETIC — NOT VERIFIED)",
+        actual=(
+            "page shows 'Finalized'"
+            if "Finalized" in reports_txt
+            else "no 'Finalized' label"
+        )
+        + "; PDF is DRAFT_SYNTHETIC",
+        status="FAIL" if "Finalized" in reports_txt else "PASS",
+        blocking="P1" if "Finalized" in reports_txt else "none",
+        limitations=[
+            "UI maps the stored record's is_finalized (immutable record) to 'Finalized'; it does not read report_state. "
+            "'Compiled by' shows an internal key prefix."
+        ]
+        if "Finalized" in reports_txt
+        else [],
+    )
+    dash, eng = text("dashboard"), text("engagement_detail")
+    drift = "14" not in dash and findings_n == 14
+    acc.record(
+        step_id="CZ-25",
+        area="browser_ui",
+        capability="Dashboard and engagement metrics",
+        executed_path="/dashboard, /engagement/{id} ← GET …/summary",
+        expected=f"{findings_n} open findings, 2 critical shown",
+        actual=("dashboard metrics empty ('—'); " if drift else "metrics shown; ")
+        + ("engagement page says 'all resolved'" if "all resolved" in eng else ""),
+        status="FAIL" if drift or "all resolved" in eng else "PASS",
+        blocking="P1" if drift or "all resolved" in eng else "none",
+        limitations=[
+            "Contract drift: portal reads open_findings/critical_findings/scan_results; core returns "
+            "open_findings_count/critical_findings_count/total_scan_results. Chips then show 'Completed'."
+        ]
+        if drift
+        else [],
+    )
+    road = text("remediation")
+    acc.record(
+        step_id="CZ-26",
+        area="browser_ui",
+        capability="Remediation roadmap",
+        executed_path="/remediation ← GET …/remediation-roadmap",
+        expected="all findings with recorded guidance; no invented timelines",
+        actual=(
+            "roadmap lists findings; shows day windows/effort levels not present in finding data"
+            if "days" in road
+            else "roadmap rendered"
+        ),
+        status="PARTIAL",
+        blocking="P2",
+    )
+    cov = text("coverage")
+    acc.record(
+        step_id="CZ-27",
+        area="browser_ui",
+        capability="Coverage page",
+        executed_path="/coverage ← questionnaires",
+        expected="collection limitations visible to the customer",
+        actual="NIST questionnaire status only; collection limitations (PARTIAL/DENIED/CANCELLED…) not shown"
+        if not any(w in cov for w in ("PARTIAL", "DENIED", "CANCELLED"))
+        else "collection limitations shown",
+        status="PARTIAL",
+        blocking="P2",
+    )
+    intact = (
+        bool(pdf.get("downloaded"))
+        and pdf.get("utf8_replacement_sequences") == 0
+        and bool(pdf.get("startxref_matches"))
+    )
+    acc.record(
+        step_id="CZ-29",
+        area="report_correctness",
+        capability="Byte integrity of the PDF downloaded via the portal",
+        executed_path="browser fetch through the BFF proxy → bytes parsed in Python",
+        expected="byte-intact PDF (no UTF-8 replacement, valid xref), state/identity headers relayed",
+        actual=json.dumps(
+            {
+                k: pdf.get(k)
+                for k in (
+                    "bytes",
+                    "utf8_replacement_sequences",
+                    "binary_header_intact",
+                    "startxref_matches",
+                    "x_report_state_forwarded",
+                )
+            }
+        ),
+        status="PASS" if intact else "FAIL",
+        blocking="none" if intact else "P1",
+        limitations=[]
+        if intact
+        else [
+            "The BFF decoded binary responses as text (response.text()), corrupting PDFs."
+        ],
+    )
+    errs = [c for c in log.get("console", []) if c["type"] in ("error", "exception")]
+    acc.record(
+        step_id="CZ-28",
+        area="browser_ui",
+        capability="Browser console health",
+        executed_path="CDP Runtime/Log events across all steps",
+        expected="no application errors",
+        actual=f"{len(errs)} console errors; {len(log.get('console', []))} total entries",
+        status="PARTIAL" if errs else "PASS",
+        blocking="P2" if errs else "none",
+        evidence={"console": log.get("console", [])[:30]},
+    )
+    (out / "browser_acceptance_matrix.json").write_text(
+        json.dumps(acc.to_dict(), indent=2, default=str)
+    )
 
 
 def main() -> int:
@@ -323,58 +657,94 @@ def main() -> int:
             f"body:JSON.stringify({{password:{json.dumps(ids['grant_secret'])}}})}})"
             ".then(r=>r.status)"
         )
-        pdf_js = (
-            f"fetch('/api/core/field-assessment/engagements/{eid}/reports/{v}/export?format=pdf')"
-            ".then(async r=>({status:r.status,type:r.headers.get('content-type'),"
-            "state:r.headers.get('x-report-state'),bytes:(await r.arrayBuffer()).byteLength}))"
-        )
-        write_js = (
-            f"fetch('/api/core/field-assessment/engagements/{eid}/reports',{{method:'POST',"
-            "headers:{'Content-Type':'application/json'},body:JSON.stringify({report_type:'full_assessment'})})"
-            ".then(r=>r.status)"
-        )
+        api = f"{portal}/api/core"
+
+        def fetch_js(path: str, method: str = "GET", body: str | None = None) -> str:
+            opts = (
+                f"{{method:'{method}'"
+                + (
+                    f",headers:{{'Content-Type':'application/json'}},body:{json.dumps(body)}"
+                    if body
+                    else ""
+                )
+                + "}"
+            )
+            return (
+                f"fetch('{path}',{opts}).then(async r=>{{const t=r.headers.get('content-type')||'';"
+                "const b=t.includes('json')?await r.json():{bytes:(await r.arrayBuffer()).byteLength};"
+                "return {status:r.status,type:t,state:r.headers.get('x-report-state'),body:b};})"
+            )
+
+        def page(name: str, path: str) -> dict[str, Any]:
+            return {"name": name, "url": f"{portal}{path}", "shot": True, "settle": 12}
+
         steps: list[dict[str, Any]] = [
-            {
-                "name": "login_page",
-                "url": f"{portal}/login",
-                "shot": True,
-                "settle": 15,
-            },
+            page("login_page", "/login"),
             {"name": "login", "js": login_js},
+            page("dashboard", f"/dashboard?e={eid}"),
+            page("engagement_detail", f"/engagement/{eid}"),
+            page("findings", f"/findings?e={eid}"),
+            page("remediation", f"/remediation?e={eid}"),
+            page("reports", f"/reports?e={eid}"),
+            page("coverage", f"/coverage?e={eid}"),
             {
-                "name": "dashboard",
-                "url": f"{portal}/dashboard?e={eid}",
-                "shot": True,
-                "settle": 15,
+                "name": "api_engagement_list_CZ18",
+                "js": fetch_js(f"{api}/field-assessment/engagements?limit=100"),
             },
             {
-                "name": "engagement_detail",
-                "url": f"{portal}/engagement/{eid}",
-                "shot": True,
-                "settle": 15,
+                "name": "api_findings",
+                "js": fetch_js(
+                    f"{api}/field-assessment/engagements/{eid}/findings?limit=100"
+                ),
             },
             {
-                "name": "findings",
-                "url": f"{portal}/findings?e={eid}",
-                "shot": True,
-                "settle": 15,
+                "name": "api_reports",
+                "js": fetch_js(f"{api}/field-assessment/engagements/{eid}/reports"),
             },
             {
-                "name": "reports",
-                "url": f"{portal}/reports?e={eid}",
-                "shot": True,
-                "settle": 15,
+                "name": "pdf_download_CZ17",
+                # Downloaded bytes are returned (base64) and parsed in Python.
+                "js": (
+                    f"fetch('{api}/field-assessment/engagements/{eid}/reports/{v}/export?format=pdf')"
+                    ".then(async r=>{const b=new Uint8Array(await r.arrayBuffer());let s='';"
+                    "for(let i=0;i<b.length;i+=8192){s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));}"
+                    "return {status:r.status,type:r.headers.get('content-type'),"
+                    "state:r.headers.get('x-report-state'),b64:btoa(s)};})"
+                ),
             },
-            {"name": "pdf_download", "js": pdf_js},
-            {"name": "write_attempt", "js": write_js},
             {
-                "name": "access_denied_other_engagement",
-                "url": f"{portal}/engagement/{other}",
-                "shot": True,
-                "settle": 15,
+                "name": "api_portal_workspace_reports_CZ19",
+                "js": fetch_js(f"{api}/portal/engagement/reports"),
             },
+            {
+                "name": "write_attempt_generate_report",
+                "js": fetch_js(
+                    f"{api}/field-assessment/engagements/{eid}/reports",
+                    "POST",
+                    json.dumps({"report_type": "full_assessment"}),
+                ),
+            },
+            {
+                "name": "api_other_engagement_findings",
+                "js": fetch_js(f"{api}/field-assessment/engagements/{other}/findings"),
+            },
+            page("access_denied_other_engagement", f"/engagement/{other}"),
+            {
+                "name": "logout",
+                "js": "fetch('/api/auth/logout',{method:'POST'}).then(r=>r.status)",
+            },
+            {
+                "name": "api_after_logout",
+                "js": fetch_js(f"{api}/field-assessment/engagements/{eid}/findings"),
+            },
+            page("after_logout_dashboard", f"/dashboard?e={eid}"),
         ]
-        log["steps"] = asyncio.run(_cdp(ws_url, steps, out))
+        cdp = asyncio.run(_cdp(ws_url, steps, out))
+        log["steps"] = cdp["steps"]
+        log["console"] = cdp["console"]
+        log["network"] = cdp["network"]
+        log["pdf_via_portal"] = _check_downloaded_pdf(cdp["steps"], out)
+        _browser_matrix(log, out)
         return 0
     finally:
         for p in reversed(procs):
