@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import pathlib
@@ -7,6 +8,7 @@ import sys
 import uuid
 
 import pytest
+from typing import Any
 from sqlalchemy import create_engine, text
 
 from api.db_migrations import (
@@ -468,5 +470,219 @@ def test_postgres_runtime_evidence_round_trip(_tx) -> None:
                     ),
                     {"i": res.scan_envelope_id},
                 )
+    finally:
+        db.close()
+
+
+class _TxEngine:
+    """Engine-shaped adapter bound to the per-test transaction.
+
+    TenantRepository and the lifecycle authority open ``engine.begin()`` /
+    ``engine.connect()``; here those become SAVEPOINTs on the rolled-back test
+    connection, so the canonical code runs unmodified and leaves no data.
+    """
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+        self.dialect = conn.dialect
+
+    @contextlib.contextmanager
+    def begin(self):
+        with self._conn.begin_nested():
+            yield self._conn
+
+    @contextlib.contextmanager
+    def connect(self):
+        yield self._conn
+
+
+def test_customer_zero_postgres_provisioning_and_authorization(_tx) -> None:
+    """L14-CUSTOMER-ZERO-E2E-001: the Postgres-only steps of the customer journey.
+
+    The SQLite acceptance harness (tests/test_customer_zero_e2e/) cannot run
+    these canonical authorities, so they are exercised here on real Postgres:
+
+    1. Tenant provisioning through the R7 tenant repository.
+    2. Lifecycle enforcement (R3): suspend → credential validation not
+       permitted → activate; transitions recorded.
+    3. Customer scan authorization (#812): receipt request; approval refused
+       for an API-key customer admin, the requester, and a platform operator;
+       approval by a SIMULATED interactive customer identity (no real OIDC
+       token — the ActorContext is constructed); double approval refused;
+       revocation.
+    4. Execution-time check fails closed with no approved scope.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.orm import Session
+
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.credential_authority import _LIFECYCLE_POLICY
+    from api.tenant_lifecycle import execute_transition, get_transition_history
+    from api.tenant_repository import TenantRepository
+    from services.field_assessment import customer_authorization as ca
+    from services.field_assessment.scan_authorization import (
+        ScanAuthorizationError,
+        check_scan_authorized,
+    )
+
+    eng: Any = _TxEngine(_tx)  # Engine-shaped; see _TxEngine
+    tenant = _uid("synthetic-northstar-pg")
+
+    # 1 + 2 — provisioning and lifecycle through the canonical authorities.
+    repo = TenantRepository(eng)
+    created = repo.create(
+        tenant_id=tenant,
+        display_name="SYNTHETIC — Northstar Manufacturing Group",
+        created_by="customer-zero-e2e",
+        migration_source="api",
+    )
+    assert created.tenant_id == tenant
+    assert repo.get_lifecycle_state_on_conn(_tx, tenant) == "active"
+    execute_transition(
+        eng,
+        tenant_id=tenant,
+        to_state="suspended",
+        reason="cz-e2e",
+        actor_id="platform",
+    )
+    state = repo.get_lifecycle_state_on_conn(_tx, tenant)
+    assert state == "suspended"
+    assert _LIFECYCLE_POLICY[state]["validate"] is False  # credentials stop validating
+    execute_transition(
+        eng, tenant_id=tenant, to_state="active", reason="cz-e2e", actor_id="platform"
+    )
+    assert repo.get_lifecycle_state_on_conn(_tx, tenant) == "active"
+    history = get_transition_history(eng, tenant)
+    assert [h.to_state for h in history][:2] == ["active", "suspended"]
+
+    # 3 — customer scan authorization receipt.
+    db = Session(bind=_tx, join_transaction_mode="create_savepoint")
+    try:
+        from api.db_models_field_assessment import FaEngagement
+
+        engagement_id = uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        db.add(
+            FaEngagement(
+                id=engagement_id,
+                tenant_id=tenant,
+                client_name="SYNTHETIC — Northstar Manufacturing Group",
+                assessor_id="assessor-subject",
+                assessment_type="comprehensive",
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+            )
+        )
+        db.flush()
+        receipt = ca.create_request(
+            db,
+            tenant_id=tenant,
+            engagement_id=engagement_id,
+            requested_by_subject="assessor-subject",
+            customer_org_name="SYNTHETIC — Northstar Manufacturing Group",
+            assessment_purpose="External attack surface assessment (synthetic)",
+            rules_of_engagement_ref="ROE-NSM-2026-001",
+            approved_targets=[
+                {
+                    "target": "www.northstar-mfg.example",
+                    "type": "fqdn",
+                    "operations": ["web_headers"],
+                }
+            ],
+            authorized_operations=["web_headers"],
+            window_start=now - timedelta(hours=1),
+            window_end=now + timedelta(days=7),
+        )
+        assert receipt["status"] == "pending_approval"
+
+        def actor(
+            subject: str, roles: list[str], auth_source: str, *, verified: bool = True
+        ) -> ActorContext:
+            return ActorContext(
+                subject=subject,
+                email=f"{subject}@northstar-mfg.example",
+                name=subject,
+                permissions=roles_to_permissions(roles),
+                roles=roles,
+                auth_source=auth_source,
+                tenant_id=tenant,
+                email_verified=verified,
+            )
+
+        refused = {
+            "api_key_customer_admin": actor("csa-key", ["tenant_admin"], "api_key"),
+            "requester": actor("assessor-subject", ["tenant_admin"], "oidc_auth0"),
+            "platform_operator": actor(
+                "ops", ["platform_admin", "tenant_admin"], "oidc_auth0"
+            ),
+            "unverified_email": actor(
+                "csa-unverified",
+                ["client_security_owner"],
+                "oidc_auth0",
+                verified=False,
+            ),
+        }
+        for label, who in refused.items():
+            with pytest.raises(ca.CustomerAuthorizationError):
+                ca.approve(
+                    db,
+                    receipt_id=str(receipt["id"]),
+                    tenant_id=tenant,
+                    engagement_id=engagement_id,
+                    actor_ctx=who,
+                )
+            current = ca.load_receipt(
+                db,
+                receipt_id=str(receipt["id"]),
+                tenant_id=tenant,
+                engagement_id=engagement_id,
+            )
+            assert current is not None and current["status"] == "pending_approval", (
+                label
+            )
+
+        approver = actor(
+            "csa-northstar", ["client_security_owner"], "oidc_auth0"
+        )  # simulated IdP identity
+        approved = ca.approve(
+            db,
+            receipt_id=str(receipt["id"]),
+            tenant_id=tenant,
+            engagement_id=engagement_id,
+            actor_ctx=approver,
+        )
+        assert approved["status"] == "approved"
+        assert approved["approver_subject"] == "csa-northstar"
+        assert approved["payload_digest"] and approved["proof_level"]
+        with pytest.raises(ca.CustomerAuthorizationError):
+            ca.approve(
+                db,
+                receipt_id=str(receipt["id"]),
+                tenant_id=tenant,
+                engagement_id=engagement_id,
+                actor_ctx=approver,
+            )
+
+        # 4 — no approved scope record exists: execution check fails closed.
+        with pytest.raises(ScanAuthorizationError):
+            check_scan_authorized(
+                db,
+                tenant_id=tenant,
+                engagement_id=engagement_id,
+                target="www.northstar-mfg.example",
+                target_type="fqdn",
+                operation="web_headers",
+            )
+
+        revoked = ca.revoke(
+            db,
+            receipt_id=str(receipt["id"]),
+            tenant_id=tenant,
+            engagement_id=engagement_id,
+            revoked_by_subject="csa-northstar",
+            reason="customer-zero acceptance complete",
+        )
+        assert revoked["status"] == "revoked"
     finally:
         db.close()

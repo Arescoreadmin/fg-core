@@ -46,6 +46,23 @@ _CONFIDENCE_TEXT = {
     "UNKNOWN": "Unknown — requires validation",
 }
 DEFAULT_MARKING = "DRAFT — NOT VERIFIED"
+# Short table labels: machine codes wrap mid-word in narrow cells.  Exact
+# codes stay in the coverage-limitations list and in the JSON export.
+_INTEGRITY_SHORT = {
+    "VERIFIED_AUTHENTIC": "Authenticated",
+    "VERIFIED_INTEGRITY_ONLY": "Integrity verified",
+    "UNVERIFIED": "Unverified",
+    "MISSING": "Missing",
+    "INVALID": "INVALID",
+    "INDETERMINATE": "Indeterminate",
+}
+
+
+def code_label(code: Any) -> str:
+    """Readable table label for a status or collector code (wraps at spaces)."""
+    return str(code or "—").replace("_", " ")
+
+
 _LONG_TOKEN = 56
 # Table cells cannot split across pages: anything unbounded that would sit in
 # a cell is previewed there and rendered in full as splittable paragraphs.
@@ -634,7 +651,7 @@ def proof_story(
                     f"<b>{esc(name)}</b><br/><font size='6.5'>{esc(s['scan_result_id'])}</font>"
                 ),
                 p(esc(desc)),
-                p(f"<b>{esc(s['collection_status'])}</b>"),
+                p(f"<b>{esc(code_label(s['collection_status']))}</b>"),
                 p(esc(obs)),
             ]
         )
@@ -889,7 +906,7 @@ def proof_story(
         ev_rows.append(
             [
                 p(f"<font name='Courier' size='6'>{esc(eid)}</font>"),
-                p(esc(e.get("scanner"))),
+                p(esc(code_label(e.get("scanner")))),
                 p(
                     esc(
                         "scan-level record"
@@ -897,8 +914,15 @@ def proof_story(
                         else e.get("observation")
                     )
                 ),
-                p(esc(e.get("collection_status"))),
-                p(esc(e.get("provenance_status"))),
+                p(esc(code_label(e.get("collection_status")))),
+                p(
+                    esc(
+                        _INTEGRITY_SHORT.get(
+                            str(e.get("provenance_status")),
+                            code_label(e.get("provenance_status")),
+                        )
+                    )
+                ),
             ]
         )
     if len(ev_rows) == 1:

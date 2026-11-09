@@ -1,3 +1,32 @@
+## test(field-assessment): L14-CUSTOMER-ZERO-E2E-001 — synthetic customer acceptance and reporting (branch feat/l14-customer-zero-e2e-001)
+
+- **Work item:** L14-CUSTOMER-ZERO-E2E-001.
+- **Baseline SHA:** `69f69c32` (main after PR #814).
+- **Nature:** product acceptance. Test harness and documentation, plus one narrowly scoped renderer readability fix.
+- **Created:**
+  - `tests/test_customer_zero_e2e/`:
+    - `_northstar.py` (synthetic fixture);
+    - `_acceptance.py` (matrix recorder);
+    - `conftest.py`;
+    - `test_customer_zero_journey.py`;
+    - `test_customer_zero_resilience.py`;
+    - `browser_acceptance.py` (opt-in, not collected).
+  - `docs/assurance/L14_CUSTOMER_ZERO_E2E_ACCEPTANCE.md`.
+- **Modified:**
+  - `tests/test_migrations_postgres_replay.py`: real-Postgres customer-zero slice. It covers R7 provisioning, R3 lifecycle and the #812 consent receipt, runs in a rolled-back transaction via a savepoint engine adapter, and executes in the CI Migrations Replay job.
+  - `services/governance/report/pdf_layout.py`: readable labels for collection/integrity/collector codes in narrow PDF table cells, which wrapped mid-word. Exact codes remain in the limitations list and the JSON.
+  - `ROADMAP.md`.
+- **Findings recorded (not fixed here; acceptance scope):**
+  - CZ-23 (P1): the trust-chain gate ignores runtime scanner evidence, so strict mode blocks export.
+  - CZ-12B (P1): a dual-scope legacy key can self-approve QA.
+  - CZ-17 (P1): customers can download unapproved drafts.
+  - No QA rejection route (P1).
+  - CZ-18 (P2): the grant-session engagement list is not scoped.
+  - CZ-19 (P2): `/portal/engagement/*` reads a different report authority.
+  - Graph affected resources are unrecorded (P2).
+  - The login page shows authenticated navigation (P2).
+- **No migration. No CI, infra or contract change.** Synthetic data only. No scans, messages or billing actions.
+
 ## feat(field-assessment): L14-SCAN-REPORT-PROOF-001 — report completeness, coverage truth, evidence proof and draft rendering (branch feat/l14-scan-report-proof-001)
 
 - **Work item:** L14-SCAN-REPORT-PROOF-001.
