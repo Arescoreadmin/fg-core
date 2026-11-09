@@ -47,6 +47,14 @@ _CONFIDENCE_TEXT = {
 }
 DEFAULT_MARKING = "DRAFT — NOT VERIFIED"
 _LONG_TOKEN = 56
+# Table cells cannot split across pages: anything unbounded that would sit in
+# a cell is previewed there and rendered in full as splittable paragraphs.
+_AFFECTED_PREVIEW = 3
+_CELL_TEXT_LIMIT = 280
+
+
+def _clip(text: str, limit: int = _CELL_TEXT_LIMIT) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 def _wrap_token(tok: str) -> list[str]:
@@ -733,7 +741,18 @@ def proof_story(
                 ],
                 [
                     p("Affected", label),
-                    p(esc(", ".join(res) if res else "Not recorded")),
+                    p(
+                        esc(
+                            ", ".join(res[:_AFFECTED_PREVIEW])
+                            + (
+                                f" (+{len(res) - _AFFECTED_PREVIEW} more, listed below)"
+                                if len(res) > _AFFECTED_PREVIEW
+                                else ""
+                            )
+                            if res
+                            else "Not recorded"
+                        )
+                    ),
                     p("Collector", label),
                     p(esc(scanner_name(f))),
                 ],
@@ -759,6 +778,12 @@ def proof_story(
             )
         )
         story.append(KeepTogether([hdr, meta]))
+        if len(res) > _AFFECTED_PREVIEW:
+            # Complete list as paragraph text (splits across pages; every
+            # resource preserved).
+            story.append(
+                dp(f"<b>Affected resources ({len(res)}).</b> {esc(', '.join(res))}")
+            )
         story.append(dp(f"<b>Description.</b> {esc(f.get('description'))}"))
         story.append(
             dp(
@@ -831,9 +856,16 @@ def proof_story(
                     [
                         p(esc(name)),
                         p(
-                            f"{esc(f['title'])}<br/><font name='Courier' size='6.5'>{esc(f['finding_id'])}</font>"
+                            f"{esc(_clip(f['title']))}<br/><font name='Courier' size='6.5'>{esc(f['finding_id'])}</font>"
                         ),
-                        p(esc(f.get("remediation") or "Guidance not recorded.")),
+                        p(
+                            esc(_clip(f.get("remediation") or "Guidance not recorded."))
+                            + (
+                                " <i>(full text in Detailed Findings)</i>"
+                                if len(f.get("remediation") or "") > _CELL_TEXT_LIMIT
+                                else ""
+                            )
+                        ),
                     ]
                 )
     if len(rr) == 1:

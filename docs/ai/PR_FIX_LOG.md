@@ -33,6 +33,14 @@
     - test-harness annotations and casts.
 
     Full `mypy .` now passes (2274 files).
+- **Review fixes (Codex P2 on #814):**
+  - **Unsplittable table cells.** A network finding with many long hostnames (50 × ~120 characters) overflowed a table row. That raised a ReportLab LayoutError, so export returned 501. Fix:
+    - the metadata cell now shows a 3-item preview;
+    - the full list is rendered as splittable paragraph text, so every resource is preserved;
+    - roadmap cells bound remediation and title text, with the full text kept in Detailed Findings.
+
+    The regression test fails with 501 on the pre-fix renderer.
+  - **`cancel_requested` jobs.** A job in `cancel_requested` was not treated as unfinished, so a report could be released while the worker was still stopping. It now raises `SCAN_JOBS_IN_PROGRESS`, with a route-level test.
 - **Files created:**
   - `services/field_assessment/report_proof.py`
   - `services/governance/report/pdf_layout.py`

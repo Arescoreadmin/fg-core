@@ -503,3 +503,119 @@ def test_large_engagement_renders_every_finding(client, count, tmp_path):
         f"\n[report-proof perf] findings={count} generate={t1 - t0:.2f}s export_pdf={t2 - t1:.2f}s pages={len(reader.pages)} bytes={len(pdf.content)}"
     )
     assert t2 - t0 < 120
+
+
+# ── Review regressions (Codex P2 on #814) ───────────────────────────────────
+
+
+def test_many_long_affected_hosts_render_and_every_host_is_preserved(client):
+    """50 hosts x ~120-char names on one network finding must not overflow a
+    table row (ReportLab LayoutError -> 501); every host must still appear."""
+    from services.field_assessment.connectors.network_scan_bridge import (
+        import_network_scan,
+    )
+    from api.db import get_sessionmaker
+
+    eid = S.create_engagement(client, "Long Host Org (test fixture)")
+    hosts = [
+        f"h{i:02d}-" + "very-long-label-" * 6 + f"segment.region-{i:02d}.example"
+        for i in range(50)
+    ]
+    assert all(len(h) >= 115 for h in hosts)
+    db = get_sessionmaker()()
+    try:
+        import_network_scan(
+            db=db,
+            tenant_id=S.TENANT,
+            engagement_id=eid,
+            actor="synthetic-assessor",
+            scan_result={
+                "scan_completed_at": "2026-11-08T12:00:00Z",
+                "collection_status": "COMPLETE",
+                "hosts": [{"host": h, "open_ports": [443], "tls": {}} for h in hosts],
+                "findings": [
+                    {
+                        "finding_type": "network.legacy_tls",
+                        "severity": "medium",
+                        "title": "[SYNTHETIC] Legacy TLS",
+                        "description": "Synthetic.",
+                        "affected_hosts": hosts,
+                        "remediation": "Synthetic remediation. " * 200,
+                    }
+                ],
+                "synthetic": True,
+            },
+        )
+        db.commit()
+    finally:
+        db.close()
+    from api.db_models_field_assessment import FaNormalizedFinding
+
+    db = get_sessionmaker()()
+    try:
+        f = db.query(FaNormalizedFinding).filter_by(engagement_id=eid).one()
+        f.asset_id = None
+        f.remediation_hint = "Synthetic remediation guidance sentence. " * 300
+        db.commit()
+    finally:
+        db.close()
+    rep = S.generate_report(client, eid)
+    proof = S.export(client, eid, rep["version"], "json").json()["report"][
+        "report_proof"
+    ]
+    resources = proof["findings"][0]["affected_resources"]
+    assert sorted(resources) == sorted(hosts)
+    pdf = S.export(client, eid, rep["version"], "pdf")
+    assert pdf.status_code == 200, pdf.text[:300]
+    text = _body_text(pdf.content)
+    for h in hosts:
+        assert h.replace(" ", "") in text, h
+    assert "Affectedresources(50)" in text
+
+
+def test_cancel_requested_job_blocks_release(client):
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaScanJob
+
+    eid = S.create_engagement(client)
+    S.seed(eid)
+    db = get_sessionmaker()()
+    try:
+        db.add(
+            FaScanJob(
+                id="cancel-req-job-01",
+                tenant_id=S.TENANT,
+                engagement_id=eid,
+                verified_target_ids="[]",
+                scanner_type="network_scan",
+                status="cancel_requested",
+                actor="synthetic-assessor",
+                created_at=S.now_iso(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    rep = S.generate_report(client, eid)
+    proof = S.export(client, eid, rep["version"], "json").json()["report"][
+        "report_proof"
+    ]
+    assert "cancel-req-job-01" in proof["coverage"]["unfinished_job_ids"]
+    assert "SCAN_JOBS_IN_PROGRESS" in proof["release_blockers"]
+
+
+def _body_text(pdf_bytes: bytes) -> str:
+    """Concatenated body text of all pages, whitespace removed, excluding the
+    per-page status band, watermark and footer (so content split across a
+    page break reads contiguously)."""
+    out: list[str] = []
+    for page in pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages:
+        top = float(page.mediabox.height) - 0.6 * 72
+
+        def visit(text, cm, tm, _f, _s, _out=out, _top=top):
+            y = tm[5] * cm[3] + cm[5]
+            if text.strip() and 0.7 * 72 < y < _top and cm[1] == 0 and tm[1] == 0:
+                _out.append(text)
+
+        page.extract_text(visitor_text=visit)
+    return re.sub(r"\s+", "", "".join(out))

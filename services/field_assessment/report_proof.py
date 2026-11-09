@@ -63,7 +63,11 @@ UNRATED = "unrated"
 EXCLUDED_STATUSES: dict[str, str] = {"false_positive": "FALSE_POSITIVE_DISPOSITION"}
 
 _VERIFIED_PROVENANCE = frozenset({"VERIFIED_INTEGRITY_ONLY", "VERIFIED_AUTHENTIC"})
-_UNFINISHED_JOB_STATES = frozenset({"queued", "running", "pending", "retrying"})
+# Non-terminal fa_scan_jobs states (0200 CHECK): cancel_requested is still in
+# flight — the worker has not confirmed the stop or persisted its results.
+_UNFINISHED_JOB_STATES = frozenset(
+    {"queued", "running", "cancel_requested", "pending", "retrying"}
+)
 
 MARKING_SYNTHETIC = "DRAFT — SYNTHETIC DATA — NOT VERIFIED"
 MARKING_DRAFT = "DRAFT — NOT VERIFIED"
