@@ -7,6 +7,7 @@ with a valid canonical CollectionStatus enum value. Downstream consumers
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 from services.connectors.collection_status import CollectionStatus
@@ -82,7 +83,7 @@ class TestWebHeadersOutputContract:
 
 
 class TestOAuthInventoryOutputContract:
-    def _mock_success(self) -> MagicMock:
+    def _mock_success(self) -> Callable[..., MagicMock]:
         def mock_get(url: str, headers=None, timeout=None) -> MagicMock:
             resp = MagicMock()
             resp.status_code = 200

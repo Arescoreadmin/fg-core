@@ -835,6 +835,8 @@ def request_emergency_stop(
         ),
         {"scope": scope, "actor": actor, "reason": reason},
     ).fetchone()
+    if result is None:
+        raise RuntimeError("emergency stop INSERT ... RETURNING produced no row")
     db.commit()
 
     return {

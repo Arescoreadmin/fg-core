@@ -396,8 +396,8 @@ def run(targets: list[str], checkpoint: ScanCheckpoint | None = None) -> dict[st
         if checkpoint is not None:
             try:
                 checkpoint("target", target)
-            except ScanTargetDenied as denied:
-                results.append(_denied_result(target, denied.reason_code))
+            except ScanTargetDenied as exc:
+                results.append(_denied_result(target, exc.reason_code))
                 continue
             except ScanCheckpointHalt as halt:
                 interrupted = interruption_record(

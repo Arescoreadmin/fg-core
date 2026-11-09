@@ -536,7 +536,7 @@ def run(
     """Scan each domain.  ``checkpoint`` is called before each domain
     (L14-SCAN-AUTH-HARDENING-001); a halt keeps completed domains and reports
     collection_status=CANCELLED."""
-    results = []
+    results: list[dict[str, Any]] = []
     all_findings: list[dict] = []
     domains_with_failures: list[str] = []
     interrupted: dict[str, Any] | None = None
