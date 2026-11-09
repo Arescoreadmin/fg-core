@@ -64,12 +64,26 @@ def _wait_http(url: str, timeout: float) -> None:
     raise TimeoutError(f"{url} not ready: {last}")
 
 
+# Inherited database connection settings must never reach the harness: the
+# core subprocess's init_db() prefers FG_DB_URL over FG_SQLITE_PATH.
+_DB_ENV_DENYLIST = ("FG_DB_URL", "FG_DB_MIGRATION_URL", "DATABASE_URL")
+
+
+def _is_db_connection_var(name: str) -> bool:
+    return (
+        name in _DB_ENV_DENYLIST
+        or name.startswith("PG")
+        or (name.startswith("FG_") and ("POSTGRES" in name or name.endswith("_DB_URL")))
+    )
+
+
 def _base_env(tmp: Path) -> dict[str, str]:
-    env = dict(os.environ)
+    env = {k: v for k, v in os.environ.items() if not _is_db_connection_var(k)}
     env.update(
         {
             "FG_ENV": "test",
             "FG_SQLITE_PATH": str(tmp / "customer-zero.db"),
+            "FG_DB_BACKEND": "sqlite",
             "FG_AUTH_ENABLED": "1",
             "FG_API_KEY": "ci-test-key-" + "0" * 32,
             "FG_KEY_PEPPER": "ci-test-pepper",
@@ -92,6 +106,8 @@ def _base_env(tmp: Path) -> dict[str, str]:
 
 def seed(env: dict[str, str], tmp: Path) -> dict[str, Any]:
     """Seed in-process with the pytest harness code; returns ids and secrets."""
+    for name in [k for k in os.environ if _is_db_connection_var(k)]:
+        del os.environ[name]  # update() alone would keep an inherited FG_DB_URL
     os.environ.update(env)
     import tools.tenants.registry as registry
 
@@ -112,6 +128,17 @@ def seed(env: dict[str, str], tmp: Path) -> dict[str, Any]:
 
     reset_engine_cache()
     init_db(sqlite_path=env["FG_SQLITE_PATH"])
+    from api.db import get_engine
+
+    engine = get_engine()
+    # Fail closed before any write: the harness must be on its temp SQLite file.
+    if (
+        engine.dialect.name != "sqlite"
+        or str(engine.url.database) != env["FG_SQLITE_PATH"]
+    ):
+        raise RuntimeError(
+            f"refusing to seed: engine is {engine.url!r}, not the isolated SQLite file"
+        )
     app = build_app()
     platform = Platform(app, env["FG_API_KEY"])
     provision(platform, None)
@@ -343,6 +370,50 @@ def _startxref_ok(data: bytes) -> bool:
     return bool(m) and data[int(m[-1]) : int(m[-1]) + 4] == b"xref"
 
 
+def _portal_controls_entry(res: Any, st: dict[str, Any]) -> dict[str, Any]:
+    """CZ-16B verdict derived from observed denials; missing evidence is NOT_TESTED."""
+    write = res("write_attempt_generate_report").get("status")
+    other = res("api_other_engagement_findings").get("status")
+    after = res("api_after_logout").get("status")
+    logout_url = str(st.get("after_logout_dashboard", {}).get("final_url") or "")
+    observed = {
+        "write": write,
+        "non_granted_engagement": other,
+        "api_after_logout": after,
+        "dashboard_after_logout_url": logout_url or None,
+    }
+    checks = {
+        "write": None if write is None else write in (401, 403),
+        "non_granted_engagement": None if other is None else other in (401, 403, 404),
+        # After logout the request must not be served: denial, a login redirect
+        # (fetch fails cross-origin → null), never a 2xx with data.
+        "api_after_logout": None
+        if not st.get("api_after_logout")
+        else (after is None or after in (401, 403) or after >= 300 and after < 400),
+        "dashboard_after_logout": None if not logout_url else "/login" in logout_url,
+    }
+    if any(v is False for v in checks.values()):
+        status, blocking = "FAIL", "P0"
+    elif any(v is None for v in checks.values()):
+        status, blocking = "NOT_TESTED", "none"
+    else:
+        status, blocking = "PASS", "none"
+    return dict(
+        step_id="CZ-16B",
+        area="security",
+        capability="Portal controls through the browser",
+        executed_path="portal proxy write, non-granted engagement, requests after logout",
+        expected="write denied; non-granted engagement denied; no data after logout",
+        actual=json.dumps(observed),
+        status=status,
+        blocking=blocking,
+        evidence={"checks": checks},
+        limitations=[f"not observed: {[k for k, v in checks.items() if v is None]}"]
+        if status == "NOT_TESTED"
+        else [],
+    )
+
+
 def _browser_matrix(log: dict[str, Any], out: Path) -> None:
     """Acceptance entries derived only from what the browser observed."""
     from tests.test_customer_zero_e2e._acceptance import Acceptance
@@ -377,18 +448,7 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
             "Grant-secret login is a development path (disabled in production-like envs); OIDC named-user login NOT_TESTED."
         ],
     )
-    acc.record(
-        step_id="CZ-16B",
-        area="security",
-        capability="Portal controls through the browser",
-        executed_path="portal proxy write, non-granted engagement, request after logout",
-        expected="denied",
-        status="PASS",
-        actual=(
-            f"write={res('write_attempt_generate_report').get('status')}, other engagement="
-            f"{res('api_other_engagement_findings').get('status')}, after logout → {st.get('after_logout_dashboard', {}).get('final_url')}"
-        ),
-    )
+    acc.record(**_portal_controls_entry(res, st))
     acc.record(
         step_id="CZ-17B",
         area="security",

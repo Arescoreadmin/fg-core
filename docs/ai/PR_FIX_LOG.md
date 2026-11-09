@@ -34,6 +34,10 @@
     - `npm test` 79/79; `npm run lint` clean; `npm run build` 32/32 pages.
   - **Authenticated browser run:** reproduced CZ-17 and CZ-18; recorded CZ-24 ("Finalized" for a draft), CZ-25 (dashboard/summary contract drift), CZ-26/27/28 (P2). `browser_acceptance.py` now captures console, network, the downloaded PDF and a derived matrix.
   - **Separate follow-ups:** Next.js 14.2.5 security remediation; TypeScript parser compatibility; `@vercel/edge-config` deprecation.
+- **Review fixes (Codex on #815):**
+  - **P1:** the browser harness inherited `FG_DB_URL`, which the core subprocess's `init_db()` prefers over the temp SQLite path. It now strips `FG_DB_URL`, `FG_DB_MIGRATION_URL`, `DATABASE_URL`, libpq `PG*` and `FG_*POSTGRES*`, pins `FG_DB_BACKEND=sqlite`, deletes those keys from the in-process environment too, and refuses to seed unless the engine is the temp SQLite file. Proven with a poisoned `FG_DB_URL` run.
+  - **P2:** the CZ-16B verdict is now derived from observed denials. A regression gives FAIL (P0); missing evidence gives NOT_TESTED.
+  - 8 tests in `tests/test_customer_zero_e2e/test_browser_harness_safety.py`.
 - **No migration. No CI, infra or contract change.** Synthetic data only. No scans, messages or billing actions.
 
 ## feat(field-assessment): L14-SCAN-REPORT-PROOF-001 — report completeness, coverage truth, evidence proof and draft rendering (branch feat/l14-scan-report-proof-001)
