@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
+from tests._assurance_actors import reviewer
 from tests.test_customer_zero_e2e import _northstar as N
 from tests.test_customer_zero_e2e._acceptance import Acceptance
 
@@ -33,6 +34,7 @@ pypdf = pytest.importorskip("pypdf")
 pytest.importorskip("reportlab")
 
 PORTAL = {"X-Portal-Source": "client-portal"}
+QA_HUMAN = "auth0|northstar-independent-qa"
 SYNTH_MARK = "DRAFT — SYNTHETIC DATA — NOT VERIFIED"
 
 
@@ -476,28 +478,40 @@ def test_customer_zero_end_to_end_journey(platform, monkeypatch):  # noqa: PLR09
     base = f"/field-assessment/engagements/{eid}/reports/{rid}"
     self_qa = assessor.post(f"{base}/qa-approve", json={"reviewer_name": "assessor"})
     assert self_qa.status_code == 403, self_qa.text
-    qa = platform.client("qa_reviewer").post(
+    # L14-ASSESSMENT-ASSURANCE-001: a role-bound QA *key* is still a key.
+    qa_key = platform.client("qa_reviewer").post(
         f"{base}/qa-approve", json={"reviewer_name": "Independent QA"}
     )
-    assert qa.status_code == 200, qa.text
+    assert qa_key.status_code == 403, qa_key.text
+    qa_human = platform.client("qa_reviewer", **reviewer(QA_HUMAN)).post(
+        f"{base}/qa-approve", json={"reviewer_name": "Independent QA"}
+    )
+    # The deliberately tampered host makes approval impossible in every mode.
+    assert qa_human.status_code == 422, qa_human.text
+    assert qa_human.json()["detail"]["code"] == "ASSURANCE_PROVENANCE_BLOCKED"
     state_after_qa = assessor.get(
         f"/field-assessment/engagements/{eid}/reports/{version}/export",
         params={"format": "json"},
     ).json()["report_state"]
     assert (
         state_after_qa["state"] == "DRAFT_SYNTHETIC"
-        and state_after_qa["qa_approved"] is True
+        and state_after_qa["qa_approved"] is False
     )
     acc.record(
         step_id="CZ-12",
         area="security",
-        capability="Independent QA (role separation)",
-        executed_path="POST /reports/{id}/qa-approve as assessor, then as qa_reviewer",
-        expected="assessor denied; independent reviewer approves; synthetic report stays DRAFT",
-        actual=f"assessor={self_qa.status_code}, reviewer={qa.status_code}, state={state_after_qa['state']}",
+        capability="Independent QA (named human, no contribution, provenance-gated)",
+        executed_path="POST /reports/{id}/qa-approve as assessor key, QA role key, then a named independent human",
+        expected="keys refused; independent human refused while evidence integrity fails",
+        actual=(
+            f"assessor={self_qa.status_code}, qa_key={qa_key.status_code}, "
+            f"named_reviewer={qa_human.status_code} "
+            f"({qa_human.json()['detail']['code']}), state={state_after_qa['state']}"
+        ),
         status="PASS",
         limitations=[
-            "Role separation only. Reviewer qualification and conflict-of-interest are not enforced (FVA-05 POLICY_ONLY)."
+            "Named reviewer simulated through the test OIDC resolution seam; interactive OIDC login NOT_TESTED.",
+            "Reviewer qualification (credentials/competence) remains policy-only (FVA-05).",
         ],
     )
     dual = _dual_role_self_approval_probe(platform, eid)
@@ -542,7 +556,7 @@ def test_customer_zero_end_to_end_journey(platform, monkeypatch):  # noqa: PLR09
     assert vid.status_code == 201, vid.text
     vid = vid.json()["id"]
     submit = assessor.post(f"{base}/versions/{vid}/submit-for-review")
-    approve = platform.client("qa_reviewer").post(
+    approve = platform.client("qa_reviewer", **reviewer(QA_HUMAN)).post(
         f"{base}/versions/{vid}/approve",
         json={
             "reviewer_name": "Independent QA",
@@ -565,6 +579,39 @@ def test_customer_zero_end_to_end_journey(platform, monkeypatch):  # noqa: PLR09
         evidence={"deliver": deliver.json(), "governed": gov.json()},
     )
 
+    reject = platform.client("qa_reviewer", **reviewer(QA_HUMAN)).post(
+        f"{base}/qa-reject",
+        json={
+            "reason_code": "EVIDENCE_INTEGRITY",
+            "explanation": "Host 203.0.113.12 evidence fails digest re-verification.",
+        },
+    )
+    assert reject.status_code == 200, reject.text
+    after_reject = assessor.get(
+        f"/field-assessment/engagements/{eid}/reports/{version}/export",
+        params={"format": "json"},
+    ).json()["report_state"]
+    revive = assessor.post(f"{base}/versions")
+    late_approve = platform.client(
+        "qa_reviewer", **reviewer("auth0|northstar-second-qa")
+    ).post(f"{base}/qa-approve", json={})
+    assert after_reject["state"] == "REJECTED"
+    assert revive.status_code == 409 and late_approve.status_code == 409
+    acc.record(
+        step_id="CZ-12C",
+        area="security",
+        capability="QA rejection and rework",
+        executed_path="POST /reports/{id}/qa-reject (named reviewer) → export state → new version / late approval",
+        expected="rejection recorded with reason; REJECTED state; no revival, no late approval",
+        actual=(
+            f"reject={reject.status_code} ({reject.json()['reason_code']}), "
+            f"state={after_reject['state']}, new_version={revive.status_code}, "
+            f"late_approve={late_approve.status_code}"
+        ),
+        status="PASS",
+        evidence={"rejection": reject.json()},
+    )
+
     # ── 7. Customer portal access path (backend) ────────────────────────────
     portal = _portal_probe(platform, eid, version)
     for step in portal:
@@ -575,13 +622,13 @@ def test_customer_zero_end_to_end_journey(platform, monkeypatch):  # noqa: PLR09
         f"/field-assessment/engagements/{eid}/audit-events", params={"limit": 100}
     )
     types = sorted({e.get("event_type") for e in _items(audit)})
-    needed = {"engagement_report_created", "report.qa_approved"}
+    needed = {"engagement_report_created", "report.qa_rejected"}
     acc.record(
         step_id="CZ-20",
         area="operational_readiness",
         capability="Audit trail",
         executed_path="GET /engagements/{id}/audit-events",
-        expected="report creation, QA approval and evidence capture audited",
+        expected="report creation, QA decision and evidence capture audited",
         actual=f"status={audit.status_code}; event types={types}",
         status="PASS" if needed <= set(types) else "PARTIAL",
         evidence={"event_types": types},
@@ -601,30 +648,49 @@ def test_customer_zero_end_to_end_journey(platform, monkeypatch):  # noqa: PLR09
         params={"format": "json"},
     )
     monkeypatch.setenv("FG_PROVENANCE_MODE", "warn")
+    from services.field_assessment.assessment_assurance import (
+        evaluate_engagement_provenance,
+    )
+    from api.db import get_sessionmaker as _sm
+
+    _db = _sm()()
+    try:
+        prov_decision = evaluate_engagement_provenance(
+            _db, tenant_id=N.TENANT, engagement_id=eid
+        ).summary()
+    finally:
+        _db.close()
+    strict_detail = (
+        strict_export.json() if strict_export.status_code != 200 else "allowed"
+    )
+    # Canonical evidence is evaluated (no legacy rows needed); the only failure is
+    # the deliberately tampered host, so strict mode blocks for the right reason.
+    assert prov_decision["evidence_count"] > 0
+    assert prov_decision["legacy_record_count"] == 0
+    assert prov_decision["reason_codes"] == ["PROVENANCE_INTEGRITY_FAILED"]
     acc.record(
         step_id="CZ-23",
         area="operational_readiness",
-        capability="Legacy trust-chain gate vs runtime scanner evidence",
-        executed_path="enforce_report_export / enforce_evidence_approval (FG_PROVENANCE_MODE) over a scanner-only engagement",
-        expected="the export/QA trust gate recognises the #810–#814 envelope + custody chain",
+        capability="Canonical provenance for runtime scanner evidence",
+        executed_path="evaluate_engagement_provenance → derive_engagement_trust_inputs → export/QA gates",
+        expected="trust gates read the runtime envelope + custody chain; strict blocks only on real integrity failures",
         actual=(
-            f"{len(trust_events)} trust_chain_failure/report_link_failure audit events in default warn mode "
-            f"(trust_score 0); export under FG_PROVENANCE_MODE=strict={strict_export.status_code}"
+            f"evidence={prov_decision['evidence_count']}, legacy_rows=0, "
+            f"classifications={prov_decision['classification_counts']}, "
+            f"reason_codes={prov_decision['reason_codes']}; strict export={strict_export.status_code} "
+            f"(tampered host); trust failure audit events={len(trust_events)}"
         ),
-        status="FAIL",
-        blocking="P1",
+        status="PASS",
         evidence={
+            "provenance": prov_decision,
             "strict_export_status": strict_export.status_code,
-            "strict_export_detail": strict_export.json()
-            if strict_export.status_code != 200
-            else "allowed",
+            "strict_export_detail": strict_detail,
         },
         limitations=[
-            "derive_engagement_trust_inputs reads only evidence_provenance, which the manual ingest routes write; "
-            "the scanner worker path (bridges + runtime evidence capture) never writes it, so every scanner-only "
-            "engagement scores 0. In warn (the default) this only emits critical warnings; in strict it blocks.",
+            "Clean-evidence strict acceptance is proven in tests/test_assessment_assurance/test_provenance.py "
+            "(this journey keeps the deliberately tampered host).",
+            "Scanner evidence is VERIFIED_INTEGRITY_ONLY: source authenticity is not established (disclosed).",
         ],
-        follow_up="Bind runtime evidence envelopes into the trust-chain inputs (or write provenance from the worker path)",
     )
 
     # ── 9. Not executable here ──────────────────────────────────────────────
@@ -745,12 +811,9 @@ def _dual_role_self_approval_probe(platform, eid: str) -> dict[str, Any]:
         actual=f"generate={rep.status_code}, self qa-approve={qa.status_code if qa else 'n/a'}",
         status="FAIL" if accepted else "PASS",
         blocking="P1" if accepted else "none",
-        limitations=[
-            "_enforce_report_qa_independence applies to human actors on the version-approve route only; "
-            "API-key actors and /qa-approve are not checked."
-        ]
-        if accepted
-        else [],
+        limitations=[]
+        if not accepted
+        else ["A dual-scope API key self-approved: independence not enforced."],
         follow_up="L14-ASSESSMENT-ASSURANCE-001: enforce author≠reviewer for every actor type"
         if accepted
         else None,
@@ -784,17 +847,16 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
         ),
     }
     codes = {k: v.status_code for k, v in reads.items()}
-    for k in ("findings", "reports", "pdf"):
+    for k in ("findings", "reports"):
         assert codes[k] == 200, (k, reads[k].text[:200])
+    # L14-ASSESSMENT-ASSURANCE-001 (CZ-17): unreleased content is internal.
+    assert codes["pdf"] == 403, reads["pdf"].text[:200]
+    assert reads["pdf"].json()["detail"]["code"] == "REPORT_DRAFT_ACCESS_DENIED"
     items = (
         reads["findings"].json().get("findings")
         or reads["findings"].json().get("items")
         or []
     )
-    pdf_first = _flat(
-        pypdf.PdfReader(io.BytesIO(reads["pdf"].content)).pages[0].extract_text() or ""
-    )
-    assert SYNTH_MARK in pdf_first
 
     # Denials
     other_eng = assessor.post(
@@ -892,13 +954,12 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
             capability="Customer download of an unapproved draft",
             executed_path="portal-scoped GET /reports/{v}/export?format=pdf before any FINAL decision",
             expected="policy decision: customers see drafts only if explicitly allowed",
-            actual="draft PDF downloadable by the customer; every page marked DRAFT — SYNTHETIC DATA — NOT VERIFIED",
-            status="PARTIAL",
-            blocking="P1",
+            actual=f"portal-scoped draft PDF export={codes['pdf']} (REPORT_DRAFT_ACCESS_DENIED)",
+            status="PASS",
             limitations=[
-                "No canonical policy restricts customer access to unapproved drafts; the marking is the only control."
+                "Engagement policy report_access_policy.customer_draft_review can opt customers in "
+                "(tests/test_assessment_assurance/test_draft_access.py)."
             ],
-            follow_up="Decide and enforce customer draft visibility (portal-origin export of non-FINAL reports)",
         ),
         dict(
             step_id="CZ-18",

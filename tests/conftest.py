@@ -147,7 +147,14 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         reset_engine_cache()
         init_db(sqlite_path=db_path)
 
-        return _build_app()
+        app = _build_app()
+        # L14-ASSESSMENT-ASSURANCE-001: QA decisions require a named human
+        # reviewer.  Inert unless a test sends the X-Test-Human-Actor header
+        # (see tests/_assurance_actors.py); all other requests resolve normally.
+        from tests._assurance_actors import install_human_actors
+
+        install_human_actors(app)
+        return app
 
     yield _factory
 

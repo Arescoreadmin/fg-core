@@ -686,3 +686,133 @@ def test_customer_zero_postgres_provisioning_and_authorization(_tx) -> None:
         assert revoked["status"] == "revoked"
     finally:
         db.close()
+
+
+def test_assessment_assurance_postgres_qa_and_provenance(_tx) -> None:
+    """L14-ASSESSMENT-ASSURANCE-001 on real Postgres.
+
+    1. Migration 0205: one governance-stage QA decision per (tenant, report,
+       stage) — a second decision (approve after reject) is refused by the DB.
+    2. Reviewer identity resolution binds string subjects / principal ids
+       against the real tenant_users / fg_principals column types.
+    3. Material-contribution lookup and QA standing queries bind correctly.
+    4. The canonical provenance evaluator runs (empty engagement → absent,
+       never trusted).
+    """
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import Session
+
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.db_models import TenantUser
+    from api.db_models_field_assessment import FaEngagement, FaReportQaDecision
+    from api.db_models_principal import FgPrincipal
+    from services.field_assessment import assessment_assurance as aa
+    from services.field_assessment.audit import emit_engagement_audit_event
+
+    idx = _tx.execute(
+        text(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE indexname = 'uq_fa_report_qa_decisions_governance_stage'"
+        )
+    ).scalar_one()
+    assert "UNIQUE" in idx and "report_version_id IS NULL" in idx
+
+    tenant = _uid("assurance-pg")
+    _insert_tenant(_tx, tenant)
+    db = Session(bind=_tx, join_transaction_mode="create_savepoint")
+    eid = uuid.uuid4().hex
+    now = "2026-11-09T00:00:00Z"
+    db.add(
+        FaEngagement(
+            id=eid,
+            tenant_id=tenant,
+            client_name="SYNTHETIC — assurance",
+            assessor_id="a",
+            assessment_type="comprehensive",
+            status="in_progress",
+            engagement_metadata={},
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.flush()
+
+    def _decision(decision: str) -> None:
+        db.add(
+            FaReportQaDecision(
+                id=uuid.uuid4().hex,
+                tenant_id=tenant,
+                engagement_id=eid,
+                report_id="report-1",
+                report_version_id=None,
+                report_version=1,
+                qa_stage="governance",
+                decision=decision,
+                reviewer_id="auth0|qa",
+                actor_type="human",
+                created_at=now,
+            )
+        )
+        db.flush()
+
+    _decision("rejected")
+    with db.begin_nested():
+        try:
+            _decision("approved")
+        except IntegrityError:
+            pass
+        else:  # pragma: no cover
+            raise AssertionError("0205 did not refuse a second governance decision")
+    assert aa.governance_qa_status(
+        db, tenant_id=tenant, engagement_id=eid, report_id="report-1"
+    ) == {"rejected": True, "independent_approval": False}
+
+    principal = FgPrincipal(display_name="Pat Example")
+    db.add(principal)
+    db.flush()
+    for i, sub in enumerate(("auth0|pat", "entra|pat")):
+        db.add(
+            TenantUser(
+                tenant_id=tenant,
+                email=f"pat{i}@example.test",
+                display_name="Pat",
+                role="assessor",
+                identity_subject=sub,
+                identity_binding_status="bound",
+                principal_id=principal.id,
+            )
+        )
+    db.flush()
+    ids = aa.reviewer_identity_set(db, tenant_id=tenant, subject="entra|pat")
+    assert {"auth0|pat", "entra|pat", f"principal:{principal.id}"} <= ids
+
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant,
+        engagement_id=eid,
+        event_type="engagement_report_created",
+        actor="auth0|pat",
+        reason_code="ENGAGEMENT_REPORT_CREATED",
+        payload={},
+    )
+    actor = ActorContext(
+        subject="entra|pat",
+        email="pat@example.test",
+        name="Pat",
+        permissions=roles_to_permissions(["qa_reviewer"]),
+        roles=["qa_reviewer"],
+        auth_source="oidc_entra",
+        tenant_id=tenant,
+    )
+    try:
+        aa.enforce_independent_reviewer(
+            db, actor_ctx=actor, tenant_id=tenant, engagement_id=eid
+        )
+    except aa.AssuranceDenied as exc:
+        assert exc.code == "REPORT_QA_SELF_REVIEW"
+    else:  # pragma: no cover
+        raise AssertionError("same principal via second provider was accepted")
+
+    d = aa.evaluate_engagement_provenance(db, tenant_id=tenant, engagement_id=eid)
+    assert d.evidence_absent and d.to_trust_inputs().chain_valid is False
+    db.close()

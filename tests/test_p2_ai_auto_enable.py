@@ -21,6 +21,7 @@ os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)  # 64-char hex test se
 
 import pytest
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 _TENANT_ID = "tenant-p2-ai-auto-enable"
 
@@ -71,6 +72,7 @@ def _qa_approve(client: TestClient, eng_id: str, report_id: str) -> dict:
     resp = client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -188,6 +190,7 @@ class TestP25Idempotent:
         resp = client.post(
             f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
             json={},
+            headers=reviewer(),
         )
         assert resp.status_code in (200, 409), resp.text
 

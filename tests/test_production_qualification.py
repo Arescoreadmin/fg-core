@@ -33,6 +33,7 @@ os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 _TENANT_A = "tenant-prod-qual-A"
 _TENANT_B = "tenant-prod-qual-B"
@@ -129,6 +130,7 @@ def _qa_approve(client: TestClient, eid: str, rid: str) -> None:
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qa-approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 
@@ -224,6 +226,7 @@ def test_a1_delivery_blocked_without_qualified_decision(
     qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead"},
+        headers=reviewer(),
     )
 
     deliver_resp = client.post(
@@ -255,6 +258,7 @@ def test_a2_delivery_gate_checks_db_not_report_json(
     client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev"},
+        headers=reviewer(),
     )
 
     deliver_resp = client.post(
@@ -659,6 +663,7 @@ def test_k1_qualified_decision_in_db_satisfies_delivery_gate(
     approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+        headers=reviewer(),
     )
     assert approve_resp.status_code == 200, approve_resp.text
 
@@ -906,6 +911,7 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
     approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid1}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+        headers=reviewer(),
     )
     assert approve_resp.status_code == 200
 
@@ -962,6 +968,7 @@ def test_l1_qualified_v1_does_not_authorize_v2_delivery(
     approve2 = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid2}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+        headers=reviewer(),
     )
     assert approve2.status_code == 200
 
@@ -1017,6 +1024,7 @@ def test_m1_wrong_fingerprint_in_qualified_row_denies_delivery(
     approve_resp = qa_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json={"reviewer_name": "Rev", "reviewer_role": "Lead", "approval_notes": "ok"},
+        headers=reviewer(),
     )
     assert approve_resp.status_code == 200
 
@@ -1136,8 +1144,10 @@ def test_n2_compliance_reviewer_cannot_call_qa_approve(
     resp = qualify_only_client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qa-approve",
         json=_APPROVAL_BODY,
+        headers=reviewer("auth0|compliance-only", "compliance_reviewer"),
     )
     assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "PERMISSION_DENIED"
 
 
 # ---------------------------------------------------------------------------

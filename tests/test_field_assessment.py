@@ -34,6 +34,7 @@ from services.field_assessment.models import (
     VALID_ENGAGEMENT_TRANSITIONS,
     EngagementStatus,
 )
+from tests._assurance_actors import QA_REVIEWER, reviewer
 
 # ---------------------------------------------------------------------------
 # Shared payloads
@@ -1002,7 +1003,8 @@ def _create_delivered_engagement(client: TestClient) -> dict:
     if report_resp.status_code == 201:
         version = report_resp.json()["version"]
         client.post(
-            f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve"
+            f"/field-assessment/engagements/{eng_id}/reports/{version}/qa-approve",
+            headers=reviewer(),
         )
     detail = client.get(f"/field-assessment/engagements/{eng_id}")
     return detail.json()
@@ -1162,6 +1164,7 @@ def test_qa_approve_blocks_delivery_when_gates_incomplete(
     resp = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -1185,6 +1188,7 @@ def test_qa_approve_blockers_include_gate_id_and_title(qa_client: TestClient) ->
     data = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     ).json()
 
     for blocker in data["delivery_blockers"]:
@@ -1204,6 +1208,7 @@ def test_qa_approve_engagement_status_unchanged_when_blocked(
     qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
 
     detail = qa_client.get(f"/field-assessment/engagements/{eng_id}")
@@ -1349,12 +1354,14 @@ def test_qa_approve_second_call_rejected_with_409(qa_client: TestClient) -> None
     first = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert first.status_code == 200
 
     second = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert second.status_code == 409
     assert "REPORT_ALREADY_APPROVED" in second.text
@@ -1368,9 +1375,10 @@ def test_qa_approve_response_uses_reviewer_name(qa_client: TestClient) -> None:
     resp = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={"reviewer_name": "Jane Smith, Senior Assessor"},
+        headers=reviewer(),
     )
     assert resp.status_code == 200
-    assert resp.json()["qa_approved_by"] == "fgk"
+    assert resp.json()["qa_approved_by"] == QA_REVIEWER  # canonical subject
     assert resp.json()["qa_approved_by"] != "Jane Smith, Senior Assessor"
 
 
@@ -1384,6 +1392,7 @@ def test_qa_approve_response_falls_back_to_actor_when_no_name(
     resp = qa_client.post(
         f"/field-assessment/engagements/{eng_id}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert resp.status_code == 200
     assert resp.json()["qa_approved_by"]  # non-empty fallback

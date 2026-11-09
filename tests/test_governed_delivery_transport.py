@@ -46,6 +46,7 @@ os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 
 import pytest
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 _TENANT_A = "tenant-gov-del-tx-A"
 _TENANT_B = "tenant-gov-del-tx-B"
@@ -127,6 +128,7 @@ def _qa_approve(client: TestClient, eid: str, rid: str) -> None:
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qa-approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 
@@ -150,6 +152,7 @@ def _approve_version(client: TestClient, eid: str, rid: str, vid: str) -> None:
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 

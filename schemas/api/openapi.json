@@ -35440,6 +35440,99 @@
         "title": "ReportQaApproveResponse",
         "type": "object"
       },
+      "ReportQaRejectBody": {
+        "additionalProperties": false,
+        "properties": {
+          "explanation": {
+            "maxLength": 4000,
+            "minLength": 10,
+            "title": "Explanation",
+            "type": "string"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason_code",
+          "explanation"
+        ],
+        "title": "ReportQaRejectBody",
+        "type": "object"
+      },
+      "ReportQaRejectResponse": {
+        "properties": {
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "proof_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Fingerprint"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "rejected_at": {
+            "title": "Rejected At",
+            "type": "string"
+          },
+          "rejected_by": {
+            "title": "Rejected By",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_version": {
+            "title": "Report Version",
+            "type": "integer"
+          },
+          "report_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Version Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "report_version",
+          "decision",
+          "reason_code",
+          "rejected_by",
+          "rejected_at",
+          "decision_id",
+          "status"
+        ],
+        "title": "ReportQaRejectResponse",
+        "type": "object"
+      },
       "ReportQualityResponse": {
         "additionalProperties": false,
         "description": "Detailed quality breakdown for a single report.",
@@ -83462,6 +83555,68 @@
         ]
       }
     },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-reject": {
+      "post": {
+        "description": "Independent QA rejection of a governance report (L14-ASSESSMENT-ASSURANCE-001).\n\nThe rejected record is immutable history: it can never be approved,\nbecome FINAL, or be delivered.  Rework means generating a corrected\nreport (a new record and version) that needs a fresh independent review.",
+        "operationId": "qa_reject_report_route_field_assessment_engagements__engagement_id__reports__report_id__qa_reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportQaRejectBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportQaRejectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qa Reject Report Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
     "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify": {
       "get": {
         "description": "Return the current production qualification status for a report.",
@@ -84128,6 +84283,77 @@
           }
         },
         "summary": "Get Report Version Manifest Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/reject": {
+      "post": {
+        "description": "Independent QA rejection of a version in internal_review.\n\ninternal_review \u2192 rejected (terminal for this version).  Rework creates a\nnew version whose ``parent_version_id`` points at the rejected one; the\nrejected version and its reasons stay as immutable history.",
+        "operationId": "reject_report_version_route_field_assessment_engagements__engagement_id__reports__report_id__versions__version_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportQaRejectBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportQaRejectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Report Version Route",
         "tags": [
           "field-assessment"
         ]

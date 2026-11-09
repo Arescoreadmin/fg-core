@@ -17,6 +17,7 @@ os.environ.setdefault("FG_REPORT_SIGNING_KEY", "aa" * 32)
 
 import pytest
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 
 _TENANT_A = "tenant-report-delivery-A"
@@ -130,6 +131,7 @@ def _approve(
     resp = client.post(
         f"/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/approve",
         json=body or _APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -279,6 +281,7 @@ def test_delivered_version_is_immutable(
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{v['id']}/approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 409, resp.text
     assert resp.json()["detail"]["code"] == "REPORT_VERSION_IMMUTABLE"
@@ -478,6 +481,7 @@ def test_approval_requires_reviewer_name(client: TestClient) -> None:
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{v['id']}/approve",
         json={"reviewer_role": "Senior Assessor"},
+        headers=reviewer(),
     )
     assert resp.status_code == 422, resp.text
 

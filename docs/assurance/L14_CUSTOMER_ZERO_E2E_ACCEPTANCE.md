@@ -1,5 +1,13 @@
 # L14-CUSTOMER-ZERO-E2E-001 — Customer-Zero End-to-End Acceptance
 
+> **Update (L14-ASSESSMENT-ASSURANCE-001).** CZ-23, CZ-12B, CZ-17 and the missing QA rejection are closed in code (`docs/assurance/L14_ASSESSMENT_ASSURANCE.md`). The backend journey now observes enforcement:
+> - CZ-12 and CZ-12B: keys refused; a named independent reviewer is refused while evidence integrity fails.
+> - CZ-12C (new): rejection recorded, the state is REJECTED, and revival is refused.
+> - CZ-17: the customer draft PDF returns 403.
+> - CZ-23: canonical evidence is evaluated without legacy rows, and strict mode blocks only on the tampered host.
+>
+> The overall verdict stays **PARTIAL**. Still open: interactive OIDC reviewer login, the portal presentation defects (CZ-24 and CZ-25) and the identity rehearsal. The browser run (§14) was not repeated after this change.
+
 **Verdict: PARTIAL.** A synthetic customer was provisioned and driven through the backend journey using canonical routes and authorities:
 - engagement;
 - collection;
@@ -77,19 +85,20 @@ Throughout: no production database, no external scan, no network egress, no mess
 | CZ-09 Coverage truth (8 states) | report_proof.coverage | — | — | SYNTHETIC_EXECUTED | — |
 | CZ-10 Remediation | roadmap route + findings | `GET /remediation-roadmap` | assessor | SYNTHETIC_EXECUTED | no ownership field |
 | CZ-11 Executive PDF | export_pdf_bytes | `GET /export?format=pdf` | assessor | SYNTHETIC_EXECUTED | — |
-| CZ-12 Independent QA | qa-approve | `POST /qa-approve` | qa_reviewer | PASS | — |
-| CZ-12B Self-approval, dual-scope key | qa-approve | `POST /qa-approve` | legacy key | **FAIL** | **P1** |
+| CZ-12 Independent QA | assessment_assurance | `POST /qa-approve` | QA key, then named human | PASS (keys 403; human 422 while evidence is tampered) | — |
+| CZ-12B Self-approval, dual-scope key | assessment_assurance | `POST /qa-approve` | legacy key | PASS (403 HUMAN_REVIEWER_REQUIRED; was FAIL) | closed |
+| CZ-12C QA rejection and rework | qa-reject | `POST /qa-reject` | named human | PASS | closed |
 | CZ-13 Qualification of a synthetic report | truth gate | `/qualify/*` | compliance_reviewer | PASS (refused) | — |
 | CZ-14 Delivery of a synthetic report | delivery gate | `/versions/*/deliver`, `/governed-delivery` | assessor | PASS (refused) | — |
 | CZ-15 Portal access (grant → session) | portal grants + middleware | `/portal/authenticate` + portal GETs | customer | SYNTHETIC_EXECUTED | pnu1 / OIDC not tested |
 | CZ-16 Portal access controls | middleware + RBAC | portal GET/POST | customer | PASS | — |
-| CZ-17 Customer draft download | export route | portal GET export | customer | PARTIAL | **P1** |
+| CZ-17 Customer draft download | draft_access_decision | portal GET export | customer | PASS (403 REPORT_DRAFT_ACCESS_DENIED; was PARTIAL) | closed |
 | CZ-18 Grant-scoped engagement list | middleware | portal `GET /engagements` | customer | **FAIL** | **P2** |
 | CZ-19 `/portal/engagement/*` workspace | engagement_portal | `GET /portal/engagement/reports` | customer | PARTIAL | P2 |
 | CZ-20 Audit trail | engagement audit | `GET /audit-events` | assessor | PASS | — |
 | CZ-21 Portal browser experience | apps/portal | Next.js + Chromium (dev grant login) | customer | PARTIAL (§14) | OIDC not tested |
 | CZ-16B Portal controls via browser | BFF policy + middleware | browser fetch | customer | PASS | — |
-| CZ-17B Draft PDF via browser | export route | browser download | customer | PARTIAL (reproduced) | **P1** |
+| CZ-17B Draft PDF via browser | export route | browser download | customer | PARTIAL (reproduced before the fix; browser not rerun since) | backend closed |
 | CZ-18B Engagement list via browser | middleware | browser fetch | customer | **FAIL** (reproduced) | P2 |
 | CZ-19B Workspace API via browser | engagement_portal | browser fetch | customer | PARTIAL (403; UI does not use it) | P2 |
 | CZ-24 Report status label | apps/portal `/reports` | browser | customer | **FAIL** ("Finalized") | **P1** |
@@ -99,7 +108,7 @@ Throughout: no production database, no external scan, no network egress, no mess
 | CZ-28 Browser console | CDP | browser | — | PARTIAL (1 error) | P2 |
 | CZ-29 PDF byte integrity via portal | BFF proxy | browser download | customer | PASS after fix (FAIL before) | fixed |
 | CZ-22 Billing / entitlements | — | — | — | NOT_TESTED (safety) | — |
-| CZ-23 Trust-chain gate vs runtime evidence | trust_enforcement_adapter | export/QA gates | — | **FAIL** | **P1** |
+| CZ-23 Trust-chain gate vs runtime evidence | evaluate_engagement_provenance | export/QA gates | — | PASS (canonical evidence; was FAIL) | closed |
 
 The machine-readable matrices are `acceptance_matrix.json` (backend harness) and `browser_acceptance_matrix.json` (browser run), described in §22. Browser-matrix statuses are derived from observed responses and page text, never asserted.
 

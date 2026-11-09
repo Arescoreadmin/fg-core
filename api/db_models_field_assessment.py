@@ -60,6 +60,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     event as sa_event,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -908,6 +909,17 @@ class FaReportQaDecision(Base):
             "report_version_id",
             "qa_stage",
             name="uq_fa_report_qa_decisions_version_stage",
+        ),
+        # L14-ASSESSMENT-ASSURANCE-001 (migration 0205): one terminal decision
+        # per governance report record and stage (report_version_id IS NULL).
+        Index(
+            "uq_fa_report_qa_decisions_governance_stage",
+            "tenant_id",
+            "report_id",
+            "qa_stage",
+            unique=True,
+            postgresql_where=text("report_version_id IS NULL"),
+            sqlite_where=text("report_version_id IS NULL"),
         ),
     )
 

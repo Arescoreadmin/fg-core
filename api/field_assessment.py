@@ -46,7 +46,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -169,6 +169,7 @@ from api.db_models_field_assessment import (
     FaArtifact,
     FaDocumentAnalysis,
     FaEngagement,
+    FaEngagementAuditEvent,
     FaEvidenceLink,
     FaEvidenceProvenance,
     FaEvidenceReportLink,
@@ -9389,6 +9390,64 @@ class ReportQaApproveBody(BaseModel):
     decision_notes: str | None = None
 
 
+# L14-ASSESSMENT-ASSURANCE-001: canonical QA rejection reasons.
+_QA_REJECTION_REASON_CODES: frozenset[str] = frozenset(
+    {
+        "EVIDENCE_INSUFFICIENT",
+        "EVIDENCE_INTEGRITY",
+        "FINDING_INACCURATE",
+        "SEVERITY_INCORRECT",
+        "COVERAGE_MISSTATED",
+        "REMEDIATION_INADEQUATE",
+        "SCOPE_OR_AUTHORIZATION",
+        "PRESENTATION_ERROR",
+        "OTHER",
+    }
+)
+
+
+class ReportQaRejectBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: str = Field(min_length=1, max_length=64)
+    explanation: str = Field(min_length=10, max_length=4000)
+
+
+class ReportQaRejectResponse(BaseModel):
+    report_id: str
+    report_version: int
+    report_version_id: str | None = None
+    decision: str
+    reason_code: str
+    rejected_by: str
+    rejected_at: str
+    decision_id: str
+    proof_fingerprint: str | None = None
+    status: str
+
+
+def _validated_rejection(body: ReportQaRejectBody) -> tuple[str, str]:
+    code = body.reason_code.strip().upper()
+    explanation = body.explanation.strip()
+    if code not in _QA_REJECTION_REASON_CODES:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_REJECTION_REASON",
+                f"reason_code must be one of {sorted(_QA_REJECTION_REASON_CODES)}",
+            ),
+        )
+    if len(explanation) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REJECTION_EXPLANATION_REQUIRED",
+                "A rejection needs a human-readable explanation (10+ characters).",
+            ),
+        )
+    return code, explanation
+
+
 class ProductionAttestBody(BaseModel):
     gate_name: str
     attested: bool
@@ -9436,6 +9495,37 @@ def _require_production_qualified(
                 "REPORT_PROOF_BLOCKED",
                 "Report proof does not permit client delivery: "
                 + ", ".join(_proof_blockers),
+            ),
+        )
+
+    # L14-ASSESSMENT-ASSURANCE-001: canonical provenance and QA rejection are
+    # release requirements in every FG_PROVENANCE_MODE.
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        evaluate_engagement_provenance,
+        governance_qa_status,
+    )
+
+    _engagement_id = str(report_json.get("engagement_id") or "")
+    if governance_qa_status(
+        db, tenant_id=tenant_id, engagement_id=_engagement_id, report_id=report_id
+    )["rejected"]:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_QA_REJECTED",
+                "A QA-rejected report cannot be released.",
+            ),
+        )
+    _prov_blockers = evaluate_engagement_provenance(
+        db, tenant_id=tenant_id, engagement_id=_engagement_id
+    ).release_blockers()
+    if _prov_blockers:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "ASSURANCE_RELEASE_BLOCKED",
+                "Evidence provenance does not permit client delivery: "
+                + ", ".join(_prov_blockers),
             ),
         )
 
@@ -9493,7 +9583,7 @@ def qa_approve_report_route(
     the engagement from transitioning to 'delivered'.
     """
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
-    actor = _actor_from_context(actor_ctx)
+    actor = _require_human_qa_actor(actor_ctx)
 
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -9502,28 +9592,9 @@ def qa_approve_report_route(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
 
-    report = db.execute(
-        select(GovernanceReportRecord).where(
-            GovernanceReportRecord.id == report_id,
-            GovernanceReportRecord.assessment_id == engagement_id,
-            GovernanceReportRecord.tenant_id == tenant_id,
-        )
-    ).scalar_one_or_none()
-
-    if report is None:
-        raise HTTPException(
-            status_code=404,
-            detail=api_error("REPORT_NOT_FOUND", f"report {report_id!r} not found"),
-        )
-
-    if not report.is_finalized:
-        raise HTTPException(
-            status_code=422,
-            detail=api_error(
-                "REPORT_NOT_FINALIZED",
-                "Only finalized reports can be QA-approved.",
-            ),
-        )
+    report = _load_governance_report_for_qa(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
 
     if report.qa_approved_by is not None:
         raise HTTPException(
@@ -9535,8 +9606,25 @@ def qa_approve_report_route(
             ),
         )
 
+    # L14-ASSESSMENT-ASSURANCE-001: independence, rejection and provenance are
+    # enforced here, inside the transaction that records the approval.
+    _independence = _enforce_report_qa_independence(
+        db,
+        actor_ctx,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_authors=_governance_report_authors(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, report=report
+        ),
+    )
+    _refuse_if_qa_rejected(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    _provenance = _enforce_qa_provenance(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+
     from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
-        derive_engagement_trust_inputs,
         enforce_evidence_approval,
     )
     from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
@@ -9606,9 +9694,7 @@ def qa_approve_report_route(
             _sig_valid = None
     else:
         _sig_valid = None
-    _trust = derive_engagement_trust_inputs(
-        db, tenant_id=tenant_id, engagement_id=engagement_id
-    )
+    _trust = _provenance.to_trust_inputs()
     try:
         enforce_evidence_approval(
             db,
@@ -9632,9 +9718,27 @@ def qa_approve_report_route(
     display_name = (
         actor_ctx.name.strip() if actor_ctx.name and actor_ctx.name.strip() else actor
     )
-    report.qa_approved_by = actor
-    report.qa_approved_at = now
-    db.flush()
+    # Compare-and-swap: two concurrent approvals cannot both win.
+    _cas = db.execute(
+        update(GovernanceReportRecord)
+        .where(
+            GovernanceReportRecord.id == report.id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+            GovernanceReportRecord.qa_approved_by.is_(None),
+        )
+        .values(qa_approved_by=actor, qa_approved_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(_cas, "rowcount", 0) != 1:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_ALREADY_APPROVED",
+                "This report has already been QA-approved.",
+            ),
+        )
+    db.refresh(report)
 
     emit_engagement_audit_event(
         db,
@@ -9648,7 +9752,13 @@ def qa_approve_report_route(
             "qa_approved_by": actor,
             "qa_approved_at": now,
             "requested_reviewer_name": body.reviewer_name,
+            "independence": _independence,
+            "provenance": _provenance.summary(),
+            "correlation_id": _request_correlation_id(request),
         },
+        entity_type="report",
+        entity_id=report_id,
+        actor_type="human",
     )
 
     # H14: record immutable governance decision with actor attribution from JWT
@@ -9664,6 +9774,7 @@ def qa_approve_report_route(
         actor_name=actor_ctx.name or display_name or None,
         actor_email=actor_ctx.email or None,
         actor_role=actor_ctx.primary_role(),
+        actor_auth_source=actor_ctx.auth_source,
         decision_reason=f"Report QA-approved for client delivery by {actor}",
         decision_notes=body.decision_notes,
         related_finding_ids=None,
@@ -9915,6 +10026,135 @@ def _load_active_qual_request(
             ),
         )
     return row
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/qa-reject",
+    response_model=ReportQaRejectResponse,
+    status_code=200,
+    dependencies=[Depends(authz_scope("governance:qa_approve"))],
+)
+def qa_reject_report_route(
+    engagement_id: str,
+    report_id: str,
+    body: ReportQaRejectBody,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qa_approve")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportQaRejectResponse:
+    """Independent QA rejection of a governance report (L14-ASSESSMENT-ASSURANCE-001).
+
+    The rejected record is immutable history: it can never be approved,
+    become FINAL, or be delivered.  Rework means generating a corrected
+    report (a new record and version) that needs a fresh independent review.
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _require_human_qa_actor(actor_ctx)
+    reason_code, explanation = _validated_rejection(body)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+
+    report = _load_governance_report_for_qa(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    if report.qa_approved_by is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_ALREADY_APPROVED",
+                "An approved report cannot be rejected; supersede it with a "
+                "corrected report.",
+            ),
+        )
+    independence = _enforce_report_qa_independence(
+        db,
+        actor_ctx,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_authors=_governance_report_authors(
+            db, tenant_id=tenant_id, engagement_id=engagement_id, report=report
+        ),
+    )
+    now = utc_iso8601_z_now()
+    row = _record_report_qa_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=None,
+        report_version=int(report.version or 1),
+        report_hash=_compute_report_hash(report.report_json or {}),
+        manifest_hash=report.manifest_hash,
+        qa_stage="governance",
+        decision="rejected",
+        reviewer_id=actor,
+        actor_type="human",
+        reason=f"{reason_code}: {explanation}",
+    )
+    proof = (report.report_json or {}).get("report_proof")
+    proof_fp = proof.get("proof_fingerprint") if isinstance(proof, dict) else None
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report.qa_rejected",
+        actor=actor,
+        reason_code="REPORT_QA_REJECTED",
+        payload={
+            "report_id": report_id,
+            "report_version": int(report.version or 1),
+            "decision_id": row.id,
+            "rejection_reason_code": reason_code,
+            "explanation": explanation,
+            "rejected_at": now,
+            "proof_fingerprint": proof_fp,
+            "manifest_hash": report.manifest_hash,
+            "independence": independence,
+            "correlation_id": _request_correlation_id(request),
+        },
+        entity_type="report",
+        entity_id=report_id,
+        actor_type="human",
+    )
+    governance_decision_svc.record_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        decision_type="report_rejected",
+        entity_type="report",
+        entity_id=report_id,
+        actor_id=actor_ctx.subject,
+        actor_subject=actor_ctx.subject,
+        actor_name=actor_ctx.name or None,
+        actor_email=actor_ctx.email or None,
+        actor_role=actor_ctx.primary_role(),
+        actor_auth_source=actor_ctx.auth_source,
+        decision_reason=f"Report rejected in QA ({reason_code})",
+        decision_notes=explanation,
+        related_finding_ids=None,
+        decision_metadata={
+            "report_id": report_id,
+            "rejection_reason_code": reason_code,
+            "decision_id": row.id,
+        },
+    )
+    db.commit()
+    return ReportQaRejectResponse(
+        report_id=report_id,
+        report_version=int(report.version or 1),
+        decision="rejected",
+        reason_code=reason_code,
+        rejected_by=actor,
+        rejected_at=now,
+        decision_id=row.id,
+        proof_fingerprint=proof_fp,
+        status="rejected",
+    )
 
 
 @router.post(
@@ -11748,6 +11988,7 @@ def get_engagement_report_route(
     engagement_id: str,
     version: int,
     request: Request,
+    response: Response,
     actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
@@ -11764,7 +12005,9 @@ def get_engagement_report_route(
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
     try:
-        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        engagement = get_engagement(
+            db, engagement_id=engagement_id, tenant_id=tenant_id
+        )
     except EngagementNotFound as exc:
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
@@ -11779,7 +12022,22 @@ def get_engagement_report_route(
             detail=api_error("REPORT_VERSION_NOT_FOUND", "Report version not found."),
         )
 
+    # L14-ASSESSMENT-ASSURANCE-001 (CZ-17): same state + access policy as export.
+    report_state, _ = _authoritative_report_state(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, record=record
+    )
+    report_state["access_basis"] = _enforce_report_content_access(
+        db,
+        request=request,
+        actor_ctx=actor_ctx,
+        engagement=engagement,
+        record=record,
+        report_state=report_state,
+        channel="document",
+    )
+    response.headers["Cache-Control"] = "no-store, private"
     return {
+        "report_state": report_state,
         "report_id": record.id,
         "version": record.version,
         "report_type": record.report_type,
@@ -11793,6 +12051,140 @@ def get_engagement_report_route(
     }
 
 
+def _is_portal_origin(request: Request) -> bool:
+    """Customer access through the client portal (validated by
+    PortalClientScopeMiddleware).  Treated as customer access regardless of
+    the transport credential's own permissions."""
+    if (request.headers.get("x-portal-source") or "") == "client-portal":
+        return True
+    state = getattr(request, "state", None)
+    return any(
+        getattr(state, attr, None)
+        for attr in (
+            "portal_engagement_id",
+            "portal_client_id",
+            "portal_user_id",
+            "portal_membership_id",
+        )
+    )
+
+
+def _authoritative_report_state(
+    db: Session, *, tenant_id: str, engagement_id: str, record: Any
+) -> tuple[dict[str, Any], Any]:
+    """Single source of the DRAFT / REJECTED / FINAL decision for a record.
+
+    FINAL needs: QA approval by an independent human (append-only QA log),
+    no QA rejection, QUALIFIED decision, a clean signed proof, unchanged
+    evidence and a clean canonical provenance decision.  No request
+    parameter affects it.
+    """
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        BLOCKER_QA_MISSING,
+        evaluate_engagement_provenance,
+        governance_qa_status,
+    )
+    from services.field_assessment.report_proof import evaluate_report_state  # noqa: PLC0415
+
+    provenance = evaluate_engagement_provenance(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    qa = governance_qa_status(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=record.id
+    )
+    assurance_blockers = provenance.release_blockers()
+    if record.qa_approved_by is not None and not qa["independent_approval"]:
+        assurance_blockers.append(BLOCKER_QA_MISSING)
+    qualified = (
+        db.execute(
+            select(FaQualificationDecision.id).where(
+                FaQualificationDecision.tenant_id == tenant_id,
+                FaQualificationDecision.report_id == record.id,
+                FaQualificationDecision.decision == "QUALIFIED",
+            )
+        ).first()
+        is not None
+    )
+    state = evaluate_report_state(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_json=record.report_json or {},
+        qa_approved_by=record.qa_approved_by,
+        qa_approved_at=record.qa_approved_at,
+        qualified=qualified,
+        assurance_blockers=assurance_blockers,
+        qa_rejected=bool(qa["rejected"]),
+    )
+    state["independent_qa"] = bool(qa["independent_approval"])
+    state["provenance"] = provenance.summary()
+    return state, provenance
+
+
+def _enforce_report_content_access(
+    db: Session,
+    *,
+    request: Request,
+    actor_ctx: ActorContext,
+    engagement: Any,
+    record: Any,
+    report_state: dict[str, Any],
+    channel: str,
+) -> str:
+    """CZ-17: backend draft-access policy for every report-content route.
+
+    Records the access decision (granted or denied) in the engagement audit
+    trail and commits it before content is returned.
+    """
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        draft_access_decision,
+    )
+
+    portal = _is_portal_origin(request)
+    allowed, basis = draft_access_decision(
+        actor_permissions=actor_ctx.permissions,
+        portal_origin=portal,
+        engagement_metadata=getattr(engagement, "engagement_metadata", None),
+        report_state=str(report_state.get("state")),
+    )
+    emit_engagement_audit_event(
+        db,
+        tenant_id=record.tenant_id,
+        engagement_id=engagement.id,
+        event_type="report.content_accessed" if allowed else "report.access_denied",
+        actor=(actor_ctx.subject or "anonymous")[:128],
+        reason_code=basis,
+        payload={
+            "report_id": record.id,
+            "version": record.version,
+            "channel": channel,
+            "report_state": report_state.get("state"),
+            "portal_origin": portal,
+            "access_basis": basis,
+            "provenance_snapshot": (report_state.get("provenance") or {}).get(
+                "snapshot_fingerprint"
+            ),
+            "correlation_id": _request_correlation_id(request),
+        },
+        entity_type="report",
+        entity_id=record.id,
+        actor_type=_actor_type_from_context(actor_ctx),
+    )
+    db.commit()
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "REPORT_DRAFT_ACCESS_DENIED",
+                "This report is not released. Draft content is available to "
+                "the assessment team only unless the engagement permits "
+                "customer draft review.",
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    return basis
+
+
 @router.get(
     "/engagements/{engagement_id}/reports/{version}/export",
     dependencies=[Depends(authz_scope("governance:read"))],
@@ -11801,6 +12193,7 @@ def export_engagement_report_route(
     engagement_id: str,
     version: int,
     request: Request,
+    response: Response,
     format: str = Query("json", pattern="^(json|pdf)$"),
     actor_ctx: ActorContext = Depends(require_permission("report.read")),
     db: Session = Depends(auth_ctx_db_session),
@@ -11840,7 +12233,6 @@ def export_engagement_report_route(
         )
 
     from services.field_assessment.trust_enforcement_adapter import (  # noqa: PLC0415
-        derive_engagement_trust_inputs,
         enforce_report_export,
     )
     from services.field_assessment.trust_enforcement import (  # noqa: PLC0415
@@ -11910,9 +12302,12 @@ def export_engagement_report_route(
             _sig_valid = None
     else:
         _sig_valid = None
-    _trust = derive_engagement_trust_inputs(
-        db, tenant_id=tenant_id, engagement_id=engagement_id
+    # L14-ASSESSMENT-ASSURANCE-001: one canonical decision feeds the trust
+    # gate, the DRAFT/FINAL state and the access policy.
+    report_state, _provenance = _authoritative_report_state(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, record=record
     )
+    _trust = _provenance.to_trust_inputs()
     try:
         enforce_report_export(
             db,
@@ -11930,34 +12325,21 @@ def export_engagement_report_route(
             detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
         ) from _te
 
-    # L14-SCAN-REPORT-PROOF-001: DRAFT / FINAL marking derived only from
-    # authoritative state (QA approval, QUALIFIED decision, signed proof and an
-    # export-time evidence re-verification).  No request parameter affects it.
-    from services.field_assessment.report_proof import evaluate_report_state
-
-    _qualified = (
-        db.execute(
-            select(FaQualificationDecision.id).where(
-                FaQualificationDecision.tenant_id == tenant_id,
-                FaQualificationDecision.report_id == record.id,
-                FaQualificationDecision.decision == "QUALIFIED",
-            )
-        ).first()
-        is not None
-    )
-    report_state = evaluate_report_state(
+    _access_basis = _enforce_report_content_access(
         db,
-        tenant_id=tenant_id,
-        engagement_id=engagement_id,
-        report_json=record.report_json or {},
-        qa_approved_by=record.qa_approved_by,
-        qa_approved_at=record.qa_approved_at,
-        qualified=_qualified,
+        request=request,
+        actor_ctx=actor_ctx,
+        engagement=engagement,
+        record=record,
+        report_state=report_state,
+        channel=f"export:{format}",
     )
+    report_state["access_basis"] = _access_basis
     # The signed record hash covers the whole report_json, including the proof;
     # the PDF must print this one (not the engine's internal manifest hash).
     report_state["signed_manifest_hash"] = record.manifest_hash
 
+    response.headers["Cache-Control"] = "no-store, private"
     if format == "json":
         return {
             "report_id": record.id,
@@ -12036,10 +12418,16 @@ def export_engagement_report_route(
     from services.governance.report.signing import get_public_key_hex as _gpkh
     import hashlib as _hl
 
+    _suffix = (
+        ""
+        if report_state["state"] == "FINAL"
+        else "-" + str(report_state["state"]).lower().replace("_", "-")
+    )
     export_headers: dict[str, str] = {
-        "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}.pdf"',
+        "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}{_suffix}.pdf"',
         "X-Manifest-Hash": record.manifest_hash,
         "X-Report-State": report_state["state"],
+        "Cache-Control": "no-store, private",
     }
     if record.signature:
         export_headers["X-Report-Signature"] = record.signature
@@ -14937,6 +15325,7 @@ _REPORT_VERSION_STATUSES: frozenset[str] = frozenset(
         "draft",
         "internal_review",
         "approved",
+        "rejected",
         "delivered",
         "superseded",
         "archived",
@@ -14944,7 +15333,7 @@ _REPORT_VERSION_STATUSES: frozenset[str] = frozenset(
 )
 
 _REPORT_VERSION_IMMUTABLE_STATUSES: frozenset[str] = frozenset(
-    {"approved", "delivered", "superseded", "archived"}
+    {"approved", "rejected", "delivered", "superseded", "archived"}
 )
 
 _REPORT_DELIVERY_EVENT_TYPES: frozenset[str] = frozenset(
@@ -14952,6 +15341,7 @@ _REPORT_DELIVERY_EVENT_TYPES: frozenset[str] = frozenset(
         "generated",
         "reviewed",
         "approved",
+        "rejected",
         "downloaded",
         "emailed",
         "portal_viewed",
@@ -15417,43 +15807,154 @@ def _record_delivery_event(
     db.flush()
 
 
-def _require_human_qa_actor(actor_ctx: ActorContext) -> str:
-    """Require a canonical named human for version-bound QA decisions.
+def _assurance_http(exc: Exception) -> HTTPException:
+    """Convert a canonical assurance refusal into a controlled API error."""
+    return HTTPException(
+        status_code=getattr(exc, "status_code", 403),
+        detail=api_error(
+            getattr(exc, "code", "ASSURANCE_DENIED"), getattr(exc, "message", "")
+        ),
+    )
 
-    Platform service principals are explicit machine actors and cannot be
-    promoted to human reviewers by request metadata. Delegated human requests
-    retain the canonical subject resolved by FA-ACTOR-001.
+
+def _require_human_qa_actor(actor_ctx: ActorContext) -> str:
+    """Require a canonical named human for every QA decision.
+
+    L14-ASSESSMENT-ASSURANCE-001: API keys and service principals cannot make
+    QA decisions — a key has no holder binding, so independence from the
+    author cannot be shown (CZ-12B).  Delegated human requests retain the
+    canonical subject resolved by FA-ACTOR-001.
     """
-    actor = _actor_from_context(actor_ctx)
-    if actor_ctx.service_principal_id:
-        raise HTTPException(
-            status_code=403,
-            detail=api_error(
-                "HUMAN_REVIEWER_REQUIRED",
-                "A service principal cannot make a human QA decision.",
-            ),
-        )
-    return actor
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        AssuranceDenied,
+        require_human_reviewer,
+    )
+
+    try:
+        return require_human_reviewer(actor_ctx)
+    except AssuranceDenied as exc:
+        raise _assurance_http(exc) from exc
 
 
 def _enforce_report_qa_independence(
-    actor_ctx: ActorContext, *, generated_by: str | None, reviewer_id: str
-) -> None:
-    """Enforce the repository's existing assessor/QA separation for humans.
+    db: Session,
+    actor_ctx: ActorContext,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    report_authors: list[str | None],
+) -> dict[str, Any]:
+    """Separation of duties for every QA decision route (CZ-12B).
 
-    Legacy API-key automation is retained as an explicitly service-attributed
-    compatibility path; canonical human/delegated requests cannot self-review.
+    The reviewer's canonical principal must not be a report author or a
+    material contributor to the engagement (append-only audit trail).
+    Enforced inside the transaction that records the decision.
     """
-    if (
-        actor_ctx.auth_source != "api_key"
-        and generated_by
-        and generated_by == reviewer_id
-    ):
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        AssuranceDenied,
+        enforce_independent_reviewer,
+    )
+
+    try:
+        return enforce_independent_reviewer(
+            db,
+            actor_ctx=actor_ctx,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            report_authors=report_authors,
+        )
+    except AssuranceDenied as exc:
+        raise _assurance_http(exc) from exc
+
+
+def _enforce_qa_provenance(db: Session, *, tenant_id: str, engagement_id: str) -> Any:
+    """Canonical provenance decision; integrity/scope failures refuse approval
+    in every FG_PROVENANCE_MODE (warn mode is observation, not a bypass)."""
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        evaluate_engagement_provenance,
+    )
+
+    decision = evaluate_engagement_provenance(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    hard = decision.approval_blockers()
+    if hard:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "ASSURANCE_PROVENANCE_BLOCKED",
+                "Evidence provenance does not permit QA approval: " + ", ".join(hard),
+            ),
+        )
+    return decision
+
+
+def _governance_report_authors(
+    db: Session, *, tenant_id: str, engagement_id: str, report: Any
+) -> list[str | None]:
+    """Canonical authors of a governance report record (audit trail first;
+    the caller-supplied ``compiled_by`` display value is included only to
+    widen, never narrow, the exclusion)."""
+    rows = db.execute(
+        select(FaEngagementAuditEvent.actor).where(
+            FaEngagementAuditEvent.tenant_id == tenant_id,
+            FaEngagementAuditEvent.engagement_id == engagement_id,
+            FaEngagementAuditEvent.event_type == "engagement_report_created",
+            FaEngagementAuditEvent.entity_id == report.id,
+        )
+    ).all()
+    return [r[0] for r in rows] + [report.compiled_by]
+
+
+def _request_correlation_id(request: Request) -> str | None:
+    rid = getattr(getattr(request, "state", None), "request_id", None) or (
+        request.headers.get("X-Request-ID") if request.headers else None
+    )
+    return str(rid)[:128] if rid else None
+
+
+def _load_governance_report_for_qa(
+    db: Session, *, tenant_id: str, engagement_id: str, report_id: str
+) -> GovernanceReportRecord:
+    report = db.execute(
+        select(GovernanceReportRecord).where(
+            GovernanceReportRecord.id == report_id,
+            GovernanceReportRecord.assessment_id == engagement_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("REPORT_NOT_FOUND", f"report {report_id!r} not found"),
+        )
+    if not report.is_finalized:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_NOT_FINALIZED",
+                "Only finalized reports can receive a QA decision.",
+            ),
+        )
+    return report
+
+
+def _refuse_if_qa_rejected(
+    db: Session, *, tenant_id: str, engagement_id: str, report_id: str
+) -> None:
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        governance_qa_status,
+    )
+
+    if governance_qa_status(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )["rejected"]:
         raise HTTPException(
             status_code=409,
             detail=api_error(
-                "REPORT_QA_CONFLICT",
-                "The report author cannot approve the same report version.",
+                "REPORT_QA_REJECTED",
+                "This report was rejected in QA. Generate a corrected report "
+                "and submit it for a new independent review.",
             ),
         )
 
@@ -15474,24 +15975,35 @@ def _record_report_qa_decision(
     actor_type: str,
     reason: str | None,
 ) -> FaReportQaDecision:
-    """Insert append-only QA evidence and reject contradictory replays."""
+    """Insert append-only QA evidence and reject contradictory replays.
+
+    One terminal decision per (report version | governance record, stage):
+    the DB unique indexes (version-bound and, for governance-stage records,
+    the partial index from migration 0205) make approve-vs-reject races
+    resolve to exactly one winner.
+    """
     if report_version_id:
-        existing = db.execute(
-            select(FaReportQaDecision).where(
-                FaReportQaDecision.tenant_id == tenant_id,
-                FaReportQaDecision.engagement_id == engagement_id,
-                FaReportQaDecision.report_version_id == report_version_id,
-                FaReportQaDecision.qa_stage == qa_stage,
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=api_error(
-                    "REPORT_QA_DECISION_REPLAY",
-                    "This report version already has a QA decision.",
-                ),
-            )
+        _scope = FaReportQaDecision.report_version_id == report_version_id
+    else:
+        _scope = (FaReportQaDecision.report_version_id.is_(None)) & (
+            FaReportQaDecision.report_id == report_id
+        )
+    existing = db.execute(
+        select(FaReportQaDecision.id).where(
+            FaReportQaDecision.tenant_id == tenant_id,
+            FaReportQaDecision.engagement_id == engagement_id,
+            _scope,
+            FaReportQaDecision.qa_stage == qa_stage,
+        )
+    ).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_QA_DECISION_REPLAY",
+                "This report version already has a QA decision.",
+            ),
+        )
     decision_id = _uuid_module.uuid4().hex
     row = FaReportQaDecision(
         id=decision_id,
@@ -15585,12 +16097,32 @@ def create_report_version_route(
         report_id=report_id,
     )
 
+    # A QA-rejected governance record cannot be revived through a new version;
+    # rework of a rejected record means generating a corrected report.
+    _refuse_if_qa_rejected(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
     version_number = _next_report_version_number(
         db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         report_id=report_id,
     )
+    # Rework lineage: the first version of a corrected report points at the
+    # most recent QA-rejected version in the engagement.  A rejected record
+    # itself can never get a new version (refused above: same content would be
+    # re-submitted to "shop" for a reviewer).  No approval state carries over.
+    _rejected_parent = db.execute(
+        select(FaReportVersion.id)
+        .where(
+            FaReportVersion.tenant_id == tenant_id,
+            FaReportVersion.engagement_id == engagement_id,
+            FaReportVersion.report_id != report_id,
+            FaReportVersion.status == "rejected",
+        )
+        .order_by(FaReportVersion.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
 
     now = utc_iso8601_z_now()
     version_id = _uuid_module.uuid4().hex
@@ -15622,7 +16154,7 @@ def create_report_version_route(
         version=version_number,
         revision=f"{version_number}.0",
         status="draft",
-        parent_version_id=None,
+        parent_version_id=_rejected_parent,
         superseded_by_id=None,
         created_at=now,
         approved_at=None,
@@ -15875,9 +16407,6 @@ def approve_report_version_route(
         version_id=version_id,
     )
     _guard_mutable(rv)
-    _enforce_report_qa_independence(
-        actor_ctx, generated_by=rv.generated_by, reviewer_id=actor
-    )
     if rv.status != "internal_review":
         raise HTTPException(
             status_code=409,
@@ -15886,6 +16415,27 @@ def approve_report_version_route(
                 f"Cannot approve from status {rv.status!r}.",
             ),
         )
+    _record = _load_report_record(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    _independence = _enforce_report_qa_independence(
+        db,
+        actor_ctx,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_authors=[
+            rv.generated_by,
+            *_governance_report_authors(
+                db, tenant_id=tenant_id, engagement_id=engagement_id, report=_record
+            ),
+        ],
+    )
+    _refuse_if_qa_rejected(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    _provenance = _enforce_qa_provenance(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
 
     now = utc_iso8601_z_now()
     rv.status = "approved"
@@ -15929,6 +16479,9 @@ def approve_report_version_route(
             "version": rv.version,
             "reviewer_name": rv.reviewer_name,
             "reviewer_role": rv.reviewer_role,
+            "independence": _independence,
+            "provenance": _provenance.summary(),
+            "correlation_id": _request_correlation_id(request),
         },
         entity_type="report_version",
         entity_id=rv.id,
@@ -15937,6 +16490,131 @@ def approve_report_version_route(
     db.commit()
     db.refresh(rv)
     return _report_version_to_response(rv)
+
+
+@router.post(
+    "/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/reject",
+    response_model=ReportQaRejectResponse,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def reject_report_version_route(
+    engagement_id: str,
+    report_id: str,
+    version_id: str,
+    body: ReportQaRejectBody,
+    request: Request,
+    actor_ctx: ActorContext = Depends(require_permission("report.qa_approve")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> ReportQaRejectResponse:
+    """Independent QA rejection of a version in internal_review.
+
+    internal_review → rejected (terminal for this version).  Rework creates a
+    new version whose ``parent_version_id`` points at the rejected one; the
+    rejected version and its reasons stay as immutable history.
+    """
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _require_human_qa_actor(actor_ctx)
+    reason_code, explanation = _validated_rejection(body)
+    actor_role = actor_ctx.primary_role() or _actor_type_from_context(actor_ctx)
+
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    rv = _load_report_version(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        version_id=version_id,
+    )
+    _guard_mutable(rv)
+    if rv.status != "internal_review":
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "REPORT_VERSION_INVALID_TRANSITION",
+                f"Cannot reject from status {rv.status!r}.",
+            ),
+        )
+    _record = _load_report_record(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    independence = _enforce_report_qa_independence(
+        db,
+        actor_ctx,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_authors=[
+            rv.generated_by,
+            *_governance_report_authors(
+                db, tenant_id=tenant_id, engagement_id=engagement_id, report=_record
+            ),
+        ],
+    )
+    now = utc_iso8601_z_now()
+    rv.status = "rejected"
+    rv.approval_notes = f"{reason_code}: {explanation}"
+    row = _record_report_qa_decision(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_id=report_id,
+        report_version_id=rv.id,
+        report_version=rv.version,
+        report_hash=rv.report_hash,
+        manifest_hash=rv.manifest_hash,
+        qa_stage="report",
+        decision="rejected",
+        reviewer_id=actor,
+        actor_type="human",
+        reason=f"{reason_code}: {explanation}",
+    )
+    db.flush()
+    _record_delivery_event(
+        db, rv=rv, event_type="rejected", actor=actor, actor_role=actor_role
+    )
+    proof = (_record.report_json or {}).get("report_proof")
+    proof_fp = proof.get("proof_fingerprint") if isinstance(proof, dict) else None
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="report_version_rejected",
+        actor=actor,
+        reason_code="REPORT_VERSION_REJECTED",
+        payload={
+            "report_id": report_id,
+            "report_version_id": rv.id,
+            "version": rv.version,
+            "decision_id": row.id,
+            "rejection_reason_code": reason_code,
+            "explanation": explanation,
+            "rejected_at": now,
+            "proof_fingerprint": proof_fp,
+            "manifest_hash": rv.manifest_hash,
+            "independence": independence,
+            "correlation_id": _request_correlation_id(request),
+        },
+        entity_type="report_version",
+        entity_id=rv.id,
+        actor_type="human",
+    )
+    db.commit()
+    return ReportQaRejectResponse(
+        report_id=report_id,
+        report_version=rv.version,
+        report_version_id=rv.id,
+        decision="rejected",
+        reason_code=reason_code,
+        rejected_by=actor,
+        rejected_at=now,
+        decision_id=row.id,
+        proof_fingerprint=proof_fp,
+        status="rejected",
+    )
 
 
 def _resolve_delivery_recipient(

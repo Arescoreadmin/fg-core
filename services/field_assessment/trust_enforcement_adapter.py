@@ -177,7 +177,43 @@ def derive_engagement_trust_inputs(
     tenant_id: str,
     engagement_id: str,
 ) -> TrustInputs:
-    """Derive TrustInputs from all independent provenance chain heads.
+    """Derive TrustInputs from the canonical engagement provenance authority.
+
+    L14-ASSESSMENT-ASSURANCE-001 (CZ-23): every trust consumer (QA approval,
+    report export, finalization, verification bundle) reads the same decision.
+    Runtime scanner evidence envelopes are evaluated directly; the older
+    ``evidence_provenance`` chain is AND-combined only where it exists, so
+    scanner-only engagements no longer score 0 for lacking legacy rows.
+
+    Returns all chain dimensions False when no evidence exists or evaluation
+    fails — never defaults unknown trust dimensions to True.
+    """
+    from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
+        evaluate_engagement_provenance,
+    )
+
+    try:
+        return evaluate_engagement_provenance(
+            db, tenant_id=tenant_id, engagement_id=engagement_id
+        ).to_trust_inputs()
+    except Exception:
+        return TrustInputs(
+            chain_valid=False,
+            signature_valid=False,
+            link_valid=False,
+            replay_valid=False,
+            tenant_valid=True,
+            engagement_valid=True,
+        )
+
+
+def legacy_provenance_trust_inputs(
+    db: Any,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+) -> TrustInputs:
+    """Derive TrustInputs from all independent legacy provenance chain heads.
 
     Fetches all provenance records and identifies chain heads — records whose
     event_hash is not referenced as any other record's previous_hash. Each

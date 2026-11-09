@@ -32,6 +32,7 @@ os.environ.setdefault("FG_ENV", "test")
 
 import pytest
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 _TENANT_A = "tenant-report-test-A"
 _TENANT_B = "tenant-report-test-B"
@@ -823,6 +824,7 @@ def test_qa_approve_response_contains_engagement_status(
     resp = qa_approve_client.post(
         f"/field-assessment/engagements/{eid}/reports/{report_id}/qa-approve",
         json={},
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()

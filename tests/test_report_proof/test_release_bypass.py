@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.test_report_proof import _synthetic as S
+from tests._assurance_actors import reviewer
 
 pypdf = pytest.importorskip("pypdf")
 pytest.importorskip("reportlab")
@@ -61,13 +62,17 @@ def test_synthetic_report_cannot_reach_final_through_any_route(client):
     )
 
     eid = S.create_engagement(client)
-    S.seed(eid)
+    # Untampered (still synthetic): independent QA approval is possible, so the
+    # test proves that nothing after it can make a synthetic report FINAL.
+    S.seed(eid, tamper=False)
     rep = S.generate_report(client, eid)
     rid, version = rep["report_id"], rep["version"]
     base = f"/field-assessment/engagements/{eid}/reports/{rid}"
 
     # QA approval is recorded, but cannot make a synthetic report final.
-    qa = client.post(f"{base}/qa-approve", json={"reviewer_name": "QA"})
+    qa = client.post(
+        f"{base}/qa-approve", json={"reviewer_name": "QA"}, headers=reviewer()
+    )
     assert qa.status_code == 200, qa.text
     assert (
         S.export(client, eid, version, "json").json()["report_state"]["state"]
@@ -149,8 +154,23 @@ def test_pdf_renders_the_same_proof_snapshot_the_release_decision_uses(client):
     try:
         record = db.get(GovernanceReportRecord, rep["report_id"])
         stored = record.report_json
-        decision_blockers = release_blockers_now(
-            db, tenant_id=S.TENANT, engagement_id=eid, report_json=stored
+        # L14-ASSESSMENT-ASSURANCE-001: the release decision is the proof
+        # blockers plus the canonical provenance blockers.
+        from services.field_assessment.assessment_assurance import (
+            evaluate_engagement_provenance,
+        )
+
+        decision_blockers = sorted(
+            set(
+                release_blockers_now(
+                    db, tenant_id=S.TENANT, engagement_id=eid, report_json=stored
+                )
+            )
+            | set(
+                evaluate_engagement_provenance(
+                    db, tenant_id=S.TENANT, engagement_id=eid
+                ).release_blockers()
+            )
         )
         manifest_hash = record.manifest_hash
     finally:

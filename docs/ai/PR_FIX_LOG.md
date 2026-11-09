@@ -1,3 +1,38 @@
+## security(field-assessment): L14-ASSESSMENT-ASSURANCE-001 — canonical provenance, independent QA, rejection and draft access (branch security/l14-assessment-assurance-001)
+
+- **Work item:** L14-ASSESSMENT-ASSURANCE-001 (REPAIR class; closes customer-zero P1s CZ-23, CZ-12B, CZ-17 and the missing QA rejection).
+- **Baseline SHA:** `4eab0d83` (main after PR #815).
+- **Created:**
+  - `services/field_assessment/assessment_assurance.py`: canonical provenance evaluator, reviewer independence and the draft-access policy.
+  - `migrations/postgres/0205_report_qa_governance_decision_unique.sql`: an additive partial unique index. It fails closed if duplicate rows already exist.
+  - `tests/test_assessment_assurance/`.
+  - `tests/_assurance_actors.py`: a test-only named-reviewer resolution seam.
+  - `docs/assurance/L14_ASSESSMENT_ASSURANCE.md`.
+- **Modified:**
+  - `api/field_assessment.py`:
+    - QA routes are hardened: human reviewer, independence, rejection check, mode-independent provenance, CAS approval.
+    - New routes `POST …/reports/{id}/qa-reject` and `POST …/versions/{id}/reject`.
+    - Rework lineage.
+    - The release gate adds provenance and rejection checks.
+    - Document and export routes use authoritative state, the access policy, audit and `no-store`.
+  - `services/field_assessment/trust_enforcement_adapter.py`: `derive_engagement_trust_inputs` delegates to the canonical evaluator. The legacy replay is renamed `legacy_provenance_trust_inputs`.
+  - `services/field_assessment/report_proof.py`: the `REJECTED` state, plus assurance blockers in FINAL.
+  - `api/db_models_field_assessment.py`: the ORM mirror of the 0205 index.
+  - `contracts/core/openapi.json`, `schemas/api/openapi.json`, `CONTRACT.md`, `BLUEPRINT_STAGED.md`: regenerated through `make contract-authority-refresh`.
+  - `tests/conftest.py`: installs the inert reviewer seam.
+  - `tests/test_customer_zero_e2e/`: `seed_collection(tamper=)`, and journey expectations now observe enforcement.
+  - `tests/test_migrations_postgres_replay.py`: a Postgres slice.
+  - Existing QA tests: approvals now made by an independent named reviewer.
+- **Behaviour changes:**
+  - API keys, including role-bound QA persona keys, can no longer approve or reject.
+  - Warn mode no longer allows QA approval over integrity, scope or legacy-chain failures.
+  - Customers get 403 `REPORT_DRAFT_ACCESS_DENIED` for unreleased content.
+  - FINAL needs an independent human approval.
+  - `GET /reports/{v}` now includes `report_state`.
+- **Not changed:**
+  - `scan.emergency_stop.platform` classification (pre-existing `test_P17` failure left as is).
+  - No CI workflow change.
+
 ## test(field-assessment): L14-CUSTOMER-ZERO-E2E-001 — synthetic customer acceptance and reporting (branch feat/l14-customer-zero-e2e-001)
 
 - **Work item:** L14-CUSTOMER-ZERO-E2E-001.

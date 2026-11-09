@@ -11,6 +11,7 @@ import os
 os.environ.setdefault("FG_ENV", "test")
 
 from fastapi.testclient import TestClient
+from tests._assurance_actors import reviewer
 
 
 TENANT_A = "high-table-financial-707"
@@ -126,6 +127,7 @@ def test_legitimate_assessment_stops_at_production_qualification(
             "reviewer_role": "Senior Assessor",
             "approval_notes": "Synthetic readiness audit only.",
         },
+        headers=reviewer(),
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["status"] == "approved"
