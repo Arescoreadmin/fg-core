@@ -19,6 +19,7 @@
   - `services/field_assessment/report_proof.py`: the `REJECTED` state, plus assurance blockers in FINAL.
   - `api/db_models_field_assessment.py`: the ORM mirror of the 0205 index.
   - `contracts/core/openapi.json`, `schemas/api/openapi.json`, `CONTRACT.md`, `BLUEPRINT_STAGED.md`: regenerated through `make contract-authority-refresh`.
+  - `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: regenerated through `make route-inventory-generate` after CI identified the two new rejection routes as missing from the committed inventory.
   - `tests/conftest.py`: installs the inert reviewer seam.
   - `tests/test_customer_zero_e2e/`: `seed_collection(tamper=)`, and journey expectations now observe enforcement.
   - `tests/test_migrations_postgres_replay.py`: a Postgres slice.

@@ -2749,6 +2749,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-reject",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/qualify",
       "scopes": [],
@@ -2811,6 +2817,12 @@
     {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/reject",
       "scopes": [],
       "source": "contract"
     },
@@ -6265,7 +6277,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-11-08T17:42:03.288452+00:00",
+  "generated_at": "2026-11-09T19:07:33.324860+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

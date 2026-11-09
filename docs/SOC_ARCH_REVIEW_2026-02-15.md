@@ -1,3 +1,17 @@
+## 2026-11-09 — L14-ASSESSMENT-ASSURANCE-001 rejection route inventory — security/l14-assessment-assurance-001
+
+**Reviewer:** Codex (pending human SOC review) | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).
+
+**Scope:** Generated route inventory regenerated with `make route-inventory-generate` for the two new Field Assessment QA rejection routes. Both routes are additive control-plane endpoints, tenant-bound through the existing Field Assessment tenant and engagement authorities, authenticated, scope-gated, permission-gated, and audited:
+- `POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/qa-reject` — scope `governance:qa_approve`; independent named-human QA authority required.
+- `POST /field-assessment/engagements/{engagement_id}/reports/{report_id}/versions/{version_id}/reject` — scope `governance:write`; report review authority required.
+
+**Security posture:** No unauthenticated or cross-tenant surface was added. Rejection is terminal and append-only; the routes reject API-key and service-principal actors, enforce reviewer independence, use compare-and-swap conflict handling, and record the canonical actor and authentication source. The generated plane snapshot is otherwise unchanged; the topology hashes changed only to bind the refreshed inventory artifacts.
+
+**Validation:** `make route-inventory-audit` passed. `make soc-review-sync` is required to pass with this entry.
+
+---
+
 ## 2026-11-08 — L14-SCAN-AUTH-HARDENING-001 customer consent and execution safety — security/l14-scan-auth-hardening-001
 
 **Reviewer:** Claude Code (pending human SOC review) | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).
