@@ -1,3 +1,53 @@
+## feat(field-assessment): L14-SCAN-REPORT-PROOF-001 — report completeness, coverage truth, evidence proof and draft rendering (branch feat/l14-scan-report-proof-001)
+
+- **Work item:** L14-SCAN-REPORT-PROOF-001.
+- **Baseline SHA:** `f686627f` (main after PR #813).
+- **Failures before** (reproduced by the deterministic synthetic fixture):
+  - the PDF rendered 1 derived domain gap instead of the 14 persisted findings;
+  - "Evidence Completeness 100%" and "Control Coverage 100%" were shown despite PARTIAL, DENIED, TIMEOUT and CANCELLED collection, and the truth gate said PASS;
+  - there was no DRAFT marking;
+  - the footer client name collided with the hash;
+  - an unsupported "verified" narrative and compliance mappings were rendered.
+- **Root causes:**
+  - `export_pdf_bytes` rendered `GovernanceReportEngine` domain gaps (findings collapsed per domain), not `fa_normalized_findings`.
+  - Coverage ratios were computed over evidence refs marked VALIDATED unconditionally, with no collection status.
+  - The truth gate checked lineage only.
+  - The footer used three fixed-position strings on one line.
+- **Fix summary:**
+  - `services/field_assessment/report_proof.py`: a signed `report_proof` built from persisted authorities only:
+    - finding reconciliation against an independent read;
+    - persisted collection-status coverage, never a percentage;
+    - re-verified evidence classification and evidence-capped confidence (via the #813 manifest, which now also returns `evidence_integrity`);
+    - release blockers;
+    - authoritative report state and marking, with evidence re-verified at export and delivery.
+  - The builder embeds the proof. `result_truth_gate` consumes its blockers. `_require_production_qualified` requires the proof and unchanged evidence.
+  - `export_pdf_bytes` renders from the proof via `services/governance/report/pdf_layout.py`: sections, a marking band and watermark on every page, and a measured two-line footer with Page X of Y. The legacy path gains the same band and footer.
+  - Finding serialization adds the confidence, collection, evidence, remediation and asset columns.
+- **Acceptance fixes:**
+  - The PDF printed the engine's internal `manifest_hash`, which does not cover `report_proof`. It now prints the signed record hash (`report_state.signed_manifest_hash`), the one export, QA and delivery verify. A test binds PDF, proof snapshot and release decision.
+  - `tests/test_db_init_ordering.py::test_no_unsafe_alter_on_orm_managed_tables` failed on `origin/main` (pre-existing) on two false positives: a wrapped SQL comment in 0201, and information_schema-guarded `ADD COLUMN`s in 0202. The checker now strips comments and accepts guarded columns; a negative control still catches an unguarded `ADD COLUMN`. Test-only; no migration edited.
+  - Full `mypy .` had 31 errors on `origin/main` (8 files, from #812/#813). CI does not run full mypy. Fixed here, with behavior preserved:
+    - explicit `RuntimeError` when `INSERT … RETURNING` yields no row (`create_scan_authorization`, `activate_emergency_stop`), instead of an implicit `TypeError`;
+    - `web_headers` runner: the `except … as denied` name no longer shadows the later `denied` list;
+    - `dns_email` runner: `results` annotated;
+    - test-harness annotations and casts.
+
+    Full `mypy .` now passes (2274 files).
+- **Files created:**
+  - `services/field_assessment/report_proof.py`
+  - `services/governance/report/pdf_layout.py`
+  - `tests/test_report_proof/` (`_synthetic.py`, `test_proof_assembly.py`, `test_report_end_to_end.py`)
+  - `docs/assurance/L14_SCAN_REPORT_PROOF.md`
+- **Files modified:**
+  - `api/field_assessment.py`
+  - `services/governance/report/serialization.py`
+  - `services/governance/report/result_truth_gate.py`
+  - `services/field_assessment/runtime_evidence.py` (manifest exposes `evidence_integrity`)
+  - `tests/test_report_preview/test_synthetic_report_preview.py` (now also writes a validation record)
+  - `tests/test_db_init_ordering.py` (heuristic fix above)
+  - Docs: FVA standard, `L14_CUSTOMER_REPORT_PREVIEW_READINESS.md`, `ROADMAP.md`
+- **No migration.** No schema, CI or infra change. No production data touched; no external scanning.
+
 ## feat(field-scan): L14-SCAN-RUNNER-INTEGRITY-001 — runtime evidence provenance enforcement (branch feat/l14-scan-runner-integrity-001)
 
 - **Work item:** L14-SCAN-RUNNER-INTEGRITY-001, plus the customer-zero report preview readiness addendum.

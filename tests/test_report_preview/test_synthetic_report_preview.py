@@ -1,18 +1,18 @@
-"""Synthetic customer report preview through EXISTING infrastructure.
+"""Synthetic customer report preview through the canonical report pipeline.
 
-L14-SCAN-RUNNER-INTEGRITY-001 addendum (customer-zero report preview readiness).
+L14-SCAN-RUNNER-INTEGRITY-001 addendum; upgraded by L14-SCAN-REPORT-PROOF-001.
 
-Isolated: the conftest ``build_app`` SQLite app, a synthetic tenant and
-engagement, synthetic scanner payloads persisted through the SAME bridge
-functions the scanner workers call (no scanning, no network), then the real
-report routes:  POST /engagements/{id}/reports → GET …/reports/{v}/export?format=pdf.
+Isolated ``build_app`` SQLite app; the deterministic synthetic engagement from
+``tests/test_report_proof/_synthetic.py`` (production bridges, production
+evidence capture, explicitly SYNTHETIC authorization provenance, no scanning,
+no network); then the real routes:
+POST /engagements/{id}/reports → GET …/reports/{v}/export?format=json|pdf.
 
-No authorization is fabricated: no customer receipt exists, so runtime evidence
-capture is NOT run and every finding stays unclassified (confidence UNKNOWN).
-The preview is DRAFT / SYNTHETIC / NOT VERIFIED; no QA approval or delivery
-route is called.
+The preview is DRAFT / SYNTHETIC / NOT VERIFIED on every page.  No QA approval
+or delivery route is called.
 
-Set FG_REPORT_PREVIEW_OUT=<dir> to keep the generated PDF + JSON for visual QA.
+Set FG_REPORT_PREVIEW_OUT=<dir> to keep the PDF, JSON, extracted text and (when
+pdftoppm is installed) one PNG per page for visual QA.
 """
 
 from __future__ import annotations
@@ -20,283 +20,236 @@ from __future__ import annotations
 import io
 import json
 import os
-import uuid
+import re
+import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-_SIGNING_KEY_HEX = "ab" * 32
-_TENANT = "tenant-synthetic-preview"
-CLIENT_NAME = "SYNTHETIC DEMO - Northwind Analytics (NOT A REAL CUSTOMER)"
-
-# Severity mix required by the preview dataset (demo fixture, not real findings).
-_WEB = [
-    ("missing_hsts", "critical", "app.northwind.example"),
-    ("missing_csp", "critical", "portal.northwind.example"),
-    ("missing_x_frame", "high", "app.northwind.example"),
-    ("weak_referrer_policy", "high", "portal.northwind.example"),
-    ("missing_permissions_policy", "medium", "app.northwind.example"),
-]
-_DNS = [
-    ("missing_dmarc", "high", "northwind.example"),
-    ("spf_permissive", "medium", "northwind.example"),
-    ("dkim_not_found", "medium", "mail.northwind.example"),
-    ("mx_single_provider", "low", "northwind.example"),
-    ("dnssec_absent", "low", "northwind.example"),
-]
-_NET = [
-    ("network.plain_http_exposed", "medium", ["203.0.113.10"]),
-    ("network.legacy_tls", "low", ["203.0.113.11"]),
-    ("network.ai_port_observed", "informational", ["203.0.113.12"]),
-    ("network.service_banner_observed", "informational", ["203.0.113.12"]),
-]
-
-
-def _issue_key(tenant_id: str, *scopes: str) -> tuple[str, str]:
-    from sqlalchemy import text as sa_text
-
-    from api.credential_authority import issue_credential
-    from api.db import get_engine
-
-    engine = get_engine()
-    with engine.begin() as conn:
-        conn.execute(
-            sa_text(
-                "INSERT OR IGNORE INTO tenants (tenant_id, lifecycle_state) VALUES (:t, 'active')"
-            ),
-            {"t": tenant_id},
-        )
-    res = issue_credential(
-        engine,
-        tenant_id=tenant_id,
-        credential_type="tenant_api_key",
-        credential_slot=f"preview:{uuid.uuid4()}",
-        scopes=list(scopes),
-    )
-    assert res.plaintext_secret is not None
-    return res.plaintext_secret, res.record.credential_id
-
-
-def _assign(tenant_id: str, credential_id: str, role: str) -> None:
-    from sqlalchemy.orm import Session
-
-    from api.db import get_engine
-    from api.tenant_rbac import assign_role
-
-    with Session(get_engine()) as db:
-        assign_role(
-            db,
-            tenant_id=tenant_id,
-            actor_key_prefix="preview",
-            credential_id=credential_id,
-            role_name=role,
-        )
-        db.commit()
-
-
-def _seed_findings(engagement_id: str) -> dict[str, str]:
-    """Persist synthetic scanner payloads through the production bridges."""
-    from api.db import get_sessionmaker
-    from services.field_assessment.connectors.dns_email_bridge import (
-        import_dns_email_scan,
-    )
-    from services.field_assessment.connectors.network_scan_bridge import (
-        import_network_scan,
-    )
-    from services.field_assessment.connectors.web_headers_bridge import (
-        import_web_headers_scan,
-    )
-
-    db = get_sessionmaker()()
-    try:
-        web = import_web_headers_scan(
-            db=db,
-            tenant_id=_TENANT,
-            engagement_id=engagement_id,
-            actor="synthetic-assessor",
-            scan_result={
-                "targets": [
-                    {
-                        "url": "https://app.northwind.example",
-                        "collection_status": "COMPLETE",
-                        "error": None,
-                    },
-                    {
-                        "url": "https://portal.northwind.example",
-                        "collection_status": "COMPLETE",
-                        "error": None,
-                    },
-                    {
-                        "url": "https://legacy.northwind.example",
-                        "collection_status": "DENIED",
-                        "error": "target blocked by scanner policy",
-                        "blocked": True,
-                    },
-                ],
-                "findings": [
-                    {
-                        "type": t,
-                        "severity": s,
-                        "title": f"[SYNTHETIC] {t.replace('_', ' ').title()}",
-                        "description": f"Synthetic demo observation on {tgt}.",
-                        "target": tgt,
-                    }
-                    for t, s, tgt in _WEB
-                ],
-                "collection_status": "PARTIAL",
-                "synthetic": True,
-            },
-        )
-        dns = import_dns_email_scan(
-            db=db,
-            tenant_id=_TENANT,
-            engagement_id=engagement_id,
-            actor="synthetic-assessor",
-            scan_result={
-                "domains": [
-                    {"domain": "northwind.example", "collection_status": "COMPLETE"},
-                    {
-                        "domain": "mail.northwind.example",
-                        "collection_status": "TIMEOUT",
-                    },
-                ],
-                "findings": [
-                    {
-                        "type": t,
-                        "severity": s,
-                        "title": f"[SYNTHETIC] {t.replace('_', ' ').title()}",
-                        "description": f"Synthetic demo observation for {d}.",
-                        "domain": d,
-                    }
-                    for t, s, d in _DNS
-                ],
-                "collection_status": "PARTIAL",
-                "synthetic": True,
-            },
-        )
-        net = import_network_scan(
-            db=db,
-            tenant_id=_TENANT,
-            engagement_id=engagement_id,
-            actor="synthetic-assessor",
-            scan_result={
-                "scan_completed_at": "2026-11-08T12:00:00Z",
-                "collection_status": "CANCELLED",
-                "scan_status": "interrupted",
-                "interrupted": {
-                    "reason_code": "JOB_CANCELLED",
-                    "phase": "target",
-                    "remaining_targets_not_started": 4,
-                },
-                "hosts": [
-                    {"host": h, "open_ports": [80], "tls": {}}
-                    for h in ("203.0.113.10", "203.0.113.11", "203.0.113.12")
-                ],
-                "findings": [
-                    {
-                        "finding_type": t,
-                        "severity": s,
-                        "title": f"[SYNTHETIC] {t.split('.')[-1].replace('_', ' ').title()}",
-                        "description": "Synthetic demo observation.",
-                        "control_id": "NIST-AI-RMF-MANAGE-2.2",
-                        "affected_hosts": hosts,
-                    }
-                    for t, s, hosts in _NET
-                ],
-                "synthetic": True,
-            },
-        )
-        db.commit()
-        return {
-            "web": web.scan_result_id,
-            "dns": dns.scan_result_id,
-            "network": net.scan_result_id,
-        }
-    finally:
-        db.close()
+from tests.test_report_proof import _synthetic as S
 
 
 @pytest.fixture()
 def client(build_app, monkeypatch):
-    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", _SIGNING_KEY_HEX)
+    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", S.SIGNING_KEY_HEX)
     app = build_app(auth_enabled=True)
-    key, cred = _issue_key(_TENANT, "governance:read", "governance:write")
-    _assign(_TENANT, cred, "analyst")
+    key = S.issue_key(S.TENANT, "governance:read", "governance:write")
     return TestClient(app, headers={"X-API-Key": key})
 
 
 def test_synthetic_report_preview_renders(client):
     pypdf = pytest.importorskip("pypdf")
-    resp = client.post(
-        "/field-assessment/engagements",
-        json={
-            "client_name": CLIENT_NAME,
-            "assessor_id": "synthetic-assessor",
-            "assessment_type": "ai_governance",
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    eid = resp.json()["id"]
-    scans = _seed_findings(eid)
+    eid = S.create_engagement(client)
+    scans = S.seed(eid)
+    rep = S.generate_report(client, eid)
+    version = rep["version"]
 
-    findings = client.get(
-        f"/field-assessment/engagements/{eid}/findings", params={"limit": 100}
-    )
-    assert findings.status_code == 200, findings.text
-    items = findings.json().get("findings") or findings.json().get("items") or []
-    sev = {}
-    for f in items:
-        sev[f["severity"]] = sev.get(f["severity"], 0) + 1
-    # Bridges dedupe per (finding_type, scan) — the counts are what persisted.
-    assert sum(sev.values()) >= 10, sev
-
-    rep = client.post(
-        f"/field-assessment/engagements/{eid}/reports",
-        json={"report_type": "full_assessment"},
-    )
-    assert rep.status_code == 201, rep.text
-    version = rep.json()["version"]
-
-    js = client.get(
-        f"/field-assessment/engagements/{eid}/reports/{version}/export",
-        params={"format": "json"},
-    )
+    js = S.export(client, eid, version, "json")
     assert js.status_code == 200, js.text
-    pdf = client.get(
-        f"/field-assessment/engagements/{eid}/reports/{version}/export",
-        params={"format": "pdf"},
-    )
+    pdf = S.export(client, eid, version, "pdf")
     if pdf.status_code == 501:
         pytest.skip("reportlab unavailable: PDF_EXPORT_UNAVAILABLE")
     assert pdf.status_code == 200, pdf.text[:500]
     assert pdf.content[:5] == b"%PDF-"
 
     reader = pypdf.PdfReader(io.BytesIO(pdf.content))
-    text = "\n".join((p.extract_text() or "") for p in reader.pages)
-    assert len(reader.pages) >= 2
-    assert "SYNTHETIC" in text  # customer identity marks the preview as synthetic
+    pages = [p.extract_text() or "" for p in reader.pages]
+    text = re.sub(r"\s+", " ", "\n".join(pages))
+    proof = js.json()["report"]["report_proof"]
+    assert proof["finding_reconciliation"]["included_total"] == 14
+    for f in proof["findings"]:
+        assert f["finding_id"] in text
+    flat_pages = [re.sub(r"\s+", " ", p) for p in pages]
+    nospace = re.sub(r"\s+", "", text)
+    sev = proof["severity_counts"]
+    checks = {
+        "all_14_finding_ids_in_pdf": all(
+            f["finding_id"] in text for f in proof["findings"]
+        ),
+        "finding_id_blocks_eq_14": text.count("Finding ID") == 14,
+        "severity_totals_2_3_4_3_2": [
+            sev[k] for k in ("critical", "high", "medium", "low", "informational")
+        ]
+        == [2, 3, 4, 3, 2],
+        "reconciled": proof["finding_reconciliation"]["reconciled"] is True,
+        "no_full_coverage_claim": proof["coverage"]["may_claim_full_coverage"] is False
+        and proof["coverage"]["coverage_percentage"] is None
+        and "100%" not in text,
+        "partial_denied_cancelled_failed_disclosed": all(
+            any(c.endswith(s_) for c in proof["coverage"]["limitations"])
+            for s_ in (":PARTIAL", ":DENIED", ":CANCELLED", ":FAILED")
+        ),
+        "synthetic_marking_every_page": all(
+            "DRAFT — SYNTHETIC DATA — NOT VERIFIED" in p for p in flat_pages
+        ),
+        "page_x_of_y_every_page": all(
+            f"Page {i} of {len(pages)}" in p for i, p in enumerate(flat_pages, start=1)
+        ),
+        "signed_hash_in_pdf": js.json()["manifest_hash"] in nospace,
+        "proof_fingerprint_in_pdf": proof["proof_fingerprint"] in nospace,
+        "release_blocked": bool(proof["release_blockers"])
+        and js.json()["report"]["result_truth_gate"]["decision"] == "FAIL",
+        "state_draft_synthetic": js.json()["report_state"]["state"]
+        == "DRAFT_SYNTHETIC",
+    }
+    layout = S.pdf_layout_checks(
+        pdf.content, marking="DRAFT — SYNTHETIC DATA — NOT VERIFIED"
+    )
+    checks["layout_every_page_marking_numbering_footer"] = layout["all_ok"]
+    raster: dict[str, object] = {"performed": False}
+    if shutil.which("pdftoppm"):
+        raster = _raster_check(pdf.content)
+        checks["raster_every_page_non_blank"] = raster["all_non_blank"]
+    assert all(checks.values()), {k: v for k, v in checks.items() if not v}
 
     out = os.getenv("FG_REPORT_PREVIEW_OUT")
     if out:
         d = Path(out)
         d.mkdir(parents=True, exist_ok=True)
-        (d / "synthetic_report_preview.pdf").write_bytes(pdf.content)
+        pdf_path = d / "synthetic_report_preview.pdf"
+        pdf_path.write_bytes(pdf.content)
         (d / "synthetic_report_preview.json").write_text(
             json.dumps(js.json(), indent=2, default=str)
         )
-        (d / "synthetic_report_preview_text.txt").write_text(text)
+        (d / "synthetic_report_preview_text.txt").write_text("\n".join(pages))
+        if shutil.which("pdftoppm"):
+            subprocess.run(
+                ["pdftoppm", "-r", "110", "-png", str(pdf_path), str(d / "page")],
+                check=True,
+                timeout=120,
+            )
+        import hashlib
+
+        import importlib.metadata as md
+        import platform
+        from datetime import datetime, timezone
+
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout.strip()
+        )
+        (d / "validation_record.json").write_text(
+            json.dumps(
+                {
+                    "work_item": "L14-SCAN-REPORT-PROOF-001",
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "test": os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0],
+                    "outcome": "PASS" if all(checks.values()) else "FAIL",
+                    "artifact": {
+                        "file": pdf_path.name,
+                        "sha256": hashlib.sha256(pdf.content).hexdigest(),
+                        "bytes": len(pdf.content),
+                        "pages": len(pages),
+                    },
+                    "snapshot": {
+                        "report_id": rep["report_id"],
+                        "report_version": version,
+                        "engagement_id": eid,
+                        "signed_report_sha256": js.json()["manifest_hash"],
+                        "proof_fingerprint": proof["proof_fingerprint"],
+                        "proof_schema": proof["schema_version"],
+                        "data_cutoff": proof["data_cutoff"],
+                        "evidence_verified_at": proof["evidence_verified_at"],
+                        "finding_ids": [f["finding_id"] for f in proof["findings"]],
+                        "severity_counts": proof["severity_counts"],
+                        "coverage_limitations": proof["coverage"]["limitations"],
+                        "release_blockers": proof["release_blockers"],
+                        "truth_gate": js.json()["report"]["result_truth_gate"][
+                            "decision"
+                        ],
+                        "report_state": js.json()["report_state"]["state"],
+                    },
+                    "checks": checks,
+                    "layout": layout,
+                    "raster": raster,
+                    "verification_basis": {
+                        "data": "Synthetic engagement persisted through production "
+                        "bridges and production evidence capture in an isolated "
+                        "SQLite test app (build_app); no scanning, no network.",
+                        "routes": [
+                            "POST /field-assessment/engagements",
+                            "POST /field-assessment/engagements/{id}/reports",
+                            "GET .../reports/{v}/export?format=json",
+                            "GET .../reports/{v}/export?format=pdf",
+                        ],
+                        "text": "pypdf text extraction of every page",
+                        "layout": "pypdf text positions + reportlab Helvetica "
+                        "7pt string widths (footer band and per-line overlap)",
+                        "raster": "pdftoppm 40 dpi per page, grayscale "
+                        "extrema (non-blank)"
+                        if raster.get("performed")
+                        else "not performed (pdftoppm unavailable)",
+                        "not_verified": [
+                            "human visual review is separate from this record",
+                            "evidence provenance is SHA-256 integrity only; "
+                            "source authenticity is not attested",
+                            "no QA approval or production qualification exists",
+                        ],
+                    },
+                    "environment": {
+                        "git_head": head,
+                        "working_tree_dirty": dirty,
+                        "python": platform.python_version(),
+                        "reportlab": md.version("reportlab"),
+                        "pypdf": md.version("pypdf"),
+                    },
+                    "status": "DRAFT / SYNTHETIC / NOT VERIFIED — not client-deliverable",
+                },
+                indent=2,
+            )
+        )
         (d / "preview_meta.json").write_text(
             json.dumps(
                 {
                     "engagement_id": eid,
                     "report_version": version,
-                    "pages": len(reader.pages),
-                    "severity_counts_persisted": sev,
+                    "report_id": rep["report_id"],
+                    "pages": len(pages),
+                    "severity_counts": proof["severity_counts"],
+                    "confidence_counts": proof["confidence_counts"],
+                    "provenance_counts": proof["provenance_counts"],
+                    "coverage_limitations": proof["coverage"]["limitations"],
+                    "release_blockers": proof["release_blockers"],
                     "scan_result_ids": scans,
                     "pdf_bytes": len(pdf.content),
-                    "status": "DRAFT / SYNTHETIC / NOT VERIFIED",
+                    "report_state": js.json()["report_state"],
                 },
                 indent=2,
             )
         )
+
+
+def _raster_check(pdf_bytes: bytes) -> dict[str, object]:
+    import tempfile
+
+    from PIL import Image
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "r.pdf"
+        src.write_bytes(pdf_bytes)
+        subprocess.run(
+            ["pdftoppm", "-r", "40", "-gray", "-png", str(src), str(Path(tmp) / "p")],
+            check=True,
+            timeout=120,
+        )
+        spans: list[int] = []
+        for img in sorted(Path(tmp).glob("p-*.png")):
+            with Image.open(img) as im:
+                extrema: Any = im.convert("L").getextrema()
+                spans.append(int(extrema[1]) - int(extrema[0]))
+    return {
+        "performed": True,
+        "pages": len(spans),
+        "contrast_span_per_page": spans,
+        "all_non_blank": bool(spans) and all(x > 100 for x in spans),
+    }

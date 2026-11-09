@@ -1,5 +1,7 @@
 # L14 Customer Report Preview Readiness (Customer-Zero Synthetic Preview)
 
+> **Update — L14-SCAN-REPORT-PROOF-001.** The preview was regenerated from a deterministic synthetic fixture, through the same routes and the upgraded canonical renderer. It is now a 10-page PDF with 14 of 14 findings rendered. Coverage is disclosed with no percentage. Evidence classifications and capped confidence are shown, and every page carries `DRAFT — SYNTHETIC DATA — NOT VERIFIED`. **Verdict: READY for internal draft review; it must not be delivered as a verified assessment** (synthetic data blocks release by design). §11 records the defect resolution. The sections below describe the original PR #813 preview.
+
 **Verdict: PARTIAL.** A synthetic preview PDF **was generated** through existing routes in an isolated SQLite environment. However, the PDF does not render the scanner findings by severity, hides collection limitations, and makes unsupported "verified" and compliance claims. It is fit for internal visual QA. It is **not** fit to show a customer as representative of a verified assessment.
 
 **Scope:** discovery plus one safe demonstration (L14-SCAN-RUNNER-INTEGRITY-001 addendum). There is no new renderer, report API, provisioning or QA bypass. Every artifact is **DRAFT / SYNTHETIC / NOT VERIFIED**.
@@ -123,3 +125,31 @@ The test also runs in CI without the env var. It asserts that the pipeline rende
 - fix footer truncation (V-8) and header contrast (V-9).
 
 **Effort basis:** all inputs already exist in persisted data (JSON `normalized_findings` = 14; the manifest builder exists and is tested). The work is confined to `export_pdf_bytes`, finding serialization, and the report builder's truth-gate inputs. It needs no migration, no new route and no new tenant tooling. The existing preview test (§4) becomes the regression harness. A reasonable estimate is about 2–3 engineering days including tests. That estimate assumes no design changes to page layout beyond V-8 and V-9.
+
+
+## 11. Defect resolution (L14-SCAN-REPORT-PROOF-001)
+
+| # | Resolution |
+|---|---|
+| V-1 | **Fixed.** The proof renders all eligible persisted findings (14/14), reconciled against an independent read. Root cause: the PDF rendered the engine's derived domain gaps. |
+| V-2 | **Fixed.** Coverage comes from persisted collection status. Every non-COMPLETE scan, observation and job is disclosed, and the percentage reads "not determinable". The truth gate FAILs on proof blockers. |
+| V-3 | **Fixed in the PDF.** A deterministic executive summary is rendered; the advisory AI narrative is not. The JSON narrative is unchanged (see `L14_SCAN_REPORT_PROOF.md` §17). |
+| V-4 | **Fixed.** Framework compliance mappings are not rendered in proof mode. |
+| V-5 | **Fixed.** An authoritative marking band appears on every page, plus a draft watermark and footer marking. |
+| V-6 | **Fixed.** Canonical confidence labels are shown, including "capped from" when the evidence is insufficient. |
+| V-7 | **Fixed.** Per-finding evidence ids and classification, plus an evidence appendix with integrity status. |
+| V-8 | **Fixed.** Two-line measured footer with Page X of Y and no client name. A geometry test asserts there is no overlap. |
+| V-9 | **Fixed.** Table headers are white bold on navy. |
+| V-10 | **Improved.** Sections flow with conditional page breaks. The cover's lower half is intentionally sparse. |
+| V-11 | **Fixed.** Timestamps are formatted `YYYY-MM-DD HH:MM UTC`. |
+| V-12 | **Fixed.** The retention and redaction statements are not rendered in proof mode. |
+| V-13 | **Fixed.** Finding headers show severity and title. |
+| V-14 | **Fixed.** A Scope and Methodology section covers collectors, methods, collection, observations, exclusions and incomplete assessments. |
+
+Regenerate with:
+
+```
+FG_REPORT_PREVIEW_OUT=<dir> FG_ENV=test .venv/bin/pytest -q tests/test_report_preview/
+```
+
+This writes the PDF, JSON, text, one PNG per page and the metadata file.

@@ -1108,6 +1108,7 @@ def build_evidence_manifest(
         "findings": findings_out,
         "scans": sorted(scans.values(), key=lambda x: str(x["scan_result_id"])),
         "coverage_limitations": limitations,
+        "evidence_integrity": {eid: integrity[eid].value for eid in sorted(integrity)},
         "report_constraints": {
             # Never assertable without an authenticated signature (Vault: L14-SCAN-VAULT-001).
             "may_claim_authenticated_evidence": bool(envs)
