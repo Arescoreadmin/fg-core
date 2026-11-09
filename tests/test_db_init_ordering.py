@@ -58,29 +58,113 @@ class TestFaMigrationSafety:
         )
 
     def test_no_unsafe_alter_on_orm_managed_tables(self) -> None:
-        """Any future migration that alters an ORM-managed FA table must use IF NOT EXISTS."""
+        """Any migration that alters an ORM-managed FA table must use IF NOT EXISTS
+        (or an information_schema existence guard in the same DO block)."""
         unsafe: list[str] = []
         for path in sorted(_MIGRATIONS_DIR.glob("*.sql")):
             if path.name.endswith(".rollback.sql"):
                 continue
-            sql = path.read_text(encoding="utf-8")
-            for line in sql.splitlines():
-                stripped = line.strip().upper()
-                if not stripped.startswith("ALTER TABLE"):
-                    continue
-                # Check if this ALTER TABLE targets one of the ORM-managed FA tables
-                for table in _ORM_MANAGED_FA_TABLES:
-                    if table.upper() in stripped:
-                        # The next meaningful statement should use IF NOT EXISTS
-                        # We check the full file for ADD COLUMN without IF NOT EXISTS
-                        add_pattern = re.search(
-                            r"ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)", sql, re.IGNORECASE
-                        )
-                        if add_pattern:
-                            unsafe.append(
-                                f"{path.name}: ADD COLUMN missing IF NOT EXISTS"
-                            )
+            for table, column in unsafe_orm_add_columns(
+                path.read_text(encoding="utf-8")
+            ):
+                unsafe.append(
+                    f"{path.name}: ADD COLUMN {table}.{column} missing IF NOT EXISTS"
+                )
         assert not unsafe, "\n".join(unsafe)
+
+    # The checker itself must keep rejecting unsafe SQL (negative controls).
+    def test_checker_rejects_unguarded_add_column(self) -> None:
+        sql = "ALTER TABLE fa_scan_results\n    ADD COLUMN new_col TEXT;"
+        assert unsafe_orm_add_columns(sql) == [("fa_scan_results", "new_col")]
+
+    def test_checker_rejects_guard_for_a_different_column_or_table(self) -> None:
+        other_col = (
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'fa_scan_results' AND column_name = 'other') THEN "
+            "ALTER TABLE fa_scan_results ADD COLUMN new_col TEXT; END IF; END $$;"
+        )
+        other_table = other_col.replace(
+            "table_name = 'fa_scan_results'", "table_name = 'fa_engagements'"
+        ).replace("'other'", "'new_col'")
+        assert unsafe_orm_add_columns(other_col) == [("fa_scan_results", "new_col")]
+        assert unsafe_orm_add_columns(other_table) == [("fa_scan_results", "new_col")]
+
+    def test_checker_rejects_guard_outside_the_do_block(self) -> None:
+        sql = (
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'fa_scan_results' AND column_name = 'new_col') THEN "
+            "RAISE NOTICE 'x'; END IF; END $$;\n"
+            "ALTER TABLE fa_scan_results ADD COLUMN new_col TEXT;"
+        )
+        assert unsafe_orm_add_columns(sql) == [("fa_scan_results", "new_col")]
+
+    def test_checker_ignores_if_not_exists_only_in_a_comment(self) -> None:
+        sql = (
+            "-- ADD COLUMN IF NOT EXISTS is used below\n"
+            "ALTER TABLE fa_scan_results ADD COLUMN new_col TEXT;"
+        )
+        assert unsafe_orm_add_columns(sql) == [("fa_scan_results", "new_col")]
+
+    def test_checker_accepts_safe_forms(self) -> None:
+        plain = "ALTER TABLE fa_scan_results ADD COLUMN IF NOT EXISTS c TEXT;"
+        wrapped_comment = "-- the ADD COLUMN IF NOT\n-- EXISTS guard\n" + plain
+        guarded = (
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'fa_scan_results' AND column_name = 'c') THEN "
+            "ALTER TABLE fa_scan_results ADD COLUMN c TEXT; END IF; END $$;"
+        )
+        non_orm = "ALTER TABLE fa_scan_jobs ADD COLUMN c TEXT;"
+        for sql in (plain, wrapped_comment, guarded, non_orm):
+            assert unsafe_orm_add_columns(sql) == [], sql
+
+    def test_baseline_0201_0202_unchanged_and_safe(self) -> None:
+        """The two migrations that tripped the old heuristic are untouched
+        merged files and are classified safe by content, not by exemption."""
+        for name in (
+            "0201_scan_evidence_integrity.sql",
+            "0202_scan_collection_status.sql",
+        ):
+            assert unsafe_orm_add_columns(_migration_sql(name)) == [], name
+
+
+_DO_START = re.compile(r"\bDO\s+\$\$", re.IGNORECASE)
+_ALTER = re.compile(r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(\w+)", re.I)
+_ADD_COL = re.compile(r"\bADD\s+COLUMN\s+(IF\s+NOT\s+EXISTS\s+)?(\w+)", re.I)
+
+
+def unsafe_orm_add_columns(sql: str) -> list[tuple[str, str]]:
+    """(table, column) for every ADD COLUMN on an ORM-managed FA table that is
+    neither ``IF NOT EXISTS`` nor inside a DO block whose information_schema
+    guard names that same table and column.  SQL comments are ignored."""
+    code = re.sub(r"--[^\n]*", "", sql)
+    found: list[tuple[str, str]] = []
+    for m in _ADD_COL.finditer(code):
+        if m.group(1):
+            continue
+        alters = [a for a in _ALTER.finditer(code, 0, m.start())]
+        if not alters:
+            continue
+        table = alters[-1].group(1).lower()
+        if table not in _ORM_MANAGED_FA_TABLES:
+            continue
+        column = m.group(2).lower()
+        do_starts = [d for d in _DO_START.finditer(code, 0, m.start())]
+        block = code[do_starts[-1].start() : m.start()] if do_starts else ""
+        closed = re.search(r"\bEND\s*\$\$", block, re.IGNORECASE)
+        guarded = (
+            bool(block)
+            and not closed
+            and re.search(
+                r"IF\s+NOT\s+EXISTS\s*\(\s*SELECT[^;]*?information_schema\.columns"
+                r"[^;]*?table_name\s*=\s*'" + re.escape(table) + r"'"
+                r"[^;]*?column_name\s*=\s*'" + re.escape(column) + r"'",
+                block,
+                re.IGNORECASE,
+            )
+        )
+        if not guarded:
+            found.append((table, column))
+    return found
 
 
 _FA_RLS_TABLES = {

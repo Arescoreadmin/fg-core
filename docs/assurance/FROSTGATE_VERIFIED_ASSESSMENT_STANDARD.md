@@ -108,7 +108,7 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 
 **Implementation status**: PARTIALLY_IMPLEMENTED
 
-**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** every scanner finding from the 10 wired worker paths is linked to canonical evidence envelopes (SHA-256 over stored evidence, append-only custody). If capture fails, the finding is explicitly UNKNOWN. **Not yet enforced:** report assembly and release do not consume the evidence manifest (L14-SCAN-REPORT-PROOF-001). Provenance is integrity-only, not authenticated (L14-SCAN-VAULT-001). See `docs/assurance/L14_SCANNER_RUNTIME_EVIDENCE_INTEGRITY.md`.
+**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** every scanner finding from the 10 wired worker paths is linked to canonical evidence envelopes (SHA-256 over stored evidence, append-only custody). If capture fails, the finding is explicitly UNKNOWN. **Report enforcement (L14-SCAN-REPORT-PROOF-001):** report assembly consumes the evidence manifest. Every rendered finding carries its re-verified evidence classification. A CONFIRMED finding without integrity-verified evidence is a release blocker. Evidence altered after generation blocks delivery. **Not yet enforced:** provenance is integrity-only, not authenticated (L14-SCAN-VAULT-001). Graph-family evidence is scan-level only. See `docs/assurance/L14_SCANNER_RUNTIME_EVIDENCE_INTEGRITY.md` and `docs/assurance/L14_SCAN_REPORT_PROOF.md`.
 
 **Testable criteria** (fixture level):
 - Scan result includes scan_id, engagement_id, timestamps (all scanners — IMPLEMENTED)
@@ -135,7 +135,7 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 
 **Implementation status**: PARTIALLY_IMPLEMENTED
 
-**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** `classify_confidence` is applied at capture using each finding's own collection status and evidence provenance. Severity is never modified. INVALID or MISSING evidence caps effective confidence at report-manifest time. **Not yet enforced:** the report PDF renders numeric scores, not canonical labels, and omits scanner findings (`L14_CUSTOMER_REPORT_PREVIEW_READINESS.md` V-1, V-6).
+**Runtime enforcement (L14-SCAN-RUNNER-INTEGRITY-001):** `classify_confidence` is applied at capture using each finding's own collection status and evidence provenance. Severity is never modified. INVALID or MISSING evidence caps effective confidence at report-manifest time. **Report enforcement (L14-SCAN-REPORT-PROOF-001):** the PDF renders every eligible scanner finding with its canonical confidence label (evidence-capped) and its unmodified severity, stated as independent. **Not yet enforced:** finding-type registry outside Microsoft Graph, and machine-checked severity justification.
 
 **Testable criteria** (fixture level):
 - Confidence model rules enforced (`test_confidence_model.py`) — IMPLEMENTED at policy level
@@ -178,8 +178,17 @@ The FrostGate Verified Assessment Standard (FVAS) defines the minimum quality re
 - `report_constraints.may_claim_no_risks_found` gated on COMPLETE status — IMPLEMENTED
 - `report_constraints.may_claim_fully_assessed` gated on COMPLETE status — IMPLEMENTED
 
+**Report enforcement (L14-SCAN-REPORT-PROOF-001):** the engagement report renders the following from persisted collection data:
+- every non-COMPLETE scan, observation and job (PARTIAL, DENIED, TIMEOUT, FAILED, CANCELLED, TRUNCATED, UNKNOWN, targets not started, evidence not captured);
+- a `Coverage not determinable` statement instead of a percentage;
+- a `LIMITED COVERAGE` final label.
+
+The false "100%" metrics are no longer rendered.
+
 **Remaining gap**:
-- Coverage disclosure in the report template is not yet wired to `report_constraints` from `AssessmentCoverageSummary`; a human operator must still apply the constraints to report language.
+- No authorized-scope inventory, so a coverage percentage is never computed.
+- Graph-family scanners disclose scan-level status only.
+- The governance-report PDF stack (`services/report_authority`) is not wired.
 
 **Closed by**: L14-SCAN-COMPLETENESS-001
 
@@ -229,8 +238,9 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 - Report generation records `created_at`, `report_version` — IMPLEMENTED
 - No correction/retraction workflow
 - No client dispute process
-- No re-verification trigger when evidence is updated post-report
+- No re-verification trigger when evidence is updated post-report. **Partially addressed (L14-SCAN-REPORT-PROOF-001):** evidence is re-verified at export and delivery; any change forces DRAFT and blocks delivery (`EVIDENCE_CHANGED_SINCE_GENERATION`). It does not create a new revision automatically.
 - No formal report release record separate from QA approval
+- Every page carries an authoritative DRAFT / FINAL marking; revisions are immutable and remain retrievable (L14-SCAN-REPORT-PROOF-001)
 
 **Known gaps**:
 - No `corrections_log` field or table
@@ -247,11 +257,11 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 | Control | ID | Description | Status | Deferred To |
 |---------|-----|-------------|--------|-------------|
 | Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 + L14-SCAN-AUTH-HARDENING-001 (customer receipt + execution-time revalidation enforced for network/DNS/web scanners; Graph-family receipt binding, customer-held signature and rebinding pinning remain) |
-| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | PARTIALLY_IMPLEMENTED | Runtime evidence links enforced by L14-SCAN-RUNNER-INTEGRITY-001; report-level sufficiency deferred to L14-SCAN-REPORT-PROOF-001 / L14-ASSESSMENT-ASSURANCE-001 |
-| Finding Accuracy | FVA-03 | Confidence and severity independently justified | PARTIALLY_IMPLEMENTED | Runtime confidence classification by L14-SCAN-RUNNER-INTEGRITY-001; report rendering deferred to L14-SCAN-REPORT-PROOF-001 |
-| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Runner-level by L14-SCAN-COMPLETENESS-001 and per-evidence by L14-SCAN-RUNNER-INTEGRITY-001; the PDF still hides gaps (preview V-2), so report disclosure is L14-SCAN-REPORT-PROOF-001 |
+| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | PARTIALLY_IMPLEMENTED | Runtime links (L14-SCAN-RUNNER-INTEGRITY-001) and report/release sufficiency (L14-SCAN-REPORT-PROOF-001) enforced; authenticated provenance L14-SCAN-VAULT-001; schema enforcement L14-ASSESSMENT-ASSURANCE-001 |
+| Finding Accuracy | FVA-03 | Confidence and severity independently justified | PARTIALLY_IMPLEMENTED | Runtime classification (L14-SCAN-RUNNER-INTEGRITY-001) and report rendering (L14-SCAN-REPORT-PROOF-001) done; finding-type registry and severity justification remain |
+| Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Engagement report discloses every recorded gap (L14-SCAN-REPORT-PROOF-001); scope inventory / Graph per-observation coverage remain |
 | Independent Quality Review | FVA-05 | Qualified, non-conflicted reviewer approval | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
-| Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | L14-SCAN-REPORT-PROOF-001 |
+| Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | Draft marking, immutable revisions and delivery-time evidence re-verification by L14-SCAN-REPORT-PROOF-001; corrections log, retraction and dispute process remain (L14-ASSESSMENT-ASSURANCE-001) |
 
 ---
 

@@ -15,7 +15,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from services.field_assessment import customer_authorization as ca
 
@@ -31,6 +31,8 @@ def utcnow() -> datetime:
 
 class _Row(tuple):
     """Tuple row that also exposes ``_mapping`` (like SQLAlchemy Row)."""
+
+    _mapping: dict[str, Any]
 
     def __new__(cls, mapping: dict[str, Any], order: list[str]):
         obj = super().__new__(cls, [mapping[k] for k in order])
@@ -64,6 +66,9 @@ class Store:
         default_factory=lambda: {E1: T1, E2: T1, "eng-bravo-1": T2}
     )
     unavailable: bool = False
+    # Set by fixtures (ids of the approved receipt and bound scope).
+    receipt_id: str = ""
+    scope_id: str = ""
     executed: list[str] = field(default_factory=list)
     # hook(sql, params) called before every statement — lets a test mutate
     # state at a precise boundary.
@@ -239,7 +244,7 @@ class FakeSession:
             "FROM fa_customer_authorization_receipts WHERE id = CAST(:rid AS uuid)"
             in sql
         ):
-            r = s.receipts.get(p["rid"])
+            r = s.receipts.get(p["rid"])  # type: ignore[assignment]
             if r and r["tenant_id"] == p["tid"] and r["engagement_id"] == p["eid"]:
                 return _Result([_Row(r, _RECEIPT_ORDER)])
             return _Result([])
@@ -254,7 +259,7 @@ class FakeSession:
 
         if sql.startswith("INSERT INTO fa_customer_authorization_receipts"):
             rid = str(uuid.uuid4())
-            row = {k: None for k in _RECEIPT_ORDER}
+            row: dict[str, Any] = {k: None for k in _RECEIPT_ORDER}
             row.update(
                 id=rid,
                 receipt_group_id=p["gid"],
@@ -282,7 +287,7 @@ class FakeSession:
         if sql.startswith(
             "UPDATE fa_customer_authorization_receipts SET status = 'approved'"
         ):
-            r = s.receipts.get(p["rid"])
+            r = s.receipts.get(p["rid"])  # type: ignore[assignment]
             if not (
                 r
                 and r["tenant_id"] == p["tid"]
@@ -311,7 +316,7 @@ class FakeSession:
         if sql.startswith(
             "UPDATE fa_customer_authorization_receipts SET status = 'rejected'"
         ):
-            r = s.receipts.get(p["rid"])
+            r = s.receipts.get(p["rid"])  # type: ignore[assignment]
             if not (
                 r and r["tenant_id"] == p["tid"] and r["status"] == "pending_approval"
             ):
@@ -324,7 +329,7 @@ class FakeSession:
         if sql.startswith(
             "UPDATE fa_customer_authorization_receipts SET status = 'revoked'"
         ):
-            r = s.receipts.get(p["rid"])
+            r = s.receipts.get(p["rid"])  # type: ignore[assignment]
             if not (
                 r
                 and r["tenant_id"] == p["tid"]
@@ -482,7 +487,7 @@ def request_receipt(
     start_offset: timedelta = timedelta(hours=-1),
 ) -> dict:
     return ca.create_request(
-        store.session(),
+        cast(Any, store.session()),
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         requested_by_subject=ASSESSOR,
@@ -499,7 +504,7 @@ def request_receipt(
 def approved_receipt(store: Store, **kw: Any) -> dict:
     r = request_receipt(store, **kw)
     return ca.approve(
-        store.session(),
+        cast(Any, store.session()),
         receipt_id=str(r["id"]),
         tenant_id=r["tenant_id"],
         engagement_id=r["engagement_id"],

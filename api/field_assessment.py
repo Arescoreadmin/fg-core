@@ -7609,6 +7609,8 @@ def create_scan_authorization(
             "customer_receipt_id": body.customer_receipt_id,
         },
     ).fetchone()
+    if result is None:
+        raise RuntimeError("scan authorization INSERT ... RETURNING produced no row")
     db.commit()
 
     _c6_write_audit_event(
@@ -9415,7 +9417,28 @@ def _require_production_qualified(
 
     Binding prevents a QUALIFIED decision for V1 from authorizing delivery of V2
     or a report whose content fingerprint has changed since qualification.
+
+    L14-SCAN-REPORT-PROOF-001: the signed report proof must exist, carry no
+    release blocker, and its evidence must re-verify unchanged at decision time.
     """
+    from services.field_assessment.report_proof import release_blockers_now
+
+    _proof_blockers = release_blockers_now(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=str(report_json.get("engagement_id") or ""),
+        report_json=dict(report_json),
+    )
+    if _proof_blockers:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_PROOF_BLOCKED",
+                "Report proof does not permit client delivery: "
+                + ", ".join(_proof_blockers),
+            ),
+        )
+
     truth_gate = report_json.get("result_truth_gate")
     if not isinstance(truth_gate, Mapping) or truth_gate.get("decision") != "PASS":
         raise HTTPException(
@@ -10894,6 +10917,14 @@ def _safe_finding_dict(f: FaNormalizedFinding) -> dict[str, Any]:
         "framework_mappings": f.framework_mappings or [],
         "nist_ai_rmf_mappings": f.nist_ai_rmf_mappings or [],
         "evidence_ref_ids": f.evidence_ref_ids or [],
+        "remediation_hint": f.remediation_hint,
+        "asset_id": f.asset_id,
+        # L14-SCAN-REPORT-PROOF-001: stored classification (NULL = legacy,
+        # never upgraded); report_proof carries the evidence-capped value.
+        "confidence_level": f.confidence_level,
+        "verification_method": f.verification_method,
+        "collection_status": f.collection_status,
+        "evidence_envelope_id": f.evidence_envelope_id,
         "schema_version": f.schema_version,
         "created_at": f.created_at,
     }
@@ -11026,6 +11057,20 @@ def _build_engagement_report_json(
         evidence_refs=evidence_refs,
         reviewer_validated=False,
         version=1,
+    )
+
+    # L14-SCAN-REPORT-PROOF-001: findings / evidence / coverage proof from
+    # persisted authorities.  Always present (not a presentation section): the
+    # truth gate and the delivery gate consume its release blockers.
+    from services.field_assessment.report_proof import build_report_proof
+
+    report_proof = build_report_proof(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        findings=all_findings,
+        scan_rows=list(scan_rows),
+        data_cutoff=report.generated_at,
     )
 
     # Build section content map
@@ -11193,6 +11238,7 @@ def _build_engagement_report_json(
         "epistemic_states": _gate_epistemic,
         "material_claims": [claim.to_dict() for claim in _grounded_claims],
         "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
+        "report_proof": report_proof,
     }
     try:
         _gate_result = evaluate_result_truth_gate(
@@ -11430,6 +11476,7 @@ def _build_engagement_report_json(
         "evidence_state_hash": evidence_population["fingerprint"],
         "grounded_claims_fingerprint": claims_fingerprint(_grounded_claims),
         "result_truth_gate": _gate_result.to_dict(),
+        "report_proof": report_proof,
         "production_qualification": {
             "status": "NOT_REQUESTED",
             "required_gates": [
@@ -11883,6 +11930,34 @@ def export_engagement_report_route(
             detail=api_error("TRUST_ENFORCEMENT_BLOCKED", str(_te)),
         ) from _te
 
+    # L14-SCAN-REPORT-PROOF-001: DRAFT / FINAL marking derived only from
+    # authoritative state (QA approval, QUALIFIED decision, signed proof and an
+    # export-time evidence re-verification).  No request parameter affects it.
+    from services.field_assessment.report_proof import evaluate_report_state
+
+    _qualified = (
+        db.execute(
+            select(FaQualificationDecision.id).where(
+                FaQualificationDecision.tenant_id == tenant_id,
+                FaQualificationDecision.report_id == record.id,
+                FaQualificationDecision.decision == "QUALIFIED",
+            )
+        ).first()
+        is not None
+    )
+    report_state = evaluate_report_state(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        report_json=record.report_json or {},
+        qa_approved_by=record.qa_approved_by,
+        qa_approved_at=record.qa_approved_at,
+        qualified=_qualified,
+    )
+    # The signed record hash covers the whole report_json, including the proof;
+    # the PDF must print this one (not the engine's internal manifest hash).
+    report_state["signed_manifest_hash"] = record.manifest_hash
+
     if format == "json":
         return {
             "report_id": record.id,
@@ -11891,6 +11966,7 @@ def export_engagement_report_route(
             "manifest_hash": record.manifest_hash,
             "signature": record.signature,
             "schema_version": record.schema_version,
+            "report_state": report_state,
             "report": record.report_json,
         }
 
@@ -11942,6 +12018,11 @@ def export_engagement_report_route(
             executive_summary=exec_summary if isinstance(exec_summary, dict) else None,
             engagement_name=engagement.client_name,
             data_disclosure=data_disclosure,
+            report_proof=report_data.get("report_proof")
+            if isinstance(report_data.get("report_proof"), dict)
+            else None,
+            report_state=report_state,
+            assessment_type=engagement.assessment_type,
         )
     except ExportUnavailableError:
         raise HTTPException(
@@ -11958,6 +12039,7 @@ def export_engagement_report_route(
     export_headers: dict[str, str] = {
         "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}.pdf"',
         "X-Manifest-Hash": record.manifest_hash,
+        "X-Report-State": report_state["state"],
     }
     if record.signature:
         export_headers["X-Report-Signature"] = record.signature

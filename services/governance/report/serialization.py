@@ -520,12 +520,20 @@ def export_pdf_bytes(
     executive_summary: dict[str, Any] | None = None,
     engagement_name: str | None = None,
     data_disclosure: dict[str, Any] | None = None,
+    report_proof: dict[str, Any] | None = None,
+    report_state: dict[str, Any] | None = None,
+    assessment_type: str | None = None,
 ) -> bytes:
     """Export the governance report as a client-ready PDF using reportlab.
 
     Raises ExportUnavailableError if reportlab is not installed.
     executive_summary is advisory-only AI narrative — labeled as such and excluded
     from the manifest hash computation.
+
+    L14-SCAN-REPORT-PROOF-001: when the signed ``report_proof`` is supplied the
+    report is rendered from it (every eligible finding, coverage truth, evidence
+    classification, QA state).  Every page carries the status band derived from
+    ``report_state``; absent state renders as DRAFT — NOT VERIFIED.
     """
     try:
         from reportlab.lib import colors as _colors  # noqa: PLC0415
@@ -550,6 +558,21 @@ def export_pdf_bytes(
         ) from exc
 
     import io  # noqa: PLC0415
+
+    from .pdf_layout import (  # noqa: PLC0415
+        DEFAULT_MARKING,
+        make_decorated_canvas,
+        proof_story,
+    )
+
+    _state = report_state or {"marking": DEFAULT_MARKING, "is_draft": True}
+    _canvas_cls = make_decorated_canvas(
+        marking=str(_state.get("marking") or DEFAULT_MARKING),
+        is_draft=bool(_state.get("is_draft", True)),
+        report_id=report.report_id,
+        revision=f"v{report.version}",
+        digest=str(_state.get("signed_manifest_hash") or report.manifest_hash),
+    )
 
     # ── Layout constants ───────────────────────────────────────────────────────
     W, _H = letter
@@ -608,22 +631,24 @@ def export_pdf_bytes(
         textColor=_colors.HexColor("#374151"),
     )
 
-    digest = report.manifest_hash
-    client_label = engagement_name or report.tenant_id
+    digest = str(_state.get("signed_manifest_hash") or report.manifest_hash)
 
-    # Page footer callback — runs on every page
-    def _footer(canvas: Any, doc: Any) -> None:
-        canvas.saveState()
-        canvas.setFont("Helvetica", 7)
-        canvas.setFillColor(_colors.HexColor("#9ca3af"))
-        canvas.setStrokeColor(_colors.HexColor("#e5e7eb"))
-        canvas.line(MARGIN, 0.62 * inch, W - MARGIN, 0.62 * inch)
-        canvas.drawString(
-            MARGIN, 0.42 * inch, f"FrostGate Field Assessment  ·  {client_label}"
-        )
-        canvas.drawCentredString(W / 2, 0.42 * inch, f"SHA-256: {digest[:24]}…")
-        canvas.drawRightString(W - MARGIN, 0.42 * inch, f"Page {doc.page}")
-        canvas.restoreState()
+    if report_proof is not None:
+        try:
+            doc.build(
+                proof_story(
+                    report=report,
+                    proof=report_proof,
+                    state=_state,
+                    engagement_name=engagement_name,
+                    assessment_type=assessment_type,
+                    connector_descriptions=_CONNECTOR_DATA_COLLECTED,
+                ),
+                canvasmaker=_canvas_cls,
+            )
+        except Exception as exc:
+            raise ExportUnavailableError(f"PDF rendering failed: {exc}") from exc
+        return buf.getvalue()
 
     story: list[Any] = []
 
@@ -1123,7 +1148,7 @@ def export_pdf_bytes(
     )
 
     try:
-        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+        doc.build(story, canvasmaker=_canvas_cls)
     except Exception as exc:
         raise ExportUnavailableError(f"PDF rendering failed: {exc}") from exc
     return buf.getvalue()

@@ -249,6 +249,25 @@ def evaluate_result_truth_gate(
         ):
             reasons.append("EPISTEMIC_INPUT_MISMATCH")
 
+    # L14-SCAN-REPORT-PROOF-001: findings / evidence / coverage proof blockers
+    # (synthetic data, integrity failure, unreconciled findings, unfinished
+    # collection) make the canonical result unreleasable.  Absent on legacy
+    # projections; the delivery gate separately requires it.
+    proof = report.get("report_proof")
+    if proof is not None:
+        if not isinstance(proof, Mapping) or not isinstance(
+            proof.get("release_blockers"), list
+        ):
+            reasons.append("REPORT_PROOF_MALFORMED")
+        else:
+            if (
+                proof.get("tenant_id") != tenant_id
+                or proof.get("engagement_id") != engagement_id
+            ):
+                reasons.append("REPORT_PROOF_SCOPE_MISMATCH")
+            for code in proof["release_blockers"]:
+                reasons.append(f"REPORT_PROOF_BLOCKED:{code}")
+
     supplied_claims_fingerprint = report.get("grounded_claims_fingerprint")
     if (
         not isinstance(supplied_claims_fingerprint, str)
@@ -295,6 +314,8 @@ def evaluate_result_truth_gate(
             sorted(epistemic.items(), key=lambda item: str(item[0]))
         ),
     }
+    if isinstance(proof, Mapping) and isinstance(proof.get("proof_fingerprint"), str):
+        canonical["report_proof_fingerprint"] = proof["proof_fingerprint"]
     result = ResultTruthGateResult(
         version=RESULT_TRUTH_GATE_VERSION,
         decision="FAIL" if normalized_reasons else "PASS",
