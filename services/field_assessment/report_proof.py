@@ -71,6 +71,7 @@ _UNFINISHED_JOB_STATES = frozenset(
 
 MARKING_SYNTHETIC = "DRAFT — SYNTHETIC DATA — NOT VERIFIED"
 MARKING_DRAFT = "DRAFT — NOT VERIFIED"
+MARKING_REJECTED = "DRAFT — QA REJECTED — NOT VERIFIED"
 MARKING_FINAL = "FINAL — QA APPROVED"
 MARKING_FINAL_LIMITED = "FINAL — QA APPROVED — LIMITED COVERAGE"
 
@@ -496,18 +497,35 @@ def evaluate_report_state(
     qa_approved_by: str | None,
     qa_approved_at: str | None,
     qualified: bool,
+    assurance_blockers: list[str] | None = None,
+    qa_rejected: bool = False,
 ) -> dict[str, Any]:
-    """Authoritative DRAFT / FINAL marking.  No caller-controlled inputs."""
+    """Authoritative DRAFT / FINAL marking.  No caller-controlled inputs.
+
+    L14-ASSESSMENT-ASSURANCE-001: ``assurance_blockers`` carries the canonical
+    provenance and independent-QA blockers (mode-independent); a QA-rejected
+    report is REJECTED and can never be FINAL.
+    """
     proof = report_json.get("report_proof") if isinstance(report_json, dict) else None
-    blockers = release_blockers_now(
-        db, tenant_id=tenant_id, engagement_id=engagement_id, report_json=report_json
+    blockers = sorted(
+        set(
+            release_blockers_now(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                report_json=report_json,
+            )
+        )
+        | set(assurance_blockers or [])
     )
     synthetic = bool(isinstance(proof, dict) and proof["synthetic"]["is_synthetic"])
     limited = not (
         isinstance(proof, dict)
         and proof["report_constraints"]["may_claim_full_coverage"]
     )
-    if synthetic:
+    if qa_rejected:
+        state, marking = "REJECTED", MARKING_REJECTED
+    elif synthetic:
         state, marking = "DRAFT_SYNTHETIC", MARKING_SYNTHETIC
     elif qa_approved_by is None or not qualified or blockers:
         state, marking = "DRAFT", MARKING_DRAFT
@@ -519,6 +537,7 @@ def evaluate_report_state(
         "marking": marking,
         "is_draft": state != "FINAL",
         "qa_approved": qa_approved_by is not None,
+        "qa_rejected": qa_rejected,
         "qa_approved_by": qa_approved_by,
         "qa_approved_at": qa_approved_at,
         "production_qualified": qualified,

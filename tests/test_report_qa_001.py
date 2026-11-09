@@ -13,6 +13,7 @@ os.environ.setdefault(
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from tests._assurance_actors import reviewer
 
 TENANT = "tenant-report-qa-001"
 
@@ -64,6 +65,7 @@ def test_approval_persists_exact_version_and_canonical_reviewer(client, build_ap
             "reviewer_role": "forged role",
             "approval_notes": "reviewed",
         },
+        headers=reviewer(),
     )
     assert response.status_code == 200, response.text
 
@@ -98,10 +100,16 @@ def test_approval_persists_exact_version_and_canonical_reviewer(client, build_ap
 def test_replay_cannot_create_second_version_decision(client):
     eid, rid, version = _setup(client)
     path = f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{version['id']}/approve"
-    first = client.post(path, json={"reviewer_name": "reviewer", "reviewer_role": "qa"})
+    first = client.post(
+        path,
+        json={"reviewer_name": "reviewer", "reviewer_role": "qa"},
+        headers=reviewer(),
+    )
     assert first.status_code == 200, first.text
     second = client.post(
-        path, json={"reviewer_name": "different", "reviewer_role": "qa"}
+        path,
+        json={"reviewer_name": "different", "reviewer_role": "qa"},
+        headers=reviewer("auth0|second-reviewer"),
     )
     assert second.status_code == 409
     assert "REPORT_VERSION_IMMUTABLE" in second.text

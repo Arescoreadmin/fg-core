@@ -205,18 +205,19 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 - Conflict of interest declaration (reviewer must not be the primary assessor for the same engagement)
 - Review scope (what was checked)
 
-**Implementation status**: POLICY_ONLY
+**Implementation status**: PARTIALLY_IMPLEMENTED (L14-ASSESSMENT-ASSURANCE-001)
 
-**Current state**:
-- QA approval gate exists in the engagement lifecycle (`fa_qa_approval` table)
-- No formal reviewer qualification check
-- No conflict of interest declaration requirement
-- Self-review (assessor = reviewer) is currently permitted without flag
+**Enforced** (server-side, on every QA decision route: `/qa-approve`, `/qa-reject`, `versions/{id}/approve`, `versions/{id}/reject`):
+- QA decisions require a named human reviewer (OIDC or verified delegation). API keys, including role-bound QA keys, and service principals are refused (`HUMAN_REVIEWER_REQUIRED`), because a key has no holder binding and independence cannot be shown.
+- Non-conflict: the reviewer's canonical principal, meaning every identity subject bound to it, must not be a report author or a material contributor to the engagement per the append-only audit trail (`REPORT_QA_SELF_REVIEW`). The caller-supplied `compiled_by` cannot narrow this exclusion.
+- QA rejection exists, with a fixed reason vocabulary and an explanation. Every decision is an append-only, version-bound record with one terminal decision per record or version.
+- FINAL requires an independent human approval. Legacy API-key approvals stay DRAFT (`QA_INDEPENDENT_APPROVAL_MISSING`).
 
 **Known gaps**:
-- Founder-led review is the current operational reality for FrostGate assessments
-- Self-review is not prohibited by existing code
-- No reviewer qualification enforcement
+- No reviewer qualification (competence/credential) enforcement.
+- Interactive OIDC reviewer login has not been rehearsed end-to-end. Tests simulate the resolution result.
+- A human reviewer is independent of an API-key *author* only at the credential-subject level; credential holder binding is a follow-up.
+- Founder-led review must still be labelled FOUNDER_REVIEW by policy.
 
 **Future enforcement PR**: L14-ASSESSMENT-ASSURANCE-001
 
@@ -241,6 +242,7 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 - No re-verification trigger when evidence is updated post-report. **Partially addressed (L14-SCAN-REPORT-PROOF-001):** evidence is re-verified at export and delivery; any change forces DRAFT and blocks delivery (`EVIDENCE_CHANGED_SINCE_GENERATION`). It does not create a new revision automatically.
 - No formal report release record separate from QA approval
 - Every page carries an authoritative DRAFT / FINAL marking; revisions are immutable and remain retrievable (L14-SCAN-REPORT-PROOF-001)
+- QA rejection is a terminal, audited state (`REJECTED`). A rejected record cannot be revived; rework is a corrected report whose first version links to the rejected one (L14-ASSESSMENT-ASSURANCE-001)
 
 **Known gaps**:
 - No `corrections_log` field or table
@@ -257,11 +259,11 @@ Where founder-led review is the only available process, it is labeled as FOUNDER
 | Control | ID | Description | Status | Deferred To |
 |---------|-----|-------------|--------|-------------|
 | Authorized Scope | FVA-01 | Scanner execution tied to approved engagement and scope | PARTIALLY_IMPLEMENTED | L14-SCAN-SAFETY-001 + L14-SCAN-AUTH-HARDENING-001 (customer receipt + execution-time revalidation enforced for network/DNS/web scanners; Graph-family receipt binding, customer-held signature and rebinding pinning remain) |
-| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | PARTIALLY_IMPLEMENTED | Runtime links (L14-SCAN-RUNNER-INTEGRITY-001) and report/release sufficiency (L14-SCAN-REPORT-PROOF-001) enforced; authenticated provenance L14-SCAN-VAULT-001; schema enforcement L14-ASSESSMENT-ASSURANCE-001 |
+| Evidence Sufficiency | FVA-02 | Confirmed findings meet confidence policy evidence threshold | PARTIALLY_IMPLEMENTED | Runtime links (L14-SCAN-RUNNER-INTEGRITY-001) and report/release sufficiency (L14-SCAN-REPORT-PROOF-001) enforced; canonical provenance drives every trust gate in every mode (L14-ASSESSMENT-ASSURANCE-001); authenticated provenance L14-SCAN-VAULT-001; schema enforcement L14-ASSESSMENT-ASSURANCE-001 |
 | Finding Accuracy | FVA-03 | Confidence and severity independently justified | PARTIALLY_IMPLEMENTED | Runtime classification (L14-SCAN-RUNNER-INTEGRITY-001) and report rendering (L14-SCAN-REPORT-PROOF-001) done; finding-type registry and severity justification remain |
 | Coverage Transparency | FVA-04 | Collection gaps explicitly disclosed | PARTIALLY_IMPLEMENTED | Engagement report discloses every recorded gap (L14-SCAN-REPORT-PROOF-001); scope inventory / Graph per-observation coverage remain |
-| Independent Quality Review | FVA-05 | Qualified, non-conflicted reviewer approval | POLICY_ONLY | L14-ASSESSMENT-ASSURANCE-001 |
-| Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | Draft marking, immutable revisions and delivery-time evidence re-verification by L14-SCAN-REPORT-PROOF-001; corrections log, retraction and dispute process remain (L14-ASSESSMENT-ASSURANCE-001) |
+| Independent Quality Review | FVA-05 | Qualified, non-conflicted reviewer approval | PARTIALLY_IMPLEMENTED | Named-human, non-conflicted QA, rejection and FINAL independence enforced (L14-ASSESSMENT-ASSURANCE-001); reviewer qualification registry, OIDC rehearsal and API-key holder binding remain |
+| Report Integrity | FVA-06 | Version control, corrections, dispute process | PARTIAL_IMPLEMENTATION | Draft marking, immutable revisions and delivery-time evidence re-verification by L14-SCAN-REPORT-PROOF-001; QA rejection and rework lineage added (L14-ASSESSMENT-ASSURANCE-001); corrections log, retraction and dispute process remain |
 
 ---
 

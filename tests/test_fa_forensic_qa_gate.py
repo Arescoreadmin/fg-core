@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from api.db_models_field_assessment import FaEngagement
 from tests.fa_forensic_helpers import create_engagement, make_context
+from tests._assurance_actors import reviewer
 
 
 def test_qa_approve_unknown_report_fails_without_delivering_engagement(
@@ -16,6 +17,7 @@ def test_qa_approve_unknown_report_fails_without_delivering_engagement(
     response = qa_client.post(
         f"/field-assessment/engagements/{engagement['id']}/reports/missing-report/qa-approve",
         json={"reviewer_display_name": "Forensic Reviewer"},
+        headers=reviewer(),
     )
     assert response.status_code in {404, 422}, response.text
     with Session(ctx.engine) as session:

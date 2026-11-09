@@ -28,6 +28,8 @@ import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from tests._assurance_actors import reviewer
+
 _TENANT_A = "tenant-gov-del-A"
 _TENANT_B = "tenant-gov-del-B"
 _SIGNING_KEY_HEX = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2"
@@ -104,9 +106,11 @@ def _create_report(client: TestClient, eid: str) -> str:
 
 
 def _qa_approve(client: TestClient, eid: str, rid: str) -> None:
+    # L14-ASSESSMENT-ASSURANCE-001: QA decisions need an independent named human.
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/qa-approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 
@@ -130,6 +134,7 @@ def _approve_version(client: TestClient, eid: str, rid: str, vid: str) -> None:
     resp = client.post(
         f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/approve",
         json=_APPROVAL_BODY,
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 

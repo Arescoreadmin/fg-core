@@ -399,7 +399,7 @@ _REMEDIATION_BY_TITLE = (
 )
 
 
-def seed_collection(eid: str) -> dict[str, str]:
+def seed_collection(eid: str, *, tamper: bool = True) -> dict[str, str]:
     """Persist all synthetic scans through the production bridges, then run the
     production runtime-evidence adapter for each.  Returns scanner → scan id."""
     from api.db import get_sessionmaker
@@ -481,7 +481,8 @@ def seed_collection(eid: str) -> dict[str, str]:
         db.commit()
     finally:
         db.close()
-    tamper_host(ids["network_scan"])
+    if tamper:
+        tamper_host(ids["network_scan"])
     return ids
 
 

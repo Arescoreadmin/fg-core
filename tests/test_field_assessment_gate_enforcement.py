@@ -17,6 +17,7 @@ os.environ.setdefault("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response
+from tests._assurance_actors import reviewer
 
 _TENANT = "tenant-gate-enforce"
 
@@ -104,13 +105,15 @@ class TestReportQaGate:
     def test_qa_approve_requires_finalized_report(self, client: TestClient) -> None:
         eng = _make_engagement(client)
         resp = client.post(
-            f"/field-assessment/engagements/{eng['id']}/reports/nonexistent-report/qa-approve"
+            f"/field-assessment/engagements/{eng['id']}/reports/nonexistent-report/qa-approve",
+            headers=reviewer(),
         )
         assert resp.status_code == 404
 
     def test_qa_approve_wrong_engagement_returns_404(self, client: TestClient) -> None:
         resp = client.post(
-            "/field-assessment/engagements/ghost-eng/reports/any-report/qa-approve"
+            "/field-assessment/engagements/ghost-eng/reports/any-report/qa-approve",
+            headers=reviewer(),
         )
         assert resp.status_code == 404
 
@@ -119,7 +122,8 @@ class TestReportQaGate:
         # the full connector import path — verify the route exists and auth works
         eng = _make_engagement(client)
         resp = client.post(
-            f"/field-assessment/engagements/{eng['id']}/reports/fake-id/qa-approve"
+            f"/field-assessment/engagements/{eng['id']}/reports/fake-id/qa-approve",
+            headers=reviewer(),
         )
         # 404 (not found) is the correct response for a missing report
         assert resp.status_code == 404

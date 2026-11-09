@@ -54,6 +54,7 @@ from services.field_assessment.governance_decision_service import (
     GovernanceDecisionService,
     governance_decision_svc,
 )
+from tests._assurance_actors import QA_REVIEWER, reviewer
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -483,6 +484,7 @@ def test_g8_qa_approve_creates_report_approved_decision_with_attribution(
             "actor_email": "auditor@example.com",
             "actor_role": "Senior Auditor",
         },
+        headers=reviewer(),
     )
     assert resp.status_code == 200, resp.text
 
@@ -501,9 +503,10 @@ def test_g8_qa_approve_creates_report_approved_decision_with_attribution(
         assert len(decisions) == 1
         d = decisions[0]
         # G9: actor attribution comes from ActorContext, not spoofable request body.
-        assert d.actor_auth_source == "api_key"
-        assert d.actor_id == "fgk"
-        assert d.actor_email is None
+        # L14-ASSESSMENT-ASSURANCE-001: QA decisions are made by a named human.
+        assert d.actor_auth_source == "oidc_auth0"
+        assert d.actor_id == QA_REVIEWER
+        assert d.actor_email == "independent-qa-reviewer@example.test"
         assert d.actor_role == "qa_reviewer"
         assert d.entity_type == "report"
         assert d.entity_id == report_id  # G33 covered here
