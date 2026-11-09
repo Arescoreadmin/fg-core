@@ -1,3 +1,45 @@
+## test(field-assessment): L14-CUSTOMER-ZERO-E2E-001 — synthetic customer acceptance and reporting (branch feat/l14-customer-zero-e2e-001)
+
+- **Work item:** L14-CUSTOMER-ZERO-E2E-001.
+- **Baseline SHA:** `69f69c32` (main after PR #814).
+- **Nature:** product acceptance. Test harness and documentation, plus one narrowly scoped renderer readability fix.
+- **Created:**
+  - `tests/test_customer_zero_e2e/`:
+    - `_northstar.py` (synthetic fixture);
+    - `_acceptance.py` (matrix recorder);
+    - `conftest.py`;
+    - `test_customer_zero_journey.py`;
+    - `test_customer_zero_resilience.py`;
+    - `browser_acceptance.py` (opt-in, not collected).
+  - `docs/assurance/L14_CUSTOMER_ZERO_E2E_ACCEPTANCE.md`.
+- **Modified:**
+  - `tests/test_migrations_postgres_replay.py`: real-Postgres customer-zero slice. It covers R7 provisioning, R3 lifecycle and the #812 consent receipt, runs in a rolled-back transaction via a savepoint engine adapter, and executes in the CI Migrations Replay job.
+  - `services/governance/report/pdf_layout.py`: readable labels for collection/integrity/collector codes in narrow PDF table cells, which wrapped mid-word. Exact codes remain in the limitations list and the JSON.
+  - `ROADMAP.md`.
+- **Findings recorded (not fixed here; acceptance scope):**
+  - CZ-23 (P1): the trust-chain gate ignores runtime scanner evidence, so strict mode blocks export.
+  - CZ-12B (P1): a dual-scope legacy key can self-approve QA.
+  - CZ-17 (P1): customers can download unapproved drafts.
+  - No QA rejection route (P1).
+  - CZ-18 (P2): the grant-session engagement list is not scoped.
+  - CZ-19 (P2): `/portal/engagement/*` reads a different report authority.
+  - Graph affected resources are unrecorded (P2).
+  - The login page shows authenticated navigation (P2).
+- **Portal acceptance completion:**
+  - **`apps/portal/package-lock.json`:** records the already-declared `@vercel/edge-config` (1.5.1 + `@vercel/global-config-fs` 0.1.0), so `npm ci` reproduces the tree. The local build failed without it. Verified offline: `npm ci --dry-run --offline`.
+  - **`apps/portal/app/api/core/[...path]/route.ts`:** CZ-29 fix.
+    - The BFF decoded every core response with `response.text()`, corrupting binary PDFs (U+FFFD in the binary header, invalid `startxref`).
+    - It now relays `arrayBuffer()` and the `content-disposition`, `x-report-state` and `x-manifest-hash` headers.
+    - 2 regression tests in `apps/portal/tests/portal-security.test.js`.
+    - `npm test` 79/79; `npm run lint` clean; `npm run build` 32/32 pages.
+  - **Authenticated browser run:** reproduced CZ-17 and CZ-18; recorded CZ-24 ("Finalized" for a draft), CZ-25 (dashboard/summary contract drift), CZ-26/27/28 (P2). `browser_acceptance.py` now captures console, network, the downloaded PDF and a derived matrix.
+  - **Separate follow-ups:** Next.js 14.2.5 security remediation; TypeScript parser compatibility; `@vercel/edge-config` deprecation.
+- **Review fixes (Codex on #815):**
+  - **P1:** the browser harness inherited `FG_DB_URL`, which the core subprocess's `init_db()` prefers over the temp SQLite path. It now strips `FG_DB_URL`, `FG_DB_MIGRATION_URL`, `DATABASE_URL`, libpq `PG*` and `FG_*POSTGRES*`, pins `FG_DB_BACKEND=sqlite`, deletes those keys from the in-process environment too, and refuses to seed unless the engine is the temp SQLite file. Proven with a poisoned `FG_DB_URL` run.
+  - **P2:** the CZ-16B verdict is now derived from observed denials. A regression gives FAIL (P0); missing evidence gives NOT_TESTED.
+  - 8 tests in `tests/test_customer_zero_e2e/test_browser_harness_safety.py`.
+- **No migration. No CI, infra or contract change.** Synthetic data only. No scans, messages or billing actions.
+
 ## feat(field-assessment): L14-SCAN-REPORT-PROOF-001 — report completeness, coverage truth, evidence proof and draft rendering (branch feat/l14-scan-report-proof-001)
 
 - **Work item:** L14-SCAN-REPORT-PROOF-001.

@@ -94,6 +94,13 @@ async function checkRateLimit(key: string): Promise<boolean> {
 
 // Portal proxy rules — read-only by default.
 // Write paths are explicitly enumerated in PORTAL_WRITE_PATTERNS below.
+// Response headers relayed from core (report download identity and state).
+const RELAYED_RESPONSE_HEADERS = [
+  'content-disposition',
+  'x-report-state',
+  'x-manifest-hash',
+] as const;
+
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'governance/assets', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'HEAD']) },
@@ -242,7 +249,9 @@ async function proxyToCore(
 
   console.info(`[portal-proxy] ${requestId} ${request.method} ${target}`);
   const response = await fetch(target, init);
-  const body = await response.text();
+  // Relay bytes, never text: decoding a binary body (e.g. a report PDF) as
+  // UTF-8 replaces bytes with U+FFFD and corrupts the signed artifact.
+  const body = await response.arrayBuffer();
   const out = new NextResponse(body, {
     status: response.status,
     headers: {
@@ -252,6 +261,11 @@ async function proxyToCore(
   });
   const ct = response.headers.get('content-type');
   if (ct) out.headers.set('content-type', ct);
+  // Authoritative report state and artifact identity set by core.
+  for (const name of RELAYED_RESPONSE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value) out.headers.set(name, value);
+  }
   return out;
 }
 

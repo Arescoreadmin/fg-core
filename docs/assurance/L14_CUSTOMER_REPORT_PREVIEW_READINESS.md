@@ -1,5 +1,7 @@
 # L14 Customer Report Preview Readiness (Customer-Zero Synthetic Preview)
 
+> **Update — L14-CUSTOMER-ZERO-E2E-001.** A full synthetic customer journey (provisioning → portal) is now exercised. See `L14_CUSTOMER_ZERO_E2E_ACCEPTANCE.md` for the acceptance matrix and launch blockers.
+>
 > **Update — L14-SCAN-REPORT-PROOF-001.** The preview was regenerated from a deterministic synthetic fixture, through the same routes and the upgraded canonical renderer. It is now a 10-page PDF with 14 of 14 findings rendered. Coverage is disclosed with no percentage. Evidence classifications and capped confidence are shown, and every page carries `DRAFT — SYNTHETIC DATA — NOT VERIFIED`. **Verdict: READY for internal draft review; it must not be delivered as a verified assessment** (synthetic data blocks release by design). §11 records the defect resolution. The sections below describe the original PR #813 preview.
 
 **Verdict: PARTIAL.** A synthetic preview PDF **was generated** through existing routes in an isolated SQLite environment. However, the PDF does not render the scanner findings by severity, hides collection limitations, and makes unsupported "verified" and compliance claims. It is fit for internal visual QA. It is **not** fit to show a customer as representative of a verified assessment.
