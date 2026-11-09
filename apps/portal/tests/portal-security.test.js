@@ -130,3 +130,16 @@ test('engagementStore uses fg_portal_eid as the storage key', () => {
   const store = read('lib/engagementStore.ts');
   assert.match(store, /fg_portal_eid/);
 });
+
+test('BFF relays core response bodies as bytes (binary downloads stay intact)', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  assert.match(proxy, /await response\.arrayBuffer\(\)/);
+  assert.doesNotMatch(proxy, /const body = await response\.text\(\)/);
+});
+
+test('BFF relays report state and artifact identity headers from core', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  for (const h of ['content-disposition', 'x-report-state', 'x-manifest-hash']) {
+    assert.ok(proxy.includes(`'${h}'`), `missing relayed header ${h}`);
+  }
+});
