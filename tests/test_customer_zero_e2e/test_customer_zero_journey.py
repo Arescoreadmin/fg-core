@@ -850,10 +850,19 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
     for k in ("findings", "reports"):
         assert codes[k] == 200, (k, reads[k].text[:200])
     report_items = reads["reports"].json().get("items", [])
-    current_report = next((item for item in report_items if item["version"] == version), None)
-    assert current_report is not None, "canonical report missing from customer workspace list"
+    current_report = next(
+        (item for item in report_items if item["version"] == version), None
+    )
+    assert current_report is not None, (
+        "canonical report missing from customer workspace list"
+    )
     assert current_report["status"] in {
-        "draft", "synthetic_draft", "pending_qa", "release_blocked", "rejected", "unknown"
+        "draft",
+        "synthetic_draft",
+        "pending_qa",
+        "release_blocked",
+        "rejected",
+        "unknown",
     }
     assert current_report.get("compiled_by") is None
     assert current_report["report_id"]
@@ -913,7 +922,9 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
         if enumerate_all.status_code == 200
         else []
     )
-    assert listed == [eid], f"grant-scoped list exposed {listed!r}; expected only {eid!r}"
+    assert listed == [eid], (
+        f"grant-scoped list exposed {listed!r}; expected only {eid!r}"
+    )
     for name, r in (
         ("cross_engagement", cross_engagement),
         ("no_session", no_session),

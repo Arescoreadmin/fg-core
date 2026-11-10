@@ -144,7 +144,10 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
 
             if path == _PORTAL_REPORT_WORKSPACE_PATH:
                 requested_engagement = request.query_params.get("engagement_id", "")
-                if not requested_engagement or requested_engagement != named_result.engagement_id:
+                if (
+                    not requested_engagement
+                    or requested_engagement != named_result.engagement_id
+                ):
                     return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
 
             m_pnu = _PORTAL_ENGAGEMENT_RE.match(path)
@@ -182,7 +185,10 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         # ── Legacy grant path (non-pnu1. tokens) ─────────────────────────────
         m = _PORTAL_ENGAGEMENT_RE.match(path)
         if not m:
-            if path.startswith("/portal/engagement/") and path != _PORTAL_REPORT_WORKSPACE_PATH:
+            if (
+                path.startswith("/portal/engagement/")
+                and path != _PORTAL_REPORT_WORKSPACE_PATH
+            ):
                 return _json_403(
                     "This portal workspace is not available for the current engagement scope",
                     "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
@@ -208,7 +214,9 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                         engagement_id=requested_engagement,
                     )
                 except Exception:
-                    return _json_403("Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED")
+                    return _json_403(
+                        "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                    )
                 finally:
                     db.close()
                 if not result.ok:
@@ -238,9 +246,7 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                 finally:
                     db.close()
                 if not result.ok or not result.engagement_id:
-                    return _json_403(
-                        "Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED"
-                    )
+                    return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
                 request.state.portal_client_id = result.client_id
                 request.state.portal_engagement_id = result.engagement_id
                 request.state.portal_engagement_ids = {result.engagement_id}

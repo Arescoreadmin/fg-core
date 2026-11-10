@@ -162,7 +162,9 @@ def portal_engagement_reports(
     tenant_id = require_bound_tenant(request)
     if not engagement_id:
         # Never fall back to the legacy tenant-wide report authority.
-        return EngagementReportListResponse(items=[], limit=limit, offset=offset, total=0)
+        return EngagementReportListResponse(
+            items=[], limit=limit, offset=offset, total=0
+        )
     portal_engagement_id = getattr(request.state, "portal_engagement_id", None)
     if (request.headers.get("x-portal-source") == "client-portal") and (
         portal_engagement_id != engagement_id
@@ -177,9 +179,7 @@ def portal_engagement_reports(
             raise HTTPException(status_code=404, detail="Engagement not found") from exc
         from services.governance.report.versioning import list_versions
 
-        versions = list_versions(
-            db, tenant_id=tenant_id, engagement_id=engagement_id
-        )
+        versions = list_versions(db, tenant_id=tenant_id, engagement_id=engagement_id)
         page = versions[offset : offset + limit]
         items = []
         for report in page:

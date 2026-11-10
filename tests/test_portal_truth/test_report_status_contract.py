@@ -4,7 +4,10 @@ from api.field_assessment import _customer_report_status
 
 
 def test_unapproved_and_blocked_reports_are_never_finalized() -> None:
-    assert _customer_report_status({"state": "DRAFT", "qa_approved": False}) == "pending_qa"
+    assert (
+        _customer_report_status({"state": "DRAFT", "qa_approved": False})
+        == "pending_qa"
+    )
     assert (
         _customer_report_status(
             {"state": "DRAFT", "qa_approved": True, "release_blockers": ["PROVENANCE"]}

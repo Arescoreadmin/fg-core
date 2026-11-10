@@ -1455,7 +1455,9 @@ def _questionnaire_coverage_metrics(
         normalized = normalize_nist_control(control_id) if control_id else None
         if normalized:
             implemented_controls.add(normalized)
-    percentage = round((len(implemented) / denominator) * 100, 1) if denominator else None
+    percentage = (
+        round((len(implemented) / denominator) * 100, 1) if denominator else None
+    )
     return denominator, percentage, control_ids, implemented_controls
 
 
@@ -3155,7 +3157,9 @@ def get_engagement_summary_route(
         select(func.count(FaNormalizedFinding.id)).where(
             FaNormalizedFinding.engagement_id == engagement_id,
             FaNormalizedFinding.tenant_id == tenant_id,
-            FaNormalizedFinding.status.in_(("resolved", "remediated", "false_positive")),
+            FaNormalizedFinding.status.in_(
+                ("resolved", "remediated", "false_positive")
+            ),
         )
     ).scalar_one()
 
@@ -12056,7 +12060,9 @@ def list_engagement_reports_route(
                 compiled_at=report.generated_at,
                 compiled_by=None,
                 report_type=report.report_type,
-                qa_approved_by=None if _is_portal_origin(request) else report.qa_approved_by,
+                qa_approved_by=None
+                if _is_portal_origin(request)
+                else report.qa_approved_by,
                 qa_approved_at=report.qa_approved_at,
                 report_state={
                     "state": state_name if isinstance(state_name, str) else "UNKNOWN",
