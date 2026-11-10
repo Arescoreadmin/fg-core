@@ -18,6 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import re
+
 import pytest
 import yaml
 
@@ -653,3 +655,118 @@ def test_drift_workflow_handles_checker_exit_codes_under_errexit(
     assert "stub" in summary.read_text()
     if checker_rc == 2:
         assert "::warning::" in proc.stdout
+
+
+# --- CI dependency provisioning (fg-required "No module named 'yaml'") --------
+
+
+def test_invariants_runner_uses_harness_interpreter_not_path_python(tmp_path):
+    """Reproduces the fg-required failure: in CI the first `python` on PATH
+    is setup-python's bare interpreter. A hostile `python` on PATH must not
+    be used; the runner must reuse the interpreter it was started with."""
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    shim = fake / "python"
+    shim.write_text("#!/bin/sh\necho 'WRONG INTERPRETER' >&2\nexit 97\n")
+    shim.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake}:/usr/bin:/bin"}
+    proc = subprocess.run(
+        [sys.executable, "tools/testing/security/check_security_invariants.py"],
+        cwd=REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stdout[-800:] + proc.stderr[-800:]
+    assert "WRONG INTERPRETER" not in proc.stderr
+    assert "security invariant checks: PASS" in proc.stdout
+
+
+def test_guard_fails_closed_when_yaml_is_unavailable():
+    """A dependency-installation failure must never yield a security PASS."""
+    code = (
+        "import sys, runpy; sys.modules['yaml'] = None; "
+        "sys.argv = ['check_security_regression_gates.py']; "
+        "runpy.run_path('tools/ci/check_security_regression_gates.py', run_name='__main__')"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode != 0
+    assert "repository security checker failed to import" in proc.stdout
+    assert "security regression gates: OK" not in proc.stdout
+
+
+def _third_party_imports(rel: str) -> set[str]:
+    import ast
+
+    tree = ast.parse((REPO / rel).read_text())
+    mods: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            mods.add(node.module.split(".")[0])
+    return {m for m in mods if m not in sys.stdlib_module_names and m != "__future__"}
+
+
+def test_checker_third_party_dependencies_are_explicitly_pinned():
+    dist_of = {"yaml": "PyYAML"}
+    needed = set()
+    for rel in (
+        "tools/ci/check_github_repo_security.py",
+        "tools/ci/check_security_regression_gates.py",
+        "tools/testing/security/check_security_invariants.py",
+    ):
+        needed |= {dist_of.get(m, m) for m in _third_party_imports(rel)}
+    assert needed == {"PyYAML"}, needed  # stdlib otherwise; update deliberately
+    manifest = (REPO / "requirements-dev.txt").read_text().splitlines()
+    for dist in needed:
+        assert any(
+            re.fullmatch(rf"{dist}==[0-9][^\s]*", line.strip()) for line in manifest
+        ), dist
+
+
+def test_checker_imports_in_isolated_interpreter():
+    """-I ignores PYTHONPATH and user site: only declared packages are visible."""
+    code = (
+        "import importlib.util, sys; "
+        "s = importlib.util.spec_from_file_location('c', 'tools/ci/check_github_repo_security.py'); "
+        "m = importlib.util.module_from_spec(s); sys.modules['c'] = m; s.loader.exec_module(m); "
+        "from pathlib import Path; sys.exit(1 if m.check_workflows(Path('.')) else 0)"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@pytest.mark.parametrize("wf", ["fg-required.yml", "ci.yml", "docker-ci.yml"])
+def test_invalid_workflow_yaml_fails_closed(fake, wf):
+    _wf(fake, wf).write_text("jobs:\n  broken: [unclosed\n  : : :\n")
+    failures = chk.check_workflows(fake)
+    assert failures and any("invalid YAML" in f for f in failures), failures
+
+
+def test_invalid_policy_json_fails_closed(fake):
+    (fake / ".github/security/repository-policy.json").write_text("{not json")
+    assert any("policy unreadable" in f for f in chk.check_workflows(fake))
+
+
+def test_drift_workflow_installs_checker_dependency_from_manifest():
+    wf = yaml.safe_load(
+        (REPO / ".github/workflows/repo-security-drift.yml").read_text()
+    )
+    runs = " ".join(str(s.get("run", "")) for s in wf["jobs"]["drift"]["steps"])
+    assert "grep -E '^PyYAML==' requirements-dev.txt" in runs
+    assert "import yaml" in runs  # install is verified, not assumed
+    assert not re.search(r"pip install[^\n]*PyYAML==\d", runs), "no literal ad-hoc pin"

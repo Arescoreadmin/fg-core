@@ -6,7 +6,7 @@
 - `.github/security/repository-policy.json`
 - `.github/security/main-ruleset.json`, the exact ruleset API payload
 
-**Checker:** `tools/ci/check_github_repo_security.py`. Make targets: `make repo-security-check` and `make repo-security-drift`.
+**Checker:** `tools/ci/check_github_repo_security.py`. It needs `PyYAML`, pinned in `requirements-dev.txt`; every CI caller runs it with the project venv interpreter. Make targets: `make repo-security-check` and `make repo-security-drift`.
 
 > Desired state is **not** evidence of enforcement. A setting counts as active only when a live admin readback (`make repo-security-drift`) reports it COMPLIANT.
 

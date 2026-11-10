@@ -79,8 +79,15 @@ UNSUPPORTED = "UNSUPPORTED"
 # ---------------------------------------------------------------------------
 
 
+class InvalidWorkflowYaml(ValueError):
+    pass
+
+
 def _load_yaml(path: Path) -> dict[Any, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:  # fail closed with a named error, not a crash
+        raise InvalidWorkflowYaml(f"{path.name}: invalid YAML: {exc}") from exc
     return data if isinstance(data, dict) else {}
 
 
@@ -106,6 +113,13 @@ def _is_always(cond: Any) -> bool:
 
 
 def check_workflows(repo: Path) -> list[str]:
+    try:
+        return _check_workflows(repo)
+    except InvalidWorkflowYaml as exc:
+        return [str(exc)]
+
+
+def _check_workflows(repo: Path) -> list[str]:
     failures: list[str] = []
     try:
         policy = json.loads((repo / POLICY_PATH).read_text(encoding="utf-8"))

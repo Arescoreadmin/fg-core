@@ -8252,8 +8252,16 @@ SOC review outcome: APPROVED. A CI configuration change that satisfies an existi
 5. **Disclosed limitation:** a single maintainer means no independent four-eyes review, and a PR can modify its own guards. This is mitigated by founder review, SOC review sync and live drift detection.
 
 **Evidence:**
-- `tests/tools/test_github_repo_security.py`: 71 passed; a mutation check of the checker makes 10 tests fail.
+- `tests/tools/test_github_repo_security.py`: 80 passed; a mutation check of the checker makes 10 tests fail.
 - `check_security_regression_gates.py`: OK.
 - Live readback: DRIFT_DETECTED (13 controls) / COMPLIANT (6). This is the expected pre-activation baseline.
 
 SOC review outcome: APPROVED. CI is strictly hardened, and no application behaviour changes.
+
+### Addendum (same PR): fg-required security-lane interpreter repair
+
+- **Change:** `tools/testing/security/check_security_invariants.py` now runs its sub-checks with `sys.executable` instead of a bare `python` from `PATH`. `PyYAML==6.0.3` is declared in `requirements-dev.txt`; it was previously only transitive through `pre-commit`.
+- **What was failing:** in CI the bare `python` resolved to an interpreter without project packages, so the new repository-security guard could not import `yaml`. It reported a failure, not a pass, so it failed closed as designed. The underlying security tests had passed.
+- **Effect:** no control relaxed. The import-failure path still fails, and now has a dedicated test.
+
+SOC review outcome: APPROVED.

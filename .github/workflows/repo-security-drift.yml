@@ -38,9 +38,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install checker dependency
+      - name: Install checker dependency (pinned in requirements-dev.txt)
         shell: bash
-        run: python -m pip install --disable-pip-version-check "PyYAML==6.0.3"
+        run: |
+          set -euo pipefail
+          pin="$(grep -E '^PyYAML==' requirements-dev.txt)"
+          test -n "${pin}" || { echo "::error::PyYAML pin missing from requirements-dev.txt"; exit 1; }
+          python -m pip install --disable-pip-version-check -c constraints.txt "${pin}"
+          python -c "import yaml; print('PyYAML', yaml.__version__)"
 
       - name: Live drift readback (read-only)
         shell: bash
