@@ -1,3 +1,27 @@
+## fix(field-assessment): L14-ASSURANCE-P1-REPAIR-001 — RLS tenant context after report-access commits; release gate at the delivery transport boundary (branch fix/l14-assurance-p1-repair-001)
+
+- **Work item:** L14-ASSURANCE-P1-REPAIR-001. REPAIR class. Fixes two Codex P1 findings on PR #816 that were merged unfixed.
+- **Baseline SHA:** `c69f9d7f` (main after #817).
+- **P1-1, reproduced first:**
+  - **Setup:** real PostgreSQL 16, a NOSUPERUSER/NOBYPASSRLS role, the production sessionmaker (`expire_on_commit=True`) and forced RLS on `governance_reports`.
+  - **Defect:** `_enforce_report_content_access` committed the access audit. The commit expired `record`, and the transaction-local `app.tenant_id` binding ended with it. The next attribute read then raised `ObjectDeletedError`, so allowed report document and export requests failed.
+  - **Why CI was green:** the CI Postgres user is a superuser, which bypasses RLS. A control run as superuser does not reproduce the failure.
+  - **Same class, also fixed:** `qa_reject_report_route` read `report.version` after commit, and `reject_report_version_route` read `rv.*` after commit.
+- **P1-2, reproduced first:**
+  - **Defect:** the route `POST …/governed-delivery/{id}/execute` re-checked qualification, recipient and supersession, but not the release gate.
+  - **Codex's sequence:** approve and qualify V1, authorize delivery, then create and reject V2. The bytes were still transported (200).
+  - Also delivered with 200: after a governance-stage rejection, and after evidence was tampered with following authorization.
+  - `versions/{id}/deliver` and authorization (`governed-delivery`) already refused (422).
+- **Fixes (`api/field_assessment.py`):**
+  - **Access helper:** captures the tenant the row was loaded under (server-resolved, never caller-supplied), commits, then re-binds `set_tenant_context`. RLS stays enforced.
+  - **Reject routes:** responses are materialized before commit (the existing D-T6 convention).
+  - **Execute route:** refuses a rejected version, then runs the canonical `_require_production_qualified` (proof, evidence change, QA rejection of any version of the record, provenance, truth gate, qualification). This happens before the idempotency read and transport, so no bytes are served and no attempt row is written.
+- **Tests:**
+  - `tests/test_migrations_postgres_replay.py`: a restricted-role fixture with real commits. Includes a control that proves RLS is enforced, access-audit tests for both the allowed and denied paths (context re-bound to the same tenant, other tenant still invisible, audit committed only for that tenant), and a reject route under RLS. These fail on the pre-fix code.
+  - `tests/test_assessment_assurance/test_release_boundary_repair.py`: Codex's sequence, governance-stage rejection, evidence change after authorization, a positive control, and the other delivery routes. These fail on the pre-fix code.
+  - The `release` fixture moved into the suite's conftest.
+- **Observation, not changed:** 19 pre-existing `commit(); refresh()` sites on non-forced-RLS tables are safe only while the runtime role owns the tables, which is the compose topology. Tracked as a follow-up audit for the restricted `fg_app` runtime role.
+
 ## security(field-assessment): L14-ASSESSMENT-ASSURANCE-001 — canonical provenance, independent QA, rejection and draft access (branch security/l14-assessment-assurance-001)
 
 - **Work item:** L14-ASSESSMENT-ASSURANCE-001 (REPAIR class; closes customer-zero P1s CZ-23, CZ-12B, CZ-17 and the missing QA rejection).

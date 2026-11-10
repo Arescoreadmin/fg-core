@@ -8,55 +8,15 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from tests._assurance_actors import reviewer
 from tests.test_assessment_assurance.conftest import (
-    QA_SUBJECT,
+    RELEASE_TENANT,
+    _version,
     code,
     export,
     human,
     qa_approve,
 )
 from tests.test_customer_zero_e2e import _northstar as N
-from tests.test_report_proof import _synthetic as S
-
-RELEASE_TENANT = "tenant-assurance-release"
-
-
-@pytest.fixture()
-def release(build_app, monkeypatch):
-    from api.auth_scopes import mint_key
-
-    monkeypatch.setenv("FG_REPORT_SIGNING_KEY", S.SIGNING_KEY_HEX)
-    app = build_app(auth_enabled=True)
-    key = mint_key(
-        "governance:read",
-        "governance:write",
-        "governance:qa_approve",
-        tenant_id=RELEASE_TENANT,
-    )
-    author = TestClient(app, headers={"X-API-Key": key})
-    qa = TestClient(app, headers={"X-API-Key": key, **reviewer(QA_SUBJECT)})
-    eid = S.create_engagement(author, "Assurance Release Org (test fixture)")
-    S.seed(
-        eid,
-        synthetic=False,
-        tamper=False,
-        failed_job=False,
-        tenant=RELEASE_TENANT,
-        proof_level="TEST_FIXTURE_ONLY",
-    )
-    rep = S.generate_report(author, eid)
-    return {"author": author, "qa": qa, "eid": eid, "rep": rep}
-
-
-def _version(c: TestClient, qa: TestClient, eid: str, rid: str) -> str:
-    vid = c.post(f"/field-assessment/engagements/{eid}/reports/{rid}/versions").json()[
-        "id"
-    ]
-    c.post(
-        f"/field-assessment/engagements/{eid}/reports/{rid}/versions/{vid}/submit-for-review"
-    )
-    return vid
 
 
 def test_final_requires_independent_human_qa_and_then_releases(release):
