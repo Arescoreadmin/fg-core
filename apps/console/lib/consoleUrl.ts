@@ -55,7 +55,7 @@ export async function resolveConsoleOrigin(): Promise<string> {
   }
 
   const { headers } = await import('next/headers');
-  const headerStore = headers();
+  const headerStore = await headers();
   const host = headerStore.get('x-forwarded-host') || headerStore.get('host');
   const proto = headerStore.get('x-forwarded-proto') || 'http';
 
@@ -87,7 +87,7 @@ export async function resolveConsoleRequestHeaders(initHeaders?: HeadersInit): P
   }
 
   const { headers: getHeaders } = await import('next/headers');
-  const incomingHeaders = getHeaders();
+  const incomingHeaders = await getHeaders();
   for (const name of [
     'cookie',
     'host',

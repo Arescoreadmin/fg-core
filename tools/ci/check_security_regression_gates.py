@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -258,8 +259,45 @@ def check_required_new_governance_assets(failures: list[str]) -> None:
             failures.append(f"missing required governance asset: {rel}")
 
 
+def check_frontend_dependency_gate(failures: list[str]) -> None:
+    """L14-FRONTEND-DEPENDENCY-SEC-001: the frontend audit gate cannot be
+    removed, path-filtered, or softened without failing this guard."""
+    wf_rel = ".github/workflows/frontend-dependency-security.yml"
+    for rel in (
+        wf_rel,
+        "tools/ci/frontend_dependency_audit.py",
+        "tools/ci/frontend_dependency_exceptions.json",
+    ):
+        if not (REPO / rel).exists():
+            failures.append(f"frontend dependency gate asset missing: {rel}")
+    if not (REPO / wf_rel).exists():
+        return
+    wf = _read(wf_rel)
+    for marker in (
+        "pull_request:",
+        "push:",
+        "schedule:",
+        "workflow_dispatch:",
+        "npm ci --ignore-scripts",
+        "tools/ci/frontend_dependency_audit.py audit",
+        "tools/ci/frontend_dependency_audit.py sbom",
+        "for app in portal console web",
+    ):
+        if marker not in wf:
+            failures.append(f"{wf_rel} missing required marker: {marker}")
+    for forbidden in ("continue-on-error", "|| true", "paths:", "paths-ignore:"):
+        if forbidden in wf:
+            failures.append(f"{wf_rel} must not contain '{forbidden}'")
+    makefile = _read("Makefile")
+    if re.search(r"npm audit[^\n]*\|\|\s*true", makefile):
+        failures.append(
+            "Makefile frontend npm audit must not be non-blocking (|| true)"
+        )
+
+
 def main() -> int:
     failures: list[str] = []
+    check_frontend_dependency_gate(failures)
     check_no_placeholder_security_tests(failures)
     check_auth_middleware_enforces(failures)
     check_no_insecure_prod_overrides(failures)

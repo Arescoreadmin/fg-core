@@ -14,9 +14,9 @@ const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').repla
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const id = params.id ?? '';
+  const id = (await params).id ?? '';
   if (!id || !/^[a-zA-Z0-9_-]{8,}$/.test(id)) {
     return NextResponse.json({ error: 'Invalid assessment id' }, { status: 400 });
   }

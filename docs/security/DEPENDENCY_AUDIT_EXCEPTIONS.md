@@ -60,6 +60,30 @@ _No active exceptions. The pip-audit gate blocks on all advisories with no suppr
 
 ---
 
+## Frontend (npm) Exceptions — L14-FRONTEND-DEPENDENCY-SEC-001
+
+Frontend advisories for `apps/portal`, `apps/console` and `apps/web` are gated by
+`tools/ci/frontend_dependency_audit.py` (workflow `frontend-dependency-security`,
+`make frontend-audit`). The machine-readable registry is
+`tools/ci/frontend_dependency_exceptions.json`.
+
+There are no active frontend exceptions; the registry is empty.
+
+An entry suppresses a blocking (critical/high) advisory only when **all** hold:
+
+- `approval_status` is `APPROVED` and `approved_by` names the approving founder or
+  security owner. An exception drafted by an engineer or AI agent is not approved
+  until the founder records it — unapproved entries are ignored and keep blocking;
+- `owner`, `runtime_exposure`, `compensating_controls` and `remediation_plan` are set;
+- `expires` is a date no more than 90 days ahead and not in the past (expired
+  entries stop suppressing automatically);
+- it names the exact `app`, `package` and `advisory` (GHSA id or npm advisory id).
+
+An audit that cannot run (registry unreachable, malformed output, timeout) is
+`AUDIT_UNVERIFIED` and fails the gate; it is never treated as clean.
+
+---
+
 ## Exception Governance
 
 - **Adding an exception:** requires documented reason, prior certification reference,

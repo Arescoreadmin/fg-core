@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession, signIn } from 'next-auth/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface PreflightData {
@@ -73,10 +73,10 @@ const s = {
   btnDisabled: { opacity: 0.6, cursor: 'not-allowed' } as React.CSSProperties,
 };
 
-export default function InvitationAcceptancePage({ params }: { params: { token: string } }) {
+export default function InvitationAcceptancePage({ params }: { params: Promise<{ token: string }> }) {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
-  const token = params.token;
+  const { token } = use(params);
 
   const [state, setState] = useState<InvitationState>({ phase: 'loading' });
   const [preflight, setPreflight] = useState<PreflightData | null>(null);

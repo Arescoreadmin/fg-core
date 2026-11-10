@@ -1303,7 +1303,8 @@ CONSOLE_DIR := apps/console
 PORTAL_DIR  := apps/portal
 
 .PHONY: console-deps console-dev console-build console-lint console-test console-audit ci-console \
-        portal-deps portal-dev portal-build portal-lint portal-test portal-audit ci-portal
+        portal-deps portal-dev portal-build portal-lint portal-test portal-audit ci-portal \
+        frontend-audit frontend-sbom
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1321,14 +1322,14 @@ console-lint: console-deps
 console-test: console-deps
 	@cd $(CONSOLE_DIR) && npm run test
 
-# Enforcement transition (do not remove this comment block until Phase 3 lands):
-#   Phase 1 — now:   || true, observe findings, classify direct vs transitive
-#   Phase 2 — next:  --audit-level=critical (fail only on newly introduced criticals)
-#   Phase 3 — later: --audit-level=high, fail on new highs with available remediation
-#   Use `npm audit --json | jq` to produce a machine-readable baseline before promoting.
+# L14-FRONTEND-DEPENDENCY-SEC-001: enforcement is now blocking (Phase 3 of the
+# former pilot).  critical/high in the production or full-tree audit fails;
+# an audit that cannot run is AUDIT_UNVERIFIED (exit 2), never clean.
+# Exceptions: tools/ci/frontend_dependency_exceptions.json (approved + dated).
+FRONTEND_AUDIT := python3 tools/ci/frontend_dependency_audit.py
+
 console-audit: console-deps
-	@echo "==> npm audit (console) — non-blocking pilot"
-	@cd $(CONSOLE_DIR) && npm audit --omit=dev --audit-level=high || true
+	@$(FRONTEND_AUDIT) audit --app console
 
 ci-console: console-lint console-test console-audit
 
@@ -1348,12 +1349,19 @@ portal-lint: portal-deps
 portal-test: portal-deps
 	@cd $(PORTAL_DIR) && npm run test
 
-# See transition comment on console-audit above — same phases apply.
+# Blocking — see console-audit above.
 portal-audit: portal-deps
-	@echo "==> npm audit (portal) — non-blocking pilot"
-	@cd $(PORTAL_DIR) && npm audit --omit=dev --audit-level=high || true
+	@$(FRONTEND_AUDIT) audit --app portal
 
 ci-portal: portal-lint portal-test portal-audit
+
+# All governed frontends (portal, console, web): fail-closed audit + SBOMs.
+# Evidence: artifacts/frontend-dependency-security/
+frontend-audit:
+	@$(FRONTEND_AUDIT) audit
+
+frontend-sbom:
+	@$(FRONTEND_AUDIT) sbom
 
 # =============================================================================
 # Repo guards

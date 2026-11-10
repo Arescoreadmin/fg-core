@@ -271,12 +271,14 @@ async function proxyToCore(
   return out;
 }
 
+type RouteCtx = { params: Promise<{ path: string[] }> };
+
 async function handle(
   request: NextRequest,
-  { params }: { params: { path: string[] } },
+  { params }: RouteCtx,
 ): Promise<NextResponse> {
   const requestId = getRequestId(request);
-  const path = params.path || [];
+  const path = (await params).path || [];
   if (!path.length) return jsonError('Missing path', 400, requestId);
 
   const clientIp =
@@ -290,15 +292,15 @@ async function handle(
   return proxyToCore(request, path, requestId);
 }
 
-export async function GET(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, ctx: RouteCtx) {
   return handle(req, ctx);
 }
-export async function POST(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function POST(req: NextRequest, ctx: RouteCtx) {
   return handle(req, ctx);
 }
-export async function HEAD(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function HEAD(req: NextRequest, ctx: RouteCtx) {
   return handle(req, ctx);
 }
-export async function PATCH(req: NextRequest, ctx: { params: { path: string[] } }) {
+export async function PATCH(req: NextRequest, ctx: RouteCtx) {
   return handle(req, ctx);
 }

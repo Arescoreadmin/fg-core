@@ -163,6 +163,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       <div className="border-t border-border px-4 py-3">
         <ThemeToggle />
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- logout is a route handler that must be a full navigation (clears session cookies, redirects to the IdP); a next/link component would prefetch it */}
         <a
           href="/api/auth/logout"
           className="mb-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-muted transition-colors hover:bg-surface-2 hover:text-foreground"

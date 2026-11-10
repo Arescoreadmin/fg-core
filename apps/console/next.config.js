@@ -43,6 +43,9 @@ const cspHeader = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Next 15 infers the tracing root from the nearest lockfile set; pin it to
+  // this app so .next/standalone/server.js stays where the Dockerfile copies it.
+  outputFileTracingRoot: __dirname,
   transpilePackages: ['@fg/ui', '@fg/navigation'],
 
   async rewrites() {
