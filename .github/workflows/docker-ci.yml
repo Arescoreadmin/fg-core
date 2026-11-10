@@ -1,26 +1,10 @@
 name: frostgate-docker-ci
 
 on:
+  # Runs on EVERY pull request so the required "Docker Compose Gate" always
+  # reports; the gate job decides relevance from the changed paths below.
   pull_request:
     branches: ["main"]
-    paths:
-      - ".github/workflows/docker-ci.yml"
-      - "docker-compose.yml"
-      - "docker-compose.lockdown.yml"
-      - "Dockerfile"
-      - "**/Dockerfile"
-      - "admin_gateway/**"
-      - "api/**"
-      - "apps/console/**"
-      - "policy/**"
-      - "scripts/**"
-      - "requirements.txt"
-      - "requirements-dev.txt"
-      - "requirements.lock"
-      - "requirements-dev.lock"
-      - "constraints.txt"
-      - ".env.example"
-      - "env/**"
   push:
     branches: ["main"]
     paths:
@@ -51,8 +35,67 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Docker Compose Relevance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      relevant: ${{ steps.detect.outputs.relevant }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Docker-relevant changes
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Keep identical to the push.paths filter (enforced by
+          # tools/ci/check_github_repo_security.py).
+          DOCKER_PATHS: |
+            .github/workflows/docker-ci.yml
+            docker-compose.yml
+            docker-compose.lockdown.yml
+            Dockerfile
+            **/Dockerfile
+            admin_gateway/**
+            api/**
+            apps/console/**
+            policy/**
+            scripts/**
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+            requirements-dev.lock
+            constraints.txt
+            .env.example
+            env/**
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > changed.txt
+          python3 - <<'PY'
+          import fnmatch, os
+          pats = [p.strip() for p in os.environ["DOCKER_PATHS"].splitlines() if p.strip()]
+          changed = [l.strip() for l in open("changed.txt") if l.strip()]
+          hits = [c for c in changed if any(fnmatch.fnmatch(c, p.replace("**", "*")) for p in pats)]
+          print(f"changed={len(changed)} docker_relevant={len(hits)}")
+          for h in hits[:50]:
+              print("  ", h)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"relevant={'true' if hits or not changed else 'false'}\n")
+          PY
+
   docker-validate:
     name: Docker Compose Validation
+    needs: changes
+    if: ${{ needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -68,28 +111,35 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Generate CI secrets
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY' >> "$GITHUB_ENV"
+          # Values are registered as log masks before export (public logs).
+          python - <<'PY'
+          import os
           import secrets
 
-          def tok(n: int) -> str:
-              return secrets.token_urlsafe(n)
-
-          print(f"FG_API_KEY={tok(32)}")
-          print(f"FG_AGENT_API_KEY={tok(24)}")
-          print(f"FG_WEBHOOK_SECRET={tok(32)}")
-          print(f"FG_ENCRYPTION_KEY={tok(32)}")
-          print(f"FG_JWT_SECRET={tok(32)}")
-          print(f"FG_SESSION_SECRET={tok(32)}")
-          print(f"REDIS_PASSWORD={tok(24)}")
-          print(f"POSTGRES_PASSWORD={tok(24)}")
-          print(f"NATS_AUTH_TOKEN={tok(24)}")
-          print(f"FG_KEY_PEPPER={tok(32)}")
+          SPEC = {
+              "FG_API_KEY": 32,
+              "FG_AGENT_API_KEY": 24,
+              "FG_WEBHOOK_SECRET": 32,
+              "FG_ENCRYPTION_KEY": 32,
+              "FG_JWT_SECRET": 32,
+              "FG_SESSION_SECRET": 32,
+              "REDIS_PASSWORD": 24,
+              "POSTGRES_PASSWORD": 24,
+              "NATS_AUTH_TOKEN": 24,
+              "FG_KEY_PEPPER": 32,
+              "CONSOLE_AUTH_SECRET": 32,
+          }
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for name, n in SPEC.items():
+                  value = secrets.token_urlsafe(n)
+                  print(f"::add-mask::{value}", flush=True)
+                  env.write(f"{name}={value}\n")
           PY
 
       - name: Verify required env vars are set
@@ -271,7 +321,7 @@ jobs:
           FG_KEY_PEPPER=${FG_KEY_PEPPER}
           # Console Auth.js session secret (per-run random; required by the
           # console startup validation that Next 15 now executes).
-          CONSOLE_AUTH_SECRET=$(openssl rand -hex 32)
+          CONSOLE_AUTH_SECRET=${CONSOLE_AUTH_SECRET}
           FG_EVIDENCE_SIGNING_KEY_B64=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=
           FG_REPORT_SIGNING_KEY=0000000000000000000000000000000000000000000000000000000000000001
           FG_BILLING_EVIDENCE_HMAC_KEY=ci-billing-hmac-evidence-key-32-bytes
@@ -596,3 +646,33 @@ jobs:
         run: |
           set +e
           docker compose --env-file .env.ci down -v --remove-orphans
+
+  docker-gate:
+    # Required status check. Always reports: passes when no Docker-relevant path
+    # changed; otherwise requires Docker Compose Validation to have SUCCEEDED
+    # (skipped, failed, cancelled or timed out all fail the gate).
+    name: Docker Compose Gate
+    needs: [changes, docker-validate]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Evaluate Docker Compose Validation
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RELEVANT: ${{ needs.changes.outputs.relevant }}
+          VALIDATE_RESULT: ${{ needs.docker-validate.result }}
+        run: |
+          set -euo pipefail
+          echo "changes=${CHANGES_RESULT} relevant=${RELEVANT} docker-validate=${VALIDATE_RESULT}"
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "::error::relevance detection did not succeed (${CHANGES_RESULT})"; exit 1
+          fi
+          if [ "${RELEVANT}" = "true" ]; then
+            [ "${VALIDATE_RESULT}" = "success" ] || { echo "::error::Docker Compose Validation result=${VALIDATE_RESULT}"; exit 1; }
+          elif [ "${RELEVANT}" != "false" ]; then
+            echo "::error::unexpected relevance output '${RELEVANT}'"; exit 1
+          fi
+          echo "Docker Compose Gate: PASS"

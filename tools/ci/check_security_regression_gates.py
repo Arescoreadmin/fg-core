@@ -295,9 +295,43 @@ def check_frontend_dependency_gate(failures: list[str]) -> None:
         )
 
 
+def check_repository_security_policy(failures: list[str]) -> None:
+    """P0-REPO-SECURITY-ENFORCEMENT-001: required status checks cannot fail
+    open (no skip/paths/continue-on-error, aggregates cover every mandatory
+    job), workflow hygiene holds, and the drift detector is present."""
+    for rel in (
+        ".github/security/repository-policy.json",
+        ".github/security/main-ruleset.json",
+        ".github/workflows/repo-security-drift.yml",
+        "tools/ci/check_github_repo_security.py",
+    ):
+        if not (REPO / rel).exists():
+            failures.append(f"repository security asset missing: {rel}")
+    checker = REPO / "tools/ci/check_github_repo_security.py"
+    if not checker.exists():
+        return
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_repo_sec", checker)
+    if spec is None or spec.loader is None:
+        failures.append("repository security checker cannot be loaded")
+        return
+    import sys
+
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["_repo_sec"] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except ImportError as exc:  # fail closed (e.g. PyYAML unavailable)
+        failures.append(f"repository security checker failed to import: {exc}")
+        return
+    failures.extend(f"repo-security: {f}" for f in mod.check_workflows(REPO))
+
+
 def main() -> int:
     failures: list[str] = []
     check_frontend_dependency_gate(failures)
+    check_repository_security_policy(failures)
     check_no_placeholder_security_tests(failures)
     check_auth_middleware_enforces(failures)
     check_no_insecure_prod_overrides(failures)

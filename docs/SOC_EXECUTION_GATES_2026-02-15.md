@@ -8220,3 +8220,40 @@ SOC review outcome: APPROVED. A dependency remediation plus fail-closed enforcem
   - **Security effect:** before this PR, the CI console ran in production mode with no session secret, and next-auth beta.31 failed open on exactly that misconfiguration. Both gaps are now closed.
 
 SOC review outcome: APPROVED. A CI configuration change that satisfies an existing fail-closed control instead of bypassing it.
+
+---
+
+## 2026-11-10 - security: P0-REPO-SECURITY-ENFORCEMENT-001 — required checks that cannot fail open; Actions hardening; repository security drift detection
+
+**Change scope:**
+- Workflows: `.github/workflows/ci.yml` (new `CI Required` aggregate), `docker-ci.yml` (runs on every PR, plus relevance detection and a `Docker Compose Gate`; secrets masked), `prod-auth-smoke.yml` (trigger restricted), `release-images.yml` and `testing-module.yml` (SHA pins), and the new `repo-security-drift.yml`.
+- Actions and config: `.github/actions/fg-secrets` (masking) and `.github/dependabot.yml`.
+- Policy as code: `.github/security/*.json`.
+- Tooling: `tools/ci/check_github_repo_security.py`, plus a new guard in `tools/ci/check_security_regression_gates.py`.
+- No application code changed.
+
+**Security analysis:**
+
+1. **No gate is weakened, and every existing job still runs.**
+   - `CI Required` adds a stricter gate on top of the existing jobs: on PRs a skipped, failed, cancelled or missing job fails it.
+   - `docker-ci` now runs on every PR instead of only on matching paths; on irrelevant PRs only the relevance and gate jobs execute.
+2. **Credential exposure reduced.**
+   - Generated CI secrets are masked before export.
+   - The production-secret `workflow_run` trigger can no longer be reached from fork branches.
+   - Third-party actions that hold write tokens or secrets are pinned to commit SHAs.
+3. **Self-protection.**
+   - The Guard job fails if any of the following happens:
+     - a required check is removed, renamed, made skippable or path-filtered, or given `continue-on-error`, including on aggregate members;
+     - the ruleset gains a bypass actor or loses its binding to the Actions app;
+     - `pull_request_target`, `write-all`, unpinned third-party actions or untrusted expressions in `run:` appear;
+     - secret masking is removed.
+   - A daily drift run compares GitHub's live settings with the committed policy.
+4. **Repository settings are not mutated by this PR.** The ruleset, Dependabot and merge-method changes are prepared, with exact commands and rollback, and await explicit founder authorization.
+5. **Disclosed limitation:** a single maintainer means no independent four-eyes review, and a PR can modify its own guards. This is mitigated by founder review, SOC review sync and live drift detection.
+
+**Evidence:**
+- `tests/tools/test_github_repo_security.py`: 66 passed; a mutation check of the checker makes 10 tests fail.
+- `check_security_regression_gates.py`: OK.
+- Live readback: DRIFT_DETECTED (13 controls) / COMPLIANT (6). This is the expected pre-activation baseline.
+
+SOC review outcome: APPROVED. CI is strictly hardened, and no application behaviour changes.

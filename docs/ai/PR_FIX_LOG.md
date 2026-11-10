@@ -1,3 +1,34 @@
+## security(github): P0-REPO-SECURITY-ENFORCEMENT-001 — required checks that cannot fail open, Actions hardening, drift detection (branch security/p0-repo-enforcement-001)
+
+- **Work item:** P0-REPO-SECURITY-ENFORCEMENT-001. SECURITY / REPAIR: it closes merge-bypass and CI fail-open gaps. `check_customer_one_roadmap.py --work-item` reports the ID as not in `next_sequence`, and the authority file is not edited.
+- **Baseline:** `751666a1` (main after #819). This is an independent read-only audit.
+  - `main` has no branch protection and no rulesets.
+  - Dependabot alerts, security updates and private vulnerability reporting are disabled.
+  - Secret scanning and push protection are on.
+  - The default token is read-only.
+  - The only collaborator is `Arescoreadmin` (admin), and the repo is public and user-owned.
+- **Fail-open defects found:**
+  - **Skipped required checks:** GitHub treats a skipped required check as passing. Integration, Evidence and Agent jobs are skipped when Unit fails, and no aggregate covered `ci.yml`.
+  - **Path-filtered Docker:** `docker-ci` was path-filtered, so it could not be required.
+  - **Unmasked generated secrets:** `fg-secrets` and docker-ci wrote generated CI secrets to `GITHUB_ENV` unmasked, so they appeared in public step logs.
+  - **Fork-triggerable smoke run:** `prod-auth-smoke`, which carries production secrets, could be triggered by a fork PR whose branch is named `main` through `workflow_run`.
+- **Fixes (CI changes, called out):**
+  - **New aggregate `CI Required`:** `if: always()`; on PRs every member must succeed.
+  - **`docker-ci` runs on every PR:** a relevance job plus a `Docker Compose Gate`.
+  - **Masking:** values are registered with `::add-mask::` before export.
+  - **`prod-auth-smoke`:** requires a same-repository push.
+  - **SHA pins:** `docker/login-action`, `docker/setup-buildx-action` and `hashicorp/setup-terraform`.
+  - **Dependabot:** limits 3/3/3/3/2 (frontends, Actions, pip), grouped frontend security updates, no `ignore` rules.
+- **Policy as code:**
+  - `.github/security/repository-policy.json` and `main-ruleset.json` hold 5 required contexts bound to GitHub Actions (15368): strict, squash-only, linear history, no bypass actors, 0 approvals (single maintainer; documented).
+  - `tools/ci/check_github_repo_security.py`:
+    - `workflows` is the offline guard, wired into `check_security_regression_gates.py` (Guard);
+    - `live` is a read-only drift readback (COMPLIANT / DRIFT_DETECTED / NOT_VERIFIED / UNSUPPORTED) with an activation plan;
+  - `.github/workflows/repo-security-drift.yml` runs daily and opens an issue on drift;
+  - new `make repo-security-check` and `make repo-security-drift` targets.
+- **Tests:** `tests/tools/test_github_repo_security.py`, 66 tests covering the 10 bypass scenarios, a runtime `EXPECTED_JOBS` check in `CI Required` (a missing job fails), and API failures (HTTP 0/401/403/5xx → NOT_VERIFIED). The tests also execute the aggregate and gate scripts with skipped, failed, cancelled and empty results, and run the live evaluator with denied API responses. A mutation check (a neutered checker makes 10 tests fail) proves the tests depend on the checker.
+- **Not applied (needs founder authorization):** ruleset activation, Dependabot alerts and security updates, private vulnerability reporting, and the merge-method settings. The exact commands, ordering and rollback are in `docs/security/GITHUB_REPOSITORY_SECURITY_POLICY.md` §7. Status: ENGINEERING_PASS candidate; ENFORCEMENT_VERIFIED is pending.
+
 ## security(frontend): L14-FRONTEND-DEPENDENCY-SEC-001 — frontend dependency remediation and supply-chain enforcement (branch security/l14-frontend-dependency-sec-001)
 
 - **Work item:** L14-FRONTEND-DEPENDENCY-SEC-001. SECURITY class, the same as P0-DEPENDENCY-REMEDIATION-001. It remediates known critical/high advisories, which the REPAIR class authorizes. `check_customer_one_roadmap.py --work-item` reports the ID as not in `next_sequence`, and the authority file is not edited here.

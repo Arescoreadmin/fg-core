@@ -30,11 +30,17 @@ runs:
           exit 1
         }
 
-        {
-          echo "FG_API_KEY=$(gen)"
-          echo "REDIS_PASSWORD=$(gen | cut -c1-32)"
-          echo "POSTGRES_PASSWORD=$(gen | cut -c1-32)"
-          echo "FG_AGENT_API_KEY=$(gen)"
-          echo "FG_WEBHOOK_SECRET=$(gen)"
-          echo "FG_KEY_PEPPER=$(gen)"
-        } >> "$GITHUB_ENV"
+        # P0-REPO-SECURITY-ENFORCEMENT-001: register every generated value as a
+        # log mask BEFORE exporting it, so it never appears in step env dumps
+        # (this repository's Actions logs are public).
+        export_masked() {
+          local name="$1" value="$2"
+          echo "::add-mask::${value}"
+          echo "${name}=${value}" >> "$GITHUB_ENV"
+        }
+        export_masked FG_API_KEY "$(gen)"
+        export_masked REDIS_PASSWORD "$(gen | cut -c1-32)"
+        export_masked POSTGRES_PASSWORD "$(gen | cut -c1-32)"
+        export_masked FG_AGENT_API_KEY "$(gen)"
+        export_masked FG_WEBHOOK_SECRET "$(gen)"
+        export_masked FG_KEY_PEPPER "$(gen)"

@@ -1,0 +1,115 @@
+{
+  "schema": "fg.github_repository_security_policy.v1",
+  "work_item": "P0-REPO-SECURITY-ENFORCEMENT-001",
+  "repository": "Arescoreadmin/fg-core",
+  "note": "Desired state only. This file is NOT evidence that any GitHub setting is active; run `make repo-security-drift` for a live readback.",
+  "protected_branches": ["main"],
+  "ruleset": {
+    "file": ".github/security/main-ruleset.json",
+    "name": "main-protection",
+    "enforcement": "active"
+  },
+  "required_status_checks": {
+    "integration_id": 15368,
+    "strict": true,
+    "contexts": [
+      {
+        "context": "CI Required",
+        "workflow": ".github/workflows/ci.yml",
+        "job": "ci_required",
+        "kind": "aggregate",
+        "aggregate_needs": [
+          "fg_guard",
+          "enforcement_mode_matrix",
+          "unit",
+          "contract_authority",
+          "integration",
+          "migrations_replay",
+          "db_postgres_verify",
+          "admin",
+          "console",
+          "portal",
+          "pt",
+          "hardening",
+          "compliance",
+          "evidence",
+          "agent_linux",
+          "agent_windows"
+        ]
+      },
+      {
+        "context": "fg-required",
+        "workflow": ".github/workflows/fg-required.yml",
+        "job": "fg-required",
+        "kind": "job"
+      },
+      {
+        "context": "Frontend Dependency Security",
+        "workflow": ".github/workflows/frontend-dependency-security.yml",
+        "job": "frontend-dependency-security",
+        "kind": "job"
+      },
+      {
+        "context": "Docker Compose Gate",
+        "workflow": ".github/workflows/docker-ci.yml",
+        "job": "docker-gate",
+        "kind": "aggregate",
+        "aggregate_needs": ["changes", "docker-validate"]
+      },
+      {
+        "context": "pr-fix-log-guard",
+        "workflow": ".github/workflows/ai-ledger-guard.yml",
+        "job": "pr_fix_log_guard",
+        "kind": "job"
+      }
+    ],
+    "advisory_not_required": [
+      "Coverage (advisory)",
+      "Record failing frontend dependency gate",
+      "Docker Compose Validation",
+      "Docker Compose Relevance",
+      "testing-module jobs (path-filtered on pull_request)",
+      "Vercel preview deployments (third-party app, not GitHub Actions)"
+    ]
+  },
+  "pull_request_review": {
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews_on_push": true,
+    "require_code_owner_review": false,
+    "require_last_push_approval": false,
+    "required_review_thread_resolution": true,
+    "rationale": "Single-maintainer repository: the only collaborator (Arescoreadmin, admin) authors every PR and GitHub forbids self-approval, so any required approval count > 0 would block every merge. Mandatory CI + founder merge authority is used instead. This is NOT independent four-eyes review; raise required_approving_review_count to 1 (and enable code-owner review) once a second maintainer exists."
+  },
+  "merge": {
+    "allowed_merge_methods": ["squash"],
+    "required_linear_history": true,
+    "repository_allow_merge_commit": false,
+    "repository_allow_rebase_merge": false,
+    "repository_allow_squash_merge": true,
+    "repository_allow_auto_merge": false
+  },
+  "branch_restrictions": {
+    "block_force_push": true,
+    "block_deletion": true,
+    "direct_push": "blocked for everyone except via pull request (ruleset 'pull_request' rule); no bypass actors"
+  },
+  "bypass": {
+    "bypass_actors": [],
+    "policy": "No standing bypass for any actor, bot or app. Emergency recovery = an admin temporarily sets the ruleset enforcement to 'disabled' (recorded in ruleset history and the audit log), per docs/security/GITHUB_REPOSITORY_SECURITY_POLICY.md section 8."
+  },
+  "actions": {
+    "default_workflow_permissions": "read",
+    "can_approve_pull_request_reviews": false,
+    "fork_pr_contributor_approval": "first_time_contributors",
+    "self_hosted_runners_allowed": false,
+    "pull_request_target_allowed": false,
+    "third_party_actions_with_secrets_or_write_must_be_sha_pinned": true
+  },
+  "security_and_analysis": {
+    "vulnerability_alerts": true,
+    "dependabot_security_updates": true,
+    "secret_scanning": true,
+    "secret_scanning_push_protection": true,
+    "private_vulnerability_reporting": true
+  }
+}
