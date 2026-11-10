@@ -493,6 +493,41 @@ def evaluate_live(
                 "" if not missing and have else plan_ruleset,
             )
         )
+        # Strictness (branch must be up to date) is part of the requirement:
+        # the same check names with strict disabled are NOT compliant.
+        strict_values = [
+            bool(
+                (x.get("parameters") or {}).get("strict_required_status_checks_policy")
+            )
+            for x in rules
+            if x.get("type") == "required_status_checks"
+        ]
+        want_strict = bool(rsc.get("strict"))
+        if strict_values:
+            strict_ok = any(strict_values) if want_strict else True
+            out.append(
+                Control(
+                    "main.required_status_checks.strict",
+                    COMPLIANT if strict_ok else DRIFT,
+                    want_strict,
+                    strict_values,
+                    ""
+                    if strict_ok
+                    else "strict_required_status_checks_policy disabled",
+                    "" if strict_ok else plan_ruleset,
+                )
+            )
+        else:
+            out.append(
+                Control(
+                    "main.required_status_checks.strict",
+                    DRIFT,
+                    want_strict,
+                    None,
+                    "no required_status_checks rule",
+                    plan_ruleset,
+                )
+            )
         prs = [
             x.get("parameters") or {} for x in rules if x.get("type") == "pull_request"
         ]

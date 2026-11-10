@@ -8252,7 +8252,7 @@ SOC review outcome: APPROVED. A CI configuration change that satisfies an existi
 5. **Disclosed limitation:** a single maintainer means no independent four-eyes review, and a PR can modify its own guards. This is mitigated by founder review, SOC review sync and live drift detection.
 
 **Evidence:**
-- `tests/tools/test_github_repo_security.py`: 66 passed; a mutation check of the checker makes 10 tests fail.
+- `tests/tools/test_github_repo_security.py`: 71 passed; a mutation check of the checker makes 10 tests fail.
 - `check_security_regression_gates.py`: OK.
 - Live readback: DRIFT_DETECTED (13 controls) / COMPLIANT (6). This is the expected pre-activation baseline.
 

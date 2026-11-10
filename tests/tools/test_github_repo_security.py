@@ -595,3 +595,61 @@ def test_live_genuinely_disabled_alerts_is_drift_for_admin():
     )
     controls = {c.control: c.status for c in chk.evaluate_live(pol, rs, obs)}
     assert controls["security.vulnerability_alerts"] == chk.DRIFT
+
+
+# --- review fixes (Codex P2 on #820) ------------------------------------------
+
+
+@pytest.mark.parametrize("strict", [False, None])
+def test_live_strict_disabled_is_drift(strict):
+    pol, rs = _policy()
+    obs = _compliant_obs()
+    for r in obs["branch_rules"].body:
+        if r["type"] == "required_status_checks":
+            if strict is None:
+                r["parameters"].pop("strict_required_status_checks_policy", None)
+            else:
+                r["parameters"]["strict_required_status_checks_policy"] = strict
+    controls = {c.control: c.status for c in chk.evaluate_live(pol, rs, obs)}
+    assert controls["main.required_status_checks.strict"] == chk.DRIFT
+    assert (
+        controls["main.required_status_checks"] == chk.COMPLIANT
+    )  # names alone still match
+    assert chk.overall(chk.evaluate_live(pol, rs, obs)) == chk.DRIFT
+
+
+@pytest.mark.parametrize("checker_rc,step_ok", [(0, True), (2, True), (1, False)])
+def test_drift_workflow_handles_checker_exit_codes_under_errexit(
+    tmp_path, checker_rc, step_ok
+):
+    """GitHub runs `shell: bash` as `bash -e -o pipefail`; NOT_VERIFIED (2)
+    must reach the warning handler instead of aborting the step."""
+    wf = yaml.safe_load(
+        (REPO / ".github/workflows/repo-security-drift.yml").read_text()
+    )
+    step = next(
+        s
+        for s in wf["jobs"]["drift"]["steps"]
+        if s.get("name", "").startswith("Live drift")
+    )
+    stub = tmp_path / "tools/ci/check_github_repo_security.py"
+    stub.parent.mkdir(parents=True)
+    stub.write_text(f"import sys\nprint('stub')\nsys.exit({checker_rc})\n")
+    script = tmp_path / "step.sh"
+    script.write_text(step["run"])
+    summary = tmp_path / "summary.md"
+    env = {
+        **{k: v for k, v in os.environ.items() if not k.startswith("GITHUB_")},
+        "GITHUB_STEP_SUMMARY": str(summary),
+    }
+    proc = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", str(script)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert (proc.returncode == 0) is step_ok, proc.stdout + proc.stderr
+    assert "stub" in summary.read_text()
+    if checker_rc == 2:
+        assert "::warning::" in proc.stdout

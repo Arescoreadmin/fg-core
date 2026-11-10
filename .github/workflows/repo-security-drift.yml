@@ -49,9 +49,13 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p artifacts/repo-security
+          # `shell: bash` runs with -e; disable errexit so the checker's exit
+          # code (0 COMPLIANT / 1 DRIFT / 2 NOT_VERIFIED) reaches the handler.
+          set +e
           python tools/ci/check_github_repo_security.py live --out artifacts/repo-security/drift.json \
             | tee artifacts/repo-security/drift.md
           rc=${PIPESTATUS[0]}
+          set -e
           cat artifacts/repo-security/drift.md >> "$GITHUB_STEP_SUMMARY"
           if [ "$rc" -eq 1 ]; then
             echo "::error::Repository security DRIFT_DETECTED"; exit 1
