@@ -99,6 +99,8 @@ const RELAYED_RESPONSE_HEADERS = [
   'content-disposition',
   'x-report-state',
   'x-manifest-hash',
+  'x-report-id',
+  'x-report-version',
 ] as const;
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [

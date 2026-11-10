@@ -16,11 +16,18 @@ Route ordering note:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine, set_tenant_context
+from api.field_assessment import (
+    EngagementReportListResponse,
+    EngagementReportSummary,
+    _authoritative_report_state,
+    _customer_report_status,
+)
+from services.field_assessment.store import EngagementNotFound, get_engagement
 from services.engagement_portal.engine import EngagementPortalEngine
 from services.engagement_portal.schemas import (
     ActivityFeedResponse,
@@ -32,7 +39,6 @@ from services.engagement_portal.schemas import (
     PreferencesResponse,
     RecordActivityRequest,
     RemediationWorkspaceResponse,
-    ReportWorkspaceResponse,
     SearchResponse,
     TimelineResponse,
     TransparencyWorkspaceResponse,
@@ -143,22 +149,70 @@ def portal_engagement_evidence(
 
 @router.get(
     "/portal/engagement/reports",
-    dependencies=[Depends(require_scopes("portal:read"))],
-    response_model=ReportWorkspaceResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+    response_model=EngagementReportListResponse,
 )
 def portal_engagement_reports(
     request: Request,
+    engagement_id: str | None = Query(default=None, min_length=1),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-) -> ReportWorkspaceResponse:
+) -> EngagementReportListResponse:
+    """Compatibility adapter over the canonical Field Assessment report store."""
     tenant_id = require_bound_tenant(request)
+    if not engagement_id:
+        # Never fall back to the legacy tenant-wide report authority.
+        return EngagementReportListResponse(items=[], limit=limit, offset=offset, total=0)
+    portal_engagement_id = getattr(request.state, "portal_engagement_id", None)
+    if (request.headers.get("x-portal-source") == "client-portal") and (
+        portal_engagement_id != engagement_id
+    ):
+        raise HTTPException(status_code=404, detail="Engagement not found")
     engine = get_engine()
     with Session(engine) as db:
         set_tenant_context(db, tenant_id)
-        svc = EngagementPortalEngine(db, tenant_id=tenant_id)
-        result = svc.get_report_workspace(limit=limit, offset=offset)
-        db.commit()
-    return result
+        try:
+            get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+        except EngagementNotFound as exc:
+            raise HTTPException(status_code=404, detail="Engagement not found") from exc
+        from services.governance.report.versioning import list_versions
+
+        versions = list_versions(
+            db, tenant_id=tenant_id, engagement_id=engagement_id
+        )
+        page = versions[offset : offset + limit]
+        items = []
+        for report in page:
+            state, _ = _authoritative_report_state(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                record=report,
+            )
+            items.append(
+                EngagementReportSummary(
+                    report_id=report.id,
+                    version=report.version,
+                    status=_customer_report_status(state),
+                    compiled_at=report.generated_at,
+                    compiled_by=None,
+                    report_type=report.report_type,
+                    qa_approved_by=None,
+                    qa_approved_at=report.qa_approved_at,
+                    report_state={
+                        "state": state.get("state", "UNKNOWN"),
+                        "marking": state.get("marking"),
+                        "release_blockers": state.get("release_blockers", []),
+                    },
+                    manifest_hash=report.manifest_hash,
+                )
+            )
+        return EngagementReportListResponse(
+            items=items,
+            limit=limit,
+            offset=offset,
+            total=len(versions),
+        )
 
 
 # ---------------------------------------------------------------------------

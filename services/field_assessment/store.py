@@ -117,9 +117,14 @@ def list_engagements(
     status_filter: str | None,
     limit: int,
     cursor: str | None,
+    engagement_ids: set[str] | None = None,
 ) -> list[FaEngagement]:
     limit = min(limit, MAX_PAGE_SIZE)
     stmt = select(FaEngagement).where(FaEngagement.tenant_id == tenant_id)
+    if engagement_ids is not None:
+        if not engagement_ids:
+            return []
+        stmt = stmt.where(FaEngagement.id.in_(engagement_ids))
     if status_filter:
         stmt = stmt.where(FaEngagement.status == status_filter)
     if cursor:

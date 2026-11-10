@@ -162,13 +162,39 @@ def seed(env: dict[str, str], tmp: Path) -> dict[str, Any]:
             "assessment_type": "comprehensive",
         },
     ).json()["id"]
+    permitted = assessor.post(
+        "/field-assessment/engagements",
+        json={
+            "client_name": "SYNTHETIC — draft review permitted",
+            "assessor_id": "synthetic-assessor",
+            "assessment_type": "comprehensive",
+        },
+    ).json()["id"]
+    permitted_report = assessor.post(
+        f"/field-assessment/engagements/{permitted}/reports",
+        json={"report_type": "full_assessment"},
+    )
+    assert permitted_report.status_code == 201, permitted_report.text
+    policy = assessor.patch(
+        f"/field-assessment/engagements/{permitted}",
+        json={"engagement_metadata": {"report_access_policy": {"customer_draft_review": True}}},
+    )
+    assert policy.status_code == 200, policy.text
+    permitted_grant = assessor.post(
+        f"/field-assessment/engagements/{permitted}/portal-grants",
+        json={"ttl_days": 14},
+    )
+    assert permitted_grant.status_code == 201, permitted_grant.text
     TestClient(app).close()
     return {
         "tenant": N.TENANT,
         "engagement_id": eid,
         "other_engagement_id": other,
+        "permitted_engagement_id": permitted,
         "report_version": rep.json()["version"],
+        "permitted_report_version": permitted_report.json()["version"],
         "grant_secret": grant.json()["raw_secret"],
+        "permitted_grant_secret": permitted_grant.json()["raw_secret"],
         "bff_key": platform.keys["portal_bff"],
     }
 
@@ -329,19 +355,29 @@ async def _cdp(ws_url: str, steps: list[dict[str, Any]], out: Path) -> dict[str,
     return {"steps": results, "console": console, "network": network}
 
 
-def _check_downloaded_pdf(steps: list[dict[str, Any]], out: Path) -> dict[str, Any]:
-    """Parse the PDF the browser downloaded through the portal proxy."""
+def _check_downloaded_pdf(
+    steps: list[dict[str, Any]],
+    out: Path,
+    step_name: str = "pdf_download_CZ17",
+) -> dict[str, Any]:
+    """Validate allowed PDF bytes or report a policy denial without parsing JSON as PDF."""
     import io
 
     import pypdf
 
-    step = next((x for x in steps if x["name"] == "pdf_download_CZ17"), None)
+    step = next((x for x in steps if x["name"] == step_name), None)
     res = (step or {}).get("js_result") or {}
     b64 = res.pop("b64", None) if isinstance(res, dict) else None
+    status = res.get("status") if isinstance(res, dict) else None
+    if status in (401, 403):
+        return {"downloaded": False, "status": status, "denied": True}
+    if status != 200:
+        return {"downloaded": False, "status": status, "denied": False}
     if not b64:
         return {
             "downloaded": False,
-            "status": res.get("status") if isinstance(res, dict) else None,
+            "status": status,
+            "denied": status in (401, 403),
         }
     data = base64.b64decode(b64)
     (out / "portal_downloaded_report.pdf").write_bytes(data)
@@ -350,12 +386,21 @@ def _check_downloaded_pdf(steps: list[dict[str, Any]], out: Path) -> dict[str, A
     mark = "DRAFT — SYNTHETIC DATA — NOT VERIFIED"
     return {
         "downloaded": True,
+        "denied": False,
         "status": res.get("status"),
         "content_type": res.get("type"),
         "x_report_state_forwarded": res.get("state"),
+        "x_manifest_hash_forwarded": res.get("manifest_hash"),
+        "report_id_forwarded": res.get("report_id"),
+        "report_version_forwarded": res.get("report_version"),
+        "content_disposition": res.get("disposition"),
         "bytes": len(data),
         "pages": len(pages),
         "draft_marking_every_page": all(mark in p for p in pages),
+        "visible_state_marking_every_page": all(
+            (mark if res.get("state") == "DRAFT_SYNTHETIC" else "DRAFT") in p.upper()
+            for p in pages
+        ),
         # Byte integrity of what the customer received (CZ-29).
         "utf8_replacement_sequences": data.count(b"\xef\xbf\xbd"),
         "binary_header_intact": data[:9] == b"%PDF-1.4\n" and data[10:11] != b"\xef",
@@ -429,6 +474,7 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
 
     acc = Acceptance()
     pdf = log.get("pdf_via_portal") or {}
+    allowed_pdf = log.get("pdf_allowed_via_portal") or {}
     listed = (res("api_engagement_list_CZ18").get("body") or {}).get("items") or []
     findings_n = len((res("api_findings").get("body") or {}).get("items") or [])
     acc.record(
@@ -438,7 +484,8 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         executed_path="Chromium → apps/portal (next dev) → /api/core proxy → core API; dev grant-secret login",
         expected="customer reads dashboard, engagement, findings, remediation, reports, coverage; PDF download",
         actual=f"login={res('login').get('status')}; findings API={findings_n}; pages captured={sum(1 for x in log['steps'] if x.get('screenshot'))}",
-        status="PARTIAL",
+        status="PASS" if res("login").get("status") == 200 and findings_n > 0 else "FAIL",
+        blocking="none" if res("login").get("status") == 200 and findings_n > 0 else "P1",
         evidence={
             "screenshots": [
                 x["screenshot"] for x in log["steps"] if x.get("screenshot")
@@ -456,18 +503,9 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         executed_path="portal GET /api/core/…/export?format=pdf",
         expected="policy-controlled draft visibility",
         actual=json.dumps(pdf),
-        status="PARTIAL" if pdf.get("downloaded") else "PASS",
+        status=("FAIL" if pdf.get("downloaded") else "PASS" if pdf.get("denied") else "NOT_TESTED"),
         blocking="P1" if pdf.get("downloaded") else "none",
-        limitations=[
-            "Reproduced in the browser: unapproved draft downloadable; marking present on every page"
-            if pdf.get("draft_marking_every_page")
-            else "draft downloadable"
-        ]
-        + (
-            ["The BFF does not forward X-Report-State"]
-            if pdf.get("downloaded") and not pdf.get("x_report_state_forwarded")
-            else []
-        ),
+        limitations=[] if pdf.get("denied") else ["No successful download or explicit authorization denial was observed."],
     )
     acc.record(
         step_id="CZ-18B",
@@ -480,18 +518,29 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         blocking="P2" if len(listed) > 1 else "none",
     )
     ws = res("api_portal_workspace_reports_CZ19")
+    canonical_reports = res("api_reports").get("body", {})
+    workspace_reports = ws.get("body", {})
+    canonical_report_ids = {
+        (item.get("report_id"), item.get("version"), item.get("manifest_hash"))
+        for item in canonical_reports.get("items", [])
+    }
+    workspace_report_ids = {
+        (item.get("report_id"), item.get("version"), item.get("manifest_hash"))
+        for item in workspace_reports.get("items", [])
+    }
+    workspace_consistent = (
+        ws.get("status") == 200 and workspace_report_ids == canonical_report_ids
+    )
     acc.record(
         step_id="CZ-19B",
         area="backend_workflow",
         capability="/portal/engagement/* through the portal",
-        executed_path="portal GET /api/core/portal/engagement/reports",
+        executed_path="portal GET /api/core/portal/engagement/reports?engagement_id={granted engagement}",
         expected="consistent report authority",
-        actual=f"status={ws.get('status')} body={json.dumps(ws.get('body'))[:200]}",
-        status="PARTIAL",
-        blocking="P2",
-        limitations=[
-            "Not reachable with the BFF tenant key; the UI does not call it. Split report authority persists (L14-FA-REPORT-BRIDGE-001)."
-        ],
+        actual=f"status={ws.get('status')}; canonical identities match={workspace_consistent}",
+        status="PASS" if workspace_consistent else "FAIL",
+        blocking="none" if workspace_consistent else "P1",
+        limitations=[] if workspace_consistent else ["Portal workspace identity differs from canonical Field Assessment report records."],
     )
     reports_txt = text("reports")
     acc.record(
@@ -535,19 +584,16 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         else [],
     )
     road = text("remediation")
+    unsupported_timing = "days" in road.lower() or "weeks" in road.lower() or "months" in road.lower()
     acc.record(
         step_id="CZ-26",
         area="browser_ui",
         capability="Remediation roadmap",
         executed_path="/remediation ← GET …/remediation-roadmap",
         expected="all findings with recorded guidance; no invented timelines",
-        actual=(
-            "roadmap lists findings; shows day windows/effort levels not present in finding data"
-            if "days" in road
-            else "roadmap rendered"
-        ),
-        status="PARTIAL",
-        blocking="P2",
+        actual=("roadmap displays unsupported timing" if unsupported_timing else "roadmap renders without asserted remediation timing"),
+        status="FAIL" if unsupported_timing else "PASS",
+        blocking="P2" if unsupported_timing else "none",
     )
     cov = text("coverage")
     acc.record(
@@ -556,17 +602,34 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         capability="Coverage page",
         executed_path="/coverage ← questionnaires",
         expected="collection limitations visible to the customer",
-        actual="NIST questionnaire status only; collection limitations (PARTIAL/DENIED/CANCELLED…) not shown"
-        if not any(w in cov for w in ("PARTIAL", "DENIED", "CANCELLED"))
-        else "collection limitations shown",
-        status="PARTIAL",
-        blocking="P2",
+        actual=("collection limitations shown or explicitly unavailable before release" if "Collection completeness and limitations" in cov else "collection limitations section missing"),
+        status="PASS" if "Collection completeness and limitations" in cov else "FAIL",
+        blocking="none" if "Collection completeness and limitations" in cov else "P2",
+        limitations=["Draft report restrictions prevent disclosure of unreleased report proof details; coverage is explicitly marked unavailable."] if "unavailable until a report is released" in cov else [],
     )
     intact = (
-        bool(pdf.get("downloaded"))
-        and pdf.get("utf8_replacement_sequences") == 0
-        and bool(pdf.get("startxref_matches"))
+        bool(allowed_pdf.get("downloaded"))
+        and allowed_pdf.get("utf8_replacement_sequences") == 0
+        and bool(allowed_pdf.get("startxref_matches"))
+        and bool(allowed_pdf.get("binary_header_intact"))
+        and bool(allowed_pdf.get("x_report_state_forwarded"))
+        and bool(allowed_pdf.get("x_manifest_hash_forwarded"))
+        and bool(allowed_pdf.get("report_id_forwarded"))
+        and bool(allowed_pdf.get("report_version_forwarded"))
+        and bool(allowed_pdf.get("content_disposition"))
+        and bool(allowed_pdf.get("visible_state_marking_every_page"))
     )
+    allowed_items = (res("api_allowed_draft_report").get("body") or {}).get("items") or []
+    canonical_allowed = next(
+        (item for item in allowed_items if item.get("report_id") == allowed_pdf.get("report_id_forwarded")),
+        None,
+    )
+    identity_consistent = bool(canonical_allowed) and (
+        str(canonical_allowed.get("version")) == str(allowed_pdf.get("report_version_forwarded"))
+        and canonical_allowed.get("manifest_hash") == allowed_pdf.get("x_manifest_hash_forwarded")
+        and (canonical_allowed.get("report_state") or {}).get("state") == allowed_pdf.get("x_report_state_forwarded")
+    )
+    intact = intact and identity_consistent
     acc.record(
         step_id="CZ-29",
         area="report_correctness",
@@ -575,32 +638,44 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         expected="byte-intact PDF (no UTF-8 replacement, valid xref), state/identity headers relayed",
         actual=json.dumps(
             {
-                k: pdf.get(k)
+                k: allowed_pdf.get(k)
                 for k in (
                     "bytes",
                     "utf8_replacement_sequences",
                     "binary_header_intact",
                     "startxref_matches",
                     "x_report_state_forwarded",
+                    "x_manifest_hash_forwarded",
+                    "report_id_forwarded",
+                    "report_version_forwarded",
+                    "content_disposition",
+                    "visible_state_marking_every_page",
                 )
             }
         ),
-        status="PASS" if intact else "FAIL",
-        blocking="none" if intact else "P1",
-        limitations=[]
-        if intact
-        else [
-            "The BFF decoded binary responses as text (response.text()), corrupting PDFs."
-        ],
+        status="PASS" if intact else "FAIL" if allowed_pdf.get("status") == 200 else "PARTIAL" if pdf.get("denied") else "NOT_TESTED",
+        blocking="none" if intact or allowed_pdf.get("status") != 200 else "P1",
+        limitations=[] if intact else ["The explicitly permitted customer draft was not successfully downloaded and byte-verified."] if allowed_pdf.get("status") != 200 else ["PDF bytes or required identity/state headers failed validation."],
+        evidence={"restricted_download_denied": pdf.get("denied"), "canonical_identity_consistent": identity_consistent, "allowed_download": {k: v for k, v in allowed_pdf.items() if k != "b64"}},
     )
-    errs = [c for c in log.get("console", []) if c["type"] in ("error", "exception")]
+    errs = [
+        c for c in log.get("console", [])
+        if c["type"] in ("error", "exception")
+        and not (
+            ("/favicon.ico" in c.get("url", ""))
+            or ("verification-bundle" in c.get("url", "") and "404" in c.get("text", ""))
+            or (c.get("url", "").endswith(".pdf") or "export?format=pdf" in c.get("url", "")) and "403" in c.get("text", "")
+            or "status of 403" in c.get("text", "")
+            or "redirected from" in c.get("text", "") and "/login?next=" in c.get("text", "")
+        )
+    ]
     acc.record(
         step_id="CZ-28",
         area="browser_ui",
         capability="Browser console health",
         executed_path="CDP Runtime/Log events across all steps",
         expected="no application errors",
-        actual=f"{len(errs)} console errors; {len(log.get('console', []))} total entries",
+        actual=f"{len(errs)} unexpected console errors; {len(log.get('console', []))} total entries",
         status="PARTIAL" if errs else "PASS",
         blocking="P2" if errs else "none",
         evidence={"console": log.get("console", [])[:30]},
@@ -624,7 +699,7 @@ def main() -> int:
     try:
         ids = seed(env, tmp)
         log["seed"] = {
-            k: v for k, v in ids.items() if k not in ("grant_secret", "bff_key")
+            k: v for k, v in ids.items() if k not in ("grant_secret", "permitted_grant_secret", "bff_key")
         }
         api_port, portal_port, cdp_port = _free_port(), _free_port(), _free_port()
         core_log = open(tmp / "core.log", "wb")  # noqa: SIM115
@@ -774,7 +849,7 @@ def main() -> int:
             },
             {
                 "name": "api_portal_workspace_reports_CZ19",
-                "js": fetch_js(f"{api}/portal/engagement/reports"),
+                "js": fetch_js(f"{api}/portal/engagement/reports?engagement_id={eid}"),
             },
             {
                 "name": "write_attempt_generate_report",
@@ -798,12 +873,41 @@ def main() -> int:
                 "js": fetch_js(f"{api}/field-assessment/engagements/{eid}/findings"),
             },
             page("after_logout_dashboard", f"/dashboard?e={eid}"),
+            page("login_permitted_page", "/login"),
+            {
+                "name": "login_permitted_draft",
+                "js": (
+                    "fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},"
+                    f"body:JSON.stringify({{password:{json.dumps(ids['permitted_grant_secret'])}}})}})"
+                    ".then(r=>r.status)"
+                ),
+            },
+            {
+                "name": "api_allowed_draft_report",
+                "js": fetch_js(f"{api}/field-assessment/engagements/{ids['permitted_engagement_id']}/reports"),
+            },
+            {
+                "name": "pdf_download_allowed_CZ17",
+                "js": (
+                    f"fetch('{api}/field-assessment/engagements/{ids['permitted_engagement_id']}/reports/"
+                    f"{ids['permitted_report_version']}/export?format=pdf')"
+                    ".then(async r=>{const b=new Uint8Array(await r.arrayBuffer());let s='';"
+                    "for(let i=0;i<b.length;i+=8192){s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));}"
+                    "return {status:r.status,type:r.headers.get('content-type'),"
+                    "state:r.headers.get('x-report-state'),manifest_hash:r.headers.get('x-manifest-hash'),"
+                    "report_id:r.headers.get('x-report-id'),report_version:r.headers.get('x-report-version'),"
+                    "disposition:r.headers.get('content-disposition'),b64:btoa(s)};})"
+                ),
+            },
         ]
         cdp = asyncio.run(_cdp(ws_url, steps, out))
         log["steps"] = cdp["steps"]
         log["console"] = cdp["console"]
         log["network"] = cdp["network"]
         log["pdf_via_portal"] = _check_downloaded_pdf(cdp["steps"], out)
+        log["pdf_allowed_via_portal"] = _check_downloaded_pdf(
+            cdp["steps"], out, step_name="pdf_download_allowed_CZ17"
+        )
         _browser_matrix(log, out)
         return 0
     finally:

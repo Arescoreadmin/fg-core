@@ -718,10 +718,43 @@ class PortalGrantService:
             pass
 
         if engagement_id is None:
+            # A grant-authenticated portal session inherits the scope of the
+            # exact grant used to create it. It must not inherit every other
+            # grant held by the same client.
+            grant_engagement_id: str | None = None
+            try:
+                credential = ca.get_credential(
+                    get_engine(), session.auth_grant_id, tenant_id
+                )
+                if credential.status != "active" or (
+                    credential.expires_at is not None
+                    and credential.expires_at <= datetime.now(timezone.utc)
+                ):
+                    return _invalid
+                metadata = credential.metadata or {}
+                grant_engagement_id = metadata.get("engagement_id")
+            except CredentialNotFoundError:
+                legacy_grant = db.execute(
+                    select(PortalGrant).where(
+                        PortalGrant.id == session.auth_grant_id,
+                        PortalGrant.tenant_id == tenant_id,
+                        PortalGrant.client_id == session.client_id,
+                        PortalGrant.status == "active",
+                        PortalGrant.revoked_at.is_(None),
+                        PortalGrant.expires_at > now_iso,
+                    )
+                ).scalar_one_or_none()
+                grant_engagement_id = (
+                    legacy_grant.engagement_id if legacy_grant is not None else None
+                )
+            except Exception:
+                return _invalid
+            if not grant_engagement_id:
+                return _invalid
             return SessionValidationResult(
                 ok=True,
                 client_id=session.client_id,
-                engagement_id=None,
+                engagement_id=grant_engagement_id,
                 denial_code=None,
                 denial_reason=None,
             )

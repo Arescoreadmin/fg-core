@@ -109,7 +109,7 @@ function FindingCard({
               {explanation.affected_entities.length > 0 && (
                 <ul className="space-y-0.5 pl-3">
                   {explanation.affected_entities.map((e, i) => (
-                    <li key={i} className="text-xs text-muted list-disc">
+                    <li key={`${e.entity_type}:${e.label}`} className="text-xs text-muted list-disc">
                       <span className="font-semibold text-foreground">{e.count}</span>{' '}
                       {e.label}
                     </li>
@@ -134,7 +134,7 @@ function FindingCard({
                   </p>
                   <ol className="space-y-1.5 pl-1">
                     {explanation.remediation_steps.map((step, i) => (
-                      <li key={i} className="flex gap-2 text-xs text-foreground leading-relaxed">
+                      <li key={`${finding.finding_id}:step:${step}`} className="flex gap-2 text-xs text-foreground leading-relaxed">
                         <span className="shrink-0 font-semibold text-muted w-4">{i + 1}.</span>
                         <span>{step}</span>
                       </li>

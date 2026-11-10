@@ -849,6 +849,15 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
     codes = {k: v.status_code for k, v in reads.items()}
     for k in ("findings", "reports"):
         assert codes[k] == 200, (k, reads[k].text[:200])
+    report_items = reads["reports"].json().get("items", [])
+    current_report = next((item for item in report_items if item["version"] == version), None)
+    assert current_report is not None, "canonical report missing from customer workspace list"
+    assert current_report["status"] in {
+        "draft", "synthetic_draft", "pending_qa", "release_blocked", "rejected", "unknown"
+    }
+    assert current_report.get("compiled_by") is None
+    assert current_report["report_id"]
+    assert current_report.get("manifest_hash")
     # L14-ASSESSMENT-ASSURANCE-001 (CZ-17): unreleased content is internal.
     assert codes["pdf"] == 403, reads["pdf"].text[:200]
     assert reads["pdf"].json()["detail"]["code"] == "REPORT_DRAFT_ACCESS_DENIED"
@@ -904,6 +913,7 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
         if enumerate_all.status_code == 200
         else []
     )
+    assert listed == [eid], f"grant-scoped list exposed {listed!r}; expected only {eid!r}"
     for name, r in (
         ("cross_engagement", cross_engagement),
         ("no_session", no_session),
@@ -984,7 +994,19 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
     from api.auth_scopes import mint_key
 
     ws_key = mint_key("portal:read", "governance:read", tenant_id=N.TENANT)
-    ep = platform.client(**{"X-API-Key": ws_key}).get("/portal/engagement/reports")
+    ep = platform.client(**{"X-API-Key": ws_key}).get(
+        "/portal/engagement/reports", params={"engagement_id": eid}
+    )
+    canonical_ids = {
+        (item["report_id"], item["version"], item.get("manifest_hash"))
+        for item in reads["reports"].json().get("items", [])
+    }
+    workspace_ids = {
+        (item["report_id"], item["version"], item.get("manifest_hash"))
+        for item in ep.json().get("items", [])
+    }
+    assert ep.status_code == 200, ep.text
+    assert workspace_ids == canonical_ids
     steps.append(
         dict(
             step_id="CZ-19",
@@ -992,15 +1014,11 @@ def _portal_probe(platform, eid: str, version: int) -> list[dict[str, Any]]:
             capability="Engagement-portal workspace API (/portal/engagement/*)",
             executed_path="GET /portal/engagement/reports",
             expected="field-assessment report visible in the portal workspace",
-            actual=f"status={ep.status_code}; items={len(_items(ep))}",
-            status="PARTIAL",
-            blocking="P2",
-            limitations=[
-                "The workspace API reads report_authority fa_report, not governance_reports where the "
-                "field-assessment pipeline writes; the portal UI uses /field-assessment routes instead. "
-                "Two report authorities are visible to customers (L14-FA-REPORT-BRIDGE-001)."
-            ],
-            follow_up="L14-FA-REPORT-BRIDGE-001",
+            actual=f"status={ep.status_code}; workspace/canonical identities match={workspace_ids == canonical_ids}",
+            status="PASS",
+            blocking="none",
+            limitations=[],
+            follow_up=None,
         )
     )
     return steps

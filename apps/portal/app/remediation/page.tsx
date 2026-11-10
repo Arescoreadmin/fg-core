@@ -69,7 +69,9 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 function OverviewBanner({ roadmap }: { roadmap: RemediationRoadmap }) {
-  const delta = roadmap.projected_coverage_pct - roadmap.current_coverage_pct;
+  const delta = roadmap.projected_coverage_pct !== null && roadmap.current_coverage_pct !== null
+    ? roadmap.projected_coverage_pct - roadmap.current_coverage_pct
+    : null;
   const totalFindings = roadmap.total_open_findings;
   const immediateCount = roadmap.phases.find((p) => p.phase_id === 'immediate')?.findings.length ?? 0;
 
@@ -77,7 +79,7 @@ function OverviewBanner({ roadmap }: { roadmap: RemediationRoadmap }) {
     <div className="rounded border border-border bg-surface-2 p-5 space-y-4">
       <div className="flex flex-wrap gap-6 items-start">
         <div>
-          <p className="text-3xl font-bold text-foreground">{roadmap.current_coverage_pct}%</p>
+          <p className="text-3xl font-bold text-foreground">{roadmap.current_coverage_pct === null ? 'Unavailable' : `${roadmap.current_coverage_pct}%`}</p>
           <p className="text-xs text-muted mt-0.5">Current NIST AI RMF coverage</p>
         </div>
         <div className="flex items-center gap-2 self-center">
@@ -86,17 +88,17 @@ function OverviewBanner({ roadmap }: { roadmap: RemediationRoadmap }) {
           <div className="h-px w-8 bg-border" />
         </div>
         <div>
-          <p className="text-3xl font-bold text-green-300">{roadmap.projected_coverage_pct}%</p>
+          <p className="text-3xl font-bold text-foreground">{roadmap.projected_coverage_pct === null ? 'Unavailable' : `${roadmap.projected_coverage_pct}%`}</p>
           <p className="text-xs text-muted mt-0.5">
             Projected coverage
-            {delta > 0 && (
+            {delta !== null && delta > 0 && (
               <span className="ml-1.5 text-green-400 font-semibold">+{delta.toFixed(1)}pp</span>
             )}
           </p>
         </div>
       </div>
 
-      <div className="space-y-1.5">
+      {roadmap.current_coverage_pct !== null && roadmap.projected_coverage_pct !== null && <div className="space-y-1.5">
         <div className="flex justify-between text-xs text-muted">
           <span>Today</span>
           <span>After all phases</span>
@@ -108,14 +110,14 @@ function OverviewBanner({ roadmap }: { roadmap: RemediationRoadmap }) {
           />
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-green-500/30 transition-all duration-700"
-            style={{ width: `${roadmap.projected_coverage_pct}%` }}
+            style={{ width: `${roadmap.projected_coverage_pct ?? 0}%` }}
           />
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-green-500/70 transition-all duration-700"
-            style={{ width: `${roadmap.current_coverage_pct}%` }}
+            style={{ width: `${roadmap.current_coverage_pct ?? 0}%` }}
           />
         </div>
-      </div>
+      </div>}
 
       <div className="flex flex-wrap gap-4 text-xs text-muted pt-1">
         <span>
@@ -297,7 +299,7 @@ function FindingCard({
         <SeverityBadge severity={finding.severity} />
         <span className="flex-1 min-w-0 text-sm font-medium text-foreground">{finding.title}</span>
         <span className={`text-xs font-medium shrink-0 ${EFFORT_CLASS[finding.effort_level] ?? 'text-muted'}`}>
-          {EFFORT_LABEL[finding.effort_level]}
+          {finding.effort_level === 'not_estimated' ? 'Effort not estimated' : EFFORT_LABEL[finding.effort_level]}
         </span>
         <span className="text-muted text-sm">{expanded ? '▲' : '▼'}</span>
       </div>
@@ -361,7 +363,7 @@ function PhaseCard({
             <span>
               <span className="font-semibold text-foreground">{phase.findings.length}</span> finding{phase.findings.length !== 1 ? 's' : ''}
             </span>
-            {phase.compliance_delta_pct > 0 && (
+            {phase.compliance_delta_pct !== null && phase.compliance_delta_pct > 0 && (
               <span className="text-green-400 font-semibold">
                 +{phase.compliance_delta_pct}pp coverage
               </span>

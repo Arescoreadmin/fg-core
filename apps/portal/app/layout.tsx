@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { COOKIE_NAME, verifySessionToken } from '@/lib/session';
 import { LogoutButton } from '@/components/LogoutButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PORTAL_REGISTRY } from '@fg/navigation';
@@ -18,7 +20,9 @@ const NAV_LINKS = PORTAL_REGISTRY.getAllItems()
   })
   .map((item) => ({ href: item.route, label: item.title }));
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const sessionToken = cookies().get(COOKIE_NAME)?.value;
+  const showAuthenticatedNav = Boolean(await verifySessionToken(sessionToken));
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -30,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-sm font-semibold text-foreground hover:text-primary transition-colors">
               FrostGate <span className="text-muted font-normal">Client Portal</span>
             </Link>
-            <nav aria-label="Main navigation">
+            {showAuthenticatedNav && <nav aria-label="Main navigation">
               <ul className="flex items-center gap-1 flex-wrap">
                 {NAV_LINKS.map((link) => (
                   <li key={link.href}>
@@ -49,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <LogoutButton />
                 </li>
               </ul>
-            </nav>
+            </nav>}
           </div>
         </header>
 

@@ -79,14 +79,14 @@ def svc(db):
 @pytest.fixture()
 def ro_client(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("portal:read", tenant_id=_TENANT)
+    key = mint_key("governance:read", tenant_id=_TENANT)
     return TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
 
 
 @pytest.fixture()
 def wrong_scope_client(build_app):
     app = build_app(auth_enabled=True)
-    key = mint_key("governance:read", tenant_id=_TENANT)
+    key = mint_key("portal:read", tenant_id=_TENANT)
     return TestClient(app, headers={"X-API-Key": key, "X-Tenant-Id": _TENANT})
 
 

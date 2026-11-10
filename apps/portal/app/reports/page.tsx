@@ -14,11 +14,17 @@ import { getStoredEngagementId } from '@/lib/engagementStore';
 
 const STATUS_CLASS: Record<string, string> = {
   finalized: 'border-green-500/30 bg-green-500/5 text-green-300',
-  ready: 'border-green-500/30 bg-green-500/5 text-green-300',
+  finalized_limited: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
+  release_blocked: 'border-red-500/30 bg-red-500/5 text-red-300',
+  pending_qa: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
   generating: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
   draft: 'border-border bg-surface-3 text-muted',
   failed: 'border-red-500/30 bg-red-500/5 text-red-300',
   superseded: 'border-border bg-surface-3 text-muted',
+  synthetic_draft: 'border-amber-500/30 bg-amber-500/5 text-amber-200',
+  rejected: 'border-red-500/30 bg-red-500/5 text-red-300',
+  unknown: 'border-border bg-surface-3 text-muted',
+  withdrawn: 'border-border bg-surface-3 text-muted',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -157,11 +163,7 @@ function ReportRow({ report, engagementId }: ReportRowProps) {
         </span>
       </div>
 
-      {report.compiled_by && (
-        <p className="text-xs text-muted">
-          Compiled by: <span className="text-foreground">{report.compiled_by}</span>
-        </p>
-      )}
+      <p className="text-xs text-muted">Compiled by: <span className="text-foreground">Not recorded</span></p>
 
       <div className="flex flex-wrap gap-2 pt-1">
         <button

@@ -14939,6 +14939,17 @@
             ],
             "title": "Compiled By"
           },
+          "manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Hash"
+          },
           "qa_approved_at": {
             "anyOf": [
               {
@@ -14964,6 +14975,17 @@
           "report_id": {
             "title": "Report Id",
             "type": "string"
+          },
+          "report_state": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report State"
           },
           "report_type": {
             "anyOf": [
@@ -15190,8 +15212,16 @@
             "title": "Findings By Severity",
             "type": "object"
           },
+          "high_findings_count": {
+            "title": "High Findings Count",
+            "type": "integer"
+          },
           "open_findings_count": {
             "title": "Open Findings Count",
+            "type": "integer"
+          },
+          "resolved_findings_count": {
+            "title": "Resolved Findings Count",
             "type": "integer"
           },
           "schema_version": {
@@ -15239,6 +15269,8 @@
           "total_evidence_links",
           "findings_by_severity",
           "open_findings_count",
+          "resolved_findings_count",
+          "high_findings_count",
           "critical_findings_count",
           "schema_version"
         ],
@@ -34476,8 +34508,15 @@
       "RemediationPhase": {
         "properties": {
           "compliance_delta_pct": {
-            "title": "Compliance Delta Pct",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Delta Pct"
           },
           "findings": {
             "items": {
@@ -34693,8 +34732,15 @@
       "RemediationRoadmapResponse": {
         "properties": {
           "current_coverage_pct": {
-            "title": "Current Coverage Pct",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Coverage Pct"
           },
           "engagement_id": {
             "title": "Engagement Id",
@@ -34713,8 +34759,15 @@
             "type": "array"
           },
           "projected_coverage_pct": {
-            "title": "Projected Coverage Pct",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projected Coverage Pct"
           },
           "schema_version": {
             "default": "1.0",
@@ -36270,128 +36323,6 @@
           "framework_count"
         ],
         "title": "ReportVersionResponse",
-        "type": "object"
-      },
-      "ReportWorkspaceItem": {
-        "additionalProperties": false,
-        "properties": {
-          "has_html": {
-            "title": "Has Html",
-            "type": "boolean"
-          },
-          "has_json": {
-            "title": "Has Json",
-            "type": "boolean"
-          },
-          "has_pdf": {
-            "title": "Has Pdf",
-            "type": "boolean"
-          },
-          "lifecycle_state": {
-            "title": "Lifecycle State",
-            "type": "string"
-          },
-          "manifest_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manifest Hash"
-          },
-          "published_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Published At"
-          },
-          "quality_grade": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quality Grade"
-          },
-          "report_id": {
-            "title": "Report Id",
-            "type": "string"
-          },
-          "report_ref": {
-            "title": "Report Ref",
-            "type": "string"
-          },
-          "report_type": {
-            "title": "Report Type",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "trust_verified": {
-            "title": "Trust Verified",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "report_id",
-          "report_ref",
-          "report_type",
-          "lifecycle_state",
-          "title",
-          "quality_grade",
-          "published_at",
-          "has_pdf",
-          "has_html",
-          "has_json",
-          "manifest_hash",
-          "trust_verified"
-        ],
-        "title": "ReportWorkspaceItem",
-        "type": "object"
-      },
-      "ReportWorkspaceResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ReportWorkspaceItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "offset",
-          "limit"
-        ],
-        "title": "ReportWorkspaceResponse",
         "type": "object"
       },
       "ReproduceRequest": {
@@ -108305,8 +108236,26 @@
     },
     "/portal/engagement/reports": {
       "get": {
+        "description": "Compatibility adapter over the canonical Field Assessment report store.",
         "operationId": "portal_engagement_reports_portal_engagement_reports_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "engagement_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engagement Id"
+            }
+          },
           {
             "in": "query",
             "name": "limit",
@@ -108352,7 +108301,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReportWorkspaceResponse"
+                  "$ref": "#/components/schemas/EngagementReportListResponse"
                 }
               }
             },
