@@ -8208,3 +8208,15 @@ SOC review outcome: APPROVED. A narrow repair inside the existing access model. 
 **Evidence:** see `docs/security/L14_FRONTEND_DEPENDENCY_SECURITY.md` and `docs/ai/PR_FIX_LOG.md`. Fresh `npm audit` results (production, critical/high): portal 1/4 → 0/0, console 3/5 → 0/0, web 1/4 → 0/0; 0 critical/high in the full tree. `tests/tools/test_frontend_dependency_audit.py`: 28 passed. `check_security_regression_gates.py`: OK.
 
 SOC review outcome: APPROVED. A dependency remediation plus fail-closed enforcement; no control is relaxed.
+
+### Addendum (same PR) — exception registry tracked; console production config in Docker Compose CI
+
+- **Exception registry:** `tools/ci/frontend_dependency_exceptions.json` was force-added. `.gitignore` matches `tools/ci/*.json`, so it had been left out of the commit and the guard failed closed in CI, as designed.
+- **Startup validation:**
+  - Next 15 now executes the console's `instrumentation.ts`. On Next 14 that file was dormant.
+  - It runs `validateProductionConfig()`, which enforces the core URL, tenant, Auth.js `AUTH_SECRET`, internal gateway secret, the legacy fallback set to `false`, and no bootstrap-admin variables.
+  - `docker-compose.yml` now passes the stack's existing values to the console service. `docker-ci.yml` generates a per-run random `CONSOLE_AUTH_SECRET`.
+  - No check is relaxed, and unset values still fail closed.
+  - **Security effect:** before this PR, the CI console ran in production mode with no session secret, and next-auth beta.31 failed open on exactly that misconfiguration. Both gaps are now closed.
+
+SOC review outcome: APPROVED. A CI configuration change that satisfies an existing fail-closed control instead of bypassing it.

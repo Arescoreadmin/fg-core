@@ -407,6 +407,14 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://127.0.0.1:18080
+      # Next 15 runs instrumentation.ts by default, so the console's
+      # validateProductionConfig() now enforces these at startup (it was dormant
+      # on Next 14). Unset values stay empty and the console fails closed.
+      CORE_API_URL: ${CONSOLE_CORE_API_URL:-http://admin-gateway:8080}
+      CORE_TENANT_ID: ${CORE_TENANT_ID:-}
+      AUTH_SECRET: ${CONSOLE_AUTH_SECRET:-}
+      FG_INTERNAL_AUTH_SECRET: ${FG_INTERNAL_AUTH_SECRET:-}
+      FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK: "false"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s

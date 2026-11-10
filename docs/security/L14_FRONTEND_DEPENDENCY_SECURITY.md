@@ -79,6 +79,17 @@ Shared packages `@fg/ui` and `@fg/navigation` widen their peer range to `react ^
 - **One rule-scoped lint suppression.** eslint-config-next 15 flags the console sidebar's `<a href="/api/auth/logout">`. The target is a route handler that must be a full document navigation, because it clears session cookies and redirects to the IdP; a `next/link` would prefetch the logout route. The anchor is kept, with an `eslint-disable-next-line @next/next/no-html-link-for-pages` and a written rationale. The existing console test that forbids `<Link>` for logout still passes. No other rule is relaxed.
 - **jose Edge-runtime build warning (new, benign, fail-closed).** @auth/core 0.41.3 brings jose 6.2.17. Its JWE decompression path references `CompressionStream`, which the Edge build flags. That path runs only after authenticated decryption with the server `AUTH_SECRET`, only for `zip: "DEF"` (which Auth.js never emits), and is capped at 250 KB. Where the API is absent, jose throws, and the result is no session.
 
+- **Console startup validation is now live.** Next 15 runs `instrumentation.ts` by default. Next 14 needed `experimental.instrumentationHook`, which was never set, so the console's `validateProductionConfig()` was dormant until now. In any prod-like environment the console refuses to start unless all of these hold:
+  - `CORE_API_URL` and `CORE_TENANT_ID` are set;
+  - `AUTH_SECRET` is set;
+  - an internal gateway secret is set;
+  - `FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK=false`;
+  - no bootstrap-admin variables are present.
+
+  This is the intended fail-closed control. It surfaced in Docker Compose CI, where the console service received none of these values and returned 500. The fix is `docker-compose.yml`: the console now receives the stack's existing `CORE_TENANT_ID` and `FG_INTERNAL_AUTH_SECRET`, plus `CORE_API_URL` (the code's own default), `FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK=false`, and an `AUTH_SECRET` taken from a per-run random `CONSOLE_AUTH_SECRET` in docker-ci. Unset values stay empty, so the check keeps failing closed.
+
+  Combined with next-auth beta.32, a console with a missing session secret no longer treats every request as authenticated, as beta.31 did. **Pre-deploy check:** confirm that every console deployment environment satisfies this list before rolling out.
+
 ## 6. CI enforcement
 
 - **Workflow** `.github/workflows/frontend-dependency-security.yml`. It runs on every pull request (no path filter), pushes to main, a daily schedule (`17 6 * * *`) and `workflow_dispatch`.
@@ -149,6 +160,7 @@ No frontend route was added. The portal and console BFF proxies forward to the s
 ## 12. Release impact
 
 - **Runtime upgrade:** this upgrades the framework runtime of all three customer-facing apps.
+- **Console configuration:** the console now enforces its production configuration at startup (§5). A deployment missing a required variable will refuse to serve instead of running misconfigured.
 - **Deployment:** it requires the normal preview → staging deploy.
 - **Environment:** there is no environment-variable, secret, schema, migration or API-contract change.
 

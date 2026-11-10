@@ -1,0 +1,4 @@
+{
+  "_policy": "L14-FRONTEND-DEPENDENCY-SEC-001. An entry suppresses a blocking frontend advisory ONLY when approval_status is APPROVED, approved_by names the approving founder/security owner, owner is set, and expires is a date no more than 90 days ahead. Unapproved or expired entries are ignored (the advisory keeps blocking). Required fields: id, app, package, advisory (GHSA id or npm advisory source id), owner, expires, approval_status, approved_by, runtime_exposure, compensating_controls, remediation_plan. See docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md.",
+  "exceptions": []
+}

@@ -45,6 +45,11 @@
     - `make fg-fast`: 686 passed, 2 skipped, all checks passed.
   - **Gates:** route scopes, plane registry, SQL percent guard, secret scan, SOC review sync, `git diff --check`, ruff and mypy all pass.
   - **Browser acceptance** (existing `browser_acceptance.py`; Next 15 portal, synthetic Northstar, loopback only): 11/11 PASS. This covers dashboard 14 open / 2 critical, write denied 403, non-granted engagement 403, draft PDF 403, no data after logout, and allowed PDF byte-intact (`%PDF` header, startxref, report-state/manifest headers forwarded). There were 0 unexpected console errors. OIDC named-user login was NOT_TESTED (dev grant-secret path).
+- **Review fixes (Codex P1 and failing CI):**
+  - **Exception registry:** `tools/ci/frontend_dependency_exceptions.json` was matched by `.gitignore` (`tools/ci/*.json`), so `git add -A` silently skipped it. It is now force-added, like the other tracked `tools/ci/*.json` files. This fixes Guard and the two gate tests that need it.
+  - **Docker Compose console 500:** Next 15 executes `instrumentation.ts` by default, which activated the previously dormant `validateProductionConfig()`. The compose console service received none of its required variables.
+    - **Fix (infra and CI, called out):** `docker-compose.yml` passes `CORE_API_URL`, `CORE_TENANT_ID`, `AUTH_SECRET` (from `CONSOLE_AUTH_SECRET`), `FG_INTERNAL_AUTH_SECRET` and `FG_CONSOLE_ALLOW_LEGACY_INTERNAL_FALLBACK=false` to the console. `docker-ci.yml` generates a per-run random `CONSOLE_AUTH_SECRET`.
+    - **Validation not weakened:** unset values stay empty and still fail closed. A harness that runs the real `validateProductionConfig()` confirms that the old env throws all 5 errors, the new env passes, and the new env without `AUTH_SECRET` throws.
 - **Evidence:** `docs/security/L14_FRONTEND_DEPENDENCY_SECURITY.md`.
 
 ## fix(field-assessment): L14-ASSURANCE-P1-REPAIR-001 — RLS tenant context after report-access commits; release gate at the delivery transport boundary (branch fix/l14-assurance-p1-repair-001)
