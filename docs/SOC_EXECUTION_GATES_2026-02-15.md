@@ -8148,3 +8148,28 @@ SOC review outcome: APPROVED. AuthGate suffix exemption is narrowly scoped to tw
 - `make fg-fast` → all checks passed
 
 SOC review outcome: APPROVED. Inventory-only update registering six new authenticated field-assessment routes. No authentication, authorization, middleware, or policy logic changed. The route inventory gate itself is unmodified and remains fail-closed against unregistered routes.
+
+---
+
+## 2026-11-10 - fix: L14-ASSURANCE-P1-REPAIR-001 — RLS tenant context after report-access commits; release gate at delivery transport
+
+**Change scope:** P0 security repair of two Codex P1 findings on PR #816, both reproduced against main `c69f9d7f` before any change.
+
+**Security analysis:**
+
+1. **RLS is not weakened.** The forced policy on `governance_reports` and every other policy is unchanged. After the access-audit commit, the request re-binds `app.tenant_id` to the tenant the row was loaded under. That tenant was resolved server-side by `auth_ctx_db_session`; no request header, body or query value is used. A real-Postgres test confirms that the other tenant's report stays invisible after the re-bind and that the audit event is visible only to its own tenant.
+2. **Fail-closed delivery.**
+   - The governed-delivery execute route now refuses a QA-rejected version.
+   - It also runs the canonical release gate, `_require_production_qualified`: proof blockers, evidence re-verification, QA rejection of any version of the report record, the provenance decision, the truth gate and the bound qualification.
+   - The gate runs before the idempotency read and before transport, so a refused execution serves no bytes and writes no attempt row.
+   - Every field-assessment delivery pathway now applies the same gate: version deliver, governed-delivery authorize and governed-delivery execute.
+3. **No auth middleware, OPA policy, public path or CI gate changed.** No migration and no new route.
+
+**Evidence:**
+
+- Reproduction on PostgreSQL 16 (throwaway container, NOSUPERUSER/NOBYPASSRLS role): `ObjectDeletedError` on main; a superuser control does not reproduce, which explains why CI was green. The same script passes after the fix.
+- `tests/test_migrations_postgres_replay.py`: 16 passed on a fresh PostgreSQL 16 database. The new RLS tests fail on the pre-fix code.
+- `tests/test_assessment_assurance/test_release_boundary_repair.py`: 6 passed. The rejection and evidence cases fail on the pre-fix code.
+- Affected suites: 298 passed. Assessment-assurance suite: 54 passed.
+
+SOC review outcome: APPROVED. A narrow repair inside the existing access model. The tenant context is re-established from server-resolved state only, and the delivery transport now enforces the same canonical release gate as every other delivery path.

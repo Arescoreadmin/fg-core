@@ -816,3 +816,234 @@ def test_assessment_assurance_postgres_qa_and_provenance(_tx) -> None:
     d = aa.evaluate_engagement_provenance(db, tenant_id=tenant, engagement_id=eid)
     assert d.evidence_absent and d.to_trust_inputs().chain_valid is False
     db.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# L14-ASSURANCE-P1-REPAIR-001 — RLS tenant context across report-access commits
+#
+# The CI service user is a superuser and bypasses RLS, so these tests create
+# a NOSUPERUSER / NOBYPASSRLS login role (as production's restricted runtime
+# role) and use REAL commits: a savepoint-wrapped "commit" would keep the
+# transaction-local app.tenant_id alive and give a false green.  A control
+# assertion proves RLS is actually enforced for the probe role.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _rls_probe(_mig_engine):
+    """Restricted runtime role + synthetic report rows; dropped afterwards."""
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.orm import sessionmaker
+
+    role = f"fg_rls_probe_{uuid.uuid4().hex[:10]}"
+    password = uuid.uuid4().hex
+    tenant, other = _uid("rls-a"), _uid("rls-b")
+    ids: dict[str, str] = {}
+    with _mig_engine.begin() as su:
+        su.execute(
+            text(
+                f"CREATE ROLE {role} LOGIN PASSWORD '{password}' NOSUPERUSER NOBYPASSRLS"
+            )
+        )
+        su.execute(text(f"GRANT USAGE ON SCHEMA public TO {role}"))
+        su.execute(
+            text(
+                f"GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {role}"
+            )
+        )
+        su.execute(
+            text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}")
+        )
+        for t in (tenant, other):
+            _insert_tenant(su, t)
+            eid, rid = uuid.uuid4().hex, uuid.uuid4().hex[:32]
+            ids[t] = rid
+            ids[f"{t}:eng"] = eid
+            su.execute(
+                text(
+                    "INSERT INTO fa_engagements (id, tenant_id, client_name, assessor_id,"
+                    " assessment_type, status, engagement_metadata, schema_version,"
+                    " created_at, updated_at) VALUES (:e, :t, 'SYNTHETIC', 'a',"
+                    " 'comprehensive', 'in_progress', '{}', '1.0',"
+                    " '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z')"
+                ),
+                {"e": eid, "t": t},
+            )
+            su.execute(
+                text(
+                    "INSERT INTO governance_reports (id, assessment_id, tenant_id,"
+                    " engagement_id, version, schema_version, manifest_hash,"
+                    " report_json, generated_at, is_finalized) VALUES (:r, :e, :t, :e,"
+                    " 1, '1.0', :h, '{}', '2026-11-10T00:00:00Z', true)"
+                ),
+                {"r": rid, "e": eid, "t": t, "h": f"hash-{t}"},
+            )
+    url = make_url(str(_mig_engine.url)).set(username=role, password=password)
+    engine = create_engine(url, future=True)
+    # Same settings as api.db.get_sessionmaker (expire_on_commit defaults True).
+    sm = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
+    try:
+        yield sm, tenant, other, ids
+    finally:
+        engine.dispose()
+        with _mig_engine.begin() as su:
+            su.execute(text(f"DROP OWNED BY {role}"))
+            su.execute(text(f"DROP ROLE {role}"))
+
+
+def _bind(db, tenant: str) -> None:
+    from api.db import set_tenant_context
+
+    set_tenant_context(db, tenant)  # exactly what auth_ctx_db_session does
+
+
+def test_rls_probe_role_really_enforces_forced_rls(_rls_probe) -> None:
+    """Control: without the repair, a post-commit reload is hidden by RLS."""
+    from sqlalchemy.orm.exc import ObjectDeletedError
+
+    from api.db_models_governance_report import GovernanceReportRecord
+
+    sm, tenant, other, ids = _rls_probe
+    db = sm()
+    try:
+        _bind(db, tenant)
+        rec = db.get(GovernanceReportRecord, ids[tenant])
+        assert rec is not None
+        assert db.get(GovernanceReportRecord, ids[other]) is None  # isolation
+        db.commit()  # context cleared, rec expired
+        with pytest.raises(ObjectDeletedError):
+            _ = rec.manifest_hash
+    finally:
+        db.rollback()
+        db.close()
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_report_access_audit_commit_preserves_tenant_context(
+    _rls_probe, allowed: bool
+) -> None:
+    """Codex P1: the access-audit commit must not break the rest of the request."""
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from sqlalchemy import select
+
+    import api.field_assessment as fa
+    from api.actor_context import ActorContext, roles_to_permissions
+    from api.db_models_field_assessment import FaEngagement, FaEngagementAuditEvent
+    from api.db_models_governance_report import GovernanceReportRecord
+
+    sm, tenant, other, ids = _rls_probe
+    db = sm()
+    try:
+        _bind(db, tenant)
+        rec = db.get(GovernanceReportRecord, ids[tenant])
+        eng = db.get(FaEngagement, ids[f"{tenant}:eng"])
+        role = "assessor" if allowed else "client_executive"
+        actor = ActorContext(
+            subject=f"auth0|{role}",
+            email="",
+            name="",
+            permissions=roles_to_permissions([role]),
+            roles=[role],
+            auth_source="oidc_auth0",
+            tenant_id=tenant,
+        )
+        req: Any = SimpleNamespace(headers={}, state=SimpleNamespace(request_id="rls"))
+        if allowed:
+            fa._enforce_report_content_access(
+                db,
+                request=req,
+                actor_ctx=actor,
+                engagement=eng,
+                record=rec,
+                report_state={"state": "DRAFT"},
+                channel="export:json",
+            )
+            # The caller's subsequent reads succeed under the same tenant.
+            assert rec.manifest_hash == f"hash-{tenant}"
+            assert eng.client_name == "SYNTHETIC"
+        else:
+            with pytest.raises(HTTPException) as exc:
+                fa._enforce_report_content_access(
+                    db,
+                    request=req,
+                    actor_ctx=actor,
+                    engagement=eng,
+                    record=rec,
+                    report_state={"state": "DRAFT"},
+                    channel="export:json",
+                )
+            assert exc.value.status_code == 403
+        bound = db.execute(
+            text("SELECT current_setting('app.tenant_id', true)")
+        ).scalar()
+        assert bound == tenant  # re-bound to the server-resolved tenant only
+        # Isolation intact after the re-bind: the other tenant stays invisible.
+        assert db.get(GovernanceReportRecord, ids[other]) is None
+        db.rollback()
+    finally:
+        db.close()
+    # The access decision was durably committed (and only for this tenant).
+    check = sm()
+    try:
+        _bind(check, tenant)
+        events = (
+            check.execute(
+                select(FaEngagementAuditEvent.event_type).where(
+                    FaEngagementAuditEvent.entity_id == ids[tenant]
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert (
+            "report.content_accessed" if allowed else "report.access_denied"
+        ) in events
+        _bind(check, other)
+        assert not check.execute(
+            select(FaEngagementAuditEvent.id).where(
+                FaEngagementAuditEvent.entity_id == ids[tenant]
+            )
+        ).first()
+    finally:
+        check.rollback()
+        check.close()
+
+
+def test_qa_reject_response_survives_commit_under_rls(_rls_probe) -> None:
+    """Same defect class in the governance-stage reject route (#816)."""
+    from types import SimpleNamespace
+
+    import api.field_assessment as fa
+    from api.actor_context import ActorContext, roles_to_permissions
+
+    sm, tenant, _other, ids = _rls_probe
+    db = sm()
+    try:
+        _bind(db, tenant)
+        actor = ActorContext(
+            subject="auth0|independent-qa",
+            email="qa@example.test",
+            name="QA",
+            permissions=roles_to_permissions(["qa_reviewer"]),
+            roles=["qa_reviewer"],
+            auth_source="oidc_auth0",
+            tenant_id=tenant,
+        )
+        req: Any = SimpleNamespace(
+            headers={}, state=SimpleNamespace(request_id="rls", tenant_id=tenant)
+        )
+        resp = fa.qa_reject_report_route(
+            engagement_id=ids[f"{tenant}:eng"],
+            report_id=ids[tenant],
+            body=fa.ReportQaRejectBody(
+                reason_code="OTHER", explanation="Rejected under real RLS."
+            ),
+            request=req,
+            actor_ctx=actor,
+            db=db,
+        )
+        assert resp.status == "rejected" and resp.report_version == 1
+    finally:
+        db.close()

@@ -10203,8 +10203,9 @@ def qa_reject_report_route(
             "decision_id": row.id,
         },
     )
-    db.commit()
-    return ReportQaRejectResponse(
+    # Materialize before commit: committed rows expire and the RLS tenant
+    # binding is transaction-local (L14-ASSURANCE-P1-REPAIR-001).
+    _response = ReportQaRejectResponse(
         report_id=report_id,
         report_version=int(report.version or 1),
         decision="rejected",
@@ -10215,6 +10216,8 @@ def qa_reject_report_route(
         proof_fingerprint=proof_fp,
         status="rejected",
     )
+    db.commit()
+    return _response
 
 
 @router.post(
@@ -12243,6 +12246,7 @@ def _enforce_report_content_access(
     Records the access decision (granted or denied) in the engagement audit
     trail and commits it before content is returned.
     """
+    from api.db import set_tenant_context  # noqa: PLC0415
     from services.field_assessment.assessment_assurance import (  # noqa: PLC0415
         draft_access_decision,
     )
@@ -12277,7 +12281,16 @@ def _enforce_report_content_access(
         entity_id=record.id,
         actor_type=_actor_type_from_context(actor_ctx),
     )
+    # L14-ASSURANCE-P1-REPAIR-001: the RLS tenant binding (set_config(...,
+    # true)) is transaction-local and the commit expires every loaded row.
+    # Callers keep reading ``record`` / ``engagement`` after this helper, so
+    # re-bind the same server-resolved tenant (the tenant the row was loaded
+    # under — never a caller-supplied value) for the next transaction.  RLS
+    # stays fully enforced; without this, PostgreSQL's forced policy on
+    # governance_reports hides the row on reload (ObjectDeletedError).
+    _bound_tenant = str(record.tenant_id)
     db.commit()
+    set_tenant_context(db, _bound_tenant)
     if not allowed:
         raise HTTPException(
             status_code=403,
@@ -16726,8 +16739,8 @@ def reject_report_version_route(
         entity_id=rv.id,
         actor_type="human",
     )
-    db.commit()
-    return ReportQaRejectResponse(
+    # Materialize before commit (L14-ASSURANCE-P1-REPAIR-001).
+    _response = ReportQaRejectResponse(
         report_id=report_id,
         report_version=rv.version,
         report_version_id=rv.id,
@@ -16739,6 +16752,8 @@ def reject_report_version_route(
         proof_fingerprint=proof_fp,
         status="rejected",
     )
+    db.commit()
+    return _response
 
 
 def _resolve_delivery_recipient(
@@ -18034,6 +18049,30 @@ def governed_delivery_execute_route(
         engagement_id=engagement_id,
         recipient_type=req_row.recipient_type,
         recipient_id=req_row.recipient_id,
+    )
+
+    # 5b. L14-ASSURANCE-P1-REPAIR-001: re-evaluate the canonical release gate
+    # at the transport boundary.  An authorization issued earlier must not
+    # outlive a later QA rejection (of any version of this report record), an
+    # evidence change, or a provenance failure.  Runs before the idempotency
+    # read so no bytes are served and no attempt row is written.
+    if rv.status == "rejected":
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "REPORT_QA_REJECTED",
+                "The report version bound to this authorization was rejected in QA.",
+            ),
+        )
+    _exec_report_record = _load_report_record(
+        db, tenant_id=tenant_id, engagement_id=engagement_id, report_id=report_id
+    )
+    _require_production_qualified(
+        _exec_report_record.report_json or {},
+        db,
+        report_id=report_id,
+        tenant_id=tenant_id,
+        report_version_id=rv.id,
     )
 
     # 6. Idempotency — if a SUCCEEDED attempt already exists for this
