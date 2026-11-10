@@ -1,0 +1,113 @@
+# L14-FRONTEND-DEPENDENCY-SEC-001 — frontend dependency security gate.
+#
+# Fail-closed npm audit + CycloneDX SBOM for apps/portal, apps/console and
+# apps/web, bound to the audited commit SHA and lockfile hashes.
+#
+# * Runs on EVERY pull request (no paths filter): the audit reads lockfiles
+#   only, so it is cheap, and a dependency regression cannot slip through a
+#   PR that "only" touches unrelated files.  New advisories published against
+#   unchanged lockfiles are caught by the daily schedule.
+# * Blocking: critical/high in the production or full-tree audit without an
+#   APPROVED, unexpired entry in tools/ci/frontend_dependency_exceptions.json.
+# * An audit that cannot run is AUDIT_UNVERIFIED (exit 2) — never clean.
+# * Removing or softening this workflow fails the Guard job
+#   (tools/ci/check_security_regression_gates.py::check_frontend_dependency_gate).
+
+name: frontend-dependency-security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-dependency-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-dependency-security:
+    name: Frontend Dependency Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node (cached)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            apps/portal/package-lock.json
+            apps/console/package-lock.json
+            apps/web/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Reproducible lockfile install (npm ci, lifecycle scripts disabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in portal console web; do
+            echo "::group::npm ci apps/${app}"
+            (cd "apps/${app}" && npm ci --ignore-scripts --no-audit --no-fund)
+            echo "::endgroup::"
+          done
+
+      - name: Dependency audit (fail-closed)
+        shell: bash
+        run: python tools/ci/frontend_dependency_audit.py audit
+
+      - name: Generate and validate SBOMs
+        if: ${{ always() }}
+        shell: bash
+        run: python tools/ci/frontend_dependency_audit.py sbom
+
+      - name: Upload dependency security evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dependency-security-${{ github.run_attempt }}
+          path: artifacts/frontend-dependency-security/
+          if-no-files-found: error
+          retention-days: 14
+
+  durable-finding:
+    name: Record failing frontend dependency gate
+    needs: frontend-dependency-security
+    if: ${{ failure() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update tracking issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="[security] Frontend dependency gate failing on main (L14-FRONTEND-DEPENDENCY-SEC-001)"
+          body="Frontend dependency security gate failed (${GITHUB_EVENT_NAME}) at ${GITHUB_SHA}. Run: ${RUN_URL}. Evidence artifact: frontend-dependency-security-*. Remediate or add an APPROVED, time-bounded exception in tools/ci/frontend_dependency_exceptions.json."
+          existing="$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body "${body}"
+          else
+            gh issue create --title "${title}" --body "${body}"
+          fi

@@ -3,6 +3,11 @@ version: 2
 # Dependabot security updates bypass this limit and are unaffected — they are
 # governed by GitHub repo settings (Security > Dependabot security updates), not
 # by this file. Set limit > 0 here only when routine version bumps are wanted.
+# NOTE (L14-FRONTEND-DEPENDENCY-SEC-001, 2026-11-10): the repository settings
+# currently have Dependabot alerts AND security updates DISABLED, so no
+# automated dependency PRs are produced at all. Detection of new frontend
+# advisories is provided by the daily frontend-dependency-security workflow;
+# enabling Dependabot security updates is an operator (repo-admin) action.
 updates:
   # Python — all requirements files at repo root
   - package-ecosystem: "pip"
@@ -71,6 +76,23 @@ updates:
       - "portal"
     groups:
       portal-routine:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Node — apps/web (public marketing site; was previously uncovered)
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "web"
+    groups:
+      web-routine:
         update-types:
           - "minor"
           - "patch"

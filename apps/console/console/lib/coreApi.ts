@@ -335,7 +335,7 @@ async function getServerCoreProxyUrl(): Promise<string> {
   }
 
   const { headers } = await import('next/headers');
-  const headerStore = headers();
+  const headerStore = await headers();
   const host = headerStore.get('x-forwarded-host') || headerStore.get('host');
   const proto = headerStore.get('x-forwarded-proto') || 'http';
   if (!host) throw new Error('Unable to resolve server host for alignment artifact fetch.');

@@ -48,7 +48,8 @@
       "@radix-ui/react-separator": ["./node_modules/@radix-ui/react-separator"],
       "@radix-ui/react-tooltip": ["./node_modules/@radix-ui/react-tooltip"]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "target": "ES2017"
   },
   "include": [
     "next-env.d.ts",

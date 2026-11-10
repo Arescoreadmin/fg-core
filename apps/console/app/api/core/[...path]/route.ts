@@ -886,9 +886,11 @@ function isLegacyAcceptInvite(path: string[], method: string): boolean {
   );
 }
 
-async function handle(request: NextRequest, { params }: { params: { path: string[] } }) {
+type RouteCtx = { params: Promise<{ path: string[] }> };
+
+async function handle(request: NextRequest, { params }: RouteCtx) {
   const requestId = getRequestId(request);
-  const path = params.path || [];
+  const path = (await params).path || [];
   const routeGroup = path[0] || 'unknown';
 
   // P-113.10: invitation preflight GET is public — proxy unauthenticated so the
@@ -990,27 +992,27 @@ async function handle(request: NextRequest, { params }: { params: { path: string
   return proxyToCore(request, path, requestId, tenantId, namedUserSub, actorAuthority);
 }
 
-export async function GET(request: NextRequest, context: { params: { path: string[] } }) {
+export async function GET(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }
 
-export async function POST(request: NextRequest, context: { params: { path: string[] } }) {
+export async function POST(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }
 
-export async function PATCH(request: NextRequest, context: { params: { path: string[] } }) {
+export async function PATCH(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }
 
 
-export async function PUT(request: NextRequest, context: { params: { path: string[] } }) {
+export async function PUT(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }
 
-export async function DELETE(request: NextRequest, context: { params: { path: string[] } }) {
+export async function DELETE(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }
 
-export async function HEAD(request: NextRequest, context: { params: { path: string[] } }) {
+export async function HEAD(request: NextRequest, context: RouteCtx) {
   return handle(request, context);
 }

@@ -21,7 +21,7 @@ const NAV_LINKS = PORTAL_REGISTRY.getAllItems()
   .map((item) => ({ href: item.route, label: item.title }));
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const sessionToken = cookies().get(COOKIE_NAME)?.value;
+  const sessionToken = (await cookies()).get(COOKIE_NAME)?.value;
   const showAuthenticatedNav = Boolean(await verifySessionToken(sessionToken));
   return (
     <html lang="en" suppressHydrationWarning>

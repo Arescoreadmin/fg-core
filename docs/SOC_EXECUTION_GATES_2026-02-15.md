@@ -8173,3 +8173,38 @@ SOC review outcome: APPROVED. Inventory-only update registering six new authenti
 - Affected suites: 298 passed. Assessment-assurance suite: 54 passed.
 
 SOC review outcome: APPROVED. A narrow repair inside the existing access model. The tenant context is re-established from server-resolved state only, and the delivery transport now enforces the same canonical release gate as every other delivery path.
+
+---
+
+## 2026-11-10 - security: L14-FRONTEND-DEPENDENCY-SEC-001 — frontend dependency remediation and supply-chain enforcement
+
+**Change scope:**
+- Dependency upgrades in `apps/portal`, `apps/console` and `apps/web`: Next 15.5.29, React 19, next-auth beta.32, zod 4, sharp 0.35.5, and the next→postcss override.
+- Minimal Next 15 async-API edits.
+- A new CI workflow, `.github/workflows/frontend-dependency-security.yml`.
+- New tooling: `tools/ci/frontend_dependency_audit.py` and `tools/ci/frontend_dependency_exceptions.json`.
+- A new guard in `tools/ci/check_security_regression_gates.py`.
+- Makefile `console-audit` and `portal-audit` promoted from the non-blocking pilot to blocking.
+
+**Security analysis:**
+
+1. **No CI gate weakened; two strengthened.**
+   - The frontend npm audit was non-blocking (`|| true`). It now fails on critical or high in either the production or the full-tree audit.
+   - An audit that cannot run is AUDIT_UNVERIFIED, which fails the gate and is never treated as clean.
+   - The new guard fails the Guard job if the workflow or tool is removed, if a trigger is dropped, or if a `paths:` filter, `continue-on-error` or `|| true` is added.
+2. **Exceptions require founder approval.** A registry entry suppresses an advisory only when it is APPROVED by a named approver, has an owner, and expires within 90 days. Unapproved and expired entries keep blocking. The registry is empty.
+3. **No auth weakening.**
+   - next-auth beta.32 / @auth/core 0.41.3 closes GHSA-8fpg-xm3f-6cx3 (auth checks failing open) and GHSA-7rqj-j65f-68wh.
+   - The console middleware, `auth.config`, session handling and the BFF proxy's tenant resolution are unchanged; only the Promise typing of `params` changed.
+   - Portal session verification is unchanged; the code only awaits `cookies()`.
+   - Logout stays a full-navigation anchor, and the lint suppression is scoped to one rule on one line, with a rationale.
+4. **No new route or proxy path.** Backend delivery, QA and RLS controls (PR #816/#817/#818) are unaffected; the #818 release-boundary tests pass on this branch.
+5. **Supply chain.**
+   - CI installs with `npm ci --ignore-scripts`, so lifecycle scripts do not run.
+   - SBOMs come from the lockfile, which needs no third-party generator, and are bound to the source SHA and lockfile SHA-256.
+   - The SBOMs are explicitly unsigned.
+6. **Disclosed operator gaps (repository settings, not changed):** `main` has no branch protection or rulesets, and Dependabot alerts and security updates are disabled.
+
+**Evidence:** see `docs/security/L14_FRONTEND_DEPENDENCY_SECURITY.md` and `docs/ai/PR_FIX_LOG.md`. Fresh `npm audit` results (production, critical/high): portal 1/4 → 0/0, console 3/5 → 0/0, web 1/4 → 0/0; 0 critical/high in the full tree. `tests/tools/test_frontend_dependency_audit.py`: 28 passed. `check_security_regression_gates.py`: OK.
+
+SOC review outcome: APPROVED. A dependency remediation plus fail-closed enforcement; no control is relaxed.

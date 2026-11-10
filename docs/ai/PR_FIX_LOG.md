@@ -1,3 +1,52 @@
+## security(frontend): L14-FRONTEND-DEPENDENCY-SEC-001 — frontend dependency remediation and supply-chain enforcement (branch security/l14-frontend-dependency-sec-001)
+
+- **Work item:** L14-FRONTEND-DEPENDENCY-SEC-001. SECURITY class, the same as P0-DEPENDENCY-REMEDIATION-001. It remediates known critical/high advisories, which the REPAIR class authorizes. `check_customer_one_roadmap.py --work-item` reports the ID as not in `next_sequence`, and the authority file is not edited here.
+- **Baseline SHA:** `7ae17b4d` (main after #818). The baseline frontend tests, lint, tsc and builds were green before any change.
+- **Fresh audit, before → after (production tree, critical/high):** portal 1/4 → 0/0; console 3/5 → 0/0; web 1/4 → 0/0. The full tree also has 0 critical/high in every app. Remaining: 6 moderate dev-only entries in portal and console (`minimatch` under `@typescript-eslint` 8.72.2, the latest release).
+- **Upgrades:**
+  - next 14.2.x → 15.5.29 (maintained backport line) with React 19.3.1, in all three apps. This clears the Next image-optimizer RCEs, the 14.x middleware authorization bypass, and the SSRF and DoS set.
+  - next-auth 5.0.0-beta.31 → beta.32 (@auth/core 0.41.3), console.
+  - zod 4.6.7 and @hookform/resolvers 5.9.2 in console; zod removed from portal, where it was declared but never imported.
+  - sharp 0.35.5; undici 6.29.1; nanoid 3.3.20; source-map-js 1.2.2.
+  - Scoped npm override `next → postcss ^8.5.32`. Next 15.5.29 pins the vulnerable 8.4.31.
+  - eslint-config-next 15.5.29. Its @typescript-eslint 8.72.2 supports TypeScript 5.9.3, which removes the parser-range warning.
+- **Code (behaviour unchanged):**
+  - Next 15 async request APIs: `await cookies()` / `await headers()` (4 sites), Promise-typed route `params` (3 handlers), and React `use(params)` in the console invitation page.
+  - `outputFileTracingRoot: __dirname` in each `next.config.js`, so the console standalone layout matches the Dockerfile.
+  - Shared `@fg/ui` and `@fg/navigation` peers widened to React 18 || 19.
+  - Console `tsconfig.json` gains the `target` Next 15 requires.
+  - One rule-scoped `eslint-disable-next-line @next/next/no-html-link-for-pages` on the logout anchor. Logout must stay a full navigation, and `next/link` would prefetch it.
+- **CI (called out: new workflow and Makefile enforcement change):**
+  - New `.github/workflows/frontend-dependency-security.yml`. It runs on every PR (no path filter), pushes to main, daily and manually. It uses `npm ci --ignore-scripts` and uploads evidence. A failing scheduled or main run opens a tracking issue.
+  - New `tools/ci/frontend_dependency_audit.py`:
+    - fail-closed: exit 2 is AUDIT_UNVERIFIED and is never clean;
+    - critical/high block in both production and full-tree scopes;
+    - evidence is bound to the source SHA and lockfile SHA-256, with redaction;
+    - lockfile-derived CycloneDX 1.5 SBOMs (`npm sbom` fails on the file-linked packages and under-reports web).
+  - Exception registry `tools/ci/frontend_dependency_exceptions.json` (empty). An entry applies only if APPROVED, named, owned and unexpired, within 90 days.
+  - Makefile `console-audit` and `portal-audit` move from `|| true` to the blocking gate; new `frontend-audit` and `frontend-sbom` targets.
+  - `check_security_regression_gates.py` fails if the gate is removed, path-filtered or softened.
+  - Dependabot gains an `apps/web` entry.
+- **Tests:** `tests/tools/test_frontend_dependency_audit.py` (28): synthetic critical → FAIL; six audit-execution failures → AUDIT_UNVERIFIED; exception approval and expiry; redaction; SBOM validity and binding; guard bypass attempts.
+- **Operator actions, not changed:**
+  - `main` has no branch protection or rulesets, so no CI check is enforced by GitHub.
+  - Dependabot alerts and security updates are disabled in the repository settings.
+- **Validation (local, this branch):**
+  - **Frontend:**
+    - portal: 85/85 tests, lint clean, tsc clean, build passes;
+    - console: 3147/3147 tests, lint clean, tsc clean, build passes, `.next/standalone/server.js` layout preserved;
+    - web: tsc clean and build passes (no test or lint script);
+    - `npm ci --dry-run` succeeds for all three apps.
+  - **Backend regressions:**
+    - #818 release-boundary: 6 passed;
+    - assessment-assurance, portal-truth, customer-zero e2e, report-proof, governed-delivery (+transport), report-delivery and tenant-isolation suites: 203 passed;
+    - `make fg-security`: 1343 passed, 1 skipped (required-tests gate PASS);
+    - `make fg-contract`: OK;
+    - `make fg-fast`: 686 passed, 2 skipped, all checks passed.
+  - **Gates:** route scopes, plane registry, SQL percent guard, secret scan, SOC review sync, `git diff --check`, ruff and mypy all pass.
+  - **Browser acceptance** (existing `browser_acceptance.py`; Next 15 portal, synthetic Northstar, loopback only): 11/11 PASS. This covers dashboard 14 open / 2 critical, write denied 403, non-granted engagement 403, draft PDF 403, no data after logout, and allowed PDF byte-intact (`%PDF` header, startxref, report-state/manifest headers forwarded). There were 0 unexpected console errors. OIDC named-user login was NOT_TESTED (dev grant-secret path).
+- **Evidence:** `docs/security/L14_FRONTEND_DEPENDENCY_SECURITY.md`.
+
 ## fix(field-assessment): L14-ASSURANCE-P1-REPAIR-001 — RLS tenant context after report-access commits; release gate at the delivery transport boundary (branch fix/l14-assurance-p1-repair-001)
 
 - **Work item:** L14-ASSURANCE-P1-REPAIR-001. REPAIR class. Fixes two Codex P1 findings on PR #816 that were merged unfixed.
