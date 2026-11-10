@@ -97,6 +97,11 @@ def test_engagement_policy_can_permit_customer_draft_review(platform, northstar)
     r = export(cust, eid, v, "pdf")
     assert r.status_code == 200, r.text
     assert r.headers["X-Report-State"] == "DRAFT_SYNTHETIC"  # never relabelled
+    assert r.headers["X-Report-Version"] == str(v)
+    listing = cust.get(f"/field-assessment/engagements/{eid}/reports").json()
+    canonical = next(item for item in listing["items"] if item["version"] == v)
+    assert r.headers["X-Report-ID"] == canonical["report_id"]
+    assert r.headers["X-Manifest-Hash"] == canonical["manifest_hash"]
     st = export(cust, eid, v, "json").json()["report_state"]
     assert st["access_basis"] == "CUSTOMER_DRAFT_REVIEW_PERMITTED" and st["is_draft"]
 

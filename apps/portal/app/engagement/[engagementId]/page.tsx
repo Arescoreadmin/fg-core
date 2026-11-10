@@ -113,11 +113,11 @@ type TabId = typeof TABS[number]['id'];
 
 // ─── Count card ───────────────────────────────────────────────────────────────
 
-function CountCard({ label, value, sub }: { label: string; value: number; sub?: string }) {
+function CountCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
   return (
     <div className="rounded border border-border bg-surface-2 px-4 py-3">
       <p className="text-xs text-muted">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold text-foreground">{value}</p>
+      <p className="mt-0.5 text-xl font-semibold text-foreground">{value ?? 'Unavailable'}</p>
       {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
     </div>
   );
@@ -132,8 +132,9 @@ function idle<T>(): Async<T> {
 }
 
 function apiError(e: unknown): string {
-  if (e instanceof PortalApiError) return `Error ${e.status}: ${e.code}`;
-  return 'Failed to load.';
+  if (e instanceof PortalApiError && e.status === 403) return 'You do not have access to this engagement.';
+  if (e instanceof PortalApiError && e.status === 404) return 'This engagement is unavailable.';
+  return 'We could not load this information. Please try again or contact support.';
 }
 
 // ─── Tab panels ───────────────────────────────────────────────────────────────
@@ -282,14 +283,14 @@ function OverviewTab({
           <CountCard
             label="Findings"
             value={counts.normalized_findings}
-            sub={counts.open_findings > 0 ? `${counts.open_findings} open` : 'all resolved'}
+            sub={`${counts.open_findings ?? 'Unavailable'} open · ${counts.resolved_findings ?? 'Unavailable'} resolved`}
           />
           <CountCard label="Evidence Links" value={counts.evidence_links} />
         </div>
       )}
 
       {/* Critical finding callout */}
-      {counts && counts.critical_findings > 0 && (
+      {counts && counts.critical_findings !== null && counts.critical_findings > 0 && (
         <div className="rounded border border-red-500/30 bg-red-500/5 p-3 flex items-center justify-between gap-4">
           <p className="text-sm text-red-300">
             <span className="font-semibold">{counts.critical_findings} critical finding{counts.critical_findings !== 1 ? 's' : ''}</span> require immediate attention.

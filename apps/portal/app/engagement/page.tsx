@@ -41,8 +41,9 @@ export default function EngagementListPage() {
       .listEngagements({ limit: 50 })
       .then((r) => setEngagements(r.items))
       .catch((e) => {
-        if (e instanceof PortalApiError) setError(`Error ${e.status}: ${e.code}`);
-        else setError('Failed to load engagements.');
+        if (e instanceof PortalApiError && e.status === 403) setError('You do not have access to engagements for this account.');
+        else if (e instanceof PortalApiError && e.status === 404) setError('No engagements are available for this account.');
+        else setError('Engagements could not be loaded. Contact support if the problem continues.');
       })
       .finally(() => setLoading(false));
   }, []);

@@ -1,3 +1,19 @@
+## 2026-11-10 — L14-PORTAL-TRUTH-001 customer grant isolation and report authority — `fix/l14-portal-truth-001`
+
+**Reviewer:** Codex (pending human SOC review) | **Classification:** SOC-HIGH-002 (portal authorization boundary and generated route inventory).
+
+**Scope:** Customer portal grant sessions are now bound to the exact active grant and its engagement. Engagement list queries and counts apply the grant-derived engagement filter in SQL before pagination. The named-user path rejects unbound memberships because no canonical tenant-wide portal entitlement exists. The `/portal/engagement/reports` adapter now reads Field Assessment report records and requires a grant-bound `engagement_id`; it no longer reads the legacy report store or falls back to tenant-wide listings. Its route scope changed from `portal:read` to `governance:read` to match the canonical Field Assessment report authority.
+
+**Report integrity:** Customer report status is derived from the assurance state evaluator, unknown states fail closed, and internal compiler/reviewer principal identifiers are omitted. PDF responses expose report ID, revision, state, and manifest hash; the BFF relays these identity headers and forwards the response body as bytes. Draft export remains governed by the existing engagement policy and independent QA/provenance gates.
+
+**Threat controls:** Wrong engagement, tenant, revoked/expired grant, unbound membership, report workspace mismatch, and direct list bypass are denied or scoped at the backend middleware/API boundary. No tenant-wide access is inferred from tenant membership. No database schema, production data, credentials, signing keys, or release gates were changed.
+
+**Generated artifacts:** `make route-inventory-generate` updated `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` for the changed report route scope.
+
+**Validation:** `make fg-security` passed (1,343 passed, 1 skipped); `make fg-contract`, route-scope, SQL percentage and route-inventory checks passed. Portal security tests, grant-scope regressions and the synthetic browser acceptance verify the denied and permitted report paths. Production OIDC and a released report with actual collection gaps remain separate acceptance work.
+
+---
+
 ## 2026-11-09 — L14-ASSESSMENT-ASSURANCE-001 rejection route inventory — security/l14-assessment-assurance-001
 
 **Reviewer:** Codex (pending human SOC review) | **Classification:** SOC-HIGH-002 (CI inventory update: `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`).

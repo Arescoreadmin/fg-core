@@ -133,7 +133,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function CoveragePanel({ roadmap }: { roadmap: RemediationRoadmap }) {
   const cur = roadmap.current_coverage_pct;
   const proj = roadmap.projected_coverage_pct;
-  const delta = proj - cur;
+  const delta = proj !== null && cur !== null ? proj - cur : null;
 
   return (
     <div className="rounded border border-border bg-surface-2 p-4 space-y-3">
@@ -143,10 +143,10 @@ function CoveragePanel({ roadmap }: { roadmap: RemediationRoadmap }) {
             NIST AI RMF Coverage
           </p>
           <div className="flex items-end gap-2 mt-1">
-            <p className="text-2xl font-bold text-foreground">{cur}%</p>
-            {delta > 0 && (
+            <p className="text-2xl font-bold text-foreground">{cur === null ? 'Unavailable' : `${cur}%`}</p>
+            {delta !== null && delta > 0 && (
               <p className="text-sm text-muted mb-0.5">
-                → <span className="text-green-300 font-semibold">{proj}%</span>
+                → <span className="text-green-300 font-semibold">{proj === null ? 'Unavailable' : `${proj}%`}</span>
                 <span className="ml-1 text-green-400 text-xs">+{delta.toFixed(1)}pp potential</span>
               </p>
             )}
@@ -160,7 +160,7 @@ function CoveragePanel({ roadmap }: { roadmap: RemediationRoadmap }) {
         </Link>
       </div>
 
-      <div className="space-y-1">
+      {cur !== null && proj !== null && <div className="space-y-1">
         <div className="relative h-2.5 w-full rounded-full bg-surface-3 overflow-hidden">
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-green-500/25 transition-all duration-700"
@@ -175,7 +175,7 @@ function CoveragePanel({ roadmap }: { roadmap: RemediationRoadmap }) {
           <span>0%</span>
           <span>100%</span>
         </div>
-      </div>
+      </div>}
 
       <div className="flex flex-wrap gap-4 text-xs text-muted">
         <span>
@@ -186,7 +186,7 @@ function CoveragePanel({ roadmap }: { roadmap: RemediationRoadmap }) {
             <span className="font-semibold">
               {roadmap.phases.find((p) => p.phase_id === 'immediate')!.findings.length}
             </span>{' '}
-            need immediate action
+            in the highest recommended priority group
           </span>
         ) : null}
       </div>

@@ -35,6 +35,8 @@ from api.portal_user_authority import (
 from services.portal_grant_service import portal_grant_svc
 
 _PORTAL_ENGAGEMENT_RE = re.compile(r"^/field-assessment/engagements/([^/]+)")
+_PORTAL_ENGAGEMENT_LIST_RE = re.compile(r"^/field-assessment/engagements/?$")
+_PORTAL_REPORT_WORKSPACE_PATH = "/portal/engagement/reports"
 _PORTAL_REMEDIATION_RE = re.compile(r"^/portal/remediation")
 _PORTAL_SOURCE_HEADER = "x-portal-source"
 _PORTAL_SOURCE_VALUE = "client-portal"
@@ -111,6 +113,43 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                     named_result.denial_code or "PORTAL_ACCESS_DENIED",
                 )
 
+            if named_result.portal_membership_id is None:
+                return _json_403(
+                    "Session has no active membership",
+                    "PORTAL_MEMBERSHIP_REQUIRED",
+                )
+
+            # A named-user membership without an engagement binding is not a
+            # tenant-wide entitlement. This portal role model has no canonical
+            # tenant-admin entitlement, so fail closed for unbound memberships.
+            if named_result.portal_membership_id and not named_result.engagement_id:
+                return _json_403(
+                    "Membership has no engagement scope",
+                    "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
+                )
+
+            if (
+                path.startswith("/portal/engagement/")
+                and path != _PORTAL_REPORT_WORKSPACE_PATH
+            ):
+                return _json_403(
+                    "This portal workspace is not available for the current engagement scope",
+                    "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
+                )
+            if path.startswith("/portal/remediation"):
+                return _json_403(
+                    "This portal workspace is not available for the current engagement scope",
+                    "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
+                )
+
+            if path == _PORTAL_REPORT_WORKSPACE_PATH:
+                requested_engagement = request.query_params.get("engagement_id", "")
+                if (
+                    not requested_engagement
+                    or requested_engagement != named_result.engagement_id
+                ):
+                    return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
+
             m_pnu = _PORTAL_ENGAGEMENT_RE.match(path)
             if m_pnu:
                 engagement_id_pnu = m_pnu.group(1)
@@ -139,12 +178,79 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                 # Session is validated; expose portal identity for downstream handlers.
                 request.state.portal_user_id = named_result.portal_user_id
                 request.state.portal_membership_id = named_result.portal_membership_id
+                request.state.portal_engagement_id = named_result.engagement_id
 
             return await call_next(request)
 
         # ── Legacy grant path (non-pnu1. tokens) ─────────────────────────────
         m = _PORTAL_ENGAGEMENT_RE.match(path)
         if not m:
+            if (
+                path.startswith("/portal/engagement/")
+                and path != _PORTAL_REPORT_WORKSPACE_PATH
+            ):
+                return _json_403(
+                    "This portal workspace is not available for the current engagement scope",
+                    "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
+                )
+            if path.startswith("/portal/remediation"):
+                return _json_403(
+                    "This portal workspace is not available for the current engagement scope",
+                    "PORTAL_ENGAGEMENT_SCOPE_REQUIRED",
+                )
+            if path == _PORTAL_REPORT_WORKSPACE_PATH:
+                tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
+                requested_engagement = request.query_params.get("engagement_id", "")
+                session_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+                if not tenant_id or not requested_engagement or not session_token:
+                    return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
+                SessionLocal = get_sessionmaker()
+                db = SessionLocal()
+                try:
+                    result = portal_grant_svc.validate_session(
+                        db,
+                        session_id=session_token,
+                        tenant_id=str(tenant_id),
+                        engagement_id=requested_engagement,
+                    )
+                except Exception:
+                    return _json_403(
+                        "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                    )
+                finally:
+                    db.close()
+                if not result.ok:
+                    return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
+                request.state.portal_client_id = result.client_id
+                request.state.portal_engagement_id = requested_engagement
+                request.state.portal_engagement_ids = {requested_engagement}
+                return await call_next(request)
+            if _PORTAL_ENGAGEMENT_LIST_RE.match(path):
+                tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
+                session_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
+                if not tenant_id or not session_token:
+                    return _json_403(
+                        "Portal session required for engagement access",
+                        "PORTAL_SESSION_REQUIRED",
+                    )
+                SessionLocal = get_sessionmaker()
+                db = SessionLocal()
+                try:
+                    result = portal_grant_svc.validate_session(
+                        db, session_id=session_token, tenant_id=str(tenant_id)
+                    )
+                except Exception:
+                    return _json_403(
+                        "Access check unavailable", "PORTAL_ACCESS_CHECK_FAILED"
+                    )
+                finally:
+                    db.close()
+                if not result.ok or not result.engagement_id:
+                    return _json_403("Access denied", "PORTAL_ENGAGEMENT_ACCESS_DENIED")
+                request.state.portal_client_id = result.client_id
+                request.state.portal_engagement_id = result.engagement_id
+                request.state.portal_engagement_ids = {result.engagement_id}
+                return await call_next(request)
             if not _PORTAL_REMEDIATION_RE.match(path):
                 return await call_next(request)
 
@@ -183,6 +289,7 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
                 )
 
             request.state.portal_client_id = result.client_id
+            request.state.portal_engagement_id = result.engagement_id
             return await call_next(request)
 
         engagement_id = m.group(1)
@@ -244,6 +351,7 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
 
             request.state.portal_membership_id = membership_id
             request.state.portal_engagement_id = engagement_id
+            request.state.portal_engagement_ids = {engagement_id}
             return await call_next(request)
 
         session_token = request.headers.get(_PORTAL_SESSION_HEADER, "").strip()
@@ -283,5 +391,6 @@ class PortalClientScopeMiddleware(BaseHTTPMiddleware):
         # Inject portal context for downstream handlers
         request.state.portal_client_id = result.client_id
         request.state.portal_engagement_id = engagement_id
+        request.state.portal_engagement_ids = {engagement_id}
 
         return await call_next(request)

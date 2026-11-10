@@ -1,5 +1,7 @@
 # L14-CUSTOMER-ZERO-E2E-001 — Customer-Zero End-to-End Acceptance
 
+> **Update (L14-PORTAL-TRUTH-001).** Synthetic Chromium acceptance on 2026-11-10 passed 11/11 probes: CZ-18B (one engagement visible), CZ-19B (workspace/canonical report identity, revision and hash match), CZ-24 (synthetic draft, not finalized), CZ-25 (14 open, 2 critical, 0 resolved), restricted draft denial, assessor-permitted draft download with PDF byte integrity and report identity/state headers, write denial, wrong-engagement denial, and logout. It used development grant-secret login, not OIDC. Screenshots/network/console/matrix artifacts are under `/tmp/portal-truth-browser-final5`; there were zero unexpected console errors. See `docs/assurance/L14_PORTAL_TRUTH.md`.
+
 > **Update (L14-ASSESSMENT-ASSURANCE-001).** CZ-23, CZ-12B, CZ-17 and the missing QA rejection are closed in code (`docs/assurance/L14_ASSESSMENT_ASSURANCE.md`). The backend journey now observes enforcement:
 > - CZ-12 and CZ-12B: keys refused; a named independent reviewer is refused while evidence integrity fails.
 > - CZ-12C (new): rejection recorded, the state is REJECTED, and revival is refused.
@@ -93,7 +95,7 @@ Throughout: no production database, no external scan, no network egress, no mess
 | CZ-15 Portal access (grant → session) | portal grants + middleware | `/portal/authenticate` + portal GETs | customer | SYNTHETIC_EXECUTED | pnu1 / OIDC not tested |
 | CZ-16 Portal access controls | middleware + RBAC | portal GET/POST | customer | PASS | — |
 | CZ-17 Customer draft download | draft_access_decision | portal GET export | customer | PASS (403 REPORT_DRAFT_ACCESS_DENIED; was PARTIAL) | closed |
-| CZ-18 Grant-scoped engagement list | middleware | portal `GET /engagements` | customer | **FAIL** | **P2** |
+| CZ-18 Grant-scoped engagement list | middleware + FA store query | portal `GET /engagements` | customer | SOURCE FIXED; regression assertions added; browser pending | P2 until browser evidence |
 | CZ-19 `/portal/engagement/*` workspace | engagement_portal | `GET /portal/engagement/reports` | customer | PARTIAL | P2 |
 | CZ-20 Audit trail | engagement audit | `GET /audit-events` | assessor | PASS | — |
 | CZ-21 Portal browser experience | apps/portal | Next.js + Chromium (dev grant login) | customer | PARTIAL (§14) | OIDC not tested |
@@ -101,10 +103,10 @@ Throughout: no production database, no external scan, no network egress, no mess
 | CZ-17B Draft PDF via browser | export route | browser download | customer | PARTIAL (reproduced before the fix; browser not rerun since) | backend closed |
 | CZ-18B Engagement list via browser | middleware | browser fetch | customer | **FAIL** (reproduced) | P2 |
 | CZ-19B Workspace API via browser | engagement_portal | browser fetch | customer | PARTIAL (403; UI does not use it) | P2 |
-| CZ-24 Report status label | apps/portal `/reports` | browser | customer | **FAIL** ("Finalized") | **P1** |
-| CZ-25 Dashboard / engagement metrics | apps/portal ← `/summary` | browser | customer | **FAIL** (contract drift) | **P1** |
-| CZ-26 Remediation roadmap | apps/portal ← `/remediation-roadmap` | browser | customer | PARTIAL | P2 |
-| CZ-27 Coverage page | apps/portal ← questionnaires | browser | customer | PARTIAL | P2 |
+| CZ-24 Report status label | canonical report-state evaluator → apps/portal `/reports` | browser | customer | SOURCE FIXED; regression tests added; browser pending | P1 until browser evidence |
+| CZ-25 Dashboard / engagement metrics | apps/portal ← canonical `/summary` contract | browser | customer | SOURCE FIXED; adapter and regression tests added; browser pending | P1 until browser evidence |
+| CZ-26 Remediation roadmap | apps/portal ← `/remediation-roadmap` | browser | customer | SOURCE FIXED: unsupported effort/timing removed; browser pending | P2 until browser evidence |
+| CZ-27 Coverage page | apps/portal ← questionnaires | browser | customer | PARTIAL: denominator unavailable handled; report-proof limitations view remains | P2 |
 | CZ-28 Browser console | CDP | browser | — | PARTIAL (1 error) | P2 |
 | CZ-29 PDF byte integrity via portal | BFF proxy | browser download | customer | PASS after fix (FAIL before) | fixed |
 | CZ-22 Billing / entitlements | — | — | — | NOT_TESTED (safety) | — |

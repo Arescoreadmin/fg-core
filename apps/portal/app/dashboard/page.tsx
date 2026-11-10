@@ -11,7 +11,7 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
     {
       id: 'open-findings',
       title: 'Open Findings',
-      status: counts.open_findings > 0 ? 'active' : 'completed',
+      status: counts.open_findings === null ? 'draft' : counts.open_findings > 0 ? 'active' : (counts.resolved_findings !== null && counts.resolved_findings === counts.normalized_findings ? 'completed' : 'draft'),
       value: counts.open_findings,
       lastUpdated: null,
       confidence: null,
@@ -21,7 +21,8 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
     {
       id: 'critical-findings',
       title: 'Critical Findings',
-      status: counts.critical_findings > 0 ? 'error' : 'completed',
+      // A critical finding is an authoritative active risk, not an application error.
+      status: counts.critical_findings === null ? 'draft' : counts.critical_findings > 0 ? 'active' : 'completed',
       value: counts.critical_findings,
       lastUpdated: null,
       confidence: null,
@@ -31,7 +32,7 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
     {
       id: 'scan-results',
       title: 'Scan Results',
-      status: counts.scan_results > 0 ? 'active' : 'draft',
+      status: counts.scan_results === null ? 'draft' : counts.scan_results > 0 ? 'active' : 'draft',
       value: counts.scan_results,
       lastUpdated: null,
       confidence: null,
@@ -41,7 +42,7 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
     {
       id: 'evidence-links',
       title: 'Evidence Links',
-      status: counts.evidence_links > 0 ? 'active' : 'pending',
+      status: counts.evidence_links === null ? 'draft' : counts.evidence_links > 0 ? 'active' : 'pending',
       value: counts.evidence_links,
       lastUpdated: null,
       confidence: null,
@@ -61,7 +62,7 @@ function buildDashboardCards(counts: EngagementCounts): DashboardCard[] {
     {
       id: 'document-analyses',
       title: 'Documents Analysed',
-      status: counts.document_analyses > 0 ? 'completed' : 'pending',
+      status: counts.document_analyses === null ? 'draft' : counts.document_analyses > 0 ? 'completed' : 'pending',
       value: counts.document_analyses,
       lastUpdated: null,
       confidence: null,

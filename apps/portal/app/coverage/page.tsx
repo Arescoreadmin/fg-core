@@ -63,13 +63,13 @@ function SummaryBar({ questionnaire }: { questionnaire: Questionnaire }) {
   const notAssessed = responses.filter((r) => r.response_status === 'not_assessed').length;
   const na = responses.filter((r) => r.response_status === 'not_applicable').length;
   const applicable = total - na;
-  const coveragePct = applicable > 0 ? Math.round((implemented / applicable) * 100) : 0;
+  const coveragePct = applicable > 0 ? Math.round((implemented / applicable) * 100) : null;
 
   return (
     <div className="rounded border border-border bg-surface-2 p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-2xl font-bold text-foreground">{coveragePct}%</p>
+          <p className="text-2xl font-bold text-foreground">{coveragePct === null ? 'Unavailable' : `${coveragePct}%`}</p>
           <p className="text-xs text-muted">
             NIST AI RMF implementation coverage
             {applicable < total ? ` (${applicable} applicable controls)` : ''}
@@ -86,12 +86,9 @@ function SummaryBar({ questionnaire }: { questionnaire: Questionnaire }) {
         )}
       </div>
 
-      <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-green-500/60 transition-all duration-500"
-          style={{ width: `${coveragePct}%` }}
-        />
-      </div>
+      {coveragePct !== null && <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
+        <div className="h-full rounded-full bg-green-500/60 transition-all duration-500" style={{ width: `${coveragePct}%` }} />
+      </div>}
 
       <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
         {[
@@ -109,6 +106,50 @@ function SummaryBar({ questionnaire }: { questionnaire: Questionnaire }) {
         ))}
       </div>
     </div>
+  );
+}
+
+type CollectionCoverage = {
+  state: 'loading' | 'unavailable' | 'unreleased' | 'available';
+  coverage?: Record<string, unknown>;
+};
+
+function CoverageLimitations({ data }: { data: CollectionCoverage }) {
+  const coverage = data.coverage ?? {};
+  const scanCounts = (coverage.scan_status_counts ?? {}) as Record<string, number>;
+  const observationCounts = (coverage.observation_status_counts ?? {}) as Record<string, number>;
+  const limitationCount = Array.isArray(coverage.limitations) ? coverage.limitations.length : null;
+  const statement = typeof coverage.coverage_statement === 'string' ? coverage.coverage_statement : null;
+  const determinable = coverage.coverage_determinable === true;
+  const percentage = typeof coverage.coverage_percentage === 'number' ? coverage.coverage_percentage : null;
+  const rows = [
+    ...Object.entries(scanCounts).map(([status, count]) => ({ source: 'Scans', status, count })),
+    ...Object.entries(observationCounts).map(([status, count]) => ({ source: 'Observations', status, count })),
+  ];
+
+  return (
+    <section className="rounded border border-amber-500/30 bg-amber-500/5 p-4 space-y-2" aria-label="collection-limitations">
+      <h3 className="text-sm font-semibold text-foreground">Collection completeness and limitations</h3>
+      {data.state === 'loading' && <p className="text-xs text-muted">Loading authoritative collection status…</p>}
+      {data.state === 'unreleased' && <p className="text-xs text-amber-200">Collection limitation details are unavailable until a report is released. This does not indicate complete coverage.</p>}
+      {data.state === 'unavailable' && <p className="text-xs text-muted">Authoritative collection limitation details are unavailable.</p>}
+      {data.state === 'available' && (
+        <>
+          <p className="text-xs text-foreground">{statement ?? 'Collection status unavailable.'}</p>
+          <p className="text-xs text-muted">
+            {determinable && percentage !== null ? `Coverage percentage: ${percentage}%` : 'Coverage percentage unavailable'}
+            {limitationCount !== null ? ` · ${limitationCount} reported limitation${limitationCount === 1 ? '' : 's'}` : ''}
+          </p>
+          {rows.length > 0 ? (
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+              {rows.map(({ source, status, count }) => (
+                <li key={`${source}:${status}`}>{source}: <span className="font-medium text-foreground">{status.replace(/_/g, ' ')}</span> ({count})</li>
+              ))}
+            </ul>
+          ) : <p className="text-xs text-muted">Collection status counts unavailable.</p>}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -203,6 +244,7 @@ function CoveragePageInner() {
   const engagementId = params.get('e') || getStoredEngagementId();
 
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
+  const [collectionCoverage, setCollectionCoverage] = useState<CollectionCoverage>({ state: 'loading' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -223,6 +265,35 @@ function CoveragePageInner() {
         }
       })
       .finally(() => setLoading(false));
+  }, [engagementId]);
+
+  useEffect(() => {
+    if (!engagementId) return;
+    let active = true;
+    setCollectionCoverage({ state: 'loading' });
+    portalApi.listReports(engagementId, { limit: 1, offset: 0 }).then(async (reports) => {
+      const latestPage = reports.total > 1
+        ? await portalApi.listReports(engagementId, { limit: 1, offset: reports.total - 1 })
+        : reports;
+      const latest = latestPage.items[0];
+      if (!latest || (latest.status !== 'finalized' && latest.status !== 'finalized_limited')) {
+        if (active) setCollectionCoverage({ state: latest ? 'unreleased' : 'unavailable' });
+        return;
+      }
+      const document = await portalApi.getReport(engagementId, latest.version);
+      const proof = document.report.report_proof as Record<string, unknown> | undefined;
+      const coverage = proof?.coverage;
+      if (active && coverage && typeof coverage === 'object') {
+        setCollectionCoverage({ state: 'available', coverage: coverage as Record<string, unknown> });
+      } else if (active) {
+        setCollectionCoverage({ state: 'unavailable' });
+      }
+    }).catch((error: unknown) => {
+      if (active) setCollectionCoverage({
+        state: error instanceof PortalApiError && error.status === 403 ? 'unreleased' : 'unavailable',
+      });
+    });
+    return () => { active = false; };
   }, [engagementId]);
 
   if (!engagementId) {
@@ -274,6 +345,8 @@ function CoveragePageInner() {
           {error}
         </div>
       )}
+
+      {!loading && !error && <CoverageLimitations data={collectionCoverage} />}
 
       {!loading && !error && !questionnaire && (
         <div className="rounded border border-border bg-surface-2 p-6 text-center space-y-1">

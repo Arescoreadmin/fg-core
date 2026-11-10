@@ -139,7 +139,7 @@ test('BFF relays core response bodies as bytes (binary downloads stay intact)', 
 
 test('BFF relays report state and artifact identity headers from core', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  for (const h of ['content-disposition', 'x-report-state', 'x-manifest-hash']) {
+  for (const h of ['content-disposition', 'x-report-state', 'x-manifest-hash', 'x-report-id', 'x-report-version']) {
     assert.ok(proxy.includes(`'${h}'`), `missing relayed header ${h}`);
   }
 });

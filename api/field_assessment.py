@@ -717,14 +717,14 @@ class RemediationPhase(BaseModel):
     label: str
     window: str
     findings: list[RemediationPhaseFinding]
-    compliance_delta_pct: float
+    compliance_delta_pct: float | None
     nist_controls_addressed: int
 
 
 class RemediationRoadmapResponse(BaseModel):
     engagement_id: str
-    current_coverage_pct: float
-    projected_coverage_pct: float
+    current_coverage_pct: float | None
+    projected_coverage_pct: float | None
     phases: list[RemediationPhase]
     total_open_findings: int
     is_truncated: bool = False
@@ -781,6 +781,8 @@ class EngagementSummaryResponse(BaseModel):
     total_evidence_links: int
     findings_by_severity: dict[str, int]
     open_findings_count: int
+    resolved_findings_count: int
+    high_findings_count: int
     critical_findings_count: int
     schema_version: str
 
@@ -1424,6 +1426,41 @@ def _get_trust_binding_authority() -> _TrustBindingAuthority:
 # ---------------------------------------------------------------------------
 
 
+def _questionnaire_coverage_metrics(
+    responses: list[Any],
+) -> tuple[int, float | None, set[str], set[str]]:
+    """Return questionnaire coverage using applicable controls only."""
+    from services.field_assessment.questionnaire_store import normalize_nist_control
+
+    applicable = [
+        response
+        for response in responses
+        if getattr(response, "response_status", None) != "not_applicable"
+    ]
+    denominator = len(applicable)
+    implemented = [
+        response
+        for response in applicable
+        if getattr(response, "response_status", None) == "implemented"
+    ]
+    control_ids = set()
+    for response in applicable:
+        control_id = getattr(response, "control_id", None)
+        normalized = normalize_nist_control(control_id) if control_id else None
+        if normalized:
+            control_ids.add(normalized)
+    implemented_controls = set()
+    for response in implemented:
+        control_id = getattr(response, "control_id", None)
+        normalized = normalize_nist_control(control_id) if control_id else None
+        if normalized:
+            implemented_controls.add(normalized)
+    percentage = (
+        round((len(implemented) / denominator) * 100, 1) if denominator else None
+    )
+    return denominator, percentage, control_ids, implemented_controls
+
+
 @router.get(
     "/engagements",
     response_model=EngagementListResponse,
@@ -1438,18 +1475,30 @@ def list_engagements_route(
     db: Session = Depends(auth_ctx_db_session),
 ) -> EngagementListResponse:
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    portal_engagement_id = getattr(request.state, "portal_engagement_id", None)
+    portal_scope_ids = getattr(request.state, "portal_engagement_ids", None)
+    if portal_engagement_id:
+        portal_scope_ids = {portal_engagement_id}
     rows = list_engagements(
         db,
         tenant_id=tenant_id,
         status_filter=status_filter,
         limit=limit,
         cursor=cursor,
+        engagement_ids=portal_scope_ids,
     )
     next_cursor = rows[-1].created_at if len(rows) == limit else None
     count_stmt = select(func.count(FaEngagement.id)).where(
         FaEngagement.tenant_id == tenant_id
     )
-    total = db.execute(count_stmt).scalar_one()
+    if portal_scope_ids is not None:
+        if not portal_scope_ids:
+            total = 0
+        else:
+            count_stmt = count_stmt.where(FaEngagement.id.in_(portal_scope_ids))
+            total = db.execute(count_stmt).scalar_one()
+    else:
+        total = db.execute(count_stmt).scalar_one()
     return EngagementListResponse(
         items=[_engagement_to_response(r) for r in rows],
         cursor=next_cursor,
@@ -3104,6 +3153,15 @@ def get_engagement_summary_route(
             FaNormalizedFinding.status == "open",
         )
     ).scalar_one()
+    resolved_findings_count = db.execute(
+        select(func.count(FaNormalizedFinding.id)).where(
+            FaNormalizedFinding.engagement_id == engagement_id,
+            FaNormalizedFinding.tenant_id == tenant_id,
+            FaNormalizedFinding.status.in_(
+                ("resolved", "remediated", "false_positive")
+            ),
+        )
+    ).scalar_one()
 
     total_evidence_links = db.execute(
         select(func.count(FaEvidenceLink.id)).where(
@@ -3124,6 +3182,8 @@ def get_engagement_summary_route(
         total_evidence_links=total_evidence_links,
         findings_by_severity=findings_by_severity,
         open_findings_count=open_findings_count,
+        resolved_findings_count=resolved_findings_count,
+        high_findings_count=findings_by_severity.get("high", 0),
         critical_findings_count=findings_by_severity.get("critical", 0),
         schema_version="1.0",
     )
@@ -11115,6 +11175,8 @@ class EngagementReportSummary(BaseModel):
     report_type: str | None
     qa_approved_by: str | None = None
     qa_approved_at: str | None = None
+    report_state: dict[str, Any] | None = None
+    manifest_hash: str | None = None
 
 
 class EngagementReportListResponse(BaseModel):
@@ -11122,6 +11184,27 @@ class EngagementReportListResponse(BaseModel):
     limit: int
     offset: int
     total: int
+
+
+def _customer_report_status(state: dict[str, Any]) -> str:
+    """Map the authoritative assurance state to a customer-safe status."""
+    state_name = state.get("state")
+    marking = state.get("marking")
+    if state_name == "FINAL" and "LIMITED COVERAGE" in str(marking or ""):
+        return "finalized_limited"
+    if state_name == "FINAL":
+        return "finalized"
+    if state_name == "DRAFT" and state.get("release_blockers"):
+        return "release_blocked"
+    if state_name == "DRAFT" and not state.get("qa_approved"):
+        return "pending_qa"
+    return {
+        "DRAFT": "draft",
+        "DRAFT_SYNTHETIC": "synthetic_draft",
+        "REJECTED": "rejected",
+        "SUPERSEDED": "superseded",
+        "WITHDRAWN": "withdrawn",
+    }.get(state_name if isinstance(state_name, str) else "", "unknown")
 
 
 class EngagementReportVerifyResponse(BaseModel):
@@ -11959,19 +12042,36 @@ def list_engagement_reports_route(
     total = len(versions)
     page = versions[offset : offset + limit]
 
-    items = [
-        EngagementReportSummary(
-            report_id=r.id,
-            version=r.version,
-            status="finalized" if r.is_finalized else "draft",
-            compiled_at=r.generated_at,
-            compiled_by=r.compiled_by,
-            report_type=r.report_type,
-            qa_approved_by=r.qa_approved_by,
-            qa_approved_at=r.qa_approved_at,
+    items = []
+    for report in page:
+        state, _ = _authoritative_report_state(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            record=report,
         )
-        for r in page
-    ]
+        state_name = state.get("state")
+        status = _customer_report_status(state)
+        items.append(
+            EngagementReportSummary(
+                report_id=report.id,
+                version=report.version,
+                status=status,
+                compiled_at=report.generated_at,
+                compiled_by=None,
+                report_type=report.report_type,
+                qa_approved_by=None
+                if _is_portal_origin(request)
+                else report.qa_approved_by,
+                qa_approved_at=report.qa_approved_at,
+                report_state={
+                    "state": state_name if isinstance(state_name, str) else "UNKNOWN",
+                    "marking": state.get("marking"),
+                    "release_blockers": state.get("release_blockers", []),
+                },
+                manifest_hash=report.manifest_hash,
+            )
+        )
     return EngagementReportListResponse(
         items=items,
         limit=limit,
@@ -12036,12 +12136,19 @@ def get_engagement_report_route(
         channel="document",
     )
     response.headers["Cache-Control"] = "no-store, private"
+    public_report_state = {
+        "state": report_state.get("state", "UNKNOWN"),
+        "marking": report_state.get("marking"),
+        "release_blockers": report_state.get("release_blockers", []),
+        "production_qualified": report_state.get("production_qualified"),
+        "limited_coverage": report_state.get("limited_coverage"),
+    }
     return {
-        "report_state": report_state,
+        "report_state": public_report_state,
         "report_id": record.id,
         "version": record.version,
         "report_type": record.report_type,
-        "compiled_by": record.compiled_by,
+        "compiled_by": None if _is_portal_origin(request) else record.compiled_by,
         "manifest_hash": record.manifest_hash,
         "section_hashes": record.section_hashes or {},
         "signature": record.signature,
@@ -12427,6 +12534,8 @@ def export_engagement_report_route(
         "Content-Disposition": f'attachment; filename="report-{engagement_id}-v{version}{_suffix}.pdf"',
         "X-Manifest-Hash": record.manifest_hash,
         "X-Report-State": report_state["state"],
+        "X-Report-ID": record.id,
+        "X-Report-Version": str(record.version),
         "Cache-Control": "no-store, private",
     }
     if record.signature:
@@ -13348,11 +13457,9 @@ def get_remediation_roadmap(
     """
     from services.field_assessment.remediation import (
         compute_priority_score,
-        compute_effort_level,
         assign_phase,
         PHASE_META,
         PHASE_ORDER,
-        NIST_TOTAL_CONTROLS,
     )
 
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
@@ -13389,14 +13496,19 @@ def get_remediation_roadmap(
     active = [f for f in all_findings if f.status in ("open", "in_progress")]
 
     # Build current NIST AI RMF coverage baseline from questionnaire.
-    current_coverage_pct = 0.0
+    current_coverage_pct: float | None = None
+    coverage_denominator = 0
     implemented_controls: set[str] = set()
+    questionnaire_control_ids: set[str] = set()
     qs = list_questionnaires(db, engagement_id=engagement_id, tenant_id=tenant_id)
     if qs:
         responses = list_responses(db, questionnaire_id=qs[0].id, tenant_id=tenant_id)
-        implemented = [r for r in responses if r.response_status == "implemented"]
-        current_coverage_pct = round((len(implemented) / NIST_TOTAL_CONTROLS) * 100, 1)
-        implemented_controls = {r.control_id for r in implemented}
+        (
+            coverage_denominator,
+            current_coverage_pct,
+            questionnaire_control_ids,
+            implemented_controls,
+        ) = _questionnaire_coverage_metrics(responses)
 
     # Group findings into phases; track NIST controls addressed per phase.
     phase_buckets: dict[str, list[FaNormalizedFinding]] = {p: [] for p in PHASE_ORDER}
@@ -13421,10 +13533,18 @@ def get_remediation_roadmap(
         for f in findings:
             for raw in f.nist_ai_rmf_mappings or []:
                 cid = normalize_nist_control(raw)
-                if cid and cid not in covered_so_far:
+                if (
+                    cid
+                    and cid in questionnaire_control_ids
+                    and cid not in covered_so_far
+                ):
                     phase_new_controls.add(cid)
 
-        delta_pct = round((len(phase_new_controls) / NIST_TOTAL_CONTROLS) * 100, 1)
+        delta_pct = (
+            round((len(phase_new_controls) / coverage_denominator) * 100, 1)
+            if coverage_denominator
+            else None
+        )
         covered_so_far |= phase_new_controls
 
         phase_findings = [
@@ -13436,14 +13556,14 @@ def get_remediation_roadmap(
                 finding_type=f.finding_type,
                 remediation_hint=f.remediation_hint,
                 remediation_priority=compute_priority_score(f),
-                effort_level=compute_effort_level(f),
+                effort_level="not_estimated",
                 nist_ai_rmf_mappings=f.nist_ai_rmf_mappings or [],
                 framework_mappings=f.framework_mappings or [],
                 nist_controls_addressed=len(
                     {
                         normalize_nist_control(r)
                         for r in (f.nist_ai_rmf_mappings or [])
-                        if normalize_nist_control(r)
+                        if normalize_nist_control(r) in questionnaire_control_ids
                     }
                 ),
             )
@@ -13454,15 +13574,19 @@ def get_remediation_roadmap(
         phases.append(
             RemediationPhase(
                 phase_id=phase_id,
-                label=meta["label"],
-                window=meta["window"],
+                label=f"{meta['label']} priority group",
+                window="Timing not estimated",
                 findings=phase_findings,
                 compliance_delta_pct=delta_pct,
                 nist_controls_addressed=len(phase_new_controls),
             )
         )
 
-    projected_coverage_pct = round((len(covered_so_far) / NIST_TOTAL_CONTROLS) * 100, 1)
+    projected_coverage_pct = (
+        round((len(covered_so_far) / coverage_denominator) * 100, 1)
+        if coverage_denominator
+        else None
+    )
 
     return RemediationRoadmapResponse(
         engagement_id=engagement_id,

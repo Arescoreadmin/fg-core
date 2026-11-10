@@ -98,6 +98,12 @@ export interface ReportVersionSummary {
   status: string;
   compiled_at: string;
   compiled_by: string | null;
+  report_state?: {
+    state?: string;
+    marking?: string;
+    release_blockers?: string[];
+  } | null;
+  manifest_hash?: string | null;
 }
 
 export interface ReportVersionListResponse {
@@ -247,7 +253,7 @@ export interface RemediationPhaseFinding {
   finding_type: string;
   remediation_hint: string | null;
   remediation_priority: number;
-  effort_level: 'low' | 'medium' | 'high';
+  effort_level: 'low' | 'medium' | 'high' | 'not_estimated';
   nist_ai_rmf_mappings: string[];
   framework_mappings: string[];
   nist_controls_addressed: number;
@@ -258,14 +264,14 @@ export interface RemediationPhase {
   label: string;
   window: string;
   findings: RemediationPhaseFinding[];
-  compliance_delta_pct: number;
+  compliance_delta_pct: number | null;
   nist_controls_addressed: number;
 }
 
 export interface RemediationRoadmap {
   engagement_id: string;
-  current_coverage_pct: number;
-  projected_coverage_pct: number;
+  current_coverage_pct: number | null;
+  projected_coverage_pct: number | null;
   phases: RemediationPhase[];
   total_open_findings: number;
   schema_version: string;
@@ -343,14 +349,32 @@ export interface EngagementDetail extends EngagementSummary {
 
 export interface EngagementCounts {
   engagement_id: string;
-  scan_results: number;
-  document_analyses: number;
-  field_observations: number;
-  normalized_findings: number;
-  evidence_links: number;
-  open_findings: number;
-  critical_findings: number;
+  scan_results: number | null;
+  document_analyses: number | null;
+  field_observations: number | null;
+  normalized_findings: number | null;
+  evidence_links: number | null;
+  open_findings: number | null;
+  critical_findings: number | null;
   findings_by_severity: Record<string, number>;
+  resolved_findings?: number | null;
+  high_findings?: number | null;
+}
+
+interface BackendEngagementSummary {
+  engagement_id: string;
+  total_scan_results?: number;
+  total_document_analyses?: number;
+  total_observations?: number;
+  total_findings?: number;
+  total_evidence_links?: number;
+  findings_by_severity?: Record<string, number>;
+  open_findings_count?: number;
+  open_findings?: number;
+  critical_findings_count?: number;
+  critical_findings?: number;
+  high_findings_count?: number;
+  resolved_findings_count?: number;
 }
 
 export interface ScanResult {
@@ -443,7 +467,17 @@ export const portalApi = {
     if (params?.limit != null) qs.set('limit', String(params.limit));
     if (params?.offset != null) qs.set('offset', String(params.offset));
     const q = qs.toString();
-    return request(`/field-assessment/engagements/${engagementId}/findings${q ? `?${q}` : ''}`);
+    return request<Omit<FindingListResponse, 'items'> & { items: Array<FindingSummary & { id?: string }> }>(
+      `/field-assessment/engagements/${engagementId}/findings${q ? `?${q}` : ''}`,
+    ).then((response) => ({
+      ...response,
+      // The canonical API names the stable finding identity `id`; the portal
+      // view model uses `finding_id`. Normalize at this boundary for React keys.
+      items: response.items.map((finding) => ({
+        ...finding,
+        finding_id: finding.finding_id ?? finding.id ?? '',
+      })),
+    }));
   },
 
   // Reports
@@ -451,11 +485,10 @@ export const portalApi = {
     engagementId: string,
     params?: { limit?: number; offset?: number },
   ): Promise<ReportVersionListResponse> {
-    const qs = new URLSearchParams();
-    if (params?.limit != null) qs.set('limit', String(params.limit));
-    if (params?.offset != null) qs.set('offset', String(params.offset));
-    const q = qs.toString();
-    return request(`/field-assessment/engagements/${engagementId}/reports${q ? `?${q}` : ''}`);
+    const query = new URLSearchParams({ engagement_id: engagementId });
+    if (params?.limit != null) query.set('limit', String(params.limit));
+    if (params?.offset != null) query.set('offset', String(params.offset));
+    return request(`/portal/engagement/reports?${query.toString()}`);
   },
 
   getReport(engagementId: string, version: number): Promise<ReportDocument> {
@@ -547,8 +580,22 @@ export const portalApi = {
     return request(`/field-assessment/engagements/${engagementId}`);
   },
 
-  getEngagementSummary(engagementId: string): Promise<EngagementCounts> {
-    return request(`/field-assessment/engagements/${engagementId}/summary`);
+  async getEngagementSummary(engagementId: string): Promise<EngagementCounts> {
+    const raw = await request<BackendEngagementSummary>(`/field-assessment/engagements/${engagementId}/summary`);
+    const severity = raw.findings_by_severity ?? {};
+    return {
+      engagement_id: raw.engagement_id,
+      scan_results: raw.total_scan_results ?? null,
+      document_analyses: raw.total_document_analyses ?? null,
+      field_observations: raw.total_observations ?? null,
+      normalized_findings: raw.total_findings ?? null,
+      evidence_links: raw.total_evidence_links ?? null,
+      open_findings: raw.open_findings_count ?? raw.open_findings ?? null,
+      critical_findings: raw.critical_findings_count ?? raw.critical_findings ?? severity.critical ?? null,
+      high_findings: raw.high_findings_count ?? severity.high ?? null,
+      resolved_findings: raw.resolved_findings_count ?? null,
+      findings_by_severity: severity,
+    };
   },
 
   // Scans (read-only)
