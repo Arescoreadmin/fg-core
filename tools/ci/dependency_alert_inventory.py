@@ -58,8 +58,9 @@ MANIFEST_AUTHORITY: dict[str, dict[str, str]] = {
         "is npm install; Dockerfile/Makefile/CI use npm); must not reappear",
     },
     "apps/console/console/package-lock.json": {
-        "status": "OBSOLETE_DUPLICATE_TREE",
-        "deployed_as": "none (not a Next.js app root; no pipeline installs it)",
+        "status": "RETIRED",
+        "deployed_as": "deleted with the whole apps/console/console/ tree in DEP-REMEDIATE-003 "
+        "(never installed or deployed; not a Next.js app root); must not reappear",
     },
     "apps/portal/package-lock.json": {
         "status": "AUTHORITATIVE_DEPLOY_STALE",

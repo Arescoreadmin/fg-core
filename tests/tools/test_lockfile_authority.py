@@ -231,3 +231,114 @@ def test_regression_gate_wires_the_guard() -> None:
     src = (REPO / "tools/ci/check_security_regression_gates.py").read_text()
     assert "def check_lockfile_authority(failures" in src
     assert "    check_lockfile_authority(failures)\n" in src
+
+
+# ─── DEP-REMEDIATE-003: nested application roots and retired trees ───────────
+
+POLICY_003: dict[str, Any] = {**POLICY, "retired_roots": ["apps/console/console"]}
+AUTHORITY_003 = {
+    **AUTHORITY,
+    "apps/console/console/package-lock.json": {
+        "status": "RETIRED",
+        "deployed_as": "deleted in DEP-REMEDIATE-003",
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "console/package.json",
+        "console/next.config.js",
+        "console/next.config.mjs",
+        "console/tsconfig.json",
+        "legacy/app/package.json",
+        "tools/yarn.lock",
+    ],
+)
+def test_nested_application_root_inside_policy_app_fails(
+    tmp_path: Path, rel: str
+) -> None:
+    auth = {**AUTHORITY_003, f"apps/console/{rel}": {"status": "DEV_TOOLING"}}
+    errs = _errors(
+        tmp_path,
+        _good(**{f"apps/console/{rel}": "{}"}),
+        policy=POLICY_003,
+        authority=auth,
+    )
+    assert any(f"nested application root apps/console/{rel}" in e for e in errs), errs
+
+
+def test_reintroduced_nested_console_lockfile_fails_three_ways(tmp_path: Path) -> None:
+    errs = _errors(
+        tmp_path,
+        _good(**{"apps/console/console/package-lock.json": "{}"}),
+        policy=POLICY_003,
+        authority=AUTHORITY_003,
+    )
+    assert any("nested application root" in e for e in errs)
+    assert any("retired tree has reappeared" in e for e in errs)
+    assert any("RETIRED lockfile has reappeared" in e for e in errs)
+
+
+def test_any_file_under_retired_root_fails(tmp_path: Path) -> None:
+    # Even a lone source file (no manifest) under the retired tree is rejected.
+    errs = _errors(
+        tmp_path,
+        _good(**{"apps/console/console/lib/coreApi.ts": "export {};"}),
+        policy=POLICY_003,
+        authority=AUTHORITY_003,
+    )
+    assert errs == [
+        "apps/console/console: retired tree has reappeared (1 tracked files, "
+        "e.g. apps/console/console/lib/coreApi.ts)"
+    ]
+
+
+def test_retired_root_prefix_does_not_match_sibling(tmp_path: Path) -> None:
+    files = _good(**{"apps/console/console-docs.md": "x"})
+    assert _errors(tmp_path, files, policy=POLICY_003, authority=AUTHORITY_003) == []
+
+
+def test_node_modules_package_roots_are_ignored(tmp_path: Path) -> None:
+    files = _good(**{"apps/console/node_modules/dep/package.json": "{}"})
+    assert _errors(tmp_path, files, policy=POLICY_003, authority=AUTHORITY_003) == []
+
+
+def test_unlisted_app_may_contain_nested_package_roots(tmp_path: Path) -> None:
+    # Legitimate independent package roots elsewhere in the monorepo stay allowed.
+    files = _good(
+        **{
+            "packages/ui/package.json": "{}",
+            "tools/site/sub/package.json": "{}",
+            "tools/site/sub/next.config.js": "",
+        }
+    )
+    assert _errors(tmp_path, files, policy=POLICY_003, authority=AUTHORITY_003) == []
+
+
+@pytest.mark.parametrize(
+    "retired", ['"apps/console/console"', '[""]', '["/"]', "[1]", "{}"]
+)
+def test_invalid_retired_roots_exit_2(tmp_path: Path, retired: str) -> None:
+    p = tmp_path / "policy.json"
+    p.write_text(
+        '{"apps": {"apps/console": {"package_manager": "npm", '
+        f'"lockfile": "package-lock.json"}}}}, "retired_roots": {retired}}}'
+    )
+    assert la.main(["--policy", str(p)]) == 2
+
+
+def test_guard_fails_closed_when_repository_state_is_unreadable(tmp_path: Path) -> None:
+    # Not a git repository: tracked files cannot be established -> exit 2, never 0.
+    (tmp_path / "apps/console").mkdir(parents=True)
+    assert la.main(["--repo", str(tmp_path)]) == 2
+
+
+def test_repository_retires_nested_console_tree() -> None:
+    policy = json.loads((REPO / ".github/security/lockfile-authority.json").read_text())
+    assert "apps/console/console" in policy["retired_roots"]
+    assert not (REPO / "apps/console/console").exists()
+    auth = la.load_manifest_authority()
+    assert auth["apps/console/console/package-lock.json"]["status"] == "RETIRED"
+    assert la.check(REPO, policy, auth) == []

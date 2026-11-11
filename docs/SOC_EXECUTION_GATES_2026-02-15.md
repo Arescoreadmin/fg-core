@@ -8321,3 +8321,24 @@ SOC review outcome: APPROVED (pending founder approval for production promotion)
 3. **Alert integrity.** No alert was dismissed. Closure is left to GitHub's rescan and verified by ID. The single overlapping dev-only exposure (minimatch, #88) stays open and is queued.
 
 SOC review outcome: APPROVED. It removes a false dependency authority without changing any installed package.
+
+---
+
+## 2026-11-11 - chore(security): DEP-REMEDIATE-003 — retire obsolete nested Console tree
+
+**Change scope:**
+- Deleted `apps/console/console/` (118 files: routes, components, lib, 15 test files, Dockerfile, `package.json`, `package-lock.json`, tsconfig).
+- Extended `tools/ci/check_lockfile_authority.py` and `.github/security/lockfile-authority.json` with `retired_roots` and nested application-root detection.
+- `tools/ci/dependency_alert_inventory.py` marks the nested lockfile RETIRED.
+- New ledger generator `tools/ci/dep_remediate_003_ledger.py`.
+- New behavioural test `apps/console/tests/rate-limit-store-behavior.test.js`.
+- No workflow, ruleset, application source, auth, tenant policy or runtime dependency changed.
+
+**Security analysis:**
+
+1. **No lost coverage.** All 712 legacy tests were executed against the deployed source and mapped to canonical active tests, or retired with commit evidence. The tenant isolation, BFF credential and secret-exposure invariants remain asserted by the active suite.
+2. **Removed attack surface.** The tree held the last copy of the client-side `TenantSwitcher` deliberately deleted in #706, along with stale BFF route code. Recurrence is fail-closed: any file under the retired root, or any second package or app root inside a policy app, fails the required regression gate.
+3. **A disclosed policy reversal is not hidden.** The retired tests encoded a fail-closed rate-limit outage policy that `225d21c25` reversed to fail-open. This PR does not change it; the reversal is recorded as residual risk R1 for founder decision.
+4. **Alert integrity.** No alert was dismissed. Closure is left to GitHub's rescan and verified by ID.
+
+SOC review outcome: APPROVED. It removes an unbuilt duplicate application and its false dependency authority without changing any deployed code path.

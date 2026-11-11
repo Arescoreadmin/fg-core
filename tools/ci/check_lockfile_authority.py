@@ -9,13 +9,17 @@ Policy: .github/security/lockfile-authority.json. For each listed app:
   * vercel.json, when the policy requires it, sets an explicit installCommand
     from the allow-list (no package-manager autodetection);
   * the Dockerfile, when listed, installs with the policy's manager, copies the
-    canonical lockfile and never invokes another manager or corepack.
+    canonical lockfile and never invokes another manager or corepack;
+  * no second application/package root (package.json, next.config.*,
+    tsconfig.json or lockfile) is tracked anywhere below the app root
+    (DEP-REMEDIATE-003: the nested apps/console/console/ tree).
 
 Repo-wide:
 
   * every tracked JS lockfile is classified in DEP-INV-001
     (tools/ci/dependency_alert_inventory.py MANIFEST_AUTHORITY);
-  * a manifest classified RETIRED must not exist (no silent reappearance).
+  * a manifest classified RETIRED must not exist (no silent reappearance);
+  * no tracked file may exist under a policy "retired_roots" directory.
 
 Apps not listed in the policy may use any package manager; they are only held
 to the repo-wide classification rule.
@@ -47,6 +51,9 @@ LOCKFILES = {
     "bun.lock": "bun",
 }
 MANAGERS = ("npm", "pnpm", "yarn", "bun")
+ROOT_MARKERS = re.compile(
+    r"^(package\.json|tsconfig\.json|next\.config\.(js|mjs|cjs|ts|mts))$"
+)
 
 
 def tracked_files(repo: Path) -> list[str]:
@@ -138,6 +145,26 @@ def check(
                 if re.search(r"\bcorepack\b", text):
                     errors.append(f"{app}/{dname}: uses corepack")
 
+        prefix = f"{app}/"
+        for path in files:
+            if not path.startswith(prefix) or "/node_modules/" in f"/{path}":
+                continue
+            rel = path[len(prefix) :]
+            name = Path(rel).name
+            if "/" in rel and (ROOT_MARKERS.match(name) or name in LOCKFILES):
+                errors.append(
+                    f"{app}: nested application root {path} — {app} must be the only "
+                    "package root (DEP-REMEDIATE-003)"
+                )
+
+    for root in policy.get("retired_roots", []):
+        under = [p for p in files if p.startswith(f"{root.rstrip('/')}/")]
+        if under:
+            errors.append(
+                f"{root}: retired tree has reappeared ({len(under)} tracked files, "
+                f"e.g. {under[0]})"
+            )
+
     for path in files:
         if Path(path).name in LOCKFILES and "/node_modules/" not in f"/{path}":
             entry = authority.get(path)
@@ -161,6 +188,11 @@ def main(argv: list[str] | None = None) -> int:
         policy = json.loads(args.policy.read_text())
         if not isinstance(policy.get("apps"), dict) or not policy["apps"]:
             raise ValueError("policy has no apps")
+        retired = policy.get("retired_roots", [])
+        if not isinstance(retired, list) or not all(
+            isinstance(r, str) and r.strip("/") for r in retired
+        ):
+            raise ValueError("retired_roots must be a list of non-empty paths")
         authority = load_manifest_authority()
     except (OSError, ValueError, KeyError, RuntimeError) as exc:
         print(f"lockfile-authority: INVALID_POLICY: {exc}", file=sys.stderr)
