@@ -108,7 +108,7 @@ jobs:
 
       - name: Upload artifacts (fg-fast)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-fast-artifacts-${{ github.run_attempt }}
           path: |
@@ -204,7 +204,7 @@ jobs:
 
       - name: Upload artifacts (fg-contract)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-contract-artifacts-${{ github.run_attempt }}
           path: |
@@ -258,7 +258,7 @@ jobs:
 
       - name: Upload artifacts (fg-security)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-security-artifacts-${{ github.run_attempt }}
           path: |
@@ -363,7 +363,7 @@ jobs:
 
       - name: Upload artifacts (fg-full-gates)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-full-gates-artifacts-${{ github.run_attempt }}
           path: |
@@ -458,7 +458,7 @@ jobs:
 
       - name: Upload shard artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-full-shard-${{ matrix.shard_index }}-${{ github.run_attempt }}
           # Upload artifacts/fg-full-shards/ (the parent) so the shard-N/ directory
@@ -530,7 +530,7 @@ jobs:
 
       - name: Upload aggregate artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-full-complete-artifacts-${{ github.run_attempt }}
           path: |
@@ -615,7 +615,7 @@ jobs:
 
       - name: Upload artifacts (flake detect)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fg-flake-artifacts-${{ github.run_attempt }}
           path: |

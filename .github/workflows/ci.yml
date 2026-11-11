@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload guard artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-guard-artifacts-${{ github.run_attempt }}
           path: |
@@ -146,7 +146,7 @@ jobs:
 
       - name: Upload enforcement artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-enforcement-mode-artifacts-${{ github.run_attempt }}
           path: |
@@ -203,7 +203,7 @@ jobs:
 
       - name: Upload unit artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-unit-artifacts-${{ github.run_attempt }}
           path: |
@@ -252,7 +252,7 @@ jobs:
 
       - name: Upload contract artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-contract-authority-artifacts-${{ github.run_attempt }}
           path: |
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload integration artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-integration-artifacts-${{ github.run_attempt }}
           path: |
@@ -365,7 +365,7 @@ jobs:
 
       - name: Upload migration replay artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-migrations-replay-artifacts-${{ github.run_attempt }}
           path: |
@@ -426,7 +426,7 @@ jobs:
 
       - name: Upload postgres verify artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-db-postgres-verify-artifacts-${{ github.run_attempt }}
           path: |
@@ -475,7 +475,7 @@ jobs:
 
       - name: Upload admin artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-admin-artifacts-${{ github.run_attempt }}
           path: |
@@ -516,7 +516,7 @@ jobs:
 
       - name: Upload console artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-console-artifacts-${{ github.run_attempt }}
           path: |
@@ -558,7 +558,7 @@ jobs:
 
       - name: Upload portal artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-portal-artifacts-${{ github.run_attempt }}
           path: |
@@ -606,7 +606,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-coverage-${{ github.run_attempt }}
           path: artifacts/ci/coverage.xml
@@ -653,7 +653,7 @@ jobs:
 
       - name: Upload PT artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-pt-artifacts-${{ github.run_attempt }}
           path: |
@@ -716,7 +716,7 @@ jobs:
 
       - name: Upload hardening artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-hardening-artifacts-${{ github.run_attempt }}
           path: |
@@ -780,7 +780,7 @@ jobs:
 
       - name: Upload Compliance Artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-compliance-artifacts-${{ github.run_attempt }}
           path: |
@@ -872,7 +872,7 @@ jobs:
 
       - name: Upload evidence bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-evidence-bundle-${{ github.run_attempt }}
           path: |
@@ -916,7 +916,7 @@ jobs:
 
       - name: Upload Linux agent artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-agent-linux-artifacts-${{ github.run_attempt }}
           path: |
@@ -954,7 +954,7 @@ jobs:
           if (!(Test-Path dist/frostgate-agent.exe.sha256)) { throw "sha256 missing" }
 
       - name: Upload Windows agent
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frostgate-agent-windows-${{ github.run_attempt }}
           path: |
