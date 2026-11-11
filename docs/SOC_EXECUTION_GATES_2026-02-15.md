@@ -8302,3 +8302,22 @@ SOC review outcome: APPROVED. An audit and offline classification tool; it chang
 4. **Disclosed side effect.** During preview verification, `vercel curl` created a Protection Bypass for Automation secret on the portal project. No protection mode, alias, environment variable or deployment was changed. Revocation is recommended.
 
 SOC review outcome: APPROVED (pending founder approval for production promotion).
+
+---
+
+## 2026-11-11 - chore(security): DEP-REMEDIATE-002 — retire obsolete Console pnpm lockfile
+
+**Change scope:**
+- Deleted `apps/console/pnpm-lock.yaml`.
+- New `tools/ci/check_lockfile_authority.py` and `.github/security/lockfile-authority.json`.
+- `tools/ci/check_security_regression_gates.py` gains `check_lockfile_authority`.
+- `tools/ci/dependency_alert_inventory.py` adds the RETIRED status.
+- No workflow, ruleset, application code or runtime dependency changed.
+
+**Security analysis:**
+
+1. **The production supply chain is preserved.** The console installs from `apps/console/package-lock.json` via the explicit `npm install` (Vercel) and `npm ci` (Docker and CI). This was verified against the live production build log before deletion.
+2. **Recurrence is fail-closed.** A second lockfile, a foreign `packageManager`, autodetected Vercel installs, a Dockerfile using another manager or corepack, an unclassified lockfile, or a reappearing RETIRED lockfile each fail the regression gate. An unloadable guard is itself a failure.
+3. **Alert integrity.** No alert was dismissed. Closure is left to GitHub's rescan and verified by ID. The single overlapping dev-only exposure (minimatch, #88) stays open and is queued.
+
+SOC review outcome: APPROVED. It removes a false dependency authority without changing any installed package.

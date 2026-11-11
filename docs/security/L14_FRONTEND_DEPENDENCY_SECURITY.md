@@ -145,6 +145,7 @@ No frontend route was added. The portal and console BFF proxies forward to the s
 - `apps/web` has no `test` or `lint` script and no CI build lane. It is covered by `tsc`, `next build`, the dependency gate and a check of the prerendered output.
 - `apps/console/console/` is an orphaned legacy copy with its own `package.json`. It is not built, deployed or referenced by the Makefile, CI or compose. It is compiled only by the console tsconfig glob, so one `await headers()` edit keeps that typecheck green. Its own lockfile is out of scope and should be deleted in a follow-up.
 - `apps/console/pnpm-lock.yaml` is stale; CI and Docker use npm.
+  - *Update 2026-11-11:* it was retired in DEP-REMEDIATE-002. `tools/ci/check_lockfile_authority.py` now prevents it from reappearing.
 
 ## 10. Remaining risks
 
