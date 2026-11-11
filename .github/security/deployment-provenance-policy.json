@@ -1,0 +1,24 @@
+{
+  "schema": "fg.deployment_provenance_policy/v1",
+  "description": "P0-PORTAL-DEPLOY-RECOVERY-001. Desired production deployment identity per Vercel project. Read by tools/ci/check_deployment_provenance.py (read-only). Raising security_baseline_commit is a deliberate, reviewed change.",
+  "vercel_scope": "frost-gate-s-projects",
+  "deployments": {
+    "portal": {
+      "project_id": "prj_f98i83OqtMWJ2IAubnSgARH1QOf9",
+      "project_name": "app.frostgate.ai",
+      "production_alias": "app.frostgate.ai",
+      "production_branch": "main",
+      "git_repo": "Arescoreadmin/fg-core",
+      "watch_paths": [
+        "apps/portal",
+        "packages/navigation",
+        "packages/ui",
+        "tools/vercel/ignore_build.sh"
+      ],
+      "security_baseline_commit": "751666a16d5435835458b754f03023554aa407e8",
+      "security_baseline_reason": "#819 L14-FRONTEND-DEPENDENCY-SEC-001 (Next 15.5.29 / React 19); its ancestry includes #804, #805, #815 and #817 (engagement isolation).",
+      "framework_package": "next",
+      "framework_lockfile": "apps/portal/package-lock.json"
+    }
+  }
+}
