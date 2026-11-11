@@ -124,7 +124,7 @@ jobs:
           make release-gate
 
       - name: Set up Go 1.22 with cache
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.22"
           cache: true
