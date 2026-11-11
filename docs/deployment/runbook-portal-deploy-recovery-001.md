@@ -147,26 +147,52 @@ Note on `/reports` with a forged well-formed `pnu1.` token: the page shell retur
 
 Founder approval is required. Nothing below has been executed.
 
-**Recommended path (staged; verifies with production configuration before the alias moves):**
+**Constraint (Codex P2, verified in code): an authenticated login cannot be completed on the unaliased deployment.**
+
+- `apps/portal/app/api/auth/oidc/route.ts` takes `redirect_uri` from `PORTAL_AUTH0_CALLBACK_URL`, which in production is `https://app.frostgate.ai/api/auth/oidc/callback`.
+- It sets the CSRF cookie `fg_oidc_state` host-only: no `domain`, `path=/`, `sameSite=lax`.
+- So a login started on `<deployment>.vercel.app` returns from Auth0 to `app.frostgate.ai`, which is the **old** deployment until promotion. That host has no `fg_oidc_state` cookie, so the callback (`callback/route.ts:94–97`) answers `session_expired`.
+- Pointing `PORTAL_AUTH0_CALLBACK_URL` and the Auth0 allowlist at the deployment host would not help either. Env changes need a rebuild, so the verified build would be a different artifact, with a non-production callback, from the one later promoted.
+
+Authenticated verification is therefore necessarily **post-promotion**. Pre-promotion checks prove the new build loaded production configuration.
+
+**Recommended path (staged):**
 
 1. **Baseline.** Run `make portal-deploy-provenance`; expect DRIFT. Save the output.
-2. **Settings change (founder).** Temporarily turn off *Settings → Domains → auto-assign custom domains* for production, so the production build happens without moving the alias.
+2. **Settings change (founder).** Temporarily turn off *Settings → Domains → auto-assign custom domains* for production, so the production build does not move the alias.
 3. **Merge.** Merge the PR. A production build of the merge commit starts.
-4. **Check the build.** Wait for READY. Confirm that the build log shows `ignore-build: BUILD …` and `Detected Next.js version: 15.5.29`.
-5. **Check the unaliased deployment.** Using its deployment URL, which is protected, run the §5 unauthenticated probes. Then **perform one named-user OIDC login per test tenant (A and B)**. Confirm:
-   - A cannot list or open B's engagements or reports;
+4. **Check the build.** Wait for READY. Confirm the build log shows `ignore-build: BUILD …` and `Detected Next.js version: 15.5.29`.
+5. **Pre-promotion checks on the unaliased deployment URL.** No auth configuration change and no login.
+   1. Run the §5 unauthenticated probes: protected pages → 307 `/login`; `POST /api/auth/login` → 403.
+   2. **The OIDC configuration is loaded.** `GET /api/auth/oidc` must return 302 to `https://<PORTAL_AUTH0_DOMAIN>/authorize` with `redirect_uri=https://app.frostgate.ai/api/auth/oidc/callback`. Read only the `Location` header and **do not follow it**. A 503 means config is missing, so abort.
+   3. **Core credentials are loaded, and Core rejects forgeries.** Call an allowlisted BFF route, e.g. `GET /api/core/portal/me`, with a random well-formed `pnu1.` cookie. It must be rejected by Core (401/403), never 200 and never `CORE_TENANT_ID is not configured`. This is one read-only, rejected request against production Core.
+   4. `GET /api/health` must report `"status":"ok"` with Redis configured.
+
+   Note: if the access method needs a protection bypass, use the existing one, or `vercel api` GET calls. `vercel curl` creates a bypass secret (see §5).
+6. **Promote, inside a scheduled verification window** (low traffic, founder on call): `vercel promote <deployment-id> --scope frost-gate-s-projects`.
+7. **Post-promotion authenticated verification on `app.frostgate.ai`, within 30 minutes.** Perform one named-user OIDC login per **test** tenant (A and B), then confirm:
+   - A cannot list or open B's engagements or reports, by URL or through the BFF;
    - restricted roles are denied;
-   - a report download is authorized.
+   - an authorized report download succeeds;
+   - logout clears the session.
 
    Use test tenants only, and make no writes to customer tenants.
-6. **Promote.** `vercel promote <deployment-id> --scope frost-gate-s-projects`.
-7. **Verify.** Run `make portal-deploy-provenance`, which **must be PASS** with the new deployment ID, the merge SHA and Next 15.5.29. Save it as `docs/deployment/evidence/portal_provenance_<date>_post_recovery.json`.
-8. **Restore the setting.** Turn auto-assign back on.
-9. **Only now** record PRODUCTION VERIFIED.
+8. **Provenance.** `make portal-deploy-provenance` **must be PASS**, with the new deployment ID, the merge SHA and Next 15.5.29. Save it as `docs/deployment/evidence/portal_provenance_<date>_post_recovery.json`.
+9. **Restore the setting.** Turn auto-assign back on.
+10. **Record PRODUCTION VERIFIED** only when steps 7 and 8 both pass.
 
-**Simple path** (if you accept a post-deploy verification window): merge, then steps 4, 5 and 7 against `app.frostgate.ai` directly. If step 5 fails, roll forward with a fix PR. Instant Rollback to `dpl_4LeXwoa4…` is the last resort, limited to hours, with the exposure noted above.
+**Simple path:** merge with auto-assign left on, then steps 4, 5 (against `app.frostgate.ai`), 7 and 8. This loses only the pre-alias configuration checks in step 5.
 
-**Abort criteria:** a failed build (production remains on the old build, which is safe but still vulnerable), an OIDC login failure, any cross-tenant read, or a provenance result other than PASS after promotion.
+**Abort criteria and recovery:**
+- **Before promotion:** a failed build, or any failure in step 5 → do not promote. Production stays on the old build, which is safe from regression but still vulnerable. Roll forward with a fix PR.
+- **After promotion:** an OIDC login failure, any cross-tenant read, a restricted-role allow, or provenance not PASS → `vercel rollback dpl_4LeXwoa4LjvnohVZ4y4PpzqD8QiW --scope frost-gate-s-projects`. This is **emergency-only and time-boxed** (hours): it reinstates Next 14.2.5's advisories and drops #817's portal-side isolation. Then roll forward.
+
+**Follow-up for true pre-promotion authenticated testing (out of scope; it changes auth code and Auth0 configuration):**
+- derive `redirect_uri` from the request host, validated against an explicit allowlist (`PORTAL_AUTH0_CALLBACK_URLS`);
+- register a fixed verification hostname, e.g. `portal-verify.frostgate.ai`, in Auth0;
+- alias the candidate deployment to that hostname before promoting it.
+
+This must keep the state cookie host-bound, and must reject unlisted hosts.
 
 ## 8. Residual risks
 
@@ -175,3 +201,4 @@ Founder approval is required. Nothing below has been executed.
 - **R3. The console uses the same `HEAD^` pattern.** Its pathspec is correct (`.`), but it does not diff against the last successful deploy. Follow-up: adopt `ignore_build.sh` for console and api.frostgate.ai.
 - **R4. fg-web / frostgate.ai deployment authority** is a separate workstream (DEP-INV-001 A2), not addressed here.
 - **R5.** The Protection Bypass secret created during verification (§5) remains until revoked.
+- **R6. No pre-promotion authenticated test path.** `redirect_uri` is env-bound to `app.frostgate.ai`, and the OIDC state cookie is host-only (§7 constraint). The follow-up design is in §7.

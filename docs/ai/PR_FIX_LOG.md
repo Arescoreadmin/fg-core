@@ -30,6 +30,12 @@
   - portal `npm test` 85/85, `tsc` OK, lint OK, production build OK.
 - **Merge = production deploy.** The project has `productionBranch: main` and `autoAssignCustomDomains: true`, so merging deploys production. Founder-approved staged promotion steps are in `docs/deployment/runbook-portal-deploy-recovery-001.md` §7.
 - **Status:** ENGINEERING PASS · PREVIEW PASS (scoped) · PRODUCTION NOT_VERIFIED.
+- **Addendum (Codex P2, runbook only):** the staged promotion's pre-promotion named-user login could not work.
+  - Why: `redirect_uri` comes from `PORTAL_AUTH0_CALLBACK_URL` (app.frostgate.ai), and `fg_oidc_state` is host-only, so Auth0 returns to the old deployment and the callback answers `session_expired`.
+  - Runbook §7 now does pre-promotion configuration checks only: OIDC 302 target not followed, forged `pnu1.` rejected by Core, health with Redis.
+  - Authenticated tenant checks move to a time-boxed post-promotion window, with explicit abort and rollback.
+  - Follow-up R6 records the host-allowlisted callback design.
+  - Guard's first run failed in runner `apt-get update` (3 timeouts, infrastructure). Only the failed jobs were re-run.
 
 ## audit(security): DEP-INV-001 — dependency inventory authority and vulnerability triage (branch audit/dep-inv-001)
 
