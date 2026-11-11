@@ -38,7 +38,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-hook-form": "^7.54.2",
-    "recharts": "^2.14.1",
+    "recharts": "^3.10.1",
     "resend": "^6.12.4",
     "tailwind-merge": "^2.6.0",
     "zod": "^4.6.7",
