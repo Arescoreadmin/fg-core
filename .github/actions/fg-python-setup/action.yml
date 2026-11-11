@@ -48,7 +48,25 @@ runs:
           done
         }
 
-        retry timeout 120 sudo apt-get update
+        # Fallback for a dead runner mirror (2026-11-11: azure.archive.ubuntu.com
+        # timed out for hours on ubuntu-26.04 runners). Only the mirror host
+        # changes; InRelease signature verification is unchanged.
+        use_official_ubuntu_mirror() {
+          echo "::warning::apt mirror unreachable; falling back to archive.ubuntu.com"
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf 'http://archive.ubuntu.com/ubuntu/\tpriority:1\n' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$f" ]; then
+              sudo sed -i 's#azure\.archive\.ubuntu\.com#archive.ubuntu.com#g' "$f"
+            fi
+          done
+        }
+
+        if ! timeout 120 sudo apt-get update; then
+          use_official_ubuntu_mirror
+          retry timeout 180 sudo apt-get update
+        fi
         retry timeout 120 sudo apt-get install -y --no-install-recommends \
           sqlite3 curl zip minisign ripgrep
 

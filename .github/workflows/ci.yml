@@ -839,8 +839,12 @@ jobs:
       - name: Install minisign
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends minisign
+          # fg-python-setup (install-os-deps) already installs minisign; avoid a
+          # second dependency on the apt mirror.
+          if ! command -v minisign >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends minisign
+          fi
           minisign -V || true
 
       - name: Verify signature

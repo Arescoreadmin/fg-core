@@ -1,3 +1,20 @@
+## ci: CI-APT-MIRROR-FALLBACK-001 — apt fallback when the runner Ubuntu mirror is unreachable (branch ci/apt-mirror-fallback)
+
+- **Work class:** REPAIR (CI infrastructure).
+- **Symptom:** since about 2026-11-11 13:15Z, every `frostgate-core-ci` run fails in `fg-python-setup` → "Install OS deps (retrying)". This affects `main` (Agent Linux, Integration, Coverage) and PR #845 (Guard, twice, plus a re-run). CI Required then fails closed, as designed.
+- **Root cause:**
+  - On `ubuntu-26.04` runners, `azure.archive.ubuntu.com` stopped answering: `Ign:` timeouts for every `resolute*` InRelease, so `apt-get update` exceeds its 120 s cap three times.
+  - The last green run at 01:53Z used the same image, and the same mirror answered immediately, so this is not an image change.
+  - GitHub status reports no incident.
+- **Fix:**
+  - `fg-python-setup` tries the configured mirrors once. On failure it rewrites `/etc/apt/apt-mirrors.txt`, and any source naming `azure.archive.ubuntu.com`, to `archive.ubuntu.com`, then retries (3 attempts, 180 s each). Package set, InRelease signature verification and failure semantics are unchanged; if both mirrors fail, the step still fails.
+  - `ci.yml` "Install minisign" (evidence job) installs only when minisign is missing. `fg-python-setup` already installed it, so the step no longer adds a second dependency on the mirror.
+- **Not changed:** no required check, job, `needs`, `continue-on-error`, `if`, permissions or action pins.
+- **Verification:**
+  - stubbed local runs: dead mirror → fallback → success; healthy mirror → unchanged; both mirrors dead → rc=1;
+  - `check_github_repo_security.py workflows` OK;
+  - 469 workflow and repo-security tests and 5 CI guard tests pass.
+
 ## audit(security): DEP-INV-001 — dependency inventory authority and vulnerability triage (branch audit/dep-inv-001)
 
 - **Work item:** DEP-INV-001, classed as SECURITY / REPAIR. `check_customer_one_roadmap.py --work-class REPAIR` authorizes it. `--work-item DEP-INV-001` reports BLOCKED (not in `next_sequence`), and the authority file is not edited.

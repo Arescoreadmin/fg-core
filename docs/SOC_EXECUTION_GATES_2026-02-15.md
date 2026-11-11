@@ -8283,3 +8283,17 @@ SOC review outcome: APPROVED.
 4. **No gate weakened.** Dependabot PRs fail the evidence and SOC gates by design. The remediation path is human-carried PRs, not bot exemptions.
 
 SOC review outcome: APPROVED. An audit and offline classification tool; it changes no control.
+
+---
+
+## 2026-11-11 - ci: CI-APT-MIRROR-FALLBACK-001 — apt mirror fallback in fg-python-setup
+
+**Change scope:** `.github/actions/fg-python-setup/action.yml` (OS-dependency step), `.github/workflows/ci.yml` (the evidence job's minisign step becomes install-if-missing).
+
+**Security analysis:**
+
+1. **Package trust is unchanged.** Only the mirror host changes, to Ubuntu's official `archive.ubuntu.com`. APT still verifies the signed InRelease against the image's Ubuntu archive keys, and no key, `trusted=yes` or `--allow-unauthenticated` is introduced.
+2. **Fails closed.** If the fallback mirror also fails, the step exits non-zero, and the job and CI Required fail exactly as before.
+3. **No gate is weakened.** Required checks, aggregate membership, job conditions, permissions and SHA pins are untouched (`check_github_repo_security.py workflows` OK).
+
+SOC review outcome: APPROVED. A CI availability repair that leaves package-trust controls unchanged.
