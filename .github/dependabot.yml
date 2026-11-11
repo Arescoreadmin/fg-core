@@ -3,6 +3,14 @@ version: 2
 # Dependabot security updates bypass this limit and are unaffected — they are
 # governed by GitHub repo settings (Security > Dependabot security updates), not
 # by this file. Set limit > 0 here only when routine version bumps are wanted.
+# P0-REPO-SECURITY-ENFORCEMENT-001 (2026-11-10): routine version-update PRs are
+# re-enabled with small limits for the security-relevant ecosystems (GitHub
+# Actions keeps the SHA-pinned actions current; the three frontends and pip
+# get grouped minor/patch PRs). Majors arrive as individual PRs. Nothing merges
+# automatically: repository auto-merge is disabled and every PR must pass the
+# required checks in .github/security/repository-policy.json. No `ignore`
+# rules are used, so security updates are never suppressed.
+#
 # NOTE (L14-FRONTEND-DEPENDENCY-SEC-001, 2026-11-10): the repository settings
 # currently have Dependabot alerts AND security updates DISABLED, so no
 # automated dependency PRs are produced at all. Detection of new frontend
@@ -15,7 +23,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "python"
@@ -52,7 +60,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "javascript"
@@ -62,6 +70,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      console-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # Node — apps/portal
   - package-ecosystem: "npm"
@@ -69,7 +81,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "javascript"
@@ -79,6 +91,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      portal-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # Node — apps/web (public marketing site; was previously uncovered)
   - package-ecosystem: "npm"
@@ -86,7 +102,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "javascript"
@@ -96,6 +112,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      web-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # GitHub Actions — pin action hashes against supply-chain attacks
   - package-ecosystem: "github-actions"
@@ -103,7 +123,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "github-actions"

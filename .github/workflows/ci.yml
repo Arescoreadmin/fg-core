@@ -963,3 +963,69 @@ jobs:
             dist/manifest.json
           if-no-files-found: error
           retention-days: 14
+
+  ci_required:
+    # Required status check (P0-REPO-SECURITY-ENFORCEMENT-001). Single stable
+    # aggregate for this workflow. On pull_request EVERY listed job must have
+    # result "success": a skipped job (e.g. Integration skipped because Unit
+    # failed), a failure, a cancellation or a timeout all fail this check.
+    # Coverage (advisory) is deliberately excluded. Membership is enforced by
+    # tools/ci/check_github_repo_security.py against
+    # .github/security/repository-policy.json.
+    name: CI Required
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ always() }}
+    permissions: {}
+    needs:
+      - fg_guard
+      - enforcement_mode_matrix
+      - unit
+      - contract_authority
+      - integration
+      - migrations_replay
+      - db_postgres_verify
+      - admin
+      - console
+      - portal
+      - pt
+      - hardening
+      - compliance
+      - evidence
+      - agent_linux
+      - agent_windows
+    steps:
+      - name: Evaluate mandatory job results
+        shell: bash
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          # Runtime cross-check: every expected job must report a result
+          # (kept identical to needs: by tools/ci/check_github_repo_security.py).
+          EXPECTED_JOBS: fg_guard,enforcement_mode_matrix,unit,contract_authority,integration,migrations_replay,db_postgres_verify,admin,console,portal,pt,hardening,compliance,evidence,agent_linux,agent_windows
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          event = os.environ["EVENT_NAME"]
+          # Pull requests: only success counts. Push to main: path-scoped jobs
+          # may legitimately skip, but failure/cancellation still fails.
+          allowed = {"success"} if event == "pull_request" else {"success", "skipped"}
+          expected = {j for j in os.environ.get("EXPECTED_JOBS", "").split(",") if j}
+          bad = {job: v.get("result") for job, v in needs.items() if v.get("result") not in allowed}
+          bad.update({job: "missing" for job in expected - set(needs)})
+          if not expected:
+              print("::error::EXPECTED_JOBS is empty"); sys.exit(1)
+          lines = ["| Job | Result |", "|---|---|"] + [f"| {j} | {v.get('result')} |" for j, v in sorted(needs.items())]
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as fh:
+                  fh.write("## CI Required\n\n" + "\n".join(lines) + "\n")
+          print("\n".join(lines))
+          if not needs:
+              print("::error::no mandatory jobs evaluated"); sys.exit(1)
+          if bad:
+              print(f"::error::mandatory jobs not successful: {bad}"); sys.exit(1)
+          print(f"CI Required: PASS ({len(needs)} jobs, event={event})")
+          PY

@@ -1304,7 +1304,7 @@ PORTAL_DIR  := apps/portal
 
 .PHONY: console-deps console-dev console-build console-lint console-test console-audit ci-console \
         portal-deps portal-dev portal-build portal-lint portal-test portal-audit ci-portal \
-        frontend-audit frontend-sbom
+        frontend-audit frontend-sbom repo-security-check repo-security-drift
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1362,6 +1362,17 @@ frontend-audit:
 
 frontend-sbom:
 	@$(FRONTEND_AUDIT) sbom
+
+# P0-REPO-SECURITY-ENFORCEMENT-001 — repository security policy.
+# repo-security-check: offline proof that required checks cannot fail open (CI).
+# repo-security-drift: READ-ONLY live readback vs .github/security/repository-policy.json
+#   (run as the repo admin for a complete result; never mutates settings).
+repo-security-check:
+	@$(PY) tools/ci/check_github_repo_security.py workflows
+
+repo-security-drift:
+	@mkdir -p artifacts/repo-security
+	@$(PY) tools/ci/check_github_repo_security.py live --out artifacts/repo-security/drift.json
 
 # =============================================================================
 # Repo guards

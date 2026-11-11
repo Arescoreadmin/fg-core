@@ -1,0 +1,105 @@
+# P0-REPO-SECURITY-ENFORCEMENT-001 — repository security drift detection.
+#
+# Daily read-only readback of the live GitHub configuration against
+# .github/security/repository-policy.json.
+# * DRIFT_DETECTED (e.g. the main ruleset was disabled or a required check was
+#   removed) fails the run and opens/updates a tracking issue.
+# * NOT_VERIFIED controls (admin-only endpoints the workflow token cannot
+#   read) are reported as warnings, never as compliant. A full admin readback
+#   is `make repo-security-drift` run by the founder.
+
+name: repo-security-drift
+
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: repo-security-drift
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Repository Security Drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install checker dependency (pinned in requirements-dev.txt)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin="$(grep -E '^PyYAML==' requirements-dev.txt)"
+          test -n "${pin}" || { echo "::error::PyYAML pin missing from requirements-dev.txt"; exit 1; }
+          python -m pip install --disable-pip-version-check -c constraints.txt "${pin}"
+          python -c "import yaml; print('PyYAML', yaml.__version__)"
+
+      - name: Live drift readback (read-only)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/repo-security
+          # `shell: bash` runs with -e; disable errexit so the checker's exit
+          # code (0 COMPLIANT / 1 DRIFT / 2 NOT_VERIFIED) reaches the handler.
+          set +e
+          python tools/ci/check_github_repo_security.py live --out artifacts/repo-security/drift.json \
+            | tee artifacts/repo-security/drift.md
+          rc=${PIPESTATUS[0]}
+          set -e
+          cat artifacts/repo-security/drift.md >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -eq 1 ]; then
+            echo "::error::Repository security DRIFT_DETECTED"; exit 1
+          elif [ "$rc" -ne 0 ]; then
+            echo "::warning::Some controls NOT_VERIFIED with the workflow token (admin readback required)"
+          fi
+
+      - name: Upload drift evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-security-drift-${{ github.run_attempt }}
+          path: artifacts/repo-security/
+          if-no-files-found: error
+          retention-days: 30
+
+  record-drift:
+    name: Record repository security drift
+    needs: drift
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update tracking issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="[security] Repository security drift detected (P0-REPO-SECURITY-ENFORCEMENT-001)"
+          body="Live GitHub configuration differs from .github/security/repository-policy.json. Run: ${RUN_URL}. Restore the setting or update the policy through a reviewed PR."
+          existing="$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body "${body}"
+          else
+            gh issue create --title "${title}" --body "${body}"
+          fi
