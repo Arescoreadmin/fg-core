@@ -8265,3 +8265,21 @@ SOC review outcome: APPROVED. CI is strictly hardened, and no application behavi
 - **Effect:** no control relaxed. The import-failure path still fails, and now has a dedicated test.
 
 SOC review outcome: APPROVED.
+
+---
+
+## 2026-11-11 - audit: DEP-INV-001 — dependency inventory authority and vulnerability triage
+
+**Change scope:**
+- New offline tool `tools/ci/dependency_alert_inventory.py` and its tests.
+- Docs: `docs/security/DEPENDENCY_INVENTORY_DEP_INV_001.md` and the inventory JSON.
+- No workflow, ruleset, lockfile, deployment configuration or application code changed.
+
+**Security analysis:**
+
+1. **Read-only and offline.** The tool reads operator-supplied JSON exports. It never contacts GitHub, never dismisses alerts and never mutates the repository.
+2. **Fails closed.** An alert on a manifest with no recorded authority is UNCLASSIFIED and exits 1; malformed input exits 2. Neither case can report clean. A test requires every tracked JS lockfile to have recorded authority.
+3. **Material finding: production drift.** `app.frostgate.ai` has not deployed since 2026-10-06, because of the #745 `ignoreCommand` path bug. It runs `next@14.2.5` and lacks the portal-side engagement isolation from #817. `frostgate.ai` runs a 2026-05-29 CLI upload. The remediation PRs are sequenced separately and need founder authorization, because merging them deploys.
+4. **No gate weakened.** Dependabot PRs fail the evidence and SOC gates by design. The remediation path is human-carried PRs, not bot exemptions.
+
+SOC review outcome: APPROVED. An audit and offline classification tool; it changes no control.

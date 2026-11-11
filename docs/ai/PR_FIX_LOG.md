@@ -1,3 +1,29 @@
+## audit(security): DEP-INV-001 — dependency inventory authority and vulnerability triage (branch audit/dep-inv-001)
+
+- **Work item:** DEP-INV-001, classed as SECURITY / REPAIR. `check_customer_one_roadmap.py --work-class REPAIR` authorizes it. `--work-item DEP-INV-001` reports BLOCKED (not in `next_sequence`), and the authority file is not edited.
+- **Baseline:** `a2c183af`. This is a read-only audit:
+  - 154 open Dependabot alerts and 22 open Dependabot PRs were exported with `gh api`;
+  - Vercel project settings, production aliases and build logs were read with the Vercel CLI;
+  - no alert was dismissed, and no setting or deployment was changed.
+- **Findings:**
+  - **No critical or high alert is on a deployed lockfile.** All 10 critical and 60 runtime-high alerts are on two manifests that no pipeline installs: `apps/console/pnpm-lock.yaml` (stale) and `apps/console/console/` (obsolete duplicate tree).
+  - **Portal production is stuck on old code.** Since #745 (2026-10-06), the portal `ignoreCommand` resolves repo-root paths from the Vercel project root and matches nothing, so every portal build is skipped. Production still serves `ec56641`, with `next@14.2.5` (37 advisories, 4 critical) and without #804, #805, #815, #817 or #819.
+  - **frostgate.ai runs an old CLI upload.** It serves a 2026-05-29 upload (`next@14.2.35`).
+  - **Dependabot PR #842 is a hidden major upgrade.** It is labelled as a security group but changes the deployed console to `next ^16.4.1`. Alerts on the stale pnpm lockfile drive it.
+  - **No Dependabot PR can pass on its own.** All 22 fail the tree-bound evidence and SOC/PR_FIX_LOG gates by design. The gates are not weakened.
+- **Added:**
+  - `tools/ci/dependency_alert_inventory.py`: offline and deterministic. It fails closed with exit 1 for an UNCLASSIFIED manifest and exit 2 for invalid input.
+  - `tests/tools/test_dependency_alert_inventory.py`: 19 tests.
+  - `docs/security/DEPENDENCY_INVENTORY_DEP_INV_001.md`: report and remediation sequence A to F.
+  - `docs/security/dependency_alert_inventory_2026-11-11.json`: the machine-readable inventory.
+- **Not changed:**
+  - No lockfile, `vercel.json`, Dependabot config, workflow or ruleset.
+  - Fixes that trigger deployments (portal `ignoreCommand`, pnpm-lock removal, retiring the nested tree) are proposed as separate PRs, so the founder controls deploy timing.
+- **Verification:**
+  - inventory tests 19/19 pass;
+  - `make frontend-audit` reports PASS for portal, console and web (0 critical/high in production);
+  - console `node --test` 3147/3147 pass.
+
 ## security(github): P0-REPO-SECURITY-ENFORCEMENT-001 — required checks that cannot fail open, Actions hardening, drift detection (branch security/p0-repo-enforcement-001)
 
 - **Work item:** P0-REPO-SECURITY-ENFORCEMENT-001. SECURITY / REPAIR: it closes merge-bypass and CI fail-open gaps. `check_customer_one_roadmap.py --work-item` reports the ID as not in `next_sequence`, and the authority file is not edited.
