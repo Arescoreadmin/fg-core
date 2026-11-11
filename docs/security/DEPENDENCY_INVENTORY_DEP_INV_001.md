@@ -199,3 +199,26 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
   - 68 of them have no corresponding vulnerable version in the deployed npm lockfile.
   - #169 (minimatch GHSA-g3hv-75wg-m249, moderate) overlaps a real **development-only** exposure (`minimatch` 10.2.6 via `@typescript-eslint`). That exposure is tracked separately as alert #88 and remains open; it belongs to DEP-REMEDIATE-006.
 - **Alert accounting:** the 154-alert baseline above is historical. The post-merge count is to be recorded from GitHub's rescan, by alert ID. No alert was dismissed.
+
+**Outcome (recorded at DEP-REMEDIATE-003 start, 2026-11-11):** #847 merged as `e5bcd96ed`. GitHub then reported 85 open alerts; the 69 targeted IDs show as fixed, none dismissed.
+
+### DEP-REMEDIATE-003: `apps/console/console/` retired (step C)
+
+- **Verification before deletion** (2026-11-11). The tree had no consumer:
+  - no Vercel project, Dockerfile, compose service, Makefile target, CI workflow or import references it;
+  - it is not a Next.js app root;
+  - its only effects were on the active Console's type-check (91 files) and test discovery (712 tests that read the nested copies, not deployed code).
+
+  Full proof: `DEP_REMEDIATE_003_NESTED_CONSOLE_RETIREMENT.md` §2.
+- **Coverage:** all 712 legacy tests were executed against the active source and mapped: 706 ALREADY_COVERED, 6 OBSOLETE_WITH_EVIDENCE, 0 BLOCKED.
+  - The 6 obsolete tests include three fail-closed rate-limit outage tests that `225d21c25` deliberately reversed. They are recorded as a residual risk, not reinstated.
+  - 11 new behavioural tests execute the real `lib/rateLimitStore.ts`.
+  - The ledger is `dep_remediate_003_retirement_ledger.json`.
+- **Change:**
+  - all 118 files are deleted, including the last copy of the `TenantSwitcher` removed in #706;
+  - `MANIFEST_AUTHORITY` now marks the nested lockfile `RETIRED`;
+  - the lockfile-authority guard now rejects nested application roots inside policy apps and anything under `retired_roots`.
+- **Alerts targeted:** 65 (4 critical, 30 high, 26 medium, 5 low). IDs are in `dep_remediate_003_alert_reconciliation.json`.
+  - 64 have no vulnerable counterpart in the deployed npm lockfile.
+  - #87 (minimatch, development-only) overlaps #88, which remains open under DEP-REMEDIATE-006.
+- **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 20, to be confirmed by ID.

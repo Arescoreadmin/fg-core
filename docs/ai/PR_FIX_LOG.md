@@ -1,3 +1,23 @@
+## chore(security): DEP-REMEDIATE-003 — retire obsolete nested Console tree (branch chore/dep-remediate-003)
+
+- **Work item:** DEP-REMEDIATE-003, classed as REPAIR. It implements DEP-INV-001 (#844) remediation step C, after DEP-REMEDIATE-002 (#847, `e5bcd96ed`).
+- **Root cause:** `apps/console/console/` was a full second Console tree (118 files, its own `package.json` and a lockfile pinning next 14.2.35) that nothing builds or deploys. GitHub scanned its lockfile, producing 65 alerts (4 critical). The active `tsconfig` type-checked 91 of its files, and `npm test` ran its 712 tests, which read the nested copies rather than deployed code.
+- **Evidence it is unused:**
+  - no Vercel project, Docker or compose service, Make target, workflow or import references it;
+  - Console production (`e5bcd96ed`, both projects) builds from `apps/console` with `npm install` and Next 15.5.29 (read-only API).
+- **Coverage ledger:**
+  - each legacy test was executed against the active source and mapped: 706 ALREADY_COVERED, 6 OBSOLETE_WITH_EVIDENCE, 0 BLOCKED;
+  - three of the six are fail-closed rate-limit tests reversed by `225d21c25` (residual risk R1, not reinstated);
+  - the generator is `tools/ci/dep_remediate_003_ledger.py`, deterministic, and the validator is `tests/tools/test_dep_remediate_003_retirement.py`.
+- **New coverage:** `apps/console/tests/rate-limit-store-behavior.test.js` (11 tests) executes the real `lib/rateLimitStore.ts`. A mutation that forces the memory fallback fails 6 of them.
+- **Guard:** `check_lockfile_authority.py` now rejects nested application roots inside policy apps and any file under `retired_roots`. `MANIFEST_AUTHORITY` marks the nested lockfile `RETIRED`.
+- **Runtime dependencies:** unchanged. The console `package.json` and `package-lock.json` are untouched (sha256 `ab46e65b…` before and after `npm ci`). The type-checked active file set is identical (359 files).
+- **Alerts:** 65 targeted; the IDs are in `docs/security/dep_remediate_003_alert_reconciliation.json`. #87 overlaps the dev-only #88, which remains open. Nothing was dismissed.
+- **Deploy consequence:** merging changes `apps/console/`, which triggers automatic production rebuilds of console.frostgate.ai and api.frostgate.ai from the same lockfile and source.
+- **Tests:**
+  - console: 3147 tests before, 2446 after (−712 mapped legacy, +11 new); `tsc`, lint and `next build` OK;
+  - guard 44, retirement 9, inventory 19.
+
 ## chore(security): DEP-REMEDIATE-002 — retire obsolete Console pnpm lockfile (branch chore/dep-remediate-002)
 
 - **Work item:** DEP-REMEDIATE-002, classed as REPAIR. It implements DEP-INV-001 (#844) remediation step B.
