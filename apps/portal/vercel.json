@@ -3,5 +3,5 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/portal packages/navigation packages/ui"
+  "ignoreCommand": "bash ../../tools/vercel/ignore_build.sh apps/portal packages/navigation packages/ui tools/vercel/ignore_build.sh || exit 1"
 }

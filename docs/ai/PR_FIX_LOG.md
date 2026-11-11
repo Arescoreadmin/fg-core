@@ -1,3 +1,42 @@
+## feat(deploy): P0-PORTAL-DEPLOY-RECOVERY-001 — restore portal deployment integrity (branch deploy/p0-portal-deploy-recovery-001)
+
+- **Work item:** P0-PORTAL-DEPLOY-RECOVERY-001, classed as REPAIR. `check_customer_one_roadmap.py --work-class REPAIR` authorizes it.
+- **Root cause, re-verified live (read-only Vercel API):**
+  - The portal `ignoreCommand` from #745 ran repo-root paths from the Vercel Root Directory `apps/portal`. It matched nothing and exited 0, so Vercel cancelled every build: the last 100 portal deployments are CANCELED, 19 of them production.
+  - The #817 production build log shows the cancellation.
+  - `app.frostgate.ai` still serves `dpl_4LeXwoa4…` (`ec566412`, Next 14.2.5). Six relevant `main` commits (#745–#819) are not deployed.
+- **Fix:**
+  - `tools/vercel/ignore_build.sh`:
+    - resolves paths from the repo top level;
+    - diffs against `VERCEL_GIT_PREVIOUS_SHA` (last successful deployment), not `HEAD^`;
+    - builds on any uncertainty;
+    - exits only 0 or 1.
+  - The `vercel.json` command adds `|| exit 1`.
+  - Watch paths: `apps/portal`, `packages/navigation`, `packages/ui` and the script itself, derived from `file:` dependencies and `tsconfig` paths and enforced by a test.
+- **Provenance:**
+  - `tools/ci/check_deployment_provenance.py` and `.github/security/deployment-provenance-policy.json` add a read-only checker (`make portal-deploy-provenance`): PASS / DRIFT / NOT_VERIFIED.
+  - Authority is the deployment the alias actually serves, never CI or commit status.
+  - Ancestry in a shallow clone never yields DRIFT.
+  - Only allow-listed fields are emitted, never environment values.
+  - Live result: DRIFT (security baseline `751666a1` not deployed; 6 commits behind).
+- **Preview:**
+  - First portal build in five weeks: `dpl_Hkq2g4Xs…`, READY, Next 15.5.29.
+  - Skip-rule log line: `ignore-build: BUILD`. The console and api.frostgate.ai builds were CANCELED for the same commit.
+  - 21 read-only probes all fail closed.
+  - Authenticated and tenant flows are NOT_VERIFIED: all portal env vars are production-scoped.
+- **Disclosure:** `vercel curl` auto-created a Protection Bypass for Automation secret on the portal project (2026-11-11 14:01Z). This was an unplanned settings change; revocation is recommended.
+- **Tests:**
+  - `test_vercel_ignore_build.py` 27 and `test_deployment_provenance.py` 27;
+  - portal `npm test` 85/85, `tsc` OK, lint OK, production build OK.
+- **Merge = production deploy.** The project has `productionBranch: main` and `autoAssignCustomDomains: true`, so merging deploys production. Founder-approved staged promotion steps are in `docs/deployment/runbook-portal-deploy-recovery-001.md` §7.
+- **Status:** ENGINEERING PASS · PREVIEW PASS (scoped) · PRODUCTION NOT_VERIFIED.
+- **Addendum (Codex P2, runbook only):** the staged promotion's pre-promotion named-user login could not work.
+  - Why: `redirect_uri` comes from `PORTAL_AUTH0_CALLBACK_URL` (app.frostgate.ai), and `fg_oidc_state` is host-only, so Auth0 returns to the old deployment and the callback answers `session_expired`.
+  - Runbook §7 now does pre-promotion configuration checks only: OIDC 302 target not followed, forged `pnu1.` rejected by Core, health with Redis.
+  - Authenticated tenant checks move to a time-boxed post-promotion window, with explicit abort and rollback.
+  - Follow-up R6 records the host-allowlisted callback design.
+  - Guard's first run failed in runner `apt-get update` (3 timeouts, infrastructure). Only the failed jobs were re-run.
+
 ## audit(security): DEP-INV-001 — dependency inventory authority and vulnerability triage (branch audit/dep-inv-001)
 
 - **Work item:** DEP-INV-001, classed as SECURITY / REPAIR. `check_customer_one_roadmap.py --work-class REPAIR` authorizes it. `--work-item DEP-INV-001` reports BLOCKED (not in `next_sequence`), and the authority file is not edited.

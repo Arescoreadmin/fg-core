@@ -1,0 +1,239 @@
+{
+  "schema": "fg.deployment_provenance/v1",
+  "project": "portal",
+  "mode": "live",
+  "observed_at": "2026-11-11T13:55:34+00:00",
+  "status": "DRIFT",
+  "policy": {
+    "project_id": "prj_f98i83OqtMWJ2IAubnSgARH1QOf9",
+    "production_alias": "app.frostgate.ai",
+    "production_branch": "main",
+    "git_repo": "Arescoreadmin/fg-core",
+    "security_baseline_commit": "751666a16d5435835458b754f03023554aa407e8",
+    "watch_paths": [
+      "apps/portal",
+      "packages/navigation",
+      "packages/ui",
+      "tools/vercel/ignore_build.sh"
+    ]
+  },
+  "branch_ref": "origin/main",
+  "observed": {
+    "deployment_id": "dpl_4LeXwoa4LjvnohVZ4y4PpzqD8QiW",
+    "deployment_url": "appfrostgate-kfmhdwl7g-frost-gate-s-projects.vercel.app",
+    "project_id": "prj_f98i83OqtMWJ2IAubnSgARH1QOf9",
+    "project_name": "app.frostgate.ai",
+    "target": "production",
+    "ready_state": "READY",
+    "build_skipped": false,
+    "source": "git",
+    "created_at": "2026-10-06T01:30:08.265000+00:00",
+    "ready_at": "2026-10-06T01:36:18.843000+00:00",
+    "alias_assigned": true,
+    "aliases": [
+      "app.frostgate.ai",
+      "appfrostgateai-frost-gate-s-projects.vercel.app",
+      "appfrostgateai-git-main-frost-gate-s-projects.vercel.app",
+      "appfrostgateai.vercel.app"
+    ],
+    "git_repo": "Arescoreadmin/fg-core",
+    "git_ref": "main",
+    "git_sha": "ec566412fc803bcdcf23f5cd8f3c9c9f70064066",
+    "latest_relevant_commit": "751666a16d5435835458b754f03023554aa407e8",
+    "relevant_commits_not_deployed": [
+      "751666a16 security(frontend): L14-FRONTEND-DEPENDENCY-SEC-001 dependency remediation and supply-chain enforcement (#819)",
+      "c69f9d7f9 fix(portal): L14-PORTAL-TRUTH-001 canonical reports, metrics and engagement isolation (#817)",
+      "4eab0d83a test(field-assessment): L14-CUSTOMER-ZERO-E2E-001 synthetic customer acceptance (#815)",
+      "ab72e44f9 audit(experience): L14 unified brand, navigation and customer journey verification (#805)",
+      "083308c75 feat(portal): L14-PORTAL-HANDOFF-001 \u2014 secure post-payment customer activation and assessment handoff (#804)",
+      "266f034b0 fix(vercel): add ignoreCommand to portal and console (#745)"
+    ],
+    "framework_version_build_log": "14.2.5",
+    "framework_version_lockfile_at_sha": "14.2.5",
+    "build_log_clone": {
+      "repo": "Arescoreadmin/fg-core",
+      "branch": "main",
+      "commit": "ec56641"
+    },
+    "newer_production_attempts_not_current": [
+      {
+        "id": "dpl_9BEfGoLGiipWYiQseNFs7k226YAV",
+        "state": "CANCELED",
+        "created_at": "2026-11-11T13:15:05.656000+00:00",
+        "sha": "69c89b5f61dc"
+      },
+      {
+        "id": "dpl_D4kS7WDmFRUmYvkc1dAvT6RB2Ch1",
+        "state": "CANCELED",
+        "created_at": "2026-11-11T00:44:59.739000+00:00",
+        "sha": "a2c183af7880"
+      },
+      {
+        "id": "dpl_FcKxgr99iXtxkBci2ACNAc1MGfF9",
+        "state": "CANCELED",
+        "created_at": "2026-11-10T20:08:27.473000+00:00",
+        "sha": "751666a16d54"
+      },
+      {
+        "id": "dpl_HVdJMt9ay7HCepCo8yW5s4Dgq8fP",
+        "state": "CANCELED",
+        "created_at": "2026-11-10T17:40:19.938000+00:00",
+        "sha": "7ae17b4ddc5e"
+      },
+      {
+        "id": "dpl_EvtGEb8SQR7yEwxE5YC3Qy3qbwnP",
+        "state": "CANCELED",
+        "created_at": "2026-11-10T15:06:04.110000+00:00",
+        "sha": "c69f9d7f9706"
+      },
+      {
+        "id": "dpl_ECRFESQKd4qT6wtJd6i6xq31DrtN",
+        "state": "CANCELED",
+        "created_at": "2026-11-09T21:23:03.964000+00:00",
+        "sha": "d31cdf1a8811"
+      },
+      {
+        "id": "dpl_7ryYJY268TEUhz3MAnw6Hj7sB6nW",
+        "state": "CANCELED",
+        "created_at": "2026-11-09T15:35:13.898000+00:00",
+        "sha": "4eab0d83a2e6"
+      },
+      {
+        "id": "dpl_G6kibBVbUwESET1qmFqKjePPDXtN",
+        "state": "CANCELED",
+        "created_at": "2026-11-09T12:14:55.093000+00:00",
+        "sha": "69f69c32a678"
+      },
+      {
+        "id": "dpl_CZV194ExuptstAv43KpY87ZMRi9z",
+        "state": "CANCELED",
+        "created_at": "2026-11-08T23:58:58.093000+00:00",
+        "sha": "f686627fcf6f"
+      },
+      {
+        "id": "dpl_FR8vefeNYAkaUBdgCpA54jzN7axh",
+        "state": "CANCELED",
+        "created_at": "2026-11-08T20:24:25.956000+00:00",
+        "sha": "fa74a2c97889"
+      },
+      {
+        "id": "dpl_Hdcpo3CL3tN3WggQoj8sSP2BP2YK",
+        "state": "CANCELED",
+        "created_at": "2026-11-08T16:42:32.155000+00:00",
+        "sha": "94ff137e25c5"
+      },
+      {
+        "id": "dpl_7KXvCHyFfKnyGFnMYrsPSPDsou9A",
+        "state": "CANCELED",
+        "created_at": "2026-11-08T00:39:31.836000+00:00",
+        "sha": "35648e08bce0"
+      },
+      {
+        "id": "dpl_6aSdNzpqmtx83qfUo3W34TNH82xG",
+        "state": "CANCELED",
+        "created_at": "2026-11-07T21:37:52.205000+00:00",
+        "sha": "aff1f69003e5"
+      },
+      {
+        "id": "dpl_47AnWgF3AQdedL3HAopsPGHkjWrZ",
+        "state": "CANCELED",
+        "created_at": "2026-11-07T04:24:25.008000+00:00",
+        "sha": "4c490a45a414"
+      },
+      {
+        "id": "dpl_ATPsTkEkqccLQSBFeRFb5vYUE5HF",
+        "state": "CANCELED",
+        "created_at": "2026-11-07T00:33:58.989000+00:00",
+        "sha": "2c24dd88648e"
+      },
+      {
+        "id": "dpl_HQKfMJhS2z6REjEZkdB15DNMKhsm",
+        "state": "CANCELED",
+        "created_at": "2026-11-06T20:27:17.326000+00:00",
+        "sha": "5a71321206e4"
+      },
+      {
+        "id": "dpl_De2VNABzj9STVTdmtxJyQU1svfPn",
+        "state": "CANCELED",
+        "created_at": "2026-11-06T17:48:11.820000+00:00",
+        "sha": "b0f671cb7e82"
+      },
+      {
+        "id": "dpl_Dwov8qEHNnh4W534yjLuGP2u1Q4e",
+        "state": "CANCELED",
+        "created_at": "2026-11-06T14:37:01.805000+00:00",
+        "sha": "ab72e44f922e"
+      },
+      {
+        "id": "dpl_Goik7p8KEdh5zW2bGtZfZrkmEPyj",
+        "state": "CANCELED",
+        "created_at": "2026-11-05T23:38:08.075000+00:00",
+        "sha": "083308c7578d"
+      },
+      {
+        "id": "dpl_GYgQVWSMuDKHsi1J2UmyBN22pTgy",
+        "state": "CANCELED",
+        "created_at": "2026-11-05T17:06:07.048000+00:00",
+        "sha": "2e76da0344c0"
+      }
+    ]
+  },
+  "controls": [
+    {
+      "control": "deployment_resolved",
+      "status": "PASS",
+      "detail": "app.frostgate.ai -> dpl_4LeXwoa4LjvnohVZ4y4PpzqD8QiW"
+    },
+    {
+      "control": "project_identity",
+      "status": "PASS",
+      "detail": "prj_f98i83OqtMWJ2IAubnSgARH1QOf9"
+    },
+    {
+      "control": "production_alias",
+      "status": "PASS",
+      "detail": "app.frostgate.ai assigned"
+    },
+    {
+      "control": "target_production",
+      "status": "PASS",
+      "detail": "production target"
+    },
+    {
+      "control": "build_outcome",
+      "status": "PASS",
+      "detail": "READY"
+    },
+    {
+      "control": "git_source",
+      "status": "PASS",
+      "detail": "Arescoreadmin/fg-core@main ec566412fc80"
+    },
+    {
+      "control": "commit_known",
+      "status": "PASS",
+      "detail": "ec566412fc80"
+    },
+    {
+      "control": "security_baseline",
+      "status": "DRIFT",
+      "detail": "production ec566412fc80 predates security baseline 751666a16d54 (#819 L14-FRONTEND-DEPENDENCY-SEC-001 (Next 15.5.29 / React 19); its ancestry includes #804, #805, #815 and #817 (engagement isolation).)"
+    },
+    {
+      "control": "freshness",
+      "status": "DRIFT",
+      "detail": "6 relevant commit(s) on origin/main not deployed; latest 751666a16d54"
+    },
+    {
+      "control": "build_log_commit",
+      "status": "PASS",
+      "detail": "build log cloned ec56641"
+    },
+    {
+      "control": "framework_version",
+      "status": "PASS",
+      "detail": "next 14.2.5 (build log == lockfile)"
+    }
+  ],
+  "attestation_limits": "git SHA identifies the cloned source tree only; dependency graph is not attested beyond the framework version cross-check."
+}
