@@ -1,0 +1,214 @@
+{
+  "schema": "fg.preview_security_acceptance/v1",
+  "work_item": "P0-PORTAL-DEPLOY-RECOVERY-001",
+  "observed_at": "2026-11-11T14:10:00Z",
+  "preview": {
+    "deployment_id": "dpl_Hkq2g4XsKoJtToUanasDPG7r9rFQ",
+    "target": "preview",
+    "ready_state": "READY",
+    "project_id": "prj_f98i83OqtMWJ2IAubnSgARH1QOf9",
+    "git_ref": "deploy/p0-portal-deploy-recovery-001",
+    "git_sha": "12cddef65c62fd1f72d3ecae010207a86453dec7",
+    "build_log": [
+      "Running \"bash ../../tools/vercel/ignore_build.sh apps/portal packages/navigation packages/ui tools/vercel/ignore_build.sh || exit 1\"",
+      "ignore-build: BUILD \u2014 changes in [apps/portal packages/navigation packages/ui tools/vercel/ignore_build.sh] since parent commit (first deployment of this branch)",
+      "Running \"install\" command: npm install",
+      "Detected Next.js version: 15.5.29",
+      "Compiled successfully in 12.3s"
+    ],
+    "other_projects_same_commit": {
+      "console.frostgate.ai": "CANCELED",
+      "api.frostgate.ai": "CANCELED",
+      "fg-web": "no deployment"
+    },
+    "environment_note": "All 19 portal env vars are production-scoped; the preview has no Core API, Auth0, session or Redis configuration (BFF upstream defaults to http://localhost:8000)."
+  },
+  "access_method": "vercel curl (operator CLI login). NOTE: the CLI auto-created a 'Protection Bypass for Automation' secret on the project at 2026-11-11T14:01Z \u2014 an unplanned settings change disclosed in the PR.",
+  "probes": [
+    {
+      "probe": "root",
+      "path": null,
+      "http_status": "307",
+      "location": "/login",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "dashboard_unauth",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Fdashboard",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "engagement_cross_tenant_unauth",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Fengagement%2Feng-tenant-b",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "reports_unauth",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Freports",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "forged_session_cookie",
+      "path": null,
+      "http_status": "307",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "/login?next=%2Freports"
+    },
+    {
+      "probe": "bff_unauth_engagements",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Fapi%2Fcore%2Fengagements",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "bff_forged_tenant_header",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Fapi%2Fcore%2Freports",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "bff_forged_cookie",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?next=%2Fapi%2Fcore%2Fengagements",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "Redirecting..."
+    },
+    {
+      "probe": "password_login_post",
+      "path": null,
+      "http_status": "403",
+      "location": null,
+      "cache_control": "no-store",
+      "body_prefix": "{\"error\":\"Password-based portal login is disabled in production.\",\"code\":\"PORTAL_DEMO_AUTH_DISABLED\"}"
+    },
+    {
+      "probe": "oidc_start_unconfigured",
+      "path": null,
+      "http_status": "503",
+      "location": null,
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "{\"error\":\"Portal OIDC authentication is not configured.\"}"
+    },
+    {
+      "probe": "oidc_callback_forged",
+      "path": null,
+      "http_status": "307",
+      "location": "/login?error=oidc_not_configured",
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": null
+    },
+    {
+      "probe": "activate_forged",
+      "path": null,
+      "http_status": "503",
+      "location": null,
+      "cache_control": "no-store",
+      "body_prefix": "{\"error\":\"Service not configured\",\"code\":\"SERVICE_NOT_CONFIGURED\"}"
+    },
+    {
+      "probe": "payment_status_unknown",
+      "path": null,
+      "http_status": "503",
+      "location": null,
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "{\"error\":\"Service unavailable\"}"
+    },
+    {
+      "probe": "health",
+      "path": null,
+      "http_status": "200",
+      "location": null,
+      "cache_control": "public, max-age=0, must-revalidate",
+      "body_prefix": "{\"status\":\"ok\",\"redis\":\"not_configured\"}"
+    },
+    {
+      "probe": "login_page",
+      "path": null,
+      "http_status": "200",
+      "location": null,
+      "cache_control": "private, no-cache, no-store, max-age=0, must-revalidate",
+      "body_prefix": "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-s"
+    },
+    {
+      "probe": "forged_wellformed_pnu1",
+      "path": "/reports",
+      "http_status": "200",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-s"
+    },
+    {
+      "probe": "forged_wellformed_pnu1",
+      "path": "/api/core/engagements",
+      "http_status": "403",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "{\"detail\":\"Route/method is not permitted by portal policy\",\"code\":\"HTTP_403\",\"request_id\":\"ab7d3d1e-556b-43d3-ad77-60064"
+    },
+    {
+      "probe": "forged_wellformed_pnu1",
+      "path": "/api/core/reports",
+      "http_status": "403",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "{\"detail\":\"Route/method is not permitted by portal policy\",\"code\":\"HTTP_403\",\"request_id\":\"08767420-2aa9-41df-b099-71da3"
+    },
+    {
+      "probe": "forged_pnu1_allowed_path",
+      "path": "/api/core/field-assessment/engagements",
+      "http_status": "500",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "{\"detail\":\"CORE_TENANT_ID is not configured\",\"code\":\"HTTP_500\",\"request_id\":\"4d6a5e32-8465-4f98-b287-db0e5faf4378\"}"
+    },
+    {
+      "probe": "forged_pnu1_allowed_path",
+      "path": "/api/core/field-assessment/engagements/eng-tenant-b/reports",
+      "http_status": "500",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "{\"detail\":\"CORE_TENANT_ID is not configured\",\"code\":\"HTTP_500\",\"request_id\":\"b0ea69d8-0efb-45f9-b449-6795d6bbf94a\"}"
+    },
+    {
+      "probe": "forged_pnu1_allowed_path",
+      "path": "/api/core/portal/me",
+      "http_status": "500",
+      "location": null,
+      "cache_control": null,
+      "body_prefix": "{\"detail\":\"CORE_TENANT_ID is not configured\",\"code\":\"HTTP_500\",\"request_id\":\"4978a1a9-7817-4ff1-8eb8-bc9a99c186c2\"}"
+    }
+  ],
+  "verdicts": {
+    "next_15_react_19_build": "PASS",
+    "unauthenticated_pages_redirect_to_login": "PASS",
+    "forged_signed_cookie_rejected": "PASS",
+    "bff_unauthenticated_denied": "PASS",
+    "bff_route_allowlist_enforced": "PASS",
+    "bff_forged_pnu1_fails_closed_without_config": "PASS",
+    "password_demo_login_disabled_in_production_mode": "PASS",
+    "oidc_unconfigured_fails_closed": "PASS",
+    "client_bundle_secret_scan": "PASS (local production build; no secret names or key patterns in .next/static)",
+    "named_user_oidc_login_and_session_lifecycle": "NOT_VERIFIED (no preview Auth0 configuration)",
+    "tenant_a_vs_tenant_b_isolation_live": "NOT_VERIFIED (no tenant sessions; covered at engineering level by backend suites)",
+    "engagement_ownership_report_access_cross_tenant_denial_live": "NOT_VERIFIED",
+    "restricted_role_denial_live": "NOT_VERIFIED",
+    "report_delivery_authorization_live": "NOT_VERIFIED",
+    "bff_credential_forwarding_live": "NOT_VERIFIED (no CORE_API_KEY in preview)"
+  }
+}

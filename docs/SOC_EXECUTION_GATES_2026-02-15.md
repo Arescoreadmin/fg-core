@@ -8283,3 +8283,22 @@ SOC review outcome: APPROVED.
 4. **No gate weakened.** Dependabot PRs fail the evidence and SOC gates by design. The remediation path is human-carried PRs, not bot exemptions.
 
 SOC review outcome: APPROVED. An audit and offline classification tool; it changes no control.
+
+---
+
+## 2026-11-11 - fix(deploy): P0-PORTAL-DEPLOY-RECOVERY-001 — portal deployment integrity and provenance
+
+**Change scope:**
+- Deployment configuration: `apps/portal/vercel.json` (ignore command).
+- New: `tools/vercel/ignore_build.sh`, `tools/ci/check_deployment_provenance.py`, `.github/security/deployment-provenance-policy.json` and a Makefile target.
+- Tests, runbook and evidence.
+- No application, authentication, workflow or ruleset code changed.
+
+**Security analysis:**
+
+1. **Closes a fail-open release path.** Security fixes #804–#819 never reached `app.frostgate.ai`. The skip rule cancelled every build, and the cancelled builds reported `success`. The new step builds on every uncertain outcome and diffs against the last *successful* deployment, so a missed build cannot be hidden by later commits.
+2. **Detection.** The provenance checker trusts only the deployment the production alias serves. It rejects a wrong project, wrong alias, preview target, non-READY build or wrong repo/branch (DRIFT). It treats CLI uploads, unknown SHAs and unreadable data as NOT_VERIFIED. It is read-only and emits no environment values.
+3. **Deployment consequence.** Merging triggers an automatic production build and alias move (`autoAssignCustomDomains: true`), so merge timing is a founder decision. A staged promotion procedure is documented, and Instant Rollback to the Next 14.2.5 build is emergency-only.
+4. **Disclosed side effect.** During preview verification, `vercel curl` created a Protection Bypass for Automation secret on the portal project. No protection mode, alias, environment variable or deployment was changed. Revocation is recommended.
+
+SOC review outcome: APPROVED (pending founder approval for production promotion).

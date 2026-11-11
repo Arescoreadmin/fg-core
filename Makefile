@@ -1304,7 +1304,7 @@ PORTAL_DIR  := apps/portal
 
 .PHONY: console-deps console-dev console-build console-lint console-test console-audit ci-console \
         portal-deps portal-dev portal-build portal-lint portal-test portal-audit ci-portal \
-        frontend-audit frontend-sbom repo-security-check repo-security-drift
+        frontend-audit frontend-sbom repo-security-check repo-security-drift portal-deploy-provenance
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1373,6 +1373,14 @@ repo-security-check:
 repo-security-drift:
 	@mkdir -p artifacts/repo-security
 	@$(PY) tools/ci/check_github_repo_security.py live --out artifacts/repo-security/drift.json
+
+# P0-PORTAL-DEPLOY-RECOVERY-001 — READ-ONLY: what does the production alias
+# actually serve? PASS / DRIFT (exit 1) / NOT_VERIFIED (exit 2). Needs a Vercel
+# CLI login and full git history (git fetch --unshallow origin).
+portal-deploy-provenance:
+	@mkdir -p artifacts/deploy-provenance
+	@git fetch -q origin main
+	@$(PY) tools/ci/check_deployment_provenance.py --project portal --out artifacts/deploy-provenance/portal.json
 
 # =============================================================================
 # Repo guards
