@@ -1,3 +1,22 @@
+## chore(security): DEP-REMEDIATE-002 — retire obsolete Console pnpm lockfile (branch chore/dep-remediate-002)
+
+- **Work item:** DEP-REMEDIATE-002, classed as REPAIR. It implements DEP-INV-001 (#844) remediation step B.
+- **Root cause:** `apps/console/pnpm-lock.yaml` was a committed lockfile from 2026-06-01 (next 14.2.35, next-auth beta.31) that nothing installs from. GitHub still scanned it, which produced 69 alerts (6 critical) and drove misleading Dependabot PRs (#842, which tried to move the console to Next 16).
+- **Evidence it is unused:**
+  - Vercel: both projects rooted at `apps/console` have no install override, `vercel.json` sets `npm install`, and the production log shows pnpm detected but `npm install` run and Next 15.5.29 built.
+  - Docker, compose, the Makefile and CI all use `npm ci`.
+  - There is no `packageManager` field or workspace file, and no pnpm references exist outside audit records.
+- **Change:**
+  - the lockfile is deleted;
+  - `MANIFEST_AUTHORITY` marks it `RETIRED`;
+  - new `tools/ci/check_lockfile_authority.py` and `.github/security/lockfile-authority.json`, wired into `check_security_regression_gates.py`, so the check runs inside the existing required Guard and fg-security lanes.
+- **Runtime dependencies:** unchanged. The console `package.json`, `package-lock.json` and `vercel.json` are untouched (lockfile sha256 `ab46e65b…` before and after `npm ci`).
+- **Alerts:** 69 targeted; the IDs are in `docs/security/dep_remediate_002_alert_reconciliation.json`. #169 overlaps the dev-only #88, which remains open. Nothing was dismissed. Closure must be confirmed after GitHub rescans the default branch.
+- **Deploy consequence:** merging changes `apps/console/`, so the console ignore step triggers production rebuilds of console.frostgate.ai and api.frostgate.ai from the same npm lockfile.
+- **Tests:**
+  - guard 27 + inventory 19 (46 with the exception-swallowing negative test);
+  - console `npm ci` OK, `tsc` OK, lint OK, tests 3147/3147, `next build` OK.
+
 ## feat(deploy): P0-PORTAL-DEPLOY-RECOVERY-001 — restore portal deployment integrity (branch deploy/p0-portal-deploy-recovery-001)
 
 - **Work item:** P0-PORTAL-DEPLOY-RECOVERY-001, classed as REPAIR. `check_customer_one_roadmap.py --work-class REPAIR` authorizes it.

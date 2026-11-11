@@ -183,3 +183,19 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
 - **Required checks and rulesets:** the five required checks, the rulesets and `.github/security/*` are unchanged. No gate is weakened, and there are no bot exemptions.
 - **Tenant isolation:** no tenant isolation code is touched. The portal-side isolation in #817 is not yet in production; PR-A ships it.
 - **Alerts:** none dismissed. `.github/dependabot.yml` is unchanged.
+
+## 9. Remediation log (append-only; the findings above are historical and unchanged)
+
+### DEP-REMEDIATE-002: `apps/console/pnpm-lock.yaml` retired (step B)
+
+- **Verification before deletion** (2026-11-11). The lockfile is installed by nothing:
+  - the two Vercel projects rooted at `apps/console` have no dashboard install override, and `vercel.json` sets `installCommand: npm install`;
+  - the console production build log shows `Detected pnpm-lock.yaml … Using pnpm@10.x`, then `npm install`, then `Next.js 15.5.29`. The pnpm lockfile pins 14.2.35, so it was never the install source;
+  - Docker, the Makefile and CI all use `npm ci`;
+  - there is no `packageManager` field, workspace file or `.npmrc`, and the repo contains no pnpm references outside audit records.
+- **Change:** the file is deleted. In `MANIFEST_AUTHORITY` its status is now `RETIRED`.
+- **Recurrence guard:** `tools/ci/check_lockfile_authority.py`, run from `check_security_regression_gates.py`, enforces exactly one lockfile and package manager per app, an explicit Vercel installer, classification of every lockfile, and that no RETIRED file reappears.
+- **Alerts targeted:** 69 (6 critical, 30 high, 27 medium, 6 low). The IDs are in `dep_remediate_002_alert_reconciliation.json`.
+  - 68 of them have no corresponding vulnerable version in the deployed npm lockfile.
+  - #169 (minimatch GHSA-g3hv-75wg-m249, moderate) overlaps a real **development-only** exposure (`minimatch` 10.2.6 via `@typescript-eslint`). That exposure is tracked separately as alert #88 and remains open; it belongs to DEP-REMEDIATE-006.
+- **Alert accounting:** the 154-alert baseline above is historical. The post-merge count is to be recorded from GitHub's rescan, by alert ID. No alert was dismissed.

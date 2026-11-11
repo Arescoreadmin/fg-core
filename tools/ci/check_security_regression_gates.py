@@ -328,10 +328,46 @@ def check_repository_security_policy(failures: list[str]) -> None:
     failures.extend(f"repo-security: {f}" for f in mod.check_workflows(REPO))
 
 
+def check_lockfile_authority(failures: list[str]) -> None:
+    """DEP-REMEDIATE-002: exactly one authoritative lockfile/package manager per
+    JS app, explicit Vercel installers, every lockfile classified by DEP-INV-001,
+    and no RETIRED lockfile (e.g. apps/console/pnpm-lock.yaml) reappearing."""
+    for rel in (
+        ".github/security/lockfile-authority.json",
+        "tools/ci/check_lockfile_authority.py",
+    ):
+        if not (REPO / rel).exists():
+            failures.append(f"lockfile authority asset missing: {rel}")
+            return
+    import importlib.util
+    import json as _json
+    import sys
+
+    spec = importlib.util.spec_from_file_location(
+        "_lockfile_authority", REPO / "tools/ci/check_lockfile_authority.py"
+    )
+    if spec is None or spec.loader is None:
+        failures.append("lockfile authority checker cannot be loaded")
+        return
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["_lockfile_authority"] = mod
+    try:
+        spec.loader.exec_module(mod)
+        policy = _json.loads(
+            (REPO / ".github/security/lockfile-authority.json").read_text()
+        )
+        errors = mod.check(REPO, policy, mod.load_manifest_authority())
+    except Exception as exc:  # fail closed: an unrunnable guard is a failure
+        failures.append(f"lockfile authority checker failed: {exc}")
+        return
+    failures.extend(f"lockfile-authority: {e}" for e in errors)
+
+
 def main() -> int:
     failures: list[str] = []
     check_frontend_dependency_gate(failures)
     check_repository_security_policy(failures)
+    check_lockfile_authority(failures)
     check_no_placeholder_security_tests(failures)
     check_auth_middleware_enforces(failures)
     check_no_insecure_prod_overrides(failures)

@@ -44,14 +44,18 @@ SCHEMA = "fg.dependency_alert_inventory/v1"
 #   OBSOLETE_DUPLICATE_TREE     legacy copy of an app; not built or deployed
 #   DEV_TOOLING                 repository tooling only, never shipped
 #   RUNTIME_NOT_REPO_DEPLOYED   runtime code with no repo-managed deploy path
+#   RETIRED                     deleted; alerts on historical exports stay
+#                               NOT_INSTALLED, and check_lockfile_authority.py
+#                               fails if the file reappears
 MANIFEST_AUTHORITY: dict[str, dict[str, str]] = {
     "apps/console/package-lock.json": {
         "status": "AUTHORITATIVE_DEPLOYED",
         "deployed_as": "console.frostgate.ai (Vercel, npm install); docker-compose console",
     },
     "apps/console/pnpm-lock.yaml": {
-        "status": "STALE_UNUSED",
-        "deployed_as": "none (Vercel installCommand is npm install; Dockerfile/Makefile/CI use npm)",
+        "status": "RETIRED",
+        "deployed_as": "deleted in DEP-REMEDIATE-002 (never installed: Vercel installCommand "
+        "is npm install; Dockerfile/Makefile/CI use npm); must not reappear",
     },
     "apps/console/console/package-lock.json": {
         "status": "OBSOLETE_DUPLICATE_TREE",
@@ -76,7 +80,7 @@ MANIFEST_AUTHORITY: dict[str, dict[str, str]] = {
 }
 
 _DEPLOYED = {"AUTHORITATIVE_DEPLOYED"}
-_NOT_INSTALLED = {"STALE_UNUSED", "OBSOLETE_DUPLICATE_TREE"}
+_NOT_INSTALLED = {"STALE_UNUSED", "OBSOLETE_DUPLICATE_TREE", "RETIRED"}
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 

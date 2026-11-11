@@ -1,0 +1,21 @@
+{
+  "schema": "fg.lockfile_authority/v1",
+  "description": "DEP-REMEDIATE-002. Exactly one authoritative lockfile and package manager per JS application. Enforced by tools/ci/check_lockfile_authority.py (via check_security_regression_gates.py). Apps not listed here are not constrained by this policy, but every tracked lockfile must still be classified in tools/ci/dependency_alert_inventory.py MANIFEST_AUTHORITY.",
+  "apps": {
+    "apps/console": {
+      "package_manager": "npm",
+      "lockfile": "package-lock.json",
+      "vercel_install_commands": ["npm install", "npm ci"],
+      "dockerfile": "Dockerfile"
+    },
+    "apps/portal": {
+      "package_manager": "npm",
+      "lockfile": "package-lock.json",
+      "vercel_install_commands": ["npm install", "npm ci"]
+    },
+    "apps/web": {
+      "package_manager": "npm",
+      "lockfile": "package-lock.json"
+    }
+  }
+}
