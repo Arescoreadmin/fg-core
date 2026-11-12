@@ -106,7 +106,7 @@ def test_every_alert_has_one_traceable_decision():
     }
     assert recon["targeted_alerts"] == ROOT_ALERTS
     for r in rows:
-        implemented = r["owner"] == "DEP-REMEDIATE-004"
+        implemented = r["owner"] in {"DEP-REMEDIATE-004", "DEP-REMEDIATE-005"}
         assert r["state"] == ("IMPLEMENTED" if implemented else "PLANNED")
         # Planned alerts stay visibly vulnerable until their own PR lands.
         assert bool(r["vulnerable_now"]) is (not implemented)
@@ -143,6 +143,29 @@ def test_regressed_root_version_fails_closed(repo, capsys, package, version, ale
     err = capsys.readouterr().err
     for n in alerts:
         assert f"alert {n}: {package} ['{version}'] still in" in err
+
+
+@pytest.mark.parametrize(
+    ("pin", "alerts"),
+    [("2.32.3", [1, 2]), ("2.32.4", [2]), ("2.32.5", [2])],
+)
+def test_regressed_agent_requests_pin_fails_closed(repo, capsys, pin, alerts):
+    path = repo / "agent/requirements.txt"
+    text = path.read_text()
+    assert "requests==2.34.2\n" in text
+    path.write_text(text.replace("requests==2.34.2", f"requests=={pin}"))
+    assert inv.main(["--repo", str(repo)]) == 1
+    err = capsys.readouterr().err
+    for n in alerts:
+        assert f"alert {n}: requests ['{pin}'] still in" in err
+    for n in {1, 2} - set(alerts):
+        assert f"alert {n}:" not in err
+
+
+def test_agent_requests_minimum_patched_pin_passes(repo):
+    path = repo / "agent/requirements.txt"
+    path.write_text(path.read_text().replace("requests==2.34.2", "requests==2.33.0"))
+    assert inv.main(["--repo", str(repo)]) == 0
 
 
 def test_github_auto_dismissed_root_alerts_stay_tracked_and_remediated():

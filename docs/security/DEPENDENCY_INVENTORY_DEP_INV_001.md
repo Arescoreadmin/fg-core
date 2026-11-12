@@ -237,3 +237,12 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
   - `dep_remediate_004_reconciliation.json`;
   - `DEP_REMEDIATE_004_ROOT_TOOLING.md`, which also holds the DEP-REMEDIATE-005 (agent `requests`) and DEP-REMEDIATE-006 (Console/Portal minimatch) plans.
 - **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 4 (#1, #2, #88, #170), to be confirmed by ID.
+
+**Outcome (recorded at DEP-REMEDIATE-005 start, 2026-11-11):** #850 merged as `10924ed44`. All 16 targeted IDs and the 5 previously auto-dismissed IDs (#172, #177, #178, #183, #184) are `fixed` with `dismissed_at` null. GitHub now reports 4 open alerts: agent 2 (#1, #2), Console 1 (#88), Portal 1 (#170).
+
+### DEP-REMEDIATE-005: agent `requests` remediated (step E)
+
+- **Change:** `agent/requirements.txt` `requests==2.32.3` → `requests==2.34.2` (latest; >= 2.33.0 fixes both advisories). Supersedes Dependabot #851 (2.33.0).
+- **Alerts targeted:** #1 (GHSA-9hjg-9r4m-mvj7) and #2 (GHSA-gc5v-m9x4-r6x2).
+- **Evidence:** `DEP_REMEDIATE_005_AGENT_REQUESTS.md`; `dep_remediation_final_inventory.json` (#1 and #2 IMPLEMENTED); `tests/agent/test_requests_advisory_regression.py`.
+- **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 2 (#88, #170), to be confirmed by ID.
