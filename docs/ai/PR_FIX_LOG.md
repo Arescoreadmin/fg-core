@@ -1,3 +1,15 @@
+## chore(deps): PY-MAINT-001 — compatible Python maintenance updates split from Dependabot #856 (branch chore/py-maint-001)
+
+- **Work item:** PY-MAINT-001, classed as MAINTENANCE (DEP-CLOSEOUT-001 phase D). It replaces the compatible subset of the grouped Dependabot #856.
+- **Why #856 could not merge:** SQLAlchemy 2.1 dropped implicit `greenlet`, so `admin_gateway` `sqlalchemy.ext.asyncio` failed at import (`contracts-gen`; the `admin-gateway` container was unhealthy). The evidence was stale. It also unblocked `ecdsa` (`==0` → 0.19.2, still affected by GHSA-wj6h-64fc-37mp).
+- **Change:** cryptography 50.0.0→50.0.2, pygments 2.20.0→2.21.0, psycopg[binary] 3.3.2→3.3.8, python-multipart 0.0.31→0.0.33, msal 1.37.0→1.39.0, loguru 0.7.2→0.7.3, python-dotenv 1.2.2→1.2.4, sqlparse 0.6.0→0.6.1, prometheus-client 0.25.0→0.26.0. These are patch and minor releases only; no framework moves (fastapi 0.136.3, starlette 1.3.1, pydantic 2.9.0 and SQLAlchemy 2.0.20 are unchanged), and the `ecdsa==0` block is kept. The other 17 #856 updates are deferred to #858.
+- **Security relevance:** none of the 26 #856 versions, old or new, has a GitHub advisory (checked 2026-11-12). This is maintenance, not remediation.
+- **Verification:**
+  - clean-venv installs of all four install paths (Makefile venv, root image, admin-gateway venv and image): `pip check` clean, `pip-audit` none;
+  - targeted tests for the touched libraries: 1917 passed, 16 skipped, 1 failed. `test_portal_list_engagements_no_session_required` (403) fails identically with `main`'s pins and is pre-existing;
+  - `fg-contract` OK; `fg-security` 1343 passed.
+- **Deploy consequence:** the root and admin-gateway images pick these up on their next build; there is no repo-managed auto-deploy for Python.
+
 ## fix(security): DEP-REMEDIATE-006 — remediate Console and Portal minimatch advisory (branch fix/dep-remediate-006)
 
 - **Work item:** DEP-REMEDIATE-006, classed as REPAIR. It is DEP-INV-001 remediation step F, after DEP-REMEDIATE-005 (#852, `c236a7a33`).

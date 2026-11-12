@@ -255,3 +255,10 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
 - **Alerts targeted:** #88 (Console) and #170 (Portal), GHSA-g3hv-75wg-m249.
 - **Evidence:** `dep_remediation_final_inventory.json` (#88 and #170 IMPLEMENTED); `npm audit` 0 in both apps.
 - **Alert accounting:** nothing was dismissed. After the rescan, every alert this inventory tracks is remediated in source; #1 and #2 await GitHub reconciliation.
+
+### PY-MAINT-001: Dependabot #856 split (maintenance, not remediation)
+
+- **#856** (26 grouped Python updates) is closed unmerged. 9 compatible updates are in PY-MAINT-001; `ecdsa` is rejected (the security block stays); 17 framework and tooling updates are tracked in #858.
+- **No open alert is affected;** none of the 26 versions has an advisory.
+
+**Outcome (recorded at PY-MAINT-001 sync with main, 2026-11-12):** GitHub reports #1 and #2 `fixed` (2026-11-12T15:44Z, `dismissed_at` null). #860 (DEP-REMEDIATE-006) merged as `ed5dc05aa`; #88 and #170 await the GitHub rescan.
