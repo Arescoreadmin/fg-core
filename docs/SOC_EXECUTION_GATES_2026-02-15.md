@@ -8409,3 +8409,19 @@ SOC review outcome: APPROVED. It updates a development-only transitive dependenc
 3. **Framework changes are isolated.** SQLAlchemy 2.1 and the FastAPI/Starlette/Pydantic stack are deferred to #858, with their own gates.
 
 SOC review outcome: APPROVED. Routine maintenance of runtime dependencies to advisory-free patch and minor releases.
+
+## 2026-11-12 - fix(security): CODEQL-REMEDIATE-001 — admin-gateway post-login open redirect
+
+**Change scope:**
+- `admin_gateway/routers/auth.py`: new `_safe_return_to()`, applied to `return_to` at storage (login) and at both redirect sinks (dev-bypass login, OIDC callback).
+- New tests in `admin_gateway/tests/test_auth_return_to_redirect.py`, and the triage ledger in `docs/security/CODEQL_REMEDIATE_001_TRIAGE.md`.
+- No workflow, ruleset, required check, CodeQL configuration, dependency, schema or session/CSRF/tenant logic changed.
+
+**Security analysis:**
+
+1. **The vulnerability is demonstrated, not asserted.** On `main`, a completed OIDC login redirects to the attacker-supplied absolute, protocol-relative or backslash URL; 38 tests reproduce this.
+2. **The fix is fail-closed.** Only a single-slash relative path without scheme, netloc, backslash or control characters is honoured; anything else falls back to `/admin/me`. The check runs again at the sink, so a stored value cannot bypass it.
+3. **Behaviour is preserved.** Same-origin return paths, including query and fragment, still work, and login and session issuance are unchanged; all 263 `admin_gateway` tests pass.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. The other 124 alerts are tracked in the triage ledger.
+
+SOC review outcome: APPROVED. It closes an unauthenticated post-login open redirect in the operator SSO flow.

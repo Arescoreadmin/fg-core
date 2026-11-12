@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -20,6 +21,30 @@ from admin_gateway.auth.session import SessionManager
 log = logging.getLogger("admin-gateway.auth-router")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_DEFAULT_RETURN_TO = "/admin/me"
+_MAX_RETURN_TO_LEN = 2048
+
+
+def _safe_return_to(value: Optional[str]) -> Optional[str]:
+    """Return ``value`` only if it is a same-origin relative path, else None.
+
+    Post-login redirects must never leave the gateway origin (CWE-601).
+    Accepts a single leading ``/`` path; rejects absolute and scheme URLs,
+    protocol-relative ``//host``, backslashes (browsers read them as ``/``)
+    and control characters (browsers strip tab/newline, turning ``/\\t/host``
+    into ``//host``).
+    """
+    if not value or len(value) > _MAX_RETURN_TO_LEN:
+        return None
+    if "\\" in value or any(ord(c) < 0x20 or ord(c) == 0x7F for c in value):
+        return None
+    if not value.startswith("/") or value.startswith("//"):
+        return None
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc:
+        return None
+    return value
 
 
 def get_oidc_client(config: AuthConfig = Depends(get_auth_config)) -> OIDCClient:
@@ -51,13 +76,18 @@ async def login(
     If OIDC is not configured and dev bypass is enabled, creates a dev session.
     Otherwise, redirects to the OIDC provider.
     """
+    safe_return_to = _safe_return_to(return_to)
+    if return_to and safe_return_to is None:
+        # Value is attacker-controlled: log its length only, never the value.
+        log.warning("auth_login_return_to_rejected length=%d", len(return_to))
+
     if config.dev_bypass_allowed and not config.oidc_enabled:
         session_manager = SessionManager(config)
         csrf = CSRFProtection(config)
 
         session = get_dev_bypass_session(config)
         if session:
-            redirect_url = return_to or "/admin/me"
+            redirect_url = safe_return_to or _DEFAULT_RETURN_TO
             response = RedirectResponse(url=redirect_url, status_code=302)
             session_manager.set_session_cookie(response, session)
             csrf.set_token_cookie(response)
@@ -71,11 +101,11 @@ async def login(
 
     url, state, _ = await oidc.get_authorization_url()
 
-    if return_to:
+    if safe_return_to:
         request.app.state.pending_returns = getattr(
             request.app.state, "pending_returns", {}
         )
-        request.app.state.pending_returns[state] = return_to
+        request.app.state.pending_returns[state] = safe_return_to
 
     return RedirectResponse(url=url, status_code=302)
 
@@ -129,10 +159,11 @@ async def callback(
             if k not in {"tenant_id", "allowed_tenants", "roles", "fg_scopes"}
         }
 
-        return_to = "/admin/me"
         pending_returns = getattr(request.app.state, "pending_returns", {})
-        if state in pending_returns:
-            return_to = pending_returns.pop(state)
+        # Re-validate at the sink (defence in depth); fall back to the default.
+        return_to = (
+            _safe_return_to(pending_returns.pop(state, None)) or _DEFAULT_RETURN_TO
+        )
 
         response = RedirectResponse(url=return_to, status_code=302)
         session_manager.set_session_cookie(response, session)

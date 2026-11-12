@@ -1,3 +1,15 @@
+## fix(security): CODEQL-REMEDIATE-001 — admin-gateway post-login open redirect (CodeQL #125, branch security/codeql-remediate-001-auth-open-redirect)
+
+- **Work item:** CODEQL-REMEDIATE-001, the first remediation PR, classed as REPAIR. CodeQL default setup was enabled on 2026-11-12 and opened 125 alerts on `main` `7d39e51c`. They are triaged in `docs/security/CODEQL_REMEDIATE_001_TRIAGE.md`.
+- **Root cause:** `/auth/login` stored the caller's `return_to` value without validation, and `/auth/callback` redirected to it after a successful OIDC login (CWE-601). The dev-bypass login also redirected to it directly. CodeQL reported only that dev-bypass sink (#125); the production callback sink was found by reading the code, because the value passes through `app.state`.
+- **Exploit:** an unauthenticated attacker sends an operator `/auth/login?return_to=https://evil.example/phish`. After a genuine SSO login the gateway answers `302 Location: https://evil.example/phish`, which is reproduced on `main` by the new tests.
+- **Change:** a new `_safe_return_to()` accepts only same-origin relative paths. It rejects schemes, protocol-relative `//host`, backslashes, control characters and values over 2048 characters. It is applied when `return_to` is stored at login and again at both redirect sinks; a rejected value falls back to `/admin/me`. Only the length of a rejected value is logged.
+- **Verification:**
+  - `admin_gateway/tests/test_auth_return_to_redirect.py`, 45 tests through the real routes: on `main` 38 fail (every hostile case) and 7 pass; with the fix 45 pass;
+  - `admin_gateway/tests`: 263 passed.
+- **Unchanged:** the OIDC exchange, session issuance, cookies, CSRF and tenant binding.
+- **Rollback:** revert the PR. The redirect becomes open again and the new tests fail.
+
 ## chore(deps): PY-MAINT-001 — compatible Python maintenance updates split from Dependabot #856 (branch chore/py-maint-001)
 
 - **Work item:** PY-MAINT-001, classed as MAINTENANCE (DEP-CLOSEOUT-001 phase D). It replaces the compatible subset of the grouped Dependabot #856.
