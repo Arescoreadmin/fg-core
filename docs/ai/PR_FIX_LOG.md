@@ -1,3 +1,20 @@
+## fix(agent): AGENT-QUEUE-DEADLOCK-001 — prevent retry-exhaustion deadlock (issue #853, branch fix/agent-queue-deadlock-001)
+
+- **Work item:** AGENT-QUEUE-DEADLOCK-001, classed as REPAIR (issue #853, HIGH).
+- **Root cause:** when an event reached `max_attempts`, `SQLiteQueue.retry_later` held the non-reentrant `threading.Lock` and called `dead_letter`, which acquired it again, so the calling thread blocked forever. In the deployed agent, `BatchSender.flush_once` therefore hung after 20 non-terminal failures (a sustained Core 429 or 5xx outage). Every other queue operation then blocked on the held lock, and telemetry stopped while the process stayed up. The same branch was also non-atomic: it committed the attempts update before the separate dead-letter transaction.
+- **Change:**
+  - **Dead-letter helper:** the move to dead-letter storage is now a lock-assuming helper, `_dead_letter_locked`, which never takes the lock or commits.
+  - **`dead_letter()`:** acquires the lock once, inside one `with conn` transaction.
+  - **`retry_later()`:** at exhaustion it calls the helper under the lock it already holds, in one transaction covering the attempts update, the dead-letter insert, the queue delete and the retention purge. It also emits a `queue_dead_letter reason=max_attempts_exceeded attempts=N` warning, with no event ID or payload.
+  - **Unchanged:** `threading.Lock` is not replaced by an RLock; the schema, the reason codes, the retention cap, the `max_attempts` default (20) and the agent-to-Core API are the same.
+- **Verification:**
+  - **Red before green:** the issue reproducer, on baseline `7d39e51c`, hit the faulthandler timeout after 5 s at `dead_letter`. After the fix it returns `size=0 dead=1`.
+  - **New tests:** `tests/agent/test_queue_deadlock_regression.py` (14 tests, in `make agent-unit` and CI Agent Linux) are all bounded by a subprocess timeout or a daemon worker. On the baseline module, 10 failed at their bounds and 4 behaviour-preservation tests passed; with the fix, 14 passed.
+  - **Suites:** `make agent-unit`: 621 passed, 1 skipped. The legacy `agent/tests` queue, poison and batch-sender tests that used to hang give 17 passed.
+- **Behaviour change:** if the dead-letter transfer fails, the attempts increment now rolls back with it (the event stays pending at its previous count) instead of being committed separately.
+- **Deploy consequence:** none repo-managed. Operators rebuild the Linux agent image (`agent/docker-compose.yml`) to pick up the fix. The Windows agent (`agent/main.py`) does not use this queue.
+- **Rollback:** revert the PR. The deadlock returns, and the new tests fail at their bounds.
+
 ## chore(deps): PY-MAINT-001 — compatible Python maintenance updates split from Dependabot #856 (branch chore/py-maint-001)
 
 - **Work item:** PY-MAINT-001, classed as MAINTENANCE (DEP-CLOSEOUT-001 phase D). It replaces the compatible subset of the grouped Dependabot #856.
