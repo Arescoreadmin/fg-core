@@ -8362,3 +8362,20 @@ SOC review outcome: APPROVED. It removes an unbuilt duplicate application and it
 4. **Alert integrity.** No alert was dismissed, and the auto-dismissed alerts were not left hidden. Closure is verified by ID after GitHub rescans.
 
 SOC review outcome: APPROVED. It updates development-only tooling with no change to any deployed dependency.
+
+## 2026-11-11 - fix(security): DEP-REMEDIATE-005 — remediate Python agent requests advisories
+
+**Change scope:**
+- `agent/requirements.txt`: `requests==2.32.3` → `requests==2.34.2`.
+- Remediation guard `tools/ci/dep_remediation_final_inventory.py`: alerts #1 and #2 move from PLANNED to IMPLEMENTED; inventory JSON regenerated.
+- New behavioural tests `tests/agent/test_requests_advisory_regression.py`; 4 new guard tests.
+- No workflow, ruleset, required check, application code, Dockerfile or other platform dependency changed.
+
+**Security analysis:**
+
+1. **Remediation is demonstrated, not asserted.** Both advisories are reproduced as executable tests that fail on the old pin (2.32.3) and pass on the new one; the boundary versions 2.32.4 and 2.33.0 behave exactly as the advisories state.
+2. **Transport security is preserved.** The deployed agent client still verifies TLS, sets its timeout, refuses redirects and sends the device Bearer token only to the configured Core host; this is now tested in the CI agent lane.
+3. **Recurrence is fail-closed.** Re-pinning any version inside either range fails the remediation guard.
+4. **Alert integrity.** No alert was dismissed. Dependabot #851 is superseded, not merged alongside. Closure is verified by ID after GitHub rescans.
+
+SOC review outcome: APPROVED. It updates one runtime dependency of the Linux agent image to a patched release with no API change used by the agent.

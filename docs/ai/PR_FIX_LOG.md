@@ -1,3 +1,17 @@
+## fix(security): DEP-REMEDIATE-005 — remediate Python agent requests advisories (branch fix/dep-remediate-005)
+
+- **Work item:** DEP-REMEDIATE-005, classed as REPAIR. It is DEP-INV-001 remediation step E, after DEP-REMEDIATE-004 (#850, `10924ed44`; all 21 of its IDs verified `fixed`, none dismissed).
+- **Root cause:** `agent/requirements.txt` pinned `requests==2.32.3`, inside GHSA-9hjg-9r4m-mvj7 (#1, `.netrc` credential leak, `< 2.32.4`) and GHSA-gc5v-m9x4-r6x2 (#2, temp-file reuse in `extract_zipped_paths`, `< 2.33.0`).
+- **Change:** `requests==2.34.2` (latest; Python >= 3.10, urllib3 < 3). No other dependency, Dockerfile or Windows requirement changed. The remediation guard now records #1 and #2 as IMPLEMENTED and fails if the pin regresses.
+- **Dependabot #851** (2.33.0) is superseded: its required `Guard` job fails at `verify-offline-simulation-evidence` and it has no regression tests. Close it after this merges and the alerts are verified.
+- **Verification:**
+  - `tests/agent/test_requests_advisory_regression.py`, 7 behavioural tests: 4 fail on 2.32.3, 2 on 2.32.4, 0 on 2.33.0 and 2.34.2;
+  - 4 new guard tests (regressed pins fail per alert, minimum 2.33.0 passes);
+  - clean-venv install, `pip check` and `pip-audit` clean.
+- **Findings recorded, not changed:** the legacy `agent/app/core_client.py` follows redirects with an `X-API-Key` header but no entrypoint launches it; `agent/tests/` runs in no CI lane.
+- **Deploy consequence:** none repo-managed. The Windows agent uses stdlib urllib and does not install this file.
+- **Alerts:** #1 and #2 targeted. Nothing was dismissed. Closure must be confirmed by ID after GitHub rescans.
+
 ## chore(security): DEP-REMEDIATE-004 — remediate root npm tooling vulnerabilities (branch chore/dep-remediate-004)
 
 - **Work item:** DEP-REMEDIATE-004, classed as REPAIR. It is DEP-INV-001 remediation step D, after DEP-REMEDIATE-003 (#848, `e1dba3a5b`; all 65 of its targets verified `fixed`, none dismissed).

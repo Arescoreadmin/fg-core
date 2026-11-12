@@ -109,19 +109,26 @@ def _root(mechanism: str) -> dict[str, Any]:
 _PARENT = "markdownlint-cli 0.48.0 -> 0.50.0 (parent update)"
 _AGENT = {
     "owner": "DEP-REMEDIATE-005",
-    "state": "PLANNED",
+    "state": "IMPLEMENTED",
     "classification": "FIXED_BY_VERSION_UPDATE",
     "mechanism": "agent/requirements.txt requests==2.32.3 -> requests==2.34.2 "
-    "(>= 2.33.0 fixes both; 2.34.2 is what the shared CI venv already runs)",
-    "reachability": "Agent HTTP client (agent/core_client.py, "
-    "agent/app/core_client.py) uses requests.Session with default trust_env; "
-    "installed only by agent/Dockerfile (not release-images, not compose).",
+    "(latest; >= 2.33.0 fixes both; supersedes Dependabot PR #851 at 2.33.0)",
+    "reachability": "Linux agent image (agent/Dockerfile, CMD agent.app."
+    "agent_main) uses agent/core_client.py: requests.Session, explicit "
+    "timeout, allow_redirects=False, TLS verification on. Legacy agent/app/"
+    "core_client.py follows redirects but is only reachable via agent/app/"
+    "main.py, which no entrypoint launches. Not in release-images.",
     "breaking_change_probability": "LOW — no API change used by the agent; "
-    "repo tests already run against requests 2.34.2.",
-    "impacted_workflows": ["agent/Dockerfile", "tests/agent", "agent/tests"],
+    "requests 2.34.2 requires Python >= 3.10 (image python:3.12-slim) and "
+    "urllib3 <3, idna <4, charset_normalizer <4, certifi; the shared CI venv "
+    "already runs it.",
+    "impacted_workflows": [
+        "agent/Dockerfile",
+        "tests/agent (make agent-unit, CI Agent Linux)",
+    ],
     "deployment_impact": "No repo-managed deploy: agent image is built only "
-    "by agent/docker-compose.yml; Windows build (tools/build/"
-    "build_agent_windows.ps1) installs pyinstaller only.",
+    "by agent/docker-compose.yml. Windows agent (agent/main.py, CI Agent "
+    "Windows Build) uses stdlib urllib and does not install this file.",
 }
 _FRONT = {
     "owner": "DEP-REMEDIATE-006",
