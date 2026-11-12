@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -10,6 +11,8 @@ from typing import Iterable
 
 
 TERMINAL_REASONS = {"schema_invalid", "auth_invalid", "payload_too_large"}
+
+_log = logging.getLogger(__name__)
 
 
 class SQLiteQueue:
@@ -156,23 +159,29 @@ class SQLiteQueue:
         self, event_id: str, reason: str, last_failed_at: float | None = None
     ) -> None:
         failed_ts = time.time() if last_failed_at is None else float(last_failed_at)
+        # `with self._conn` commits on success and rolls back on any exception.
         with self._lock, self._conn:
-            self._conn.execute(
-                """
-                INSERT INTO dead_events(event_id,payload,reason,attempts,first_seen_at,last_failed_at)
-                SELECT event_id,payload,?,attempts,created_at,?
-                FROM events
-                WHERE event_id=?
-                ON CONFLICT(event_id) DO UPDATE SET
-                    reason=excluded.reason,
-                    attempts=excluded.attempts,
-                    last_failed_at=excluded.last_failed_at
-                """,
-                (reason, failed_ts, event_id),
-            )
-            self._conn.execute("DELETE FROM events WHERE event_id=?", (event_id,))
-            self._purge_dead_letter_overflow_locked()
-            self._conn.commit()
+            self._dead_letter_locked(event_id, reason, failed_ts)
+
+    def _dead_letter_locked(self, event_id: str, reason: str, failed_ts: float) -> None:
+        # Caller must hold self._lock and own the open transaction; this never
+        # acquires the lock or commits. Issue #853: reacquiring the
+        # non-reentrant lock from retry_later deadlocked the agent.
+        self._conn.execute(
+            """
+            INSERT INTO dead_events(event_id,payload,reason,attempts,first_seen_at,last_failed_at)
+            SELECT event_id,payload,?,attempts,created_at,?
+            FROM events
+            WHERE event_id=?
+            ON CONFLICT(event_id) DO UPDATE SET
+                reason=excluded.reason,
+                attempts=excluded.attempts,
+                last_failed_at=excluded.last_failed_at
+            """,
+            (reason, failed_ts, event_id),
+        )
+        self._conn.execute("DELETE FROM events WHERE event_id=?", (event_id,))
+        self._purge_dead_letter_overflow_locked()
 
     def _purge_dead_letter_overflow_locked(self) -> None:
         # Caller must hold lock/conn context. Keeps behavior consistent and avoids nested lock.
@@ -236,15 +245,19 @@ class SQLiteQueue:
 
                 attempts = int(attempts_row[0]) + 1
                 if attempts >= self.max_attempts:
-                    # Max attempts is terminal for the queue itself.
-                    self._conn.execute(
-                        "UPDATE events SET attempts=?, last_failed_at=? WHERE event_id=?",
-                        (attempts, now, event_id),
-                    )
-                    self._conn.commit()
-                    # Move to dead-letter with a stable reason.
-                    self.dead_letter(
-                        event_id, "max_attempts_exceeded", last_failed_at=now
+                    # Max attempts is terminal for the queue itself. The attempts
+                    # update and the dead-letter move share one transaction under
+                    # the lock already held, so a failure leaves the event pending
+                    # with its previous attempt count (issue #853).
+                    with self._conn:
+                        self._conn.execute(
+                            "UPDATE events SET attempts=?, last_failed_at=? WHERE event_id=?",
+                            (attempts, now, event_id),
+                        )
+                        self._dead_letter_locked(event_id, "max_attempts_exceeded", now)
+                    _log.warning(
+                        "queue_dead_letter reason=max_attempts_exceeded attempts=%d",
+                        attempts,
                     )
                     continue
 
