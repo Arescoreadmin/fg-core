@@ -10,6 +10,21 @@
   - `fg-contract` OK; `fg-security` 1343 passed.
 - **Deploy consequence:** the root and admin-gateway images pick these up on their next build; there is no repo-managed auto-deploy for Python.
 
+## fix(security): DEP-REMEDIATE-006 — remediate Console and Portal minimatch advisory (branch fix/dep-remediate-006)
+
+- **Work item:** DEP-REMEDIATE-006, classed as REPAIR. It is DEP-INV-001 remediation step F, after DEP-REMEDIATE-005 (#852, `c236a7a33`).
+- **Root cause:** `@typescript-eslint/typescript-estree` 8.72.2, the latest release and a dev-only ESLint parser dependency of `eslint-config-next`, declares `minimatch ^10.2.2`. It therefore resolved minimatch 10.2.6, inside GHSA-g3hv-75wg-m249 (`>= 7.0.0, < 11.0.1`), in both apps: #88 (Console) and #170 (Portal). No 10.x release is patched and no newer parent exists.
+- **Change:** one scoped override per app, `"@typescript-eslint/typescript-estree": {"minimatch": "^11.0.8"}`, and lockfiles regenerated with `npm install --package-lock-only` (npm 10.9.7). In each lock the nested minimatch moves 10.2.6 → 11.0.8 and `@isaacs/nonrecursive-glob-match` 1.1.0 (dev) is added; the top-level minimatch 3.1.5 (outside the range) and next 15.5.29 / react 19.3.1 are unchanged. The remediation guard records #88 and #170 as IMPLEMENTED.
+- **Compatibility:** typescript-estree calls only `minimatch(path, pattern, {dot: true})`, which v11 keeps. v11 requires node `20 || >=22`; CI uses 20 and the Vercel projects 24.x.
+- **Verification (both apps):**
+  - `npm ci`, `npm audit` 0 vulnerabilities;
+  - `next lint` clean, typecheck clean, production build OK;
+  - Console 2446/2446 and Portal 85/85 node tests;
+  - frontend dependency audit PASS;
+  - 6 new guard tests: a regressed nested minimatch (10.2.6, 11.0.0) fails per alert, and the override stays scoped.
+- **Deploy consequence:** merge triggers production builds of console.frostgate.ai, api.frostgate.ai (both `apps/console`) and app.frostgate.ai (`apps/portal`). The change is dev-only lint tooling, not bundled.
+- **Alerts:** #88 and #170 targeted. Nothing was dismissed. Closure must be confirmed by ID after GitHub rescans.
+
 ## fix(security): DEP-REMEDIATE-005 — remediate Python agent requests advisories (branch fix/dep-remediate-005)
 
 - **Work item:** DEP-REMEDIATE-005, classed as REPAIR. It is DEP-INV-001 remediation step E, after DEP-REMEDIATE-004 (#850, `10924ed44`; all 21 of its IDs verified `fixed`, none dismissed).
