@@ -8342,3 +8342,23 @@ SOC review outcome: APPROVED. It removes a false dependency authority without ch
 4. **Alert integrity.** No alert was dismissed. Closure is left to GitHub's rescan and verified by ID.
 
 SOC review outcome: APPROVED. It removes an unbuilt duplicate application and its false dependency authority without changing any deployed code path.
+
+---
+
+## 2026-11-11 - chore(security): DEP-REMEDIATE-004 — remediate root npm tooling vulnerabilities
+
+**Change scope:**
+- Root `package.json`: `markdownlint-cli` ^0.48.0 → ^0.50.0, plus two scoped `overrides` (`minimatch ^11.0.8` under `markdownlint-cli`, `katex ^0.18.11` under `micromark-extension-math`).
+- Root `package-lock.json` regenerated.
+- New guard `tools/ci/dep_remediation_final_inventory.py` and its tests.
+- New evidence JSON files and report under `docs/security/`.
+- No workflow, ruleset, required check, application code, application lockfile or runtime dependency changed.
+
+**Security analysis:**
+
+1. **Remediation is demonstrated, not asserted.** All 16 root alerts, plus 5 real high-severity alerts that GitHub had auto-dismissed, now resolve outside their advisory ranges. `npm audit` dropped from 10 vulnerable packages to 0. Lockfile integrity hashes and registry provenance were verified for every entry.
+2. **Tooling behaviour is preserved.** The lint configuration is unchanged. A full-repo markdownlint run is strictly additive (+5 findings from improved rules), and every override code path was exercised.
+3. **Recurrence is fail-closed.** Regressing any implemented package, losing a decision, an unclassified manifest or unparseable input fails the guard. Its tests run in the existing `tests/tools` lanes.
+4. **Alert integrity.** No alert was dismissed, and the auto-dismissed alerts were not left hidden. Closure is verified by ID after GitHub rescans.
+
+SOC review outcome: APPROVED. It updates development-only tooling with no change to any deployed dependency.

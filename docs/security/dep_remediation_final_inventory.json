@@ -1,0 +1,866 @@
+{
+  "schema": "fg.dep_remediation_final_inventory/v1",
+  "base_commit": "e1dba3a5bef390cab0cebc9a2a98fa1628199f33",
+  "alert_snapshot": "docs/security/dep_remediation_alerts_snapshot_2026-11-11.json",
+  "alert_snapshot_sha256": "34b9ce48df01876e1dd60ed57093bf1ec8565c843b5e3927a7934b6cd3aaee8e",
+  "total_open_alerts": 20,
+  "by_manifest": {
+    "agent/requirements.txt": {
+      "medium": 2
+    },
+    "apps/console/package-lock.json": {
+      "medium": 1
+    },
+    "apps/portal/package-lock.json": {
+      "medium": 1
+    },
+    "package-lock.json": {
+      "high": 8,
+      "low": 2,
+      "medium": 6
+    }
+  },
+  "by_severity": {
+    "high": 8,
+    "low": 2,
+    "medium": 10
+  },
+  "by_exposure": {
+    "DEVELOPMENT_ONLY": {
+      "high": 8,
+      "low": 2,
+      "medium": 8
+    },
+    "RUNTIME_NOT_REPO_DEPLOYED": {
+      "medium": 2
+    }
+  },
+  "by_owner": {
+    "DEP-REMEDIATE-004": [
+      171,
+      173,
+      174,
+      175,
+      176,
+      179,
+      180,
+      181,
+      182,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191
+    ],
+    "DEP-REMEDIATE-005": [
+      1,
+      2
+    ],
+    "DEP-REMEDIATE-006": [
+      88,
+      170
+    ]
+  },
+  "pr_order": [
+    {
+      "pr": "DEP-REMEDIATE-004",
+      "alerts": "root package-lock.json (16)",
+      "precondition": "none"
+    },
+    {
+      "pr": "DEP-REMEDIATE-005",
+      "alerts": "agent/requirements.txt (2)",
+      "precondition": "DEP-004 merged and GitHub alert state verified"
+    },
+    {
+      "pr": "DEP-REMEDIATE-006",
+      "alerts": "console + portal package-lock.json (2)",
+      "precondition": "DEP-005 merged; founder-approved Console/Portal production rebuild window"
+    }
+  ],
+  "policy": "No dismissals. An alert is closed only when GitHub reports state=fixed with no dismissed_at after the owning PR merges.",
+  "alerts": [
+    {
+      "alert": 1,
+      "ghsa": "GHSA-9hjg-9r4m-mvj7",
+      "cve": "CVE-2024-47081",
+      "severity": "medium",
+      "package": "requests",
+      "manifest": "agent/requirements.txt",
+      "manifest_status": "RUNTIME_NOT_REPO_DEPLOYED",
+      "relationship": "direct",
+      "scope": "runtime",
+      "exposure": "RUNTIME_NOT_REPO_DEPLOYED",
+      "vulnerable_range": "< 2.32.4",
+      "first_patched": "2.32.4",
+      "summary": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+      "versions_at_base": [
+        "2.32.3"
+      ],
+      "versions_now": [
+        "2.32.3"
+      ],
+      "vulnerable_now": [
+        "2.32.3"
+      ],
+      "owner": "DEP-REMEDIATE-005",
+      "state": "PLANNED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "agent/requirements.txt requests==2.32.3 -> requests==2.34.2 (>= 2.33.0 fixes both; 2.34.2 is what the shared CI venv already runs)",
+      "reachability": "Agent HTTP client (agent/core_client.py, agent/app/core_client.py) uses requests.Session with default trust_env; installed only by agent/Dockerfile (not release-images, not compose).",
+      "exploit_prerequisites": "A malicious URL whose host matches a .netrc entry on the agent host; agent targets operator-configured Core URLs.",
+      "breaking_change_probability": "LOW — no API change used by the agent; repo tests already run against requests 2.34.2.",
+      "impacted_workflows": [
+        "agent/Dockerfile",
+        "tests/agent",
+        "agent/tests"
+      ],
+      "deployment_impact": "No repo-managed deploy: agent image is built only by agent/docker-compose.yml; Windows build (tools/build/build_agent_windows.ps1) installs pyinstaller only."
+    },
+    {
+      "alert": 2,
+      "ghsa": "GHSA-gc5v-m9x4-r6x2",
+      "cve": "CVE-2026-25645",
+      "severity": "medium",
+      "package": "requests",
+      "manifest": "agent/requirements.txt",
+      "manifest_status": "RUNTIME_NOT_REPO_DEPLOYED",
+      "relationship": "direct",
+      "scope": "runtime",
+      "exposure": "RUNTIME_NOT_REPO_DEPLOYED",
+      "vulnerable_range": "< 2.33.0",
+      "first_patched": "2.33.0",
+      "summary": "Requests has Insecure Temp File Reuse in its extract_zipped_paths() utility function",
+      "versions_at_base": [
+        "2.32.3"
+      ],
+      "versions_now": [
+        "2.32.3"
+      ],
+      "vulnerable_now": [
+        "2.32.3"
+      ],
+      "owner": "DEP-REMEDIATE-005",
+      "state": "PLANNED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "agent/requirements.txt requests==2.32.3 -> requests==2.34.2 (>= 2.33.0 fixes both; 2.34.2 is what the shared CI venv already runs)",
+      "reachability": "Agent HTTP client (agent/core_client.py, agent/app/core_client.py) uses requests.Session with default trust_env; installed only by agent/Dockerfile (not release-images, not compose).",
+      "exploit_prerequisites": "Local attacker able to pre-create files in the shared temp directory while extract_zipped_paths runs (zipped/frozen installs such as PyInstaller bundles).",
+      "breaking_change_probability": "LOW — no API change used by the agent; repo tests already run against requests 2.34.2.",
+      "impacted_workflows": [
+        "agent/Dockerfile",
+        "tests/agent",
+        "agent/tests"
+      ],
+      "deployment_impact": "No repo-managed deploy: agent image is built only by agent/docker-compose.yml; Windows build (tools/build/build_agent_windows.ps1) installs pyinstaller only."
+    },
+    {
+      "alert": 88,
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "cve": "CVE-2026-118764",
+      "severity": "medium",
+      "package": "minimatch",
+      "manifest": "apps/console/package-lock.json",
+      "manifest_status": "AUTHORITATIVE_DEPLOYED",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 7.0.0, < 11.0.1",
+      "first_patched": "11.0.1",
+      "summary": "minimatch has potential denial of service via globparts amplification",
+      "versions_at_base": [
+        "10.2.6",
+        "3.1.5"
+      ],
+      "versions_now": [
+        "3.1.5",
+        "10.2.6"
+      ],
+      "vulnerable_now": [
+        "10.2.6"
+      ],
+      "owner": "DEP-REMEDIATE-006",
+      "state": "PLANNED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"@typescript-eslint/typescript-estree\": {\"minimatch\": \"^11.0.8\"}; no parent fix exists (typescript-estree 8.72.2 latest still declares minimatch ^10.2.2)",
+      "reachability": "ESLint/TypeScript parser glob matching during `next lint` / CI lint and next build lint; not bundled into the application.",
+      "exploit_prerequisites": "Attacker-controlled glob pattern in lint configuration (repository-controlled).",
+      "breaking_change_probability": "LOW — lockfile delta is two entries; next 15.5.29 / react 19.3.1 unchanged (scratch probe).",
+      "impacted_workflows": [
+        "apps/console lint/build",
+        "CI console job"
+      ],
+      "deployment_impact": "apps/console/package*.json change triggers the Console Vercel production build on merge."
+    },
+    {
+      "alert": 170,
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "cve": "CVE-2026-118764",
+      "severity": "medium",
+      "package": "minimatch",
+      "manifest": "apps/portal/package-lock.json",
+      "manifest_status": "AUTHORITATIVE_DEPLOY_STALE",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 7.0.0, < 11.0.1",
+      "first_patched": "11.0.1",
+      "summary": "minimatch has potential denial of service via globparts amplification",
+      "versions_at_base": [
+        "10.2.6",
+        "3.1.5"
+      ],
+      "versions_now": [
+        "3.1.5",
+        "10.2.6"
+      ],
+      "vulnerable_now": [
+        "10.2.6"
+      ],
+      "owner": "DEP-REMEDIATE-006",
+      "state": "PLANNED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"@typescript-eslint/typescript-estree\": {\"minimatch\": \"^11.0.8\"}; no parent fix exists (typescript-estree 8.72.2 latest still declares minimatch ^10.2.2)",
+      "reachability": "ESLint/TypeScript parser glob matching during `next lint` / CI lint and next build lint; not bundled into the application.",
+      "exploit_prerequisites": "Attacker-controlled glob pattern in lint configuration (repository-controlled).",
+      "breaking_change_probability": "LOW — lockfile delta is two entries; next 15.5.29 / react 19.3.1 unchanged (scratch probe).",
+      "impacted_workflows": [
+        "apps/portal lint/build",
+        "CI portal job"
+      ],
+      "deployment_impact": "apps/portal change passes tools/vercel/ignore_build.sh and triggers the Portal Vercel production build."
+    },
+    {
+      "alert": 171,
+      "ghsa": "GHSA-6v5v-wf23-fmfq",
+      "cve": "CVE-2026-48988",
+      "severity": "medium",
+      "package": "markdown-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "<= 14.1.1",
+      "first_patched": "14.2.0",
+      "summary": "markdown-it: Quadratic complexity DoS in smartquotes rule via replaceAt string operations",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 173,
+      "ghsa": "GHSA-h67p-54hq-rp68",
+      "cve": "CVE-2026-53550",
+      "severity": "medium",
+      "package": "js-yaml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 4.0.0, <= 4.1.1",
+      "first_patched": "4.2.0",
+      "summary": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 174,
+      "ghsa": "GHSA-3jxr-9vmj-r5cp",
+      "cve": "CVE-2026-13149",
+      "severity": "high",
+      "package": "brace-expansion",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 3.0.0, < 5.0.7",
+      "first_patched": "5.0.7",
+      "summary": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 175,
+      "ghsa": "GHSA-52cp-r559-cp3m",
+      "cve": "CVE-2026-59869",
+      "severity": "high",
+      "package": "js-yaml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 4.0.0, < 4.3.0",
+      "first_patched": "4.3.0",
+      "summary": "js-yaml: YAML merge-key chains can force quadratic CPU consumption",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 176,
+      "ghsa": "GHSA-v245-v573-v5vm",
+      "cve": "CVE-2026-59887",
+      "severity": "high",
+      "package": "linkify-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "<= 5.0.1",
+      "first_patched": "5.0.2",
+      "summary": "linkify-it: Quadratic-complexity DoS via the `mailto:` validator scan-loop on attacker text",
+      "versions_at_base": [
+        "5.0.0"
+      ],
+      "versions_now": [
+        "6.1.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); linkify-it 5.0.0 -> 6.1.0 via markdown-it 15",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 179,
+      "ghsa": "GHSA-5p4m-2wfm-xmqj",
+      "cve": null,
+      "severity": "high",
+      "package": "js-yaml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 4.0.0, < 4.3.1",
+      "first_patched": "4.3.1",
+      "summary": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 180,
+      "ghsa": "GHSA-2883-xcg3-v3hh",
+      "cve": "CVE-2026-84375",
+      "severity": "high",
+      "package": "js-yaml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 4.0.0, < 4.3.2",
+      "first_patched": "4.3.2",
+      "summary": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 181,
+      "ghsa": "GHSA-7w5x-hrqm-74c2",
+      "cve": "CVE-2026-85730",
+      "severity": "high",
+      "package": "smol-toml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "<= 1.7.0",
+      "first_patched": "1.7.1",
+      "summary": "smol-toml: Denial of Service via malformed TOML documents",
+      "versions_at_base": [
+        "1.6.1"
+      ],
+      "versions_now": [
+        "1.9.1"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); smol-toml 1.6.1 -> 1.9.1",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 182,
+      "ghsa": "GHSA-253c-mchw-3w2r",
+      "cve": null,
+      "severity": "medium",
+      "package": "markdown-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "< 14.3.1",
+      "first_patched": "14.3.1",
+      "summary": "markdown-it linkify: true has two quadratic paths, so a few hundred KB of markdown blocks the event loop for tens of seconds",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 185,
+      "ghsa": "GHSA-q2hr-2g5m-vwhr",
+      "cve": "CVE-2026-102277",
+      "severity": "medium",
+      "package": "brace-expansion",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 4.0.0, < 5.0.12",
+      "first_patched": "5.0.12",
+      "summary": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 186,
+      "ghsa": "GHSA-238p-pmpm-9mq7",
+      "cve": "CVE-2026-103923",
+      "severity": "low",
+      "package": "katex",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 0.11.0, < 0.18.2",
+      "first_patched": "0.18.2",
+      "summary": "KaTeX: Existing prototype pollution can bypass trust restrictions",
+      "versions_at_base": [
+        "0.16.46"
+      ],
+      "versions_now": [
+        "0.18.11"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"micromark-extension-math\": {\"katex\": \"^0.18.11\"} (micromark-extension-math 3.1.0, latest, declares katex ^0.16.0)",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 187,
+      "ghsa": "GHSA-r4xh-jqrq-34v2",
+      "cve": null,
+      "severity": "medium",
+      "package": "smol-toml",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "<= 1.8.0",
+      "first_patched": "1.9.0",
+      "summary": "smol-toml: Quadratic-time parse() from parseKey rescanning to end of document on each key line",
+      "versions_at_base": [
+        "1.6.1"
+      ],
+      "versions_now": [
+        "1.9.1"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); smol-toml 1.6.1 -> 1.9.1",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 188,
+      "ghsa": "GHSA-r7fv-28h4-cvq7",
+      "cve": "CVE-2026-111759",
+      "severity": "high",
+      "package": "markdown-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "< 14.3.2",
+      "first_patched": "14.3.2",
+      "summary": "markdown-it: Quadratic complexity in smartquotes with unmatched closing quotes",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 189,
+      "ghsa": "GHSA-vfgh-jcmw-g37q",
+      "cve": "CVE-2026-111766",
+      "severity": "low",
+      "package": "markdown-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": "< 14.3.3",
+      "first_patched": "14.3.3",
+      "summary": "markdown-it: Quadratic-time denial of service in inline HTML parsing with html enabled",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 190,
+      "ghsa": "GHSA-gfr2-rv44-r23c",
+      "cve": "CVE-2026-111758",
+      "severity": "high",
+      "package": "markdown-it",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 14.1.0, < 14.3.3",
+      "first_patched": "14.3.3",
+      "summary": "markdown-it: Quadratic-time rendering of a single multi-line link reference definition with default options (regression since 14.0)",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    },
+    {
+      "alert": 191,
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "cve": "CVE-2026-118764",
+      "severity": "medium",
+      "package": "minimatch",
+      "manifest": "package-lock.json",
+      "manifest_status": "DEV_TOOLING",
+      "relationship": "transitive",
+      "scope": "development",
+      "exposure": "DEVELOPMENT_ONLY",
+      "vulnerable_range": ">= 7.0.0, < 11.0.1",
+      "first_patched": "11.0.1",
+      "summary": "minimatch has potential denial of service via globparts amplification",
+      "versions_at_base": [
+        "10.2.5"
+      ],
+      "versions_now": [
+        "11.0.8"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "state": "IMPLEMENTED",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"markdownlint-cli\": {\"minimatch\": \"^11.0.8\"} (markdownlint-cli 0.50.0, latest, declares minimatch ~10.2.6)",
+      "reachability": "Root devDependency chain of markdownlint-cli only. No CI job, Make target, Dockerfile or Vercel project installs the root manifest; it runs only when a developer invokes node_modules/.bin/markdownlint on repository Markdown/config. Inputs are repository-controlled.",
+      "exploit_prerequisites": "Attacker-controlled Markdown, YAML or TOML (or a glob/brace pattern) processed by a developer's local markdownlint run; impact is CPU denial of service of that process (katex: prototype pollution already present in the process).",
+      "breaking_change_probability": "LOW — upstream markdownlint-cli 0.50.0 declares the new majors itself; the two scoped overrides were exercised (ignore globs, YAML/TOML/JSONC config, stdin, katex load+render).",
+      "impacted_workflows": [
+        "local markdownlint (node_modules/.bin/markdownlint)"
+      ],
+      "deployment_impact": "Root package-lock.json is in apps/console/vercel.json ignoreCommand: merge rebuilds the Console Vercel production project(s) from unchanged apps/console inputs. release-images republishes the root image, which carries package.json/package-lock.json as inert files (COPY .; no npm in the image)."
+    }
+  ],
+  "auto_dismissed_by_github_tracked": [
+    {
+      "alert": 172,
+      "ghsa": "GHSA-22p9-wv53-3rq4",
+      "cve": "CVE-2026-48801",
+      "severity": "high",
+      "package": "linkify-it",
+      "vulnerable_range": "<= 5.0.0",
+      "first_patched": "5.0.1",
+      "versions_at_base": [
+        "5.0.0"
+      ],
+      "github_state": "auto_dismissed",
+      "versions_now": [
+        "6.1.0"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); linkify-it 5.0.0 -> 6.1.0 via markdown-it 15"
+    },
+    {
+      "alert": 177,
+      "ghsa": "GHSA-mh99-v99m-4gvg",
+      "cve": "CVE-2026-14257",
+      "severity": "high",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.8",
+      "first_patched": "5.0.8",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "github_state": "auto_dismissed",
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    },
+    {
+      "alert": 178,
+      "ghsa": "GHSA-rgw5-rvv9-x895",
+      "cve": "CVE-2026-69152",
+      "severity": "high",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.9",
+      "first_patched": "5.0.9",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "github_state": "auto_dismissed",
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    },
+    {
+      "alert": 183,
+      "ghsa": "GHSA-6j4f-fj2g-mc7p",
+      "cve": "CVE-2026-102276",
+      "severity": "high",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.10",
+      "first_patched": "5.0.10",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "github_state": "auto_dismissed",
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    },
+    {
+      "alert": 184,
+      "ghsa": "GHSA-qhr7-859c-m2p7",
+      "cve": "CVE-2026-102278",
+      "severity": "high",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.11",
+      "first_patched": "5.0.11",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "github_state": "auto_dismissed",
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "owner": "DEP-REMEDIATE-004",
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    }
+  ]
+}

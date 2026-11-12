@@ -222,3 +222,18 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
   - 64 have no vulnerable counterpart in the deployed npm lockfile.
   - #87 (minimatch, development-only) overlaps #88, which remains open under DEP-REMEDIATE-006.
 - **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 20, to be confirmed by ID.
+
+**Outcome (recorded at DEP-REMEDIATE-004 start, 2026-11-11):** #848 merged as `e1dba3a5b`. All 65 targeted IDs are `fixed` with `dismissed_at` null. GitHub now reports 20 open alerts: root 16, agent 2, Console 1 (#88), Portal 1 (#170).
+
+### DEP-REMEDIATE-004: root npm tooling remediated (step D)
+
+- **Change:**
+  - `markdownlint-cli` ^0.48.0 → ^0.50.0 (parent update);
+  - scoped overrides `markdownlint-cli` → `minimatch ^11.0.8` and `micromark-extension-math` → `katex ^0.18.11`, because the latest releases of both parents still pin vulnerable ranges.
+- **Scope:** the Console, Portal and Web lockfiles are byte-identical. Nothing installs the root manifest in CI or deployment.
+- **Alerts targeted:** 16 open root alerts. GitHub had auto-dismissed 5 further high root alerts (#172, #177, #178, #183, #184) at 2026-11-11T01:15Z without any FrostGate action. Their advisories are real and their base versions were vulnerable, so they are tracked and resolved too.
+- **Evidence:**
+  - `dep_remediation_final_inventory.json` (all open alerts, each with an owner PR);
+  - `dep_remediate_004_reconciliation.json`;
+  - `DEP_REMEDIATE_004_ROOT_TOOLING.md`, which also holds the DEP-REMEDIATE-005 (agent `requests`) and DEP-REMEDIATE-006 (Console/Portal minimatch) plans.
+- **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 4 (#1, #2, #88, #170), to be confirmed by ID.
