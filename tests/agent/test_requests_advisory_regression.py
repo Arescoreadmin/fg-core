@@ -177,6 +177,10 @@ def test_agent_core_client_verifies_tls_and_never_follows_redirects(monkeypatch)
         "socket.getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("8.8.8.8", 0))]
     )
     monkeypatch.delenv("FG_CORE_CERT_SHA256", raising=False)
+    # requests (trust_env) substitutes an operator CA bundle for verify=True;
+    # isolate the default case, then check the bundle case separately.
+    monkeypatch.delenv("REQUESTS_CA_BUNDLE", raising=False)
+    monkeypatch.delenv("CURL_CA_BUNDLE", raising=False)
     client = CoreClient("https://core.example", "device-key", "t", "a", "2025-01-01")
     adapter = _RecordingAdapter()
     client._session.mount("https://", adapter)
@@ -189,3 +193,9 @@ def test_agent_core_client_verifies_tls_and_never_follows_redirects(monkeypatch)
     assert call["verify"] is True
     assert call["timeout"] == client.timeout
     assert call["headers"]["Authorization"] == "Bearer device-key"
+
+    # With an operator CA bundle, verification stays on against that bundle.
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/etc/ssl/certs/corp-ca.pem")
+    client._request("GET", "/v1/agent/commands")
+    assert len(adapter.calls) == 2
+    assert adapter.calls[1]["verify"] == "/etc/ssl/certs/corp-ca.pem"
