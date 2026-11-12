@@ -106,10 +106,9 @@ def test_every_alert_has_one_traceable_decision():
     }
     assert recon["targeted_alerts"] == ROOT_ALERTS
     for r in rows:
-        implemented = r["owner"] in {"DEP-REMEDIATE-004", "DEP-REMEDIATE-005"}
-        assert r["state"] == ("IMPLEMENTED" if implemented else "PLANNED")
-        # Planned alerts stay visibly vulnerable until their own PR lands.
-        assert bool(r["vulnerable_now"]) is (not implemented)
+        # DEP-REMEDIATE-006 implemented the last planned owner.
+        assert r["state"] == "IMPLEMENTED", r["alert"]
+        assert r["vulnerable_now"] == [], r["alert"]
         assert r["versions_at_base"], r["alert"]
 
 
@@ -166,6 +165,38 @@ def test_agent_requests_minimum_patched_pin_passes(repo):
     path = repo / "agent/requirements.txt"
     path.write_text(path.read_text().replace("requests==2.34.2", "requests==2.33.0"))
     assert inv.main(["--repo", str(repo)]) == 0
+
+
+@pytest.mark.parametrize(
+    ("app", "alert", "version"),
+    [
+        ("console", 88, "10.2.6"),
+        ("console", 88, "11.0.0"),
+        ("portal", 170, "10.2.6"),
+        ("portal", 170, "11.0.0"),
+    ],
+)
+def test_regressed_frontend_minimatch_fails_closed(repo, capsys, app, alert, version):
+    path = repo / f"apps/{app}/package-lock.json"
+    lock = json.loads(path.read_text())
+    key = "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"
+    assert lock["packages"][key]["version"] == "11.0.8"
+    lock["packages"][key]["version"] = version
+    path.write_text(json.dumps(lock))
+    assert inv.main(["--repo", str(repo)]) == 1
+    err = capsys.readouterr().err
+    assert f"alert {alert}: minimatch" in err and f"'{version}'" in err
+    other = 170 if alert == 88 else 88
+    assert f"alert {other}:" not in err
+
+
+def test_frontend_override_is_scoped_to_typescript_estree():
+    for app in ("console", "portal"):
+        pkg = json.loads((REPO / f"apps/{app}/package.json").read_text())
+        assert pkg["overrides"] == {
+            "next": {"postcss": "^8.5.32"},
+            "@typescript-eslint/typescript-estree": {"minimatch": "^11.0.8"},
+        }, app
 
 
 def test_github_auto_dismissed_root_alerts_stay_tracked_and_remediated():

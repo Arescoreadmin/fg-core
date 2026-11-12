@@ -8379,3 +8379,19 @@ SOC review outcome: APPROVED. It updates development-only tooling with no change
 4. **Alert integrity.** No alert was dismissed. Dependabot #851 is superseded, not merged alongside. Closure is verified by ID after GitHub rescans.
 
 SOC review outcome: APPROVED. It updates one runtime dependency of the Linux agent image to a patched release with no API change used by the agent.
+
+## 2026-11-12 - fix(security): DEP-REMEDIATE-006 — remediate Console and Portal minimatch advisory
+
+**Change scope:**
+- `apps/console/package.json` and `apps/portal/package.json`: scoped override `"@typescript-eslint/typescript-estree": {"minimatch": "^11.0.8"}`; both lockfiles regenerated (nested minimatch 10.2.6 → 11.0.8, plus `@isaacs/nonrecursive-glob-match` 1.1.0, dev-only).
+- Remediation guard `tools/ci/dep_remediation_final_inventory.py`: alerts #88 and #170 move from PLANNED to IMPLEMENTED; inventory JSON regenerated; 6 new guard tests.
+- No workflow, ruleset, required check, application code, runtime dependency or Vercel configuration changed.
+
+**Security analysis:**
+
+1. **Remediation is demonstrated, not asserted.** Both lockfiles now resolve only minimatch 3.1.5 and 11.0.8, both outside GHSA-g3hv-75wg-m249; `npm audit` reports 0 vulnerabilities in each app.
+2. **Behaviour is preserved.** The affected package is the dev-time ESLint parser; lint, typecheck, the production build and the full node test suites pass in both apps, and the one minimatch call site is compatible with v11.
+3. **Recurrence is fail-closed.** Any nested minimatch inside the range fails the guard per alert, and the override must stay scoped to its parent.
+4. **Alert integrity.** No alert was dismissed. Closure is verified by ID after GitHub rescans.
+
+SOC review outcome: APPROVED. It updates a development-only transitive dependency to a patched release; the deployed bundles do not include it.

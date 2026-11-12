@@ -246,3 +246,12 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
 - **Alerts targeted:** #1 (GHSA-9hjg-9r4m-mvj7) and #2 (GHSA-gc5v-m9x4-r6x2).
 - **Evidence:** `DEP_REMEDIATE_005_AGENT_REQUESTS.md`; `dep_remediation_final_inventory.json` (#1 and #2 IMPLEMENTED); `tests/agent/test_requests_advisory_regression.py`.
 - **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 2 (#88, #170), to be confirmed by ID.
+
+**Outcome (recorded at DEP-REMEDIATE-006 start, 2026-11-12):** #852 merged as `c236a7a33`; #851 closed unmerged. The default-branch manifest and dependency graph show `requests` 2.34.2, but GitHub still reports #1 and #2 `open` (last updated 2026-11-11T01:15Z). This is tracked as an external reconciliation item; nothing was dismissed.
+
+### DEP-REMEDIATE-006: Console and Portal minimatch remediated (step F)
+
+- **Change:** scoped override `"@typescript-eslint/typescript-estree": {"minimatch": "^11.0.8"}` in both apps (no patched 10.x and no newer parent exist).
+- **Alerts targeted:** #88 (Console) and #170 (Portal), GHSA-g3hv-75wg-m249.
+- **Evidence:** `dep_remediation_final_inventory.json` (#88 and #170 IMPLEMENTED); `npm audit` 0 in both apps.
+- **Alert accounting:** nothing was dismissed. After the rescan, every alert this inventory tracks is remediated in source; #1 and #2 await GitHub reconciliation.

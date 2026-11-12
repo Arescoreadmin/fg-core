@@ -132,7 +132,7 @@ _AGENT = {
 }
 _FRONT = {
     "owner": "DEP-REMEDIATE-006",
-    "state": "PLANNED",
+    "state": "IMPLEMENTED",
     "classification": "FIXED_BY_VERSION_UPDATE",
     "mechanism": 'scoped override "@typescript-eslint/typescript-estree": '
     '{"minimatch": "^11.0.8"}; no parent fix exists (typescript-estree '
@@ -141,8 +141,11 @@ _FRONT = {
     " / CI lint and next build lint; not bundled into the application.",
     "exploit_prerequisites": "Attacker-controlled glob pattern in lint "
     "configuration (repository-controlled).",
-    "breaking_change_probability": "LOW — lockfile delta is two entries; "
-    "next 15.5.29 / react 19.3.1 unchanged (scratch probe).",
+    "breaking_change_probability": "LOW — per lockfile: nested minimatch "
+    "10.2.6 -> 11.0.8 plus @isaacs/nonrecursive-glob-match 1.1.0 (dev); "
+    "next 15.5.29 / react 19.3.1 unchanged. typescript-estree only calls "
+    "minimatch(path, pattern, {dot: true}), which v11 keeps. v11 needs node "
+    "20 || >=22: CI uses 20, Vercel projects 24.x.",
 }
 
 DECISIONS: dict[int, dict[str, Any]] = {
