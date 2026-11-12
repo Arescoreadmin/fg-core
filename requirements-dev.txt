@@ -17,8 +17,8 @@ pre-commit==4.0.1
 # security policy checker tools/ci/check_github_repo_security.py.
 PyYAML==6.0.3
 PyJWT[crypto]==2.15.1
-cryptography==50.0.0
-pygments==2.20.0
+cryptography==50.0.2
+pygments==2.21.0
 mypy==1.5.1
 pip-audit==2.10.1
 types-PyYAML

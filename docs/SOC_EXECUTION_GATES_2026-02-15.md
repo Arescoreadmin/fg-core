@@ -8379,3 +8379,17 @@ SOC review outcome: APPROVED. It updates development-only tooling with no change
 4. **Alert integrity.** No alert was dismissed. Dependabot #851 is superseded, not merged alongside. Closure is verified by ID after GitHub rescans.
 
 SOC review outcome: APPROVED. It updates one runtime dependency of the Linux agent image to a patched release with no API change used by the agent.
+
+## 2026-11-12 - chore(deps): PY-MAINT-001 — compatible Python maintenance updates split from Dependabot #856
+
+**Change scope:**
+- `requirements.txt`, `requirements-shared.txt` and `requirements-dev.txt`: cryptography 50.0.0→50.0.2, pygments 2.20.0→2.21.0, psycopg[binary] 3.3.2→3.3.8, python-multipart 0.0.31→0.0.33, msal 1.37.0→1.39.0, loguru 0.7.2→0.7.3, python-dotenv 1.2.2→1.2.4, sqlparse 0.6.0→0.6.1, prometheus-client 0.25.0→0.26.0.
+- No framework, workflow, ruleset, required check, application code or constraint changed; `ecdsa==0` stays.
+
+**Security analysis:**
+
+1. **No security posture regresses.** The intentional `ecdsa` install block that #856 would have removed is kept. Every new version is advisory-free, and `pip-audit` is clean for all four install paths.
+2. **Behaviour is preserved.** Only patch and minor releases are included, and the release notes were reviewed. `python-multipart` 0.0.33 adds opt-in field limits and drops Python 3.10 (all images and CI use 3.12). `msal` 1.38's region-discovery change does not apply, because the repo uses only `PublicClientApplication` without a region.
+3. **Framework changes are isolated.** SQLAlchemy 2.1 and the FastAPI/Starlette/Pydantic stack are deferred to #858, with their own gates.
+
+SOC review outcome: APPROVED. Routine maintenance of runtime dependencies to advisory-free patch and minor releases.

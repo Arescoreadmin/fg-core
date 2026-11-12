@@ -246,3 +246,8 @@ Each step is a separate PR, none merged automatically. A PR that triggers a depl
 - **Alerts targeted:** #1 (GHSA-9hjg-9r4m-mvj7) and #2 (GHSA-gc5v-m9x4-r6x2).
 - **Evidence:** `DEP_REMEDIATE_005_AGENT_REQUESTS.md`; `dep_remediation_final_inventory.json` (#1 and #2 IMPLEMENTED); `tests/agent/test_requests_advisory_regression.py`.
 - **Alert accounting:** nothing was dismissed. The projected open count after the rescan is 2 (#88, #170), to be confirmed by ID.
+
+### PY-MAINT-001: Dependabot #856 split (maintenance, not remediation)
+
+- **#856** (26 grouped Python updates) is closed unmerged. 9 compatible updates are in PY-MAINT-001; `ecdsa` is rejected (the security block stays); 17 framework and tooling updates are tracked in #858.
+- **No open alert is affected;** none of the 26 versions has an advisory.

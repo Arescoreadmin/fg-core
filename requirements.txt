@@ -1,11 +1,11 @@
 -r requirements-shared.txt
-python-multipart==0.0.31
+python-multipart==0.0.33
 pydantic-settings==2.5.2
-msal==1.37.0
-loguru==0.7.2
-python-dotenv==1.2.2
+msal==1.39.0
+loguru==0.7.3
+python-dotenv==1.2.4
 redis==7.1.0
-sqlparse==0.6.0
+sqlparse==0.6.1
 argon2-cffi==23.1.0
 packaging>=21.3
 stripe>=10.0.0
@@ -17,4 +17,4 @@ dnspython>=2.9.0
 opentelemetry-api>=1.45.1
 opentelemetry-sdk>=1.45.1
 opentelemetry-exporter-otlp-proto-http>=1.45.1
-prometheus-client==0.25.0
+prometheus-client==0.26.0
