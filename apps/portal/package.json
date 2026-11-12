@@ -40,6 +40,9 @@
   "overrides": {
     "next": {
       "postcss": "^8.5.32"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.8"
     }
   }
 }
