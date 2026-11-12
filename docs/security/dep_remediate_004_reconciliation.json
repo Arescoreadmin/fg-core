@@ -1,0 +1,421 @@
+{
+  "schema": "fg.dep_remediate_004_reconciliation/v1",
+  "pr": "DEP-REMEDIATE-004",
+  "base_commit": "e1dba3a5bef390cab0cebc9a2a98fa1628199f33",
+  "root_lock_sha256_base": "4500a0efd6bd29cab3c76350099560163f40f53b42d8a6b1f1cf4c536913b393",
+  "root_lock_sha256_now": "612b7c077667bcff744d78d2ad9afe24f87cd72238dfba97f4a6569e3f9bdd49",
+  "app_lockfiles_untouched": [
+    "apps/console/package-lock.json",
+    "apps/portal/package-lock.json",
+    "apps/web/package-lock.json"
+  ],
+  "targeted_alerts": [
+    171,
+    173,
+    174,
+    175,
+    176,
+    179,
+    180,
+    181,
+    182,
+    185,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191
+  ],
+  "observed": {
+    "npm_audit_before": {
+      "critical": 0,
+      "high": 6,
+      "moderate": 1,
+      "low": 3,
+      "total": 10
+    },
+    "npm_audit_after": {
+      "critical": 0,
+      "high": 0,
+      "moderate": 0,
+      "low": 0,
+      "total": 0
+    },
+    "markdownlint_repo_run": {
+      "files": 381,
+      "config": ".markdownlint.json (unchanged)",
+      "findings_before": 9456,
+      "findings_after": 9461,
+      "delta": "+5, strictly additive (MD034 +2 bare e-mail, MD036 +3); no finding lost"
+    },
+    "compatibility_probes": [
+      "--ignore glob excludes matching files (minimatch 11)",
+      "YAML config disables a rule; YAML merge keys parse (js-yaml 5)",
+      "TOML config parses (smol-toml 1.9)",
+      "JSONC config parses",
+      "stdin linting (-s)",
+      "micromark-extension-math html loads; katex 0.18.11 renderToString"
+    ],
+    "engine_note": "markdownlint-cli >=0.49 requires node >=22 (local tooling only; no CI job runs root markdownlint)"
+  },
+  "expected_github_outcome": "each targeted alert state=fixed, dismissed_at null, after merge and default-branch rescan (not yet verified)",
+  "alerts": [
+    {
+      "alert": 171,
+      "ghsa": "GHSA-6v5v-wf23-fmfq",
+      "cve": "CVE-2026-48988",
+      "severity": "medium",
+      "package": "markdown-it",
+      "vulnerable_range": "<= 14.1.1",
+      "first_patched": "14.2.0",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3"
+    },
+    {
+      "alert": 173,
+      "ghsa": "GHSA-h67p-54hq-rp68",
+      "cve": "CVE-2026-53550",
+      "severity": "medium",
+      "package": "js-yaml",
+      "vulnerable_range": ">= 4.0.0, <= 4.1.1",
+      "first_patched": "4.2.0",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0"
+    },
+    {
+      "alert": 174,
+      "ghsa": "GHSA-3jxr-9vmj-r5cp",
+      "cve": "CVE-2026-13149",
+      "severity": "high",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 3.0.0, < 5.0.7",
+      "first_patched": "5.0.7",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    },
+    {
+      "alert": 175,
+      "ghsa": "GHSA-52cp-r559-cp3m",
+      "cve": "CVE-2026-59869",
+      "severity": "high",
+      "package": "js-yaml",
+      "vulnerable_range": ">= 4.0.0, < 4.3.0",
+      "first_patched": "4.3.0",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0"
+    },
+    {
+      "alert": 176,
+      "ghsa": "GHSA-v245-v573-v5vm",
+      "cve": "CVE-2026-59887",
+      "severity": "high",
+      "package": "linkify-it",
+      "vulnerable_range": "<= 5.0.1",
+      "first_patched": "5.0.2",
+      "versions_at_base": [
+        "5.0.0"
+      ],
+      "versions_now": [
+        "6.1.0"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); linkify-it 5.0.0 -> 6.1.0 via markdown-it 15"
+    },
+    {
+      "alert": 179,
+      "ghsa": "GHSA-5p4m-2wfm-xmqj",
+      "cve": null,
+      "severity": "high",
+      "package": "js-yaml",
+      "vulnerable_range": ">= 4.0.0, < 4.3.1",
+      "first_patched": "4.3.1",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0"
+    },
+    {
+      "alert": 180,
+      "ghsa": "GHSA-2883-xcg3-v3hh",
+      "cve": "CVE-2026-84375",
+      "severity": "high",
+      "package": "js-yaml",
+      "vulnerable_range": ">= 4.0.0, < 4.3.2",
+      "first_patched": "4.3.2",
+      "versions_at_base": [
+        "4.1.1"
+      ],
+      "versions_now": [
+        "5.5.0"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); js-yaml 4.1.1 -> 5.5.0"
+    },
+    {
+      "alert": 181,
+      "ghsa": "GHSA-7w5x-hrqm-74c2",
+      "cve": "CVE-2026-85730",
+      "severity": "high",
+      "package": "smol-toml",
+      "vulnerable_range": "<= 1.7.0",
+      "first_patched": "1.7.1",
+      "versions_at_base": [
+        "1.6.1"
+      ],
+      "versions_now": [
+        "1.9.1"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); smol-toml 1.6.1 -> 1.9.1"
+    },
+    {
+      "alert": 182,
+      "ghsa": "GHSA-253c-mchw-3w2r",
+      "cve": null,
+      "severity": "medium",
+      "package": "markdown-it",
+      "vulnerable_range": "< 14.3.1",
+      "first_patched": "14.3.1",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3"
+    },
+    {
+      "alert": 185,
+      "ghsa": "GHSA-q2hr-2g5m-vwhr",
+      "cve": "CVE-2026-102277",
+      "severity": "medium",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.12",
+      "first_patched": "5.0.12",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "minimatch override ^11.0.8 pulls brace-expansion 5.0.13"
+    },
+    {
+      "alert": 186,
+      "ghsa": "GHSA-238p-pmpm-9mq7",
+      "cve": "CVE-2026-103923",
+      "severity": "low",
+      "package": "katex",
+      "vulnerable_range": ">= 0.11.0, < 0.18.2",
+      "first_patched": "0.18.2",
+      "versions_at_base": [
+        "0.16.46"
+      ],
+      "versions_now": [
+        "0.18.11"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"micromark-extension-math\": {\"katex\": \"^0.18.11\"} (micromark-extension-math 3.1.0, latest, declares katex ^0.16.0)"
+    },
+    {
+      "alert": 187,
+      "ghsa": "GHSA-r4xh-jqrq-34v2",
+      "cve": null,
+      "severity": "medium",
+      "package": "smol-toml",
+      "vulnerable_range": "<= 1.8.0",
+      "first_patched": "1.9.0",
+      "versions_at_base": [
+        "1.6.1"
+      ],
+      "versions_now": [
+        "1.9.1"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); smol-toml 1.6.1 -> 1.9.1"
+    },
+    {
+      "alert": 188,
+      "ghsa": "GHSA-r7fv-28h4-cvq7",
+      "cve": "CVE-2026-111759",
+      "severity": "high",
+      "package": "markdown-it",
+      "vulnerable_range": "< 14.3.2",
+      "first_patched": "14.3.2",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3"
+    },
+    {
+      "alert": 189,
+      "ghsa": "GHSA-vfgh-jcmw-g37q",
+      "cve": "CVE-2026-111766",
+      "severity": "low",
+      "package": "markdown-it",
+      "vulnerable_range": "< 14.3.3",
+      "first_patched": "14.3.3",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3"
+    },
+    {
+      "alert": 190,
+      "ghsa": "GHSA-gfr2-rv44-r23c",
+      "cve": "CVE-2026-111758",
+      "severity": "high",
+      "package": "markdown-it",
+      "vulnerable_range": ">= 14.1.0, < 14.3.3",
+      "first_patched": "14.3.3",
+      "versions_at_base": [
+        "14.1.1"
+      ],
+      "versions_now": [
+        "15.0.3"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "markdownlint-cli 0.48.0 -> 0.50.0 (parent update); markdown-it 14.1.1 -> 15.0.3"
+    },
+    {
+      "alert": 191,
+      "ghsa": "GHSA-g3hv-75wg-m249",
+      "cve": "CVE-2026-118764",
+      "severity": "medium",
+      "package": "minimatch",
+      "vulnerable_range": ">= 7.0.0, < 11.0.1",
+      "first_patched": "11.0.1",
+      "versions_at_base": [
+        "10.2.5"
+      ],
+      "versions_now": [
+        "11.0.8"
+      ],
+      "vulnerable_now": [],
+      "classification": "FIXED_BY_VERSION_UPDATE",
+      "mechanism": "scoped override \"markdownlint-cli\": {\"minimatch\": \"^11.0.8\"} (markdownlint-cli 0.50.0, latest, declares minimatch ~10.2.6)"
+    }
+  ],
+  "auto_dismissed_by_github_also_remediated": [
+    {
+      "alert": 172,
+      "ghsa": "GHSA-22p9-wv53-3rq4",
+      "package": "linkify-it",
+      "vulnerable_range": "<= 5.0.0",
+      "versions_at_base": [
+        "5.0.0"
+      ],
+      "versions_now": [
+        "6.1.0"
+      ],
+      "vulnerable_now": []
+    },
+    {
+      "alert": 177,
+      "ghsa": "GHSA-mh99-v99m-4gvg",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.8",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": []
+    },
+    {
+      "alert": 178,
+      "ghsa": "GHSA-rgw5-rvv9-x895",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.9",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": []
+    },
+    {
+      "alert": 183,
+      "ghsa": "GHSA-6j4f-fj2g-mc7p",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.10",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": []
+    },
+    {
+      "alert": 184,
+      "ghsa": "GHSA-qhr7-859c-m2p7",
+      "package": "brace-expansion",
+      "vulnerable_range": ">= 4.0.0, < 5.0.11",
+      "versions_at_base": [
+        "5.0.6"
+      ],
+      "versions_now": [
+        "5.0.13"
+      ],
+      "vulnerable_now": []
+    }
+  ],
+  "auto_dismissed_note": "GitHub auto-dismissed these on 2026-11-11T01:15Z; no FrostGate action dismissed them. They may stay auto_dismissed after the rescan; the guard proves their resolution instead."
+}

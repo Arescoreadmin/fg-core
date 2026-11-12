@@ -1,3 +1,32 @@
+## chore(security): DEP-REMEDIATE-004 — remediate root npm tooling vulnerabilities (branch chore/dep-remediate-004)
+
+- **Work item:** DEP-REMEDIATE-004, classed as REPAIR. It is DEP-INV-001 remediation step D, after DEP-REMEDIATE-003 (#848, `e1dba3a5b`; all 65 of its targets verified `fixed`, none dismissed).
+- **Root cause:** the root `package.json` exists only for `markdownlint-cli` 0.48.0, whose tilde-pinned chain resolved vulnerable markdown-it 14.1.1, js-yaml 4.1.1, linkify-it 5.0.0, smol-toml 1.6.1, minimatch 10.2.5, brace-expansion 5.0.6 and katex 0.16.46. That produced 16 open alerts (8 high), plus 5 high alerts GitHub had auto-dismissed on its own.
+- **Change:**
+  - parent update to `markdownlint-cli` ^0.50.0;
+  - two scoped overrides where no upstream release fixes the chain: `markdownlint-cli` → `minimatch ^11.0.8`, and `micromark-extension-math` → `katex ^0.18.11`;
+  - root `package-lock.json` regenerated with npm 10.9.7.
+  - No `audit fix --force` and no lint-rule change. The Console, Portal and Web lockfiles are byte-identical.
+- **Verification:**
+  - `npm ci` OK; `npm audit` 10 → 0;
+  - every lock entry has sha512 integrity and resolves from registry.npmjs.org, none has install scripts, and `npm ls` is consistent;
+  - markdownlint over 381 files: 9456 → 9461 findings, strictly additive, none lost;
+  - override paths probed: ignore globs, YAML/TOML/JSONC config, stdin, and katex load/render.
+- **Guard:** new `tools/ci/dep_remediation_final_inventory.py`, reusing `dependency_alert_inventory`, fails closed when:
+  - an implemented alert resolves inside its vulnerable range;
+  - an implemented package vanishes;
+  - an alert has no decision, or a decision has no alert;
+  - a manifest is unclassified;
+  - input cannot be parsed (exit 2).
+  30 tests; a mutation that neuters the range check fails 16 of them.
+- **Evidence:**
+  - `docs/security/dep_remediation_final_inventory.json` (all 20 alerts, the PR owner for each, and the 005/006 plans);
+  - `dep_remediate_004_reconciliation.json`;
+  - the trimmed alert snapshot;
+  - `DEP_REMEDIATE_004_ROOT_TOOLING.md`.
+- **Deploy consequence:** the root `package-lock.json` is in the Console `ignoreCommand`, so merging rebuilds console.frostgate.ai and api.frostgate.ai from unchanged `apps/console` inputs. `release-images` republishes the root image, in which the root manifests are inert files.
+- **Alerts:** 16 targeted (171, 173–176, 179–182, 185–191 as listed in the reconciliation). Nothing was dismissed. Closure must be confirmed by ID after GitHub rescans.
+
 ## chore(security): DEP-REMEDIATE-003 — retire obsolete nested Console tree (branch chore/dep-remediate-003)
 
 - **Work item:** DEP-REMEDIATE-003, classed as REPAIR. It implements DEP-INV-001 (#844) remediation step C, after DEP-REMEDIATE-002 (#847, `e5bcd96ed`).
