@@ -13,7 +13,7 @@ CodeQL picks its sources by **variable name**: `password`, `secret`, `private`, 
 | Class | Count | Alerts |
 |---|---|---|
 | P0: raw credential, token, session secret or auth header in a service log | **0** | none confirmed |
-| P1: fixed in this PR | 1 | #53, plus three sibling sinks CodeQL did not report |
+| P1: fixed in this PR | 1 | #53, plus four sibling sinks CodeQL did not report |
 | P1: deferred | 2 | #31, #52 |
 | P2 | 40 | see the ledger |
 | FALSE_POSITIVE (complete source-to-sink check) | 2 | #43, #54 |
@@ -38,6 +38,7 @@ Session ids are the revocation key (`fg:session:revoked:<sid>`) and the per-sess
 | `session_authority.create_session` (`session_created`) | DEBUG | **#53** | raw `sid` | `sid_ref` |
 | `session_authority.revoke_session` (`session_revoked`) | **INFO** | not reported | raw `sid` | `sid_ref` |
 | `SessionRevokedError` message (re-raised as `ValueError` by `portal_identity`) | exception | not reported | `session <sid> has been revoked` | `session has been revoked` |
+| `IdentityAuditor.emit` log line for `SESSION_CREATED` (`IdentityAuthority.create_session`) | **INFO** | not reported (found in review of #866) | raw `sid` via `**safe_details` | `sid_ref`; raw `sid` omitted from the line |
 | `IdentityAuditor.emit` log line for `LOGOUT` | **INFO** | not reported | raw `sid` via `**safe_details` | `sid_ref`; raw `sid` omitted from the line |
 
 The hash-chained identity audit record is unchanged: it is still hashed over, and persisted with, the raw `sid`, because it is the governed forensic store.
@@ -47,7 +48,7 @@ The hash-chained identity audit record is unchanged: it is still hashed over, an
 - It is keyed, so a log reader cannot recompute it from a candidate `sid`; an unsalted hash would allow that.
 - It is domain-separated from token signing.
 - It rotates with `FG_SESSION_SECRET`.
-- It is stable for one session, so `session_created`, `session_revoked` and `identity.logout` correlate across the log stream.
+- It is stable for one session, so `session_created`, `identity.session.created`, `session_revoked` and `identity.logout` correlate across the log stream.
 - `event_id` still links the log line to the persisted audit record.
 
 ## Deferred P1: operator seed tooling prints live API keys (#31, #52)
@@ -61,13 +62,23 @@ The hash-chained identity audit record is unchanged: it is still hashed over, an
 
 | # | Group | Alerts | Class | Recommendation |
 |---|---|---|---|---|
-| 1 | **This PR:** identity session identifiers | #53 (+3 unreported) | P1 | Fixed: keyed `sid_ref` |
+| 1 | **This PR:** identity session identifiers | #53 (+4 unreported) | P1 | Fixed: keyed `sid_ref` |
 | 2 | Operator seed tooling credential output | #31, #52 | P1 | Next PR: write to a `0600` file, print redacted; needs operator sign-off |
 | 3 | Auth-event logging consistency | #49–#51, #28–#30 | P2 | `_log_auth_event` logs raw `tenant_id` and `client_ip`, while `log_tenant_denial_event` hashes both in prod. Align them with a keyed reference. Also confirm the `key_prefix` and `actor_id` invariants in a test. |
 | 4 | Identity-provider debug attributes | #21, #32 | P2 | 16-character subject/oid prefix and roles at DEBUG. Consider dropping roles or using keyed refs. |
 | 5 | Tenant-scoped operational metadata (RAG, usage, billing, behavior) | #11–#19, #33–#42, #44–#48, #22–#26, #55, #56 | P2 | Logs `tenant_id`, counts, error codes and 8-character id prefixes, mostly at DEBUG. Candidate for one policy decision on `tenant_id` in logs, rather than per-site edits. |
 | 6 | Ops-governance audit log line | #20 | P2 | The audit record is filtered by `_SAFE_DETAIL_KEYS` by design. Needs a design review, not a code change. |
 | 7 | False-positive evidence | #43, #54, #27 | FP | Keep open with documented evidence; never dismiss to manufacture progress. |
+
+## Unreported sinks outside this boundary
+
+A sweep for every `"sid"`/`"session_id"` dict key and session-id log argument in `api/`, `admin_gateway/` and `services/` found one more authentication-session sink, which CodeQL did not report:
+
+- `admin_gateway/auth/session.py:180` logs `session.session_id` at DEBUG, only for already-expired sessions.
+- Admin-gateway sessions are HMAC-signed cookies, so the id is not a bearer credential.
+- P2, a separate service boundary, so a separate PR.
+
+The other hits use "session" for unrelated things (audit-engine cycles, AI-console chat, cp-terminal, workforce) or are serialisation, not logging.
 
 ## Related finding outside this mission
 
@@ -119,7 +130,7 @@ The hash-chained identity audit record is unchanged: it is still hashed over, an
 | #50 | `api/auth_scopes/resolution.py:287` | auth event: `key_prefix[:8]`, raw `tenant_id`, `client_ip`, path | P2 | 3 |
 | #51 | `api/auth_scopes/resolution.py:289` | same as #50 (failure branch) | P2 | 3 |
 | #52 | `tools/seed/run_seed.py:337` | **local seed API keys** (CLI stdout) | P1 | 2 |
-| #53 | `api/identity_authority/session_authority.py:249` | **raw session id** | P1 | **1: fixed in this PR** |
+| #53 | `api/identity_authority/session_authority.py:249` | **raw session id** (plus 4 unreported sibling sinks) | P1 | **1: fixed in this PR** |
 | #54 | `api/stripe_webhooks.py:186` | one of four module-constant reason codes | FALSE_POSITIVE | 7 |
 | #55 | `api/usage_attribution.py:259` | `tenant_id`, `usage_id[:8]` (DEBUG) | P2 | 5 |
 | #56 | `api/usage_attribution.py:275` | `tenant_id`, action, units (DEBUG) | P2 | 5 |

@@ -197,3 +197,61 @@ def test_logout_audit_log_line_omits_raw_session_id_but_record_keeps_it(
     (rec,) = persisted
     assert rec["details"] == {"sid": token.session_id}
     assert rec["event_id"] == line["event_id"]
+
+
+def _identity_authority(authority):
+    """IdentityAuthority over the real SessionAuthority with a capturing auditor."""
+    from api.identity_authority import audit as audit_mod
+    from api.identity_authority.authority import IdentityAuthority
+
+    persisted: list[dict] = []
+    auditor = audit_mod.IdentityAuditor()
+    auditor._persist = lambda **kw: persisted.append(kw)  # type: ignore[method-assign]
+    auditor.set_db_factory(object())
+    ia = IdentityAuthority(
+        provider_registry=None,  # type: ignore[arg-type]
+        session_authority=authority,
+        tenant_resolver=None,  # type: ignore[arg-type]
+        auditor=auditor,
+    )
+    return ia, persisted
+
+
+def test_identity_authority_session_created_audit_log_omits_raw_session_id(
+    authority, caplog, canonical_identity
+):
+    # Codex review on #866: the SESSION_CREATED audit event also carried the
+    # raw sid into the INFO log line.
+    from api.identity_authority import audit as audit_mod
+    from api.identity_authority.models import AuthorizationContext
+
+    ia, persisted = _identity_authority(authority)
+    ctx = AuthorizationContext(
+        identity=canonical_identity,
+        permissions=frozenset(),
+        capabilities=frozenset(),
+        tenant_id="tenant-123",
+        organization_id=None,
+        session_id="",
+        session_risk_score=0.0,
+        correlation_id="req-create-1",
+    )
+    caplog.set_level(logging.DEBUG, logger=_LOGGER)
+
+    signed = ia.create_session(ctx)
+    sid = authority.validate_session(signed).session_id
+
+    text = _rendered(caplog)
+    assert sid not in text
+    assert signed not in text
+    (line,) = _records(caplog, audit_mod.IdentityEventType.SESSION_CREATED.value)
+    assert line["sid_ref"] == authority.session_log_ref(sid)
+    assert line["mfa"] is True
+    assert line["correlation_id"] == "req-create-1"
+    # Correlates with the lower-level session_authority event.
+    (low,) = _records(caplog, "session_authority.session_created")
+    assert low["sid_ref"] == line["sid_ref"]
+    # The governed audit record still holds the raw id.
+    (rec,) = persisted
+    assert rec["details"] == {"sid": sid, "mfa": True}
+    assert rec["event_id"] == line["event_id"]

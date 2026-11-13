@@ -1,16 +1,16 @@
 ## fix(security): CODEQL-REMEDIATE-002 — keep session identifiers out of logs (CodeQL #53, branch security/codeql-remediate-002-sensitive-logging)
 
 - **Work item:** CODEQL-REMEDIATE-002 PR 1 (REPAIR). All 46 open `py/clear-text-logging-sensitive-data` alerts on `main` `7483d15b` are inventoried source-to-sink in `docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`: 0 P0, 3 P1, 40 P2, 2 false positives, 1 candidate.
-- **Root cause:** `api/identity_authority` wrote the raw session id, which is the revocation key and per-session handle, to application logs at four sinks: `session_created` (DEBUG, #53), `session_revoked` (INFO), the `SessionRevokedError` message, and the identity auditor's `LOGOUT` log line (INFO, via `**safe_details`). CodeQL reported only the first.
+- **Root cause:** `api/identity_authority` wrote the raw session id, which is the revocation key and per-session handle, to application logs at five sinks: `session_created` (DEBUG, #53), `session_revoked` (INFO), the `SessionRevokedError` message, and the identity auditor's `SESSION_CREATED` and `LOGOUT` log lines (INFO, via `**safe_details`). CodeQL reported only the first; the `SESSION_CREATED` sink was found in review of #866.
 - **Exploit:** a central-log reader (ELK/Loki) obtains session ids. They do not authenticate on their own, because tokens are HMAC-signed, but they expose the revocation key and allow cross-event session tracking outside the governed audit store.
 - **Change:**
   - `SessionAuthority.session_log_ref()` returns `HMAC-SHA256(K_log, sid)[:16]`, with `K_log = HMAC(FG_SESSION_SECRET, "fg.identity.session.log-ref.v1")`. It is keyed and domain-separated, not an unsalted hash.
   - Both session logs now carry `sid_ref`, and the revoked error says "session has been revoked".
-  - `IdentityAuditor.emit` gains log-only `omit_from_log`/`log_details`. `logout` drops the raw `sid` from the log line and adds `sid_ref`. The hashed and persisted audit record is unchanged.
+  - `IdentityAuditor.emit` gains log-only `omit_from_log`/`log_details`. `IdentityAuthority.create_session` and `logout` drop the raw `sid` from their log lines and add `sid_ref`. The hashed and persisted audit record is unchanged.
 - **Verification:**
-  - New `tests/identity_authority/test_session_log_redaction.py`, 10 tests rendering records through the production `_JsonFormatter`.
-  - Before the fix: 6 fail, including 4 exposure proofs, each with the raw sid present at its sink; 4 failure-path guards pass on both. After the fix: 10 pass.
-  - `tests/identity_authority` plus canonical delegation: 103 passed.
+  - New `tests/identity_authority/test_session_log_redaction.py`, 11 tests rendering records through the production `_JsonFormatter`.
+  - Before the fix: 7 fail, including 5 exposure proofs, each with the raw sid present at its sink; 4 failure-path guards pass on both. After the fix: 11 pass.
+  - `tests/identity_authority` plus canonical delegation: 104 passed.
 - **Unchanged:** token format and signing, revocation, the audit hash chain and persisted audit details, and the error types.
 - **Rollback:** revert the PR. Raw sids return to the logs and the new tests fail.
 
