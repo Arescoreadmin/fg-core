@@ -13,10 +13,20 @@ from api.entitlements import require_capability
 from api.db_models import AuditLedgerRecord
 from api.security_audit import audit_admin_action
 from services.audit_engine import AuditEngine
-from services.audit_engine.engine import AuditIntegrityError, AuditTamperDetected
+from services.audit_engine.engine import (
+    AuditExportWindowInvalid,
+    AuditIntegrityError,
+    AuditTamperDetected,
+)
 from services.compliance_registry import ComplianceRegistry
 
 router = APIRouter(tags=["audit"])
+
+_WINDOW_INVALID_DETAIL = {
+    "code": AuditExportWindowInvalid.code,
+    "message": "window bounds must be ISO-8601 UTC timestamps ending in Z, start <= end",
+}
+_EXAM_NOT_FOUND_DETAIL = {"code": "AUDIT_EXAM_NOT_FOUND", "message": "exam not found"}
 
 
 class CycleRunRequest(BaseModel):
@@ -136,6 +146,8 @@ def audit_export(
             tenant_id=tenant_id,
             app_openapi=request.app.openapi(),
         )
+    except AuditExportWindowInvalid as exc:
+        raise HTTPException(status_code=400, detail=_WINDOW_INVALID_DETAIL) from exc
     except AuditIntegrityError as exc:
         raise HTTPException(
             status_code=409, detail={"code": exc.code, "message": str(exc)}
@@ -228,12 +240,15 @@ def list_exams(request: Request) -> dict[str, object]:
 @router.post("/audit/exams/run", dependencies=[Depends(require_scopes("audit:write"))])
 def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
     tenant_id = require_bound_tenant(request)
-    exam_id = AuditEngine().create_exam(
-        tenant_id=tenant_id,
-        name=body.name,
-        window_start=body.window_start_utc,
-        window_end=body.window_end_utc,
-    )
+    try:
+        exam_id = AuditEngine().create_exam(
+            tenant_id=tenant_id,
+            name=body.name,
+            window_start=body.window_start_utc,
+            window_end=body.window_end_utc,
+        )
+    except AuditExportWindowInvalid as exc:
+        raise HTTPException(status_code=400, detail=_WINDOW_INVALID_DETAIL) from exc
     return {"exam_id": exam_id}
 
 
@@ -247,9 +262,22 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
 )
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
-    result = AuditEngine().export_exam_bundle(
-        exam_id=exam_id, app_openapi=request.app.openapi(), tenant_id=tenant_id
-    )
+    try:
+        result = AuditEngine().export_exam_bundle(
+            exam_id=exam_id, app_openapi=request.app.openapi(), tenant_id=tenant_id
+        )
+    except AuditExportWindowInvalid as exc:
+        raise HTTPException(status_code=400, detail=_WINDOW_INVALID_DETAIL) from exc
+    except AuditIntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    except AuditTamperDetected as exc:
+        # The lookup is tenant-filtered, so another tenant's exam and an
+        # unknown id take this same branch: one response, no existence oracle.
+        if str(exc) != "exam_session_not_found":
+            raise
+        raise HTTPException(status_code=404, detail=_EXAM_NOT_FOUND_DETAIL) from exc
     audit_admin_action(
         action="audit_exam_export",
         tenant_id=tenant_id,

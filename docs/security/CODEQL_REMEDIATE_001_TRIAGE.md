@@ -79,7 +79,7 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | 3 | Billing evidence ID validation and containment | #91–#94 |
 | 4 | Bound user-supplied regex (`api/workforce.py`) | #71 |
 | 5 | Sensitive-logging triage and fixes: continued as CODEQL-REMEDIATE-002 (`docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`; #53 fixed via #866) and CODEQL-REMEDIATE-003 (#31, #52; fixed on main via #867). Seed credential storage (#8, #9): CODEQL-REMEDIATE-004 | 46 logging alerts |
-| 6 | `services/*` path-injection triage: #100–#105 fixed by CODEQL-REMEDIATE-005 wave 1 (evidence artifact containment); #95–#97 queued as wave 2 (`docs/security/CODEQL_REMEDIATE_005_BURNDOWN.md`) | #95–#105 |
+| 6 | `services/*` path-injection triage: #100–#105 fixed by CODEQL-REMEDIATE-005 wave 1 (confirmed on main `3024ad92`); #95–#97 addressed by CODEQL-REMEDIATE-006 wave 2 (`docs/security/CODEQL_REMEDIATE_005_BURNDOWN.md`) | #95–#105 |
 | 7 | Remaining low items and documented false-positive evidence; all open alerts are classified in `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json` | the rest |
 
 ## Per-alert ledger
@@ -180,9 +180,9 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | #92 | `py/path-injection` | high | `api/billing.py:82` | CONFIRMED_LOW |
 | #93 | `py/path-injection` | high | `api/billing.py:86` | CONFIRMED_LOW |
 | #94 | `py/path-injection` | high | `api/billing.py:86` | CONFIRMED_LOW |
-| #95 | `py/path-injection` | high | `services/audit_engine/engine.py:549` | NEEDS_TRIAGE |
-| #96 | `py/path-injection` | high | `services/audit_engine/engine.py:550` | NEEDS_TRIAGE |
-| #97 | `py/path-injection` | high | `services/audit_engine/engine.py:555` | NEEDS_TRIAGE |
+| #95 | `py/path-injection` | high | `services/audit_engine/engine.py:549` | GENUINE: fix in CODEQL-REMEDIATE-006 (validated window, tenant namespace, contained path; exploit reproduced); open until a main analysis confirms |
+| #96 | `py/path-injection` | high | `services/audit_engine/engine.py:550` | GENUINE: fix in CODEQL-REMEDIATE-006 (validated window, tenant namespace, contained path; exploit reproduced); open until a main analysis confirms |
+| #97 | `py/path-injection` | high | `services/audit_engine/engine.py:555` | GENUINE: fix in CODEQL-REMEDIATE-006 (validated window, tenant namespace, contained path; exploit reproduced); open until a main analysis confirms |
 | #98 | `py/path-injection` | high | `services/ai/policy.py:145` | NEEDS_TRIAGE |
 | #99 | `py/path-injection` | high | `services/ai/policy.py:540` | NEEDS_TRIAGE |
 | #100 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:83` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |

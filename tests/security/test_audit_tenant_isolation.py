@@ -136,16 +136,18 @@ def test_export_exam_bundle_correct_tenant_finds_exam(audit_eng, monkeypatch, tm
 
     captured: list[str] = []
 
-    def _fake_export_bundle(**kwargs: object) -> dict:
+    def _fake_write_export(**kwargs: object) -> tuple:
         captured.append(str(kwargs.get("tenant_id")))
         dummy = tmp_path / "dummy.json"
-        dummy.write_text(
-            '{"bundle":{"signed_evidence_checksum":"ak-test:aabbcc"},'
-            '"manifest":{"bundle_sha256":"aabbcc"}}'
-        )
-        return {"path": str(dummy), "manifest": {"bundle_sha256": "aabbcc"}}
+        payload = {
+            "bundle": {"signed_evidence_checksum": "ak-test:aabbcc"},
+            "manifest": {"bundle_sha256": "aabbcc"},
+        }
+        return payload, dummy, dummy
 
-    monkeypatch.setattr(audit_eng, "export_bundle", _fake_export_bundle)
+    # CODEQL-REMEDIATE-006: exam export archives the payload it built
+    # in memory (_write_export) instead of re-reading export_bundle's file.
+    monkeypatch.setattr(audit_eng, "_write_export", _fake_write_export)
     monkeypatch.setattr(audit_eng, "_write_deterministic_archive", lambda *a, **k: None)
 
     result = audit_eng.export_exam_bundle(

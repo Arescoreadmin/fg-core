@@ -1,3 +1,33 @@
+## fix(security): CODEQL-REMEDIATE-006 — tenant-bind audit exports and block path traversal (CodeQL #95–#97, branch security/codeql-remediate-006-audit-export)
+
+- **Work item:** CODEQL-REMEDIATE-006, wave 2 (REPAIR).
+  - Live inventory on `main` `3024ad92`: 96 open alerts, 0 dismissed. #100–#105 read `fixed` (analysis 2164346692).
+  - The inventory and burn-down doc were regenerated against that commit.
+- **Root cause (#95–#97):**
+  - `AuditEngine.export_bundle` named the file `audit_export_{start}_{end}.json` from the raw query strings, stripping only `:` and `-`.
+  - The name had no tenant part.
+  - `export_exam_bundle` re-read that shared file by path before archiving it.
+- **Exploit:** reproduced on `main` with synthetic tenants and records.
+  - `end=../../../escaped/pwn` (also `%2F`-encoded) wrote a tenant audit bundle outside the export root.
+  - Non-timestamps and inverted windows were exported.
+  - Two tenants exporting the same window wrote one file. A concurrent export by tenant B landed in tenant A's exam archive.
+  - A failed write left a temporary file behind.
+- **Change:** in `services/audit_engine/engine.py` (the existing authority) and `api/audit.py`.
+  - `validate_export_window`: strict ISO-8601 UTC `...Z` timestamps, at most 32 characters, ASCII digits, `start <= end`. Applied on export and at exam creation. Anything else gets a fixed 400 `AUDIT_EXPORT_WINDOW_INVALID`.
+  - The name is built from the parsed integers, inside `t-<sha256(tenant)[:32]>` under the realpath of `FG_AUDIT_EXPORT_DIR`. Symlinked tenant directories and any resolved path outside the namespace are refused (409 `AUDIT_EXPORT_STORAGE_INVALID`).
+  - Exam export archives its in-memory payload.
+  - `atomic_write` deletes its temporary file on failure.
+  - Exam export maps unknown and foreign exams to one 404 `AUDIT_EXAM_NOT_FOUND` (previously an unhandled 500), and chain failure to 409.
+- **Verification:**
+  - New `tests/security/test_audit_export_path_integrity.py`, 17 tests: **15 fail on `main` `3024ad92`**, 17 pass here.
+  - `tests/security/test_audit_tenant_isolation.py`: one test mocked `export_bundle` as the exam-export seam. It now mocks `_write_export`; its assertions are unchanged.
+- **Unchanged:** bundle, manifest, signature and hash formats; the `start`/`end` strings recorded in the bundle; ledger queries; tenant filtering; the response shape. `path` keeps the configured-root form.
+- **Behaviour change:**
+  - Malformed or inverted windows now return 400 instead of an export.
+  - Export files move into a per-tenant subdirectory. No in-repo consumer reads them by name.
+- **Residual:** EVIDENCE-ARTIFACT-TENANT-AUTH-001 (P1, verified). `POST /evidence/anchors` and `/evidence/runs/register` can still fingerprint and anchor another tenant's file inside the shared `FG_ARTIFACTS_DIR`, such as `decision_evidence/<id>.json`.
+- **Rollback:** revert the PR. Exports return to the shared, caller-named path and the new tests fail. There is no data migration.
+
 ## fix(security): CODEQL-REMEDIATE-005 — evidence registration confined to the artifact root (CodeQL #100–#105, branch security/codeql-remediate-005-accelerated)
 
 - **Work item:** CODEQL-REMEDIATE-005 wave 1 (REPAIR).

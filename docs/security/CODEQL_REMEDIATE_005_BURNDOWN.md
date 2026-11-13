@@ -1,6 +1,8 @@
 # CODEQL-REMEDIATE-005: CodeQL burn-down inventory and remediation waves
 
-Baseline: `main` `7102fd5e` (#868 merged). Python analysis 2163406981 and JavaScript analysis 2163387692 were both run on that commit and read 2026-11-13. There are **102 open alerts and 0 dismissed**.
+Baseline: `main` `3024ad92` (#869 merged), refreshed by CODEQL-REMEDIATE-006. Python analysis 2164346692 and JavaScript analysis 2164327094 were both run on that commit and read 2026-11-13. There are **96 open alerts and 0 dismissed**.
+
+The original baseline was `main` `7102fd5e` with 102 open alerts. Wave 1 (#100–#105, PR #869) is **confirmed `fixed`** by analysis 2164346692 on `3024ad92`, with 0 dismissals.
 
 Machine-readable inventory: `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json`, schema `fg.codeql.burndown.v1`. It has one row per open alert, with:
 - rule, location and SARIF source;
@@ -23,7 +25,7 @@ Machine-readable inventory: `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json`,
 
 | Classification | Count |
 |---|---|
-| GENUINE | 11 |
+| GENUINE | 5 |
 | GENUINE_LOW | 7 |
 | NEEDS_VERIFICATION | 18 |
 | FALSE_POSITIVE_CANDIDATE | 45 |
@@ -49,8 +51,8 @@ Disposition: `DEV_ONLY`, no code change. A future identity migration to opaque U
 
 | Wave | Cluster | Alerts | Root cause, fix boundary | Severity, exploitability | Effort | Predicted CodeQL result |
 |---|---|---|---|---|---|---|
-| **1 (this PR)** | C1 | #100–#105 | `POST /evidence/anchors` (`compliance:read`) and `POST /evidence/runs/register` (`admin:write`) hash a **caller-supplied server path**. Fix: `services/artifact_paths.py` containment in the artifact root. | **High.** Any tenant key with a read scope gets a server-wide existence oracle, the SHA-256 of any readable file, a forged provenance record and an unbounded read. Reproduced. | S | #100–#105 close (prediction) |
-| 2 | C2 | #95–#97 | Audit export file name is built from raw query `start`/`end` (`/` allowed) and has no tenant segment; exam export reads the file back by path. Fix: parse the timestamps, put the tenant id in the name, and contain the path. | **High.** Write outside the export root; two tenants exporting the same window can collide and mix records in exam archives. Needs `audit:export` + capability. | S–M | #95–#97 close (prediction) |
+| 1 (**fixed**, #869, confirmed on `main`) | C1 | #100–#105 | `POST /evidence/anchors` (`compliance:read`) and `POST /evidence/runs/register` (`admin:write`) hash a **caller-supplied server path**. Fix: `services/artifact_paths.py` containment in the artifact root. | **High.** Any tenant key with a read scope gets a server-wide existence oracle, the SHA-256 of any readable file, a forged provenance record and an unbounded read. Reproduced. | S | #100–#105 close (prediction) |
+| **2 (CODEQL-REMEDIATE-006)** | C2 | #95–#97 | Audit export file name is built from raw query `start`/`end` (`/` allowed) and has no tenant segment; exam export reads the file back by path. Fix: strict UTC window validation, a tenant namespace, a contained path, and an in-memory exam payload. | **High.** Write outside the export root; a concurrent same-window export by another tenant lands in an exam archive. Both reproduced. Needs `audit:export` + capability. | S–M | #95–#97 close (prediction) |
 | 3 | C3 | #1, #72 | Backtracking-prone regex over unbounded input. #1 is the **unauthenticated** portal `POST /api/assessment/start` email check (per-IP rate limit keyed on proxy headers; spoofable only where the platform does not overwrite them). Fix: bound the length before matching, and use an unambiguous pattern. | **Medium.** Unauthenticated CPU burn on Vercel. | XS | #1, #72 close (prediction) |
 | 4 | C4 | #91–#94, #3 | Billing evidence directories use client-chosen `invoice_id`/`credit_note_id`. Path params limit HTTP reach to `.`/`..`. Fix: validate the id format at creation, and contain the path. | Low–medium. Escape to the shared billing root. | S | #91–#94 close; #3 may close (prediction) |
 | 5 | C5 | #71 | Tenant-supplied regex run with `re.search` and no timeout. Fix needs an **operator decision**: allow regex with an `re2`-style engine (new dependency), or restrict to literal/prefix plus a length cap. | **Medium.** An `admin:write` holder can stall a shared worker for all tenants. | S | #71 closes (prediction) |
@@ -61,7 +63,36 @@ Disposition: `DEV_ONLY`, no code change. A future identity migration to opaque U
 | 10 | C11 | 19 alerts | Tests, CI tools, offline scripts. | Not production. | S | Hygiene |
 | — | C12 | #10, #73, #125 | Dev-only surfaces and the CSRF token cookie. | Dev only. | — | Tracked |
 
-Risk eliminated is tracked separately from alert count: waves 1–3 remove the verified high and medium exposures (11 alerts). Waves 7–10 mostly turn into evidence for operator decisions, not code.
+Risk eliminated is tracked separately from alert count: waves 1–3 remove the verified high and medium exposures (11 alerts; 6 confirmed fixed). Waves 7–10 mostly turn into evidence for operator decisions, not code.
+
+## Wave 2 (CODEQL-REMEDIATE-006): audit export authority
+
+### Trust boundary as found on `main` `3024ad92`
+
+| Step | Finding |
+|---|---|
+| Request | `GET /audit/export` (`audit:export` + capability `audit.export`) passed raw `start`/`end` to `AuditEngine.export_bundle`. No format, length or order check. `POST /audit/exams/run` (`audit:write`) stored raw `window_start_utc`/`window_end_utc` the same way. |
+| Tenant | Taken from the bound key (`require_bound_tenant`); records are tenant-filtered. **The file name had no tenant part.** |
+| Filesystem | Name `audit_export_{start}_{end}.json` with only `:` and `-` stripped. `atomic_write` creates parents, so `/` and `..` (also as `%2F`) wrote anywhere the service can write, over existing `*.json` files. **Reproduced**: `end=../../../escaped/pwn` wrote a tenant audit bundle outside the export root. |
+| Integrity | Two tenants exporting the same window wrote one file. `export_exam_bundle` re-read that file by path before archiving it, so a concurrent export by tenant B landed in tenant A's signed exam archive. **Reproduced.** A failed write left a temporary file beside the target. |
+| Retrieval | No route serves files by path. The exam lookup is tenant-filtered, but a missing exam raised an unhandled error (500). |
+
+### Correction (in the existing audit engine; no new authority)
+
+- `validate_export_window`: each bound must be a strict ISO-8601 UTC `...Z` timestamp of at most 32 characters (ASCII digits only), and `start <= end`. Otherwise one fixed `AUDIT_EXPORT_WINDOW_INVALID` (400). Applied on export **and** at exam creation.
+- The file name is built from the **parsed** integers, never the caller's string. It sits in a tenant namespace `t-<sha256(tenant_id)[:32]>` under the realpath of `FG_AUDIT_EXPORT_DIR`. A symlinked tenant directory or any resolved path outside it is refused (`AUDIT_EXPORT_STORAGE_INVALID`, 409). The namespace is not an authorization control; no route serves these files.
+- Exam export archives the payload it just built in memory; it no longer re-reads the shared file.
+- `atomic_write` removes its temporary file on any failure.
+- `GET /audit/exams/{id}/export`: an unknown and another tenant's exam both return the same 404 `AUDIT_EXAM_NOT_FOUND`; chain failure returns 409.
+- Unchanged: bundle and manifest format, signatures, hashes, the `start`/`end` strings recorded in the bundle, the ledger queries, and the response shape (`path` keeps the configured-root form).
+
+### Residual risk and follow-up: EVIDENCE-ARTIFACT-TENANT-AUTH-001 (P1)
+
+Wave 1 confined `POST /evidence/anchors` and `POST /evidence/runs/register` to `FG_ARTIFACTS_DIR`, but that root is **shared by all tenants**. It holds `decision_evidence/<sequential id>.json` (every tenant), `anchor_receipts/`, and by default `audit_exports/`. **Verified** with a synthetic probe on this branch: a `compliance:read` key for tenant B anchored tenant A's decision evidence and got 200, the correct SHA-256, and an anchor record stored in tenant B. A missing id returned 404, so ids are enumerable.
+
+- Impact: cross-tenant fingerprint and existence disclosure, plus forged provenance. No content is disclosed.
+- Treat it as **release-blocking for external multi-tenant use** of these two routes until it is fixed or contained.
+- Required change: resolve artifacts through a tenant-owned authority, not a path. `DecisionEvidenceArtifact` already binds `tenant_id` to `storage_path`; anchors and runs need an equivalent owner check, or per-tenant subtrees plus a platform-artifact allowlist. Not in this PR, because it changes the evidence-anchor authority and may need a schema change.
 
 ## Repeatable loop for the next waves
 
@@ -170,16 +201,10 @@ Run this after each merge, before branching the next wave:
 | 92 | `path-injection` | `api/billing.py:82` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
 | 93 | `path-injection` | `api/billing.py:86` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
 | 94 | `path-injection` | `api/billing.py:86` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
-| 95 | `path-injection` | `services/audit_engine/engine.py:549` | C2 | GENUINE | VERIFIED_CODE | yes | query params start/end may contain '/'; only ':' and '-' stripped |
-| 96 | `path-injection` | `services/audit_engine/engine.py:550` | C2 | GENUINE | VERIFIED_CODE | yes | query params start/end may contain '/'; only ':' and '-' stripped |
-| 97 | `path-injection` | `services/audit_engine/engine.py:555` | C2 | GENUINE | VERIFIED_CODE | yes | query params start/end may contain '/'; only ':' and '-' stripped |
+| 95 | `path-injection` | `services/audit_engine/engine.py:549` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
+| 96 | `path-injection` | `services/audit_engine/engine.py:550` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
+| 97 | `path-injection` | `services/audit_engine/engine.py:555` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
 | 98 | `path-injection` | `services/ai/policy.py:145` | C9 | NEEDS_VERIFICATION | PATTERN_ESTIMATE | unknown | AI policy path from tenant id; UI router unmounted in prod; verify other callers |
 | 99 | `path-injection` | `services/ai/policy.py:540` | C9 | NEEDS_VERIFICATION | PATTERN_ESTIMATE | unknown | AI policy path from tenant id; UI router unmounted in prod; verify other callers |
-| 100 | `path-injection` | `services/evidence_anchor_extension/service.py:83` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/anchors: existence oracle, foreign-file hash, unbounded read; red test 10/13 fail on main |
-| 101 | `path-injection` | `services/evidence_anchor_extension/service.py:83` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/anchors: existence oracle, foreign-file hash, unbounded read; red test 10/13 fail on main |
-| 102 | `path-injection` | `services/evidence_anchor_extension/service.py:85` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/anchors: existence oracle, foreign-file hash, unbounded read; red test 10/13 fail on main |
-| 103 | `path-injection` | `services/evidence_index/service.py:32` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/runs/register: same root cause |
-| 104 | `path-injection` | `services/evidence_index/service.py:32` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/runs/register: same root cause |
-| 105 | `path-injection` | `services/evidence_index/service.py:31` | C1 | GENUINE | VERIFIED_EXPLOIT | yes | POST /evidence/runs/register: same root cause |
 | 124 | `sql-injection` | `api/rag_corpus_ingestion.py:964` | C9 | FALSE_POSITIVE_CANDIDATE | VERIFIED_CODE | yes | sort_dir allowlist check before interpolation |
 | 125 | `url-redirection` | `admin_gateway/routers/auth.py:91` | C12 | DEV_ONLY | VERIFIED_CODE | dev-bypass only | tracked since CODEQL-001: dev-bypass redirect, _safe_return_to not modelled |
