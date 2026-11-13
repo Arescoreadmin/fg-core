@@ -5,12 +5,14 @@ import hmac
 import io
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
 import tarfile
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Optional
@@ -36,6 +38,62 @@ class AuditIntegrityError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+AUDIT_EXPORT_WINDOW_INVALID = "AUDIT_EXPORT_WINDOW_INVALID"
+AUDIT_EXPORT_STORAGE_INVALID = "AUDIT_EXPORT_STORAGE_INVALID"
+_MAX_WINDOW_BOUND_LEN = 32
+_UTC_Z_TIMESTAMP_RE = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z"
+)
+
+
+class AuditExportWindowInvalid(ValueError):
+    """An export window bound is not a strict ISO-8601 UTC ``...Z`` timestamp,
+    or ``start`` is after ``end`` (CODEQL-REMEDIATE-006)."""
+
+    code = AUDIT_EXPORT_WINDOW_INVALID
+
+    def __init__(self) -> None:
+        super().__init__(AUDIT_EXPORT_WINDOW_INVALID)
+
+
+def _parse_window_bound(value: object) -> datetime:
+    if (
+        not isinstance(value, str)
+        or len(value) > _MAX_WINDOW_BOUND_LEN
+        or _UTC_Z_TIMESTAMP_RE.fullmatch(value) is None
+    ):
+        raise AuditExportWindowInvalid()
+    try:
+        return datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise AuditExportWindowInvalid() from exc
+
+
+def validate_export_window(start: object, end: object) -> tuple[datetime, datetime]:
+    """Fail closed on anything but an ordered pair of UTC ``...Z`` timestamps."""
+    start_dt, end_dt = _parse_window_bound(start), _parse_window_bound(end)
+    if start_dt > end_dt:
+        raise AuditExportWindowInvalid()
+    return start_dt, end_dt
+
+
+def _window_token(value: datetime) -> str:
+    # Built from parsed integers only: never from the caller's string.
+    token = (
+        f"{value.year:04d}{value.month:02d}{value.day:02d}"
+        f"T{value.hour:02d}{value.minute:02d}{value.second:02d}"
+    )
+    if value.microsecond:
+        token += f"{value.microsecond:06d}"
+    return token + "Z"
+
+
+def _tenant_export_segment(tenant_id: str) -> str:
+    # Tenant ids are trusted but not guaranteed path-safe; a digest is total,
+    # collision-resistant and separator-free. It is a namespace, not a secret.
+    return "t-" + _sha256_hex(tenant_id.encode("utf-8"))[:32]
 
 
 def deterministic_json_bytes(payload: Any) -> bytes:
@@ -291,8 +349,19 @@ class AuditEngine:
         app_openapi: dict[str, Any],
         tenant_id: str,
     ) -> dict[str, Any]:
+        out, _real, display = self._write_export(start, end, app_openapi, tenant_id)
+        return {"path": str(display), "manifest": out["manifest"]}
+
+    def _write_export(
+        self,
+        start: str,
+        end: str,
+        app_openapi: dict[str, Any],
+        tenant_id: str,
+    ) -> tuple[dict[str, Any], Path, Path]:
         if not tenant_id or not tenant_id.strip():
             raise AuditTamperDetected("tenant_context_required")
+        start_dt, end_dt = validate_export_window(start, end)
         with Session(self.engine) as session:
             rows = (
                 session.query(AuditLedgerRecord)
@@ -352,12 +421,38 @@ class AuditEngine:
             ),
         }
         out = {"bundle": bundle, "manifest": manifest}
-        root = Path(os.getenv("FG_AUDIT_EXPORT_DIR", "artifacts/audit_exports"))
-        root.mkdir(parents=True, exist_ok=True)
-        name = f"audit_export_{start.replace(':', '').replace('-', '')}_{end.replace(':', '').replace('-', '')}.json"
-        path = root / name
-        self.atomic_write(path, deterministic_json_bytes(out))
-        return {"path": str(path), "manifest": manifest}
+        real_path, display_path = self._tenant_export_path(
+            tenant_id, f"audit_export_{_window_token(start_dt)}_{_window_token(end_dt)}"
+        )
+        self.atomic_write(real_path, deterministic_json_bytes(out))
+        return out, real_path, display_path
+
+    @staticmethod
+    def _tenant_export_path(tenant_id: str, stem: str) -> tuple[Path, Path]:
+        """Return (real, display) paths for ``stem`` in the tenant's namespace.
+
+        The real path is resolved and must sit directly inside the tenant
+        directory, which must itself resolve to ``<root>/<segment>`` (a symlinked
+        tenant directory is refused). The display path keeps the configured root
+        form so the response shape is unchanged.
+        """
+        configured = os.getenv("FG_AUDIT_EXPORT_DIR", "artifacts/audit_exports")
+        segment = _tenant_export_segment(tenant_id)
+        root = os.path.realpath(configured)
+        tenant_dir = os.path.join(root, segment)
+        os.makedirs(tenant_dir, exist_ok=True)
+        if os.path.realpath(tenant_dir) != tenant_dir:
+            raise AuditIntegrityError(
+                AUDIT_EXPORT_STORAGE_INVALID, "audit export storage refused"
+            )
+        candidate = os.path.realpath(os.path.join(tenant_dir, f"{stem}.json"))
+        if os.path.dirname(candidate) != tenant_dir or not candidate.startswith(
+            tenant_dir + os.sep
+        ):
+            raise AuditIntegrityError(
+                AUDIT_EXPORT_STORAGE_INVALID, "audit export storage refused"
+            )
+        return Path(candidate), Path(configured) / segment / f"{stem}.json"
 
     def reproduce_session(self, session_id: str, tenant_id: str) -> dict[str, Any]:
         if not tenant_id or not tenant_id.strip():
@@ -401,6 +496,7 @@ class AuditEngine:
     def create_exam(
         self, tenant_id: str, name: str, window_start: str, window_end: str
     ) -> str:
+        validate_export_window(window_start, window_end)
         exam_id = str(uuid.uuid4())
         key_id, keys = _audit_keys()
         with Session(self.engine) as session:
@@ -475,14 +571,15 @@ class AuditEngine:
             )
             if exam is None:
                 raise AuditTamperDetected("exam_session_not_found")
-        export = self.export_bundle(
+        # Archive the payload this call built, never a re-read of the shared
+        # file: a concurrent export must not be able to substitute it.
+        payload, real_path, display_path = self._write_export(
             start=exam.window_start_utc,
             end=exam.window_end_utc,
             app_openapi=app_openapi,
             tenant_id=exam.tenant_id,
         )
-        payload = json.loads(Path(export["path"]).read_text(encoding="utf-8"))
-        archive_path = Path(export["path"]).with_suffix(".tar")
+        archive_path = real_path.with_suffix(".tar")
         self._write_deterministic_archive(
             archive_path,
             {
@@ -498,7 +595,7 @@ class AuditEngine:
         )
         return {
             "exam_id": exam_id,
-            "archive_path": str(archive_path),
+            "archive_path": str(display_path.with_suffix(".tar")),
             "manifest": payload["manifest"],
         }
 
@@ -547,9 +644,16 @@ class AuditEngine:
     @staticmethod
     def atomic_write(path: Path, payload: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with NamedTemporaryFile(dir=path.parent, delete=False) as tmp:
-            tmp.write(payload)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-            tmp_path = Path(tmp.name)
-        os.replace(tmp_path, path)
+        tmp_path: Optional[Path] = None
+        try:
+            with NamedTemporaryFile(dir=path.parent, delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+                tmp.write(payload)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp_path, path)
+        except BaseException:
+            # Never leave a partial artifact beside the published one.
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+            raise

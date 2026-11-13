@@ -8512,3 +8512,21 @@ SOC review outcome: APPROVED. Seed credentials can no longer be minted in anothe
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. False-positive candidates are documented for operator decision only.
 
 SOC review outcome: APPROVED. Removes a read-scope filesystem probe and foreign-file fingerprinting from the evidence APIs.
+
+## 2026-11-13 - fix(security): CODEQL-REMEDIATE-006 — tenant-bind audit exports and block path traversal
+
+**Change scope:**
+- `services/audit_engine/engine.py`: export window validation, tenant-namespaced contained export paths, in-memory exam payload, temporary-file cleanup.
+- `api/audit.py`: refusals mapped to 400/404/409.
+- Tests, plus the refreshed burn-down inventory (96 open alerts).
+- No route, scope, schema, migration, workflow, ruleset, required check, CodeQL configuration, dependency, or audit bundle/manifest/signature format change.
+
+**Security analysis:**
+
+1. **The exposure is demonstrated, not asserted.** On `main`, an `audit:export` tenant key wrote a synthetic audit bundle outside the export root through `start`/`end`. A concurrent same-window export by a second synthetic tenant was archived into the first tenant's exam bundle.
+2. **The fix is fail-closed.** Window bounds must parse as strict UTC timestamps in order, or the request is refused before any query or write. File names come from parsed integers in a per-tenant namespace whose resolved path is checked. Symlink escapes are refused.
+3. **Forensic integrity is preserved.** The bundle bytes, manifest hashes and signatures are produced exactly as before. The exam archive is built from the payload that was just hashed and signed, not a file another request can replace. Failed writes leave no partial artifact.
+4. **Tenant isolation.** Tenant identity still comes only from the bound key. Unknown and foreign exams return the same 404. The remaining shared-root evidence-anchor exposure is verified and tracked as EVIDENCE-ARTIFACT-TENANT-AUTH-001 (P1).
+5. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. #95–#97 are not claimed fixed until a `main` analysis shows it.
+
+SOC review outcome: APPROVED. Audit exports can no longer be written outside their root or substituted across tenants.

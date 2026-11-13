@@ -57,6 +57,14 @@ UI summaries:
 - `GET /ui/compliance/findings`
 - `GET /ui/compliance/exam-readiness`
 
+## Export storage
+
+- `start`/`end` (and exam `window_start_utc`/`window_end_utc`) must be ISO-8601 UTC timestamps ending in `Z`, at most 32 characters, with `start <= end`. Anything else returns 400 `AUDIT_EXPORT_WINDOW_INVALID`.
+- Bundles are written to `<FG_AUDIT_EXPORT_DIR>/t-<sha256(tenant_id)[:32]>/audit_export_<start>_<end>.json`, where the name is built from the parsed timestamps. A tenant directory or file that resolves outside that namespace is refused (409 `AUDIT_EXPORT_STORAGE_INVALID`).
+- Writes are atomic, and a failed write leaves no temporary file.
+- Exam export archives the bundle it just built, never a re-read of the file.
+- The tenant directory is a namespace, not an access control: no route serves export files by path.
+
 ## Local checks
 
 - `python tools/seed/run_seed.py` (canonical local tester bootstrap)
