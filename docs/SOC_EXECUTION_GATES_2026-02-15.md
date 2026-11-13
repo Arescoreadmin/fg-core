@@ -8441,3 +8441,21 @@ SOC review outcome: APPROVED. It closes an unauthenticated post-login open redir
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded.
 
 SOC review outcome: APPROVED. Closes path traversal in UI audit-packet storage and download.
+
+## 2026-11-13 - fix(security): CODEQL-REMEDIATE-002 — keep session identifiers out of logs
+
+**Change scope:**
+- `api/identity_authority/session_authority.py`: keyed `session_log_ref()`, applied to the session-created and session-revoked logs; the revoked error no longer contains the id.
+- `api/identity_authority/audit.py`: log-only `omit_from_log`/`log_details` on `emit`.
+- `api/identity_authority/authority.py`: `create_session` and `logout` use them.
+- Tests and the logging inventory.
+- No workflow, ruleset, required check, CodeQL configuration, dependency, schema, token format or audit-record content changed.
+
+**Security analysis:**
+
+1. **The exposure is demonstrated, not asserted.** On `main`, the raw session id appears in the JSON log line at four sinks and in the revoked-error message; 5 tests reproduce this.
+2. **The fix is fail-closed and keyed.** Logs carry an HMAC reference under a domain-separated key derived from the session secret. It is not an unsalted hash, so it cannot be guessed offline from log contents.
+3. **Forensics are preserved.** The hash-chained identity audit record still holds the raw id, and the chain input is unchanged. `sid_ref` correlates create, revoke and logout across logs, and `event_id` links a log line to its audit record.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. All 46 logging alerts are accounted for in the inventory.
+
+SOC review outcome: APPROVED. Removes raw session identifiers from central application logs.

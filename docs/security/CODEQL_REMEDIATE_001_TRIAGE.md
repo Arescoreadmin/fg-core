@@ -75,10 +75,10 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | # | PR | Alerts |
 |---|---|---|
 | 1 | Open redirect in the admin-gateway login flow (#864, merged) | #125 (plus the unreported callback sink) |
-| 2 | **PR 2:** UI audit-packet path containment | #106–#123 |
+| 2 | UI audit-packet path containment (#865, merged; fixed on main) | #106–#123 |
 | 3 | Billing evidence ID validation and containment | #91–#94 |
 | 4 | Bound user-supplied regex (`api/workforce.py`) | #71 |
-| 5 | Sensitive-logging triage and fixes, starting with session IDs | 46 logging alerts |
+| 5 | Sensitive-logging triage and fixes: continued as CODEQL-REMEDIATE-002 (`docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`) | 46 logging alerts |
 | 6 | `services/*` path-injection triage | #95–#105 |
 | 7 | Remaining low items and documented false-positive evidence | the rest |
 

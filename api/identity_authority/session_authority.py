@@ -34,6 +34,10 @@ MAX_CONCURRENT_SESSIONS: int = int(os.getenv("FG_MAX_CONCURRENT_SESSIONS", "5"))
 
 _SESSION_VERSION = "v2"  # bump on incompatible changes
 
+# Domain label for the key that derives log-safe session references. Distinct
+# from token signing so a sid_ref is never a valid signature over anything.
+_LOG_REF_KEY_LABEL = b"fg.identity.session.log-ref.v1"
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -154,7 +158,21 @@ class SessionAuthority:
 
     def __init__(self) -> None:
         self._secret = self._load_secret()
+        self._log_ref_key = hmac.new(
+            self._secret, _LOG_REF_KEY_LABEL, hashlib.sha256
+        ).digest()
         self._store = _RevocationStore()
+
+    def session_log_ref(self, session_id: str) -> str:
+        """Return a log-safe reference for ``session_id``.
+
+        Raw session ids are the revocation key and must not reach logs. The
+        reference is a keyed HMAC (not an unsalted hash), so it correlates
+        events for one session without being recomputable from logs.
+        """
+        return hmac.new(
+            self._log_ref_key, session_id.encode(), hashlib.sha256
+        ).hexdigest()[:16]
 
     @staticmethod
     def _load_secret() -> bytes:
@@ -246,7 +264,10 @@ class SessionAuthority:
 
         log.debug(
             "session_authority.session_created",
-            extra={"sid": session_id, "provider": provider, "mfa": mfa_verified},
+            extra={
+                "sid_ref": self.session_log_ref(session_id),
+                "provider": provider,
+            },
         )
 
         return SessionToken(
@@ -282,7 +303,7 @@ class SessionAuthority:
 
         # Revocation check
         if self._store.is_revoked(session_id):
-            raise SessionRevokedError(f"session {session_id} has been revoked")
+            raise SessionRevokedError("session has been revoked")
 
         issued_at = payload.get("iat", 0)
         idle_expires_at_ts = payload.get("idle_exp", exp)
@@ -340,7 +361,10 @@ class SessionAuthority:
     def revoke_session(self, session_id: str) -> None:
         """Immediately invalidate a session (logout, role change, security event)."""
         self._store.revoke(session_id)
-        log.info("session_authority.session_revoked", extra={"sid": session_id})
+        log.info(
+            "session_authority.session_revoked",
+            extra={"sid_ref": self.session_log_ref(session_id)},
+        )
 
     def revoke_all_for_subject(self, subject: str, session_ids: list[str]) -> int:
         """Revoke a list of known session IDs for a subject.
