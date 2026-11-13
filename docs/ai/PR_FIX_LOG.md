@@ -14,14 +14,26 @@
     - `--output` is required unless `--dry-run`. Without it the tool exits 2 **before** minting, rotating or any database mutation.
     - The credential file is created before seeding, so an unsafe path also exits 2 with nothing changed.
     - A `seed()` failure exits 3 and prints only the exception type, never its text, which could carry credential material. The empty file is removed.
-    - A credential-write failure after minting exits 4: the partial file is removed, the affected tenants are named, and a `--rotate-keys` recovery path is given.
-    - The full result goes only to the `0600` file. Stdout carries an allowlisted summary (tenant ids, statuses, grant ids, URLs, `credentials_file`, `api_key_issued_tenants`), so a credential field added later is not printed by default.
+    - A credential-write failure after minting exits 4: the partial file is removed and a **generic** `--rotate-keys` recovery message is printed, with no tenant names or identifiers. This message came from the repo owner's Copilot Autofix `a8d392637` (PR-scan alert #129) and is kept.
+    - The full result goes only to the `0600` file. Stdout is built **only from module constants and fixed labels**, never copied from the seed result:
+      - per demo tenant: `tenant_id` and `tenant_label` from `DEMO_TENANTS`, and `api_key_status` as a constant label chosen by comparison (`created`/`rotated`/`unchanged`, otherwise `unknown`). No value from the result is ever emitted;
+      - `api_key_issued_tenants`;
+      - `credentials_file`.
+    - A field added to the result later, or a credential placed in a known field, cannot reach stdout. Grant ids, URLs and engagement/report ids are in the file only.
+    - The dry-run stdout is built from constants the same way, which completes Copilot Autofix `debdef779` (PR-scan alert #128).
   - `run_seed.py`: stdout carries an allowlisted summary plus `credentials_file`; the state file is written `0600` on both write paths. The documented tester flow already reads keys from that file.
   - `docs/tester_quickstart.md`: expected output updated, plus an operator section on demo-tenant credential handoff: a private `mktemp -d` directory, the Vercel key map piped through stdin, portal passwords via an approved channel, and `shred -u` disposal.
 - **Verification:**
-  - New `tests/test_seed_credential_output.py`, 16 tests with synthetic credentials.
-  - Against unmodified `main` `4635376f`: 15 fail. These include 4 exposure proofs: the synthetic API key in `demo_tenants` stdout, the synthetic admin key in `run_seed` stdout, minting without `--output`, and the raw `seed()` exception text with key and password escaping. The dry-run compatibility guard passes on both. After the fix: 16 pass.
-  - Existing seed and quickstart tests: 56 passed with the new file.
+  - New `tests/test_seed_credential_output.py`, 19 tests with synthetic credentials.
+  - Against unmodified `main` `4635376f`: 15 fail. These include 4 exposure proofs: the synthetic API key in `demo_tenants` stdout, the synthetic admin key in `run_seed` stdout, minting without `--output`, and the raw `seed()` exception text with key and password escaping. The dry-run compatibility guard passes on both. After the fix: 19 pass.
+  - The PR-review round (alerts #128–#130) adds 3 tests and tightens 2. Against the earlier PR head `a8d392637`, 4 fail, including a hostile-result leak proof: the earlier allowlist copied `tenant_label` from the result, so a credential placed in it reached stdout.
+  - Existing seed and quickstart tests: 59 passed with the new file.
+  - PR-scan alert dispositions, from the SARIF source-to-sink paths:
+    - **#130** (genuine): `portal_secret` → seed result → copied summary fields, including `demo_tenant_unchanged_keys` → `print`. Fixed by constants-only stdout.
+    - **#129** (`debdef779`): tenant names from the summary in the write-failure message. Fixed by Copilot Autofix `a8d392637`; the message is generic.
+    - **#128** (`d6000067e`): dry-run `print(rendered)`. Fixed by Copilot Autofix `debdef779`; it now uses `_dry_run_stdout()` from constants.
+    - **#127**: a test fixture wrote synthetic credentials with `write_text`. The fixture is now credential-free; the tool adds the synthetic credentials and writes the file itself, which still proves `0644` → `0600`.
+    - None dismissed.
 - **Unchanged:** credential issuance and rotation, credential authority, portal grant service, the JSON content of the credentials file and the state file, `--dry-run` behaviour.
 - **Operator-facing change (approved):** `demo_tenants.py` now needs `--output <path>` naming a new file; keys and passwords are read from that file, not the terminal.
 - **Still open:** `py/clear-text-storage-sensitive-data` #8/#9 (the `run_seed.py` state-file writes) remain **unresolved**. The file is the designed local credential store, now `0600`.

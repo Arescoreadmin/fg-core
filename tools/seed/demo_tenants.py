@@ -1140,17 +1140,20 @@ def _create_demo_credential(
     return result.plaintext_secret, status
 
 
+_DRY_RUN_WOULD_CREATE = (
+    "tenant API keys",
+    "delivered engagements",
+    "reports",
+    "portal grants",
+)
+
+
 def seed(*, dry_run: bool, rotate_keys: bool = False) -> dict[str, Any]:
     if dry_run:
         return {
             "dry_run": True,
             "tenants": [tenant.__dict__ for tenant in DEMO_TENANTS],
-            "would_create": [
-                "tenant API keys",
-                "delivered engagements",
-                "reports",
-                "portal grants",
-            ],
+            "would_create": list(_DRY_RUN_WOULD_CREATE),
         }
 
     reset_engine_cache()
@@ -1232,12 +1235,7 @@ def main() -> int:
         rendered = json.dumps(result, indent=2, sort_keys=True)
         if args.output:
             write_fd_text(open_private_exclusive(Path(args.output)), rendered + "\n")
-        safe_stdout = {
-            "dry_run": bool(result.get("dry_run")),
-            "tenant_count": len(result.get("tenants", [])),
-            "would_create": result.get("would_create", []),
-        }
-        print(json.dumps(safe_stdout, indent=2, sort_keys=True))
+        print(json.dumps(_dry_run_stdout(), indent=2, sort_keys=True))
         return 0
     if not args.output:
         print(
@@ -1275,7 +1273,6 @@ def main() -> int:
             file=sys.stderr,
         )
         return 3
-    summary = _stdout_summary(result, out_path)
     try:
         write_fd_text(fd, json.dumps(result, indent=2, sort_keys=True) + "\n")
     except OSError as exc:
@@ -1290,55 +1287,63 @@ def main() -> int:
             file=sys.stderr,
         )
         return 4
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    print(json.dumps(_stdout_summary(result, out_path), indent=2, sort_keys=True))
     return 0
 
 
-# Fields that are safe on stdout. Allowlisted so that a credential added to
-# the seed result later is not printed by default.
-_SUMMARY_TENANT_FIELDS = (
-    "tenant_id",
-    "tenant_label",
-    "client_name",
-    "sector",
-    "assessment_type",
-    "engagement_id",
-    "report_id",
-    "status",
-    "api_key_status",
-    "portal_grant_id",
-    "portal_grant_expires_at",
-    "portal_url",
-    "console_url",
-)
+# Stdout is built only from module constants and fixed labels, never by
+# copying values out of the seed result (which carries API keys and portal
+# passwords). A field added to the result later therefore cannot reach stdout.
+# Everything else (grant ids, URLs, engagement/report ids) is in the 0600 file.
+_KEY_STATUS_LABELS = ("created", "rotated", "unchanged")
+
+
+def _status_label(value: object) -> str:
+    """Return the matching constant label, never the input value itself."""
+    for label in _KEY_STATUS_LABELS:
+        if value == label:
+            return label
+    return "unknown"
+
+
+def _dry_run_stdout() -> dict[str, Any]:
+    return {
+        "dry_run": True,
+        "tenant_count": len(DEMO_TENANTS),
+        "tenant_ids": [t.tenant_id for t in DEMO_TENANTS],
+        "would_create": list(_DRY_RUN_WOULD_CREATE),
+    }
 
 
 def _stdout_summary(result: dict[str, Any], out_path: Path) -> dict[str, Any]:
-    tenants = [
-        {field: t.get(field) for field in _SUMMARY_TENANT_FIELDS}
-        for t in result.get("tenants", [])
-    ]
-    issued = sorted(
-        str(t["tenant_id"])
-        for t in tenants
-        if t.get("api_key_status") in ("created", "rotated")
-    )
-    summary: dict[str, Any] = {
-        "generated_at": result.get("generated_at"),
-        "portal_demo_tenants": result.get("portal_demo_tenants"),
-        "console_demo_tenants": result.get("console_demo_tenants"),
+    entries = [e for e in result.get("tenants", []) if isinstance(e, dict)]
+    tenants = []
+    for tenant in DEMO_TENANTS:
+        status = "unknown"
+        for entry in entries:
+            if entry.get("tenant_id") == tenant.tenant_id:
+                status = _status_label(entry.get("api_key_status"))
+        tenants.append(
+            {
+                "tenant_id": tenant.tenant_id,
+                "tenant_label": tenant.tenant_label,
+                "api_key_status": status,
+            }
+        )
+    return {
         "tenants": tenants,
+        "api_key_issued_tenants": [
+            t["tenant_id"]
+            for t in tenants
+            if t["api_key_status"] in ("created", "rotated")
+        ],
         "credentials_file": str(out_path),
-        "api_key_issued_tenants": issued,
         "credentials_note": (
-            f"API keys and portal passwords are in {out_path} (mode 0600). "
-            "Update FG_PORTAL_DEMO_TENANT_KEYS in Vercel from "
+            f"API keys, portal passwords, grant ids and URLs are in {out_path} "
+            "(mode 0600). Update FG_PORTAL_DEMO_TENANT_KEYS in Vercel from "
             "demo_tenant_api_key_map_json in that file, then delete it."
         ),
     }
-    if result.get("demo_tenant_unchanged_keys"):
-        summary["demo_tenant_unchanged_keys"] = result["demo_tenant_unchanged_keys"]
-    return summary
 
 
 if __name__ == "__main__":

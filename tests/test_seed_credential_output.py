@@ -74,7 +74,10 @@ def fake_seed(monkeypatch):
 
     def _seed(*, dry_run: bool, rotate_keys: bool = False) -> dict:
         calls.append({"dry_run": dry_run, "rotate_keys": rotate_keys})
-        return {"dry_run": True} if dry_run else _demo_result()
+        if dry_run:
+            # Secret-bearing on purpose: dry-run stdout must not echo results.
+            return {"dry_run": True, "tenants": [{"leak": _FUTURE}]}
+        return _demo_result()
 
     monkeypatch.setattr(demo_tenants, "seed", _seed)
     return calls
@@ -107,14 +110,44 @@ def test_demo_stdout_keeps_operator_summary(monkeypatch, capsys, tmp_path, fake_
     _run_demo(monkeypatch, "--output", str(out))
 
     summary = json.loads(capsys.readouterr().out)
+    assert set(summary) == {
+        "tenants",
+        "api_key_issued_tenants",
+        "credentials_file",
+        "credentials_note",
+    }
     assert summary["credentials_file"] == str(out)
-    (tenant,) = summary["tenants"]
-    assert tenant["tenant_id"] == "demo-bank"
-    assert tenant["api_key_status"] == "created"
-    assert tenant["portal_grant_id"] == "grant-1"
+    by_id = {t["tenant_id"]: t for t in summary["tenants"]}
+    assert set(by_id) == {t.tenant_id for t in demo_tenants.DEMO_TENANTS}
+    for tenant in by_id.values():
+        assert set(tenant) == {"tenant_id", "tenant_label", "api_key_status"}
+    assert by_id["demo-bank"]["api_key_status"] == "created"
+    assert by_id["demo-law"]["api_key_status"] == "unknown"  # not in result
     assert summary["api_key_issued_tenants"] == ["demo-bank"]
-    assert "portal_password" not in tenant
-    assert "demo_tenant_api_key_map_json" not in summary
+
+
+def test_demo_stdout_ignores_unknown_or_hostile_result_values(
+    monkeypatch, capsys, tmp_path
+):
+    # A future schema may add fields, or put unexpected values in known ones.
+    hostile = _demo_result()
+    hostile["tenants"][0]["api_key_status"] = _FUTURE
+    hostile["tenants"][0]["tenant_label"] = _PORTAL_PW
+    hostile["new_top_level_secret"] = _API_KEY
+    hostile["tenants"].append({"tenant_id": _API_KEY, "api_key_status": "created"})
+    monkeypatch.setattr(demo_tenants, "seed", lambda **_: hostile)
+    out = tmp_path / "creds.json"
+
+    assert _run_demo(monkeypatch, "--output", str(out)) == 0
+    printed = capsys.readouterr()
+    for secret in (_API_KEY, _PORTAL_PW, _FUTURE):
+        assert secret not in printed.out + printed.err
+    summary = json.loads(printed.out)
+    by_id = {t["tenant_id"]: t for t in summary["tenants"]}
+    assert by_id["demo-bank"]["api_key_status"] == "unknown"
+    assert summary["api_key_issued_tenants"] == []
+    # The file still carries the full result for the operator.
+    assert json.loads(out.read_text(encoding="utf-8")) == hostile
 
 
 def test_demo_credentials_file_is_complete_and_owner_only(
@@ -215,7 +248,9 @@ def test_demo_write_failure_after_minting_gives_recovery(
     printed = capsys.readouterr()
     for secret in (_API_KEY, _PORTAL_PW, _FUTURE):
         assert secret not in printed.out + printed.err
-    assert "demo-bank" in printed.err  # which tenants need recovery
+    # Generic recovery message: no tenant names or identifiers.
+    for ident in ("demo-bank", "Demo Bank", "grant-1", "eng-1", "rep-1"):
+        assert ident not in printed.err
     assert "--rotate-keys" in printed.err
     assert printed.out == ""  # no success summary
     assert not out.exists()  # no partial credential file left behind
@@ -233,8 +268,28 @@ def test_demo_without_output_fails_before_minting(monkeypatch, capsys, fake_seed
 
 def test_demo_dry_run_without_output_still_works(monkeypatch, capsys, fake_seed):
     assert _run_demo(monkeypatch, "--dry-run") == 0
-    assert json.loads(capsys.readouterr().out)["dry_run"] is True
+    printed = capsys.readouterr()
+    assert _FUTURE not in printed.out + printed.err
+    plan = json.loads(printed.out)
+    assert plan["dry_run"] is True
+    assert plan["tenant_count"] == len(demo_tenants.DEMO_TENANTS)
+    assert plan["would_create"] == list(demo_tenants._DRY_RUN_WOULD_CREATE)
     assert fake_seed == [{"dry_run": True, "rotate_keys": False}]
+
+
+def test_demo_dry_run_output_file_is_private(monkeypatch, capsys, tmp_path, fake_seed):
+    out = tmp_path / "plan.json"
+    assert _run_demo(monkeypatch, "--dry-run", "--output", str(out)) == 0
+    assert _FUTURE not in capsys.readouterr().out
+    assert _mode(out) == 0o600
+    assert json.loads(out.read_text(encoding="utf-8"))["tenants"] == [{"leak": _FUTURE}]
+
+
+def test_real_dry_run_plan_contains_no_secret_fields():
+    plan = demo_tenants.seed(dry_run=True)
+    assert plan["would_create"] == list(demo_tenants._DRY_RUN_WOULD_CREATE)
+    for tenant in plan["tenants"]:
+        assert not {k for k in tenant if "password" in k or "secret" in k}
 
 
 # --- run_seed (#52) -----------------------------------------------------------
@@ -288,11 +343,15 @@ def test_run_seed_state_file_is_owner_only(monkeypatch, tmp_path):
     config = _config(tmp_path)
     state = Path(config.state_path)
     state.parent.mkdir(parents=True)
-    state.write_text(json.dumps(_seed_payload(state)), encoding="utf-8")
+    # A permissive, credential-free state file from an earlier run. The tool
+    # itself adds the (synthetic) credentials and must write the file 0600.
+    state.write_text(json.dumps({"status": "seeded"}), encoding="utf-8")
     state.chmod(0o644)
     monkeypatch.setattr(run_seed, "_validate_existing_seed", lambda cfg: None)
     monkeypatch.setattr(
-        run_seed, "_ensure_seed_credentials", lambda cfg, payload: payload
+        run_seed,
+        "_ensure_seed_credentials",
+        lambda cfg, payload: {**payload, "seed_credentials": dict(_SEED_KEYS)},
     )
 
     result = run_seed._seed_once(config)
@@ -309,7 +368,7 @@ def test_run_seed_state_file_refuses_symlink(monkeypatch, tmp_path):
     state = Path(config.state_path)
     state.parent.mkdir(parents=True)
     target = tmp_path / "elsewhere.json"
-    target.write_text(json.dumps(_seed_payload(state)), encoding="utf-8")
+    target.write_text(json.dumps({"status": "seeded"}), encoding="utf-8")
     state.symlink_to(target)
     monkeypatch.setattr(run_seed, "_validate_existing_seed", lambda cfg: None)
     monkeypatch.setattr(
