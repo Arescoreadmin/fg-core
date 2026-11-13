@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 from datetime import datetime, timedelta, timezone
@@ -279,6 +280,25 @@ def _packet_metadata_path(packet_dir: Path) -> Path:
 
 def _audit_packet_dir() -> Path:
     return Path(os.getenv("FG_AUDIT_PACKET_DIR", "artifacts/audit_packets")).resolve()
+
+
+# Packet ids are "packet-<tenant>-<timestamp>"; tenant ids are [A-Za-z0-9_-].
+_PACKET_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,200}")
+
+
+def _contained_packet_dir(packet_id: str) -> Optional[Path]:
+    """Resolve ``packet_id`` to a directory strictly inside the packet root.
+
+    Returns None for anything that is not a single safe path component or
+    that resolves (including via symlinks) outside the root (CWE-22).
+    """
+    if not isinstance(packet_id, str) or not _PACKET_ID_RE.fullmatch(packet_id):
+        return None
+    root = os.path.realpath(_audit_packet_dir())
+    candidate = os.path.realpath(os.path.join(root, packet_id))
+    if not candidate.startswith(root + os.sep):
+        return None
+    return Path(candidate)
 
 
 def _zip_packet(packet_dir: Path, files: list[str]) -> Path:
@@ -787,7 +807,10 @@ async def ui_audit_packet(
 
     created_at = datetime.now(timezone.utc)
     packet_id = f"packet-{tenant_id}-{created_at.strftime('%Y%m%d%H%M%S')}"
-    packet_dir = packet_root / packet_id
+    contained_dir = _contained_packet_dir(packet_id)
+    if contained_dir is None:
+        raise HTTPException(status_code=400, detail="Invalid tenant identifier")
+    packet_dir = contained_dir
     packet_dir.mkdir(parents=True, exist_ok=True)
 
     stmt = select(DecisionRecord).where(DecisionRecord.tenant_id == tenant_id)
@@ -909,8 +932,8 @@ async def ui_audit_packet_download(
     token: str = Query(..., min_length=8),
 ) -> FileResponse | JSONResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
-    packet_dir = _audit_packet_dir() / packet_id
-    if not packet_dir.exists():
+    packet_dir = _contained_packet_dir(packet_id)
+    if packet_dir is None or not packet_dir.exists():
         return _not_found_response(request, "Packet not found")
     token_path = packet_dir / "token.txt"
     file_token = (

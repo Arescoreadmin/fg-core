@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -11,6 +14,22 @@ import json
 from api.auth_scopes import mint_key
 from api.db import get_engine
 from api.db_models import DecisionRecord
+from api.ui_dashboards import ui_audit_packet_download
+
+
+def _request_for_tenant(tenant_id: str):
+    from starlette.requests import Request
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/ui/audit/packet/test/download",
+            "headers": [],
+        }
+    )
+    request.state.tenant_id = tenant_id
+    return request
 
 
 def _compute_chain_hash(prev_hash: str | None, payload: dict) -> str:
@@ -226,3 +245,81 @@ def test_audit_packet_manifest(build_app, monkeypatch, tmp_path):
     assert "chain_verification.json" in files
 
     assert files["decisions.jsonl"] == _sha256_file(packet_path / "decisions.jsonl")
+
+
+def _plant_outside_packet(tmp_path: Path) -> tuple[Path, Path]:
+    """A packet-shaped dir outside the root whose token the caller knows."""
+    audit_dir = tmp_path / "audit_packets"
+    audit_dir.mkdir()  # the root must exist or the OS cannot resolve ".."
+    (audit_dir / "a").mkdir()  # real intermediate dir for "a/../../outside"
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    (outside_dir / "token.txt").write_text("known-token", encoding="utf-8")
+    (outside_dir / "metadata.json").write_text(
+        json.dumps({"tenant_id": "tenant-a", "packet_id": "outside"}),
+        encoding="utf-8",
+    )
+    (outside_dir / "audit_packet.zip").write_bytes(b"outside-root-data")
+    (audit_dir / "escape-link").symlink_to(outside_dir, target_is_directory=True)
+    return audit_dir, outside_dir
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    ["../outside", "ABS", "..", "escape-link", "./../outside", "a/../../outside"],
+)
+def test_audit_packet_download_rejects_path_traversal(monkeypatch, tmp_path, hostile):
+    audit_dir, outside_dir = _plant_outside_packet(tmp_path)
+    if hostile == "ABS":
+        hostile = str(outside_dir)
+    if hostile == "..":
+        # Parent of the root holds a packet-shaped dir too.
+        for name in ("token.txt", "metadata.json", "audit_packet.zip"):
+            (tmp_path / name).write_bytes((outside_dir / name).read_bytes())
+    monkeypatch.setenv("FG_AUDIT_PACKET_DIR", str(audit_dir))
+
+    response = asyncio.run(
+        ui_audit_packet_download(
+            packet_id=hostile,
+            request=_request_for_tenant("tenant-a"),
+            tenant_id=None,
+            token="known-token",
+        )
+    )
+
+    assert response.status_code == 404
+    assert json.loads(response.body) == {
+        "detail": "Packet not found",
+        "request_id": None,
+    }
+
+
+def test_audit_packet_download_serves_contained_packet(monkeypatch, tmp_path):
+    audit_dir, outside_dir = _plant_outside_packet(tmp_path)
+    inside = audit_dir / "packet-tenant-a-20261112000000"
+    inside.mkdir()
+    for name in ("token.txt", "metadata.json", "audit_packet.zip"):
+        (inside / name).write_bytes((outside_dir / name).read_bytes())
+    monkeypatch.setenv("FG_AUDIT_PACKET_DIR", str(audit_dir))
+
+    response = asyncio.run(
+        ui_audit_packet_download(
+            packet_id=inside.name,
+            request=_request_for_tenant("tenant-a"),
+            tenant_id=None,
+            token="known-token",
+        )
+    )
+
+    assert response.status_code == 200
+    assert Path(response.path) == inside.resolve() / "audit_packet.zip"
+
+
+@pytest.mark.parametrize(
+    "tenant", ["../x", "a/b", "a\\b", "/abs", "t.1", "t\x00", "t\n", "t:1"]
+)
+def test_packet_id_from_hostile_tenant_is_not_contained(monkeypatch, tmp_path, tenant):
+    from api.ui_dashboards import _contained_packet_dir
+
+    monkeypatch.setenv("FG_AUDIT_PACKET_DIR", str(tmp_path / "audit_packets"))
+    assert _contained_packet_dir(f"packet-{tenant}-20261112000000") is None
