@@ -8477,3 +8477,20 @@ SOC review outcome: APPROVED. Removes raw session identifiers from central appli
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. `py/clear-text-storage-sensitive-data` #8/#9 (the `run_seed.py` state-file writes) stay open and **unresolved**: that file is the designed credential store, now `0600`.
 
 SOC review outcome: APPROVED. Removes live tenant credentials from operator terminal output and makes credential files owner-only.
+
+## 2026-11-13 - fix(security): CODEQL-REMEDIATE-004 — bind seed credentials to their environment and persist them atomically
+
+**Change scope:**
+- `tools/seed/credential_output.py`: `check_replace_target()`. `write_private_text()` now does an atomic replace: `0600` exclusive temp file, fsync, rename, directory fsync.
+- `tools/seed/run_seed.py`: checks the state path before reading or minting; the rerun pins the recorded SQLite database.
+- `docs/tester_quickstart.md`, `docs/security/CODEQL_REMEDIATE_004_CREDENTIAL_STORAGE.md`, tests and governance records.
+- No API, middleware, credential-authority, workflow, ruleset, required check, CodeQL configuration, dependency, schema or audit-record change.
+
+**Security analysis:**
+
+1. **The defects are demonstrated, not asserted.** The real tool, rerun with an inherited `FG_DB_URL`, minted non-expiring admin-scoped seed keys in the other database and stored them under the local database's name. 5 of 8 new tests fail on `main`: environment binding, minting before a symlink refusal, seeding before a dangling-symlink refusal, a truncated state file after a failed write, and write-through on a hardlink.
+2. **The fix is fail-closed.** Unsafe targets are refused before any key is minted. A failed write leaves the previous complete file and no temporary file. Credentials are bound to the database the state file records.
+3. **Storage design is unchanged and justified.** The `0600`, git-ignored, local-only state file is the designed tester hand-off for local development keys. Encryption with a co-located key, or a mandatory secret manager for local SQLite keys, was rejected in the audit. Generation, issuance and rotation are untouched.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. #8/#9 read `fixed` on main because of sink modelling after #867. This PR does not claim that closure; the audit records it.
+
+SOC review outcome: APPROVED. Seed credentials can no longer be minted in another environment or lost to a partial write.

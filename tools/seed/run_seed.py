@@ -12,7 +12,10 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from dataclasses import dataclass
 from typing import Any
 
-from tools.seed.credential_output import write_private_text  # noqa: E402
+from tools.seed.credential_output import (  # noqa: E402
+    check_replace_target,
+    write_private_text,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
@@ -281,20 +284,27 @@ def _ensure_seed_credentials(
 
 
 def _seed_once(config: SeedConfig) -> dict[str, Any]:
-    from api.db import init_db, reset_engine_cache
+    from api.db import get_engine, init_db, reset_engine_cache
     from services.audit_engine.engine import AuditEngine
     from tools.tenants.registry import ensure_tenant
 
     seed_marker = Path(config.state_path)
+    seed_marker.parent.mkdir(parents=True, exist_ok=True)
+    # Refuse an unsafe state file before reading it or minting any key, so a
+    # refusal never leaves issued credentials with nowhere to go.
+    check_replace_target(seed_marker)
     if seed_marker.exists():
+        # Bind validation and minting to the database this state file
+        # records, as the first run does via init_db(sqlite_path=...). An
+        # inherited FG_DB_URL (another environment) must never receive keys.
+        reset_engine_cache()
+        get_engine(sqlite_path=config.sqlite_path)
         _validate_existing_seed(config)
         payload = _load_json(seed_marker)
         payload = _ensure_seed_credentials(config, payload)
         payload["status"] = "already_seeded"
         write_private_text(seed_marker, _json_dump(payload))
         return payload
-
-    seed_marker.parent.mkdir(parents=True, exist_ok=True)
 
     reset_engine_cache()
     init_db(sqlite_path=config.sqlite_path)
