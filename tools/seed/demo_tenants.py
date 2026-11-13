@@ -1282,12 +1282,11 @@ def main() -> int:
         out_path.unlink(missing_ok=True)
         print(
             f"DEMO_SEED_OUTPUT_WRITE_FAILED: {exc.__class__.__name__} "
-            f"errno={exc.errno}. Credentials were issued for "
-            f"{', '.join(summary['api_key_issued_tenants']) or 'no tenants'} "
-            "(plus portal passwords for all tenants) but not written. "
-            "Recover: re-run with --rotate-keys --output <new path>; that "
-            "rotates out the unwritten credentials and issues new ones "
-            "(see docs/tester_quickstart.md, demo-tenant credential handoff).",
+            f"errno={exc.errno}. Credentials may have been issued but were "
+            "not written. Recover: re-run with --rotate-keys --output <new "
+            "path>; that rotates out any unwritten credentials and issues new "
+            "ones (see docs/tester_quickstart.md, demo-tenant credential "
+            "handoff).",
             file=sys.stderr,
         )
         return 4
