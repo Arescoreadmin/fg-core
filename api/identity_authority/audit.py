@@ -108,8 +108,16 @@ class IdentityAuditor:
         provider: Optional[str] = None,
         correlation_id: Optional[str] = None,
         details: Optional[dict] = None,
+        log_details: Optional[dict] = None,
+        omit_from_log: frozenset[str] = frozenset(),
     ) -> str:
-        """Emit a hash-chained audit event. Returns event_id."""
+        """Emit a hash-chained audit event. Returns event_id.
+
+        ``details`` is hashed and persisted unchanged. ``omit_from_log`` keys
+        are kept out of the application log line only, and ``log_details``
+        (e.g. a keyed reference) are added to that line only; neither affects
+        the hash chain or the persisted record.
+        """
         event_id = secrets.token_hex(16)
         ts = datetime.now(tz=timezone.utc).isoformat()
         details_str = json.dumps(details or {}, sort_keys=True)
@@ -139,7 +147,8 @@ class IdentityAuditor:
                 "tenant_id": tenant_id,
                 "provider": provider,
                 "correlation_id": correlation_id,
-                **safe_details,
+                **{k: v for k, v in safe_details.items() if k not in omit_from_log},
+                **(log_details or {}),
             },
         )
 

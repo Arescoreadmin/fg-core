@@ -189,6 +189,9 @@ class IdentityAuthority:
             subject=subject,
             correlation_id=correlation_id,
             details={"sid": session_id},
+            # Raw sid stays in the governed record; logs get the keyed ref.
+            omit_from_log=frozenset({"sid"}),
+            log_details={"sid_ref": self._session.session_log_ref(session_id)},
         )
 
     def logout_all(
