@@ -7,6 +7,7 @@
   - `SessionAuthority.session_log_ref()` returns `HMAC-SHA256(K_log, sid)[:16]`, with `K_log = HMAC(FG_SESSION_SECRET, "fg.identity.session.log-ref.v1")`. It is keyed and domain-separated, not an unsalted hash.
   - Both session logs now carry `sid_ref`, and the revoked error says "session has been revoked".
   - `IdentityAuditor.emit` gains log-only `omit_from_log`/`log_details`. `IdentityAuthority.create_session` and `logout` drop the raw `sid` from their log lines and add `sid_ref`. The hashed and persisted audit record is unchanged.
+  - A Copilot Autofix commit by the repo owner (`3d4c79f43`, for PR-scan alert #126) removed the `mfa` boolean from the DEBUG `session_created` line. MFA status remains on the `identity.session.created` audit line.
 - **Verification:**
   - New `tests/identity_authority/test_session_log_redaction.py`, 11 tests rendering records through the production `_JsonFormatter`.
   - Before the fix: 7 fail, including 5 exposure proofs, each with the raw sid present at its sink; 4 failure-path guards pass on both. After the fix: 11 pass.
