@@ -8494,3 +8494,21 @@ SOC review outcome: APPROVED. Removes live tenant credentials from operator term
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. #8/#9 read `fixed` on main because of sink modelling after #867. This PR does not claim that closure; the audit records it.
 
 SOC review outcome: APPROVED. Seed credentials can no longer be minted in another environment or lost to a partial write.
+
+## 2026-11-13 - fix(security): CODEQL-REMEDIATE-005 — evidence registration confined to the artifact root
+
+**Change scope:**
+- `services/artifact_paths.py` (new): artifact-root containment and chunked hashing.
+- `services/evidence_anchor_extension/service.py`, `services/evidence_index/service.py`: contain the path before touching the file.
+- `api/evidence_index.py`: refusal mapped to 400.
+- Tests, plus the burn-down inventory and report for all 102 open alerts.
+- No route, scope, schema, migration, workflow, ruleset, required check, CodeQL configuration, dependency or audit-record change.
+
+**Security analysis:**
+
+1. **The exposure is demonstrated, not asserted.** On `main`, a `compliance:read` tenant key received the SHA-256 of a synthetic file outside the artifact root, recorded an anchor for it, and could tell existing from missing paths. Absolute, `..`, `/proc` and in-root symlink variants all worked. 10 of 13 new tests fail on `main`.
+2. **The fix is fail-closed and oracle-free.** Paths are resolved with realpath and must sit strictly inside the artifact root. Every other path gets the same 400 before any filesystem read of the target, so existence is not revealed.
+3. **Tenant isolation and audit are preserved.** Anchor and run records remain tenant-scoped. No audit or evidence record format changed. Hashing is chunked, which bounds memory.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. False-positive candidates are documented for operator decision only.
+
+SOC review outcome: APPROVED. Removes a read-scope filesystem probe and foreign-file fingerprinting from the evidence APIs.

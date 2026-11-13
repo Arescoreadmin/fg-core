@@ -79,8 +79,8 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | 3 | Billing evidence ID validation and containment | #91–#94 |
 | 4 | Bound user-supplied regex (`api/workforce.py`) | #71 |
 | 5 | Sensitive-logging triage and fixes: continued as CODEQL-REMEDIATE-002 (`docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`; #53 fixed via #866) and CODEQL-REMEDIATE-003 (#31, #52; fixed on main via #867). Seed credential storage (#8, #9): CODEQL-REMEDIATE-004 | 46 logging alerts |
-| 6 | `services/*` path-injection triage | #95–#105 |
-| 7 | Remaining low items and documented false-positive evidence | the rest |
+| 6 | `services/*` path-injection triage: #100–#105 fixed by CODEQL-REMEDIATE-005 wave 1 (evidence artifact containment); #95–#97 queued as wave 2 (`docs/security/CODEQL_REMEDIATE_005_BURNDOWN.md`) | #95–#105 |
+| 7 | Remaining low items and documented false-positive evidence; all open alerts are classified in `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json` | the rest |
 
 ## Per-alert ledger
 
@@ -95,7 +95,7 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | #7 | `py/clear-text-storage-sensitive-data` | high | `scripts/patch_compliant_surfaces.py:137` | FALSE_POSITIVE_CANDIDATE |
 | #8 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:292` | `fixed` on main `bb513ebc` (sink no longer modelled after #867; bytes unchanged). Audited in CODEQL-REMEDIATE-004: storage is intentional and `0600`; rerun environment binding, pre-mint refusal and atomic replace fixed (`docs/security/CODEQL_REMEDIATE_004_CREDENTIAL_STORAGE.md`) |
 | #9 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:330` | `fixed` on main `bb513ebc` (sink no longer modelled after #867; bytes unchanged). Audited in CODEQL-REMEDIATE-004: storage is intentional and `0600`; rerun environment binding, pre-mint refusal and atomic replace fixed (`docs/security/CODEQL_REMEDIATE_004_CREDENTIAL_STORAGE.md`) |
-| #10 | `py/clear-text-storage-sensitive-data` | high | `api/ui.py:992` | DESIGN_REVIEW |
+| #10 | `py/clear-text-storage-sensitive-data` | high | `api/ui.py:992` | DEV_ONLY (CODEQL-REMEDIATE-005: UI routers unmounted in prod-like envs; cookie refused there; verified) |
 | #11 | `py/clear-text-logging-sensitive-data` | high | `api/rag/answering.py:279` | NEEDS_TRIAGE |
 | #12 | `py/clear-text-logging-sensitive-data` | high | `api/rag/answering.py:346` | NEEDS_TRIAGE |
 | #13 | `py/clear-text-logging-sensitive-data` | high | `api/rag/answering.py:362` | NEEDS_TRIAGE |
@@ -185,12 +185,12 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | #97 | `py/path-injection` | high | `services/audit_engine/engine.py:555` | NEEDS_TRIAGE |
 | #98 | `py/path-injection` | high | `services/ai/policy.py:145` | NEEDS_TRIAGE |
 | #99 | `py/path-injection` | high | `services/ai/policy.py:540` | NEEDS_TRIAGE |
-| #100 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:83` | NEEDS_TRIAGE |
-| #101 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:83` | NEEDS_TRIAGE |
-| #102 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:85` | NEEDS_TRIAGE |
-| #103 | `py/path-injection` | high | `services/evidence_index/service.py:32` | NEEDS_TRIAGE |
-| #104 | `py/path-injection` | high | `services/evidence_index/service.py:32` | NEEDS_TRIAGE |
-| #105 | `py/path-injection` | high | `services/evidence_index/service.py:31` | NEEDS_TRIAGE |
+| #100 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:83` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
+| #101 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:83` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
+| #102 | `py/path-injection` | high | `services/evidence_anchor_extension/service.py:85` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
+| #103 | `py/path-injection` | high | `services/evidence_index/service.py:32` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
+| #104 | `py/path-injection` | high | `services/evidence_index/service.py:32` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
+| #105 | `py/path-injection` | high | `services/evidence_index/service.py:31` | GENUINE: fixed by CODEQL-REMEDIATE-005 (artifact-root containment; exploit reproduced) |
 | #106 | `py/path-injection` | high | `api/ui_dashboards.py:292` | FIXED_PR2 |
 | #107 | `py/path-injection` | high | `api/ui_dashboards.py:296` | FIXED_PR2 |
 | #108 | `py/path-injection` | high | `api/ui_dashboards.py:303` | FIXED_PR2 |

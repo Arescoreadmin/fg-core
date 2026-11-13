@@ -24,8 +24,12 @@ def _setup(tmp_path: Path) -> tuple[TestClient, str, str]:
     return TestClient(build_app(auth_enabled=True)), key_a, key_b
 
 
-def test_evidence_index_register_and_tenant_isolation(tmp_path: Path) -> None:
+def test_evidence_index_register_and_tenant_isolation(
+    tmp_path: Path, monkeypatch
+) -> None:
     client, key_a, key_b = _setup(tmp_path)
+    # Registered artifacts must live under the artifact root (CODEQL-REMEDIATE-005).
+    monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path))
     p = tmp_path / "artifact.json"
     p.write_text('{"ok":true}', encoding="utf-8")
     created = client.post(
