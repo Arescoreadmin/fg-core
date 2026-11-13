@@ -1232,7 +1232,12 @@ def main() -> int:
         rendered = json.dumps(result, indent=2, sort_keys=True)
         if args.output:
             write_fd_text(open_private_exclusive(Path(args.output)), rendered + "\n")
-        print(rendered)
+        safe_stdout = {
+            "dry_run": bool(result.get("dry_run")),
+            "tenant_count": len(result.get("tenants", [])),
+            "would_create": result.get("would_create", []),
+        }
+        print(json.dumps(safe_stdout, indent=2, sort_keys=True))
         return 0
     if not args.output:
         print(
