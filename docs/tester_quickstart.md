@@ -212,6 +212,8 @@ If `"status": "already_seeded"` appears, the environment was already bootstrappe
 
 API keys are not in this output. Read them from `seed_credentials` in `state/seed/bootstrap_state.json`, as shown in CTJ-1.
 
+The seed always mints against its local SQLite database (`sqlite_path`), including on re-runs. An `FG_DB_URL` left in your shell, for example from the operator demo-tenant flow, is ignored, so seed keys never land in another environment. The state file is owner-only (`0600`) and is replaced atomically: if a run fails part-way, the previous file is kept intact.
+
 **What the seed creates:**
 
 | Resource | Value |
@@ -499,6 +501,7 @@ Expected: `201 Created` with the product object. Repeating returns `409 Conflict
 | `GET /admin/keys` → 503 | Core API not reachable | Set `AG_CORE_BASE_URL` correctly and start core API (Step 3) |
 | `GET /admin/audit/search` → 503 | Core API not reachable | Same as above |
 | Seed fails with `SEED_CONFLICT` | DB state conflicts with env | Clear `state/` directory and re-run `run_seed.py` |
+| Seed fails with `refusing to replace a symlink…` or `credential directory…` | `state/seed/bootstrap_state.json` is a symlink or not yours, or `state/seed/` is writable by other users | Fix or remove the path and re-run; nothing was minted before the refusal |
 | `FG_DEV_AUTH_BYPASS=1` but 503 on login | OIDC partially configured | Unset all `FG_OIDC_*` and `FG_KEYCLOAK_*` vars |
 
 ---

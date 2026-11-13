@@ -10,7 +10,9 @@ Shared by ``tools/seed/demo_tenants.py`` and ``tools/seed/run_seed.py`` only.
 
 from __future__ import annotations
 
+import contextlib
 import os
+import secrets
 import stat
 from pathlib import Path
 
@@ -90,35 +92,58 @@ def write_fd_text(fd: int, text: str) -> None:
         os.close(fd)
 
 
-def write_private_text(path: Path, text: str) -> None:
-    """Replace our own file at ``path`` with ``text``, mode 0600.
+def check_replace_target(path: Path) -> None:
+    """Refuse a state-file location we must not replace.
 
-    For a tool-owned state file that is rewritten on every run. The path
-    must be a regular file we own, or absent; symlinks are never followed.
+    Call this before minting anything, so a refusal never strands freshly
+    issued credentials. ``path`` must be absent or a regular file we own, in
+    a safe directory; symlinks (including dangling ones) are refused.
     """
     check_parent_dir(path)
     try:
         st = os.lstat(path)
     except FileNotFoundError:
-        pass
-    else:
-        if not stat.S_ISREG(st.st_mode) or not _trusted_owner(st.st_uid):
-            raise UnsafeCredentialPathError(
-                f"refusing to overwrite a symlink, special file or another "
-                f"user's file: {path}"
-            )
-    flags = (
-        os.O_WRONLY
-        | os.O_CREAT
-        | os.O_TRUNC
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-    )
-    fd = os.open(path, flags, PRIVATE_FILE_MODE)
+        return
+    if not stat.S_ISREG(st.st_mode) or not _trusted_owner(st.st_uid):
+        raise UnsafeCredentialPathError(
+            f"refusing to replace a symlink, special file or another "
+            f"user's file: {path}"
+        )
+
+
+def write_private_text(path: Path, text: str) -> None:
+    """Atomically replace our own file at ``path`` with ``text``, mode 0600.
+
+    For a tool-owned state file that is rewritten on every run. The new
+    content goes to a fresh 0600 file in the same directory and is renamed
+    over ``path``, so readers and a failed write only ever see the previous
+    complete file or the new one, and a hardlink to the old file is never
+    written through.
+    """
+    check_replace_target(path)
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    fd = open_private_exclusive(tmp)
     try:
-        if hasattr(os, "fchmod"):
-            os.fchmod(fd, PRIVATE_FILE_MODE)
+        write_fd_text(fd, text)  # fsyncs and closes fd
+        os.replace(tmp, path)
     except BaseException:
-        os.close(fd)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
         raise
-    write_fd_text(fd, text)
+    _fsync_dir(path.parent)
+
+
+def _fsync_dir(directory: Path) -> None:
+    """Persist the rename itself; best effort where directories can't fsync."""
+    if not hasattr(os, "O_DIRECTORY"):
+        return
+    try:
+        dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError:
+        return
+    try:
+        os.fsync(dfd)
+    except OSError:
+        pass
+    finally:
+        os.close(dfd)

@@ -1,3 +1,23 @@
+## fix(security): CODEQL-REMEDIATE-004 — bind seed credentials to their environment and persist them atomically (CodeQL #8, #9, branch security/codeql-remediate-004-credential-storage)
+
+- **Work item:** CODEQL-REMEDIATE-004 (REPAIR).
+  - Live inventory on `main` `bb513ebc`: 102 open alerts, 0 dismissed.
+  - #8 and #9 (`py/clear-text-storage-sensitive-data`, `tools/seed/run_seed.py` state-file writes) already read `fixed` (analysis 2162115661, 2026-11-13T15:44:33Z), because #867 moved the write to `os.write`, which CodeQL does not model as a sink. The bytes stored did not change, so the storage was audited on its merits.
+  - Audit: `docs/security/CODEQL_REMEDIATE_004_CREDENTIAL_STORAGE.md`.
+- **Classification:**
+  - The `0600` plaintext state file is **intentional, adequately controlled** storage for local development keys: git-ignored, untracked, not mounted into containers, not used by CI.
+  - Four defects around it were real and are fixed.
+- **Root causes and fixes:**
+  1. **Rerun minted in another environment (F1).** The first run pins SQLite with `init_db(sqlite_path=…)`; the rerun path called `get_engine()`, so an inherited `FG_DB_URL` (the demo-tenant operator flow exports one) received non-expiring, admin-scoped seed keys. Those keys were then stored under the local `sqlite_path`. Reproduced with the real tool against two SQLite files. Fix: the rerun resets the engine cache and pins `config.sqlite_path` before validation and minting.
+  2. **Refused after minting (F2).** A symlinked state file was read and keys were minted before the write refused; a dangling symlink ran database initialisation and seeding first. Fix: new `credential_output.check_replace_target()` runs before anything is read or minted.
+  3. **Non-atomic rewrite (F3).** `O_TRUNC` in place: a failure part-way left an empty file, losing the only copy of keys rotated that run, and every later run crashed with `JSONDecodeError`. Fix: `write_private_text()` writes a new `0600` temp file (`O_EXCL|O_NOFOLLOW`), fsyncs it, renames it over the target, and fsyncs the directory. On failure the temp file is removed and the previous file is untouched.
+  4. **Hardlink write-through (F4).** The in-place truncate wrote new keys into every linked name. The atomic rename fixes this.
+- **Verification:** new `tests/test_seed_credential_storage.py`, 8 tests, synthetic credentials only. On unmodified `main` `bb513ebc`: **5 failed, 3 passed** (the 3 are guards that already hold: `0600` rewrite, unsafe parent, git-ignore). On this branch: 8/8. Seed, quickstart and CODEQL-003 tests: 67 passed. Real-tool rerun with `FG_DB_URL` set to a second database: keys valid only in the recorded database; the second database is untouched.
+- **Unchanged:** credential generation (`secrets.token_urlsafe(32)`), issuance, rotation and authority; state-file JSON content; stdout summary; first-run behaviour; `demo_tenants.py`.
+- **Operator-facing change:** `run_seed.py` reruns ignore `FG_DB_URL`, as first runs already did. Documented in `docs/tester_quickstart.md`.
+- **Still open:** the file is plaintext at rest (accepted for local dev keys; options C/D rejected in the audit). Concurrent runs are not serialised (self-healing). Production credential delivery (Vercel `FG_PORTAL_DEMO_TENANT_KEYS`) should move to a broker; recorded as a future item, not built here.
+- **Rollback:** revert the PR. Reruns follow `FG_DB_URL` again and the rewrite becomes non-atomic; the new tests fail.
+
 ## fix(security): CODEQL-REMEDIATE-003 — seed tooling stops printing live credentials (CodeQL #31, #52, branch security/codeql-remediate-003-logging)
 
 - **Work item:** CODEQL-REMEDIATE-003 (REPAIR). Live inventory on `main` `4635376f`: 106 open alerts, 45 `py/clear-text-logging-sensitive-data`, 0 dismissed; #53 reads `fixed` (2026-11-13T11:55Z). The two remaining P1 logging alerts from `docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md` are selected; no P0 exists.
