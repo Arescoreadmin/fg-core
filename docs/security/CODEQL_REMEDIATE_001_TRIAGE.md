@@ -8,11 +8,11 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 
 | Disposition | Count | Meaning |
 |---|---|---|
-| FIXED_THIS_PR | 1 | Remediated by this PR, with exploit tests |
+| FIXED_PR1 | 1 | Remediated by PR #864, with exploit tests |
+| FIXED_PR2 | 18 | Remediated by PR 2 (UI audit-packet containment), with exploit tests |
 | CONFIRMED_MEDIUM | 1 | Exploitable; fix scheduled |
 | LIKELY_REAL_MEDIUM | 1 | Sampled site leaks a sensitive value; fix scheduled |
 | CONFIRMED_LOW | 7 | Exploitable but contained; hardening scheduled |
-| IN_FLIGHT_OTHER_BRANCH | 18 | Being fixed on branch `security/codeql-remediate-001-ui-path-containment` |
 | DESIGN_REVIEW | 1 | Intentional design that needs a security decision |
 | FALSE_POSITIVE | 14 | Verified at the site: not a vulnerability |
 | FALSE_POSITIVE_CANDIDATE | 24 | Group evidence says not exploitable; per-site check pending |
@@ -49,7 +49,7 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
    - Column names come from the database's own schema metadata, never the client.
    - Optional hardening: map `sort_dir` to the literals `ASC`/`DESC`, as `api/rag_corpus_console.py` already does.
 3. **Filesystem paths from identifiers** (`py/path-injection`, 38):
-   - **`api/ui_dashboards.py` (18): in flight on another branch.** `packet_id` is a single path segment and downloads need a per-packet token, so a `..` traversal reaches only the parent of the packet root. There is a defence-in-depth gap: the tenant check is skipped when `metadata.json` is absent.
+   - **`api/ui_dashboards.py` (18): fixed in PR 2.** `packet_id` is a single path segment and downloads need a per-packet token, so a `..` traversal reaches only the parent of the packet root. It also closes a defence-in-depth gap: the tenant check was skipped when `metadata.json` was absent; download now fails closed.
    - **`api/billing.py` (4): confirmed, low.**
      - `invoice_id` and `credit_note_id` are client-chosen at creation and never format-validated.
      - The evidence exports write to `artifacts/billing/<tenant>/<id>/`, where `<tenant>` is the bound tenant. The id comes from a `{param}` path segment, which cannot contain `/`, so the worst case is `..`: it writes the fixed evidence filenames one level up, still inside the caller's own tenant directory.
@@ -74,8 +74,8 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 
 | # | PR | Alerts |
 |---|---|---|
-| 1 | **This PR:** open redirect in the admin-gateway login flow | #125 (plus the unreported callback sink) |
-| 2 | UI audit-packet path containment (in flight on another branch) | #106–#123 |
+| 1 | Open redirect in the admin-gateway login flow (#864, merged) | #125 (plus the unreported callback sink) |
+| 2 | **PR 2:** UI audit-packet path containment | #106–#123 |
 | 3 | Billing evidence ID validation and containment | #91–#94 |
 | 4 | Bound user-supplied regex (`api/workforce.py`) | #71 |
 | 5 | Sensitive-logging triage and fixes, starting with session IDs | 46 logging alerts |
@@ -191,23 +191,23 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | #103 | `py/path-injection` | high | `services/evidence_index/service.py:32` | NEEDS_TRIAGE |
 | #104 | `py/path-injection` | high | `services/evidence_index/service.py:32` | NEEDS_TRIAGE |
 | #105 | `py/path-injection` | high | `services/evidence_index/service.py:31` | NEEDS_TRIAGE |
-| #106 | `py/path-injection` | high | `api/ui_dashboards.py:292` | IN_FLIGHT_OTHER_BRANCH |
-| #107 | `py/path-injection` | high | `api/ui_dashboards.py:296` | IN_FLIGHT_OTHER_BRANCH |
-| #108 | `py/path-injection` | high | `api/ui_dashboards.py:303` | IN_FLIGHT_OTHER_BRANCH |
-| #109 | `py/path-injection` | high | `api/ui_dashboards.py:791` | IN_FLIGHT_OTHER_BRANCH |
-| #110 | `py/path-injection` | high | `api/ui_dashboards.py:802` | IN_FLIGHT_OTHER_BRANCH |
-| #111 | `py/path-injection` | high | `api/ui_dashboards.py:846` | IN_FLIGHT_OTHER_BRANCH |
-| #112 | `py/path-injection` | high | `api/ui_dashboards.py:854` | IN_FLIGHT_OTHER_BRANCH |
-| #113 | `py/path-injection` | high | `api/ui_dashboards.py:865` | IN_FLIGHT_OTHER_BRANCH |
-| #114 | `py/path-injection` | high | `api/ui_dashboards.py:873` | IN_FLIGHT_OTHER_BRANCH |
-| #115 | `py/path-injection` | high | `api/ui_dashboards.py:879` | IN_FLIGHT_OTHER_BRANCH |
-| #116 | `py/path-injection` | high | `api/ui_dashboards.py:913` | IN_FLIGHT_OTHER_BRANCH |
-| #117 | `py/path-injection` | high | `api/ui_dashboards.py:917` | IN_FLIGHT_OTHER_BRANCH |
-| #118 | `py/path-injection` | high | `api/ui_dashboards.py:917` | IN_FLIGHT_OTHER_BRANCH |
-| #119 | `py/path-injection` | high | `api/ui_dashboards.py:920` | IN_FLIGHT_OTHER_BRANCH |
-| #120 | `py/path-injection` | high | `api/ui_dashboards.py:927` | IN_FLIGHT_OTHER_BRANCH |
-| #121 | `py/path-injection` | high | `api/ui_dashboards.py:928` | IN_FLIGHT_OTHER_BRANCH |
-| #122 | `py/path-injection` | high | `api/ui_dashboards.py:938` | IN_FLIGHT_OTHER_BRANCH |
-| #123 | `py/path-injection` | high | `api/ui_dashboards.py:941` | IN_FLIGHT_OTHER_BRANCH |
+| #106 | `py/path-injection` | high | `api/ui_dashboards.py:292` | FIXED_PR2 |
+| #107 | `py/path-injection` | high | `api/ui_dashboards.py:296` | FIXED_PR2 |
+| #108 | `py/path-injection` | high | `api/ui_dashboards.py:303` | FIXED_PR2 |
+| #109 | `py/path-injection` | high | `api/ui_dashboards.py:791` | FIXED_PR2 |
+| #110 | `py/path-injection` | high | `api/ui_dashboards.py:802` | FIXED_PR2 |
+| #111 | `py/path-injection` | high | `api/ui_dashboards.py:846` | FIXED_PR2 |
+| #112 | `py/path-injection` | high | `api/ui_dashboards.py:854` | FIXED_PR2 |
+| #113 | `py/path-injection` | high | `api/ui_dashboards.py:865` | FIXED_PR2 |
+| #114 | `py/path-injection` | high | `api/ui_dashboards.py:873` | FIXED_PR2 |
+| #115 | `py/path-injection` | high | `api/ui_dashboards.py:879` | FIXED_PR2 |
+| #116 | `py/path-injection` | high | `api/ui_dashboards.py:913` | FIXED_PR2 |
+| #117 | `py/path-injection` | high | `api/ui_dashboards.py:917` | FIXED_PR2 |
+| #118 | `py/path-injection` | high | `api/ui_dashboards.py:917` | FIXED_PR2 |
+| #119 | `py/path-injection` | high | `api/ui_dashboards.py:920` | FIXED_PR2 |
+| #120 | `py/path-injection` | high | `api/ui_dashboards.py:927` | FIXED_PR2 |
+| #121 | `py/path-injection` | high | `api/ui_dashboards.py:928` | FIXED_PR2 |
+| #122 | `py/path-injection` | high | `api/ui_dashboards.py:938` | FIXED_PR2 |
+| #123 | `py/path-injection` | high | `api/ui_dashboards.py:941` | FIXED_PR2 |
 | #124 | `py/sql-injection` | high | `api/rag_corpus_ingestion.py:964` | FALSE_POSITIVE |
-| #125 | `py/url-redirection` | medium | `admin_gateway/routers/auth.py:61` | FIXED_THIS_PR |
+| #125 | `py/url-redirection` | medium | `admin_gateway/routers/auth.py:61` | FIXED_PR1 |
