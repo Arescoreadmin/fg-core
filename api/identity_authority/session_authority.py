@@ -267,7 +267,6 @@ class SessionAuthority:
             extra={
                 "sid_ref": self.session_log_ref(session_id),
                 "provider": provider,
-                "mfa": mfa_verified,
             },
         )
 
