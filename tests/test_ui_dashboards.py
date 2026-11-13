@@ -323,3 +323,23 @@ def test_packet_id_from_hostile_tenant_is_not_contained(monkeypatch, tmp_path, t
 
     monkeypatch.setenv("FG_AUDIT_PACKET_DIR", str(tmp_path / "audit_packets"))
     assert _contained_packet_dir(f"packet-{tenant}-20261112000000") is None
+
+
+def test_audit_packet_download_without_metadata_fails_closed(monkeypatch, tmp_path):
+    audit_dir, outside_dir = _plant_outside_packet(tmp_path)
+    inside = audit_dir / "packet-tenant-b-20261112000000"
+    inside.mkdir()
+    for name in ("token.txt", "audit_packet.zip"):  # no metadata.json
+        (inside / name).write_bytes((outside_dir / name).read_bytes())
+    monkeypatch.setenv("FG_AUDIT_PACKET_DIR", str(audit_dir))
+
+    response = asyncio.run(
+        ui_audit_packet_download(
+            packet_id=inside.name,
+            request=_request_for_tenant("tenant-a"),
+            tenant_id=None,
+            token="known-token",
+        )
+    )
+
+    assert response.status_code == 404

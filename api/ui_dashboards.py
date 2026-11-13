@@ -947,16 +947,19 @@ async def ui_audit_packet_download(
     ):
         raise HTTPException(status_code=403, detail="Invalid token")
     meta_path = _packet_metadata_path(packet_dir)
-    if meta_path.exists():
-        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
-        if metadata.get("tenant_id") != tenant_id:
-            _deny_cross_tenant(
-                request=request,
-                actor_tenant=tenant_id,
-                target_tenant=str(metadata.get("tenant_id") or "unknown"),
-                action="ui_audit_packet_download",
-            )
-            return _not_found_response(request, "Packet not found")
+    if not meta_path.exists():
+        # Creation always writes metadata; without it tenant ownership is
+        # unprovable, so fail closed.
+        return _not_found_response(request, "Packet not found")
+    metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+    if metadata.get("tenant_id") != tenant_id:
+        _deny_cross_tenant(
+            request=request,
+            actor_tenant=tenant_id,
+            target_tenant=str(metadata.get("tenant_id") or "unknown"),
+            action="ui_audit_packet_download",
+        )
+        return _not_found_response(request, "Packet not found")
     zip_path = packet_dir / "audit_packet.zip"
     if not zip_path.exists():
         return _not_found_response(request, "Packet not found")

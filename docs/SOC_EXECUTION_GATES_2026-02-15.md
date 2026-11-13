@@ -8425,3 +8425,19 @@ SOC review outcome: APPROVED. Routine maintenance of runtime dependencies to adv
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. The other 124 alerts are tracked in the triage ledger.
 
 SOC review outcome: APPROVED. It closes an unauthenticated post-login open redirect in the operator SSO flow.
+
+## 2026-11-12 - fix(security): CODEQL-REMEDIATE-001 — UI audit-packet path containment
+
+**Change scope:**
+- `api/ui_dashboards.py`: new `_contained_packet_dir()`, applied to packet creation and download; download fails closed when `metadata.json` is missing.
+- Tests in `tests/test_ui_dashboards.py`.
+- No workflow, ruleset, required check, CodeQL configuration, dependency, schema, auth scope or CSRF logic changed.
+
+**Security analysis:**
+
+1. **The vulnerability is demonstrated, not asserted.** On the pre-fix code, relative, absolute, parent-directory and symlink escapes serve a zip from outside the packet root; 15 tests reproduce this.
+2. **The fix is fail-closed.** Only a single safe path component whose realpath lies strictly under the root is used; anything else is a 404 (download) or 400 (creation). A packet without metadata is not served.
+3. **Behaviour is preserved.** Generated packet ids (`packet-<tenant>-<timestamp>`) match the allowlist; the existing manifest and P0 hardening tests pass.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded.
+
+SOC review outcome: APPROVED. Closes path traversal in UI audit-packet storage and download.

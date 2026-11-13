@@ -1,3 +1,18 @@
+## fix(security): CODEQL-REMEDIATE-001 — UI audit-packet path containment (CodeQL #106–#123, branch security/codeql-remediate-001-ui-path-containment)
+
+- **Work item:** CODEQL-REMEDIATE-001 PR 2 (REPAIR), the second step of the sequence in `docs/security/CODEQL_REMEDIATE_001_TRIAGE.md`.
+- **Root cause:** `/ui/audit/packet/{packet_id}/download` joined `packet_id` onto the packet root without containment, and packet creation joined a tenant-derived `packet_id` the same way (CWE-22). `..`, an absolute path or a symlink inside the root resolved outside it, and the route served `audit_packet.zip` from there whenever a matching `token.txt` existed. Download also skipped the tenant check when `metadata.json` was missing.
+- **Exploit:** reachable only by an `audit:read` caller who knows a token for a packet-shaped directory outside the root. Over HTTP a path segment cannot contain `/`, so the practical reach is `..` (the root's parent); a direct call reaches any absolute path.
+- **Change:**
+  - New `_contained_packet_dir()` requires a single `[A-Za-z0-9_-]{1,200}` component and an `os.path.realpath` strictly under the realpath'd root; both routes use it.
+  - Download returns the existing 404 for a rejected id or missing metadata; creation returns 400.
+- **Verification:**
+  - Red: on the pre-fix code 15 of 16 new tests fail; the positive control passes on both.
+  - Green: `tests/test_ui_dashboards.py` 20 passed; `tests/security/test_dashboard_p0_hardening.py` 8 passed.
+  - The originally uncommitted test passed on vulnerable code because it never created the packet root, so `..` could not resolve; it now does.
+- **Unchanged:** token and tenant checks, the packet format, CSRF and scopes.
+- **Rollback:** revert the PR. Traversal returns and the new tests fail.
+
 ## fix(security): CODEQL-REMEDIATE-001 — admin-gateway post-login open redirect (CodeQL #125, branch security/codeql-remediate-001-auth-open-redirect)
 
 - **Work item:** CODEQL-REMEDIATE-001, the first remediation PR, classed as REPAIR. CodeQL default setup was enabled on 2026-11-12 and opened 125 alerts on `main` `7d39e51c`. They are triaged in `docs/security/CODEQL_REMEDIATE_001_TRIAGE.md`.
