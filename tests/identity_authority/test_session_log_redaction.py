@@ -80,8 +80,10 @@ def test_session_created_log_has_no_raw_session_id(authority, caplog):
     # Approved telemetry is still present.
     (rec,) = _records(caplog, "session_authority.session_created")
     assert rec["provider"] == "oidc"
-    assert rec["mfa"] is True
     assert rec["sid_ref"] == authority.session_log_ref(token.session_id)
+    # MFA status is reported on the identity.session.created audit line
+    # (asserted below); this DEBUG duplicate dropped it (CodeQL #126 autofix).
+    assert "mfa" not in rec
 
 
 def test_session_revoked_log_has_no_raw_session_id(authority, caplog):

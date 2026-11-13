@@ -43,6 +43,12 @@ Session ids are the revocation key (`fg:session:revoked:<sid>`) and the per-sess
 
 The hash-chained identity audit record is unchanged: it is still hashed over, and persisted with, the raw `sid`, because it is the governed forensic store.
 
+**CodeQL on the PR.**
+- The first PR analysis flagged **#126**: the `session_created` DEBUG dict, where the name heuristic treats `mfa_verified` as "password".
+- Copilot Autofix (`3d4c79f43`, committed by the repo owner) removed `mfa` from that DEBUG line, and #126 then read `fixed`.
+- `sid_ref` itself was not flagged.
+- MFA status remains on the authoritative `identity.session.created` audit line, which a test asserts.
+
 **`sid_ref` design.**
 - `sid_ref = HMAC-SHA256(K_log, sid)[:16]`, where `K_log = HMAC-SHA256(FG_SESSION_SECRET, "fg.identity.session.log-ref.v1")`.
 - It is keyed, so a log reader cannot recompute it from a candidate `sid`; an unsalted hash would allow that.
