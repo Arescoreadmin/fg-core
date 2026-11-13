@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import uuid
-from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from services.artifact_paths import resolve_contained_artifact, sha256_file
 from services.evidence_index import storage
 
 
@@ -26,12 +25,10 @@ class EvidenceIndexService:
         retention_class: str,
         anchor_status: str,
     ) -> dict[str, object]:
-        p = Path(artifact_path)
-        artifact_sha256 = (
-            hashlib.sha256(p.read_bytes()).hexdigest()
-            if p.exists() and p.is_file()
-            else "missing"
-        )
+        # Refuse anything outside the artifact root before touching it
+        # (CODEQL-REMEDIATE-005): no existence oracle, no foreign file hashes.
+        contained = resolve_contained_artifact(artifact_path)
+        artifact_sha256 = sha256_file(contained) if contained.is_file() else "missing"
         payload: dict[str, object] = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,

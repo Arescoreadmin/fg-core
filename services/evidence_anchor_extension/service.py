@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -13,6 +12,7 @@ from sqlalchemy import text
 from services.schema_validation import validate_payload_against_schema
 from sqlalchemy.orm import Session
 
+from services.artifact_paths import resolve_contained_artifact, sha256_file
 from services.evidence_anchor_extension.models import EvidenceAnchorCreate
 
 
@@ -79,10 +79,13 @@ class EvidenceAnchorService:
     def create_anchor(
         self, db: Session, tenant_id: str, payload: EvidenceAnchorCreate
     ) -> dict[str, object]:
-        p = Path(payload.artifact_path)
-        if not p.exists() or not p.is_file():
+        # Refuse anything outside the artifact root before touching it
+        # (CODEQL-REMEDIATE-005): no existence oracle, no foreign file hashes.
+        contained = resolve_contained_artifact(payload.artifact_path)
+        if not contained.is_file():
             raise FileNotFoundError(payload.artifact_path)
-        digest = hashlib.sha256(p.read_bytes()).hexdigest()
+        digest = sha256_file(contained)
+        p = Path(payload.artifact_path)
         db.execute(
             text(
                 """

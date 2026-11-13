@@ -1,3 +1,37 @@
+## fix(security): CODEQL-REMEDIATE-005 — evidence registration confined to the artifact root (CodeQL #100–#105, branch security/codeql-remediate-005-accelerated)
+
+- **Work item:** CODEQL-REMEDIATE-005 wave 1 (REPAIR).
+  - Live inventory on `main` `7102fd5e`: 102 open alerts, 0 dismissed.
+  - All of them are classified in `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json`, with clusters and waves in `docs/security/CODEQL_REMEDIATE_005_BURNDOWN.md`.
+- **#10 investigated first:** `DEV_ONLY`, no change.
+  - The prod-profile `build_app` mounts 0 `/ui` routes, and core auth refuses the cookie in prod-like envs.
+  - In dev the route echoes a key the auth gate already validated, as an `HttpOnly`, `SameSite=Lax` cookie.
+- **Root cause (#100–#105):** two routes took `artifact_path` from the request body and opened it with no containment:
+  - `POST /evidence/anchors` (`compliance:read`);
+  - `POST /evidence/runs/register` (`admin:write`).
+- **Exploit:** reproduced on `main` with a `compliance:read` key and a synthetic out-of-root secret file. The tenant received:
+  - 200 with the file's SHA-256, plus a stored anchor record in its own tenant;
+  - a 200-vs-404 existence oracle;
+  - the same through `/proc/self/environ`, `..` traversal, and a symlink inside the artifact root.
+  - The read was an unbounded `read_bytes()`.
+- **Change:**
+  - New `services/artifact_paths.py`:
+    - `resolve_contained_artifact()`: realpath, then strictly inside `realpath(FG_ARTIFACTS_DIR)` (`os.sep` prefix). Otherwise one fixed `EVIDENCE_ARTIFACT_PATH_INVALID`, whether or not the target exists.
+    - `sha256_file()`: hashes in 1 MiB chunks.
+  - Both services use it before touching the file.
+  - `api/evidence_index.py` maps the refusal to 400; the anchors route already mapped `ValueError` to 400.
+  - Stored and returned `artifact_path` values are unchanged. Relative `artifacts/...` paths, such as those from the AI-plane evidence generator, keep working.
+- **Verification:**
+  - New `tests/security/test_evidence_artifact_path_containment.py`, 13 tests, synthetic files only: **10 fail on `main` `7102fd5e`**, 13 pass here.
+  - Two existing tests registered `tmp_path` files outside the root. They now point `FG_ARTIFACTS_DIR` at `tmp_path` via `monkeypatch`; their assertions are unchanged.
+  - Evidence route tests: 27 passed.
+- **Unchanged:** routes, scopes, request and response schemas, stored columns, tenant scoping of anchor and run records, the anchor receipt writer.
+- **Behaviour change:** registering a file outside `FG_ARTIFACTS_DIR` now returns 400. Producers must write artifacts under the artifact root, which the in-repo generator already does.
+- **Residual:**
+  - Files inside the shared artifact root remain hashable by any tenant with the scope; a tenant-owned artifact registry is the stage-2 design.
+  - A realpath-to-open race needs write access inside the artifact root.
+- **Rollback:** revert the PR. The routes accept any server path again and the new tests fail.
+
 ## fix(security): CODEQL-REMEDIATE-004 — bind seed credentials to their environment and persist them atomically (CodeQL #8, #9, branch security/codeql-remediate-004-credential-storage)
 
 - **Work item:** CODEQL-REMEDIATE-004 (REPAIR).

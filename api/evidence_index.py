@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
+from services.artifact_paths import ArtifactPathError
 from services.evidence_index import EvidenceIndexService
 
 router = APIRouter(tags=["evidence-index"])
@@ -58,16 +59,19 @@ def register_evidence_run(
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
-    return service.register_run(
-        db,
-        tenant_id=tenant_id,
-        plane_id=payload.plane_id,
-        artifact_type=payload.artifact_type,
-        artifact_path=payload.artifact_path,
-        schema_version=payload.schema_version,
-        git_sha=payload.git_sha,
-        status=payload.status,
-        summary_json=payload.summary_json,
-        retention_class=payload.retention_class,
-        anchor_status=payload.anchor_status,
-    )
+    try:
+        return service.register_run(
+            db,
+            tenant_id=tenant_id,
+            plane_id=payload.plane_id,
+            artifact_type=payload.artifact_type,
+            artifact_path=payload.artifact_path,
+            schema_version=payload.schema_version,
+            git_sha=payload.git_sha,
+            status=payload.status,
+            summary_json=payload.summary_json,
+            retention_class=payload.retention_class,
+            anchor_status=payload.anchor_status,
+        )
+    except ArtifactPathError as exc:
+        raise HTTPException(status_code=400, detail={"error_code": str(exc)}) from exc

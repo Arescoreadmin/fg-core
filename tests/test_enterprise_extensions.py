@@ -132,8 +132,12 @@ def test_governance_risk_hook_sod_violation_when_enabled(monkeypatch) -> None:
     assert result["quorum_required"] == 2
 
 
-def test_evidence_anchor_happy_tenant_isolation_and_error_code(tmp_path: Path) -> None:
+def test_evidence_anchor_happy_tenant_isolation_and_error_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     client, key_a, key_b = _setup_client(tmp_path)
+    # Anchored artifacts must live under the artifact root (CODEQL-REMEDIATE-005).
+    monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path))
     artifact = tmp_path / "artifact.json"
     artifact.write_text('{"ok":true}', encoding="utf-8")
     created = client.post(
