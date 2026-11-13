@@ -13,8 +13,8 @@ CodeQL picks its sources by **variable name**: `password`, `secret`, `private`, 
 | Class | Count | Alerts |
 |---|---|---|
 | P0: raw credential, token, session secret or auth header in a service log | **0** | none confirmed |
-| P1: fixed in this PR | 1 | #53, plus four sibling sinks CodeQL did not report |
-| P1: deferred | 2 | #31, #52 |
+| P1: fixed by #866 (confirmed `fixed` on main 2026-11-13) | 1 | #53, plus four sibling sinks CodeQL did not report |
+| P1: CODEQL-REMEDIATE-003 | 2 | #31, #52 |
 | P2 | 40 | see the ledger |
 | FALSE_POSITIVE (complete source-to-sink check) | 2 | #43, #54 |
 | FALSE_POSITIVE_CANDIDATE | 1 | #27 |
@@ -57,7 +57,10 @@ The hash-chained identity audit record is unchanged: it is still hashed over, an
 - It is stable for one session, so `session_created`, `identity.session.created`, `session_revoked` and `identity.logout` correlate across the log stream.
 - `event_id` still links the log line to the persisted audit record.
 
-## Deferred P1: operator seed tooling prints live API keys (#31, #52)
+## P1 group 2: operator seed tooling prints live API keys (#31, #52)
+
+**Status (2026-11-13): addressed by CODEQL-REMEDIATE-003** (branch `security/codeql-remediate-003-logging`). Credentials go only to a new `0600` file (exclusive create, no symlink, safe parent). `demo_tenants.py` requires `--output` (operator-approved 2026-11-13) and fails before minting without it. Stdout is an allowlisted summary. Not counted as fixed until a default-branch analysis marks #31 and #52 `fixed`. The related storage alerts `py/clear-text-storage-sensitive-data` **#8/#9** (`run_seed.py` state-file writes) remain **open and unresolved**; the file is the designed local credential store, now `0600`. The original analysis follows.
+
 
 - `tools/seed/demo_tenants.py` prints newly minted **production demo-tenant API keys** to stdout for an operator to paste into Vercel (`FG_PORTAL_DEMO_TENANT_KEYS`). An `--output` file option exists alongside.
 - `tools/seed/run_seed.py` prints local seed credentials.
@@ -69,7 +72,7 @@ The hash-chained identity audit record is unchanged: it is still hashed over, an
 | # | Group | Alerts | Class | Recommendation |
 |---|---|---|---|---|
 | 1 | **This PR:** identity session identifiers | #53 (+4 unreported) | P1 | Fixed: keyed `sid_ref` |
-| 2 | Operator seed tooling credential output | #31, #52 | P1 | Next PR: write to a `0600` file, print redacted; needs operator sign-off |
+| 2 | Operator seed tooling credential output | #31, #52 | P1 | CODEQL-REMEDIATE-003: `0600` file only, `--output` required, allowlisted stdout |
 | 3 | Auth-event logging consistency | #49–#51, #28–#30 | P2 | `_log_auth_event` logs raw `tenant_id` and `client_ip`, while `log_tenant_denial_event` hashes both in prod. Align them with a keyed reference. Also confirm the `key_prefix` and `actor_id` invariants in a test. |
 | 4 | Identity-provider debug attributes | #21, #32 | P2 | 16-character subject/oid prefix and roles at DEBUG. Consider dropping roles or using keyed refs. |
 | 5 | Tenant-scoped operational metadata (RAG, usage, billing, behavior) | #11–#19, #33–#42, #44–#48, #22–#26, #55, #56 | P2 | Logs `tenant_id`, counts, error codes and 8-character id prefixes, mostly at DEBUG. Candidate for one policy decision on `tenant_id` in logs, rather than per-site edits. |

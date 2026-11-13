@@ -1,3 +1,32 @@
+## fix(security): CODEQL-REMEDIATE-003 — seed tooling stops printing live credentials (CodeQL #31, #52, branch security/codeql-remediate-003-logging)
+
+- **Work item:** CODEQL-REMEDIATE-003 (REPAIR). Live inventory on `main` `4635376f`: 106 open alerts, 45 `py/clear-text-logging-sensitive-data`, 0 dismissed; #53 reads `fixed` (2026-11-13T11:55Z). The two remaining P1 logging alerts from `docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md` are selected; no P0 exists.
+- **Root cause:** both operator seed tools `print()`ed their full result dict:
+  - `tools/seed/demo_tenants.py` (#31): newly minted **production** demo-tenant API keys (`demo_tenant_api_key_map_json`) and portal passwords, which are revoked and re-minted on every run. The optional `--output` file was written with the default umask (typically `0644`) and followed symlinks.
+  - `tools/seed/run_seed.py` (#52): local seed API keys (`seed_credentials`, `ag_core_api_key`). The state file holding them was written with the default umask.
+- **Exploit:** stdout lands in terminal scrollback, CI and AI-agent transcripts and log collectors. Anyone reading one obtains working tenant API keys and portal logins. A world-readable `--output` file or state file exposes the same values to other local users.
+- **Change:**
+  - New `tools/seed/credential_output.py`:
+    - `open_private_exclusive()` creates a **new** file, mode `0600`, with `O_EXCL|O_NOFOLLOW`. It refuses existing files and symlinks, including dangling ones.
+    - `check_parent_dir()` refuses a parent that is a symlink, owned by another user, or writable by others. Sticky directories are allowed, as is group-write for the operator's own primary group (OpenSSH-style).
+    - `write_private_text()` replaces the tool's own regular file, mode `0600`, and never follows symlinks.
+  - `demo_tenants.py`, operator-approved 2026-11-13:
+    - `--output` is required unless `--dry-run`. Without it the tool exits 2 **before** minting, rotating or any database mutation.
+    - The credential file is created before seeding, so an unsafe path also exits 2 with nothing changed.
+    - A `seed()` failure exits 3 and prints only the exception type, never its text, which could carry credential material. The empty file is removed.
+    - A credential-write failure after minting exits 4: the partial file is removed, the affected tenants are named, and a `--rotate-keys` recovery path is given.
+    - The full result goes only to the `0600` file. Stdout carries an allowlisted summary (tenant ids, statuses, grant ids, URLs, `credentials_file`, `api_key_issued_tenants`), so a credential field added later is not printed by default.
+  - `run_seed.py`: stdout carries an allowlisted summary plus `credentials_file`; the state file is written `0600` on both write paths. The documented tester flow already reads keys from that file.
+  - `docs/tester_quickstart.md`: expected output updated, plus an operator section on demo-tenant credential handoff: a private `mktemp -d` directory, the Vercel key map piped through stdin, portal passwords via an approved channel, and `shred -u` disposal.
+- **Verification:**
+  - New `tests/test_seed_credential_output.py`, 16 tests with synthetic credentials.
+  - Against unmodified `main` `4635376f`: 15 fail. These include 4 exposure proofs: the synthetic API key in `demo_tenants` stdout, the synthetic admin key in `run_seed` stdout, minting without `--output`, and the raw `seed()` exception text with key and password escaping. The dry-run compatibility guard passes on both. After the fix: 16 pass.
+  - Existing seed and quickstart tests: 56 passed with the new file.
+- **Unchanged:** credential issuance and rotation, credential authority, portal grant service, the JSON content of the credentials file and the state file, `--dry-run` behaviour.
+- **Operator-facing change (approved):** `demo_tenants.py` now needs `--output <path>` naming a new file; keys and passwords are read from that file, not the terminal.
+- **Still open:** `py/clear-text-storage-sensitive-data` #8/#9 (the `run_seed.py` state-file writes) remain **unresolved**. The file is the designed local credential store, now `0600`.
+- **Rollback:** revert the PR. Credentials print to stdout again and the new tests fail.
+
 ## fix(security): CODEQL-REMEDIATE-002 — keep session identifiers out of logs (CodeQL #53, branch security/codeql-remediate-002-sensitive-logging)
 
 - **Work item:** CODEQL-REMEDIATE-002 PR 1 (REPAIR). All 46 open `py/clear-text-logging-sensitive-data` alerts on `main` `7483d15b` are inventoried source-to-sink in `docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`: 0 P0, 3 P1, 40 P2, 2 false positives, 1 candidate.

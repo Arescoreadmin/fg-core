@@ -8459,3 +8459,21 @@ SOC review outcome: APPROVED. Closes path traversal in UI audit-packet storage a
 4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. All 46 logging alerts are accounted for in the inventory.
 
 SOC review outcome: APPROVED. Removes raw session identifiers from central application logs.
+
+## 2026-11-13 - fix(security): CODEQL-REMEDIATE-003 — seed tooling stops printing live credentials
+
+**Change scope:**
+- `tools/seed/credential_output.py` (new): owner-only credential files. Exclusive `0600` create, no symlink follow, safe-parent check.
+- `tools/seed/demo_tenants.py`: `--output` required unless `--dry-run`, operator-approved 2026-11-13. It fails before minting; failure messages carry no exception text; a write failure gives a rotation recovery path; stdout is an allowlisted summary.
+- `tools/seed/run_seed.py`: allowlisted stdout summary; `0600` state file.
+- `docs/tester_quickstart.md`, tests and governance records.
+- No API, middleware, credential-authority, workflow, ruleset, required check, CodeQL configuration, dependency, schema or audit-record change.
+
+**Security analysis:**
+
+1. **The exposure is demonstrated, not asserted.** On `main`, synthetic minted credentials appear on stdout from both tools and in a propagated `seed()` exception, and `demo_tenants.py` mints and rotates with no capture file. 15 of 16 tests fail on `main`, covering exposure, permissive modes, symlinks, unsafe parents, overwrite and write-failure recovery.
+2. **The fix is fail-closed.** Credentials go only to an owner-only file. `demo_tenants.py` refuses to mint without one, and creates it exclusively (no overwrite, no symlink, safe parent) before seeding. A write failure removes the partial file and names the tenants to recover with `--rotate-keys`. Stdout output is allowlisted, not redacted, so new fields are not printed by default.
+3. **Operator evidence is preserved.** Stdout keeps tenant ids, key and grant status, grant ids, URLs and the credentials file path. The credentials file content is unchanged.
+4. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. `py/clear-text-storage-sensitive-data` #8/#9 (the `run_seed.py` state-file writes) stay open and **unresolved**: that file is the designed credential store, now `0600`.
+
+SOC review outcome: APPROVED. Removes live tenant credentials from operator terminal output and makes credential files owner-only.

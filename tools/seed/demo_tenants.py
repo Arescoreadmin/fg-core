@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -54,6 +55,10 @@ from services.field_assessment.store import (  # noqa: E402
     list_observations,
 )
 from services.portal_grant_service import portal_grant_svc  # noqa: E402
+from tools.seed.credential_output import (  # noqa: E402
+    open_private_exclusive,
+    write_fd_text,
+)
 
 
 @dataclass(frozen=True)
@@ -1214,15 +1219,122 @@ def main() -> int:
         help="Force-rotate API keys even if an active key exists",
     )
     parser.add_argument(
-        "--output", default="", help="Optional path for credentials JSON"
+        "--output",
+        default="",
+        help=(
+            "Path for the credentials JSON (written 0600). Required unless "
+            "--dry-run: credentials are never printed to stdout."
+        ),
     )
     args = parser.parse_args()
-    result = seed(dry_run=args.dry_run, rotate_keys=args.rotate_keys)
-    rendered = json.dumps(result, indent=2, sort_keys=True)
-    if args.output:
-        Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-    print(rendered)
+    if args.dry_run:
+        result = seed(dry_run=True, rotate_keys=args.rotate_keys)
+        rendered = json.dumps(result, indent=2, sort_keys=True)
+        if args.output:
+            write_fd_text(open_private_exclusive(Path(args.output)), rendered + "\n")
+        print(rendered)
+        return 0
+    if not args.output:
+        print(
+            "DEMO_SEED_OUTPUT_REQUIRED: pass --output <path>. Minted API keys "
+            "and portal passwords are written only to that 0600 file, never "
+            "to stdout. Nothing was changed.",
+            file=sys.stderr,
+        )
+        return 2
+    out_path = Path(args.output)
+    # Create the credentials file (new, 0600, safe parent) before minting or
+    # rotating anything, so a bad path changes nothing.
+    try:
+        fd = open_private_exclusive(out_path)
+    except OSError as exc:
+        print(
+            f"DEMO_SEED_OUTPUT_UNSAFE: {exc}. Choose a new file in a directory "
+            "only you can write. Nothing was changed.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        result = seed(dry_run=False, rotate_keys=args.rotate_keys)
+    except Exception as exc:
+        # The exception text is not printed: it may carry values from the
+        # credential and portal-grant paths.
+        os.close(fd)
+        out_path.unlink(missing_ok=True)
+        print(
+            f"DEMO_SEED_FAILED: {type(exc).__name__} (details withheld; may "
+            "carry credential material). Credentials issued before the "
+            "failure were not written anywhere. Re-run with --rotate-keys "
+            "--output <new path> to replace them (see docs/tester_quickstart.md, "
+            "demo-tenant credential handoff).",
+            file=sys.stderr,
+        )
+        return 3
+    summary = _stdout_summary(result, out_path)
+    try:
+        write_fd_text(fd, json.dumps(result, indent=2, sort_keys=True) + "\n")
+    except OSError as exc:
+        out_path.unlink(missing_ok=True)
+        print(
+            f"DEMO_SEED_OUTPUT_WRITE_FAILED: {exc.__class__.__name__} "
+            f"errno={exc.errno}. Credentials were issued for "
+            f"{', '.join(summary['api_key_issued_tenants']) or 'no tenants'} "
+            "(plus portal passwords for all tenants) but not written. "
+            "Recover: re-run with --rotate-keys --output <new path>; that "
+            "rotates out the unwritten credentials and issues new ones "
+            "(see docs/tester_quickstart.md, demo-tenant credential handoff).",
+            file=sys.stderr,
+        )
+        return 4
+    print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
+
+
+# Fields that are safe on stdout. Allowlisted so that a credential added to
+# the seed result later is not printed by default.
+_SUMMARY_TENANT_FIELDS = (
+    "tenant_id",
+    "tenant_label",
+    "client_name",
+    "sector",
+    "assessment_type",
+    "engagement_id",
+    "report_id",
+    "status",
+    "api_key_status",
+    "portal_grant_id",
+    "portal_grant_expires_at",
+    "portal_url",
+    "console_url",
+)
+
+
+def _stdout_summary(result: dict[str, Any], out_path: Path) -> dict[str, Any]:
+    tenants = [
+        {field: t.get(field) for field in _SUMMARY_TENANT_FIELDS}
+        for t in result.get("tenants", [])
+    ]
+    issued = sorted(
+        str(t["tenant_id"])
+        for t in tenants
+        if t.get("api_key_status") in ("created", "rotated")
+    )
+    summary: dict[str, Any] = {
+        "generated_at": result.get("generated_at"),
+        "portal_demo_tenants": result.get("portal_demo_tenants"),
+        "console_demo_tenants": result.get("console_demo_tenants"),
+        "tenants": tenants,
+        "credentials_file": str(out_path),
+        "api_key_issued_tenants": issued,
+        "credentials_note": (
+            f"API keys and portal passwords are in {out_path} (mode 0600). "
+            "Update FG_PORTAL_DEMO_TENANT_KEYS in Vercel from "
+            "demo_tenant_api_key_map_json in that file, then delete it."
+        ),
+    }
+    if result.get("demo_tenant_unchanged_keys"):
+        summary["demo_tenant_unchanged_keys"] = result["demo_tenant_unchanged_keys"]
+    return summary
 
 
 if __name__ == "__main__":

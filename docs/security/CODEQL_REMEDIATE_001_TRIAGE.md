@@ -78,7 +78,7 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | 2 | UI audit-packet path containment (#865, merged; fixed on main) | #106–#123 |
 | 3 | Billing evidence ID validation and containment | #91–#94 |
 | 4 | Bound user-supplied regex (`api/workforce.py`) | #71 |
-| 5 | Sensitive-logging triage and fixes: continued as CODEQL-REMEDIATE-002 (`docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`) | 46 logging alerts |
+| 5 | Sensitive-logging triage and fixes: continued as CODEQL-REMEDIATE-002 (`docs/security/CODEQL_REMEDIATE_002_LOGGING_INVENTORY.md`; #53 fixed via #866) and CODEQL-REMEDIATE-003 (#31, #52) | 46 logging alerts |
 | 6 | `services/*` path-injection triage | #95–#105 |
 | 7 | Remaining low items and documented false-positive evidence | the rest |
 
@@ -93,8 +93,8 @@ No alert has been dismissed, and no rule, path or severity has been changed. A f
 | #5 | `py/clear-text-storage-sensitive-data` | high | `scripts/contracts_gen_core.py:163` | FALSE_POSITIVE_CANDIDATE |
 | #6 | `py/clear-text-storage-sensitive-data` | high | `scripts/contracts_gen_core.py:164` | FALSE_POSITIVE_CANDIDATE |
 | #7 | `py/clear-text-storage-sensitive-data` | high | `scripts/patch_compliant_surfaces.py:137` | FALSE_POSITIVE_CANDIDATE |
-| #8 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:292` | FALSE_POSITIVE_CANDIDATE |
-| #9 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:330` | FALSE_POSITIVE_CANDIDATE |
+| #8 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:292` | FALSE_POSITIVE_CANDIDATE (open, unresolved; file `0600` since CODEQL-REMEDIATE-003) |
+| #9 | `py/clear-text-storage-sensitive-data` | high | `tools/seed/run_seed.py:330` | FALSE_POSITIVE_CANDIDATE (open, unresolved; file `0600` since CODEQL-REMEDIATE-003) |
 | #10 | `py/clear-text-storage-sensitive-data` | high | `api/ui.py:992` | DESIGN_REVIEW |
 | #11 | `py/clear-text-logging-sensitive-data` | high | `api/rag/answering.py:279` | NEEDS_TRIAGE |
 | #12 | `py/clear-text-logging-sensitive-data` | high | `api/rag/answering.py:346` | NEEDS_TRIAGE |

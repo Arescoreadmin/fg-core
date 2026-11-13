@@ -28,7 +28,7 @@ FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
 python tools/seed/run_seed.py
 ```
 
-Captures from output (or from state file after first run):
+Capture values from the state file. It is written with mode `0600`; API keys are never printed to stdout:
 
 ```bash
 EXPORT_PATH=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['export_path'])")
@@ -38,7 +38,7 @@ SEED_AGENT_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootst
 SEED_AUDIT_API_KEY=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['seed_credentials']['audit_api_key'])")
 ```
 
-Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `session_id`, `export_path`, and `seed_credentials` containing `fgk.*` admin, agent, and audit keys.
+Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `session_id`, `export_path`, `seed_credential_status`, and `credentials_file`. The `fgk.*` admin, agent, and audit keys are only in `seed_credentials` inside the state file.
 
 **Checkpoint:** `state/seed/bootstrap_state.json` exists. Audit cycle ran. Evidence bundle exported.
 
@@ -200,11 +200,8 @@ Expected output (JSON):
   "export_path": "state/seed/...",
   "registry_path": "state/tenants.json",
   "session_id": "<uuid>",
-  "seed_credentials": {
-    "admin_api_key": "fgk....",
-    "agent_api_key": "fgk....",
-    "audit_api_key": "fgk...."
-  },
+  "seed_credential_status": {"admin": "issued", "agent": "issued", "audit": "issued"},
+  "credentials_file": "state/seed/bootstrap_state.json",
   "sqlite_path": "state/frostgate.db",
   "status": "seeded",
   "tenant_id": "tenant-seed-primary"
@@ -212,6 +209,8 @@ Expected output (JSON):
 ```
 
 If `"status": "already_seeded"` appears, the environment was already bootstrapped. This is expected and correct.
+
+API keys are not in this output. Read them from `seed_credentials` in `state/seed/bootstrap_state.json`, as shown in CTJ-1.
 
 **What the seed creates:**
 
@@ -227,6 +226,36 @@ If `"status": "already_seeded"` appears, the environment was already bootstrappe
 > The admin/agent API keys are for direct core API access. The admin gateway uses session-cookie auth via OIDC (canonical) or dev bypass (non-canonical, dev-only). The keys are not used in this tester flow.
 
 ---
+
+### Operator only: demo-tenant credential handoff
+
+`tools/seed/demo_tenants.py` mints **production** demo-tenant API keys and portal passwords. It never prints them. It writes them only to the file named by `--output`, which is required unless `--dry-run` is given:
+
+- The file is created new with mode `0600`. The tool refuses an existing file, a symlink, and a directory that is a symlink or writable by other users. It refuses **before** minting or rotating anything.
+- If seeding or the file write fails, the tool exits non-zero (3 or 4) without printing credentials. Recover by re-running with `--rotate-keys --output <new path>`: that rotates out anything issued but not written, and issues fresh credentials. If that fails with `CredentialSlotNotFoundError`, a tenant has never had a key; run once with only `--output <new path>`, then again with `--rotate-keys --output <another new path>`.
+
+Run it from a private temporary directory, and keep credentials out of the terminal:
+
+```bash
+umask 077
+CRED_DIR=$(mktemp -d)                      # 0700, owned by you
+python tools/seed/demo_tenants.py --rotate-keys --output "$CRED_DIR/demo-creds.json"
+
+# Hand the key map to Vercel through stdin, never as a command-line argument.
+vercel env rm FG_PORTAL_DEMO_TENANT_KEYS production --yes
+jq -r '.demo_tenant_api_key_map_json' "$CRED_DIR/demo-creds.json" \
+  | vercel env add FG_PORTAL_DEMO_TENANT_KEYS production
+```
+
+- `--rotate-keys` issues a key for every demo tenant, so the map is complete. It needs an existing key for each tenant, so omit it on the very first seed of an environment. Without it, the map contains only the tenants listed in `api_key_issued_tenants`, and you must merge it with the existing Vercel value yourself.
+- Hand portal passwords (`tenants[].portal_password` in the same file) to their recipients through an approved secret channel, not chat or email.
+- Dispose of the file as soon as the handoff is done:
+
+```bash
+shred -u "$CRED_DIR/demo-creds.json" && rmdir "$CRED_DIR"
+```
+
+`shred` is best-effort on journaling and copy-on-write filesystems. That is why the file goes in a temporary directory and is deleted promptly. Never copy it into the repository, a ticket or a shared drive.
 
 ## Step 2 — Start the Admin Gateway
 

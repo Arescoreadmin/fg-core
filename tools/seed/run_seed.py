@@ -12,6 +12,8 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from dataclasses import dataclass
 from typing import Any
 
+from tools.seed.credential_output import write_private_text  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 DEFAULT_TENANT_ID = "tenant-seed-primary"
@@ -289,7 +291,7 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         payload = _load_json(seed_marker)
         payload = _ensure_seed_credentials(config, payload)
         payload["status"] = "already_seeded"
-        seed_marker.write_text(_json_dump(payload), encoding="utf-8")
+        write_private_text(seed_marker, _json_dump(payload))
         return payload
 
     seed_marker.parent.mkdir(parents=True, exist_ok=True)
@@ -327,14 +329,29 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         "tenant_id": config.tenant_id,
     }
     payload = _ensure_seed_credentials(config, payload)
-    seed_marker.write_text(_json_dump(payload), encoding="utf-8")
+    write_private_text(seed_marker, _json_dump(payload))
     return {**payload, "status": "seeded"}
+
+
+# Fields that are safe on stdout. Seed API keys stay in the 0600 state file,
+# which the documented tester flow already reads them from.
+_SUMMARY_FIELDS = (
+    "export_path",
+    "registry_path",
+    "session_id",
+    "sqlite_path",
+    "tenant_id",
+    "seed_credential_status",
+    "status",
+)
 
 
 def _internal_main() -> int:
     config = _set_default_env()
     result = _seed_once(config)
-    print(_json_dump(result))
+    summary = {field: result.get(field) for field in _SUMMARY_FIELDS}
+    summary["credentials_file"] = config.state_path
+    print(_json_dump(summary))
     return 0
 
 
