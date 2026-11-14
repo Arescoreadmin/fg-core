@@ -45,6 +45,7 @@ See blueprint requirements:
 - Exception and break-glass workflows are additive under `/exceptions/*` and `/breakglass/*` with expiry and approval requirements.
 - Governance risk extension can enforce quorum + SoD checks when `FG_GOVERNANCE_RISK_EXTENSION_ENABLED=1`.
 - Evidence anchoring endpoints (`/evidence/anchors`) support immutable retention hooks and external anchor placeholders.
+- Evidence anchors and evidence-run registrations accept only artifacts the caller's bound tenant owns per the producer's canonical record (today `decision_evidence_artifacts`, fingerprint-checked), or platform artifacts registered by an internal producer holding a code-defined grant (`services/artifact_paths.py`). Being inside `FG_ARTIFACTS_DIR` is not ownership (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
 - Federation endpoints (`/auth/federation/*`) are additive and optional; API key auth remains supported.
 - AI Plane endpoints (`/ai-plane/*`) are additive, tenant-scoped, and governance-reviewed with policy + review surfaces.
 

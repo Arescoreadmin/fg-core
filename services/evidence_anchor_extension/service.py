@@ -12,7 +12,7 @@ from sqlalchemy import text
 from services.schema_validation import validate_payload_against_schema
 from sqlalchemy.orm import Session
 
-from services.artifact_paths import resolve_contained_artifact, sha256_file
+from services.artifact_paths import authorize_tenant_artifact, hash_authorized_artifact
 from services.evidence_anchor_extension.models import EvidenceAnchorCreate
 
 
@@ -79,13 +79,11 @@ class EvidenceAnchorService:
     def create_anchor(
         self, db: Session, tenant_id: str, payload: EvidenceAnchorCreate
     ) -> dict[str, object]:
-        # Refuse anything outside the artifact root before touching it
-        # (CODEQL-REMEDIATE-005): no existence oracle, no foreign file hashes.
-        contained = resolve_contained_artifact(payload.artifact_path)
-        if not contained.is_file():
-            raise FileNotFoundError(payload.artifact_path)
-        digest = sha256_file(contained)
-        p = Path(payload.artifact_path)
+        # Containment, then ownership by canonical record, before any read
+        # (CODEQL-REMEDIATE-005, EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+        artifact = authorize_tenant_artifact(db, tenant_id, payload.artifact_path)
+        digest = hash_authorized_artifact(artifact)
+        p = artifact.path
         db.execute(
             text(
                 """
@@ -119,6 +117,7 @@ class EvidenceAnchorService:
             "external_anchor_ref": payload.external_anchor_ref,
             "immutable_retention": payload.immutable_retention,
             "anchor_receipt_path": receipt_path,
+            "artifact_ref": artifact.ref,
         }
 
     def list_anchors(self, db: Session, tenant_id: str) -> list[dict[str, object]]:

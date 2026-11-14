@@ -8530,3 +8530,23 @@ SOC review outcome: APPROVED. Removes a read-scope filesystem probe and foreign-
 5. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded. #95–#97 are not claimed fixed until a `main` analysis shows it.
 
 SOC review outcome: APPROVED. Audit exports can no longer be written outside their root or substituted across tenants.
+
+## 2026-11-13 - fix(security): EVIDENCE-ARTIFACT-TENANT-AUTH-001 — enforce canonical artifact ownership
+
+**Change scope:**
+- `services/artifact_paths.py`: owner-record authorization, fingerprint check, code-defined platform grants.
+- `services/evidence_anchor_extension/service.py`, `services/evidence_index/service.py`: authorize before reading.
+- `api/evidence_anchors.py`, `api/evidence_index.py`: one 404 for non-owned artifacts, 409 for a fingerprint mismatch.
+- `scripts/generate_ai_plane_evidence.py`: presents its platform grant.
+- Tests, `docs/security/EVIDENCE_ARTIFACT_TENANT_AUTH_001.md`, the burn-down refresh (93 alerts), and a `docs/GOVERNANCE_RULES.md` rule.
+- No schema, migration, workflow, ruleset, required check, CodeQL configuration or dependency change.
+
+**Security analysis:**
+
+1. **The exposure is demonstrated, not asserted.** On `main`, a synthetic tenant B received tenant A's decision-evidence fingerprint, stored an anchor and an evidence run claiming it, enumerated sequential artifact ids, and claimed platform evidence.
+2. **Ownership is decided by the producer's canonical record, not by a path.** `decision_evidence_artifacts` binds tenant, resolved path and SHA-256, and Postgres RLS also scopes it. No competing registry was added.
+3. **Fail closed, with no oracle.** Every non-owned case gets one 404 before any file read, with no path echo and no logging of foreign paths or hashes.
+4. **Provenance integrity.** An anchored fingerprint must equal the recorded one, so mutation and swap-after-check are refused. Platform evidence is claimable only through a reviewed code grant that internal producers present.
+5. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded.
+
+SOC review outcome: APPROVED. Closes cross-tenant evidence fingerprinting and forged provenance through the evidence APIs.

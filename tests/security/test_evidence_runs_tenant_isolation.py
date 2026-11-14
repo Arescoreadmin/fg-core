@@ -6,11 +6,17 @@ import pytest
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker
 from services.evidence_index.storage import list_runs
+from tests.decision_evidence_helpers import emit_synthetic_decision_evidence
 
 
-def test_evidence_runs_tenant_isolation(build_app):
+def test_evidence_runs_tenant_isolation(build_app, tmp_path, monkeypatch):
+    monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
     app = build_app(auth_enabled=True)
     client = TestClient(app)
+    # A tenant registers evidence it owns. It used to register the platform
+    # artifact artifacts/ai_plane_evidence.json, which tenants may no longer
+    # claim (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+    owned, _ = emit_synthetic_decision_evidence("tenant-a", 1)
 
     admin_a = mint_key("admin:write", tenant_id="tenant-a")
     read_a = mint_key("compliance:read", tenant_id="tenant-a")
@@ -22,7 +28,7 @@ def test_evidence_runs_tenant_isolation(build_app):
         json={
             "plane_id": "ai_plane",
             "artifact_type": "ai_plane_evidence",
-            "artifact_path": "artifacts/ai_plane_evidence.json",
+            "artifact_path": str(owned),
             "schema_version": "v1",
             "git_sha": "abc123",
             "status": "PASS",

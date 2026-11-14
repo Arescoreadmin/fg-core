@@ -1,8 +1,10 @@
 # CODEQL-REMEDIATE-005: CodeQL burn-down inventory and remediation waves
 
-Baseline: `main` `3024ad92` (#869 merged), refreshed by CODEQL-REMEDIATE-006. Python analysis 2164346692 and JavaScript analysis 2164327094 were both run on that commit and read 2026-11-13. There are **96 open alerts and 0 dismissed**.
+Baseline: `main` `7acd62cb` (#870 merged), refreshed by EVIDENCE-ARTIFACT-TENANT-AUTH-001. Python analysis 2165152067 was run on that commit and read 2026-11-13. There are **93 open alerts and 0 dismissed**.
 
-The original baseline was `main` `7102fd5e` with 102 open alerts. Wave 1 (#100–#105, PR #869) is **confirmed `fixed`** by analysis 2164346692 on `3024ad92`, with 0 dismissals.
+The original baseline was `main` `7102fd5e` with 102 open alerts. Confirmed `fixed` on `main` with 0 dismissals:
+- wave 1, #100–#105 (PR #869);
+- wave 2, #95–#97 (PR #870).
 
 Machine-readable inventory: `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json`, schema `fg.codeql.burndown.v1`. It has one row per open alert, with:
 - rule, location and SARIF source;
@@ -25,7 +27,7 @@ Machine-readable inventory: `docs/security/CODEQL_REMEDIATE_005_INVENTORY.json`,
 
 | Classification | Count |
 |---|---|
-| GENUINE | 5 |
+| GENUINE | 2 |
 | GENUINE_LOW | 7 |
 | NEEDS_VERIFICATION | 18 |
 | FALSE_POSITIVE_CANDIDATE | 45 |
@@ -52,7 +54,7 @@ Disposition: `DEV_ONLY`, no code change. A future identity migration to opaque U
 | Wave | Cluster | Alerts | Root cause, fix boundary | Severity, exploitability | Effort | Predicted CodeQL result |
 |---|---|---|---|---|---|---|
 | 1 (**fixed**, #869, confirmed on `main`) | C1 | #100–#105 | `POST /evidence/anchors` (`compliance:read`) and `POST /evidence/runs/register` (`admin:write`) hash a **caller-supplied server path**. Fix: `services/artifact_paths.py` containment in the artifact root. | **High.** Any tenant key with a read scope gets a server-wide existence oracle, the SHA-256 of any readable file, a forged provenance record and an unbounded read. Reproduced. | S | #100–#105 close (prediction) |
-| **2 (CODEQL-REMEDIATE-006)** | C2 | #95–#97 | Audit export file name is built from raw query `start`/`end` (`/` allowed) and has no tenant segment; exam export reads the file back by path. Fix: strict UTC window validation, a tenant namespace, a contained path, and an in-memory exam payload. | **High.** Write outside the export root; a concurrent same-window export by another tenant lands in an exam archive. Both reproduced. Needs `audit:export` + capability. | S–M | #95–#97 close (prediction) |
+| 2 (**fixed**, #870, confirmed on `main`) | C2 | #95–#97 | Audit export file name is built from raw query `start`/`end` (`/` allowed) and has no tenant segment; exam export reads the file back by path. Fix: strict UTC window validation, a tenant namespace, a contained path, and an in-memory exam payload. | **High.** Write outside the export root; a concurrent same-window export by another tenant lands in an exam archive. Both reproduced. Needs `audit:export` + capability. | S–M | #95–#97 close (prediction) |
 | 3 | C3 | #1, #72 | Backtracking-prone regex over unbounded input. #1 is the **unauthenticated** portal `POST /api/assessment/start` email check (per-IP rate limit keyed on proxy headers; spoofable only where the platform does not overwrite them). Fix: bound the length before matching, and use an unambiguous pattern. | **Medium.** Unauthenticated CPU burn on Vercel. | XS | #1, #72 close (prediction) |
 | 4 | C4 | #91–#94, #3 | Billing evidence directories use client-chosen `invoice_id`/`credit_note_id`. Path params limit HTTP reach to `.`/`..`. Fix: validate the id format at creation, and contain the path. | Low–medium. Escape to the shared billing root. | S | #91–#94 close; #3 may close (prediction) |
 | 5 | C5 | #71 | Tenant-supplied regex run with `re.search` and no timeout. Fix needs an **operator decision**: allow regex with an `re2`-style engine (new dependency), or restrict to literal/prefix plus a length cap. | **Medium.** An `admin:write` holder can stall a shared worker for all tenants. | S | #71 closes (prediction) |
@@ -63,7 +65,7 @@ Disposition: `DEV_ONLY`, no code change. A future identity migration to opaque U
 | 10 | C11 | 19 alerts | Tests, CI tools, offline scripts. | Not production. | S | Hygiene |
 | — | C12 | #10, #73, #125 | Dev-only surfaces and the CSRF token cookie. | Dev only. | — | Tracked |
 
-Risk eliminated is tracked separately from alert count: waves 1–3 remove the verified high and medium exposures (11 alerts; 6 confirmed fixed). Waves 7–10 mostly turn into evidence for operator decisions, not code.
+Risk eliminated is tracked separately from alert count: waves 1–3 remove the verified high and medium exposures (11 alerts; 9 confirmed fixed). Waves 7–10 mostly turn into evidence for operator decisions, not code.
 
 ## Wave 2 (CODEQL-REMEDIATE-006): audit export authority
 
@@ -86,7 +88,7 @@ Risk eliminated is tracked separately from alert count: waves 1–3 remove the v
 - `GET /audit/exams/{id}/export`: an unknown and another tenant's exam both return the same 404 `AUDIT_EXAM_NOT_FOUND`; chain failure returns 409.
 - Unchanged: bundle and manifest format, signatures, hashes, the `start`/`end` strings recorded in the bundle, the ledger queries, and the response shape (`path` keeps the configured-root form).
 
-### Residual risk and follow-up: EVIDENCE-ARTIFACT-TENANT-AUTH-001 (P1)
+### Residual risk and follow-up: EVIDENCE-ARTIFACT-TENANT-AUTH-001 (P1; addressed, see `docs/security/EVIDENCE_ARTIFACT_TENANT_AUTH_001.md`)
 
 Wave 1 confined `POST /evidence/anchors` and `POST /evidence/runs/register` to `FG_ARTIFACTS_DIR`, but that root is **shared by all tenants**. It holds `decision_evidence/<sequential id>.json` (every tenant), `anchor_receipts/`, and by default `audit_exports/`. **Verified** with a synthetic probe on this branch: a `compliance:read` key for tenant B anchored tenant A's decision evidence and got 200, the correct SHA-256, and an anchor record stored in tenant B. A missing id returned 404, so ids are enumerable.
 
@@ -201,9 +203,6 @@ Run this after each merge, before branching the next wave:
 | 92 | `path-injection` | `api/billing.py:82` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
 | 93 | `path-injection` | `api/billing.py:86` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
 | 94 | `path-injection` | `api/billing.py:86` | C4 | GENUINE_LOW | VERIFIED_CODE | yes | path params cannot carry '/', so reach is '.'/'..' only |
-| 95 | `path-injection` | `services/audit_engine/engine.py:549` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
-| 96 | `path-injection` | `services/audit_engine/engine.py:550` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
-| 97 | `path-injection` | `services/audit_engine/engine.py:555` | C2 | GENUINE | VERIFIED_EXPLOIT | yes | fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms |
 | 98 | `path-injection` | `services/ai/policy.py:145` | C9 | NEEDS_VERIFICATION | PATTERN_ESTIMATE | unknown | AI policy path from tenant id; UI router unmounted in prod; verify other callers |
 | 99 | `path-injection` | `services/ai/policy.py:540` | C9 | NEEDS_VERIFICATION | PATTERN_ESTIMATE | unknown | AI policy path from tenant id; UI router unmounted in prod; verify other callers |
 | 124 | `sql-injection` | `api/rag_corpus_ingestion.py:964` | C9 | FALSE_POSITIVE_CANDIDATE | VERIFIED_CODE | yes | sort_dir allowlist check before interpolation |

@@ -1603,60 +1603,6 @@
    "wave": 4
   },
   {
-   "auth_required": "audit:export + capability audit.export",
-   "classification": "GENUINE",
-   "cluster": "C2",
-   "cluster_title": "Audit export filename built from raw start/end, not tenant-scoped",
-   "evidence": "VERIFIED_EXPLOIT",
-   "line": 549,
-   "note": "fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms",
-   "number": 95,
-   "path": "services/audit_engine/engine.py",
-   "production_reachable": "yes",
-   "rule": "py/path-injection",
-   "secret_exposure": "tenant audit bundle written outside root (reproduced)",
-   "severity": "high",
-   "source": "api/audit.py:127 ControlFlowNode for start",
-   "tenant_boundary_impact": "shared tenant-less filename; concurrent export substituted another tenant's records into an exam archive (reproduced)",
-   "wave": 2
-  },
-  {
-   "auth_required": "audit:export + capability audit.export",
-   "classification": "GENUINE",
-   "cluster": "C2",
-   "cluster_title": "Audit export filename built from raw start/end, not tenant-scoped",
-   "evidence": "VERIFIED_EXPLOIT",
-   "line": 550,
-   "note": "fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms",
-   "number": 96,
-   "path": "services/audit_engine/engine.py",
-   "production_reachable": "yes",
-   "rule": "py/path-injection",
-   "secret_exposure": "tenant audit bundle written outside root (reproduced)",
-   "severity": "high",
-   "source": "api/audit.py:127 ControlFlowNode for start",
-   "tenant_boundary_impact": "shared tenant-less filename; concurrent export substituted another tenant's records into an exam archive (reproduced)",
-   "wave": 2
-  },
-  {
-   "auth_required": "audit:export + capability audit.export",
-   "classification": "GENUINE",
-   "cluster": "C2",
-   "cluster_title": "Audit export filename built from raw start/end, not tenant-scoped",
-   "evidence": "VERIFIED_EXPLOIT",
-   "line": 555,
-   "note": "fix in CODEQL-REMEDIATE-006 (validated UTC window, tenant namespace, contained path); open until a main analysis confirms",
-   "number": 97,
-   "path": "services/audit_engine/engine.py",
-   "production_reachable": "yes",
-   "rule": "py/path-injection",
-   "secret_exposure": "tenant audit bundle written outside root (reproduced)",
-   "severity": "high",
-   "source": "api/audit.py:127 ControlFlowNode for start",
-   "tenant_boundary_impact": "shared tenant-less filename; concurrent export substituted another tenant's records into an exam archive (reproduced)",
-   "wave": 2
-  },
-  {
    "auth_required": "tenant",
    "classification": "NEEDS_VERIFICATION",
    "cluster": "C9",
@@ -1805,20 +1751,30 @@
   "VERIFIED_CODE",
   "PATTERN_ESTIMATE"
  ],
- "fixed_confirmed_on_main": {
-  "alerts": [
-   100,
-   101,
-   102,
-   103,
-   104,
-   105
-  ],
-  "analysis_id": 2164346692,
-  "main_sha": "3024ad926a6ab32fff341818a5e8f92e40783eaf",
-  "pr": 869
- },
- "main_sha": "3024ad926a6ab32fff341818a5e8f92e40783eaf",
- "open_alerts": 96,
+ "fixed_confirmed_on_main": [
+  {
+   "alerts": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105
+   ],
+   "main_sha": "3024ad926a6ab32fff341818a5e8f92e40783eaf",
+   "pr": 869
+  },
+  {
+   "alerts": [
+    95,
+    96,
+    97
+   ],
+   "main_sha": "7acd62cb81666db9322b31917bd2eeb8f0b002b8",
+   "pr": 870
+  }
+ ],
+ "main_sha": "7acd62cb81666db9322b31917bd2eeb8f0b002b8",
+ "open_alerts": 93,
  "schema": "fg.codeql.burndown.v1"
 }

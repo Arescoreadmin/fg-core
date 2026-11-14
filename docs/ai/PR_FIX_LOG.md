@@ -1,3 +1,38 @@
+## fix(security): EVIDENCE-ARTIFACT-TENANT-AUTH-001 — enforce canonical artifact ownership for evidence anchors and runs (branch security/evidence-artifact-tenant-auth-001)
+
+- **Work item:** EVIDENCE-ARTIFACT-TENANT-AUTH-001 (REPAIR). It is the P1 follow-up recorded by CODEQL-REMEDIATE-006.
+  - Base: `main` `7acd62cb`, 93 open CodeQL alerts, 0 dismissed. #95–#97 read `fixed` (analysis 2165152067).
+  - Audit: `docs/security/EVIDENCE_ARTIFACT_TENANT_AUTH_001.md`.
+- **Root cause:** `POST /evidence/anchors` (`compliance:read`) and `POST /evidence/runs/register` (`admin:write`) checked only that `artifact_path` resolved inside `FG_ARTIFACTS_DIR`. That root is shared by all tenants.
+- **Exploit:** reproduced on `main` with synthetic tenants. Tenant B:
+  - got tenant A's decision-evidence SHA-256 (200);
+  - stored an anchor and an evidence run claiming it;
+  - enumerated `decision_evidence/<id>.json` (200 vs 404);
+  - followed an in-root symlink to A's file;
+  - claimed `ai_plane_evidence.json`.
+  - The 404 body echoed the requested path.
+- **Change:**
+  - `services/artifact_paths.py`:
+    - `authorize_tenant_artifact`: after containment, the resolved path must match a `decision_evidence_artifacts` row for the bound tenant, before any read.
+    - `hash_authorized_artifact`: the file must match the recorded `evidence_sha256`; otherwise 409 `EVIDENCE_ARTIFACT_INTEGRITY_MISMATCH`.
+    - `PLATFORM_ARTIFACT_GRANTS`: one code-defined grant for the AI-plane evidence (`services.ai_plane_extension`, `register_run`), usable only through the internal `platform_authority=` argument.
+  - Both services use these checks.
+  - Routes return one 404 for foreign, unknown and missing artifacts: `evidence_anchor_artifact_not_found` with no `reason`, and `EVIDENCE_ARTIFACT_NOT_FOUND` for runs.
+  - Rows store the canonical path; responses add `artifact_ref`.
+  - `scripts/generate_ai_plane_evidence.py` presents the grant.
+- **Verification:**
+  - New `tests/security/test_evidence_artifact_tenant_authorization.py`, 18 tests: **14 fail on `main` `7acd62cb`**, 18 pass here.
+  - New `tests/decision_evidence_helpers.py` creates owned evidence through the real producer.
+  - Six existing tests used unowned in-root files. They now use owned decision evidence; their assertions are unchanged except one documented contract change: registering an unwritten tenant artifact returns 404 instead of storing `"missing"`.
+  - `test_evidence_runs_tenant_isolation` no longer has a tenant register the platform artifact.
+  - Evidence suites: 81 passed.
+- **Unchanged:** schemas, migrations, anchor receipt format, tenant scoping and listing, the decision evidence producer, containment.
+- **Behaviour change:** arbitrary in-root files, and other features' artifacts, are no longer anchorable. Each needs a per-producer owner adapter.
+- **Residual:**
+  - Historical anchor and run rows are not rewritten. An operator query to quarantine unprovable rows is in the audit doc.
+  - Platform grants are trusted by code review.
+- **Rollback:** revert the PR. There is no data change.
+
 ## fix(security): CODEQL-REMEDIATE-006 — tenant-bind audit exports and block path traversal (CodeQL #95–#97, branch security/codeql-remediate-006-audit-export)
 
 - **Work item:** CODEQL-REMEDIATE-006, wave 2 (REPAIR).

@@ -138,8 +138,10 @@ def test_evidence_anchor_happy_tenant_isolation_and_error_code(
     client, key_a, key_b = _setup_client(tmp_path)
     # Anchored artifacts must live under the artifact root (CODEQL-REMEDIATE-005).
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path))
-    artifact = tmp_path / "artifact.json"
-    artifact.write_text('{"ok":true}', encoding="utf-8")
+    # ...and be owned by the caller's tenant (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+    from tests.decision_evidence_helpers import emit_synthetic_decision_evidence
+
+    artifact, _ = emit_synthetic_decision_evidence("tenant-a", 1)
     created = client.post(
         "/evidence/anchors",
         json={"artifact_path": str(artifact), "immutable_retention": True},

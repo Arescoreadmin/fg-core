@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
+from services.artifact_paths import ArtifactIntegrityError, ArtifactNotAuthorized
 from services.evidence_anchor_extension import (
     EvidenceAnchorCreate,
     EvidenceAnchorService,
@@ -26,14 +27,15 @@ def create_anchor(
     tenant_id = require_bound_tenant(request)
     try:
         return service.create_anchor(db, tenant_id, payload)
-    except FileNotFoundError as exc:
+    except ArtifactNotAuthorized as exc:
+        # Foreign, unknown and missing artifacts share this one response, and
+        # it no longer echoes the requested path.
         raise HTTPException(
             status_code=404,
-            detail={
-                "error_code": "evidence_anchor_artifact_not_found",
-                "reason": str(exc),
-            },
+            detail={"error_code": "evidence_anchor_artifact_not_found"},
         ) from exc
+    except ArtifactIntegrityError as exc:
+        raise HTTPException(status_code=409, detail={"error_code": str(exc)}) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=400,

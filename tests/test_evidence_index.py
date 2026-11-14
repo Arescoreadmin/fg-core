@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from api.auth_scopes import mint_key
 from api.db import init_db, reset_engine_cache
 from api.main import build_app
+from tests.decision_evidence_helpers import emit_synthetic_decision_evidence
 
 
 def _setup(tmp_path: Path) -> tuple[TestClient, str, str]:
@@ -30,8 +31,9 @@ def test_evidence_index_register_and_tenant_isolation(
     client, key_a, key_b = _setup(tmp_path)
     # Registered artifacts must live under the artifact root (CODEQL-REMEDIATE-005).
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path))
-    p = tmp_path / "artifact.json"
-    p.write_text('{"ok":true}', encoding="utf-8")
+    # Registered artifacts must be owned by the caller's tenant
+    # (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+    p, _ = emit_synthetic_decision_evidence("tenant-a", 1)
     created = client.post(
         "/evidence/runs/register",
         json={

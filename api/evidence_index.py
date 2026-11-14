@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
-from services.artifact_paths import ArtifactPathError
+from services.artifact_paths import (
+    ArtifactIntegrityError,
+    ArtifactNotAuthorized,
+    ArtifactPathError,
+)
 from services.evidence_index import EvidenceIndexService
 
 router = APIRouter(tags=["evidence-index"])
@@ -75,3 +79,7 @@ def register_evidence_run(
         )
     except ArtifactPathError as exc:
         raise HTTPException(status_code=400, detail={"error_code": str(exc)}) from exc
+    except ArtifactNotAuthorized as exc:
+        raise HTTPException(status_code=404, detail={"error_code": str(exc)}) from exc
+    except ArtifactIntegrityError as exc:
+        raise HTTPException(status_code=409, detail={"error_code": str(exc)}) from exc
