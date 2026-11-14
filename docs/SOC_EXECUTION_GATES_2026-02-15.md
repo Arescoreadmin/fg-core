@@ -8589,3 +8589,52 @@ SOC review outcome: APPROVED for merge as a foundation. Not approved for a real 
 
 - **Gate exception added (called out).** `tools/ci/check_plane_registry.py` `EXACT_TENANT_BINDING_EXCEPTIONS` gains exactly one route: `PUT /admin/msp/organizations/{tenant_id}`. The path names the platform's designation target, not the caller; the route stays behind the internal admin gateway, `admin:write` and `platform.admin`, and accepts only customer-kind tenants. Precedent: `POST /admin/tenants/{tenant_id}/identity-bindings`. No other gate, threshold or check changed. The other eight routes now satisfy the scanner by resolving the caller's tenant (`resolve_authoritative_tenant`) in the route body.
 - **Correctness under forced RLS (Codex P1).** Mutation responses are serialized before `db.commit()`. Committing first cleared the transaction-local tenant context, so the response reload was hidden by RLS and returned 500 after the change persisted. Covered by `test_18b` (SQLite simulation; red on the previous commit) and a CI Postgres probe.
+
+## 2026-11-14 - feat(msp): MSP-002 — multi-client portfolio and customer approval console
+
+**Change scope:**
+- **Schema:** none. Migration 0206 is reused unchanged.
+- **Code (Core):**
+  - `api/msp.py`: two read-only routes (`/portfolio`, `/relationships/{id}/events`); `limit`/`offset` and `counterparty_display_name` on the relationship list; `_bind_console_gateway_tenant` added as the first dependency on all ten GET and POST MSP routes.
+  - `api/msp_portfolio.py`: summary composition. It is not an authority.
+  - `api/identity/store.py`: one audit event type, `tenant.msp.portfolio_summary_accessed`.
+- **Code (console):**
+  - BFF proxy rules plus delegated-actor classification for `admin/msp/{relationships,customers,portfolio}`, GET and POST only;
+  - `CORE_API_POLICIES` and two route audits;
+  - `/msp` and `/partners` pages and their helpers.
+- **Not changed:** schema, workflows, rulesets, required checks, CodeQL configuration, dependencies, CI gate code, MSP-001 authority semantics and RBAC.
+
+**Called out — authentication path:**
+- **The binder.** `_bind_console_gateway_tenant` reuses `api.entitlements._ensure_admin_gateway_tenant_bound`. For the admin-gateway credential it runs `bind_tenant_id` before the actor is resolved: delegation proof, then tenant-human authority, then tenant lifecycle. For any other credential it does nothing.
+- **Effect.** It makes the console's verified named human (DB roles only) the actor on MSP routes.
+- **What it does not do.** It widens no one. Core still accepts console delegation only for the tenant's unique, active, bound `tenant_admin`.
+- **Why it was needed.** Before the binder, these routes refused every console caller.
+
+**Called out — console proxy:**
+- New BFF allowlist entries cover `admin/msp/*`, GET and POST only.
+- The platform designation `PUT` is never proxied.
+- The tenant is always the session tenant. The customer id in `customers/{id}/context` is not parsed as a tenant.
+
+**Security analysis:**
+
+1. **No new authority.**
+   - The customer set and permissions come only from `list_actor_customers` (role ∩ approved ∩ read-only ceiling), re-evaluated on every request with no cache.
+   - Context selection grants nothing.
+2. **Per-customer, per-capability gating.**
+   - A summary is read only for a delegated capability, under that customer's RLS context. The CI Postgres probe shows the MSP context alone sees no customer rows.
+   - No cross-customer aggregation.
+   - A failure in one section of one customer is isolated and never echoed.
+3. **No information leakage beyond MSP-001.**
+   - An MSP sees a customer's name only after approval.
+   - History shows subjects only for the caller's own side.
+   - Summaries are counts and timestamps only.
+   - The console shows mapped messages only.
+4. **Attribution.** Each portfolio read of customer data is recorded on that customer's chain (actor, membership, MSP, customer, relationship, capabilities, correlation id). The chains still verify.
+5. **Residual risks:**
+   - the tenant-id oracle (MSP-001);
+   - the customer page shows the organization's own id for sharing;
+   - non-admin MSP staff have no console path;
+   - summary counts cover the newest 100 records per source (labelled);
+   - legacy delegation code remains (non-authoritative, regression-tested).
+
+SOC review outcome: APPROVED for merge as console enablement. Not approved for a real external MSP until `docs/msp/MSP_FIRST_CLIENT_READINESS.md` controls 2 (deployment), 10 and 13 pass.

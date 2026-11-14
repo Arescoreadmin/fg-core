@@ -1,3 +1,40 @@
+## feat(msp): MSP-002 — multi-client portfolio and customer approval console (branch feat/msp-002-portfolio-console)
+
+- **Work item:** MSP-002, founder-authorized on 2026-11-14 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`. Criteria (1) and (2) are not claimed.
+  - Base: `main` `ee1a31e12`.
+  - Scope audit: `docs/msp/MSP_002_REUSE_AND_SCOPE.md`.
+- **Defect found and fixed — MSP-001 routes were unusable from the console:**
+  - Through the console BFF (admin gateway plus delegation proof v3), Core verifies the proof and the named human only inside `bind_tenant_id`.
+  - The MSP-001 routes resolved the actor before anything bound the tenant. Propose worked only because `require_capability` binds first.
+  - List, approve, suspend, resume and revoke returned 403 `MSP_ACCESS_DENIED` (reproduced in `test_msp_002_console_transport.py`).
+  - Fix: `_bind_console_gateway_tenant` (which reuses `api.entitlements._ensure_admin_gateway_tenant_bound`) is now the first dependency on all ten GET and POST MSP routes. The platform designation `PUT` is unchanged.
+- **Added — Core:**
+  - `GET /admin/msp/portfolio`. Paginated (25 by default, 50 at most), stable order. Built by `api/msp_portfolio.py`, which is not an authority.
+    - Summaries come from `services/field_assessment/store`, read under each customer's RLS context and gated per delegated capability.
+    - States are `available`, `not_authorized`, `not_configured` and `unavailable`. Failures are isolated per section.
+  - `GET /admin/msp/relationships/{id}/events`. Reads only the caller's own chain. It shows the party that acted, shows subjects only for the caller's own side, and reports chain verification.
+  - `GET /admin/msp/relationships` gains `limit`/`offset` and `counterparty_display_name`. An MSP sees a customer's name only after approval.
+  - New audit event: `tenant.msp.portfolio_summary_accessed`, on the customer's chain.
+- **Added — console:**
+  - BFF rules for `admin/msp/{relationships,customers,portfolio}`, GET and POST only, as delegated named-actor calls. The designation `PUT` is never proxied.
+  - `CORE_API_POLICIES` entry and two route audits (`CLIENT_ADMIN_ROLES`).
+  - Pages `/msp` and `/partners`, components `components/msp/*`, `lib/mspApi.ts` and `lib/mspConsole.js` (with types).
+  - Links from `/admin/tenants/[tenantId]`.
+- **Not changed:**
+  - schema;
+  - MSP-001 authority semantics;
+  - RBAC;
+  - the navigation registry (MCIM documents required; deferred);
+  - legacy `cp_msp_delegation` (non-authoritative; test 26 proves it grants nothing; removal deferred because it is a CI invariant).
+- **Verification:**
+  - Backend red on `ee1a31e12`: 27 of 31 new tests fail. The 4 that pass are regression guards.
+  - Backend green: 31 of 31, including the 11-step first-client demonstration over the real console transport.
+  - Console: 23 new tests pass (2469 in the full console suite). On base they fail with a missing module.
+  - New Postgres probe `test_0206_msp_002_portfolio_reads_only_under_the_customer_context` (CI only).
+  - The MSP-001 route contract test now covers both new routes.
+- **Generated:** `make route-inventory-generate`. `make fg-contract` reported no contract diff (the new routes take no request bodies).
+- **Rollback:** revert the PR. There is no schema change, and the new audit events remain verifiable.
+
 ## fix(rbac): align P17 critical permission classification (branch fix/rbac-critical-permission-p17, PR #873)
 
 - **Problem:** `tests/test_h14_rbac.py::test_P17_critical_permissions_are_governance_or_platform` failed on `main`. Its invariant was that every `critical` permission starts with `risk.`, `exception.`, `governance.` or `platform.`. `scan.emergency_stop.platform` was added as `critical` by L14-SCAN-SAFETY-001 (#809), and it uses the `scan.` namespace.

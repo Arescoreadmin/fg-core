@@ -82,6 +82,8 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.msp.relationship_resumed",
         "tenant.msp.relationship_revoked",
         "tenant.msp.context_resolved",
+        # MSP-002: an MSP read a capability-gated summary (customer's chain)
+        "tenant.msp.portfolio_summary_accessed",
     }
 )
 INVITATION_TRANSITIONS = {

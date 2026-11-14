@@ -186,6 +186,8 @@ Constraints:
 
 ## Next MSP workstreams
 
+**MSP-002 delivered** (portfolio API, `/msp` and `/partners` console, relationship history). See `MSP_002_ARCHITECTURE.md`. It also fixed a defect in these routes: they resolved the actor before the console's delegation proof was verified, so the console could not call them.
+
 These are candidates, not approved work.
 
 | Order | Workstream | Why this order | Reuses |
