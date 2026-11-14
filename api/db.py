@@ -380,6 +380,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_principal"
     )  # PR-AUTH-001: fg_principals + fg_external_identities
+    importlib.import_module(
+        "api.db_models_msp"
+    )  # MSP-001: MSP designation + customer-approved service relationships
 
 
 def _get_base():

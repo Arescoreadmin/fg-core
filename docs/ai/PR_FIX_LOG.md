@@ -1,3 +1,46 @@
+## feat(msp): MSP-001 — secure partner and customer relationship foundation (branch feat/msp-001-foundation)
+
+- **Work item:** MSP-001, founder-authorized on 2026-11-13. It was added to `next_sequence` without claiming Freeze Law criteria (1) or (2).
+  - Base: `main` `e241e43b`, 93 open CodeQL alerts.
+  - Audit: `docs/msp/MSP_001_CAPABILITY_AUDIT.md`.
+- **Reused:**
+  - `tenants`, `tenant_users` and `fg_principals`;
+  - `ROLE_PERMISSIONS` and existing permission names;
+  - `check_tenant_admin_authority`, for the MSP admin and the customer approver;
+  - `resolve_authoritative_tenant`;
+  - `require_capability("msp.multi_tenant")`;
+  - `emit_identity_audit_event`;
+  - the internal admin gateway with `platform.admin`.
+  - No new role, permission, membership table, tenant registry or audit ledger.
+- **Added:**
+  - Migration 0206 and `api/db_models_msp.py`: `msp_organizations` (designation) and `msp_service_relationships`.
+    - Forced RLS: visible to the two parties only.
+    - One open relationship per pair; no self-relationship.
+    - Approved and revoked rows must be complete.
+  - `api/msp_authority.py`: the only MSP authority. It is DB-canonical, uncached, and intersection-only.
+  - `api/msp.py`: nine `/admin/msp/*` routes covering designation, propose, approve, suspend, resume, revoke, discovery, and context (validates and audits; grants nothing).
+  - 8 `tenant.msp.*` identity audit events.
+- **Pre-existing defect fixed:**
+  - `api/control_plane_v2.py` `_resolve_msp_tenant` gave any `control-plane:msp:*` credential:
+    - every tenant's control-plane data, via `?tenant_id=`;
+    - a global listing, with no filter.
+  - Reproduced on `main`: 200 and `tenant_scope: "global"`.
+  - Cross-tenant reads now need an active, customer-approved relationship delegating `governance.read`. Unfiltered queries see only the caller's tenant.
+  - `control_plane_msp_delegations` is documented as non-authoritative.
+- **Verification:**
+  - New `tests/security/test_msp_001_foundation.py`: 34 tests, all passing.
+    - On `main` all 34 error, because the routes are absent.
+    - The control-plane probe fails 2/2 on `main` and passes 2/2 here.
+  - 3 Postgres forced-RLS probe tests in `tests/test_migrations_postgres_replay.py`. They run in CI and skip locally.
+  - Tier A identity, tenant-admin, RBAC, control-plane and route suites: 1460 passed. The 1 failure (`test_h14_rbac::test_P17`) fails identically on unmodified `main`.
+  - Updated `test_msp_read_can_query_specific_tenant`: it now proves the scope alone is refused, and that an approved relationship allows the read.
+- **Generated:**
+  - `make route-inventory-generate`;
+  - `make fg-contract` (OpenAPI components for three request bodies);
+  - `make contract-authority-refresh` (`BLUEPRINT_STAGED.md` and `CONTRACT.md` markers).
+- **Unchanged:** customer data routes, evidence, reports, assessments, and tenant admin behaviour.
+- **Rollback:** revert the PR. Migration 0206 is additive.
+
 ## fix(security): EVIDENCE-ARTIFACT-TENANT-AUTH-001 — enforce canonical artifact ownership for evidence anchors and runs (branch security/evidence-artifact-tenant-auth-001)
 
 - **Work item:** EVIDENCE-ARTIFACT-TENANT-AUTH-001 (REPAIR). It is the P1 follow-up recorded by CODEQL-REMEDIATE-006.

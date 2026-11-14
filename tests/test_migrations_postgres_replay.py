@@ -1047,3 +1047,182 @@ def test_qa_reject_response_survives_commit_under_rls(_rls_probe) -> None:
         assert resp.status == "rejected" and resp.report_version == 1
     finally:
         db.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MSP-001 — migration 0206 forced RLS, exercised through the real authority and
+# audit code with a NOBYPASSRLS runtime role. All tenants are synthetic.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _msp_rls_probe(_mig_engine):
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.orm import sessionmaker
+
+    import api.db_models_msp  # noqa: F401 — registers MSP tables on Base
+
+    role = f"fg_msp_probe_{uuid.uuid4().hex[:10]}"
+    password = uuid.uuid4().hex
+    msp, cust, third = _uid("msp"), _uid("cust"), _uid("third")
+    rid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    with _mig_engine.begin() as su:
+        su.execute(
+            text(
+                f"CREATE ROLE {role} LOGIN PASSWORD '{password}' NOSUPERUSER NOBYPASSRLS"
+            )
+        )
+        su.execute(text(f"GRANT USAGE ON SCHEMA public TO {role}"))
+        su.execute(
+            text(
+                f"GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {role}"
+            )
+        )
+        for t in (msp, cust, third):
+            _insert_tenant(su, t)
+        su.execute(
+            text(
+                "INSERT INTO msp_organizations (tenant_id, status,"
+                " designated_by_subject, designated_at, status_changed_by_subject,"
+                " status_changed_at) VALUES (:m, 'active', 'synthetic', :n,"
+                " 'synthetic', :n)"
+            ),
+            {"m": msp, "n": now},
+        )
+        su.execute(
+            text(
+                "INSERT INTO msp_service_relationships (id, msp_tenant_id, tenant_id,"
+                " status, requested_capabilities, authorized_capabilities,"
+                " proposed_by_subject, proposed_at, approved_by_subject, approved_at,"
+                " effective_at, expires_at, version, created_at, updated_at) VALUES"
+                " (:id, :m, :c, 'approved', '[\"governance.read\"]',"
+                " '[\"governance.read\"]', 'synthetic-msp', :n, 'synthetic-cust', :n,"
+                " :e, :x, 2, :n, :n)"
+            ),
+            {
+                "id": rid,
+                "m": msp,
+                "c": cust,
+                "n": now,
+                "e": now - timedelta(minutes=1),
+                "x": now + timedelta(days=1),
+            },
+        )
+    url = make_url(str(_mig_engine.url)).set(username=role, password=password)
+    engine = create_engine(url, future=True)
+    sm = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
+    try:
+        yield sm, msp, cust, third, rid
+    finally:
+        engine.dispose()
+        with _mig_engine.begin() as su:
+            su.execute(
+                text(
+                    "DELETE FROM tenant_identity_audit_events WHERE tenant_id IN (:m, :c)"
+                ),
+                {"m": msp, "c": cust},
+            )
+            su.execute(
+                text("DELETE FROM msp_service_relationships WHERE id = :id"),
+                {"id": rid},
+            )
+            su.execute(
+                text("DELETE FROM msp_organizations WHERE tenant_id = :m"), {"m": msp}
+            )
+            su.execute(text(f"DROP OWNED BY {role}"))
+            su.execute(text(f"DROP ROLE {role}"))
+
+
+def test_0206_relationship_rows_visible_only_to_the_two_parties(_msp_rls_probe) -> None:
+    from api.db_models_msp import MspOrganization, MspServiceRelationship
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    for tenant, visible in ((cust, True), (msp, True), (third, False)):
+        db = sm()
+        try:
+            _bind(db, tenant)
+            assert (db.get(MspServiceRelationship, rid) is not None) is visible, tenant
+            assert (db.get(MspOrganization, msp) is not None) is (tenant == msp)
+        finally:
+            db.rollback()
+            db.close()
+    db = sm()  # no tenant context at all: nothing, no empty-context bypass
+    try:
+        assert db.get(MspServiceRelationship, rid) is None
+    finally:
+        db.close()
+
+
+def test_0206_third_tenant_cannot_write_a_relationship_for_others(
+    _msp_rls_probe,
+) -> None:
+    from sqlalchemy.exc import ProgrammingError
+
+    sm, msp, cust, third, _ = _msp_rls_probe
+    db = sm()
+    try:
+        _bind(db, third)
+        with pytest.raises(ProgrammingError):  # WITH CHECK violation
+            db.execute(
+                text(
+                    "INSERT INTO msp_service_relationships (id, msp_tenant_id,"
+                    " tenant_id, status, requested_capabilities, proposed_by_subject,"
+                    " proposed_at, created_at, updated_at) VALUES (:id, :m, :c,"
+                    " 'proposed', '[]', 'x', now(), now(), now())"
+                ),
+                {"id": str(uuid.uuid4()), "m": msp, "c": cust},
+            )
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_0206_authority_and_cross_chain_audit_work_under_forced_rls(
+    _msp_rls_probe,
+) -> None:
+    from fastapi import HTTPException
+
+    from api.identity.store import verify_identity_audit_chain
+    from api.msp_authority import emit_msp_audit, resolve_credential_access
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    db = sm()
+    try:
+        _bind(db, msp)  # the MSP credential's own context, as in production
+        access = resolve_credential_access(
+            db, msp_tenant_id=msp, customer_tenant_id=cust, required="governance.read"
+        )
+        assert access.relationship_id == rid
+        emit_msp_audit(
+            db,
+            chains=(cust, msp),
+            restore_tenant=msp,
+            event_type="tenant.msp.context_resolved",
+            actor_subject="synthetic-msp-staff",
+            membership_id=None,
+            reason_code="MSP_CONTEXT_RESOLVED",
+            msp_tenant_id=msp,
+            customer_tenant_id=cust,
+            relationship_id=rid,
+            operation="context.resolve",
+            capabilities=access.effective_permissions,
+        )
+        db.commit()
+        for tenant in (cust, msp):
+            _bind(db, tenant)
+            assert verify_identity_audit_chain(db, tenant)
+            db.rollback()
+        _bind(db, third)
+        with pytest.raises(HTTPException):
+            resolve_credential_access(
+                db,
+                msp_tenant_id=third,
+                customer_tenant_id=cust,
+                required="governance.read",
+            )
+    finally:
+        db.rollback()
+        db.close()
