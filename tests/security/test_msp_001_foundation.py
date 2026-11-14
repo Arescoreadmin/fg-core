@@ -618,6 +618,42 @@ def test_18_idempotency_rules(w):
     assert w.propose(w.msp_a_admin, CUST_1).json()["created"] is True
 
 
+def test_18b_mutation_responses_never_reload_rows_after_commit(w):
+    """Forced RLS hides a relationship once commit clears the transaction-local
+    tenant context, so a post-commit reload of an expired row 500s on Postgres.
+    SQLite has no RLS, so any post-commit reload is treated as that failure."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session, object_session
+
+    from api.db_models_msp import MspServiceRelationship
+
+    committed: set[int] = set()
+    reloads: list[str] = []
+
+    def _after_commit(session) -> None:
+        committed.add(id(session))
+
+    def _on_refresh(target, context, attrs) -> None:
+        sess = object_session(target)
+        if sess is not None and id(sess) in committed:
+            reloads.append(str(target.id))
+
+    event.listen(Session, "after_commit", _after_commit)
+    event.listen(MspServiceRelationship, "refresh", _on_refresh, propagate=True)
+    try:
+        rid = w.propose(w.msp_a_admin, CUST_1).json()["relationship_id"]
+        assert w.approve(w.c1_admin, rid).status_code == 200
+        assert w.act(w.c1_admin, rid, "suspend").status_code == 200
+        assert w.act(w.c1_admin, rid, "resume").status_code == 200
+        revoked = w.act(w.c1_admin, rid, "revoke")
+        assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
+    finally:
+        event.remove(MspServiceRelationship, "refresh", _on_refresh)
+        event.remove(Session, "after_commit", _after_commit)
+
+    assert reloads == [], "relationship rows reloaded after commit"
+
+
 # ---------------------------------------------------------------------------
 # 19-20. Attribution and offboarding
 # ---------------------------------------------------------------------------

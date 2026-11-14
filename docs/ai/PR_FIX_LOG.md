@@ -41,6 +41,15 @@
   - `make contract-authority-refresh` (`BLUEPRINT_STAGED.md` and `CONTRACT.md` markers).
 - **Unchanged:** customer data routes, evidence, reports, assessments, and tenant admin behaviour.
 - **Rollback:** revert the PR. Migration 0206 is additive.
+- **Follow-up (PR #872 review and CI):**
+  - **Codex P1:** propose, approve, suspend, resume and revoke built `relationship_view(row)` after `db.commit()`. On Postgres the commit clears the transaction-local `app.tenant_id` and expires the row, so forced RLS hides the reload (`ObjectDeletedError`, 500 after the change persisted). Responses are now serialized before commit.
+    - New `test_18b`: fails on the previous commit (6 post-commit reloads), passes here.
+    - New Postgres probe `test_0206_relationship_view_must_be_built_before_commit` (CI only).
+  - **CI `control-plane-check`** (in `fg-fast-ci` and the `fg-contract` drift lane) failed all nine routes with "missing tenant binding". The scanner recognises only tenant resolution called in the route body.
+    - Renamed `_caller_tenant` to `_caller_tenant_from_auth` (a recognised suffix; same behaviour: bound credential only).
+    - Suspend and resume now resolve the caller in the route body.
+    - `PUT /admin/msp/organizations/{tenant_id}` has no caller tenant (the path names the platform's target), so it gets an exact entry in `EXACT_TENANT_BINDING_EXCEPTIONS` (`tools/ci/check_plane_registry.py`), following `/admin/tenants/{tenant_id}/identity-bindings`.
+    - Route inventory regenerated.
 
 ## fix(security): EVIDENCE-ARTIFACT-TENANT-AUTH-001 — enforce canonical artifact ownership for evidence anchors and runs (branch security/evidence-artifact-tenant-auth-001)
 

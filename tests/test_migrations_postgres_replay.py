@@ -1226,3 +1226,29 @@ def test_0206_authority_and_cross_chain_audit_work_under_forced_rls(
     finally:
         db.rollback()
         db.close()
+
+
+def test_0206_relationship_view_must_be_built_before_commit(_msp_rls_probe) -> None:
+    """Codex P1 (#872): commit clears app.tenant_id and expires the row, so a
+    post-commit relationship_view() reload is hidden by forced RLS. The MSP
+    mutation routes therefore serialize the response before committing."""
+    from sqlalchemy.orm.exc import ObjectDeletedError
+
+    from api.db_models_msp import MspServiceRelationship
+    from api.msp_authority import relationship_view
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    db = sm()
+    try:
+        _bind(db, cust)
+        row = db.get(MspServiceRelationship, rid)
+        assert row is not None
+        row.updated_at = row.updated_at  # a write in the customer's context
+        view = relationship_view(row)  # built while the context is bound
+        db.commit()
+        assert view["relationship_id"] == rid
+        with pytest.raises(ObjectDeletedError):
+            relationship_view(row)  # what the routes did before the fix
+    finally:
+        db.rollback()
+        db.close()

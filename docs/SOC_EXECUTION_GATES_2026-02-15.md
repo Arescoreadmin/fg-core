@@ -8584,3 +8584,8 @@ SOC review outcome: APPROVED. Closes cross-tenant evidence fingerprinting and fo
    - No CodeQL alert was dismissed or excluded.
 
 SOC review outcome: APPROVED for merge as a foundation. Not approved for a real external MSP until `docs/msp/MSP_FIRST_CLIENT_READINESS.md` controls 2, 5, 10 and 13 pass.
+
+**Follow-up (PR #872 review and CI):**
+
+- **Gate exception added (called out).** `tools/ci/check_plane_registry.py` `EXACT_TENANT_BINDING_EXCEPTIONS` gains exactly one route: `PUT /admin/msp/organizations/{tenant_id}`. The path names the platform's designation target, not the caller; the route stays behind the internal admin gateway, `admin:write` and `platform.admin`, and accepts only customer-kind tenants. Precedent: `POST /admin/tenants/{tenant_id}/identity-bindings`. No other gate, threshold or check changed. The other eight routes now satisfy the scanner by resolving the caller's tenant (`resolve_authoritative_tenant`) in the route body.
+- **Correctness under forced RLS (Codex P1).** Mutation responses are serialized before `db.commit()`. Committing first cleared the transaction-local tenant context, so the response reload was hidden by RLS and returned 500 after the change persisted. Covered by `test_18b` (SQLite simulation; red on the previous commit) and a CI Postgres probe.

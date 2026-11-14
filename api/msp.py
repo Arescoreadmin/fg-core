@@ -112,7 +112,7 @@ class ApproveRelationshipBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _caller_tenant(request: Request, actor_ctx: ActorContext) -> str:
+def _caller_tenant_from_auth(request: Request, actor_ctx: ActorContext) -> str:
     """The caller's own tenant, from the bound credential only."""
     tenant = str(actor_ctx.tenant_id or "").strip()
     if not tenant:
@@ -288,7 +288,7 @@ def list_relationships(
 
     Customers see every MSP that has asked for or holds access to them.
     """
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
     rows = (
         db.query(MspServiceRelationship)
@@ -329,7 +329,7 @@ def propose_relationship(
     proposal is pending returns it with ``created: false``; any other open
     relationship for the pair is a 409.
     """
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     authority = check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
     if not msp_organization_active(db, caller):
         raise msp_error(403, MSP_ORGANIZATION_INACTIVE)
@@ -387,8 +387,9 @@ def propose_relationship(
         membership_id=authority.membership_id,
         operation="relationship.propose",
     )
+    view = {**relationship_view(row), "created": True}
     db.commit()
-    return {**relationship_view(row), "created": True}
+    return view
 
 
 @router.post(
@@ -407,7 +408,7 @@ def approve_relationship(
     The approver may narrow but never widen the requested capabilities, and
     may not hold any active membership in the MSP organization.
     """
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     row = _party_relationship(db, relationship_id, caller)
     authority = _customer_admin(db, request, actor_ctx, row, caller)
     if authority.subject == str(row.proposed_by_subject) or principal_is_member_of(
@@ -459,12 +460,14 @@ def approve_relationship(
         membership_id=authority.membership_id,
         operation="relationship.approve",
     )
+    view = relationship_view(row)
     db.commit()
-    return relationship_view(row)
+    return view
 
 
 def _customer_status_change(
     *,
+    caller: str,
     relationship_id: str,
     request: Request,
     actor_ctx: ActorContext,
@@ -475,7 +478,6 @@ def _customer_status_change(
     reason_code: str,
     operation: str,
 ) -> dict[str, Any]:
-    caller = _caller_tenant(request, actor_ctx)
     row = _party_relationship(db, relationship_id, caller)
     authority = _customer_admin(db, request, actor_ctx, row, caller)
     _transition(db, row, expected=expected, values=values)
@@ -491,8 +493,9 @@ def _customer_status_change(
         membership_id=authority.membership_id,
         operation=operation,
     )
+    view = relationship_view(row)
     db.commit()
-    return relationship_view(row)
+    return view
 
 
 @router.post(
@@ -507,6 +510,7 @@ def suspend_relationship(
 ) -> dict[str, Any]:
     """The customer pauses MSP access. Effective on the next check."""
     return _customer_status_change(
+        caller=_caller_tenant_from_auth(request, actor_ctx),
         relationship_id=relationship_id,
         request=request,
         actor_ctx=actor_ctx,
@@ -532,6 +536,7 @@ def resume_relationship(
     """The customer resumes a suspended relationship. The original approval
     window still applies; an expired approval stays expired."""
     return _customer_status_change(
+        caller=_caller_tenant_from_auth(request, actor_ctx),
         relationship_id=relationship_id,
         request=request,
         actor_ctx=actor_ctx,
@@ -559,7 +564,7 @@ def revoke_relationship(
     Customer data, evidence and audit history are untouched. Idempotent: an
     already revoked relationship returns ``changed: false``.
     """
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     row = _party_relationship(db, relationship_id, caller)
     authority = check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
     if str(row.status) == "revoked":
@@ -588,8 +593,9 @@ def revoke_relationship(
         membership_id=authority.membership_id,
         operation=f"relationship.revoke.{party}",
     )
+    view = {**relationship_view(row), "changed": True}
     db.commit()
-    return {**relationship_view(row), "changed": True}
+    return view
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +617,7 @@ def list_authorized_customers(
 ) -> dict[str, Any]:
     """Customers this MSP member can act for right now, with the permissions
     they can use for each. Nothing else is listed."""
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     membership = resolve_msp_membership(db, actor_ctx=actor_ctx, msp_tenant_id=caller)
     items = []
     for row, effective in list_actor_customers(db, membership=membership):
@@ -650,7 +656,7 @@ def resolve_customer_context(
     re-runs the same check, so suspension, revocation, expiry and membership
     removal apply to the very next request.
     """
-    caller = _caller_tenant(request, actor_ctx)
+    caller = _caller_tenant_from_auth(request, actor_ctx)
     membership, access = resolve_actor_access(
         db,
         actor_ctx=actor_ctx,

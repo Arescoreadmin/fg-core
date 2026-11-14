@@ -1602,7 +1602,8 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "GET",
@@ -1614,12 +1615,13 @@
         "admin:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1631,7 +1633,7 @@
         "admin:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -1653,7 +1655,8 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "GET",
@@ -1665,12 +1668,13 @@
         "admin:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1682,12 +1686,13 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1699,12 +1704,13 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1716,12 +1722,13 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1733,12 +1740,13 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/msp.py",
       "method": "POST",
@@ -1750,7 +1758,7 @@
         "admin:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -21628,7 +21636,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-11-14T04:12:41.170065+00:00",
+  "generated_at": "2026-11-14T12:07:43.391469+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
