@@ -64,6 +64,9 @@ def main() -> int:
                 summary_json={"simulated_mode": True},
                 retention_class="hot",
                 anchor_status="none",
+                # Platform artifact: authorized by the code-defined grant in
+                # services/artifact_paths.py, not by tenant ownership.
+                platform_authority="services.ai_plane_extension",
             )
     except Exception:
         # degraded mode: artifact already written; mark index unavailable finding

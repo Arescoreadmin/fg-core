@@ -25,6 +25,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
+from tests.decision_evidence_helpers import emit_synthetic_decision_evidence
 
 _SECRET = b"FG_SYNTHETIC_SECRET=never-reveal-this-value-0123456789\n"
 _SECRET_SHA = hashlib.sha256(_SECRET).hexdigest()
@@ -118,8 +119,8 @@ def test_anchor_is_not_an_existence_oracle(env):
 
 
 def test_anchor_inside_root_still_works(env):
-    artifact = env["root"] / "evidence.json"
-    artifact.write_text('{"ok":true}', encoding="utf-8")
+    # In-root artifacts must also be owned (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+    artifact, _ = emit_synthetic_decision_evidence("tenant-a", 1)
 
     resp = _anchor(env, str(artifact))
 
@@ -156,8 +157,8 @@ def test_register_is_not_an_existence_oracle(env):
 
 
 def test_register_inside_root_still_works(env):
-    artifact = env["root"] / "ai_plane_evidence.json"
-    artifact.write_text('{"ok":true}', encoding="utf-8")
+    # In-root artifacts must also be owned (EVIDENCE-ARTIFACT-TENANT-AUTH-001).
+    artifact, _ = emit_synthetic_decision_evidence("tenant-a", 1)
 
     ok = _register(env, str(artifact))
     assert ok.status_code == 200, ok.text
@@ -166,21 +167,42 @@ def test_register_inside_root_still_works(env):
         == hashlib.sha256(artifact.read_bytes()).hexdigest()
     )
 
+    # Contract change (EVIDENCE-ARTIFACT-TENANT-AUTH-001): an unowned or
+    # unwritten tenant artifact is refused like a foreign one, not recorded
+    # as "missing". Platform producers keep the "missing" degraded path.
     missing = _register(env, str(env["root"] / "not-yet-written.json"))
-    assert missing.status_code == 200
-    assert missing.json()["artifact_sha256"] == "missing"
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["error_code"] == "EVIDENCE_ARTIFACT_NOT_FOUND"
 
 
 def test_relative_path_under_default_root_still_works(env, monkeypatch, tmp_path):
     """The AI-plane evidence generator registers ``artifacts/...`` relative
-    to the working directory; that contract must keep working."""
+    to the working directory; that contract must keep working. It calls the
+    service directly, as a platform producer holding the code-defined grant
+    (EVIDENCE-ARTIFACT-TENANT-AUTH-001); tenants cannot use that grant."""
+    from api.db import get_sessionmaker
+    from services.evidence_index import EvidenceIndexService
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FG_ARTIFACTS_DIR", "artifacts")
     (tmp_path / "artifacts" / "ai_plane_evidence.json").write_text(
         "{}", encoding="utf-8"
     )
 
-    resp = _register(env, "artifacts/ai_plane_evidence.json")
+    with get_sessionmaker()() as db:
+        run = EvidenceIndexService().register_run(
+            db,
+            tenant_id="tenant-a",
+            plane_id="ai_plane",
+            artifact_type="ai_plane_evidence",
+            artifact_path="artifacts/ai_plane_evidence.json",
+            schema_version="v1",
+            git_sha="abc",
+            status="PASS",
+            summary_json={},
+            retention_class="hot",
+            anchor_status="none",
+            platform_authority="services.ai_plane_extension",
+        )
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["artifact_sha256"] != "missing"
+    assert run["artifact_sha256"] != "missing"
