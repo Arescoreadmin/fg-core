@@ -1119,12 +1119,9 @@ def _msp_rls_probe(_mig_engine):
     finally:
         engine.dispose()
         with _mig_engine.begin() as su:
-            su.execute(
-                text(
-                    "DELETE FROM tenant_identity_audit_events WHERE tenant_id IN (:m, :c)"
-                ),
-                {"m": msp, "c": cust},
-            )
+            # tenant_identity_audit_events is append-only (append_only_guard
+            # rejects DELETE even for the superuser); the probe's audit rows
+            # stay, keyed to these unique synthetic tenant ids.
             su.execute(
                 text("DELETE FROM msp_service_relationships WHERE id = :id"),
                 {"id": rid},
