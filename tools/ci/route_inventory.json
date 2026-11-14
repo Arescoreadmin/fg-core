@@ -1605,6 +1605,167 @@
         "rate",
         "tenant"
       ],
+      "file": "api/msp.py",
+      "method": "GET",
+      "path": "/admin/msp/customers",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/customers/{customer_tenant_id}/context",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/msp.py",
+      "method": "PUT",
+      "path": "/admin/msp/organizations/{tenant_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "GET",
+      "path": "/admin/msp/relationships",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/relationships",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/relationships/{relationship_id}/approve",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/relationships/{relationship_id}/resume",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/relationships/{relationship_id}/revoke",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/msp.py",
+      "method": "POST",
+      "path": "/admin/msp/relationships/{relationship_id}/suspend",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/subscriptions.py",
       "method": "POST",
       "path": "/admin/subscriptions/contracts",
@@ -21475,7 +21636,7 @@
       "tenant_bound": true
     }
   ],
-  "generated_at": "2026-11-10T13:34:26.254846+00:00",
+  "generated_at": "2026-11-14T12:07:43.391469+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

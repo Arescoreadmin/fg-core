@@ -369,3 +369,14 @@ authority proof.
 - `api/main.py` — router registration in both dev and prod app builders.
 - `tests/test_tenant_admin_001.py` — 63 tests across 14 groups (A–N).
 - `docs/architecture/tenant-admin-001.md` — this document.
+
+---
+
+## MSP-001 cross-tenant delegation (reuses this authority)
+
+TENANT-ADMIN-001 remains single-tenant. MSP-001 (`docs/msp/MSP_001_ARCHITECTURE.md`) reuses `check_tenant_admin_authority` in two roles:
+
+- on the **MSP tenant**, to propose or end a service relationship;
+- on the **customer tenant**, to approve, suspend, resume or revoke one. The approver must hold no membership in the MSP.
+
+A customer `tenant_admin` delegates only a time-boxed, read-only permission set. It never assigns roles in another tenant and never delegates any of its own administrative permissions. `DELEGATABLE_ROLES` and `FORBIDDEN_DELEGATION_ROLES` are unchanged.

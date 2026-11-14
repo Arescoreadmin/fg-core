@@ -60,6 +60,10 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # tenant being provisioned, not the caller. Caller authenticates via admin:write
     # scope; isolation enforced by provision_tenant_organization, not auth context.
     ("POST", "/admin/tenants/{tenant_id}/identity-bindings"),
+    # MSP-001 platform designation: tenant_id in path is the customer tenant
+    # being designated as an MSP, not the caller. Internal admin gateway +
+    # admin:write + platform.admin; the target must be a customer-kind tenant.
+    ("PUT", "/admin/msp/organizations/{tenant_id}"),
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
     # C7 portal grant/session routes enforce tenant isolation through
     # PortalGrantSession validation and PortalScopeMiddleware rather than

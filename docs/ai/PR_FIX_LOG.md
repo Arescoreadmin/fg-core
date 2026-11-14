@@ -1,3 +1,56 @@
+## feat(msp): MSP-001 — secure partner and customer relationship foundation (branch feat/msp-001-foundation)
+
+- **Work item:** MSP-001, founder-authorized on 2026-11-13. It was added to `next_sequence` without claiming Freeze Law criteria (1) or (2).
+  - Base: `main` `e241e43b`, 93 open CodeQL alerts.
+  - Audit: `docs/msp/MSP_001_CAPABILITY_AUDIT.md`.
+- **Reused:**
+  - `tenants`, `tenant_users` and `fg_principals`;
+  - `ROLE_PERMISSIONS` and existing permission names;
+  - `check_tenant_admin_authority`, for the MSP admin and the customer approver;
+  - `resolve_authoritative_tenant`;
+  - `require_capability("msp.multi_tenant")`;
+  - `emit_identity_audit_event`;
+  - the internal admin gateway with `platform.admin`.
+  - No new role, permission, membership table, tenant registry or audit ledger.
+- **Added:**
+  - Migration 0206 and `api/db_models_msp.py`: `msp_organizations` (designation) and `msp_service_relationships`.
+    - Forced RLS: visible to the two parties only.
+    - One open relationship per pair; no self-relationship.
+    - Approved and revoked rows must be complete.
+  - `api/msp_authority.py`: the only MSP authority. It is DB-canonical, uncached, and intersection-only.
+  - `api/msp.py`: nine `/admin/msp/*` routes covering designation, propose, approve, suspend, resume, revoke, discovery, and context (validates and audits; grants nothing).
+  - 8 `tenant.msp.*` identity audit events.
+- **Pre-existing defect fixed:**
+  - `api/control_plane_v2.py` `_resolve_msp_tenant` gave any `control-plane:msp:*` credential:
+    - every tenant's control-plane data, via `?tenant_id=`;
+    - a global listing, with no filter.
+  - Reproduced on `main`: 200 and `tenant_scope: "global"`.
+  - Cross-tenant reads now need an active, customer-approved relationship delegating `governance.read`. Unfiltered queries see only the caller's tenant.
+  - `control_plane_msp_delegations` is documented as non-authoritative.
+- **Verification:**
+  - New `tests/security/test_msp_001_foundation.py`: 34 tests, all passing.
+    - On `main` all 34 error, because the routes are absent.
+    - The control-plane probe fails 2/2 on `main` and passes 2/2 here.
+  - 3 Postgres forced-RLS probe tests in `tests/test_migrations_postgres_replay.py`. They run in CI and skip locally.
+  - New `tests/security/test_msp_001_route_contract.py`, 3 tests: all nine routes are mounted and refuse no auth, a wrong scope and a tenant mismatch; the core contract publishes the three bodies (closed to extra fields) and no `/admin/msp` paths.
+  - Tier A identity, tenant-admin, RBAC, control-plane and route suites: 1460 passed. The 1 failure (`test_h14_rbac::test_P17`) fails identically on unmodified `main`.
+  - Updated `test_msp_read_can_query_specific_tenant`: it now proves the scope alone is refused, and that an approved relationship allows the read.
+- **Generated:**
+  - `make route-inventory-generate`;
+  - `make fg-contract` (OpenAPI components for three request bodies);
+  - `make contract-authority-refresh` (`BLUEPRINT_STAGED.md` and `CONTRACT.md` markers).
+- **Unchanged:** customer data routes, evidence, reports, assessments, and tenant admin behaviour.
+- **Rollback:** revert the PR. Migration 0206 is additive.
+- **Follow-up (PR #872 review and CI):**
+  - **Codex P1:** propose, approve, suspend, resume and revoke built `relationship_view(row)` after `db.commit()`. On Postgres the commit clears the transaction-local `app.tenant_id` and expires the row, so forced RLS hides the reload (`ObjectDeletedError`, 500 after the change persisted). Responses are now serialized before commit.
+    - New `test_18b`: fails on the previous commit (6 post-commit reloads), passes here.
+    - New Postgres probe `test_0206_relationship_view_must_be_built_before_commit` (CI only).
+  - **CI `control-plane-check`** (in `fg-fast-ci` and the `fg-contract` drift lane) failed all nine routes with "missing tenant binding". The scanner recognises only tenant resolution called in the route body.
+    - Renamed `_caller_tenant` to `_caller_tenant_from_auth` (a recognised suffix; same behaviour: bound credential only).
+    - Suspend and resume now resolve the caller in the route body.
+    - `PUT /admin/msp/organizations/{tenant_id}` has no caller tenant (the path names the platform's target), so it gets an exact entry in `EXACT_TENANT_BINDING_EXCEPTIONS` (`tools/ci/check_plane_registry.py`), following `/admin/tenants/{tenant_id}/identity-bindings`.
+    - Route inventory regenerated.
+
 ## fix(security): EVIDENCE-ARTIFACT-TENANT-AUTH-001 — enforce canonical artifact ownership for evidence anchors and runs (branch security/evidence-artifact-tenant-auth-001)
 
 - **Work item:** EVIDENCE-ARTIFACT-TENANT-AUTH-001 (REPAIR). It is the P1 follow-up recorded by CODEQL-REMEDIATE-006.
