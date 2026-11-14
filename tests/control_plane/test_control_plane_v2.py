@@ -1240,6 +1240,45 @@ class TestEvidenceBundleAPI:
         assert resp.status_code == 200
 
 
+def _seed_approved_msp_relationship(msp_tenant: str, customer: str) -> None:
+    """Synthetic designation + customer-approved relationship (MSP-001)."""
+    from api.db import get_sessionmaker
+    from api.db_models_msp import MspOrganization, MspServiceRelationship
+
+    now = datetime.now(timezone.utc)
+    with get_sessionmaker()() as db:
+        db.add(
+            MspOrganization(
+                tenant_id=msp_tenant,
+                status="active",
+                designated_by_subject="synthetic-platform",
+                designated_at=now,
+                status_changed_by_subject="synthetic-platform",
+                status_changed_at=now,
+            )
+        )
+        db.add(
+            MspServiceRelationship(
+                id=str(uuid.uuid4()),
+                msp_tenant_id=msp_tenant,
+                tenant_id=customer,
+                status="approved",
+                requested_capabilities='["governance.read"]',
+                authorized_capabilities='["governance.read"]',
+                proposed_by_subject="synthetic-msp-admin",
+                proposed_at=now,
+                approved_by_subject="synthetic-customer-admin",
+                approved_at=now,
+                effective_at=now - timedelta(minutes=1),
+                expires_at=now + timedelta(days=1),
+                version=2,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+
+
 class TestMSPIsolation:
     """Tests for MSP cross-tenant access controls."""
 
@@ -1255,7 +1294,16 @@ class TestMSPIsolation:
         assert resp.status_code == 404
 
     def test_msp_read_can_query_specific_tenant(self, app_client, msp_read_key):
-        """MSP read scope with explicit tenant_id must succeed."""
+        """MSP read scope with explicit tenant_id succeeds only when the
+        customer approved an active MSP relationship delegating governance.read
+        (MSP-001). The scope alone is refused like any other foreign tenant."""
+        refused = app_client.get(
+            "/control-plane/v2/ledger?tenant_id=tenant-alpha",
+            headers=_headers(msp_read_key),
+        )
+        assert refused.status_code == 404
+
+        _seed_approved_msp_relationship("msp-provider", "tenant-alpha")
         resp = app_client.get(
             "/control-plane/v2/ledger?tenant_id=tenant-alpha",
             headers=_headers(msp_read_key),

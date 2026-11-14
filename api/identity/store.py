@@ -73,6 +73,15 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.workforce.user_reactivated",
         "tenant.workforce.user_role_changed",
         "tenant.workforce.user_revoked",
+        # MSP-001 delegated service-provider events (written to each party's chain)
+        "tenant.msp.organization_designated",
+        "tenant.msp.organization_suspended",
+        "tenant.msp.relationship_proposed",
+        "tenant.msp.relationship_approved",
+        "tenant.msp.relationship_suspended",
+        "tenant.msp.relationship_resumed",
+        "tenant.msp.relationship_revoked",
+        "tenant.msp.context_resolved",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -238,6 +247,13 @@ def emit_identity_audit_event(
         "role_change_reason",
         "revoked_by",
         "revocation_reason",
+        # MSP-001 attribution keys (identifiers and permission names only)
+        "msp_tenant_id",
+        "customer_tenant_id",
+        "relationship_id",
+        "operation",
+        "capabilities",
+        "result",
     }
     safe_details = {k: v for k, v in (details or {}).items() if k in safe_keys}
     created_at = _now()

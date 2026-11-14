@@ -3,6 +3,12 @@ services/cp_msp_delegation.py — FrostGate Control Plane v2 MSP Delegation Serv
 
 Phase 4: MSP Delegated Administration.
 
+MSP-001 status: NON-AUTHORITATIVE. These records grant no access: nothing in
+the request path consults ``check_delegation``, and they are not customer
+approved. The canonical MSP authority is ``api/msp_authority.py`` (customer-
+approved ``msp_service_relationships``). Do not wire these records into an
+access decision; see docs/msp/MSP_001_ARCHITECTURE.md.
+
 Delegation model:
   - An MSP actor (with control-plane:msp:admin scope) may create a delegation
     record granting another actor limited read/write access to a specific tenant.

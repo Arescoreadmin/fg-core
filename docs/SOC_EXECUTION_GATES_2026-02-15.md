@@ -8550,3 +8550,42 @@ SOC review outcome: APPROVED. Audit exports can no longer be written outside the
 5. **Alert integrity.** No CodeQL alert was dismissed and no rule or path was excluded.
 
 SOC review outcome: APPROVED. Closes cross-tenant evidence fingerprinting and forged provenance through the evidence APIs.
+
+## 2026-11-13 - feat(msp): MSP-001 — secure partner and customer relationship foundation
+
+**Change scope:**
+- **Schema:** migration `0206_msp_service_relationships.sql` (two tables, forced RLS), mirrored by `api/db_models_msp.py`.
+- **Code:**
+  - `api/msp_authority.py`: the only MSP authority.
+  - `api/msp.py`: nine `/admin/msp/*` routes.
+  - `api/identity/store.py`: 8 `tenant.msp.*` audit event types and 6 safe detail keys.
+  - `api/control_plane_v2.py`: the MSP scope now requires a relationship.
+  - `services/cp_msp_delegation.py`: marked non-authoritative (docstring only).
+  - `api/main.py` and `api/db.py`: router mount and model registration.
+- **Generated:** route inventory, OpenAPI components and contract authority markers, all from repo generators.
+- **Governance:** `customer_one/roadmap_authority.yaml` records the founder authorization.
+- **Not changed:** workflows, rulesets, required checks, CodeQL configuration and dependencies.
+
+**Security analysis:**
+
+1. **The pre-existing exposure is demonstrated.** On `main`, a synthetic `control-plane:msp:read` credential bound to tenant M read another tenant's control-plane ledger (200). With no filter it received a global listing. Both are closed: cross-tenant reads need an active, customer-approved relationship that delegates `governance.read`; otherwise the same 404 as for any foreign tenant.
+2. **No self-granted authority.**
+   - Only the customer's DB-canonical `tenant_admin` approves.
+   - The approver may not be the proposer, and may not hold any membership in the MSP.
+   - The platform designates or suspends partners but cannot approve.
+   - MSP membership alone grants nothing.
+3. **Intersection, never union.** Effective permissions are the member's DB role ∩ the customer's approved capabilities ∩ a read-only ceiling. They are re-checked from the database on every request; nothing is cached. Suspension, revocation, expiry, membership removal and partner suspension apply on the next request.
+4. **No new data path.** MSP-001 opens no MSP route into customer data. Existing tenant routes still deny MSP credentials. Offboarding leaves evidence and audit history customer-owned and verifiable.
+5. **Attribution.** Every relationship and context event goes to both parties' identity audit hash chains. Each event binds actor, membership, MSP, customer, relationship, capabilities, operation and correlation id.
+6. **Residual and pending:**
+   - Forced RLS for 0206 is proven only by the CI Postgres replay probes.
+   - A tenant-id existence oracle remains for designated MSP admins.
+   - Legacy `admin:write` keys satisfy `platform.admin` outside the internal gateway in non-production.
+   - No CodeQL alert was dismissed or excluded.
+
+SOC review outcome: APPROVED for merge as a foundation. Not approved for a real external MSP until `docs/msp/MSP_FIRST_CLIENT_READINESS.md` controls 2, 5, 10 and 13 pass.
+
+**Follow-up (PR #872 review and CI):**
+
+- **Gate exception added (called out).** `tools/ci/check_plane_registry.py` `EXACT_TENANT_BINDING_EXCEPTIONS` gains exactly one route: `PUT /admin/msp/organizations/{tenant_id}`. The path names the platform's designation target, not the caller; the route stays behind the internal admin gateway, `admin:write` and `platform.admin`, and accepts only customer-kind tenants. Precedent: `POST /admin/tenants/{tenant_id}/identity-bindings`. No other gate, threshold or check changed. The other eight routes now satisfy the scanner by resolving the caller's tenant (`resolve_authoritative_tenant`) in the route body.
+- **Correctness under forced RLS (Codex P1).** Mutation responses are serialized before `db.commit()`. Committing first cleared the transaction-local tenant context, so the response reload was hidden by RLS and returned 500 after the change persisted. Covered by `test_18b` (SQLite simulation; red on the previous commit) and a CI Postgres probe.

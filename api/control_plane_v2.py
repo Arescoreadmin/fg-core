@@ -24,7 +24,8 @@ Endpoints:
 Global Security Invariants (all enforced, no bypass):
   - tenant_id ALWAYS from auth context; NEVER from request headers/body.
   - All write endpoints require control-plane:admin scope.
-  - MSP cross-tenant requires control-plane:msp:read or :msp:admin scope.
+  - MSP cross-tenant requires control-plane:msp:read or :msp:admin scope AND an
+    active, customer-approved MSP relationship (MSP-001, api/msp_authority.py).
   - Cross-tenant reads require explicit tenant_id query param + msp scope.
   - All write endpoints fail-closed if DB unavailable.
   - No subprocess, no shell, no dynamic code execution.
@@ -49,6 +50,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_scopes
 from api.entitlements import require_capability
 from api.deps import auth_ctx_db_session
+from api.msp_authority import resolve_credential_access
 from api.ratelimit import MemoryRateLimiter
 from services.cp_commands import (
     VALID_CP_COMMANDS,
@@ -229,13 +231,21 @@ def _resolve_msp_tenant(
     request: Request,
     tenant_param: Optional[str],
     require_msp: bool = False,
+    *,
+    db: Session,
 ) -> tuple[Optional[str], bool]:
     """
     Resolve tenant for MSP cross-tenant queries.
 
     Returns (effective_tenant_id, is_global_admin).
-    For MSP actors, allows filtering by explicit tenant_param.
-    Cross-tenant access is logged at elevated severity.
+
+    MSP-001: the ``control-plane:msp:*`` scope is a gate, never an authority.
+    An MSP credential reads another tenant only when the canonical MSP
+    authority (api/msp_authority.py) finds an active, customer-approved
+    relationship between the credential's bound tenant and that tenant which
+    delegates ``governance.read``. Without one the response is the same 404
+    as for any other tenant. An MSP credential with no tenant filter sees its
+    own tenant only; it never receives a global listing.
     """
     is_global = _is_global_admin(request)
     my_tenant = _tenant_from_auth(request)
@@ -245,28 +255,41 @@ def _resolve_msp_tenant(
         # Global platform admin: can query any tenant
         return tenant_param, True
 
-    if has_msp and tenant_param:
-        # MSP actor: must supply explicit tenant_param (anti-enumeration)
-        # Log elevated severity
-        _emit_msp_access_log(request, tenant_param)
-        return tenant_param, False
-
-    if has_msp and not tenant_param:
-        if require_msp:
+    if has_msp and tenant_param and tenant_param != my_tenant:
+        try:
+            resolve_credential_access(
+                db,
+                msp_tenant_id=my_tenant or "",
+                customer_tenant_id=tenant_param,
+                required="governance.read",
+            )
+        except HTTPException:
             raise HTTPException(
-                status_code=400,
+                status_code=404,
                 detail={
                     "error": {
-                        "code": "CP_MSP_TENANT_REQUIRED",
+                        "code": "CP_NOT_FOUND",
                         "trace_id": _trace_id(request),
-                        "message": "MSP queries require explicit tenant_id parameter",
+                        "message": "Not found",
                     }
                 },
             )
-        # MSP read: no tenant filter → returns all (paginated, caller must paginate)
-        return None, True  # treat as global for query
+        _emit_msp_access_log(request, tenant_param)
+        return tenant_param, False
 
-    # Tenant actor: strict isolation
+    if has_msp and not tenant_param and require_msp:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "CP_MSP_TENANT_REQUIRED",
+                    "trace_id": _trace_id(request),
+                    "message": "MSP queries require explicit tenant_id parameter",
+                }
+            },
+        )
+
+    # Tenant actor (and MSP credential acting on its own tenant): strict isolation
     if my_tenant and tenant_param and tenant_param != my_tenant:
         # Anti-enumeration: return 404
         raise HTTPException(
@@ -479,7 +502,7 @@ def list_commands(
     offset: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "cmd_list"),
@@ -684,7 +707,7 @@ def query_ledger(
     offset: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "ledger_query"),
@@ -739,7 +762,7 @@ def verify_ledger(
     Fails with 500 if tampering is detected (chain broken).
     """
     trace = _trace_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "ledger_verify"),
@@ -812,7 +835,7 @@ def export_ledger_anchor(
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
-    effective_tenant, _is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, _is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "anchor"),
@@ -921,7 +944,7 @@ def list_heartbeats(
     stale_only: bool = Query(False),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "hb_list"),
@@ -956,7 +979,7 @@ def list_stale_heartbeats(
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "stale"), *_RL_READ, error_code="CP_STALE_RATE_LIMIT"
@@ -1100,7 +1123,7 @@ def get_evidence_bundle(
     """
     trace = _trace_id(request)
     actor = _actor_id(request)
-    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
+    effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param, db=db)
 
     _enforce_rate_limit(
         _rl_key(effective_tenant, "evidence"),

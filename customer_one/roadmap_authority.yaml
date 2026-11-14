@@ -75,6 +75,22 @@ next_sequence:
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
+  - id: "MSP-001"
+    title: "MSP-001 — MSP organization, customer-approved relationship and delegated-authority foundation"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    authorized_by: "Founder (explicit decision in the MSP-001 session, 2026-11-13)"
+    freeze_law_basis: >
+      Founder authorization only. No contracted MSP customer and no Customer-One
+      blocker was cited, so criteria (1) and (2) are NOT claimed. Partial support
+      for criterion (3): the work closes a pre-existing cross-tenant read through
+      the control-plane v2 MSP scope (any control-plane:msp:* credential could read
+      any tenant's control-plane data without customer consent).
+    scope: >
+      Foundation only: designation, customer-approved relationships, intersection-only
+      delegated read authority, discovery/context API, audit attribution. No MSP access
+      to customer data routes, no billing, no UI. Does not change the Customer-One
+      critical path or any FG_RESULT_TRUTH_GATE acceptance gate.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"

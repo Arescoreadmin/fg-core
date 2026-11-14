@@ -3378,6 +3378,49 @@
         "title": "ApprovalVerifyRequest",
         "type": "object"
       },
+      "ApproveRelationshipBody": {
+        "additionalProperties": false,
+        "properties": {
+          "authorized_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Authorized Capabilities",
+            "type": "array"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "required": [
+          "authorized_capabilities"
+        ],
+        "title": "ApproveRelationshipBody",
+        "type": "object"
+      },
       "ApproveRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27750,6 +27793,24 @@
         "title": "OrgLifecycleStatus",
         "type": "string"
       },
+      "OrganizationStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OrganizationStatusBody",
+        "type": "object"
+      },
       "OutcomeListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -31208,6 +31269,32 @@
           "baseline_readiness_score"
         ],
         "title": "PromotionResponse",
+        "type": "object"
+      },
+      "ProposeRelationshipBody": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Customer Tenant Id",
+            "type": "string"
+          },
+          "requested_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Requested Capabilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "customer_tenant_id",
+          "requested_capabilities"
+        ],
+        "title": "ProposeRelationshipBody",
         "type": "object"
       },
       "ProvenanceGraphResponse": {
