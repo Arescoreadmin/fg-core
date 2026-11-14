@@ -1,3 +1,16 @@
+## fix(rbac): align P17 critical permission classification (branch fix/rbac-critical-permission-p17, PR #873)
+
+- **Problem:** `tests/test_h14_rbac.py::test_P17_critical_permissions_are_governance_or_platform` failed on `main`. Its invariant was that every `critical` permission starts with `risk.`, `exception.`, `governance.` or `platform.`. `scan.emergency_stop.platform` was added as `critical` by L14-SCAN-SAFETY-001 (#809), and it uses the `scan.` namespace.
+- **Classification:** the permission is platform authority. It halts every tenant's scanner, and only `platform_admin` holds it in `ROLE_PERMISSIONS` (verified). Its `critical` risk level is correct.
+- **Change (test only):**
+  - P17 accepts the four prefixes plus an exact one-item set, `{"scan.emergency_stop.platform"}`.
+  - The prefix rule is not loosened: any other `critical` permission outside those namespaces still fails P17.
+  - No permission, role or registry entry changed.
+- **Verification:**
+  - `tests/test_h14_rbac.py`: 79 passed.
+  - `ruff format --check` passes.
+  - Offline simulation evidence regenerated: GREEN 6/6.
+
 ## feat(msp): MSP-001 — secure partner and customer relationship foundation (branch feat/msp-001-foundation)
 
 - **Work item:** MSP-001, founder-authorized on 2026-11-13. It was added to `next_sequence` without claiming Freeze Law criteria (1) or (2).

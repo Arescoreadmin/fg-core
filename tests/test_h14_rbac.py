@@ -134,9 +134,12 @@ class TestPermissionModel:
             p for p, m in CAPABILITY_REGISTRY.items() if m["risk_level"] == "critical"
         }
         allowed_prefixes = ("risk.", "exception.", "governance.", "platform.")
+        explicitly_approved = {"scan.emergency_stop.platform"}
+
         for perm in critical:
-            assert perm.startswith(allowed_prefixes), (
-                f"{perm!r} is marked critical but is not a governance or platform permission"
+            assert perm.startswith(allowed_prefixes) or perm in explicitly_approved, (
+                f"{perm!r} is critical but lacks an approved "
+                "governance or platform authority classification"
             )
 
 
