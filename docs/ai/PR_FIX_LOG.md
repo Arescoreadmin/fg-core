@@ -32,6 +32,7 @@
     - On `main` all 34 error, because the routes are absent.
     - The control-plane probe fails 2/2 on `main` and passes 2/2 here.
   - 3 Postgres forced-RLS probe tests in `tests/test_migrations_postgres_replay.py`. They run in CI and skip locally.
+  - New `tests/security/test_msp_001_route_contract.py`, 3 tests: all nine routes are mounted and refuse no auth, a wrong scope and a tenant mismatch; the core contract publishes the three bodies (closed to extra fields) and no `/admin/msp` paths.
   - Tier A identity, tenant-admin, RBAC, control-plane and route suites: 1460 passed. The 1 failure (`test_h14_rbac::test_P17`) fails identically on unmodified `main`.
   - Updated `test_msp_read_can_query_specific_tenant`: it now proves the scope alone is refused, and that an approved relationship allows the read.
 - **Generated:**
