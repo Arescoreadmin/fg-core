@@ -137,10 +137,7 @@ class TestPermissionModel:
         explicitly_approved = {"scan.emergency_stop.platform"}
 
         for perm in critical:
-            assert (
-                perm.startswith(allowed_prefixes)
-                or perm in explicitly_approved
-            ), (
+            assert perm.startswith(allowed_prefixes) or perm in explicitly_approved, (
                 f"{perm!r} is critical but lacks an approved "
                 "governance or platform authority classification"
             )
