@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -183,6 +184,132 @@ class MspPayerAssignment(Base):
     approved_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
     terminated_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
     terminated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MspAssessmentGrant(Base):
+    """MSP-003: one customer-approved, expiring, single-use assessment grant.
+
+    Lets an MSP initiate exactly one Field Assessment engagement in the
+    customer's tenant. Separate from the MSP-001 relationship, whose delegation
+    ceiling stays read-only. The engagement lives in ``fa_engagements`` (owned
+    by the customer); this row stores only the authorization and the link.
+    """
+
+    __tablename__ = "msp_assessment_grants"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('requested', 'approved', 'rejected', 'withdrawn', "
+            "'initiated', 'revoked')",
+            name="msp_assessment_grants_status_check",
+        ),
+        CheckConstraint(
+            "msp_tenant_id <> tenant_id", name="msp_grant_distinct_parties"
+        ),
+        CheckConstraint("expires_at > requested_at", name="msp_grant_window"),
+        CheckConstraint(
+            "status <> 'initiated' OR (engagement_id IS NOT NULL AND "
+            "initiated_by_subject IS NOT NULL AND initiated_at IS NOT NULL)",
+            name="msp_grant_initiated_has_engagement",
+        ),
+        CheckConstraint(
+            "engagement_id IS NULL OR status IN ('initiated', 'revoked')",
+            name="msp_grant_engagement_only_when_used",
+        ),
+        CheckConstraint(
+            "status IN ('requested', 'withdrawn') OR "
+            "(decided_by_subject IS NOT NULL AND decided_at IS NOT NULL)",
+            name="msp_grant_decided_fields",
+        ),
+        CheckConstraint(
+            "status <> 'revoked' OR "
+            "(revoked_by_subject IS NOT NULL AND revoked_at IS NOT NULL)",
+            name="msp_grant_revoked_fields",
+        ),
+        UniqueConstraint(
+            "msp_tenant_id",
+            "tenant_id",
+            "request_key",
+            name="uq_msp_grant_request_key",
+        ),
+        UniqueConstraint("engagement_id", name="uq_msp_grant_engagement"),
+        Index("ix_msp_grant_customer_status", "tenant_id", "status"),
+        Index("ix_msp_grant_msp_status", "msp_tenant_id", "status"),
+        Index("ix_msp_grant_relationship", "relationship_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    msp_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    relationship_id: Mapped[Any] = mapped_column(
+        String(36), ForeignKey("msp_service_relationships.id"), nullable=False
+    )
+    request_key: Mapped[Any] = mapped_column(String(128), nullable=False)
+    capabilities: Mapped[Any] = mapped_column(Text, nullable=False)
+    assessment_type: Mapped[Any] = mapped_column(String(64), nullable=False)
+    assessor_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False)
+    requested_by_subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    requested_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    decided_by_membership_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    decided_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    engagement_id: Mapped[Any] = mapped_column(String(64), nullable=True)
+    initiated_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    initiated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MspOnboardingRequest(Base):
+    """MSP-003: an MSP's referral of an organization not yet on FrostGate.
+
+    A review queue only. The platform provisions the tenant through the
+    canonical routes, then links the request. Nothing here creates a tenant, a
+    user or a relationship. Visible to the requesting MSP only.
+    """
+
+    __tablename__ = "msp_onboarding_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('requested', 'rejected', 'canceled', 'linked')",
+            name="msp_onboarding_requests_status_check",
+        ),
+        CheckConstraint("expires_at > requested_at", name="msp_onboarding_window"),
+        CheckConstraint(
+            "status <> 'linked' OR (customer_tenant_id IS NOT NULL AND "
+            "reviewed_by_subject IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="msp_onboarding_linked_fields",
+        ),
+        CheckConstraint(
+            "customer_tenant_id IS NULL OR customer_tenant_id <> tenant_id",
+            name="msp_onboarding_not_self",
+        ),
+        UniqueConstraint(
+            "tenant_id", "request_key", name="uq_msp_onboarding_request_key"
+        ),
+        Index("ix_msp_onboarding_msp_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    request_key: Mapped[Any] = mapped_column(String(128), nullable=False)
+    organization_name: Mapped[Any] = mapped_column(String(200), nullable=False)
+    contact_email: Mapped[Any] = mapped_column(String(254), nullable=False)
+    requested_capabilities: Mapped[Any] = mapped_column(Text, nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False)
+    requested_by_subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    requested_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    customer_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=True)
     version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -170,7 +170,14 @@ test('BFF proxies only GET/POST MSP routes and never the platform designation', 
   const src = read(BFF);
   const rules = Array.from(src.matchAll(/\{ prefix: '(admin\/msp[^']*)', methods: new Set\(\[([^\]]*)\]\) \}/g));
   const byPrefix = Object.fromEntries(rules.map((m) => [m[1], m[2]]));
-  assert.deepEqual(Object.keys(byPrefix).sort(), ['admin/msp/customers', 'admin/msp/portfolio', 'admin/msp/relationships']);
+  // MSP-003 added admin/msp/assessments and admin/msp/onboarding (GET/POST only).
+  assert.deepEqual(Object.keys(byPrefix).sort(), [
+    'admin/msp/assessments',
+    'admin/msp/customers',
+    'admin/msp/onboarding',
+    'admin/msp/portfolio',
+    'admin/msp/relationships',
+  ]);
   for (const methods of Object.values(byPrefix)) {
     assert.doesNotMatch(methods, /PUT|PATCH|DELETE/);
   }

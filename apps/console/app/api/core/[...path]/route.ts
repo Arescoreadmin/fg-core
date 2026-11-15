@@ -140,6 +140,10 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'admin/msp/relationships', methods: new Set(['GET', 'POST']) },
   { prefix: 'admin/msp/customers', methods: new Set(['GET', 'POST']) },
   { prefix: 'admin/msp/portfolio', methods: new Set(['GET']) },
+  // MSP-003 — assessment requests and onboarding referrals. GET/POST only.
+  // Platform review routes (admin/msp/platform/...) are never proxied.
+  { prefix: 'admin/msp/assessments', methods: new Set(['GET', 'POST']) },
+  { prefix: 'admin/msp/onboarding', methods: new Set(['GET', 'POST']) },
 ];
 
 function getRequestId(request: NextRequest): string {
@@ -353,7 +357,9 @@ function isTenantAdminCorePath(path: string[]): boolean {
   const isMspConsolePath =
     joined.startsWith('admin/msp/relationships') ||
     joined.startsWith('admin/msp/customers') ||
-    joined === 'admin/msp/portfolio';
+    joined === 'admin/msp/portfolio' ||
+    joined.startsWith('admin/msp/assessments/') ||
+    joined.startsWith('admin/msp/onboarding/');
   return (
     isMspConsolePath ||
     joined.startsWith('workforce/users') ||

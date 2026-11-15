@@ -376,10 +376,25 @@ def list_relationships(
 
 
 _CUSTOMER_OPERATIONS = frozenset(
-    {"relationship.approve", "relationship.suspend", "relationship.resume"}
+    {
+        "relationship.approve",
+        "relationship.suspend",
+        "relationship.resume",
+        # MSP-003 assessment grants (api/msp_orchestration.py)
+        "assessment_grant.approve",
+        "assessment_grant.reject",
+        "assessment_grant.revoke",
+    }
 )
 _MSP_OPERATIONS = frozenset(
-    {"relationship.propose", "context.resolve", "portfolio.summary"}
+    {
+        "relationship.propose",
+        "context.resolve",
+        "portfolio.summary",
+        "assessment_grant.request",
+        "assessment_grant.withdraw",
+        "assessment.initiate",
+    }
 )
 _HISTORY_DEFAULT_PAGE = 100
 _HISTORY_MAX_PAGE = 200

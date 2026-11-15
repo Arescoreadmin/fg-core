@@ -5,6 +5,7 @@
 - **Internal synthetic validation: READY.** Every control below passes against synthetic tenants.
 - **A real external MSP with real customer data: NOT READY.** It is blocked by 2 controls (10, 13), control 2 awaits deployment, and 3 are deferred.
 - **MSP-002 update (2026-11-14).** Control 2 now has a console workflow; control 5 passed in CI on #872.
+- **MSP-003 update (2026-11-15).** Controls 16 and 17 added for partner-guided onboarding and MSP-initiated assessments. Both pass on synthetic tenants and are pending deployment. Control 14 now has an MSP write path, through customer-approved single-assessment grants only.
 
 Unit and route tests do not make the platform customer-ready, and nothing here claims they do.
 
@@ -27,8 +28,10 @@ All tests cited are in `tests/security/test_msp_001_foundation.py` unless stated
 | 11 | Support and incident response ownership | NOT APPLICABLE | DEFERRED | No named owner for partner incidents (suspect MSP, mistaken approval). The kill switch exists (organization suspension, test 10); the runbook does not. |
 | 12 | Open CodeQL findings on MSP entry points | PASS | PASS (pending CI) | See below. The new files have no CodeQL result until the PR's analysis runs. |
 | 13 | Commercial readiness (billing an MSP) | **PASS** (MSP-006 synthetic first-revenue demonstration) | **BLOCKED** | Payer assignment, attributed usage, hash-pinned integer pricing and deterministic reconciliation exist (MSP-006). Still blocked for real billing: migration 0207 is not evidenced in production, no processor settlement is proven (`StripeProvider.report_usage` uses an API removed from stripe-python 15, audit F10), and no real partner price or agreement is configured. |
-| 14 | Customer data access through MSP authority | NOT APPLICABLE | NOT APPLICABLE | MSP-001 deliberately exposes none. The first data route (MSP-002) must call `resolve_actor_access` on every request. |
+| 14 | Customer data access through MSP authority | NOT APPLICABLE | NOT APPLICABLE | MSP-001 deliberately exposes none. The first data route (MSP-002) must call `resolve_actor_access` on every request. MSP-003 adds one write path, initiation of a customer-approved assessment, and reads progress through `resolve_actor_access(required="assessment.read")` (t26). |
 | 15 | Background jobs and queued work | NOT APPLICABLE | DEFERRED | No MSP job path exists. The bounded revocation contract is in `MSP_001_ARCHITECTURE.md`. |
+| 16 | Partner-guided onboarding | PASS | **PENDING DEPLOYMENT** | MSP-003: an MSP referral is a platform review queue. It creates no tenant, user, invitation or access (t03–t06, t06b). Provisioning stays on the canonical platform routes, and stages are derived from client lifecycle and the MSP-001 relationship. Migration 0208 is not applied in any environment. |
+| 17 | MSP-initiated assessments | PASS | **PENDING DEPLOYMENT** | MSP-003: each assessment needs a customer-approved, expiring, single-use grant. Initiation runs the canonical engagement creation path in the customer's tenant, is idempotent, and is refused by any of the seven authority dimensions (t08–t24). It cannot drive readiness, QA or delivery (t33–t36), and records no charge (t37–t39). Forced RLS probe for 0208 runs in CI Migrations Replay (`-k 0208`). Not shown in a target environment. |
 
 ## CodeQL impact on MSP entry points
 
@@ -53,4 +56,7 @@ No reachable vulnerability required blocking an MSP integration. The one reachab
 - **Organization id sharing (MSP-002).** The customer page shows the organization's own id so it can be given to an MSP. Kept by founder decision (2026-11-15) as a non-secret identifier, never a credential: knowing it cannot bypass approval, grant access or disclose customer details (`test_organization_id_is_an_identifier_not_a_credential`). It still lets a designated MSP admin confirm an id exists; invitation codes would replace this.
 - **Partner settlement NOT PROVEN (MSP-006).** Charges are recorded and reconciled, but no processor has acknowledged one. Real collection needs a processor integration authorized separately (audit F10).
 - **Billing tables without database RLS (MSP-006 audit F1).** `usage_events` now has forced RLS. `billing_event_ledger`, `billing_accounts`, `billing_subscription_links` and the three subscription tables still rely on application tenant filters.
+- **MSP-003 progress reads are not audited per read.** MSP-002 portfolio summary reads are. An MSP's grant listing shows only the canonical status of engagements it initiated.
+- **MSP-003 assessor identifier.** The assessor named in a grant is an identifier approved by the customer, not a bound membership. Field Assessment QA separation of duties still applies.
+- **MSP-003 notifications.** None. Customers see requests only when they open `/partners`.
 - **Payer assignment in non-production (MSP-006).** Like MSP designation, payer assignment needs `platform.admin` behind the internal gateway. Without the gateway secret, the legacy `admin:write` mapping satisfies it outside production.

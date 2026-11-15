@@ -13,6 +13,12 @@ const OPERATION_LABELS: Record<string, string> = {
   'relationship.revoke.msp': 'Ended by the MSP',
   'context.resolve': 'MSP opened this customer',
   'portfolio.summary': 'MSP viewed portfolio summaries',
+  'assessment_grant.request': 'Assessment requested by the MSP',
+  'assessment_grant.approve': 'Assessment request approved by the customer',
+  'assessment_grant.reject': 'Assessment request declined by the customer',
+  'assessment_grant.withdraw': 'Assessment request withdrawn by the MSP',
+  'assessment_grant.revoke': 'Assessment authority revoked by the customer',
+  'assessment.initiate': 'Assessment started by the MSP',
 };
 
 const PARTY_LABELS: Record<string, string> = {

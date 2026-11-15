@@ -1508,35 +1508,43 @@ def list_engagements_route(
     )
 
 
-@router.post(
-    "/engagements",
-    response_model=EngagementResponse,
-    status_code=201,
-    dependencies=[Depends(authz_scope("governance:write"))],
-)
-def create_engagement_route(
-    request: Request,
-    body: CreateEngagementRequest,
-    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
-    db: Session = Depends(auth_ctx_db_session),
-) -> EngagementResponse:
-    tenant_id = _resolve_caller_tenant(request, actor_ctx)
-    actor = _actor_from_context(actor_ctx)
+def create_engagement_with_audit(
+    db: Session,
+    *,
+    tenant_id: str,
+    client_name: str,
+    client_domain: str | None,
+    assessor_id: str,
+    assessment_type: str,
+    scheduled_date: str | None,
+    engagement_metadata: dict[str, Any],
+    actor: str,
+    audit_extra: dict[str, Any] | None = None,
+) -> FaEngagement:
+    """The one engagement creation path: the record, its canonical
+    ``engagement.created`` audit event and its timeline event.
+
+    Used by ``create_engagement_route`` and by MSP-003 initiation
+    (``api/msp_orchestration.py``), which passes ``audit_extra`` to mark the
+    MSP origin. The caller owns authorization and the commit, and must have
+    bound ``tenant_id``'s RLS context.
+    """
     eng = create_engagement(
         db,
         tenant_id=tenant_id,
-        client_name=body.client_name,
-        client_domain=body.client_domain,
-        assessor_id=body.assessor_id,
-        assessment_type=body.assessment_type.value,
-        scheduled_date=body.scheduled_date,
-        engagement_metadata=body.engagement_metadata,
+        client_name=client_name,
+        client_domain=client_domain,
+        assessor_id=assessor_id,
+        assessment_type=assessment_type,
+        scheduled_date=scheduled_date,
+        engagement_metadata=engagement_metadata,
         actor=actor,
     )
-    audit_payload = {
-        "client_name": body.client_name,
-        "assessment_type": body.assessment_type.value,
-        "assessor_id": body.assessor_id,
+    audit_payload: dict[str, Any] = {
+        "client_name": client_name,
+        "assessment_type": assessment_type,
+        "assessor_id": assessor_id,
+        **(audit_extra or {}),
     }
     emit_engagement_audit_event(
         db,
@@ -1554,6 +1562,34 @@ def create_engagement_route(
         event_type="field_assessment.engagement.created",
         occurred_at=eng.created_at,
         payload=audit_payload,
+    )
+    return eng
+
+
+@router.post(
+    "/engagements",
+    response_model=EngagementResponse,
+    status_code=201,
+    dependencies=[Depends(authz_scope("governance:write"))],
+)
+def create_engagement_route(
+    request: Request,
+    body: CreateEngagementRequest,
+    actor_ctx: ActorContext = Depends(require_permission("assessment.create")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> EngagementResponse:
+    tenant_id = _resolve_caller_tenant(request, actor_ctx)
+    actor = _actor_from_context(actor_ctx)
+    eng = create_engagement_with_audit(
+        db,
+        tenant_id=tenant_id,
+        client_name=body.client_name,
+        client_domain=body.client_domain,
+        assessor_id=body.assessor_id,
+        assessment_type=body.assessment_type.value,
+        scheduled_date=body.scheduled_date,
+        engagement_metadata=body.engagement_metadata,
+        actor=actor,
     )
     # Capture all ORM attributes before commit to avoid post-commit expiry (D-T6-002).
     _eng_id = eng.id
