@@ -276,3 +276,65 @@ test('no fabricated metrics: summaries render only Core-provided fields', () => 
   assert.match(page, /sectionStateLabel\(a\.state\)/);
   assert.match(page, /sectionStateLabel\(f\.state\)/);
 });
+
+// ---------------------------------------------------------------------------
+// Relationship lists follow next_offset; history pages reach the oldest event
+// ---------------------------------------------------------------------------
+
+function pager(pages) {
+  const calls = [];
+  const fetchPage = async (offset) => {
+    calls.push(offset);
+    const p = pages[offset];
+    return p ? { ok: true, data: { tenant_id: 't', ...p } } : { ok: false, error: 'HTTP 500', status: 500 };
+  };
+  return { calls, fetchPage };
+}
+
+test('collectAllPages follows next_offset to the last page', async () => {
+  const { calls, fetchPage } = pager({
+    0: { items: [1, 2], next_offset: 2, total: 5 },
+    2: { items: [3, 4], next_offset: 4, total: 5 },
+    4: { items: [5], next_offset: null, total: 5 },
+  });
+  const res = await msp.collectAllPages(fetchPage);
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.data.items, [1, 2, 3, 4, 5]);
+  assert.equal(res.data.next_offset, null);
+  assert.equal(res.data.tenant_id, 't');
+  assert.deepEqual(calls, [0, 2, 4]);
+});
+
+test('collectAllPages fails closed instead of returning a partial list', async () => {
+  const failing = pager({ 0: { items: [1], next_offset: 1 } });
+  const failed = await msp.collectAllPages(failing.fetchPage);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.status, 500);
+
+  const stuck = pager({ 0: { items: [1], next_offset: 0 } });
+  const res = await msp.collectAllPages(stuck.fetchPage);
+  assert.equal(res.ok, false);
+  assert.equal(res.code, 'MSP_RELATIONSHIPS_INCOMPLETE');
+
+  const endless = { fetchPage: async (o) => ({ ok: true, data: { items: [o], next_offset: o + 1 } }) };
+  const capped = await msp.collectAllPages(endless.fetchPage, 3);
+  assert.equal(capped.ok, false);
+  assert.equal(capped.code, 'MSP_RELATIONSHIPS_INCOMPLETE');
+  assert.match(msp.safeErrorMessage(capped), /more relationships than this page can show/);
+});
+
+test('both pages load every relationship page and history exposes older events', () => {
+  const api = read(API);
+  assert.match(api, /export function listAllRelationships\(\)/);
+  assert.match(api, /collectAllPages\(\(offset\) => listRelationships\(200, offset\)\)/);
+  for (const pagePath of [PAGE_MSP, PAGE_PARTNERS]) {
+    const src = read(pagePath);
+    assert.match(src, /await listAllRelationships\(\)|listAllRelationships\(\)\]/, pagePath);
+    assert.doesNotMatch(src, /listRelationships\(/, pagePath);
+  }
+  assert.match(read(PAGE_MSP), /setLoadError\(r\.ok \? '' : safeErrorMessage\(r\)\)/);
+  const history = read(HISTORY);
+  assert.match(history, /getRelationshipHistory\(relationshipId, history\.next_offset\)/);
+  assert.match(history, /Show older events/);
+  assert.match(history, /seen\.has\(ev\.event_hash\)/);
+});

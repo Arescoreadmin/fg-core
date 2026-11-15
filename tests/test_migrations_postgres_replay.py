@@ -1323,3 +1323,42 @@ def test_0206_msp_002_portfolio_reads_only_under_the_customer_context(
     finally:
         db.rollback()
         db.close()
+
+
+def test_0206_msp_002_history_filters_by_relationship_in_postgres(
+    _msp_rls_probe,
+) -> None:
+    """MSP-002: the history route's relationship predicate on the JSONB
+    details runs in Postgres under the chain owner's RLS context, and returns
+    only that relationship's events."""
+    from api.msp import relationship_events_query
+    from api.msp_authority import emit_msp_audit
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    other = f"rel-other-{uuid.uuid4().hex[:12]}"
+    db = sm()
+    try:
+        _bind(db, cust)
+        for relationship_id in (other, rid, other):
+            emit_msp_audit(
+                db,
+                chains=(cust,),
+                restore_tenant=cust,
+                event_type="tenant.msp.portfolio_summary_accessed",
+                actor_subject="synthetic-probe",
+                membership_id=None,
+                reason_code="MSP_PORTFOLIO_SUMMARY_ACCESSED",
+                msp_tenant_id=msp,
+                customer_tenant_id=cust,
+                relationship_id=relationship_id,
+                operation="portfolio.summary",
+            )
+        db.commit()
+        _bind(db, cust)
+        mine = relationship_events_query(db, cust, rid).all()
+        assert mine and all(e.details_json["relationship_id"] == rid for e in mine)
+        assert relationship_events_query(db, cust, other).count() == 2
+        _bind(db, third)  # another tenant's context sees none of these rows
+        assert relationship_events_query(db, cust, rid).count() == 0
+    finally:
+        db.close()

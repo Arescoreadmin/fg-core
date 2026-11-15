@@ -562,6 +562,70 @@ def test_history_shows_lifecycle_without_the_other_partys_subjects(w):
     }
 
 
+def test_history_filters_by_relationship_before_paging(w):
+    """Unrelated MSP events on the chain never push a relationship's history out."""
+    from api.db import get_sessionmaker
+    from api.msp_authority import emit_msp_audit
+
+    rid = w.establish(w.msp_a_admin, w.c1_admin, req=ASSESS_CAPS, auth=ASSESS_CAPS)
+    # More newer unrelated events than the old 2,000-row scan window.
+    with get_sessionmaker()() as db:
+        for _ in range(2001):
+            emit_msp_audit(
+                db,
+                chains=(CUST_1,),
+                restore_tenant=CUST_1,
+                event_type="tenant.msp.portfolio_summary_accessed",
+                actor_subject="synthetic-other",
+                membership_id=None,
+                reason_code="MSP_PORTFOLIO_SUMMARY_ACCESSED",
+                msp_tenant_id="synthetic-msp",
+                customer_tenant_id=CUST_1,
+                relationship_id="synthetic-other-relationship",
+                operation="portfolio.summary",
+            )
+        db.commit()
+
+    full = _events(w, w.c1_admin, rid)
+    assert full.status_code == 200, full.text
+    body = full.json()
+    assert [e["operation"] for e in body["items"]] == [
+        "relationship.approve",
+        "relationship.propose",
+    ]
+    assert body["total"] == 2 and body["next_offset"] is None
+    assert "synthetic" not in full.text
+
+
+def test_history_pages_reach_the_oldest_event(w):
+    rid = w.establish(w.msp_a_admin, w.c1_admin, req=ASSESS_CAPS, auth=ASSESS_CAPS)
+    assert w.context(w.msp_a_staff, CUST_1).status_code == 200
+    assert w.act(w.c1_admin, rid, "suspend").status_code == 200
+    whole = _events(w, w.c1_admin, rid).json()["items"]
+
+    paged, offset = [], 0
+    while offset is not None:
+        resp = w.call(
+            w.c1_admin,
+            "GET",
+            f"/admin/msp/relationships/{rid}/events?limit=1&offset={offset}",
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["total"] == 4 and len(body["items"]) == 1
+        paged += body["items"]
+        offset = body["next_offset"]
+    assert paged == whole
+    assert paged[-1]["operation"] == "relationship.propose"
+    for bad in ("limit=0", "limit=201", "offset=-1"):
+        assert (
+            w.call(
+                w.c1_admin, "GET", f"/admin/msp/relationships/{rid}/events?{bad}"
+            ).status_code
+            == 422
+        )
+
+
 def test_history_is_party_only(w):
     rid = w.establish(w.msp_a_admin, w.c1_admin, req=ASSESS_CAPS, auth=ASSESS_CAPS)
     for outsider in (w.c2_admin, w.msp_b_admin):

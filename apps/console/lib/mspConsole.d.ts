@@ -69,3 +69,10 @@ export function buildProposalBody(input: {
   selected: string[];
 }): BuildResult<ProposalBody>;
 export function safeErrorMessage(result: ResultLike): string;
+export const MAX_COLLECTED_PAGES: number;
+export function collectAllPages<P extends { items: unknown[]; next_offset: number | null }>(
+  fetchPage: (offset: number) => Promise<
+    { ok: true; data: P } | { ok: false; error: string; status?: number; code?: string }
+  >,
+  maxPages?: number,
+): Promise<{ ok: true; data: P } | { ok: false; error: string; status?: number; code?: string }>;

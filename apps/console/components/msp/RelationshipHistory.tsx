@@ -25,6 +25,26 @@ const PARTY_LABELS: Record<string, string> = {
 export function RelationshipHistory({ relationshipId }: { relationshipId: string }) {
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Older events are fetched page by page from the server's next_offset, so
+  // a long-lived relationship's earliest records stay reachable.
+  const loadOlder = async () => {
+    if (!history || history.next_offset === null || loadingMore) return;
+    setLoadingMore(true);
+    const res = await getRelationshipHistory(relationshipId, history.next_offset);
+    setLoadingMore(false);
+    if (!res.ok) {
+      setError(safeErrorMessage(res));
+      return;
+    }
+    // New events shift offsets between pages; drop any event already shown.
+    const seen = new Set(history.items.map((ev) => ev.event_hash));
+    setHistory({
+      ...res.data,
+      items: [...history.items, ...res.data.items.filter((ev) => !seen.has(ev.event_hash))],
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +100,16 @@ export function RelationshipHistory({ relationshipId }: { relationshipId: string
           ))}
         </ol>
       )}
+      {history.next_offset !== null ? (
+        <button
+          type="button"
+          className="text-xs font-medium text-primary underline disabled:opacity-50"
+          disabled={loadingMore}
+          onClick={() => void loadOlder()}
+        >
+          {loadingMore ? 'Loading…' : `Show older events (${history.items.length} of ${history.total})`}
+        </button>
+      ) : null}
     </div>
   );
 }

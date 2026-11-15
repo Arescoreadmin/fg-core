@@ -22,7 +22,7 @@ import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
 import {
   approveRelationship,
   changeRelationship,
-  listRelationships,
+  listAllRelationships,
   type LifecycleAction,
   type Relationship,
 } from '@/lib/mspApi';
@@ -80,7 +80,7 @@ export default function PartnersPage() {
   const [historyFor, setHistoryFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await listRelationships();
+    const res = await listAllRelationships();
     if (!res.ok) {
       if (res.status === 401) setSessionExpired(true);
       setLoadError(safeErrorMessage(res));

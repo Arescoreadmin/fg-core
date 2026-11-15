@@ -22,7 +22,7 @@ import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
 import {
   changeRelationship,
   getPortfolio,
-  listRelationships,
+  listAllRelationships,
   proposeRelationship,
   selectCustomerContext,
   type CustomerContext,
@@ -100,7 +100,7 @@ export default function MspPortfolioPage() {
   const [historyFor, setHistoryFor] = useState<string | null>(null);
 
   const load = useCallback(async (nextOffset: number) => {
-    const [p, r] = await Promise.all([getPortfolio(PAGE_SIZE, nextOffset), listRelationships()]);
+    const [p, r] = await Promise.all([getPortfolio(PAGE_SIZE, nextOffset), listAllRelationships()]);
     for (const res of [p, r]) {
       if (!res.ok && res.status === 401) {
         setSessionExpired(true);
@@ -114,7 +114,8 @@ export default function MspPortfolioPage() {
       setLoadError(safeErrorMessage(p));
       setPortfolio({ msp_tenant_id: '', items: [], total: 0, limit: PAGE_SIZE, offset: 0, next_offset: null, generated_at: '' });
     } else {
-      setLoadError('');
+      // A failed or incomplete relationship list is shown, never rendered as empty.
+      setLoadError(r.ok ? '' : safeErrorMessage(r));
       setNotConfigured(false);
       setPortfolio(p.data);
     }

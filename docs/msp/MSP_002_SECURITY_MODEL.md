@@ -87,6 +87,6 @@ Nothing logs tokens, secrets, raw evidence or customer payloads. Server logs for
 ## Residual risks
 
 - **Tenant-id oracle.** A designated MSP admin can still test whether a customer id exists (MSP-001). The customer page shows its own organization id for sharing; invitation codes would remove both.
-- **Truncation.** Summary counts cover only the 100 most recent records per source, and this is labelled in the UI.
+- **Truncation.** Summary counts cover only the 100 most recent records per source, and this is labelled in the UI. Relationship lists and relationship history are not truncated: the console follows every relationship page (failing closed past 10,000), and history filters by relationship in the database and pages back to the first event.
 - **Legacy delegation.** The non-authoritative legacy delegation code still exists; it grants nothing.
 - **Non-admin MSP staff** have no console path.

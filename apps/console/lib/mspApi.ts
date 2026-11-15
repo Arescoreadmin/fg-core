@@ -12,6 +12,8 @@
  * only safeErrorMessage() text, never the raw server body.
  */
 
+import { collectAllPages } from './mspConsole';
+
 export type SafeResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; status?: number; code?: string };
@@ -99,6 +101,8 @@ export interface RelationshipHistory {
   party: 'customer' | 'msp';
   chain_verified: boolean;
   items: RelationshipEvent[];
+  total: number;
+  next_offset: number | null;
 }
 
 export interface CustomerContext {
@@ -162,9 +166,23 @@ export function listRelationships(limit = 100, offset = 0): Promise<SafeResult<R
   return call(`${BASE}/relationships?${page(Math.min(limit, 200), offset)}`);
 }
 
-/** Either side: this relationship's events from the organization's own audit chain. */
-export function getRelationshipHistory(relationshipId: string): Promise<SafeResult<RelationshipHistory>> {
-  return call(`${BASE}/relationships/${encodeURIComponent(relationshipId)}/events`);
+/**
+ * Either side: every relationship of the signed-in user's organization,
+ * following next_offset. Pages use this so no relationship (and its controls)
+ * silently drops off the end; an over-large list fails closed.
+ */
+export function listAllRelationships(): Promise<SafeResult<RelationshipPage>> {
+  return collectAllPages((offset) => listRelationships(200, offset));
+}
+
+/** Either side: one page (newest first) of this relationship's events from the organization's own audit chain. */
+export function getRelationshipHistory(
+  relationshipId: string,
+  offset = 0,
+): Promise<SafeResult<RelationshipHistory>> {
+  return call(
+    `${BASE}/relationships/${encodeURIComponent(relationshipId)}/events?${page(100, offset)}`,
+  );
 }
 
 /** MSP side: request access to a customer. The customer must approve. */

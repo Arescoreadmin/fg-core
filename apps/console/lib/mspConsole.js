@@ -159,7 +159,36 @@ const SAFE_ERRORS = Object.freeze({
   MSP_ORGANIZATION_INACTIVE: 'Your organization is not an active managed service provider.',
   MSP_ACCESS_DENIED: 'Your organization is not set up as an active managed service provider, or your account cannot use it.',
   MSP_TENANT_NOT_ELIGIBLE: 'That organization cannot take part in MSP relationships.',
+  MSP_RELATIONSHIPS_INCOMPLETE: 'Your organization has more relationships than this page can show. Contact support.',
 });
+
+/** Upper bound on pages collectAllPages follows (200 per page = 10,000 rows). */
+const MAX_COLLECTED_PAGES = 50;
+
+/**
+ * Follow next_offset until the server reports no more pages, so a page never
+ * acts on a silently truncated list. Fail-closed: a failed page is returned
+ * as-is; a page that does not advance, or more than maxPages pages, returns
+ * MSP_RELATIONSHIPS_INCOMPLETE instead of a partial list.
+ */
+async function collectAllPages(fetchPage, maxPages = MAX_COLLECTED_PAGES) {
+  const items = [];
+  let offset = 0;
+  let first = null;
+  for (let n = 0; n < maxPages; n += 1) {
+    const res = await fetchPage(offset);
+    if (!res || !res.ok) return res;
+    if (first === null) first = res.data;
+    items.push(...(res.data.items || []));
+    const next = res.data.next_offset;
+    if (next === null || next === undefined) {
+      return { ok: true, data: { ...first, items, total: items.length, next_offset: null } };
+    }
+    if (typeof next !== 'number' || next <= offset) break;
+    offset = next;
+  }
+  return { ok: false, error: 'Incomplete relationship list', code: 'MSP_RELATIONSHIPS_INCOMPLETE' };
+}
 
 /**
  * Map a failed API result to a message safe to show. Never shows server text:
@@ -192,4 +221,6 @@ module.exports = {
   buildApprovalBody,
   buildProposalBody,
   safeErrorMessage,
+  MAX_COLLECTED_PAGES,
+  collectAllPages,
 };

@@ -1,3 +1,21 @@
+## fix(msp): MSP-002 review P2s — complete relationship lists and relationship history paging (PR #874)
+
+- **Codex P2, console relationship pagination:**
+  - **Problem:** `/partners` and `/msp` used only the first page (100) of `GET /admin/msp/relationships` and discarded `next_offset`.
+  - **Effect:** past 100 relationships, older active relationships, and their suspend and revoke controls, disappeared, and the overview counts were wrong.
+  - **Fix:** `listAllRelationships()` follows `next_offset` through the pure helper `collectAllPages` in `lib/mspConsole.js`. It fails closed with `MSP_RELATIONSHIPS_INCOMPLETE` if a page fails, if `next_offset` does not advance, or after 50 pages (10,000 rows), rather than showing a partial list.
+  - `/msp` now shows a failed relationship load as an error instead of an empty list.
+- **Codex P2, history scan limit:**
+  - **Problem:** `GET /admin/msp/relationships/{id}/events` scanned the newest 2,000 MSP events on the chain and only then filtered by relationship in Python.
+  - **Effect:** unrelated activity (portfolio views keep adding events) could hide an older relationship's history entirely.
+  - **Fix:** `relationship_events_query` filters on `details_json->>'relationship_id'` in the database, before paging. The route gains `limit` (100 by default, 200 at most) and `offset`, and reports `total` and `next_offset`.
+  - The history component adds "Show older events", which drops duplicate events (by `event_hash`) if offsets shift between pages.
+- **Verification:**
+  - Red on `854d77dd6`: `test_history_filters_by_relationship_before_paging` (2,001 unrelated events) and `test_history_pages_reach_the_oldest_event` both fail. Green after the fix.
+  - New Postgres probe `test_0206_msp_002_history_filters_by_relationship_in_postgres` runs the JSONB predicate under RLS (CI only).
+  - Console: 3 new tests (26 of 26 in the MSP file; 2472 in the full suite).
+- **Not changed:** schema, authority, RBAC, BFF rules.
+
 ## feat(msp): MSP-002 — multi-client portfolio and customer approval console (branch feat/msp-002-portfolio-console)
 
 - **Work item:** MSP-002, founder-authorized on 2026-11-14 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`. Criteria (1) and (2) are not claimed.

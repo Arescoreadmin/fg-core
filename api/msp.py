@@ -381,8 +381,23 @@ _CUSTOMER_OPERATIONS = frozenset(
 _MSP_OPERATIONS = frozenset(
     {"relationship.propose", "context.resolve", "portfolio.summary"}
 )
-_HISTORY_SCAN_LIMIT = 2000
-_HISTORY_MAX_ITEMS = 200
+_HISTORY_DEFAULT_PAGE = 100
+_HISTORY_MAX_PAGE = 200
+
+
+def relationship_events_query(db: Session, chain_tenant: str, relationship_id: str):
+    """MSP events for one relationship on one tenant's chain.
+
+    The relationship predicate runs in the database, before any paging, so
+    unrelated MSP activity on the chain can never push this relationship's
+    events out of a page.
+    """
+    return db.query(TenantIdentityAuditEvent).filter(
+        TenantIdentityAuditEvent.tenant_id == chain_tenant,
+        TenantIdentityAuditEvent.event_type.like("tenant.msp.%"),
+        TenantIdentityAuditEvent.details_json["relationship_id"].as_string()
+        == relationship_id,
+    )
 
 
 def _actor_party(operation: str) -> str:
@@ -402,6 +417,8 @@ def _actor_party(operation: str) -> str:
 def list_relationship_events(
     relationship_id: str,
     request: Request,
+    limit: int = Query(_HISTORY_DEFAULT_PAGE, ge=1, le=_HISTORY_MAX_PAGE),
+    offset: int = Query(0, ge=0),
     actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
@@ -416,24 +433,20 @@ def list_relationship_events(
     check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
     row = _party_relationship(db, relationship_id, caller)
     caller_party = "customer" if caller == str(row.tenant_id) else "msp"
+    base = relationship_events_query(db, caller, relationship_id)
+    total = base.count()
     events = (
-        db.query(TenantIdentityAuditEvent)
-        .filter(
-            TenantIdentityAuditEvent.tenant_id == caller,
-            TenantIdentityAuditEvent.event_type.like("tenant.msp.%"),
-        )
-        .order_by(
+        base.order_by(
             TenantIdentityAuditEvent.created_at.desc(),
             TenantIdentityAuditEvent.id.desc(),
         )
-        .limit(_HISTORY_SCAN_LIMIT)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     items: list[dict[str, Any]] = []
     for ev in events:
         details = ev.details_json if isinstance(ev.details_json, dict) else {}
-        if details.get("relationship_id") != relationship_id:
-            continue
         operation = str(details.get("operation") or "")
         party = _actor_party(operation)
         created = as_utc(ev.created_at)
@@ -450,15 +463,17 @@ def list_relationship_events(
                 "event_hash": ev.event_hash,
             }
         )
-        if len(items) >= _HISTORY_MAX_ITEMS:
-            break
+    next_offset = offset + len(items) if offset + len(items) < total else None
     return {
         "tenant_id": caller,
         "relationship_id": relationship_id,
         "party": caller_party,
         "chain_verified": bool(verify_identity_audit_chain(db, caller)),
         "items": items,
-        "total": len(items),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": next_offset,
     }
 
 
