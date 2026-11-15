@@ -1,3 +1,37 @@
+## feat(msp): MSP-006 — authoritative partner billing and usage attribution (branch feat/msp-006-billing-attribution)
+
+- **Work item:** MSP-006, founder-authorized on 2026-11-15 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.
+  - Criteria (1) and (2) are not claimed.
+  - It does not authorize live charges, live subscriptions or processor changes.
+  - Base: `main` `fc31ce17d`.
+- **Audit first:** `docs/msp/MSP_006_BILLING_AUTHORITY_AUDIT.md` covers the capability matrix, the authority-integration warnings and findings F1–F10. No competing billing or subscription authority is created.
+- **Added:**
+  - `msp_payer_assignments` (migration 0207, forced RLS). This is the only new state.
+  - `api/msp_billing.py`:
+    - payer resolution, failing closed with reason codes;
+    - the trusted producer `record_assessment_delivery_usage`, called once from the QA-approval delivery advance;
+    - read routes (`billing.read`) and platform routes (internal gateway + `platform.admin`);
+    - deterministic `reconcile_period`;
+    - test-mode-only `report_pending_usage` (reuses `BillingReconciler`).
+  - `billing.read` permission (`tenant_admin`).
+  - Four audit event types.
+- **Repaired (audit findings):**
+  - **F1:** `usage_events` gets forced RLS; billing_v2 record, list and explain bind the tenant context.
+  - **F7:** `msp.*` meters are refused on the public usage route.
+  - **F6:** a late webhook can no longer move a `disabled` link back to active.
+  - **F8:** `StripeProvider.parse_webhook` uses `to_dict()`, because `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook failed.
+- **Deferred (documented):**
+  - **F1:** the other six billing and subscription tables still lack RLS.
+  - **F9:** CodeQL #91–#94 and #3 in `api/billing.py`; not reachable from MSP-006.
+  - **F10:** the Stripe usage API was removed from the SDK; settlement is NOT PROVEN.
+- **Verification:**
+  - **Red on `fc31ce17d`:** 46 of 48 new tests fail. The 2 that pass are guards (forged signature rejected, existing metering works).
+  - **Green:** 48/48.
+  - **Postgres probe:** `test_0207_msp_006_billing_rows_are_isolated_by_forced_rls` (CI only).
+  - **Related suites:** 355 passed (MSP-001/002, billing, subscriptions, Stripe webhooks, RBAC, production qualification, assessment assurance).
+- **Generated:** `make route-inventory-generate`, `make contract-authority-refresh` (OpenAPI and marker), offline simulation evidence.
+- **Rollback:** revert. Migration 0207 is additive, and no existing financial row is changed.
+
 ## docs(governance): MSP-002 closure — mark complete and record the organization-id decision (branch governance/msp-002-closure)
 
 - **Work item:** governance-only closure of MSP-002 (#874, merged as `622727d1`), authorized by the founder on 2026-11-15.

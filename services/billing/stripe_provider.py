@@ -153,7 +153,9 @@ class StripeProvider(BillingProvider):
                 sig_header=sig_header,
                 secret=secret,
             )
-            return dict(evt)
+            # MSP-006 (F8): dict(StripeObject) raises KeyError on stripe-python
+            # 15; to_dict() is the SDK's own recursive conversion (as L14 #803).
+            return evt.to_dict()
         except Exception as exc:
             log.warning("stripe.parse_webhook_failed error=%s", type(exc).__name__)
             return {}

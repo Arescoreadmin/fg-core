@@ -64,6 +64,13 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     # being designated as an MSP, not the caller. Internal admin gateway +
     # admin:write + platform.admin; the target must be a customer-kind tenant.
     ("PUT", "/admin/msp/organizations/{tenant_id}"),
+    # MSP-006 platform billing routes: the tenants named in the body or query are
+    # the customer and payer being governed, not the caller. Internal admin
+    # gateway + admin:write/admin:read + platform.admin; each route binds the
+    # named customer's or payer's RLS context and verifies the row belongs to it.
+    ("POST", "/admin/msp/billing/payer-assignments"),
+    ("POST", "/admin/msp/billing/payer-assignments/{assignment_id}/terminate"),
+    ("GET", "/admin/msp/billing/reconciliation"),
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
     # C7 portal grant/session routes enforce tenant isolation through
     # PortalGrantSession validation and PortalScopeMiddleware rather than

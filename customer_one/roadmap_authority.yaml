@@ -75,6 +75,23 @@ next_sequence:
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
+  - id: "MSP-006"
+    title: "MSP-006 — Partner billing, usage attribution and subscription integration"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    authorized_by: "Founder (explicit decision in the MSP-002 closure session, 2026-11-15)"
+    freeze_law_basis: >
+      Founder authorization only. No contracted MSP customer and no Customer-One
+      blocker was cited, so criteria (1) and (2) are NOT claimed, and this entry is
+      not evidence of a contracted customer.
+    scope: >
+      Canonical billing-authority audit, payer assignment, usage attribution,
+      idempotent financial records, deterministic pricing, reconciliation and
+      test-mode processor integration, reusing the existing billing, subscription,
+      entitlement and payment authorities. Does NOT authorize production billing,
+      live charges, live subscriptions, processor dashboard changes or spending.
+      Does not change the Customer-One critical path or any FG_RESULT_TRUTH_GATE
+      acceptance gate.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"

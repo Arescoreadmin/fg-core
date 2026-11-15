@@ -80,6 +80,7 @@ from api.admin_identity import router as admin_identity_router
 from api.identity_acceptance import router as identity_acceptance_router
 from api.tenant_admin import router as tenant_admin_router
 from api.msp import router as msp_router
+from api.msp_billing import router as msp_billing_router
 from api.assessments import public_router as assessments_public_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
@@ -790,6 +791,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(identity_acceptance_router)
     app.include_router(tenant_admin_router)
     app.include_router(msp_router)
+    app.include_router(msp_billing_router)
 
     if not _is_production_runtime():
         app.include_router(ui_router)
@@ -1274,6 +1276,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(identity_acceptance_router)
     app.include_router(tenant_admin_router)
     app.include_router(msp_router)
+    app.include_router(msp_billing_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
     app.include_router(agent_tokens_router)

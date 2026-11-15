@@ -84,6 +84,11 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.msp.context_resolved",
         # MSP-002: an MSP read a capability-gated summary (customer's chain)
         "tenant.msp.portfolio_summary_accessed",
+        # MSP-006: payer assignments and billable usage attribution
+        "tenant.msp.payer_assigned",
+        "tenant.msp.payer_assignment_terminated",
+        "tenant.msp.billing_usage_recorded",
+        "tenant.msp.billing_usage_not_billable",
     }
 )
 INVITATION_TRANSITIONS = {

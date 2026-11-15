@@ -1,4 +1,4 @@
-# MSP commercial model (design; no billing code in MSP-001)
+# MSP commercial model (design in MSP-001; first implementation in MSP-006)
 
 MSP-001 adds no payment processing, invoicing, pricing or metering. It establishes what billing will attribute against, and gates MSP operations on the existing `msp.multi_tenant` entitlement.
 
@@ -31,6 +31,28 @@ Rules:
 2. **No event without consent.** Usage is attributable only when a `DelegatedAccess` was granted for that request. A denied request is never billed.
 3. **Billing visibility follows the payer.** MSP personnel see only the MSP's own wholesale invoices and usage, grouped by customer *id*. Customer billing data (the customer's direct contracts, payment methods, invoices) is never visible to the MSP. That data lives under the customer tenant's RLS, and no MSP capability covers it.
 4. **Managed-customer count** means the number of relationships with derived status `active`. It is computed from `msp_service_relationships`, never stored separately.
+
+## Implemented in MSP-006
+
+MSP-006 implements this contract for one dimension, `assessment.delivered`. See `MSP_006_ARCHITECTURE.md`.
+
+| Contract field | Where it lives |
+|---|---|
+| `provider_tenant_id` | `msp_tenant_id` |
+| `beneficiary_tenant_id` | `customer_tenant_id`, in the `usage_events.metadata_json` of each charge |
+| `relationship_id` | `relationship_id` |
+| Payer | `payer_tenant_id`, chosen by a platform-created `msp_payer_assignments` row bound to the payer's commercial agreement. Rule 1's terms field is that assignment (`msp_paid` or `customer_paid`). |
+| `capability` / `sku_code` | `product_code` and `meter_code` |
+| `actor_subject` | Kept on the customer's own audit chain, not in payer-visible records, so neither party learns the other's people |
+| `occurred_at`, `correlation_id` | Both stored, joinable to the audit chain |
+
+How the rules are met:
+
+- **Rule 1 (one payer).** A partial unique index allows one active assignment per customer and product.
+- **Rule 2 (no event without consent).** A charge is recorded only while the relationship is active.
+- **Rule 3 (visibility follows the payer).** `billing.read` plus forced RLS.
+
+Rule 4 (managed-customer count) is not billed yet.
 
 ## Monetization dimensions
 

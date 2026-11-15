@@ -12020,6 +12020,76 @@
         "title": "CreateOrgRequest",
         "type": "object"
       },
+      "CreatePayerAssignmentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "billing_mode": {
+            "enum": [
+              "msp_paid",
+              "customer_paid"
+            ],
+            "title": "Billing Mode",
+            "type": "string"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "customer_tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Customer Tenant Id",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "product_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Product Code",
+            "type": "string"
+          },
+          "relationship_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Relationship Id",
+            "type": "string"
+          },
+          "subscription_contract_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Subscription Contract Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_tenant_id",
+          "relationship_id",
+          "billing_mode",
+          "product_code",
+          "subscription_contract_id",
+          "currency",
+          "expires_at"
+        ],
+        "title": "CreatePayerAssignmentBody",
+        "type": "object"
+      },
       "CreatePlanRequest": {
         "additionalProperties": false,
         "description": "Create a remediation plan.",
@@ -40386,6 +40456,28 @@
           "reason"
         ],
         "title": "TerminalExecuteRequest",
+        "type": "object"
+      },
+      "TerminatePayerAssignmentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Customer Tenant Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_tenant_id",
+          "expected_version"
+        ],
+        "title": "TerminatePayerAssignmentBody",
         "type": "object"
       },
       "ThreatCounts": {

@@ -8638,3 +8638,57 @@ SOC review outcome: APPROVED for merge as a foundation. Not approved for a real 
    - legacy delegation code remains (non-authoritative, regression-tested).
 
 SOC review outcome: APPROVED for merge as console enablement. Not approved for a real external MSP until `docs/msp/MSP_FIRST_CLIENT_READINESS.md` controls 2 (deployment), 10 and 13 pass.
+
+## 2026-11-15 - feat(msp): MSP-006 — authoritative partner billing and usage attribution
+
+**Scope:** payer assignment, usage attribution, integer pricing and reconciliation for MSP-managed assessment deliveries, built on the existing subscription, pricing, metering and MSP authorities. Founder-authorized; no live charges.
+
+**Called out — schema:** migration 0207 does two things:
+
+- adds `msp_payer_assignments`, with forced RLS (customer or payer only);
+- enables and forces RLS on the existing `usage_events` (audit F1).
+
+It is additive, and no existing row changes.
+
+**Called out — RBAC:** new permission `billing.read`, granted to `tenant_admin` only. `ALL_PERMISSIONS` and `CAPABILITY_REGISTRY` stay in sync. Risk level is medium.
+
+**Called out — authorization paths:**
+
+- **Public usage route.** `POST /billing/usage/events` now refuses `msp.*` meters (`BILLING_METER_RESTRICTED`).
+- **Tenant context.** The billing_v2 usage routes now bind the tenant context before touching `usage_events`.
+- **Delivery.** The QA-approval delivery advance calls the producer inside a savepoint, so it never blocks delivery.
+
+**Called out — processor webhook:**
+
+- **F8.** `StripeProvider.parse_webhook` now returns `evt.to_dict()`. Before, `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook was dropped.
+- **F6.** A `disabled` link stays disabled on later lifecycle events.
+
+**Security analysis:**
+
+1. **Financial authority is separate from access.**
+   - Only a platform operator can create a payer assignment.
+   - The payer is derived from the mode and must hold an active agreement.
+   - A relationship approval creates no liability, and neither party can assign a payer.
+2. **Exactly one payer, at most one charge.**
+   - A partial unique index allows one active assignment per customer and product.
+   - The idempotency key comes from the source operation.
+   - A payload hash rejects a replay with different content.
+   - A savepoint-protected insert handles the concurrency race.
+3. **Trusted producer only.** The customer, the completion and its time are read from the database at the canonical completion point. Client-reported MSP usage is refused.
+4. **Exact, reproducible money.** Integer minor units and explicit currency. Hash-pinned price lists and contracts, verified on use. Historical charges are never repriced.
+5. **Isolation.**
+   - Forced RLS on both financial tables.
+   - `billing.read` reads return only the caller's own records.
+   - The MSP never sees customer-paid records.
+   - The customer never sees the MSP's wholesale price.
+   - No processor secret or personnel identity appears in a payer-visible record.
+6. **Lifecycle.** Revocation, suspension and expiry, MSP suspension, customer deactivation and agreement cancellation all stop new charges. They keep accrued charges and cancel no subscription.
+7. **Audit.** Payer changes and usage decisions are on the identity hash chains, and the chains verify.
+8. **Residual risks:**
+   - settlement NOT PROVEN (F10);
+   - six billing tables still lack database RLS (F1);
+   - CodeQL #91–#94 and #3 deferred to a separate PR (F9, not reachable from MSP-006);
+   - the legacy `admin:write` → `platform.admin` mapping outside production.
+
+SOC review outcome: APPROVED for merge as a synthetic, test-mode billing foundation. Not approved for real collection until settlement is proven under a separate founder authorization and migration 0207 is evidenced in production.
+

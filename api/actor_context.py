@@ -90,6 +90,9 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         # Identity assurance — read and write assurance level / trust score records
         "assurance.read",
         "assurance.write",
+        # Billing visibility (MSP-006) — separate from MSP relationship authority:
+        # an approved MSP relationship never implies the right to see charges.
+        "billing.read",
     }
 )
 
@@ -330,6 +333,12 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "description": "Trigger recomputation of actor assurance level and trust score",
         "risk_level": "medium",
     },
+    # Billing (MSP-006)
+    "billing.read": {
+        "display_name": "View Billing",
+        "description": "Read the organization's own payer assignments, attributed usage and charges; never another organization's financial records",
+        "risk_level": "medium",
+    },
 }
 
 # Role → permission mapping.
@@ -433,6 +442,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             "actor.read",
             # identity assurance — admins can read assurance levels/trust scores
             "assurance.read",
+            # billing visibility for the organization's own financial records (MSP-006)
+            "billing.read",
         }
     ),
     # Client-facing delegation roles (CLIENT-E2E-001) — read-only baseline.
