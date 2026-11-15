@@ -1,3 +1,16 @@
+## docs(governance): MSP-002 closure — mark complete and record the organization-id decision (branch governance/msp-002-closure)
+
+- **Work item:** governance-only closure of MSP-002 (#874, merged as `622727d1`), authorized by the founder on 2026-11-15.
+- **Authority:** MSP-002 moved from `next_sequence` to `completed` in `customer_one/roadmap_authority.yaml`, with its PR and merge SHA. `check_customer_one_roadmap.py --work-item MSP-002` now reports COMPLETED.
+  - MSP-001 (#872, #873) was also still in `next_sequence` after merging. It is reconciled to `completed` in the same edit, so the checker cannot treat it as open.
+  - Freeze Law: both entries keep founder authorization as their only basis. Criteria (1) and (2) are not claimed.
+- **ROADMAP.md:** the MSP-002 row moves from IN_REVIEW to MERGED #874 (COMPLETE).
+- **Founder decision:** the customer's own organization id stays visible on `/partners` as a non-secret identifier, never a credential.
+  - Documented in `docs/msp/MSP_002_SECURITY_MODEL.md` (new section, *Organization identifiers*) and `MSP_FIRST_CLIENT_READINESS.md`.
+  - Pinned by the new guard test `test_organization_id_is_an_identifier_not_a_credential`, which passes on `main` unchanged: it asserts existing behaviour, not a fix. Knowing the id cannot bypass approval, grant access or disclose customer details. A spoofed `X-Tenant-ID` gets 403.
+  - Residual, unchanged: a designated MSP `tenant_admin` can confirm an id exists. Invitation codes are not built.
+- **Not changed:** application code, schema, authority, RBAC, CI. MSP-006 is not started; `check_customer_one_roadmap.py --work-item MSP-006` still fails closed.
+
 ## fix(msp): MSP-002 review P2s — complete relationship lists and relationship history paging (PR #874)
 
 - **Codex P2, console relationship pagination:**
