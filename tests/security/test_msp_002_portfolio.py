@@ -498,6 +498,59 @@ def test_31_msp_never_learns_an_unapproved_customers_name(w):
     assert msp_view["counterparty_display_name"] == f"Synthetic {CUST_1}"
 
 
+def test_organization_id_is_an_identifier_not_a_credential(w):
+    """Founder decision (MSP-002 closure): /partners shows a customer's own
+    organization id so it can be shared with an MSP. Knowing that id must not
+    bypass customer approval, disclose tenant details, or grant access."""
+    customer_name = f"Synthetic {CUST_1}"
+
+    # An organization that is not a designated MSP gets nothing from the id.
+    stranger = w.propose(w.c2_admin, CUST_1, ASSESS_CAPS)
+    assert stranger.status_code == 403, stranger.text
+    # MSP staff without tenant_admin cannot use it either.
+    assert w.propose(w.msp_a_staff, CUST_1, ASSESS_CAPS).status_code == 403
+    assert _relationships(w, w.c1_admin)["total"] == 0
+
+    # A designated MSP admin can only ask; the request carries no authority
+    # and no customer details.
+    proposed = w.propose(w.msp_a_admin, CUST_1, ASSESS_CAPS)
+    assert proposed.status_code == 200, proposed.text
+    body = proposed.json()
+    assert body["status"] == "proposed"
+    assert body["authorized_capabilities"] == []
+    assert customer_name not in proposed.text
+    rid = body["relationship_id"]
+
+    # Until the customer approves, the id opens nothing, and the denial is
+    # indistinguishable from an id that does not exist.
+    unknown = w.context(w.msp_a_admin, "no-such-tenant")
+    for who in (w.msp_a_admin, w.msp_a_staff):
+        denied = w.context(who, CUST_1)
+        assert denied.status_code == 404
+        assert denied.json() == unknown.json()
+    assert CUST_1 not in w.customer_ids(w.msp_a_admin)
+    page = w.call(w.msp_a_admin, "GET", "/admin/msp/portfolio")
+    assert page.status_code == 200, page.text
+    assert page.json()["items"] == []
+    assert customer_name not in page.text
+    # Presenting the id as the caller's tenant is refused outright.
+    spoofed = w.call(
+        w.msp_a_admin,
+        "GET",
+        "/admin/msp/portfolio",
+        extra_headers={"X-Tenant-ID": CUST_1},
+    )
+    assert spoofed.status_code == 403
+    assert customer_name not in spoofed.text
+    msp_view = _relationships(w, w.msp_a_admin)["items"][0]
+    assert msp_view["counterparty_display_name"] is None
+
+    # Holding the id never lets the MSP side approve its own request.
+    for who in (w.msp_a_admin, w.msp_a_staff):
+        assert w.approve(who, rid, ASSESS_CAPS).status_code == 403
+    assert _relationships(w, w.c1_admin)["items"][0]["status"] == "proposed"
+
+
 def test_34_customer_admin_reaches_its_own_queue_and_others_do_not(w):
     w.propose(w.msp_a_admin, CUST_1, ASSESS_CAPS)
     w.propose(w.msp_b_admin, CUST_1, ASSESS_CAPS)

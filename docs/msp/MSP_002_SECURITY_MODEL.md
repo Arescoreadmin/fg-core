@@ -44,6 +44,21 @@ Selecting a customer (`POST /admin/msp/customers/{id}/context`) validates and au
 - **No aggregation and no cache.** There is no cross-customer aggregation and no cache. Each customer's summary is computed from that tenant's rows alone (tests 13 and 33).
 - **Uniform denial.** Any MSP-side refusal (no relationship, pending, suspended, revoked, expired, not delegated, or no such tenant) returns the same 404 `MSP_CUSTOMER_NOT_FOUND`.
 
+## Organization identifiers
+
+**Founder decision (2026-11-15).** The `/partners` page shows the customer's own organization id so the customer can give it to an MSP to start a relationship. The id is a non-secret identifier, never an authorization credential.
+
+Knowing an organization id does not:
+
+- **bypass approval.** A proposal is created `proposed` with no authorized capabilities. Only the customer's own `tenant_admin`, who is not also an MSP member, can approve it. The MSP side cannot approve its own request (`MSP_APPROVAL_REQUIRES_CUSTOMER`).
+- **grant access.** Until approval, the customer is absent from the portfolio and the customer list. Selecting it returns the same 404 `MSP_CUSTOMER_NOT_FOUND` as an id that does not exist.
+- **disclose details.** Responses to the MSP carry no customer display name before approval and no customer records. Presenting the id as the caller's tenant (`X-Tenant-ID`) is refused with 403.
+- **help anyone else.** An organization that is not a designated, active MSP, and MSP staff without `tenant_admin`, cannot propose at all (403).
+
+All of this is pinned by `tests/security/test_msp_002_portfolio.py::test_organization_id_is_an_identifier_not_a_credential`, alongside MSP-001's isolation tests.
+
+**What an id does reveal.** A designated MSP `tenant_admin` can tell whether an id exists, because a proposal to it succeeds rather than returning 404 (the tenant-id oracle below). Invitation codes would remove this; they are not built.
+
 ## Information disclosure controls
 
 - An MSP never learns a customer's display name before that customer approves (test 31).
@@ -86,7 +101,7 @@ Nothing logs tokens, secrets, raw evidence or customer payloads. Server logs for
 
 ## Residual risks
 
-- **Tenant-id oracle.** A designated MSP admin can still test whether a customer id exists (MSP-001). The customer page shows its own organization id for sharing; invitation codes would remove both.
+- **Tenant-id oracle.** A designated MSP admin can still test whether a customer id exists (MSP-001). The customer page shows its own organization id for sharing, kept by founder decision (see *Organization identifiers*); invitation codes would remove both.
 - **Truncation.** Summary counts cover only the 100 most recent records per source, and this is labelled in the UI. Relationship lists and relationship history are not truncated: the console follows every relationship page (failing closed past 10,000), and history filters by relationship in the database and pages back to the first event.
 - **Legacy delegation.** The non-authoritative legacy delegation code still exists; it grants nothing.
 - **Non-admin MSP staff** have no console path.

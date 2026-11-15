@@ -75,39 +75,6 @@ next_sequence:
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
-  - id: "MSP-001"
-    title: "MSP-001 — MSP organization, customer-approved relationship and delegated-authority foundation"
-    work_class: "FOUNDER_AUTHORIZED"
-    status: NEXT
-    authorized_by: "Founder (explicit decision in the MSP-001 session, 2026-11-13)"
-    freeze_law_basis: >
-      Founder authorization only. No contracted MSP customer and no Customer-One
-      blocker was cited, so criteria (1) and (2) are NOT claimed. Partial support
-      for criterion (3): the work closes a pre-existing cross-tenant read through
-      the control-plane v2 MSP scope (any control-plane:msp:* credential could read
-      any tenant's control-plane data without customer consent).
-    scope: >
-      Foundation only: designation, customer-approved relationships, intersection-only
-      delegated read authority, discovery/context API, audit attribution. No MSP access
-      to customer data routes, no billing, no UI. Does not change the Customer-One
-      critical path or any FG_RESULT_TRUTH_GATE acceptance gate.
-  - id: "MSP-002"
-    title: "MSP-002 — Multi-client portfolio and customer approval console"
-    work_class: "FOUNDER_AUTHORIZED"
-    status: NEXT
-    authorized_by: "Founder (explicit decision in the MSP-002 session, 2026-11-14)"
-    freeze_law_basis: >
-      Founder authorization only. No contracted MSP customer and no Customer-One
-      blocker was cited, so criteria (1) and (2) are NOT claimed. Partial support
-      for criterion (3): MSP-001's customer-side routes could not be called from
-      the console (the actor was resolved before the console's delegation proof
-      was verified), leaving customer approval API-only.
-    scope: >
-      Read-only portfolio API and relationship history on MSP-001's authority; MSP
-      portfolio and customer approval console pages; console transport wiring. No
-      schema change, no new service, no MSP write access to customer data, no
-      governance score, no billing. Does not change the Customer-One critical path or
-      any FG_RESULT_TRUTH_GATE acceptance gate.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"
@@ -513,6 +480,43 @@ completed:
   - id: "REVENUE-GATE-1"
     title: "Revenue Gate 1 — all 12 items cleared"
     prs: ["#539", "#540", "#544", "P-1", "FA-1", "FA-2", "R-1", "R-2", "P-2"]
+
+  - id: "MSP-001"
+    title: "MSP-001 — MSP organization, customer-approved relationship and delegated-authority foundation"
+    prs: ["#872", "#873"]
+    merged_sha: "3bc4a5762299e1cdf14c3e57763d12dbe20fee2e"
+    work_class: "FOUNDER_AUTHORIZED"
+    authorized_by: "Founder (explicit decision in the MSP-001 session, 2026-11-13)"
+    freeze_law_criterion: >
+      Founder authorization only; criteria (1) and (2) NOT claimed. Partial support
+      for criterion (3): closed a pre-existing cross-tenant read through the
+      control-plane v2 MSP scope.
+    note: >
+      Reconciled at MSP-002 closure: merged as #872 (3bc4a576); the P17 RBAC
+      classification follow-up merged as #873 (ee1a31e1). Foundation only: no UI,
+      no billing, no MSP write access. Production designation, entitlement and
+      migration 0206 are not evidenced as deployed.
+  - id: "MSP-002"
+    title: "MSP-002 — Multi-client portfolio and customer approval console"
+    prs: ["#874"]
+    merged_sha: "622727d167de12f1dbc1965aabbcc0b50ff7b600"
+    work_class: "FOUNDER_AUTHORIZED"
+    authorized_by: "Founder (explicit decision in the MSP-002 session, 2026-11-14)"
+    freeze_law_criterion: >
+      Founder authorization only; criteria (1) and (2) NOT claimed. Partial support
+      for criterion (3): MSP-001's customer-side routes were unusable from the
+      console, leaving customer approval API-only.
+    note: >
+      Read-only portfolio and relationship history on MSP-001's authority; /msp
+      and /partners console pages; console transport fix. Post-merge validation on
+      main 622727d1: focused MSP suites 71 passed / 22 Postgres-only skipped (all
+      22 Postgres replay tests pass in CI); console 2472 tests, lint, typecheck,
+      build pass; fg-fast-ci 686 passed; fg-security 1462 passed / 1 skipped.
+      Founder decision at closure (2026-11-15): the customer's own organization id
+      stays visible on /partners as a non-secret identifier, never a credential
+      (test_organization_id_is_an_identifier_not_a_credential). Not production
+      ready: deployment, designation, entitlement and migration 0206 are not
+      evidenced in production; partner billing (MSP-006) is not implemented.
 
 precedence:
   - level: 1
