@@ -8751,6 +8751,8 @@ SOC review outcome: APPROVED as a review fix within PR #876.
 
 **Why the exceptions are needed.** These are platform-only routes (internal admin gateway + `platform.admin`). The MSP tenant they name is the review queue, not the caller.
 
+**Exact change.** The diff is +6 lines: 3 tuples plus a 3-line comment, inserted after the MSP-006 entries. The set is checked by exact membership (`route_key not in EXACT_TENANT_BINDING_EXCEPTIONS`), with no wildcard, prefix or regex. No other line of the checker changed.
+
 **Compensating controls.** Each route binds that MSP's RLS context and verifies row ownership. The exceptions are exact method-and-path pairs; no check is disabled.
 
 **Called out — console BFF:** two new proxied prefixes, `admin/msp/assessments` and `admin/msp/onboarding`, GET and POST only. Each call is a delegated named-actor call for the session tenant. `admin/msp/platform/...` is never proxied.
@@ -8788,5 +8790,7 @@ SOC review outcome: APPROVED as a review fix within PR #876.
 - There are no notifications.
 - Migration 0208 and the MSP-001/002/006 prerequisites are not evidenced in production.
 - Settlement is still NOT PROVEN (MSP-006 F10).
+
+**Verification:** 43 of 44 new tests fail on `main` `295fde436`; the only one that passes is the direct-customer guard. All 44 pass on the branch. The Postgres RLS probe for 0208 runs in CI Migrations Replay.
 
 SOC review outcome: APPROVED for merge as a synthetic, development-only orchestration foundation. Not approved for real customer use until it is deployed, migration 0208 is evidenced, and a live partner acceptance is run under separate authorization.

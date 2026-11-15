@@ -15,14 +15,14 @@
   - **Console:** `/msp` gains referrals and per-customer assessment requests, start and progress; `/partners` gains customer approve, decline and revoke, rendered only when requests exist.
   - **BFF:** two GET/POST prefixes.
 - **Not changed:** the MSP-001 read-only ceiling `MSP_DELEGABLE_PERMISSIONS`; Field Assessment statuses and gates; QA, report qualification and governed delivery; MSP-006 billing (the only charge is still the delivery producer).
-- **CI check configuration (called out):** `tools/ci/check_plane_registry.py` gains three exact `EXACT_TENANT_BINDING_EXCEPTIONS` for the platform review routes: `GET /admin/msp/platform/onboarding`, and `POST .../{request_id}/link` and `.../reject`.
+- **CI check configuration (called out):** `tools/ci/check_plane_registry.py`, +6 lines (3 entries plus a comment), no other change. It gains three exact `EXACT_TENANT_BINDING_EXCEPTIONS` for the platform review routes. The set is matched by exact `(method, path)` membership (`route_key not in EXACT_TENANT_BINDING_EXCEPTIONS`), with no wildcard or prefix: `GET /admin/msp/platform/onboarding`, and `POST .../{request_id}/link` and `.../reject`.
   - **Why:** the MSP tenant they name is the queue being reviewed, not the caller.
   - **Compensating control:** internal admin gateway + `platform.admin`; the named MSP's RLS context is bound and row ownership verified.
   - Same pattern as MSP-001 and MSP-006. No check is disabled.
 - **Existing test updated (called out):** `apps/console/tests/msp-002-console.test.js` pins the exact set of proxied MSP prefixes. It now lists the two MSP-003 prefixes; the GET/POST-only and no-platform-route assertions are unchanged.
 - **Verification:**
-  - **Red on `295fde436`:** 40 of 41 new tests fail. The 1 that passes is the direct-customer creation guard (t02).
-  - **Green:** 41/41.
+  - **Red on `295fde436`:** 43 of 44 new tests fail. The 1 that passes is the direct-customer creation guard (t02).
+  - **Green:** 44/44. This includes three invariant tests added in final validation: a grant is bound to its own relationship (C); referrals do not disclose existing tenants (E); payer assignments and grants are independent authorities (G/H).
   - **Postgres probe:** `test_0208_msp_003_orchestration_rows_are_isolated_by_forced_rls` (CI only).
   - **Console:** 19 new tests.
 - **Rollback:** revert. Migration 0208 is additive, and initiated engagements stay valid customer engagements.

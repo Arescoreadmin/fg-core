@@ -1206,3 +1206,99 @@ def test_first_partner_guided_assessment_demonstration(w, engine):
         for chain in ("customer-one", MSP_A):
             set_tenant_context(db, chain)
             assert verify_identity_audit_chain(db, chain)
+
+
+# ---------------------------------------------------------------------------
+# Invariants C, E, G, H (final-validation review)
+# ---------------------------------------------------------------------------
+
+
+def test_inv_c_grant_is_bound_to_its_own_relationship(w):
+    """A grant approved under one relationship is dead once that relationship
+    ends, even if the same MSP and customer later establish a new one."""
+    rid, grant = _approved_grant(w)
+    assert w.act(w.c1_admin, rid, "revoke").status_code == 200
+    new_rid = _relate(w)
+    assert new_rid != rid
+    resp = _initiate(w, grant["grant_id"])
+    assert resp.status_code == 409 and _code(resp) == "MSP_RELATIONSHIP_INACTIVE"
+    assert _engagements(CUST_1) == []
+    # The grant cannot be re-pointed: its relationship is fixed at request.
+    [view] = [
+        g for g in _grants(w, w.msp_a_admin) if g["grant_id"] == grant["grant_id"]
+    ]
+    assert view["relationship_id"] == rid
+    assert "RELATIONSHIP_INACTIVE" in view["blockers"]
+
+
+def test_inv_e_referrals_do_not_disclose_existing_tenants(w):
+    """Referring an organization that already exists on FrostGate (same
+    display name, same admin email domain) looks exactly like referring an
+    unknown one: no tenant id, no match signal."""
+    existing = _onboard(
+        w,
+        key="ref-existing",
+        name=f"Synthetic {CUST_2}",
+        email=f"c2-admin@{CUST_2}.example.invalid",
+    )
+    unknown = _onboard(
+        w, key="ref-unknown", name="Nobody Co", email="it@nobody.invalid"
+    )
+    assert existing.status_code == unknown.status_code == 200
+    a, b = existing.json(), unknown.json()
+    assert a["customer_tenant_id"] is None and b["customer_tenant_id"] is None
+    assert a["stage"] == b["stage"] == "requested"
+    assert set(a) == set(b)
+    # Apart from the MSP's own echoed input, nothing names the tenant.
+    echoed = {"organization_name", "contact_email", "request_key"}
+    assert CUST_2 not in str({k: v for k, v in a.items() if k not in echoed})
+    # Nothing was linked, proposed or written to the other tenant's chain.
+    assert _chain_events(CUST_2, "tenant.msp.") == []
+
+
+def test_inv_g_h_payer_assignment_and_grant_are_independent_authorities(w, engine):
+    """G: a payer assignment grants no assessment authority. H: an approved
+    grant establishes no payment liability."""
+    # G — commercial authority alone: no grant, no initiation path, no
+    # engagement, and the relationship's read-only ceiling is unchanged.
+    rid = _relate(w)
+    _entitle(w, rid)
+    assert _grants(w, w.msp_a_admin) == []
+    for gid in (str(uuid.uuid4()),):
+        assert _initiate(w, gid).status_code == 404
+    from api.msp_authority import MSP_DELEGABLE_PERMISSIONS
+
+    assert "assessment.create" not in MSP_DELEGABLE_PERMISSIONS
+    resp = _fa(
+        w,
+        w.msp_a_admin,
+        "POST",
+        "/field-assessment/engagements",
+        {"client_name": "x", "assessor_id": "a", "assessment_type": "soc2"},
+        tenant=CUST_1,
+    )
+    assert resp.status_code in (403, 404)
+    assert _engagements(CUST_1) == []
+
+    # H — a grant approved for a customer with no payer creates no payer
+    # assignment, no usage and no ledger entry, and cannot be started.
+    w.establish(w.msp_a_admin, w.c2_admin, req=CAPS, auth=CAPS)
+    req = _request(w, customer=CUST_2).json()
+    ok = _decide(w, w.c2_admin, req, "approve")
+    assert ok.status_code == 200
+    with _session() as db:
+        assert (
+            db.execute(
+                text("SELECT COUNT(*) FROM msp_payer_assignments WHERE tenant_id = :t"),
+                {"t": CUST_2},
+            ).scalar()
+            == 0
+        )
+        assert (
+            db.execute(text("SELECT COUNT(*) FROM billing_event_ledger")).scalar() == 0
+        )
+    assert _usage_rows() == []
+    blocked = _initiate(w, req["grant_id"])
+    assert (
+        blocked.status_code == 409 and _code(blocked) == "MSP_ASSESSMENT_NOT_ENTITLED"
+    )
