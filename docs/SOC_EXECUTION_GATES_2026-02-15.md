@@ -8713,3 +8713,15 @@ This is the same pattern as MSP-001's `PUT /admin/msp/organizations/{tenant_id}`
 
 SOC review outcome: APPROVED for merge as a synthetic, test-mode billing foundation. Not approved for real collection until settlement is proven under a separate founder authorization and migration 0207 is evidenced in production.
 
+## 2026-11-15 - fix(msp): MSP-006 review — reserved producer key namespace and termination-bounded reconciliation
+
+**Called out — authorization path:** the public `POST /billing/usage/events` now also refuses idempotency keys in the trusted producer's `msp006:` namespace (403 `BILLING_METER_RESTRICTED`), not only `msp.*` meters.
+
+Before this, a `billing:write` caller could occupy the producer's `(tenant_id, idempotency_key)` slot with an unrelated meter. That permanently suppressed the real charge for a delivery: a financial-integrity denial of service, not a disclosure.
+
+**Called out — reconciliation correctness:** coverage of a payer assignment now ends at `terminated_at`. Deliveries after early termination, including ones charged under a replacement assignment, are no longer reported as missing usage for the former payer.
+
+There is no schema, RBAC or CI change.
+
+SOC review outcome: APPROVED as a review fix within PR #876.
+

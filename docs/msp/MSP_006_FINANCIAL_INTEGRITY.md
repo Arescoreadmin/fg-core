@@ -51,6 +51,7 @@ Distributed exactly-once delivery is not claimed. The guarantee is one database 
 | Rule | Test |
 |---|---|
 | Only `field_assessment.delivery` produces MSP usage; the public metering route refuses `msp.*` meters | 14 |
+| The public metering route refuses the producer's `msp006:` idempotency namespace, so no other writer can occupy a delivery's slot | 14b |
 | The producer reads the customer, the completion and its time from the database; a foreign or incomplete engagement is never billed | 15, 16 |
 | Usage binds the delivery audit event id (`source_event_ref`) | 17 |
 | The producer is wired once, between `eng.status = "delivered"` and the portal grant in `qa_approve_report_route` | 17b |
@@ -82,7 +83,7 @@ Across the period it reports:
 - duplicate source references (test 29);
 - missing processor references (test 30);
 - webhook replays recorded in the ledger;
-- deliveries with no usage and no recorded not-billable decision (test 30b);
+- deliveries with no usage and no recorded not-billable decision, counted only while an assignment was in force (before any termination) (tests 30b, 30d, 30e);
 - totals per currency.
 
 A charge is reconstructed entirely from its own record and from immutable pins, so the report never depends on current prices.

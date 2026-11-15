@@ -347,8 +347,9 @@ async def record_usage_event(
     request: Request,
 ) -> UsageEventResponse:
     tenant_id = require_bound_tenant(request)
-    # MSP-006 (F7): MSP meters are billable only from the trusted producer.
-    assert_meter_not_reserved(body.meter_code)
+    # MSP-006 (F7): MSP meters and the producer's idempotency namespace are
+    # writable only by the trusted producer.
+    assert_meter_not_reserved(body.meter_code, body.idempotency_key)
     eng = get_engine()
     with Session(eng) as db:
         # MSP-006 (F1): usage_events has forced RLS; bind before any access.

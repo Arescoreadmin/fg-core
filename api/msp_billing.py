@@ -89,6 +89,9 @@ router = APIRouter(prefix="/admin/msp/billing", tags=["msp-006"])
 USAGE_SCHEMA_VERSION = "msp006.usage.v1"
 TRUSTED_PRODUCER = "field_assessment.delivery"
 RESERVED_METER_PREFIX = "msp."
+# The trusted producer's idempotency namespace. Reserved on the public route so
+# no other writer can pre-occupy a (tenant_id, idempotency_key) slot.
+RESERVED_KEY_PREFIX = "msp006:"
 
 PRODUCT_ASSESSMENT_DELIVERED = "assessment.delivered"
 # product_code -> (meter_code, unit). One product until another is authorized.
@@ -245,6 +248,13 @@ def _in_window(row: Any, at: datetime) -> bool:
     return start is not None and end is not None and start <= at < end
 
 
+def _in_coverage(row: Any, at: datetime) -> bool:
+    """The assignment covered ``at``: inside its window and before any
+    termination. Termination keeps ``expires_at``, so it bounds coverage here."""
+    terminated = as_utc(getattr(row, "terminated_at", None))
+    return _in_window(row, at) and (terminated is None or at < terminated)
+
+
 def resolve_payer(
     db: Session,
     *,
@@ -367,7 +377,7 @@ def _delivery_evidence(
 
 
 def usage_idempotency_key(product_code: str, customer: str, source_id: str) -> str:
-    return f"msp006:{product_code}:{customer}:{source_id}"
+    return f"{RESERVED_KEY_PREFIX}{product_code}:{customer}:{source_id}"
 
 
 def _semantic_payload(
@@ -881,7 +891,7 @@ def _deliveries_without_usage(
             if (ev.payload or {}).get("new_status") != "delivered":
                 continue
             at = _parse_ts(ev.created_at)
-            if at is None or not (start <= at < end) or not _in_window(a, at):
+            if at is None or not (start <= at < end) or not _in_coverage(a, at):
                 continue
             key = (customer, str(a.product_code), str(ev.engagement_id))
             if key in recorded or _not_billable_decision(
@@ -1198,7 +1208,10 @@ def get_reconciliation(
     return reconcile_period(db, payer_tenant_id=payer_tenant_id, period=period)
 
 
-def assert_meter_not_reserved(meter_code: str) -> None:
-    """Reserved MSP meters accept usage only from MSP-006's trusted producer."""
-    if str(meter_code).startswith(RESERVED_METER_PREFIX):
+def assert_meter_not_reserved(meter_code: str, idempotency_key: str = "") -> None:
+    """Reserved MSP meters and the producer's idempotency namespace accept
+    usage only from MSP-006's trusted producer (audit F7; review P1)."""
+    if str(meter_code).startswith(RESERVED_METER_PREFIX) or str(
+        idempotency_key
+    ).startswith(RESERVED_KEY_PREFIX):
         raise billing_error(403, BILLING_METER_RESTRICTED)

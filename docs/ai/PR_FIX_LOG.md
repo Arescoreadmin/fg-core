@@ -1,3 +1,19 @@
+## fix(msp): MSP-006 review — reserve the producer key namespace; end coverage at termination (PR #876)
+
+- **Codex P1, reserved idempotency namespace:**
+  - **Problem:** the public `POST /billing/usage/events` reserved only `msp.*` meter names. A `billing:write` caller could record an ordinary meter (for example `api.calls`) under the producer's key `msp006:assessment.delivered:{customer}:{engagement}`. Because uniqueness is `(tenant_id, idempotency_key)`, the later delivery collided with it, raised `UsageIdempotencyConflict` (suppressed by the safe wrapper), and was never charged, permanently.
+  - **Fix:** `assert_meter_not_reserved(meter_code, idempotency_key)` also refuses the `msp006:` key prefix (`RESERVED_KEY_PREFIX`) with 403 `BILLING_METER_RESTRICTED`.
+- **Codex P2, coverage ends at termination:**
+  - **Problem:** `_deliveries_without_usage` checked only an assignment's original window. Termination records `terminated_at` without shortening `expires_at`, so after early termination, later deliveries (including ones charged under a replacement assignment) were reported as missing usage for the former payer.
+  - **Fix:** a new `_in_coverage` bounds historical coverage by `terminated_at` and keeps the check for deliveries made before termination.
+- **Verification:**
+  - **Red on `a6006abc5`:** 3 new tests fail:
+    - `test_14b_public_route_cannot_squat_the_msp_idempotency_namespace`;
+    - `test_30d_reconciliation_coverage_ends_at_termination`;
+    - `test_30e_replacement_payer_deliveries_are_not_charged_to_the_old_payer`.
+  - **Green:** MSP-006 tests 51/51.
+- **Not changed:** schema, RBAC, CI configuration.
+
 ## feat(msp): MSP-006 — authoritative partner billing and usage attribution (branch feat/msp-006-billing-attribution)
 
 - **Work item:** MSP-006, founder-authorized on 2026-11-15 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.

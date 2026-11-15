@@ -1181,3 +1181,84 @@ def test_first_revenue_demonstration(w):
     )
     assert report["settlement"] == "NOT_PROVEN"  # no revenue is claimed
     assert MSP_B not in json.dumps(report)
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (PR #876): reserved key namespace; coverage ends at termination
+# ---------------------------------------------------------------------------
+
+
+def test_14b_public_route_cannot_squat_the_msp_idempotency_namespace(w):
+    """Codex P1: an ordinary meter with an msp006: key would collide with the
+    producer's (tenant_id, idempotency_key) and suppress the real charge."""
+    from api.db_models_billing import UsageMeter
+    from tests.security.test_msp_001_foundation import mint_key
+
+    _billable_world(w, "customer_paid")
+    with _session() as db:
+        db.add(
+            UsageMeter(
+                meter_code="api.calls",
+                display_name="API calls",
+                billing_category="usage",
+                active="1",
+            )
+        )
+        db.commit()
+    eid = _deliver(CUST_1)
+    squat = w.client.post(
+        "/billing/usage/events",
+        json={
+            "meter_code": "api.calls",
+            "quantity": "1",
+            "idempotency_key": f"msp006:{PRODUCT}:{CUST_1}:{eid}",
+        },
+        headers={"x-api-key": mint_key("billing:write", tenant_id=CUST_1)},
+    )
+    assert squat.status_code == 403, squat.text
+    assert squat.json()["detail"] == {"code": "BILLING_METER_RESTRICTED"}
+    out = _produce(CUST_1, eid)
+    assert out.status == "recorded"
+    [(_, payer, md, _)] = _usage_rows()
+    assert payer == CUST_1 and md["source_event_id"] == eid
+
+
+def _terminate(w: World, aid: str, version: int = 1):
+    resp = w.call(
+        w.platform,
+        "POST",
+        f"/admin/msp/billing/payer-assignments/{aid}/terminate",
+        {"customer_tenant_id": CUST_1, "expected_version": version},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_30d_reconciliation_coverage_ends_at_termination(w):
+    """Codex P2: a delivery after termination is not missing usage for the
+    former payer; one before termination still is."""
+    rid, aid = _billable_world(w)
+    before = _deliver(CUST_1, at=_now())  # covered, but the producer never ran
+    _terminate(w, aid)
+    after = _deliver(CUST_1, at=_now() + timedelta(seconds=3))
+    assert _produce(CUST_1, after).status == "not_applicable"
+    report = _reconcile(w, MSP_A, _period())
+    assert report["deliveries_without_usage"] == [
+        {
+            "customer_tenant_id": CUST_1,
+            "source_event_id": before,
+            "payer_assignment_id": aid,
+        }
+    ]
+
+
+def test_30e_replacement_payer_deliveries_are_not_charged_to_the_old_payer(w):
+    rid, old = _billable_world(w, "msp_paid")
+    _terminate(w, old)
+    _seed_price(CUST_1)
+    new = _assign(w, rid, mode="customer_paid", agreement=_seed_agreement(CUST_1))
+    assert new.status_code == 200, new.text
+    eid = _deliver(CUST_1, at=_now() + timedelta(seconds=3))
+    assert _produce(CUST_1, eid).status == "recorded"
+    assert _reconcile(w, MSP_A, _period())["deliveries_without_usage"] == []
+    report = _reconcile(w, CUST_1, _period())
+    assert report["ok"] is True and len(report["charges"]) == 1
