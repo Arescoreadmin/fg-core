@@ -1439,8 +1439,11 @@ def test_0207_msp_006_billing_rows_are_isolated_by_forced_rls(
         # usage_events: the payer records and reads its own usage only.
         _bind(db, msp)
         evt = record_usage_event(db, msp, meter, "1", f"probe-{uuid.uuid4().hex}")
+        # Capture before commit: the commit ends the transaction-local tenant
+        # context, so a post-commit reload is (correctly) hidden by forced RLS.
+        evt_id = evt.id
         db.commit()
-        for tenant, expected in ((msp, {evt.id}), (cust, set()), (third, set())):
+        for tenant, expected in ((msp, {evt_id}), (cust, set()), (third, set())):
             s = sm()
             try:
                 _bind(s, tenant)

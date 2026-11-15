@@ -1262,3 +1262,44 @@ def test_30e_replacement_payer_deliveries_are_not_charged_to_the_old_payer(w):
     assert _reconcile(w, MSP_A, _period())["deliveries_without_usage"] == []
     report = _reconcile(w, CUST_1, _period())
     assert report["ok"] is True and len(report["charges"]) == 1
+
+
+def test_32b_legacy_billing_reads_do_not_bypass_billing_read(w):
+    """Codex P1: admin:read alone must not expose MSP charges through the
+    pre-existing billing_v2 usage and explain routes."""
+    from api.db_models_billing import UsageMeter
+    from tests.security.test_msp_001_foundation import mint_key
+
+    _billable_world(w)
+    assert _produce(CUST_1, _deliver(CUST_1)).status == "recorded"
+    with _session() as db:
+        db.add(
+            UsageMeter(
+                meter_code="api.calls",
+                display_name="API calls",
+                billing_category="usage",
+                active="1",
+            )
+        )
+        db.commit()
+    ordinary = w.client.post(
+        "/billing/usage/events",
+        json={"meter_code": "api.calls", "quantity": "2", "idempotency_key": "k-ord"},
+        headers={"x-api-key": mint_key("billing:write", tenant_id=MSP_A)},
+    )
+    assert ordinary.status_code == 200, ordinary.text
+    reader = {"x-api-key": mint_key("admin:read", tenant_id=MSP_A)}
+    usage = w.client.get(f"/admin/tenants/{MSP_A}/billing/usage", headers=reader)
+    assert usage.status_code == 200, usage.text
+    assert [e["meter_code"] for e in usage.json()["events"]] == ["api.calls"]
+    explain = w.client.get(f"/admin/billing/explain?tenant_id={MSP_A}", headers=reader)
+    assert explain.status_code == 200, explain.text
+    assert [e["meter_code"] for e in explain.json()["pending_usage"]] == ["api.calls"]
+    assert METER not in usage.text
+    usage_records = json.dumps(
+        [explain.json()["pending_usage"], explain.json()["failed_usage"]]
+    )
+    assert METER not in usage_records  # the meter catalog may name it; no charge
+    for body in (usage.text, explain.text):
+        assert "amount_minor" not in body and str(RATE) not in body
+        assert CUST_1 not in body

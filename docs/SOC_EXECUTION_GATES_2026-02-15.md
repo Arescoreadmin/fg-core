@@ -8721,6 +8721,8 @@ Before this, a `billing:write` caller could occupy the producer's `(tenant_id, i
 
 **Called out — reconciliation correctness:** coverage of a payer assignment now ends at `terminated_at`. Deliveries after early termination, including ones charged under a replacement assignment, are no longer reported as missing usage for the former payer.
 
+**Called out — authorization (financial data visibility):** `GET /admin/tenants/{tenant_id}/billing/usage` and `GET /admin/billing/explain` (scope `admin:read` only) no longer return usage on reserved `msp.*` meters. Before, they exposed MSP charges (prices, amounts, attribution) without `billing.read`. MSP charges are now readable only through `/admin/msp/billing/*`. Ordinary usage is unchanged.
+
 There is no schema, RBAC or CI change.
 
 SOC review outcome: APPROVED as a review fix within PR #876.

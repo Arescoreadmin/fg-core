@@ -33,7 +33,7 @@ from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.tenant_authority import ensure_billing_eligible
 from api.db import get_engine, set_tenant_context
 from api.db_models_billing import BillingEventLedger, BillingSubscriptionLink
-from api.msp_billing import assert_meter_not_reserved
+from api.msp_billing import RESERVED_METER_PREFIX, assert_meter_not_reserved
 from api.observability.metrics import (
     BILLING_WEBHOOK_REPLAY_TOTAL,
     BILLING_WEBHOOKS_TOTAL,
@@ -386,8 +386,14 @@ def list_usage_events(
     eng = get_engine()
     with Session(eng) as db:
         set_tenant_context(db, tenant_id)
+        # MSP-006 review: MSP charges (reserved msp.* meters) are financial
+        # records readable only through /admin/msp/billing/* with billing.read.
         events = _engine.list_usage_events(
-            db, tenant_id, billing_status=billing_status, limit=limit
+            db,
+            tenant_id,
+            billing_status=billing_status,
+            limit=limit,
+            exclude_meter_prefixes=(RESERVED_METER_PREFIX,),
         )
     return {
         "tenant_id": tenant_id,
@@ -527,5 +533,7 @@ def billing_explain(
     eng = get_engine()
     with Session(eng) as db:
         set_tenant_context(db, tenant_id)
-        result = _engine.explain_billing(db, tenant_id)
+        result = _engine.explain_billing(
+            db, tenant_id, exclude_meter_prefixes=(RESERVED_METER_PREFIX,)
+        )
     return result

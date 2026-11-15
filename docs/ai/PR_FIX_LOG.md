@@ -1,4 +1,4 @@
-## fix(msp): MSP-006 review — reserve the producer key namespace; end coverage at termination (PR #876)
+## fix(msp): MSP-006 review — reserve the producer key namespace, end coverage at termination, protect legacy usage reads (PR #876)
 
 - **Codex P1, reserved idempotency namespace:**
   - **Problem:** the public `POST /billing/usage/events` reserved only `msp.*` meter names. A `billing:write` caller could record an ordinary meter (for example `api.calls`) under the producer's key `msp006:assessment.delivered:{customer}:{engagement}`. Because uniqueness is `(tenant_id, idempotency_key)`, the later delivery collided with it, raised `UsageIdempotencyConflict` (suppressed by the safe wrapper), and was never charged, permanently.
@@ -6,12 +6,18 @@
 - **Codex P2, coverage ends at termination:**
   - **Problem:** `_deliveries_without_usage` checked only an assignment's original window. Termination records `terminated_at` without shortening `expires_at`, so after early termination, later deliveries (including ones charged under a replacement assignment) were reported as missing usage for the former payer.
   - **Fix:** a new `_in_coverage` bounds historical coverage by `terminated_at` and keeps the check for deliveries made before termination.
+- **Codex P1, legacy reads bypassed `billing.read`:**
+  - **Problem:** `GET /admin/tenants/{tenant_id}/billing/usage` and `GET /admin/billing/explain` check only `admin:read`. Both returned every `usage_events` row, so MSP charges (prices, amounts, attribution) were readable without `billing.read`.
+  - **Fix:** both routes pass `exclude_meter_prefixes=("msp.",)` to `BillingEngine`. MSP charges are readable only through `/admin/msp/billing/*`. Ordinary usage is unchanged.
+- **CI Migrations Replay failure on `a6006abc5`:**
+  - **Problem:** `test_0207_msp_006_billing_rows_are_isolated_by_forced_rls` read `evt.id` after `commit()`. The commit ends the transaction-local tenant context, so forced RLS correctly hid the reload (`ObjectDeletedError`). The payer-assignment visibility assertions had already passed.
+  - **Fix:** the probe captures the id before committing. This was a test defect; production paths already serialize before commit.
 - **Verification:**
-  - **Red on `a6006abc5`:** 3 new tests fail:
+  - **Red on `a6006abc5`:** 4 new tests fail (the 3 below and `test_32b_legacy_billing_reads_do_not_bypass_billing_read`):
     - `test_14b_public_route_cannot_squat_the_msp_idempotency_namespace`;
     - `test_30d_reconciliation_coverage_ends_at_termination`;
     - `test_30e_replacement_payer_deliveries_are_not_charged_to_the_old_payer`.
-  - **Green:** MSP-006 tests 51/51.
+  - **Green:** MSP-006 tests 52/52; `tests/test_billing_engine.py` still passes.
 - **Not changed:** schema, RBAC, CI configuration.
 
 ## feat(msp): MSP-006 — authoritative partner billing and usage attribution (branch feat/msp-006-billing-attribution)

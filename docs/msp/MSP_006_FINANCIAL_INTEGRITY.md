@@ -66,6 +66,8 @@ Distributed exactly-once delivery is not claimed. The guarantee is one database 
 
 The customer of an MSP-paid delivery does not see the MSP's wholesale charge. That is the MSP's financial record.
 
+The pre-existing billing_v2 reads (`/admin/tenants/{id}/billing/usage`, `/admin/billing/explain`) require only `admin:read`, so they exclude MSP charges. `billing.read` cannot be bypassed through them (test 32b).
+
 ## Reconciliation
 
 `reconcile_period(payer, YYYY-MM)` and the platform route `GET /admin/msp/billing/reconciliation` produce a deterministic report with a `report_sha256` (test 30c).
