@@ -8658,6 +8658,27 @@ It is additive, and no existing row changes.
 - **Tenant context.** The billing_v2 usage routes now bind the tenant context before touching `usage_events`.
 - **Delivery.** The QA-approval delivery advance calls the producer inside a savepoint, so it never blocks delivery.
 
+**Called out — CI check configuration:** `tools/ci/check_plane_registry.py` gains three entries in `EXACT_TENANT_BINDING_EXCEPTIONS`:
+
+- `POST /admin/msp/billing/payer-assignments`;
+- `POST /admin/msp/billing/payer-assignments/{assignment_id}/terminate`;
+- `GET /admin/msp/billing/reconciliation`.
+
+**Why the exceptions are needed.** These are platform-only routes (internal admin gateway + `platform.admin`). The tenants they name, in the body or query, are the customer and payer being governed, not the caller. The AST scanner cannot recognize that binding.
+
+**Compensating controls.** Each route:
+
+- binds the named customer's or payer's RLS context;
+- verifies the row belongs to that tenant before acting.
+
+This is the same pattern as MSP-001's `PUT /admin/msp/organizations/{tenant_id}` exception. No check is disabled or relaxed: the exceptions are exact method-and-path pairs, and every other route is still scanned.
+
+**Called out — production settlement blocker (F10):**
+
+- `StripeProvider.report_usage` calls `stripe.SubscriptionItem.create_usage_record`. That function does not exist in the installed stripe-python 15.3.1, so any attempt to report usage to Stripe through billing_v2 fails.
+- MSP-006 does not repair this. No processor objects or dashboard changes were authorized.
+- **Until it is repaired and independently validated against Stripe test mode, no MSP charge can be settled, and none is claimed.**
+
 **Called out — processor webhook:**
 
 - **F8.** `StripeProvider.parse_webhook` now returns `evt.to_dict()`. Before, `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook was dropped.

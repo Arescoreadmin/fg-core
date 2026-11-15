@@ -123,7 +123,10 @@ No payment secret, processor key, webhook secret or customer personnel identity 
 
 ## Remaining risks
 
-- **Settlement NOT PROVEN.** No processor has acknowledged an MSP-006 charge. The billing_v2 Stripe usage call uses a removed SDK API (F10).
+- **Production settlement blocker (F10).**
+  - `StripeProvider.report_usage` calls `stripe.SubscriptionItem.create_usage_record`, which the installed stripe-python 15.3.1 does not provide. Every attempt to report usage to Stripe fails.
+  - No processor has acknowledged an MSP-006 charge, and settlement is NOT PROVEN.
+  - Real collection is blocked until the integration is repaired (for example, Stripe Billing Meters) under a separate founder authorization and independently validated in Stripe test mode.
 - **Six other billing tables lack database RLS.** `billing_event_ledger`, `billing_accounts`, `billing_subscription_links` and the three subscription tables are still isolated only by application filters (F1).
 - **CodeQL #91–#94 and #3.** Path injection in the device-coverage invoice export. Not reachable from MSP-006; it needs a separate fix (F9).
 - **Single product.** Only `assessment.delivered` is billable. Per-managed-tenant and monitoring dimensions are not implemented.

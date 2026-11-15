@@ -20,6 +20,11 @@
   - **F7:** `msp.*` meters are refused on the public usage route.
   - **F6:** a late webhook can no longer move a `disabled` link back to active.
   - **F8:** `StripeProvider.parse_webhook` uses `to_dict()`, because `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook failed.
+- **CI check configuration (called out):** `tools/ci/check_plane_registry.py` gains exact `EXACT_TENANT_BINDING_EXCEPTIONS` for the three platform-only MSP billing routes: `POST payer-assignments`, `POST payer-assignments/{assignment_id}/terminate` and `GET reconciliation`.
+  - **Why:** the tenants they name are governed targets, not the caller.
+  - **Compensating control:** each route binds the named tenant's RLS context and verifies row ownership.
+  - Same pattern as MSP-001's designation `PUT`. No check is disabled.
+- **Production settlement blocker (F10):** `StripeProvider.report_usage` calls `stripe.SubscriptionItem.create_usage_record`, which stripe-python 15.3.1 does not provide. No MSP charge can be settled until this is repaired and independently validated in Stripe test mode. MSP-006 claims no settlement.
 - **Deferred (documented):**
   - **F1:** the other six billing and subscription tables still lack RLS.
   - **F9:** CodeQL #91–#94 and #3 in `api/billing.py`; not reachable from MSP-006.
