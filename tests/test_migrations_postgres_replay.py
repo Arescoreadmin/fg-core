@@ -1362,3 +1362,122 @@ def test_0206_msp_002_history_filters_by_relationship_in_postgres(
         assert relationship_events_query(db, cust, rid).count() == 0
     finally:
         db.close()
+
+
+def test_0207_msp_006_billing_rows_are_isolated_by_forced_rls(
+    _msp_rls_probe, _mig_engine
+) -> None:
+    """MSP-006: a payer assignment is visible only to the customer and the
+    payer (never to the MSP in customer-paid mode, never to a third tenant,
+    never with no context); a usage event only to its own payer tenant. The
+    billing_v2 metering path still records usage once the context is bound."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.exc import DBAPIError
+
+    from api.db_models_billing import UsageEvent
+    from api.db_models_msp import MspPayerAssignment
+    from services.billing.metering import record_usage_event
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    now = datetime.now(timezone.utc)
+    meter = f"probe.meter.{uuid.uuid4().hex[:8]}"
+    ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+    with _mig_engine.begin() as su:
+        su.execute(
+            text(
+                "INSERT INTO usage_meters (id, meter_code, display_name, unit,"
+                " aggregation_mode, billing_category, active, metadata_json,"
+                " created_at, updated_at) VALUES (:i, :m, 'probe', 'count', 'sum',"
+                " 'probe', '1', '{}', :n, :n)"
+            ),
+            {"i": str(uuid.uuid4()), "m": meter, "n": now},
+        )
+
+    def _assignment(aid: str, mode: str, product: str) -> MspPayerAssignment:
+        return MspPayerAssignment(
+            id=aid,
+            tenant_id=cust,
+            msp_tenant_id=msp,
+            relationship_id=rid,
+            payer_tenant_id=msp if mode == "msp_paid" else cust,
+            billing_mode=mode,
+            product_code=product,
+            subscription_contract_id="sc-probe",
+            currency="USD",
+            status="active",
+            effective_at=now,
+            expires_at=now + timedelta(days=30),
+            approved_by_subject="synthetic-platform",
+            approved_at=now,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+
+    db = sm()
+    try:
+        _bind(db, cust)
+        db.add(_assignment(ids[0], "msp_paid", "assessment.delivered"))
+        db.add(_assignment(ids[1], "customer_paid", "probe.other"))
+        db.commit()
+
+        def visible(tenant: str | None) -> set[str]:
+            s = sm()
+            try:
+                if tenant:
+                    _bind(s, tenant)
+                return {r.id for r in s.query(MspPayerAssignment).all()}
+            finally:
+                s.close()
+
+        assert visible(cust) == set(ids)
+        assert visible(msp) == {ids[0]}  # the MSP never sees customer-paid rows
+        assert visible(third) == set()
+        assert visible(None) == set()  # no empty-context bypass
+
+        # usage_events: the payer records and reads its own usage only.
+        _bind(db, msp)
+        evt = record_usage_event(db, msp, meter, "1", f"probe-{uuid.uuid4().hex}")
+        # Capture before commit: the commit ends the transaction-local tenant
+        # context, so a post-commit reload is (correctly) hidden by forced RLS.
+        evt_id = evt.id
+        db.commit()
+        for tenant, expected in ((msp, {evt_id}), (cust, set()), (third, set())):
+            s = sm()
+            try:
+                _bind(s, tenant)
+                assert {r.id for r in s.query(UsageEvent).all()} == expected, tenant
+            finally:
+                s.close()
+        s = sm()
+        try:
+            assert s.query(UsageEvent).count() == 0  # no context, no rows
+            _bind(s, msp)
+            s.add(
+                UsageEvent(
+                    id=str(uuid.uuid4()),
+                    tenant_id=cust,  # spoofed: another tenant's usage
+                    meter_code=meter,
+                    quantity="1",
+                    idempotency_key=f"spoof-{uuid.uuid4().hex}",
+                )
+            )
+            with pytest.raises(DBAPIError):
+                s.flush()
+            s.rollback()
+        finally:
+            s.close()
+    finally:
+        db.close()
+        with _mig_engine.begin() as su:
+            su.execute(
+                text("DELETE FROM msp_payer_assignments WHERE relationship_id = :r"),
+                {"r": rid},
+            )
+            su.execute(
+                text("DELETE FROM usage_events WHERE meter_code = :m"), {"m": meter}
+            )
+            su.execute(
+                text("DELETE FROM usage_meters WHERE meter_code = :m"), {"m": meter}
+            )

@@ -226,6 +226,8 @@ from services.governance.trust_binding import (
 )
 from services.field_assessment.normalizer import normalize_scan_findings
 from services.field_assessment.promotion import promote_engagement_to_governance
+from api.msp_authority import correlation_id as msp_correlation_id
+from api.msp_billing import record_delivery_usage_safely
 from services.field_assessment.promotion_store import get_promotion
 from services.governance_asset_registry.promotion import (
     promote_candidate_to_asset as _promote_candidate,
@@ -9974,6 +9976,14 @@ def qa_approve_report_route(
                     engagement_id=engagement_id,
                     gate_snapshot=gate_snapshot,
                     baseline_readiness_score=gate_snapshot.get("readiness_score", 0),
+                )
+                # MSP-006: the canonical billable completion. At most one usage
+                # record, only for a resolved payer; never blocks delivery.
+                record_delivery_usage_safely(
+                    db,
+                    customer_tenant_id=tenant_id,
+                    engagement_id=engagement_id,
+                    correlation=msp_correlation_id(request),
                 )
                 # Create a hashed portal grant for client delivery access.
                 grant_result = _portal_grant_svc.create_grant(

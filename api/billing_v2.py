@@ -31,8 +31,9 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.tenant_authority import ensure_billing_eligible
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from api.db_models_billing import BillingEventLedger, BillingSubscriptionLink
+from api.msp_billing import RESERVED_METER_PREFIX, assert_meter_not_reserved
 from api.observability.metrics import (
     BILLING_WEBHOOK_REPLAY_TOTAL,
     BILLING_WEBHOOKS_TOTAL,
@@ -346,8 +347,13 @@ async def record_usage_event(
     request: Request,
 ) -> UsageEventResponse:
     tenant_id = require_bound_tenant(request)
+    # MSP-006 (F7): MSP meters and the producer's idempotency namespace are
+    # writable only by the trusted producer.
+    assert_meter_not_reserved(body.meter_code, body.idempotency_key)
     eng = get_engine()
     with Session(eng) as db:
+        # MSP-006 (F1): usage_events has forced RLS; bind before any access.
+        set_tenant_context(db, tenant_id)
         try:
             evt = _engine.record_usage(
                 db,
@@ -379,8 +385,15 @@ def list_usage_events(
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     eng = get_engine()
     with Session(eng) as db:
+        set_tenant_context(db, tenant_id)
+        # MSP-006 review: MSP charges (reserved msp.* meters) are financial
+        # records readable only through /admin/msp/billing/* with billing.read.
         events = _engine.list_usage_events(
-            db, tenant_id, billing_status=billing_status, limit=limit
+            db,
+            tenant_id,
+            billing_status=billing_status,
+            limit=limit,
+            exclude_meter_prefixes=(RESERVED_METER_PREFIX,),
         )
     return {
         "tenant_id": tenant_id,
@@ -492,6 +505,10 @@ def _handle_stripe_subscription_event(
         .all()
     )
     for link in links:
+        # MSP-006 (F6): a canceled subscription stays canceled. A delayed or
+        # replayed lifecycle event must never move a link out of "disabled".
+        if str(link.sync_status) == "disabled" and new_sync_status != "disabled":
+            continue
         link.sync_status = new_sync_status
         link.last_synced_at = datetime.now(timezone.utc)
         link.updated_at = datetime.now(timezone.utc)
@@ -515,5 +532,8 @@ def billing_explain(
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     eng = get_engine()
     with Session(eng) as db:
-        result = _engine.explain_billing(db, tenant_id)
+        set_tenant_context(db, tenant_id)
+        result = _engine.explain_billing(
+            db, tenant_id, exclude_meter_prefixes=(RESERVED_METER_PREFIX,)
+        )
     return result

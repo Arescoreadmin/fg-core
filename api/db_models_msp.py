@@ -1,6 +1,7 @@
-"""api/db_models_msp.py — MSP-001 MSP designation and service relationships.
+"""api/db_models_msp.py — MSP designation, service relationships and payer assignments.
 
-ORM mirror of migrations/postgres/0206_msp_service_relationships.sql. Column
+ORM mirror of migrations/postgres/0206_msp_service_relationships.sql (MSP-001)
+and the msp_payer_assignments table of 0207_msp_006_partner_billing.sql (MSP-006). Column
 names, CHECK constraints and index names match the migration so the SQLite
 create_all path and the Postgres migration path produce the same schema.
 
@@ -16,6 +17,7 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -108,6 +110,79 @@ class MspServiceRelationship(Base):
     revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
     revoked_by_party: Mapped[Any] = mapped_column(String(16), nullable=True)
+    version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+_ACTIVE_ASSIGNMENT_SQL = "status = 'active'"
+
+
+class MspPayerAssignment(Base):
+    """MSP-006: which party pays for one product delivered to one customer.
+
+    A platform decision bound to the payer's existing commercial agreement
+    (``subscription_contracts``). It is not consent (that is the relationship)
+    and not a price (that is ``tenant_contracts`` / ``pricing_versions``).
+    """
+
+    __tablename__ = "msp_payer_assignments"
+    __table_args__ = (
+        CheckConstraint(
+            "billing_mode IN ('msp_paid', 'customer_paid')",
+            name="msp_payer_billing_mode_check",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'terminated')", name="msp_payer_status_check"
+        ),
+        CheckConstraint(
+            "(billing_mode = 'msp_paid' AND payer_tenant_id = msp_tenant_id) OR "
+            "(billing_mode = 'customer_paid' AND payer_tenant_id = tenant_id)",
+            name="msp_payer_mode_matches_payer",
+        ),
+        CheckConstraint(
+            "msp_tenant_id <> tenant_id", name="msp_payer_distinct_parties"
+        ),
+        CheckConstraint("expires_at > effective_at", name="msp_payer_window"),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="msp_payer_currency_code",
+        ),
+        CheckConstraint(
+            "status <> 'terminated' OR "
+            "(terminated_by_subject IS NOT NULL AND terminated_at IS NOT NULL)",
+            name="msp_payer_terminated_fields",
+        ),
+        Index(
+            "uq_msp_payer_one_active_per_product",
+            "tenant_id",
+            "product_code",
+            unique=True,
+            sqlite_where=text(_ACTIVE_ASSIGNMENT_SQL),
+            postgresql_where=text(_ACTIVE_ASSIGNMENT_SQL),
+        ),
+        Index("ix_msp_payer_payer_status", "payer_tenant_id", "status"),
+        Index("ix_msp_payer_relationship", "relationship_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    msp_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    relationship_id: Mapped[Any] = mapped_column(
+        String(36), ForeignKey("msp_service_relationships.id"), nullable=False
+    )
+    payer_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    billing_mode: Mapped[Any] = mapped_column(String(16), nullable=False)
+    product_code: Mapped[Any] = mapped_column(String(64), nullable=False)
+    subscription_contract_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    currency: Mapped[Any] = mapped_column(String(3), nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False)
+    effective_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    approved_by_subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    approved_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    terminated_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    terminated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)

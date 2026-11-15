@@ -1,3 +1,64 @@
+## fix(msp): MSP-006 review — reserve the producer key namespace, end coverage at termination, protect legacy usage reads (PR #876)
+
+- **Codex P1, reserved idempotency namespace:**
+  - **Problem:** the public `POST /billing/usage/events` reserved only `msp.*` meter names. A `billing:write` caller could record an ordinary meter (for example `api.calls`) under the producer's key `msp006:assessment.delivered:{customer}:{engagement}`. Because uniqueness is `(tenant_id, idempotency_key)`, the later delivery collided with it, raised `UsageIdempotencyConflict` (suppressed by the safe wrapper), and was never charged, permanently.
+  - **Fix:** `assert_meter_not_reserved(meter_code, idempotency_key)` also refuses the `msp006:` key prefix (`RESERVED_KEY_PREFIX`) with 403 `BILLING_METER_RESTRICTED`.
+- **Codex P2, coverage ends at termination:**
+  - **Problem:** `_deliveries_without_usage` checked only an assignment's original window. Termination records `terminated_at` without shortening `expires_at`, so after early termination, later deliveries (including ones charged under a replacement assignment) were reported as missing usage for the former payer.
+  - **Fix:** a new `_in_coverage` bounds historical coverage by `terminated_at` and keeps the check for deliveries made before termination.
+- **Codex P1, legacy reads bypassed `billing.read`:**
+  - **Problem:** `GET /admin/tenants/{tenant_id}/billing/usage` and `GET /admin/billing/explain` check only `admin:read`. Both returned every `usage_events` row, so MSP charges (prices, amounts, attribution) were readable without `billing.read`.
+  - **Fix:** both routes pass `exclude_meter_prefixes=("msp.",)` to `BillingEngine`. MSP charges are readable only through `/admin/msp/billing/*`. Ordinary usage is unchanged.
+- **CI Migrations Replay failure on `a6006abc5`:**
+  - **Problem:** `test_0207_msp_006_billing_rows_are_isolated_by_forced_rls` read `evt.id` after `commit()`. The commit ends the transaction-local tenant context, so forced RLS correctly hid the reload (`ObjectDeletedError`). The payer-assignment visibility assertions had already passed.
+  - **Fix:** the probe captures the id before committing. This was a test defect; production paths already serialize before commit.
+- **Verification:**
+  - **Red on `a6006abc5`:** 4 new tests fail (the 3 below and `test_32b_legacy_billing_reads_do_not_bypass_billing_read`):
+    - `test_14b_public_route_cannot_squat_the_msp_idempotency_namespace`;
+    - `test_30d_reconciliation_coverage_ends_at_termination`;
+    - `test_30e_replacement_payer_deliveries_are_not_charged_to_the_old_payer`.
+  - **Green:** MSP-006 tests 52/52; `tests/test_billing_engine.py` still passes.
+- **Not changed:** schema, RBAC, CI configuration.
+
+## feat(msp): MSP-006 — authoritative partner billing and usage attribution (branch feat/msp-006-billing-attribution)
+
+- **Work item:** MSP-006, founder-authorized on 2026-11-15 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.
+  - Criteria (1) and (2) are not claimed.
+  - It does not authorize live charges, live subscriptions or processor changes.
+  - Base: `main` `fc31ce17d`.
+- **Audit first:** `docs/msp/MSP_006_BILLING_AUTHORITY_AUDIT.md` covers the capability matrix, the authority-integration warnings and findings F1–F10. No competing billing or subscription authority is created.
+- **Added:**
+  - `msp_payer_assignments` (migration 0207, forced RLS). This is the only new state.
+  - `api/msp_billing.py`:
+    - payer resolution, failing closed with reason codes;
+    - the trusted producer `record_assessment_delivery_usage`, called once from the QA-approval delivery advance;
+    - read routes (`billing.read`) and platform routes (internal gateway + `platform.admin`);
+    - deterministic `reconcile_period`;
+    - test-mode-only `report_pending_usage` (reuses `BillingReconciler`).
+  - `billing.read` permission (`tenant_admin`).
+  - Four audit event types.
+- **Repaired (audit findings):**
+  - **F1:** `usage_events` gets forced RLS; billing_v2 record, list and explain bind the tenant context.
+  - **F7:** `msp.*` meters are refused on the public usage route.
+  - **F6:** a late webhook can no longer move a `disabled` link back to active.
+  - **F8:** `StripeProvider.parse_webhook` uses `to_dict()`, because `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook failed.
+- **CI check configuration (called out):** `tools/ci/check_plane_registry.py` gains exact `EXACT_TENANT_BINDING_EXCEPTIONS` for the three platform-only MSP billing routes: `POST payer-assignments`, `POST payer-assignments/{assignment_id}/terminate` and `GET reconciliation`.
+  - **Why:** the tenants they name are governed targets, not the caller.
+  - **Compensating control:** each route binds the named tenant's RLS context and verifies row ownership.
+  - Same pattern as MSP-001's designation `PUT`. No check is disabled.
+- **Production settlement blocker (F10):** `StripeProvider.report_usage` calls `stripe.SubscriptionItem.create_usage_record`, which stripe-python 15.3.1 does not provide. No MSP charge can be settled until this is repaired and independently validated in Stripe test mode. MSP-006 claims no settlement.
+- **Deferred (documented):**
+  - **F1:** the other six billing and subscription tables still lack RLS.
+  - **F9:** CodeQL #91–#94 and #3 in `api/billing.py`; not reachable from MSP-006.
+  - **F10:** the Stripe usage API was removed from the SDK; settlement is NOT PROVEN.
+- **Verification:**
+  - **Red on `fc31ce17d`:** 46 of 48 new tests fail. The 2 that pass are guards (forged signature rejected, existing metering works).
+  - **Green:** 48/48.
+  - **Postgres probe:** `test_0207_msp_006_billing_rows_are_isolated_by_forced_rls` (CI only).
+  - **Related suites:** 355 passed (MSP-001/002, billing, subscriptions, Stripe webhooks, RBAC, production qualification, assessment assurance).
+- **Generated:** `make route-inventory-generate`, `make contract-authority-refresh` (OpenAPI and marker), offline simulation evidence.
+- **Rollback:** revert. Migration 0207 is additive, and no existing financial row is changed.
+
 ## docs(governance): MSP-002 closure — mark complete and record the organization-id decision (branch governance/msp-002-closure)
 
 - **Work item:** governance-only closure of MSP-002 (#874, merged as `622727d1`), authorized by the founder on 2026-11-15.

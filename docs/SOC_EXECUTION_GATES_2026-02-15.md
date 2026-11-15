@@ -8638,3 +8638,92 @@ SOC review outcome: APPROVED for merge as a foundation. Not approved for a real 
    - legacy delegation code remains (non-authoritative, regression-tested).
 
 SOC review outcome: APPROVED for merge as console enablement. Not approved for a real external MSP until `docs/msp/MSP_FIRST_CLIENT_READINESS.md` controls 2 (deployment), 10 and 13 pass.
+
+## 2026-11-15 - feat(msp): MSP-006 — authoritative partner billing and usage attribution
+
+**Scope:** payer assignment, usage attribution, integer pricing and reconciliation for MSP-managed assessment deliveries, built on the existing subscription, pricing, metering and MSP authorities. Founder-authorized; no live charges.
+
+**Called out — schema:** migration 0207 does two things:
+
+- adds `msp_payer_assignments`, with forced RLS (customer or payer only);
+- enables and forces RLS on the existing `usage_events` (audit F1).
+
+It is additive, and no existing row changes.
+
+**Called out — RBAC:** new permission `billing.read`, granted to `tenant_admin` only. `ALL_PERMISSIONS` and `CAPABILITY_REGISTRY` stay in sync. Risk level is medium.
+
+**Called out — authorization paths:**
+
+- **Public usage route.** `POST /billing/usage/events` now refuses `msp.*` meters (`BILLING_METER_RESTRICTED`).
+- **Tenant context.** The billing_v2 usage routes now bind the tenant context before touching `usage_events`.
+- **Delivery.** The QA-approval delivery advance calls the producer inside a savepoint, so it never blocks delivery.
+
+**Called out — CI check configuration:** `tools/ci/check_plane_registry.py` gains three entries in `EXACT_TENANT_BINDING_EXCEPTIONS`:
+
+- `POST /admin/msp/billing/payer-assignments`;
+- `POST /admin/msp/billing/payer-assignments/{assignment_id}/terminate`;
+- `GET /admin/msp/billing/reconciliation`.
+
+**Why the exceptions are needed.** These are platform-only routes (internal admin gateway + `platform.admin`). The tenants they name, in the body or query, are the customer and payer being governed, not the caller. The AST scanner cannot recognize that binding.
+
+**Compensating controls.** Each route:
+
+- binds the named customer's or payer's RLS context;
+- verifies the row belongs to that tenant before acting.
+
+This is the same pattern as MSP-001's `PUT /admin/msp/organizations/{tenant_id}` exception. No check is disabled or relaxed: the exceptions are exact method-and-path pairs, and every other route is still scanned.
+
+**Called out — production settlement blocker (F10):**
+
+- `StripeProvider.report_usage` calls `stripe.SubscriptionItem.create_usage_record`. That function does not exist in the installed stripe-python 15.3.1, so any attempt to report usage to Stripe through billing_v2 fails.
+- MSP-006 does not repair this. No processor objects or dashboard changes were authorized.
+- **Until it is repaired and independently validated against Stripe test mode, no MSP charge can be settled, and none is claimed.**
+
+**Called out — processor webhook:**
+
+- **F8.** `StripeProvider.parse_webhook` now returns `evt.to_dict()`. Before, `dict()` raised `KeyError` on a real signed event, so every billing_v2 webhook was dropped.
+- **F6.** A `disabled` link stays disabled on later lifecycle events.
+
+**Security analysis:**
+
+1. **Financial authority is separate from access.**
+   - Only a platform operator can create a payer assignment.
+   - The payer is derived from the mode and must hold an active agreement.
+   - A relationship approval creates no liability, and neither party can assign a payer.
+2. **Exactly one payer, at most one charge.**
+   - A partial unique index allows one active assignment per customer and product.
+   - The idempotency key comes from the source operation.
+   - A payload hash rejects a replay with different content.
+   - A savepoint-protected insert handles the concurrency race.
+3. **Trusted producer only.** The customer, the completion and its time are read from the database at the canonical completion point. Client-reported MSP usage is refused.
+4. **Exact, reproducible money.** Integer minor units and explicit currency. Hash-pinned price lists and contracts, verified on use. Historical charges are never repriced.
+5. **Isolation.**
+   - Forced RLS on both financial tables.
+   - `billing.read` reads return only the caller's own records.
+   - The MSP never sees customer-paid records.
+   - The customer never sees the MSP's wholesale price.
+   - No processor secret or personnel identity appears in a payer-visible record.
+6. **Lifecycle.** Revocation, suspension and expiry, MSP suspension, customer deactivation and agreement cancellation all stop new charges. They keep accrued charges and cancel no subscription.
+7. **Audit.** Payer changes and usage decisions are on the identity hash chains, and the chains verify.
+8. **Residual risks:**
+   - settlement NOT PROVEN (F10);
+   - six billing tables still lack database RLS (F1);
+   - CodeQL #91–#94 and #3 deferred to a separate PR (F9, not reachable from MSP-006);
+   - the legacy `admin:write` → `platform.admin` mapping outside production.
+
+SOC review outcome: APPROVED for merge as a synthetic, test-mode billing foundation. Not approved for real collection until settlement is proven under a separate founder authorization and migration 0207 is evidenced in production.
+
+## 2026-11-15 - fix(msp): MSP-006 review — reserved producer key namespace and termination-bounded reconciliation
+
+**Called out — authorization path:** the public `POST /billing/usage/events` now also refuses idempotency keys in the trusted producer's `msp006:` namespace (403 `BILLING_METER_RESTRICTED`), not only `msp.*` meters.
+
+Before this, a `billing:write` caller could occupy the producer's `(tenant_id, idempotency_key)` slot with an unrelated meter. That permanently suppressed the real charge for a delivery: a financial-integrity denial of service, not a disclosure.
+
+**Called out — reconciliation correctness:** coverage of a payer assignment now ends at `terminated_at`. Deliveries after early termination, including ones charged under a replacement assignment, are no longer reported as missing usage for the former payer.
+
+**Called out — authorization (financial data visibility):** `GET /admin/tenants/{tenant_id}/billing/usage` and `GET /admin/billing/explain` (scope `admin:read` only) no longer return usage on reserved `msp.*` meters. Before, they exposed MSP charges (prices, amounts, attribution) without `billing.read`. MSP charges are now readable only through `/admin/msp/billing/*`. Ordinary usage is unchanged.
+
+There is no schema, RBAC or CI change.
+
+SOC review outcome: APPROVED as a review fix within PR #876.
+

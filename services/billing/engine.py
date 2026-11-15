@@ -435,8 +435,11 @@ class BillingEngine:
         *,
         billing_status: str | None = None,
         limit: int = 100,
+        exclude_meter_prefixes: tuple[str, ...] = (),
     ) -> list[UsageEventResponse]:
         query = db.query(UsageEvent).filter(UsageEvent.tenant_id == tenant_id)
+        for prefix in exclude_meter_prefixes:
+            query = query.filter(~UsageEvent.meter_code.startswith(prefix))
         if billing_status is not None:
             query = query.filter(UsageEvent.billing_status == billing_status)
         rows = query.limit(limit).all()
@@ -446,7 +449,13 @@ class BillingEngine:
     # Explain
     # ------------------------------------------------------------------
 
-    def explain_billing(self, db: Session, tenant_id: str) -> BillingExplainResponse:
+    def explain_billing(
+        self,
+        db: Session,
+        tenant_id: str,
+        *,
+        exclude_meter_prefixes: tuple[str, ...] = (),
+    ) -> BillingExplainResponse:
         account_row = (
             db.query(BillingAccount)
             .filter(BillingAccount.tenant_id == tenant_id)
@@ -458,11 +467,15 @@ class BillingEngine:
             .all()
         )
         active_meters = db.query(UsageMeter).filter(UsageMeter.active == "1").all()
+        excluded = [
+            ~UsageEvent.meter_code.startswith(p) for p in exclude_meter_prefixes
+        ]
         pending = (
             db.query(UsageEvent)
             .filter(
                 UsageEvent.tenant_id == tenant_id,
                 UsageEvent.billing_status == "pending",
+                *excluded,
             )
             .limit(20)
             .all()
@@ -472,6 +485,7 @@ class BillingEngine:
             .filter(
                 UsageEvent.tenant_id == tenant_id,
                 UsageEvent.billing_status == "failed",
+                *excluded,
             )
             .limit(20)
             .all()
