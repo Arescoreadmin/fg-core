@@ -1249,3 +1249,116 @@ def test_0206_relationship_view_must_be_built_before_commit(_msp_rls_probe) -> N
     finally:
         db.rollback()
         db.close()
+
+
+def test_0206_msp_002_portfolio_reads_only_under_the_customer_context(
+    _msp_rls_probe, _mig_engine
+) -> None:
+    """MSP-002: forced RLS on the field-assessment tables hides a customer's
+    rows from the MSP's own context; the portfolio reader sees them only by
+    switching to the customer's context, and restores the MSP's context."""
+    from api.msp_portfolio import PortfolioEntry, build_portfolio_items
+    from services.field_assessment import store as fa_store
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    eid = f"eng-{uuid.uuid4().hex[:12]}"
+    with _mig_engine.begin() as su:
+        su.execute(
+            text(
+                "INSERT INTO fa_engagements (id, tenant_id, client_name, assessor_id,"
+                " assessment_type, status, engagement_metadata, schema_version,"
+                " created_at, updated_at) VALUES (:id, :t, 'Synthetic', 'assessor-x',"
+                " 'ai_governance', 'delivered', '{}', '1.0', :u, :u)"
+            ),
+            {"id": eid, "t": cust, "u": "2026-11-10T10:00:00Z"},
+        )
+        su.execute(
+            text(
+                "INSERT INTO fa_normalized_findings (id, tenant_id, engagement_id,"
+                " finding_type, findings_hash, severity, status, title, description,"
+                " source_attribution, confidence_score, framework_mappings,"
+                " nist_ai_rmf_mappings, evidence_ref_ids, schema_version, created_at,"
+                " updated_at) VALUES (:id, :t, :e, 'policy_gap', :h, 'high', 'open',"
+                " 'Synthetic', 'Synthetic', 'synthetic', 80, '[]', '[]', '[]', '1.0',"
+                " :u, :u)"
+            ),
+            {
+                "id": f"fnd-{uuid.uuid4().hex[:12]}",
+                "t": cust,
+                "e": eid,
+                "h": uuid.uuid4().hex,
+                "u": "2026-11-11T10:00:00Z",
+            },
+        )
+    # Synthetic FA rows stay (unique tenant ids); FA tables may be append-only.
+    db = sm()
+    try:
+        _bind(db, msp)
+        hidden = fa_store.list_engagements(
+            db, tenant_id=cust, status_filter=None, limit=100, cursor=None
+        )
+        assert hidden == []  # the MSP's own context cannot see customer rows
+        entry = PortfolioEntry(
+            customer_tenant_id=cust,
+            display_name="Synthetic",
+            relationship_id=rid,
+            expires_at=None,
+            effective_permissions=frozenset({"assessment.read", "finding.read"}),
+        )
+        items, reads = build_portfolio_items(db, entries=[entry], restore_tenant=msp)
+        assert items[0]["assessment"]["engagements_by_status"] == {"delivered": 1}
+        assert items[0]["findings"]["outstanding_by_severity"] == {"high": 1}
+        assert reads == [(entry, ["assessment.read", "finding.read"])]
+        current = db.execute(
+            text("SELECT current_setting('app.tenant_id', true)")
+        ).scalar()
+        assert current == msp
+        _bind(db, third)  # an unrelated tenant's context sees nothing either
+        assert (
+            fa_store.list_engagements(
+                db, tenant_id=cust, status_filter=None, limit=100, cursor=None
+            )
+            == []
+        )
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_0206_msp_002_history_filters_by_relationship_in_postgres(
+    _msp_rls_probe,
+) -> None:
+    """MSP-002: the history route's relationship predicate on the JSONB
+    details runs in Postgres under the chain owner's RLS context, and returns
+    only that relationship's events."""
+    from api.msp import relationship_events_query
+    from api.msp_authority import emit_msp_audit
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    other = f"rel-other-{uuid.uuid4().hex[:12]}"
+    db = sm()
+    try:
+        _bind(db, cust)
+        for relationship_id in (other, rid, other):
+            emit_msp_audit(
+                db,
+                chains=(cust,),
+                restore_tenant=cust,
+                event_type="tenant.msp.portfolio_summary_accessed",
+                actor_subject="synthetic-probe",
+                membership_id=None,
+                reason_code="MSP_PORTFOLIO_SUMMARY_ACCESSED",
+                msp_tenant_id=msp,
+                customer_tenant_id=cust,
+                relationship_id=relationship_id,
+                operation="portfolio.summary",
+            )
+        db.commit()
+        _bind(db, cust)
+        mine = relationship_events_query(db, cust, rid).all()
+        assert mine and all(e.details_json["relationship_id"] == rid for e in mine)
+        assert relationship_events_query(db, cust, other).count() == 2
+        _bind(db, third)  # another tenant's context sees none of these rows
+        assert relationship_events_query(db, cust, rid).count() == 0
+    finally:
+        db.close()

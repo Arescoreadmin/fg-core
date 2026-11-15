@@ -12,13 +12,19 @@ Route table (all fail-closed; authority from api/msp_authority.py):
     GET  /admin/msp/customers                             MSP member (+ msp.multi_tenant)
     POST /admin/msp/customers/{customer_tenant_id}/context MSP member (+ msp.multi_tenant)
 
+MSP-002 (read-only, same authority):
+
+    GET  /admin/msp/portfolio                             MSP member (+ msp.multi_tenant)
+    GET  /admin/msp/relationships/{id}/events             tenant_admin of either party (own chain)
+
 The caller's tenant always comes from the bound credential
 (``resolve_authoritative_tenant``); no route accepts a tenant header or body
 field as the caller's identity. MSP-001 exposes no customer data through MSP
 authority: the context route only reports and audits what the actor may do.
 
 Non-goals: no second RBAC, tenant registry or audit ledger; no MSP write
-access to customer data; no billing. See docs/msp/MSP_001_ARCHITECTURE.md.
+access to customer data; no billing. See docs/msp/MSP_001_ARCHITECTURE.md
+and docs/msp/MSP_002_ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -37,9 +43,14 @@ from api.admin import require_internal_admin_gateway
 from api.auth_dispatch import get_actor_context, require_permission
 from api.auth_scopes import require_scopes, resolve_authoritative_tenant
 from api.db import set_tenant_context
+from api.db_models_identity import TenantIdentityAuditEvent
 from api.db_models_msp import MspOrganization, MspServiceRelationship
 from api.deps import auth_ctx_db_session
-from api.entitlements import require_capability
+from api.entitlements import (
+    _ensure_admin_gateway_tenant_bound,
+    require_capability,
+)
+from api.identity.store import verify_identity_audit_chain
 from api.msp_authority import (
     MAX_RELATIONSHIP_DAYS,
     MSP_APPROVAL_REQUIRES_CUSTOMER,
@@ -71,6 +82,12 @@ from api.msp_authority import (
     tenant_kind_and_name,
     utcnow,
 )
+from api.msp_portfolio import (
+    PORTFOLIO_DEFAULT_PAGE,
+    PORTFOLIO_MAX_PAGE,
+    PortfolioEntry,
+    build_portfolio_items,
+)
 from api.tenant_admin_authority import (
     TenantAdminAuthority,
     check_tenant_admin_authority,
@@ -79,6 +96,22 @@ from api.tenant_admin_authority import (
 router = APIRouter(prefix="/admin/msp", tags=["msp-001"])
 
 _CLOCK_SKEW = timedelta(seconds=60)
+
+
+def _bind_console_gateway_tenant(request: Request) -> None:
+    """MSP-002 console transport: verify before the actor is resolved.
+
+    For the admin-gateway credential (the console BFF), Core's delegation
+    proof check, the tenant-human authority check and tenant lifecycle check
+    all run inside ``bind_tenant_id``. Running it first means the actor is
+    then built from the verified named human and its DB roles. For tenant-bound
+    credentials it is a no-op. Reuses the entitlement module's binder so there
+    is one implementation of this order.
+    """
+    _ensure_admin_gateway_tenant_bound(request)
+
+
+_CONSOLE_BIND = Depends(_bind_console_gateway_tenant)
 
 
 # ---------------------------------------------------------------------------
@@ -277,42 +310,177 @@ def set_msp_organization_status(
 
 @router.get(
     "/relationships",
-    dependencies=[Depends(require_scopes("admin:read"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:read"))],
 )
 def list_relationships(
     request: Request,
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     """Relationships in which the caller's tenant is a party (MSP or customer).
 
-    Customers see every MSP that has asked for or holds access to them.
+    Customers see every MSP that has asked for or holds access to them, with
+    the MSP's display name. An MSP sees a customer's display name only once
+    that customer has approved (MSP-002): a proposal never reveals more about
+    a tenant than the id the MSP already typed.
     """
     caller = _caller_tenant_from_auth(request, actor_ctx)
     check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
+    base = db.query(MspServiceRelationship).filter(
+        (MspServiceRelationship.tenant_id == caller)
+        | (MspServiceRelationship.msp_tenant_id == caller)
+    )
+    total = base.count()
     rows = (
-        db.query(MspServiceRelationship)
-        .filter(
-            (MspServiceRelationship.tenant_id == caller)
-            | (MspServiceRelationship.msp_tenant_id == caller)
+        base.order_by(
+            MspServiceRelationship.created_at.desc(), MspServiceRelationship.id
         )
-        .order_by(MspServiceRelationship.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     now = utcnow()
-    items = [
-        {
-            **relationship_view(r, now=now),
-            "party": "customer" if str(r.tenant_id) == caller else "msp",
-        }
-        for r in rows
-    ]
-    return {"tenant_id": caller, "items": items, "total": len(items)}
+    names: dict[str, Optional[str]] = {}
+
+    def _name(tenant_id: str) -> Optional[str]:
+        if tenant_id not in names:
+            info = tenant_kind_and_name(db, tenant_id)
+            names[tenant_id] = info[1] if info else None
+        return names[tenant_id]
+
+    items = []
+    for r in rows:
+        party = "customer" if str(r.tenant_id) == caller else "msp"
+        if party == "customer":
+            counterparty: Optional[str] = _name(str(r.msp_tenant_id))
+        else:
+            counterparty = _name(str(r.tenant_id)) if r.approved_at else None
+        items.append(
+            {
+                **relationship_view(r, now=now),
+                "party": party,
+                "counterparty_display_name": counterparty,
+            }
+        )
+    end = offset + len(items)
+    return {
+        "tenant_id": caller,
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": end if end < total else None,
+    }
+
+
+_CUSTOMER_OPERATIONS = frozenset(
+    {"relationship.approve", "relationship.suspend", "relationship.resume"}
+)
+_MSP_OPERATIONS = frozenset(
+    {"relationship.propose", "context.resolve", "portfolio.summary"}
+)
+_HISTORY_DEFAULT_PAGE = 100
+_HISTORY_MAX_PAGE = 200
+
+
+def relationship_events_query(db: Session, chain_tenant: str, relationship_id: str):
+    """MSP events for one relationship on one tenant's chain.
+
+    The relationship predicate runs in the database, before any paging, so
+    unrelated MSP activity on the chain can never push this relationship's
+    events out of a page.
+    """
+    return db.query(TenantIdentityAuditEvent).filter(
+        TenantIdentityAuditEvent.tenant_id == chain_tenant,
+        TenantIdentityAuditEvent.event_type.like("tenant.msp.%"),
+        TenantIdentityAuditEvent.details_json["relationship_id"].as_string()
+        == relationship_id,
+    )
+
+
+def _actor_party(operation: str) -> str:
+    if operation.startswith("relationship.revoke."):
+        return operation.rsplit(".", 1)[1]
+    if operation in _CUSTOMER_OPERATIONS:
+        return "customer"
+    if operation in _MSP_OPERATIONS:
+        return "msp"
+    return "platform"
+
+
+@router.get(
+    "/relationships/{relationship_id}/events",
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:read"))],
+)
+def list_relationship_events(
+    relationship_id: str,
+    request: Request,
+    limit: int = Query(_HISTORY_DEFAULT_PAGE, ge=1, le=_HISTORY_MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(require_permission("tenant.configure")),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """This relationship's events from the caller's own audit chain.
+
+    Read-only; it never reads the other party's chain. Each event names the
+    party that acted. The acting subject is shown only when that party is the
+    caller's own organization, so neither side learns the other's people.
+    ``chain_verified`` is the result of verifying the caller's whole chain.
+    """
+    caller = _caller_tenant_from_auth(request, actor_ctx)
+    check_tenant_admin_authority(db, actor_ctx=actor_ctx, tenant_id=caller)
+    row = _party_relationship(db, relationship_id, caller)
+    caller_party = "customer" if caller == str(row.tenant_id) else "msp"
+    base = relationship_events_query(db, caller, relationship_id)
+    total = base.count()
+    events = (
+        base.order_by(
+            TenantIdentityAuditEvent.created_at.desc(),
+            TenantIdentityAuditEvent.id.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    items: list[dict[str, Any]] = []
+    for ev in events:
+        details = ev.details_json if isinstance(ev.details_json, dict) else {}
+        operation = str(details.get("operation") or "")
+        party = _actor_party(operation)
+        created = as_utc(ev.created_at)
+        items.append(
+            {
+                "event_type": ev.event_type,
+                "occurred_at": created.isoformat() if created else None,
+                "operation": operation,
+                "capabilities": list(details.get("capabilities") or []),
+                "result": details.get("result"),
+                "actor_party": party,
+                "actor_subject": ev.actor_user_id if party == caller_party else None,
+                "correlation_id": ev.correlation_id,
+                "event_hash": ev.event_hash,
+            }
+        )
+    next_offset = offset + len(items) if offset + len(items) < total else None
+    return {
+        "tenant_id": caller,
+        "relationship_id": relationship_id,
+        "party": caller_party,
+        "chain_verified": bool(verify_identity_audit_chain(db, caller)),
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": next_offset,
+    }
 
 
 @router.post(
     "/relationships",
     dependencies=[
+        _CONSOLE_BIND,
         Depends(require_scopes("admin:write")),
         Depends(require_capability("msp.multi_tenant")),
     ],
@@ -394,7 +562,7 @@ def propose_relationship(
 
 @router.post(
     "/relationships/{relationship_id}/approve",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
 )
 def approve_relationship(
     relationship_id: str,
@@ -500,7 +668,7 @@ def _customer_status_change(
 
 @router.post(
     "/relationships/{relationship_id}/suspend",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
 )
 def suspend_relationship(
     relationship_id: str,
@@ -525,7 +693,7 @@ def suspend_relationship(
 
 @router.post(
     "/relationships/{relationship_id}/resume",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
 )
 def resume_relationship(
     relationship_id: str,
@@ -551,7 +719,7 @@ def resume_relationship(
 
 @router.post(
     "/relationships/{relationship_id}/revoke",
-    dependencies=[Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
 )
 def revoke_relationship(
     relationship_id: str,
@@ -606,6 +774,7 @@ def revoke_relationship(
 @router.get(
     "/customers",
     dependencies=[
+        _CONSOLE_BIND,
         Depends(require_scopes("admin:read")),
         Depends(require_capability("msp.multi_tenant")),
     ],
@@ -637,9 +806,85 @@ def list_authorized_customers(
     return {"msp_tenant_id": caller, "items": items, "total": len(items)}
 
 
+@router.get(
+    "/portfolio",
+    dependencies=[
+        _CONSOLE_BIND,
+        Depends(require_scopes("admin:read")),
+        Depends(require_capability("msp.multi_tenant")),
+    ],
+)
+def get_portfolio(
+    request: Request,
+    limit: int = Query(PORTFOLIO_DEFAULT_PAGE, ge=1, le=PORTFOLIO_MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    actor_ctx: ActorContext = Depends(get_actor_context),
+    db: Session = Depends(auth_ctx_db_session),
+) -> dict[str, Any]:
+    """MSP-002 read-only portfolio: one page of authorized customers.
+
+    The customer set and each customer's permissions come only from
+    ``list_actor_customers`` (re-evaluated on every request, no cache). Each
+    summary section is read only when its capability is delegated, under that
+    customer's tenant context; every customer whose data was read gets a
+    ``tenant.msp.portfolio_summary_accessed`` event on its own chain.
+    Stable order: customer tenant id.
+    """
+    caller = _caller_tenant_from_auth(request, actor_ctx)
+    membership = resolve_msp_membership(db, actor_ctx=actor_ctx, msp_tenant_id=caller)
+    entries: list[PortfolioEntry] = []
+    for row, effective in list_actor_customers(db, membership=membership):
+        info = tenant_kind_and_name(db, str(row.tenant_id))
+        if info is None:
+            continue
+        expires_at = as_utc(row.expires_at)
+        entries.append(
+            PortfolioEntry(
+                customer_tenant_id=str(row.tenant_id),
+                display_name=info[1],
+                relationship_id=str(row.id),
+                expires_at=expires_at.isoformat() if expires_at else None,
+                effective_permissions=effective,
+            )
+        )
+    total = len(entries)
+    page = entries[offset : offset + limit]
+    items, reads = build_portfolio_items(db, entries=page, restore_tenant=caller)
+    for entry, used in reads:
+        emit_msp_audit(
+            db,
+            chains=(entry.customer_tenant_id,),
+            restore_tenant=caller,
+            event_type="tenant.msp.portfolio_summary_accessed",
+            actor_subject=membership.subject,
+            membership_id=membership.membership_id,
+            reason_code="MSP_PORTFOLIO_SUMMARY_ACCESSED",
+            msp_tenant_id=caller,
+            customer_tenant_id=entry.customer_tenant_id,
+            relationship_id=entry.relationship_id,
+            operation="portfolio.summary",
+            capabilities=used,
+            correlation=correlation_id(request),
+        )
+    end = offset + len(items)
+    view = {
+        "msp_tenant_id": caller,
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "next_offset": end if end < total else None,
+        "generated_at": utcnow().isoformat(),
+        "revalidation": "every_request",
+    }
+    db.commit()
+    return view
+
+
 @router.post(
     "/customers/{customer_tenant_id}/context",
     dependencies=[
+        _CONSOLE_BIND,
         Depends(require_scopes("admin:read")),
         Depends(require_capability("msp.multi_tenant")),
     ],

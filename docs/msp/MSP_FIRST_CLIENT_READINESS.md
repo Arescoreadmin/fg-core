@@ -3,7 +3,8 @@
 **Verdict**:
 
 - **Internal synthetic validation: READY.** Every control below passes against synthetic tenants.
-- **A real external MSP with real customer data: NOT READY.** It is blocked by 4 controls and has 3 deferred.
+- **A real external MSP with real customer data: NOT READY.** It is blocked by 2 controls (10, 13), control 2 awaits deployment, and 3 are deferred.
+- **MSP-002 update (2026-11-14).** Control 2 now has a console workflow; control 5 passed in CI on #872.
 
 Unit and route tests do not make the platform customer-ready, and nothing here claims they do.
 
@@ -14,10 +15,10 @@ All tests cited are in `tests/security/test_msp_001_foundation.py` unless stated
 | # | Control | Synthetic validation | Real MSP + real customer data | Evidence or blocker |
 |---|---|---|---|---|
 | 1 | Tenant provisioning | PASS | PASS (mechanism) | The MSP is an ordinary tenant provisioned through the existing `POST /admin/tenants`, then designated through `PUT /admin/msp/organizations/{id}`. Tests 17b, 21; route inventory regenerated. |
-| 2 | Customer approval workflow | PASS | **BLOCKED** | Tests 04, 05, 06. Blocker: there is no console UI. `/admin/msp/*` is a control-plane API reached through the admin gateway, so a real customer administrator cannot approve without operator help. Addressed in MSP-002. |
+| 2 | Customer approval workflow | PASS | **PENDING DEPLOYMENT** | Tests 04, 05, 06. MSP-002 adds the console page `/partners`, driven through the console's real transport (`tests/security/test_msp_002_console_transport.py`, first-client demonstration). MSP-002 also fixed MSP-001 routes rejecting console callers (see `MSP_002_ARCHITECTURE.md`). Not yet deployed or shown in a target environment. |
 | 3 | Role and scope enforcement | PASS | PASS | Tests 06, 11, 11b; existing TENANT-ADMIN-001, RBAC and identity suites green (Tier A). |
 | 4 | Relationship revocation | PASS | PASS | Tests 07, 08, 08b, 10 (membership and partner kill switch), 16 (no cached authority). |
-| 5 | Tenant isolation | PASS | **BLOCKED** | Tests 02, 13, 14, 15, plus the control-plane v2 tests. Blocker: the forced RLS policies of migration 0206 have not yet been shown on Postgres. Three probe tests are added (`tests/test_migrations_postgres_replay.py -k 0206`): parties-only visibility, `WITH CHECK` refusal, and authority plus cross-chain audit under a `NOBYPASSRLS` role. They skip locally (no `FG_DB_URL`) and run in the CI Postgres job. Blocked until that run passes. |
+| 5 | Tenant isolation | PASS | PASS (CI Postgres) | Tests 02, 13, 14, 15, plus the control-plane v2 tests. The forced RLS probes of migration 0206 (`tests/test_migrations_postgres_replay.py -k 0206`: parties-only visibility, `WITH CHECK` refusal, authority plus cross-chain audit under a `NOBYPASSRLS` role) passed in CI Migrations Replay on #872 (head `5ba584bea`). MSP-002 adds a portfolio-read probe in the same job. Not yet shown on a production database. |
 | 6 | Audit attribution | PASS | PASS | Test 19: events on both chains bind actor, membership, MSP, customer, relationship, capabilities, operation and correlation id; `verify_identity_audit_chain` holds for both tenants. |
 | 7 | Evidence ownership | PASS | PASS | Test 20: revocation leaves the customer's decision evidence row, file, SHA-256 and audit chain intact. MSP-001 exposes no evidence through MSP authority. |
 | 8 | Operational rollback | PASS | PASS | The PR revert is self-contained, and migration 0206 is additive (`MSP_001_ARCHITECTURE.md` → Rollback). No live rollback drill was run. |
@@ -47,4 +48,6 @@ No reachable vulnerability required blocking an MSP integration. The one reachab
 
 - **Legacy scope-to-platform mapping.** `admin:write` API keys satisfy `platform.admin` through the legacy scope mapping. Without the internal gateway secret, in non-production, any such key can designate an MSP. Designation grants nothing without customer approval. Production requires the gateway.
 - **Tenant id oracle.** A designated MSP's `tenant_admin` can learn whether a customer tenant id exists by proposing to it (404 vs 200). This is limited to platform-vetted MSPs; MSP-002 should consider invitation codes instead of raw tenant ids.
-- **No live Postgres validation** of 0206 in this session (control 5).
+- **Postgres validation is CI-only.** The 0206 probes passed in CI on #872. They have not been run against a production database.
+- **Console is tenant_admin only (MSP-002).** Core's console delegation accepts only a tenant's own `tenant_admin`, so non-admin MSP staff have no console path. They can still use the API with a tenant-bound credential.
+- **Organization id sharing (MSP-002).** The customer page shows the organization's own id so it can be given to an MSP. Invitation codes would replace this.

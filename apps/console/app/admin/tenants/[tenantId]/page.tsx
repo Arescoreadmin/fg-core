@@ -1008,6 +1008,12 @@ export default function TenantDetailPage() {
             Tenant ID: <code style={{ fontSize: '0.8rem' }}>{tenantId}</code>
           </p>
         )}
+        {/* MSP-002: partner access (customer side) and MSP portfolio (MSP side). */}
+        <p style={s.pageSubtitle} data-testid="msp-links">
+          <Link href="/partners">Managed service partners</Link>
+          {' · '}
+          <Link href="/msp">MSP portfolio</Link>
+        </p>
       </div>
 
       <div style={s.tabs}>

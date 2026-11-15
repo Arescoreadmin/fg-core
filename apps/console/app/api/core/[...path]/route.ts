@@ -135,6 +135,11 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'admin/tenants', methods: new Set(['GET', 'POST', 'PATCH', 'DELETE', 'HEAD']) },
   // Executive Intelligence — governance:read gated; read-only surface (PR 18.6.7)
   { prefix: 'api/executive', methods: new Set(['GET', 'HEAD']) },
+  // MSP-002 — MSP portfolio + customer approval console. GET/POST only: the
+  // platform designation route (PUT admin/msp/organizations) is never proxied.
+  { prefix: 'admin/msp/relationships', methods: new Set(['GET', 'POST']) },
+  { prefix: 'admin/msp/customers', methods: new Set(['GET', 'POST']) },
+  { prefix: 'admin/msp/portfolio', methods: new Set(['GET']) },
 ];
 
 function getRequestId(request: NextRequest): string {
@@ -342,7 +347,15 @@ function isTenantAdminCorePath(path: string[]): boolean {
     path[0] === 'admin' &&
     path[1] === 'tenants' &&
     (path[3] === 'invite-initial-admin' || path[3] === 'bootstrap-admin' || path[3] === 'users' || path[3] === 'portal-access' || path[3] === 'lifecycle' || path[3] === 'credential-administration');
+  // MSP-002: every proxied MSP route is a delegated named-actor call. The
+  // X-Tenant-ID is always the session's own tenant (an MSP or a customer);
+  // a customer id in the path (customers/{id}/context) never selects it.
+  const isMspConsolePath =
+    joined.startsWith('admin/msp/relationships') ||
+    joined.startsWith('admin/msp/customers') ||
+    joined === 'admin/msp/portfolio';
   return (
+    isMspConsolePath ||
     joined.startsWith('workforce/users') ||
     joined === 'portal/grants' ||
     joined.startsWith('portal/grants/') ||

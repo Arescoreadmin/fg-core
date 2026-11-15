@@ -447,6 +447,40 @@ const CONSOLE_ROUTE_AUDITS = [
     allowsMutation: true,
   }),
   routeAudit({
+    id: 'msp-portfolio',
+    title: 'MSP Portfolio',
+    routePattern: '/msp',
+    // MSP-002: an MSP tenant's own administrators. The customer list and every
+    // summary come from Core's MSP authority; nothing is decided in the browser.
+    audience: 'tenant_admin_console',
+    allowedRoles: CLIENT_ADMIN_ROLES,
+    backendApis: ['/api/core/admin/msp/portfolio', '/api/core/admin/msp/relationships', '/api/core/admin/msp/customers/*/context'],
+    navVisible: false,
+    tenantScoped: true,
+    clientSafe: true,
+    exposesInternalMetadata: false,
+    readOnly: false,
+    allowsMutation: true,
+    notes: 'Reached from the organization workspace; navigation registry entry deferred (MCIM docs).',
+  }),
+  routeAudit({
+    id: 'msp-partner-access',
+    title: 'Managed Service Partners',
+    routePattern: '/partners',
+    // MSP-002: a customer's own administrators approve, suspend, resume and
+    // revoke MSP access to their organization.
+    audience: 'tenant_admin_console',
+    allowedRoles: CLIENT_ADMIN_ROLES,
+    backendApis: ['/api/core/admin/msp/relationships', '/api/core/admin/msp/relationships/*/events'],
+    navVisible: false,
+    tenantScoped: true,
+    clientSafe: true,
+    exposesInternalMetadata: false,
+    readOnly: false,
+    allowsMutation: true,
+    notes: 'Reached from the organization workspace; navigation registry entry deferred (MCIM docs).',
+  }),
+  routeAudit({
     id: 'keys',
     title: 'Keys',
     routePattern: '/keys',
@@ -658,6 +692,11 @@ const CORE_API_POLICIES = [
   // (Core API enforces platform.admin; BFF allows TENANT_ADMIN_CONSOLE_ROLES through).
   { prefix: 'admin/tenants', allowedRoles: TENANT_ADMIN_CONSOLE_ROLES, tenantScoped: true, clientSafe: false, readOnly: false, mutationRoles: ['tenant_admin', ...INTERNAL_ONLY_ROLES] },
   { prefix: 'api/executive', allowedRoles: CLIENT_CONSOLE_ALLOWED_ROLES, tenantScoped: true, clientSafe: true, readOnly: true },
+  // MSP-002 — relationship, portfolio and context routes (GET/POST only; the
+  // platform designation PUT is never proxied). Session tenant only. Core's
+  // console delegation accepts only the tenant's own canonical tenant_admin
+  // (_verify_delegated_tenant_human_authority) and re-checks every request.
+  { prefix: 'admin/msp', allowedRoles: CLIENT_ADMIN_ROLES, tenantScoped: true, clientSafe: true, readOnly: false, mutationRoles: CLIENT_ADMIN_ROLES },
 ];
 
 function isRecord(value) {

@@ -91,6 +91,23 @@ next_sequence:
       delegated read authority, discovery/context API, audit attribution. No MSP access
       to customer data routes, no billing, no UI. Does not change the Customer-One
       critical path or any FG_RESULT_TRUTH_GATE acceptance gate.
+  - id: "MSP-002"
+    title: "MSP-002 — Multi-client portfolio and customer approval console"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    authorized_by: "Founder (explicit decision in the MSP-002 session, 2026-11-14)"
+    freeze_law_basis: >
+      Founder authorization only. No contracted MSP customer and no Customer-One
+      blocker was cited, so criteria (1) and (2) are NOT claimed. Partial support
+      for criterion (3): MSP-001's customer-side routes could not be called from
+      the console (the actor was resolved before the console's delegation proof
+      was verified), leaving customer approval API-only.
+    scope: >
+      Read-only portfolio API and relationship history on MSP-001's authority; MSP
+      portfolio and customer approval console pages; console transport wiring. No
+      schema change, no new service, no MSP write access to customer data, no
+      governance score, no billing. Does not change the Customer-One critical path or
+      any FG_RESULT_TRUTH_GATE acceptance gate.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"

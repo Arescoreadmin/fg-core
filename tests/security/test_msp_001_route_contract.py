@@ -1,4 +1,4 @@
-"""MSP-001 route security contract.
+"""MSP-001 / MSP-002 route security contract.
 
 Every /admin/msp/* route rejects unauthenticated callers, callers without the
 required scope, and callers whose tenant header disagrees with the key-bound
@@ -37,6 +37,9 @@ ROUTES = [
     ("POST", f"/admin/msp/relationships/{_RID}/revoke", None, "admin:write"),
     ("GET", "/admin/msp/customers", None, "admin:read"),
     ("POST", "/admin/msp/customers/tenant-b/context", None, "admin:read"),
+    # MSP-002 read-only routes
+    ("GET", "/admin/msp/portfolio", None, "admin:read"),
+    ("GET", f"/admin/msp/relationships/{_RID}/events", None, "admin:read"),
 ]
 
 
@@ -57,6 +60,8 @@ def test_every_msp_route_is_mounted(build_app) -> None:
         ("POST", "/admin/msp/relationships/{relationship_id}/revoke"),
         ("GET", "/admin/msp/customers"),
         ("POST", "/admin/msp/customers/{customer_tenant_id}/context"),
+        ("GET", "/admin/msp/portfolio"),
+        ("GET", "/admin/msp/relationships/{relationship_id}/events"),
     }
     assert templates <= mounted, sorted(templates - mounted)
 
