@@ -17,8 +17,10 @@ Reused, unchanged:
     in a grant.
   * Administrators — TENANT-ADMIN-001 ``check_tenant_admin_authority`` for the
     MSP and the customer side.
-  * Engagement creation — ``create_engagement_with_audit``, the same function
-    the Field Assessment create route uses. Every later step (scans, evidence,
+  * Engagement creation — ``create_engagement_with_audit``: the canonical
+    store ``create_engagement`` plus the same ``engagement.created`` audit and
+    timeline events the Field Assessment create route emits (parity is
+    test-enforced; the route keeps its inline audit calls). Every later step (scans, evidence,
     readiness, QA, report qualification, governed delivery) stays with Field
     Assessment under the customer tenant's own authority; this module has no
     engagement status mutation.

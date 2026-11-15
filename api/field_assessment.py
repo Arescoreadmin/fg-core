@@ -1521,13 +1521,18 @@ def create_engagement_with_audit(
     actor: str,
     audit_extra: dict[str, Any] | None = None,
 ) -> FaEngagement:
-    """The one engagement creation path: the record, its canonical
-    ``engagement.created`` audit event and its timeline event.
+    """Engagement creation for callers outside ``create_engagement_route``:
+    the canonical store record, its ``engagement.created`` audit event and
+    its timeline event, in the same order and shape as the route.
 
-    Used by ``create_engagement_route`` and by MSP-003 initiation
-    (``api/msp_orchestration.py``), which passes ``audit_extra`` to mark the
-    MSP origin. The caller owns authorization and the commit, and must have
-    bound ``tenant_id``'s RLS context.
+    Used by MSP-003 initiation (``api/msp_orchestration.py``), which passes
+    ``audit_extra`` to mark the MSP origin. The route keeps its own inline
+    audit calls so tools/ci/check_audit_coverage.py verifies it directly.
+    Parity with the route is enforced by
+    tests/security/test_msp_003_orchestration.py::
+    test_inv_msp_creation_matches_the_canonical_route. The caller owns
+    authorization and the commit, and must have bound ``tenant_id``'s RLS
+    context.
     """
     eng = create_engagement(
         db,
@@ -1580,7 +1585,7 @@ def create_engagement_route(
 ) -> EngagementResponse:
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
-    eng = create_engagement_with_audit(
+    eng = create_engagement(
         db,
         tenant_id=tenant_id,
         client_name=body.client_name,
@@ -1590,6 +1595,28 @@ def create_engagement_route(
         scheduled_date=body.scheduled_date,
         engagement_metadata=body.engagement_metadata,
         actor=actor,
+    )
+    audit_payload = {
+        "client_name": body.client_name,
+        "assessment_type": body.assessment_type.value,
+        "assessor_id": body.assessor_id,
+    }
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=eng.id,
+        event_type="engagement.created",
+        actor=actor,
+        reason_code="ENGAGEMENT_CREATED",
+        payload=audit_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=eng.id,
+        event_type="field_assessment.engagement.created",
+        occurred_at=eng.created_at,
+        payload=audit_payload,
     )
     # Capture all ORM attributes before commit to avoid post-commit expiry (D-T6-002).
     _eng_id = eng.id

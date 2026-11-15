@@ -1302,3 +1302,62 @@ def test_inv_g_h_payer_assignment_and_grant_are_independent_authorities(w, engin
     assert (
         blocked.status_code == 409 and _code(blocked) == "MSP_ASSESSMENT_NOT_ENTITLED"
     )
+
+
+def test_inv_msp_creation_matches_the_canonical_route(w, engine):
+    """MSP initiation and the direct create route produce the same canonical
+    record, audit event and timeline event; the MSP path only adds its
+    ``msp`` provenance block. Guards drift between the route (which keeps its
+    inline audit calls for tools/ci/check_audit_coverage.py) and
+    create_engagement_with_audit."""
+    from api.db_models_field_assessment import FaEngagementAuditEvent
+
+    def _shape(eid: str) -> tuple:
+        with _session() as db:
+            eng = db.execute(
+                text(
+                    "SELECT status, schema_version, assessment_type, assessor_id"
+                    " FROM fa_engagements WHERE id = :id"
+                ),
+                {"id": eid},
+            ).fetchone()
+            events = (
+                db.query(FaEngagementAuditEvent)
+                .filter(FaEngagementAuditEvent.engagement_id == eid)
+                .all()
+            )
+            timeline = db.execute(
+                text(
+                    "SELECT event_type FROM governance_timeline_events"
+                    " WHERE source_id = :id"
+                ),
+                {"id": eid},
+            ).fetchall()
+        [ev] = events
+        payload = {k: v for k, v in (ev.payload or {}).items() if k != "msp"}
+        return (
+            tuple(eng),
+            (ev.event_type, ev.reason_code, sorted(payload)),
+            sorted(r[0] for r in timeline),
+        )
+
+    # Both paths must actually write a timeline event, not just match on none.
+
+    assessor = _seed_person(engine, CUST_1, "c1-assessor", "assessor")
+    direct = _fa(
+        w,
+        assessor,
+        "POST",
+        "/field-assessment/engagements",
+        {
+            "client_name": "Direct",
+            "assessor_id": "assessor-msp-alpha-1",
+            "assessment_type": "ai_governance",
+        },
+    )
+    assert direct.status_code == 201, direct.text
+    _rid, grant = _approved_grant(w)
+    mspid = _initiate(w, grant["grant_id"]).json()["engagement_id"]
+    direct_shape = _shape(direct.json()["id"])
+    assert direct_shape[2] == ["field_assessment.engagement.created"]
+    assert direct_shape == _shape(mspid)

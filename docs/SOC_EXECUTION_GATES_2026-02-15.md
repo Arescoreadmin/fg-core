@@ -8741,7 +8741,7 @@ SOC review outcome: APPROVED as a review fix within PR #876.
 
 - **New MSP write path.** An MSP `tenant_admin` can create one engagement in a customer tenant, but only through an approved, unexpired, unused grant. It must also hold an active relationship, an active designation, an active customer tenant and a resolving MSP-006 payer.
 - **Read ceiling unchanged.** The MSP-001 read ceiling is not widened. A grant decodes only `assessment.create`.
-- **Field Assessment.** `create_engagement_route` now calls the extracted `create_engagement_with_audit`. Its behavior is unchanged, which test t02 guards.
+- **Field Assessment.** `create_engagement_route` is unchanged (zero diff), and the audit coverage gate still verifies it at 100%. MSP initiation uses the new `create_engagement_with_audit`, with the same store function and the same audit and timeline events. Parity is enforced by `test_inv_msp_creation_matches_the_canonical_route`, and t02 guards the direct path.
 
 **Called out — CI check configuration:** `tools/ci/check_plane_registry.py` gains three entries in `EXACT_TENANT_BINDING_EXCEPTIONS`:
 
@@ -8791,6 +8791,6 @@ SOC review outcome: APPROVED as a review fix within PR #876.
 - Migration 0208 and the MSP-001/002/006 prerequisites are not evidenced in production.
 - Settlement is still NOT PROVEN (MSP-006 F10).
 
-**Verification:** 43 of 44 new tests fail on `main` `295fde436`; the only one that passes is the direct-customer guard. All 44 pass on the branch. The Postgres RLS probe for 0208 runs in CI Migrations Replay.
+**Verification:** 43 of 44 new tests fail on `main` `295fde436`; the only one that passes is the direct-customer guard. All 45 pass on the branch, including the parity guard added in final validation. The Postgres RLS probe for 0208 runs in CI Migrations Replay.
 
 SOC review outcome: APPROVED for merge as a synthetic, development-only orchestration foundation. Not approved for real customer use until it is deployed, migration 0208 is evidenced, and a live partner acceptance is run under separate authorization.

@@ -11,7 +11,7 @@ MSP-003 lets an approved MSP guide a customer onto FrostGate and start an assess
 | `msp_assessment_grants` | Migration 0208, `api/db_models_msp.py` | One customer-approved, expiring, single-use grant to initiate one engagement |
 | `msp_onboarding_requests` | Migration 0208, `api/db_models_msp.py` | An MSP's referral of an organization that is not yet a tenant (a platform review queue) |
 | Orchestration API | `api/msp_orchestration.py` | Grant request, decision and initiation routes; onboarding referral and platform review routes |
-| One creation path | `api/field_assessment.py` `create_engagement_with_audit` | The existing create route's body, now shared with MSP initiation |
+| Canonical creation for MSP | `api/field_assessment.py` `create_engagement_with_audit` | Same store function and the same `engagement.created` audit and timeline events as the create route. The route is unchanged; parity is test-enforced. |
 | Audit fields | `emit_msp_audit(extra=…)`; the identity audit allowlist | Grant, engagement, previous and new state on each MSP event |
 | Console | `/msp` and `/partners`, `components/msp/AssessmentGrants.tsx` and `OnboardingRequests.tsx` | MSP request, start and progress views; customer approve, decline and revoke |
 
