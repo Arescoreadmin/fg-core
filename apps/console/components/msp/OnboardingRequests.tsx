@@ -18,7 +18,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CapabilityPicker } from '@/components/msp/CapabilityPicker';
 import {
   cancelOnboarding,
-  listOnboardingRequests,
+  listAllOnboardingRequests,
   requestOnboarding,
   type OnboardingRequest,
 } from '@/lib/mspApi';
@@ -45,7 +45,7 @@ export function OnboardingRequests({ onSessionExpired }: { onSessionExpired?: ()
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    const res = await listOnboardingRequests();
+    const res = await listAllOnboardingRequests();
     if (!res.ok) {
       if (res.status === 401) onSessionExpired?.();
       setError(safeOrchestrationError(res));

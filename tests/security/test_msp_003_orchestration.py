@@ -1361,3 +1361,39 @@ def test_inv_msp_creation_matches_the_canonical_route(w, engine):
     direct_shape = _shape(direct.json()["id"])
     assert direct_shape[2] == ["field_assessment.engagement.created"]
     assert direct_shape == _shape(mspid)
+
+
+def test_review_msp_entitlement_gates_orchestration_mutations(w, monkeypatch):
+    """PR #877 review (P2): losing the msp.multi_tenant entitlement stops every
+    MSP-003 mutation that creates or expands MSP activity, exactly like the
+    MSP-001 relationship proposal. Retracting the MSP's own pending request
+    stays possible."""
+    import api.entitlements as ent
+    from services.capability_bundles.resolver import invalidate_cache
+
+    _rid, grant = _approved_grant(w)
+    pending = _request(w).json()
+    onb = _onboard(w, key="before-revocation").json()
+
+    monkeypatch.setenv("FG_ENTITLEMENT_ENFORCEMENT", "true")
+    monkeypatch.setattr(ent, "ENFORCEMENT_STRICT", True)
+    invalidate_cache(MSP_A)
+
+    for resp in (
+        _request(w),
+        _initiate(w, grant["grant_id"]),
+        _onboard(w, key="after-revocation"),
+    ):
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["detail"]["code"] == "CAPABILITY_DENIED"
+    assert _engagements(CUST_1) == []
+
+    # Retraction only reduces activity, so it is not entitlement-gated.
+    assert _decide(w, w.msp_a_admin, pending, "withdraw").status_code == 200
+    cancel = w.call(
+        w.msp_a_admin,
+        "POST",
+        f"{ONBOARD}/{onb['onboarding_request_id']}/cancel",
+        {"expected_version": onb["version"]},
+    )
+    assert cancel.status_code == 200

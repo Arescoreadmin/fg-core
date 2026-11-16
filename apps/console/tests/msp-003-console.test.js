@@ -239,3 +239,13 @@ test('no client-side storage, HTML injection or raw server errors', () => {
 test('the MSP page shows onboarding only for an active MSP', () => {
   assert.match(read(PAGE_MSP), /\{!notConfigured \? <OnboardingRequests/);
 });
+
+test('PR #877 review: onboarding referrals load every page, failing closed', () => {
+  const api = read(API);
+  assert.match(api, /export function listAllOnboardingRequests\(\)[\s\S]*?collectAllPages\(\(offset\) => listOnboardingRequests\(offset\)\)/);
+  const src = read(ONBOARDING);
+  assert.match(src, /await listAllOnboardingRequests\(\)/);
+  assert.doesNotMatch(src, /await listOnboardingRequests\(/);
+  // Both MSP-003 lists use the paging helper, never a single page.
+  assert.match(read(GRANTS), /await listAllAssessmentGrants\(/);
+});
