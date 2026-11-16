@@ -8861,3 +8861,13 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 5. **Isolation.** Identical 404s for unknown and foreign ids; per-party listings; RLS proven in CI Migrations Replay (`-k 0209`).
 6. **Audit.** Both identity chains record every decision and read; downloads also go to the engagement trail; history survives revocation; chains verify.
 7. **No billing.** Sharing and reading record no usage; MSP-006 delivery remains the only charge.
+
+## 2026-11-16 - fix(msp): MSP-007 review — download headers before commit; renew expired shares
+
+**Called out — schema:** migration 0209 (not yet merged) adds the stored status `expired` to `msp_report_shares`. The report-binding CHECK now covers `active`, `revoked` and `expired`. The change is additive to the unmerged migration, and no existing table changes.
+
+**Security analysis:**
+
+1. Renewal retires only an active share that is already past its expiry, by compare-and-set. It is audited on both chains as `tenant.msp.report_share_expired`, and the row and its history are kept.
+2. An unexpired active share still blocks a duplicate: the partial unique index is unchanged.
+3. The download fix only moves header construction before the commit. Authorization, audit and response content are unchanged.
