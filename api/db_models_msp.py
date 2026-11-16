@@ -1,7 +1,8 @@
 """api/db_models_msp.py — MSP designation, service relationships and payer assignments.
 
 ORM mirror of migrations/postgres/0206_msp_service_relationships.sql (MSP-001)
-and the msp_payer_assignments table of 0207_msp_006_partner_billing.sql (MSP-006). Column
+and the msp_payer_assignments table of 0207_msp_006_partner_billing.sql (MSP-006),
+0208 (MSP-003) and 0209_msp_007_report_shares.sql (MSP-007). Column
 names, CHECK constraints and index names match the migration so the SQLite
 create_all path and the Postgres migration path produce the same schema.
 
@@ -310,6 +311,98 @@ class MspOnboardingRequest(Base):
     reviewed_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     customer_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MspReportShare(Base):
+    """MSP-007: a customer's decision to let one MSP read one exact, released
+    report version (id, version and manifest fingerprint) until ``expires_at``.
+
+    ORM mirror of migrations/postgres/0209_msp_007_report_shares.sql. The report
+    stays in ``governance_reports``; this row is only the authorization. An
+    MSP-origin row starts as a request; only the customer makes it active.
+    Rows are never deleted, so the access history survives revocation.
+    """
+
+    __tablename__ = "msp_report_shares"
+    __table_args__ = (
+        CheckConstraint(
+            "origin IN ('customer', 'msp')", name="msp_report_shares_origin_check"
+        ),
+        CheckConstraint(
+            "status IN ('requested', 'active', 'rejected', 'withdrawn', 'revoked', "
+            "'expired')",
+            name="msp_report_shares_status_check",
+        ),
+        CheckConstraint(
+            "msp_tenant_id <> tenant_id", name="msp_share_distinct_parties"
+        ),
+        CheckConstraint(
+            "status NOT IN ('active', 'revoked', 'expired') OR (report_id IS NOT NULL AND "
+            "report_version IS NOT NULL AND manifest_hash IS NOT NULL AND "
+            "decided_by_subject IS NOT NULL AND decided_at IS NOT NULL AND "
+            "expires_at IS NOT NULL AND expires_at > decided_at)",
+            name="msp_share_bound_report",
+        ),
+        CheckConstraint(
+            "status <> 'rejected' OR (decided_by_subject IS NOT NULL AND "
+            "decided_at IS NOT NULL)",
+            name="msp_share_rejected_fields",
+        ),
+        CheckConstraint(
+            "status <> 'revoked' OR (revoked_by_subject IS NOT NULL AND "
+            "revoked_at IS NOT NULL)",
+            name="msp_share_revoked_fields",
+        ),
+        CheckConstraint(
+            "origin <> 'msp' OR source_grant_id IS NOT NULL",
+            name="msp_share_msp_origin_has_grant",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "msp_tenant_id",
+            "origin",
+            "request_key",
+            name="uq_msp_share_request_key",
+        ),
+        Index(
+            "uq_msp_share_active_report",
+            "tenant_id",
+            "msp_tenant_id",
+            "report_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
+        Index("ix_msp_share_customer_status", "tenant_id", "status"),
+        Index("ix_msp_share_msp_status", "msp_tenant_id", "status"),
+        Index("ix_msp_share_relationship", "relationship_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    msp_tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    relationship_id: Mapped[Any] = mapped_column(
+        String(36), ForeignKey("msp_service_relationships.id"), nullable=False
+    )
+    origin: Mapped[Any] = mapped_column(String(16), nullable=False)
+    request_key: Mapped[Any] = mapped_column(String(128), nullable=False)
+    engagement_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    source_grant_id: Mapped[Any] = mapped_column(String(36), nullable=True)
+    report_id: Mapped[Any] = mapped_column(String(255), nullable=True)
+    report_version: Mapped[Any] = mapped_column(Integer, nullable=True)
+    manifest_hash: Mapped[Any] = mapped_column(String(128), nullable=True)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False)
+    requested_by_subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    requested_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    decided_by_membership_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    decided_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_subject: Mapped[Any] = mapped_column(Text, nullable=True)
+    revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)

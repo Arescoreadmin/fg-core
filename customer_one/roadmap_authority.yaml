@@ -94,6 +94,28 @@ next_sequence:
       attribution. Does NOT authorize production deployment, processing of real
       customer data, spending, live charges, MSP-led tenant creation, or any change
       to the Customer-One critical path or FG_RESULT_TRUTH_GATE acceptance gates.
+  - id: "MSP-007"
+    title: "MSP-007 — Customer evidence portal, managed reporting and verifiable partner delivery"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    authorized_by: "Founder (explicit MSP-007 instruction, 2026-11-16)"
+    freeze_law_basis: >
+      Founder authorization only. No contracted MSP customer and no Customer-One
+      blocker was cited, so criteria (1) and (2) are NOT claimed, and this entry is
+      not evidence of a contracted customer, operational acceptance or production
+      readiness.
+    scope: >
+      Development only: canonical authority audit; customer-approved, expiring,
+      version- and fingerprint-bound sharing of released Field Assessment reports
+      with an MSP under an active MSP-001 relationship; MSP report verification and
+      download through the canonical release, integrity and trust-gate authorities;
+      audited access history; Console /msp and /partners views; migration with
+      forced RLS. Reuses MSP-001, MSP-003, TENANT-ADMIN-001, the report release
+      decision, report verification and governed-delivery records. Does NOT
+      authorize production deployment, external customer onboarding, live evidence
+      sharing, transmission of real customer reports, live payment settlement,
+      operational acceptance, contracts or spending, or any change to the
+      Customer-One critical path or FG_RESULT_TRUTH_GATE acceptance gates.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"

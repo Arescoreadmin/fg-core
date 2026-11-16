@@ -384,6 +384,11 @@ _CUSTOMER_OPERATIONS = frozenset(
         "assessment_grant.approve",
         "assessment_grant.reject",
         "assessment_grant.revoke",
+        # MSP-007 report sharing (api/msp_reporting.py)
+        "report_share.approve",
+        "report_share.reject",
+        "report_share.revoke",
+        "report_share.expire",
     }
 )
 _MSP_OPERATIONS = frozenset(
@@ -394,6 +399,10 @@ _MSP_OPERATIONS = frozenset(
         "assessment_grant.request",
         "assessment_grant.withdraw",
         "assessment.initiate",
+        "report_share.request",
+        "report_share.withdraw",
+        "report.verify",
+        "report.download",
     }
 )
 _HISTORY_DEFAULT_PAGE = 100

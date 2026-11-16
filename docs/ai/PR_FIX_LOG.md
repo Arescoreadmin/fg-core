@@ -1,3 +1,57 @@
+## ci(hardening): raise the ci-hardening job timeout from 40 to 55 minutes (PR #892)
+
+- **Problem:** on #892, `Hardening Gates (ci-hardening)` was cancelled at its 40-minute `timeout-minutes` during `pytest tests/security`, with no test failing. `CI Required` then failed because it depends on that job.
+  - The job was already close to the limit on `main`: 38.4 min on #878 and 31 min on #891.
+  - MSP-007 adds 59 security tests at about 3 s each, mostly per-test app startup.
+- **Fix:** `.github/workflows/ci.yml` changes `hardening.timeout-minutes` from 40 to 55. Founder approved this in the #892 session.
+- **Unchanged:** no step, test or gate is removed, skipped or made non-blocking. `tools/ci/check_github_repo_security.py` still requires a timeout on every required job, and one is still set.
+
+## fix(msp): MSP-007 review — build download headers before commit; renew expired shares (Codex review of PR #892)
+
+- **P1, download after commit (`api/msp_reporting.py` `download_shared_report`):**
+  - **Problem:** the response headers read `record.engagement_id` and `record.version` after `db.commit()`. Commit expires the row and clears the transaction-local tenant binding. On Postgres, forced RLS on `governance_reports` hides the reload (`ObjectDeletedError`), so an authorized, already-audited download returned an error.
+  - **Fix:** headers are built before commit.
+  - **Test:** `test_review_no_report_or_share_row_is_reloaded_after_commit` covers approve, verify, download, revoke and a refused download. It was red (a `GovernanceReportRecord` reloaded after commit) and is now green.
+- **P2, expired share kept the active slot (`migrations/postgres/0209_msp_007_report_shares.sql`):**
+  - **Problem:** an expired share stayed stored as `active`, so the partial unique index refused a renewal with `MSP_REPORT_SHARE_CONFLICT`, contradicting the `RENEW_REPORT_SHARE` next action.
+  - **Fix:** sharing again, or approving a new request, first retires an active-but-expired share of the same report for the same MSP. It moves to a new stored status `expired`, in the same transaction, by compare-and-set, audited as `tenant.msp.report_share_expired`. The row and its history stay. An unexpired active share still blocks a duplicate.
+  - **Schema:** migration 0209 is not merged; its status CHECK and report-binding CHECK now include `expired`, and the ORM matches.
+  - **Tests:** two renewal tests, red (409) before and green after. The Postgres probe now proves that a retired share frees the slot.
+- **Merge:** `origin/main` (#891, MSP-006 closure) merged into the branch with a merge commit, no force push. The `ROADMAP.md` and PR fix log conflicts were resolved keeping both sides. Offline evidence and contracts regenerated.
+
+## feat(msp): MSP-007 — customer evidence portal and managed reporting (branch feat/msp-007-evidence-sharing)
+
+- **Work item:** MSP-007, founder-authorized on 2026-11-16 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.
+  - Criteria (1) and (2) are not claimed.
+  - Development only: no deployment, live evidence sharing, real customer reports, settlement or spending.
+  - Base: `main` `408e5565`.
+- **Audit first:** `docs/msp/MSP_007_AUTHORITY_AUDIT.md`. Reused unchanged:
+  - report store;
+  - release decision;
+  - QA and qualification;
+  - provenance;
+  - export trust gate;
+  - governed-delivery records;
+  - MSP-001 delegation and ceiling;
+  - TENANT-ADMIN-001;
+  - MSP-003 grants;
+  - MSP-006 billing.
+
+  No second report store, verifier, evidence index, Portal or ledger is created.
+- **Added:**
+  - Migration 0209 `msp_report_shares`:
+    - forced RLS, parties only;
+    - a report-binding CHECK;
+    - a partial unique index for one active share per report and MSP.
+  - `api/msp_reporting.py` with 11 routes.
+  - Console: `ReportSharing` on `/partners`, `SharedReports` and `ShareHistory` on `/msp`, `lib/mspReporting.js`.
+  - Audit: 9 identity event types and 9 allowlisted detail keys.
+- **Extended without behavior change:** the verify route's checks moved into `report_integrity` in `api/field_assessment.py`, so the route and MSP-007 share one engine.
+  - The route's responses are unchanged, including the 503 when the key is missing.
+  - The 30 verification, signing, trust-binding and provenance test files pass: 1,149 passed, 7 skipped.
+- **Red before green:** 55 of 56 new backend tests fail on `main`. The one that passes, t39b, is a guard (404 on an absent route).
+- **Tests updated (not weakened):** `apps/console/tests/msp-002-console.test.js` pins the exact list of proxied MSP prefixes. It now also lists `admin/msp/report-shares` and `admin/msp/reports`, as MSP-003 did for its two prefixes.
+- **Unchanged:** the MSP-001 ceiling; RBAC; Field Assessment statuses, QA, qualification and delivery; MSP-006 billing (t38); CI configuration; the client portal.
 ## docs(msp): close MSP-006 merged implementation milestone (governance only)
 
 - **Discrepancy:** MSP-006 merged as #876 (`295fde436`), but `ROADMAP.md` still said IN_REVIEW and `customer_one/roadmap_authority.yaml` still listed it in `next_sequence` with status NEXT.

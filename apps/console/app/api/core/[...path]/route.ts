@@ -144,6 +144,9 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Platform review routes (admin/msp/platform/...) are never proxied.
   { prefix: 'admin/msp/assessments', methods: new Set(['GET', 'POST']) },
   { prefix: 'admin/msp/onboarding', methods: new Set(['GET', 'POST']) },
+  // MSP-007 — customer-controlled report sharing. GET/POST only.
+  { prefix: 'admin/msp/report-shares', methods: new Set(['GET', 'POST']) },
+  { prefix: 'admin/msp/reports', methods: new Set(['GET']) },
 ];
 
 function getRequestId(request: NextRequest): string {
@@ -359,7 +362,10 @@ function isTenantAdminCorePath(path: string[]): boolean {
     joined.startsWith('admin/msp/customers') ||
     joined === 'admin/msp/portfolio' ||
     joined.startsWith('admin/msp/assessments/') ||
-    joined.startsWith('admin/msp/onboarding/');
+    joined.startsWith('admin/msp/onboarding/') ||
+    joined === 'admin/msp/report-shares' ||
+    joined.startsWith('admin/msp/report-shares/') ||
+    joined.startsWith('admin/msp/reports/');
   return (
     isMspConsolePath ||
     joined.startsWith('workforce/users') ||

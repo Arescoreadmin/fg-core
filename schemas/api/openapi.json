@@ -3487,6 +3487,39 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "ApproveShareBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "pattern": "^[A-Za-z0-9._:-]{1,255}$",
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "report_id",
+          "manifest_hash",
+          "expires_at"
+        ],
+        "title": "ApproveShareBody",
+        "type": "object"
+      },
       "ArtifactInternalResponse": {
         "description": "Extended response used by the BFF proxy \u2014 includes storage_key.\n\nThis response shape must only be returned to authenticated server-side\ncallers (BFF proxy). The storage_key must never be forwarded to browsers.",
         "properties": {
@@ -36650,6 +36683,29 @@
         "title": "RequestGrantBody",
         "type": "object"
       },
+      "RequestShareBody": {
+        "additionalProperties": false,
+        "description": "An MSP asks for the report of an engagement it initiated (MSP-003).",
+        "properties": {
+          "grant_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "request_key": {
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "title": "Request Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_id",
+          "request_key"
+        ],
+        "title": "RequestShareBody",
+        "type": "object"
+      },
       "RequirementImportItem": {
         "additionalProperties": false,
         "properties": {
@@ -39373,6 +39429,47 @@
           }
         },
         "title": "SetWorkflowSlaRequest",
+        "type": "object"
+      },
+      "ShareReportBody": {
+        "additionalProperties": false,
+        "description": "A customer shares one exact report version with one of its MSPs.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "relationship_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Relationship Id",
+            "type": "string"
+          },
+          "report_id": {
+            "pattern": "^[A-Za-z0-9._:-]{1,255}$",
+            "title": "Report Id",
+            "type": "string"
+          },
+          "request_key": {
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "title": "Request Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relationship_id",
+          "report_id",
+          "manifest_hash",
+          "expires_at",
+          "request_key"
+        ],
+        "title": "ShareReportBody",
         "type": "object"
       },
       "SimulationClassification": {
@@ -84874,7 +84971,7 @@
     },
     "/field-assessment/engagements/{engagement_id}/reports/{version}/verify": {
       "post": {
-        "description": "Verify the Ed25519 signature of a stored report version.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. Returns 404 for unknown or cross-tenant reports.\nMissing signature returns valid=False without leaking existence.",
+        "description": "Verify the Ed25519 signature of a stored report version.\n\nThis module is NOT standalone. It is a component of the Field Assessment\nEngagement Substrate and Governance Platform.\n\nRequires governance:read scope. Returns 404 for unknown or cross-tenant reports.\nMissing signature returns valid=False without leaking existence.\nThe checks themselves live in ``report_integrity`` (shared with MSP-007).",
         "operationId": "verify_engagement_report_route_field_assessment_engagements__engagement_id__reports__version__verify_post",
         "parameters": [
           {

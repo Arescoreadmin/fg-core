@@ -8815,3 +8815,67 @@ SOC review outcome: APPROVED for merge as a synthetic, development-only orchestr
 There is no schema, RBAC or CI-configuration change.
 
 SOC review outcome: APPROVED as a review fix within PR #877.
+
+## 2026-11-16 - feat(msp): MSP-007 — customer evidence portal and managed reporting
+
+**Scope:** a customer shares one exact, released assessment report with an approved MSP for a bounded time; the MSP verifies and downloads it. Built on the report store, the canonical release decision, report verification, the export trust gate, MSP-001 delegation, TENANT-ADMIN-001 and MSP-003 grants. Founder-authorized for development only.
+
+**Called out — schema:** migration 0209 adds `msp_report_shares`. It is additive, and no existing row changes.
+
+- Forced RLS: customer or MSP only, no empty-context bypass.
+- Unique `(customer, msp, origin, request_key)`.
+- Partial unique index: at most one active share per (customer, MSP, report).
+- CHECK: an active or revoked share is bound to report id, version and fingerprint, with a decision and an expiry later than the decision.
+
+**Called out — authorization paths:**
+
+- **New MSP read path.** An MSP member whose role holds `report.read` can read one shared report version. All of these are re-checked on every call:
+  - an active designation;
+  - the `msp.multi_tenant` entitlement;
+  - an active relationship delegating `report.read`;
+  - an active, unexpired share;
+  - an active customer tenant;
+  - the same id, version and fingerprint;
+  - the FINAL release decision;
+  - integrity.
+- **No new permission.** `MSP_DELEGABLE_PERMISSIONS` is unchanged. A relationship, an MSP-003 grant or an MSP-006 payer alone grants nothing.
+- **Field Assessment.** The verify route's checks are extracted into `report_integrity` with identical responses. No Field Assessment mutation route changes, and the audit coverage gate scope is unchanged.
+
+**Called out — CI check configuration:** none. No plane-registry exception is added: every MSP-007 route binds the caller's tenant from the credential.
+
+**Called out — console BFF:** two new proxied prefixes, both delegated named-actor calls for the session tenant:
+
+- `admin/msp/report-shares` (GET and POST);
+- `admin/msp/reports` (GET).
+
+**Security analysis:**
+
+1. **Customer ownership.** Only the customer's canonical `tenant_admin` shares, approves, rejects or revokes. The approver holds no MSP membership and is not the requester.
+2. **Version binding.** A new version, a changed fingerprint or tampered content blocks the share. Nothing widens silently.
+3. **Release safety.** Shares require FINAL at creation and at every read. Losing FINAL (for example, evidence tampering) blocks reads.
+4. **Downloads.**
+   - No URL, token or storage credential is issued.
+   - `no-store`; bounded at 10 MiB.
+   - The export trust gate applies.
+   - Integrity failures fail closed and are audited without content.
+5. **Isolation.** Identical 404s for unknown and foreign ids; per-party listings; RLS proven in CI Migrations Replay (`-k 0209`).
+6. **Audit.** Both identity chains record every decision and read; downloads also go to the engagement trail; history survives revocation; chains verify.
+7. **No billing.** Sharing and reading record no usage; MSP-006 delivery remains the only charge.
+
+## 2026-11-16 - fix(msp): MSP-007 review — download headers before commit; renew expired shares
+
+**Called out — schema:** migration 0209 (not yet merged) adds the stored status `expired` to `msp_report_shares`. The report-binding CHECK now covers `active`, `revoked` and `expired`. The change is additive to the unmerged migration, and no existing table changes.
+
+**Security analysis:**
+
+1. Renewal retires only an active share that is already past its expiry, by compare-and-set. It is audited on both chains as `tenant.msp.report_share_expired`, and the row and its history are kept.
+2. An unexpired active share still blocks a duplicate: the partial unique index is unchanged.
+3. The download fix only moves header construction before the commit. Authorization, audit and response content are unchanged.
+
+## 2026-11-16 - ci(hardening): ci-hardening job timeout 40 → 55 minutes (PR #892)
+
+**Called out — CI configuration:** `.github/workflows/ci.yml`, job `hardening`: `timeout-minutes` changes from 40 to 55. The founder approved it in the #892 session.
+
+**Why:** the job was cancelled at the 40-minute limit while running `pytest tests/security`, with no test failing. On `main` it already took 38.4 minutes (#878), and MSP-007 adds about 3 minutes of security tests.
+
+**Security analysis:** this is not a weakening. Every step still runs, and every test must still pass. `CI Required` still depends on the job, and the job still has a bounded timeout, as `check_github_repo_security.py` requires. The longer limit only gives headroom.

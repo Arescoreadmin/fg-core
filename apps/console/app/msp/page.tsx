@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/msp/ConfirmDialog';
 import { CapabilityPicker } from '@/components/msp/CapabilityPicker';
 import { AssessmentGrants } from '@/components/msp/AssessmentGrants';
 import { OnboardingRequests } from '@/components/msp/OnboardingRequests';
+import { SharedReports } from '@/components/msp/SharedReports';
 import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
 import {
   changeRelationship,
@@ -349,6 +350,12 @@ export default function MspPortfolioPage() {
             <AssessmentGrants
               key={selected.item.customer_tenant_id}
               party="msp"
+              customerTenantId={selected.item.customer_tenant_id}
+              onSessionExpired={() => setSessionExpired(true)}
+            />
+            {/* MSP-007: keyed by customer so switching customers discards every list and summary. */}
+            <SharedReports
+              key={`reports-${selected.item.customer_tenant_id}`}
               customerTenantId={selected.item.customer_tenant_id}
               onSessionExpired={() => setSessionExpired(true)}
             />

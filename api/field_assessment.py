@@ -21,6 +21,7 @@ import os
 import secrets
 import threading
 import uuid as _uuid_module
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, cast
@@ -12659,11 +12660,9 @@ def verify_engagement_report_route(
 
     Requires governance:read scope. Returns 404 for unknown or cross-tenant reports.
     Missing signature returns valid=False without leaking existence.
+    The checks themselves live in ``report_integrity`` (shared with MSP-007).
     """
-    import json
-
     from services.governance.report.versioning import get_version
-    from services.governance.report.signing import ReportSigningKeyError, verify_report
 
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
 
@@ -12687,32 +12686,89 @@ def verify_engagement_report_route(
         "services.canonical", fromlist=["utc_iso8601_z_now"]
     ).utc_iso8601_z_now()
 
+    integrity = report_integrity(record, engagement_id=engagement_id)
+    if integrity.key_unavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=api_error(
+                "REPORT_SIGNING_KEY_MISSING",
+                "Signing key unavailable for verification.",
+            ),
+        )
+    signature: str | None = None
+    if integrity.signature_kind == "trust_binding":
+        # PROVENANCE-INTEGRITY-001: no signature is reported for content that
+        # no longer matches its stored fingerprint.
+        if integrity.content == INTEGRITY_HASH_VERIFIED:
+            signature = record.trust_signature
+    elif integrity.signature_kind == "legacy_ed25519":
+        # trust_* columns are authoritative for Vault-signed reports; fall back to
+        # legacy signature field for reports signed before TRUST-BINDING-001.
+        signature = record.trust_signature or record.signature
+
+    return EngagementReportVerifyResponse(
+        valid=integrity.valid,
+        manifest_hash=record.manifest_hash,
+        signature=signature,
+        verified_at=now,
+    )
+
+
+INTEGRITY_HASH_VERIFIED = "HASH_VERIFIED"
+INTEGRITY_SIGNATURE_VERIFIED = "SIGNATURE_VERIFIED"
+INTEGRITY_VERIFICATION_FAILED = "VERIFICATION_FAILED"
+INTEGRITY_VERIFICATION_UNAVAILABLE = "VERIFICATION_UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class ReportIntegrity:
+    """Canonical integrity result for one stored report version.
+
+    ``content``: the stored ``manifest_hash`` re-derived from the current
+    ``report_json`` (PROVENANCE-INTEGRITY-001) — HASH_VERIFIED or
+    VERIFICATION_FAILED. A hash is a fingerprint, never a signature.
+    ``signature``: the report signature (TRUST-BINDING-001 Vault Transit
+    binding, or the legacy Ed25519 signature) — SIGNATURE_VERIFIED,
+    VERIFICATION_FAILED, or VERIFICATION_UNAVAILABLE (unsigned, key missing,
+    or not checked because the content failed). ``valid`` is the verdict of
+    POST /engagements/{id}/reports/{version}/verify.
+    """
+
+    content: str
+    signature: str
+    signature_kind: str
+    key_unavailable: bool
+    valid: bool
+
+
+def report_integrity(record: Any, *, engagement_id: str) -> ReportIntegrity:
+    """The single report verification path: the verify route and MSP-007
+    sharing both call it, so neither can drift from the other."""
+    import json
+
+    from services.governance.report.signing import ReportSigningKeyError, verify_report
+
+    report_json = record.report_json
+    content_ok = isinstance(
+        report_json, dict
+    ) and _derive_manifest_hash_from_report_json(report_json) == str(
+        record.manifest_hash
+    )
+    content = INTEGRITY_HASH_VERIFIED if content_ok else INTEGRITY_VERIFICATION_FAILED
     if record.trust_signature:
+        if not content_ok:
+            return ReportIntegrity(
+                content,
+                INTEGRITY_VERIFICATION_UNAVAILABLE,
+                "trust_binding",
+                False,
+                False,
+            )
         from services.governance.trust_binding import (  # noqa: PLC0415
             build_report_signing_payload as _brsp,
         )
 
-        # PROVENANCE-INTEGRITY-001: re-derive the manifest_hash from the current
-        # report_json before using the stored value as the signing payload input.
-        # If the current content no longer matches the stored hash, the report_json
-        # has been mutated since signing — fail closed immediately.
-        if record.report_json is None or not isinstance(record.report_json, dict):
-            return EngagementReportVerifyResponse(
-                valid=False,
-                manifest_hash=record.manifest_hash,
-                signature=None,
-                verified_at=now,
-            )
-        _derived_hash = _derive_manifest_hash_from_report_json(record.report_json)
-        if _derived_hash != record.manifest_hash:
-            return EngagementReportVerifyResponse(
-                valid=False,
-                manifest_hash=record.manifest_hash,
-                signature=None,
-                verified_at=now,
-            )
-
-        _verify_payload = _brsp(
+        payload = _brsp(
             tenant_id=record.tenant_id,
             engagement_id=record.engagement_id or engagement_id,
             report_id=record.id,
@@ -12720,38 +12776,41 @@ def verify_engagement_report_route(
             report_fingerprint=record.manifest_hash,
             report_schema_version=record.schema_version,
         )
-        valid = _get_trust_binding_authority().verify_report(
-            _verify_payload, _envelope_from_report_row(record)
+        valid = bool(
+            _get_trust_binding_authority().verify_report(
+                payload, _envelope_from_report_row(record)
+            )
         )
-    elif record.signature:
+        return ReportIntegrity(
+            content,
+            INTEGRITY_SIGNATURE_VERIFIED if valid else INTEGRITY_VERIFICATION_FAILED,
+            "trust_binding",
+            False,
+            valid,
+        )
+    if record.signature:
         canonical_str = json.dumps(
-            record.report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            report_json, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         try:
-            valid = verify_report(canonical_str, record.signature)
+            valid = bool(verify_report(canonical_str, record.signature))
         except ReportSigningKeyError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=api_error(
-                    "REPORT_SIGNING_KEY_MISSING",
-                    "Signing key unavailable for verification.",
-                ),
+            return ReportIntegrity(
+                content,
+                INTEGRITY_VERIFICATION_UNAVAILABLE,
+                "legacy_ed25519",
+                True,
+                False,
             )
-    else:
-        return EngagementReportVerifyResponse(
-            valid=False,
-            manifest_hash=record.manifest_hash,
-            signature=None,
-            verified_at=now,
+        return ReportIntegrity(
+            content,
+            INTEGRITY_SIGNATURE_VERIFIED if valid else INTEGRITY_VERIFICATION_FAILED,
+            "legacy_ed25519",
+            False,
+            valid,
         )
-
-    return EngagementReportVerifyResponse(
-        valid=valid,
-        manifest_hash=record.manifest_hash,
-        # trust_* columns are authoritative for Vault-signed reports; fall back to
-        # legacy signature field for reports signed before TRUST-BINDING-001.
-        signature=record.trust_signature or record.signature,
-        verified_at=now,
+    return ReportIntegrity(
+        content, INTEGRITY_VERIFICATION_UNAVAILABLE, "none", False, False
     )
 
 

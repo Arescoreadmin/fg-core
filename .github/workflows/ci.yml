@@ -665,7 +665,11 @@ jobs:
   hardening:
     name: Hardening Gates (ci-hardening)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 40 → 55 (MSP-007, PR #892): `pytest tests/security` alone took ~37 min
+    # on #878 (job 38.4 min) and the MSP-007 security tests add ~3 min, so
+    # the job was cancelled at the limit with no test failing. No step or
+    # test is removed; the limit only gives headroom.
+    timeout-minutes: 55
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     permissions:
