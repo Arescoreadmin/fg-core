@@ -1,4 +1,6 @@
-## fix(msp): MSP-003 review — enforce the MSP entitlement on orchestration mutations; page all onboarding referrals (PR #877)
+## fix(msp): MSP-003 review — enforce the MSP entitlement on orchestration mutations; page all onboarding referrals (Codex review of PR #877; follow-up PR)
+
+- **Why a follow-up PR:** #877 was squash-merged at `d99544ee5` before these fixes were pushed, so `main` `f0e1533f0` did not contain them. This branch cherry-picks the validated commit `bec237e8b` onto `main`. The resulting code tree is identical to `bec237e8b`.
 
 - **Codex P2, MSP entitlement (`api/msp_orchestration.py` `_msp_admin`):**
   - **Problem:** an MSP that kept its designation but lost the `msp.multi_tenant` entitlement could still request grants, initiate approved assessments and submit referrals. The new routes checked membership and designation only, unlike MSP-001's relationship-proposal and portfolio routes.
