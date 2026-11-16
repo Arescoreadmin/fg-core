@@ -8871,3 +8871,11 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 1. Renewal retires only an active share that is already past its expiry, by compare-and-set. It is audited on both chains as `tenant.msp.report_share_expired`, and the row and its history are kept.
 2. An unexpired active share still blocks a duplicate: the partial unique index is unchanged.
 3. The download fix only moves header construction before the commit. Authorization, audit and response content are unchanged.
+
+## 2026-11-16 - ci(hardening): ci-hardening job timeout 40 → 55 minutes (PR #892)
+
+**Called out — CI configuration:** `.github/workflows/ci.yml`, job `hardening`: `timeout-minutes` changes from 40 to 55. The founder approved it in the #892 session.
+
+**Why:** the job was cancelled at the 40-minute limit while running `pytest tests/security`, with no test failing. On `main` it already took 38.4 minutes (#878), and MSP-007 adds about 3 minutes of security tests.
+
+**Security analysis:** this is not a weakening. Every step still runs, and every test must still pass. `CI Required` still depends on the job, and the job still has a bounded timeout, as `check_github_repo_security.py` requires. The longer limit only gives headroom.

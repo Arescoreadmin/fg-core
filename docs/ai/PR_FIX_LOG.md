@@ -1,3 +1,11 @@
+## ci(hardening): raise the ci-hardening job timeout from 40 to 55 minutes (PR #892)
+
+- **Problem:** on #892, `Hardening Gates (ci-hardening)` was cancelled at its 40-minute `timeout-minutes` during `pytest tests/security`, with no test failing. `CI Required` then failed because it depends on that job.
+  - The job was already close to the limit on `main`: 38.4 min on #878 and 31 min on #891.
+  - MSP-007 adds 59 security tests at about 3 s each, mostly per-test app startup.
+- **Fix:** `.github/workflows/ci.yml` changes `hardening.timeout-minutes` from 40 to 55. Founder approved this in the #892 session.
+- **Unchanged:** no step, test or gate is removed, skipped or made non-blocking. `tools/ci/check_github_repo_security.py` still requires a timeout on every required job, and one is still set.
+
 ## fix(msp): MSP-007 review — build download headers before commit; renew expired shares (Codex review of PR #892)
 
 - **P1, download after commit (`api/msp_reporting.py` `download_shared_report`):**
