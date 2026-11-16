@@ -1,3 +1,37 @@
+## feat(msp): MSP-007 — customer evidence portal and managed reporting (branch feat/msp-007-evidence-sharing)
+
+- **Work item:** MSP-007, founder-authorized on 2026-11-16 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.
+  - Criteria (1) and (2) are not claimed.
+  - Development only: no deployment, live evidence sharing, real customer reports, settlement or spending.
+  - Base: `main` `408e5565`.
+- **Audit first:** `docs/msp/MSP_007_AUTHORITY_AUDIT.md`. Reused unchanged:
+  - report store;
+  - release decision;
+  - QA and qualification;
+  - provenance;
+  - export trust gate;
+  - governed-delivery records;
+  - MSP-001 delegation and ceiling;
+  - TENANT-ADMIN-001;
+  - MSP-003 grants;
+  - MSP-006 billing.
+
+  No second report store, verifier, evidence index, Portal or ledger is created.
+- **Added:**
+  - Migration 0209 `msp_report_shares`:
+    - forced RLS, parties only;
+    - a report-binding CHECK;
+    - a partial unique index for one active share per report and MSP.
+  - `api/msp_reporting.py` with 11 routes.
+  - Console: `ReportSharing` on `/partners`, `SharedReports` and `ShareHistory` on `/msp`, `lib/mspReporting.js`.
+  - Audit: 9 identity event types and 9 allowlisted detail keys.
+- **Extended without behavior change:** the verify route's checks moved into `report_integrity` in `api/field_assessment.py`, so the route and MSP-007 share one engine.
+  - The route's responses are unchanged, including the 503 when the key is missing.
+  - The 30 verification, signing, trust-binding and provenance test files pass: 1,149 passed, 7 skipped.
+- **Red before green:** 55 of 56 new backend tests fail on `main`. The one that passes, t39b, is a guard (404 on an absent route).
+- **Tests updated (not weakened):** `apps/console/tests/msp-002-console.test.js` pins the exact list of proxied MSP prefixes. It now also lists `admin/msp/report-shares` and `admin/msp/reports`, as MSP-003 did for its two prefixes.
+- **Unchanged:** the MSP-001 ceiling; RBAC; Field Assessment statuses, QA, qualification and delivery; MSP-006 billing (t38); CI configuration; the client portal.
+
 ## fix(msp): MSP-003 review — enforce the MSP entitlement on orchestration mutations; page all onboarding referrals (Codex review of PR #877; follow-up PR)
 
 - **Why a follow-up PR:** #877 was squash-merged at `d99544ee5` before these fixes were pushed, so `main` `f0e1533f0` did not contain them. This branch cherry-picks the validated commit `bec237e8b` onto `main`. The resulting code tree is identical to `bec237e8b`.

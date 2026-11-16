@@ -19,6 +19,13 @@ const OPERATION_LABELS: Record<string, string> = {
   'assessment_grant.withdraw': 'Assessment request withdrawn by the MSP',
   'assessment_grant.revoke': 'Assessment authority revoked by the customer',
   'assessment.initiate': 'Assessment started by the MSP',
+  'report_share.request': 'Report requested by the MSP',
+  'report_share.approve': 'Report shared by the customer',
+  'report_share.reject': 'Report request declined by the customer',
+  'report_share.withdraw': 'Report request withdrawn by the MSP',
+  'report_share.revoke': 'Report access revoked by the customer',
+  'report.verify': 'Shared report verified by the MSP',
+  'report.download': 'Shared report downloaded by the MSP',
 };
 
 const PARTY_LABELS: Record<string, string> = {

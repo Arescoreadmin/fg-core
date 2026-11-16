@@ -100,6 +100,16 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.msp.assessment_grant_withdrawn",
         "tenant.msp.assessment_grant_revoked",
         "tenant.msp.assessment_initiated",
+        # MSP-007 customer-controlled report sharing
+        "tenant.msp.report_share_requested",
+        "tenant.msp.report_share_approved",
+        "tenant.msp.report_share_rejected",
+        "tenant.msp.report_share_withdrawn",
+        "tenant.msp.report_share_revoked",
+        "tenant.msp.report_verified",
+        "tenant.msp.report_downloaded",
+        "tenant.msp.report_access_denied",
+        "tenant.msp.report_integrity_failed",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -280,6 +290,16 @@ def emit_identity_audit_event(
         "assessor_id",
         "previous_state",
         "new_state",
+        # MSP-007 sharing keys (identifiers, fingerprints and decisions only)
+        "share_id",
+        "report_id",
+        "report_version",
+        "manifest_hash",
+        "expires_at",
+        "decision",
+        "blockers",
+        "content_integrity",
+        "signature_integrity",
     }
     safe_details = {k: v for k, v in (details or {}).items() if k in safe_keys}
     created_at = _now()

@@ -1674,3 +1674,184 @@ def test_0208_msp_003_orchestration_rows_are_isolated_by_forced_rls(
                 text("DELETE FROM msp_onboarding_requests WHERE tenant_id = :m"),
                 {"m": msp},
             )
+
+
+def test_0209_msp_007_report_shares_are_isolated_by_forced_rls(
+    _msp_rls_probe, _mig_engine
+) -> None:
+    """MSP-007: a report share is visible and writable only by its customer
+    and its MSP. A third tenant and an empty context see nothing; spoofed
+    writes are refused by WITH CHECK; a third tenant's revoke matches no row;
+    two concurrent approvals of one request let exactly one win; and at most
+    one active share per (customer, MSP, report) exists."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.exc import DBAPIError, IntegrityError
+
+    from api.db_models_msp import MspReportShare
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    now = datetime.now(timezone.utc)
+    sid, req_id = str(uuid.uuid4()), str(uuid.uuid4())
+    fingerprint = "a" * 64
+
+    def _active(share_id: str, customer: str, key: str) -> MspReportShare:
+        return MspReportShare(
+            id=share_id,
+            tenant_id=customer,
+            msp_tenant_id=msp,
+            relationship_id=rid,
+            origin="customer",
+            request_key=key,
+            engagement_id="eng-probe",
+            report_id="report-probe",
+            report_version=1,
+            manifest_hash=fingerprint,
+            status="active",
+            requested_by_subject="synthetic-cust",
+            requested_at=now,
+            decided_by_subject="synthetic-cust",
+            decided_at=now,
+            expires_at=now + timedelta(days=5),
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+
+    db = sm()
+    try:
+        _bind(db, cust)
+        db.add(_active(sid, cust, "probe-share"))
+        db.add(
+            MspReportShare(
+                id=req_id,
+                tenant_id=cust,
+                msp_tenant_id=msp,
+                relationship_id=rid,
+                origin="msp",
+                request_key="probe-request",
+                engagement_id="eng-probe-2",
+                source_grant_id=str(uuid.uuid4()),
+                status="requested",
+                requested_by_subject="synthetic-msp",
+                requested_at=now,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+
+        def visible(tenant: str | None) -> set[str]:
+            s = sm()
+            try:
+                if tenant:
+                    _bind(s, tenant)
+                return {r.id for r in s.query(MspReportShare).all()}
+            finally:
+                s.close()
+
+        assert visible(cust) == {sid, req_id}
+        assert visible(msp) == {sid, req_id}
+        assert visible(third) == set()
+        assert visible(None) == set()
+
+        # Spoofed write: a third tenant cannot create a share between others.
+        s = sm()
+        try:
+            _bind(s, third)
+            s.add(_active(str(uuid.uuid4()), cust, "spoof-share"))
+            with pytest.raises(DBAPIError):
+                s.flush()
+            s.rollback()
+        finally:
+            s.close()
+
+        # A third tenant's revoke matches no row (USING hides it).
+        s = sm()
+        try:
+            _bind(s, third)
+            n = (
+                s.query(MspReportShare)
+                .filter(MspReportShare.id == sid)
+                .update(
+                    {
+                        "status": "revoked",
+                        "revoked_by_subject": "third",
+                        "revoked_at": now,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            assert n == 0
+            s.rollback()
+        finally:
+            s.close()
+
+        # Concurrent approval of one request: compare-and-set on the version.
+        def _approve(session, report_id: str) -> int:
+            return (
+                session.query(MspReportShare)
+                .filter(
+                    MspReportShare.id == req_id,
+                    MspReportShare.status == "requested",
+                    MspReportShare.version == 1,
+                )
+                .update(
+                    {
+                        "status": "active",
+                        "report_id": report_id,
+                        "report_version": 1,
+                        "manifest_hash": fingerprint,
+                        "decided_by_subject": "synthetic-cust",
+                        "decided_at": now,
+                        "expires_at": now + timedelta(days=1),
+                        "version": 2,
+                    },
+                    synchronize_session=False,
+                )
+            )
+
+        first, second = sm(), sm()
+        try:
+            _bind(first, cust)
+            _bind(second, cust)
+            assert _approve(first, "report-probe-2") == 1
+            first.commit()
+            assert _approve(second, "report-probe-3") == 0
+            second.rollback()
+        finally:
+            first.close()
+            second.close()
+
+        # At most one active share of one report for one MSP.
+        s = sm()
+        try:
+            _bind(s, cust)
+            s.add(_active(str(uuid.uuid4()), cust, "probe-share-dup"))
+            with pytest.raises(IntegrityError):
+                s.flush()
+            s.rollback()
+        finally:
+            s.close()
+
+        # An active share must be bound to an exact report version.
+        s = sm()
+        try:
+            _bind(s, cust)
+            unbound = _active(str(uuid.uuid4()), cust, "probe-unbound")
+            unbound.report_id = "report-probe-4"
+            unbound.manifest_hash = None
+            s.add(unbound)
+            with pytest.raises(IntegrityError):
+                s.flush()
+            s.rollback()
+        finally:
+            s.close()
+    finally:
+        db.close()
+        with _mig_engine.begin() as su:
+            su.execute(
+                text("DELETE FROM msp_report_shares WHERE relationship_id = :r"),
+                {"r": rid},
+            )

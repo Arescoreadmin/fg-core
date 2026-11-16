@@ -15,7 +15,7 @@ const DELEGABLE_CAPABILITIES = Object.freeze([
   { id: 'finding.read', label: 'Findings (read)', description: 'See outstanding findings counted by severity.' },
   { id: 'evidence.read', label: 'Evidence (read)', description: 'Read evidence records. Not shown in the MSP-002 portfolio.' },
   { id: 'scan.read', label: 'Scans (read)', description: 'See scan results. Not shown in the MSP-002 portfolio.' },
-  { id: 'report.read', label: 'Reports (read)', description: 'Read delivered reports. Not shown in the MSP-002 portfolio.' },
+  { id: 'report.read', label: 'Reports (read)', description: 'Read reports your organization explicitly shares, one exact version at a time (MSP-007).' },
   { id: 'bundle.read', label: 'Evidence bundles (read)', description: 'Read verification bundles. Not shown in the MSP-002 portfolio.' },
   { id: 'governance.read', label: 'Governance (read)', description: 'Read governance and control-plane records.' },
 ]);

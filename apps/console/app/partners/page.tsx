@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/msp/ConfirmDialog';
 import { CapabilityPicker } from '@/components/msp/CapabilityPicker';
 import { AssessmentGrants } from '@/components/msp/AssessmentGrants';
 import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
+import { ReportSharing } from '@/components/msp/ReportSharing';
 import {
   approveRelationship,
   changeRelationship,
@@ -269,6 +270,9 @@ export default function PartnersPage() {
 
       {/* MSP-003: renders nothing unless an MSP has sent this organization an assessment request. */}
       <AssessmentGrants party="customer" onSessionExpired={() => setSessionExpired(true)} />
+
+      {/* MSP-007: renders nothing unless a partner has report access or a share exists. */}
+      <ReportSharing onSessionExpired={() => setSessionExpired(true)} />
 
       <ConfirmDialog
         open={pending !== null}
