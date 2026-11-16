@@ -75,23 +75,6 @@ next_sequence:
       assessment proof, durable execution, and recovery/retention) are proven.
     status: NEXT
     note: "Non-engineering. Tasks: design partner scheduled, price locked ($5k), packet complete, Stripe proven, founder review; closure remains gated by FG_RESULT_TRUTH_GATE acceptance gates."
-  - id: "MSP-006"
-    title: "MSP-006 — Partner billing, usage attribution and subscription integration"
-    work_class: "FOUNDER_AUTHORIZED"
-    status: NEXT
-    authorized_by: "Founder (explicit decision in the MSP-002 closure session, 2026-11-15)"
-    freeze_law_basis: >
-      Founder authorization only. No contracted MSP customer and no Customer-One
-      blocker was cited, so criteria (1) and (2) are NOT claimed, and this entry is
-      not evidence of a contracted customer.
-    scope: >
-      Canonical billing-authority audit, payer assignment, usage attribution,
-      idempotent financial records, deterministic pricing, reconciliation and
-      test-mode processor integration, reusing the existing billing, subscription,
-      entitlement and payment authorities. Does NOT authorize production billing,
-      live charges, live subscriptions, processor dashboard changes or spending.
-      Does not change the Customer-One critical path or any FG_RESULT_TRUTH_GATE
-      acceptance gate.
   - id: "MSP-003"
     title: "MSP-003 — Partner-guided customer onboarding and assessment orchestration"
     work_class: "FOUNDER_AUTHORIZED"
@@ -553,6 +536,26 @@ completed:
       (test_organization_id_is_an_identifier_not_a_credential). Not production
       ready: deployment, designation, entitlement and migration 0206 are not
       evidenced in production; partner billing (MSP-006) is not implemented.
+  - id: "MSP-006"
+    title: "MSP-006 — Partner billing, usage attribution and subscription integration"
+    prs: ["#876"]
+    merged_sha: "295fde436105e68b75c716327b54a2c052c7f625"
+    work_class: "FOUNDER_AUTHORIZED"
+    authorized_by: "Founder (explicit decision in the MSP-002 closure session, 2026-11-15)"
+    freeze_law_criterion: >
+      Founder authorization only; criteria (1) and (2) NOT claimed. This entry is
+      not evidence of a contracted customer, operational acceptance or production
+      readiness.
+    note: >
+      Reconciled at MSP-006 closure (2026-11-16): merged as #876 (295fde43),
+      including its review fixes. Payer assignment, usage attribution, deterministic
+      pricing and reconciliation on the billing_v2 authorities; migration 0207.
+      Post-merge validation on main 408e5565: tests/security/test_msp_006_billing.py
+      plus tests/test_billing_engine.py 88 passed. SETTLEMENT = NOT_PROVEN: no
+      processor has acknowledged an MSP-006 charge (audit F10, stripe-python 15.3.1
+      has no create_usage_record), and live settlement is not authorized. Billing and
+      subscription RLS debt outside usage_events remains open. Deployment and
+      migration 0207 are not evidenced in production.
 
 precedence:
   - level: 1

@@ -1,3 +1,11 @@
+## docs(msp): close MSP-006 merged implementation milestone (governance only)
+
+- **Discrepancy:** MSP-006 merged as #876 (`295fde436`), but `ROADMAP.md` still said IN_REVIEW and `customer_one/roadmap_authority.yaml` still listed it in `next_sequence` with status NEXT.
+- **Resolution:** the same closure mechanism as MSP-002 (#875). MSP-006 moves from `next_sequence` to `completed` with its PR and merge SHA, and the ROADMAP row becomes MERGED #876. The Freeze Law basis is unchanged: founder authorization, criteria (1) and (2) not claimed.
+- **Post-merge check on `main` `408e5565`:** `tests/security/test_msp_006_billing.py` and `tests/test_billing_engine.py`, 88 passed.
+- **Preserved, not changed:** SETTLEMENT = NOT_PROVEN (audit F10); the billing and subscription RLS debt outside `usage_events`; no production deployment of migration 0207.
+- **Not changed:** application code, APIs, schema, RBAC, CI. Offline simulation evidence regenerated.
+
 ## fix(msp): MSP-003 review — enforce the MSP entitlement on orchestration mutations; page all onboarding referrals (Codex review of PR #877; follow-up PR)
 
 - **Why a follow-up PR:** #877 was squash-merged at `d99544ee5` before these fixes were pushed, so `main` `f0e1533f0` did not contain them. This branch cherry-picks the validated commit `bec237e8b` onto `main`. The resulting code tree is identical to `bec237e8b`.
