@@ -1481,3 +1481,196 @@ def test_0207_msp_006_billing_rows_are_isolated_by_forced_rls(
             su.execute(
                 text("DELETE FROM usage_meters WHERE meter_code = :m"), {"m": meter}
             )
+
+
+def test_0208_msp_003_orchestration_rows_are_isolated_by_forced_rls(
+    _msp_rls_probe, _mig_engine
+) -> None:
+    """MSP-003: an assessment grant is visible and writable only by the
+    customer and the MSP; an onboarding request only by its MSP. A third
+    tenant and an empty context see nothing; spoofed writes are refused by
+    WITH CHECK; the compare-and-set that initiates a grant lets exactly one
+    concurrent writer win, and one engagement id can back only one grant."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy.exc import DBAPIError, IntegrityError
+
+    from api.db_models_msp import MspAssessmentGrant, MspOnboardingRequest
+
+    sm, msp, cust, third, rid = _msp_rls_probe
+    now = datetime.now(timezone.utc)
+    gid, oid = str(uuid.uuid4()), str(uuid.uuid4())
+
+    def _grant(grant_id: str, customer: str, key: str) -> MspAssessmentGrant:
+        return MspAssessmentGrant(
+            id=grant_id,
+            tenant_id=customer,
+            msp_tenant_id=msp,
+            relationship_id=rid,
+            request_key=key,
+            capabilities='["assessment.create"]',
+            assessment_type="ai_governance",
+            assessor_id="assessor-probe",
+            status="approved",
+            requested_by_subject="synthetic-msp",
+            requested_at=now,
+            expires_at=now + timedelta(days=5),
+            decided_by_subject="synthetic-cust",
+            decided_at=now,
+            version=2,
+            created_at=now,
+            updated_at=now,
+        )
+
+    db = sm()
+    try:
+        _bind(db, msp)
+        db.add(_grant(gid, cust, "probe-1"))
+        db.add(
+            MspOnboardingRequest(
+                id=oid,
+                tenant_id=msp,
+                request_key="probe-onb",
+                organization_name="Probe Co",
+                contact_email="it@probe.invalid",
+                requested_capabilities='["governance.read"]',
+                status="requested",
+                requested_by_subject="synthetic-msp",
+                requested_at=now,
+                expires_at=now + timedelta(days=30),
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+
+        def visible(model, tenant: str | None) -> set[str]:
+            s = sm()
+            try:
+                if tenant:
+                    _bind(s, tenant)
+                return {r.id for r in s.query(model).all()}
+            finally:
+                s.close()
+
+        assert visible(MspAssessmentGrant, cust) == {gid}
+        assert visible(MspAssessmentGrant, msp) == {gid}
+        assert visible(MspAssessmentGrant, third) == set()
+        assert visible(MspAssessmentGrant, None) == set()
+        assert visible(MspOnboardingRequest, msp) == {oid}
+        assert visible(MspOnboardingRequest, cust) == set()
+        assert visible(MspOnboardingRequest, third) == set()
+        assert visible(MspOnboardingRequest, None) == set()
+
+        # Spoofed writes: a third tenant cannot create a grant between others,
+        # nor an onboarding request owned by another MSP.
+        for model_row in (
+            _grant(str(uuid.uuid4()), cust, "spoof-1"),
+            MspOnboardingRequest(
+                id=str(uuid.uuid4()),
+                tenant_id=msp,
+                request_key="spoof-onb",
+                organization_name="Spoof",
+                contact_email="x@spoof.invalid",
+                requested_capabilities="[]",
+                status="requested",
+                requested_by_subject="third",
+                requested_at=now,
+                expires_at=now + timedelta(days=1),
+                version=1,
+                created_at=now,
+                updated_at=now,
+            ),
+        ):
+            s = sm()
+            try:
+                _bind(s, third)
+                s.add(model_row)
+                with pytest.raises(DBAPIError):
+                    s.flush()
+                s.rollback()
+            finally:
+                s.close()
+
+        # A third tenant's UPDATE matches no row (USING hides it).
+        s = sm()
+        try:
+            _bind(s, third)
+            n = (
+                s.query(MspAssessmentGrant)
+                .filter(MspAssessmentGrant.id == gid)
+                .update({"status": "revoked"}, synchronize_session=False)
+            )
+            assert n == 0
+            s.rollback()
+        finally:
+            s.close()
+
+        # Concurrent initiation: two writers compare-and-set the same version.
+        def _cas(session, engagement_id: str) -> int:
+            return (
+                session.query(MspAssessmentGrant)
+                .filter(
+                    MspAssessmentGrant.id == gid,
+                    MspAssessmentGrant.status == "approved",
+                    MspAssessmentGrant.version == 2,
+                    MspAssessmentGrant.engagement_id.is_(None),
+                )
+                .update(
+                    {
+                        "status": "initiated",
+                        "engagement_id": engagement_id,
+                        "initiated_by_subject": "synthetic-msp",
+                        "initiated_at": now,
+                        "version": 3,
+                    },
+                    synchronize_session=False,
+                )
+            )
+
+        first, second = sm(), sm()
+        try:
+            _bind(first, msp)
+            _bind(second, cust)
+            assert _cas(first, "eng-probe-a") == 1
+            first.commit()
+            assert _cas(second, "eng-probe-b") == 0
+            second.rollback()
+        finally:
+            first.close()
+            second.close()
+        s = sm()
+        try:
+            _bind(s, cust)
+            row = s.get(MspAssessmentGrant, gid)
+            assert (row.status, row.engagement_id) == ("initiated", "eng-probe-a")
+        finally:
+            s.close()
+
+        # One engagement id can back only one grant.
+        s = sm()
+        try:
+            _bind(s, msp)
+            dup = _grant(str(uuid.uuid4()), cust, "probe-2")
+            dup.status = "initiated"
+            dup.engagement_id = "eng-probe-a"
+            dup.initiated_by_subject = "synthetic-msp"
+            dup.initiated_at = now
+            s.add(dup)
+            with pytest.raises(IntegrityError):
+                s.flush()
+            s.rollback()
+        finally:
+            s.close()
+    finally:
+        db.close()
+        with _mig_engine.begin() as su:
+            su.execute(
+                text("DELETE FROM msp_assessment_grants WHERE relationship_id = :r"),
+                {"r": rid},
+            )
+            su.execute(
+                text("DELETE FROM msp_onboarding_requests WHERE tenant_id = :m"),
+                {"m": msp},
+            )

@@ -71,6 +71,12 @@ EXACT_TENANT_BINDING_EXCEPTIONS: set[tuple[str, str]] = {
     ("POST", "/admin/msp/billing/payer-assignments"),
     ("POST", "/admin/msp/billing/payer-assignments/{assignment_id}/terminate"),
     ("GET", "/admin/msp/billing/reconciliation"),
+    # MSP-003 platform review of MSP onboarding referrals. Internal admin
+    # gateway + platform.admin only; the MSP tenant is a named query/body
+    # parameter verified against the row; never proxied by the console.
+    ("GET", "/admin/msp/platform/onboarding"),
+    ("POST", "/admin/msp/platform/onboarding/{request_id}/link"),
+    ("POST", "/admin/msp/platform/onboarding/{request_id}/reject"),
     ("GET", "/field-assessment/reports/verify/{report_hash}"),
     # C7 portal grant/session routes enforce tenant isolation through
     # PortalGrantSession validation and PortalScopeMiddleware rather than

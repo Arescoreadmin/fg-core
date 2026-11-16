@@ -493,14 +493,18 @@ def emit_msp_audit(
     operation: str,
     capabilities: Iterable[str] = (),
     correlation: Optional[str] = None,
+    extra: Optional[dict[str, Any]] = None,
 ) -> None:
     """Append one event to each party's identity audit chain.
 
     Each write runs under that tenant's RLS context, then the caller's context
     is restored. The event binds actor, MSP, customer, relationship, effective
     authority, operation and correlation id; ``created_at`` is the timestamp.
+    ``extra`` adds workflow fields (MSP-003: grant, engagement, previous and
+    new state); it never overrides the binding fields above.
     """
     details = {
+        **(extra or {}),
         "msp_tenant_id": msp_tenant_id,
         "customer_tenant_id": customer_tenant_id,
         "relationship_id": relationship_id,

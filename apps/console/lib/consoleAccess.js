@@ -454,7 +454,13 @@ const CONSOLE_ROUTE_AUDITS = [
     // summary come from Core's MSP authority; nothing is decided in the browser.
     audience: 'tenant_admin_console',
     allowedRoles: CLIENT_ADMIN_ROLES,
-    backendApis: ['/api/core/admin/msp/portfolio', '/api/core/admin/msp/relationships', '/api/core/admin/msp/customers/*/context'],
+    backendApis: [
+      '/api/core/admin/msp/portfolio',
+      '/api/core/admin/msp/relationships',
+      '/api/core/admin/msp/customers/*/context',
+      '/api/core/admin/msp/assessments/grants',
+      '/api/core/admin/msp/onboarding/requests',
+    ],
     navVisible: false,
     tenantScoped: true,
     clientSafe: true,
@@ -471,7 +477,11 @@ const CONSOLE_ROUTE_AUDITS = [
     // revoke MSP access to their organization.
     audience: 'tenant_admin_console',
     allowedRoles: CLIENT_ADMIN_ROLES,
-    backendApis: ['/api/core/admin/msp/relationships', '/api/core/admin/msp/relationships/*/events'],
+    backendApis: [
+      '/api/core/admin/msp/relationships',
+      '/api/core/admin/msp/relationships/*/events',
+      '/api/core/admin/msp/assessments/grants',
+    ],
     navVisible: false,
     tenantScoped: true,
     clientSafe: true,

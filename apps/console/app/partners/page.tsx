@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/msp/ConfirmDialog';
 import { CapabilityPicker } from '@/components/msp/CapabilityPicker';
+import { AssessmentGrants } from '@/components/msp/AssessmentGrants';
 import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
 import {
   approveRelationship,
@@ -233,7 +234,8 @@ export default function PartnersPage() {
         <p className="text-sm text-muted">
           A managed service provider (MSP) can work with your organization only with your approval. You choose
           which read-only capabilities it gets and for how long, and you can suspend or revoke access at any time.
-          MSPs never get write access, and never see your users or billing.
+          Relationship access is read-only. An MSP can start an assessment in your organization only when you approve
+          that specific request. MSPs never see your users or billing.
         </p>
         {ownTenant ? (
           <p className="text-xs text-muted">
@@ -264,6 +266,9 @@ export default function PartnersPage() {
           {section('Ended', groups.ended, 'None.', 'msp-ended')}
         </>
       )}
+
+      {/* MSP-003: renders nothing unless an MSP has sent this organization an assessment request. */}
+      <AssessmentGrants party="customer" onSessionExpired={() => setSessionExpired(true)} />
 
       <ConfirmDialog
         open={pending !== null}

@@ -1508,6 +1508,69 @@ def list_engagements_route(
     )
 
 
+def create_engagement_with_audit(
+    db: Session,
+    *,
+    tenant_id: str,
+    client_name: str,
+    client_domain: str | None,
+    assessor_id: str,
+    assessment_type: str,
+    scheduled_date: str | None,
+    engagement_metadata: dict[str, Any],
+    actor: str,
+    audit_extra: dict[str, Any] | None = None,
+) -> FaEngagement:
+    """Engagement creation for callers outside ``create_engagement_route``:
+    the canonical store record, its ``engagement.created`` audit event and
+    its timeline event, in the same order and shape as the route.
+
+    Used by MSP-003 initiation (``api/msp_orchestration.py``), which passes
+    ``audit_extra`` to mark the MSP origin. The route keeps its own inline
+    audit calls so tools/ci/check_audit_coverage.py verifies it directly.
+    Parity with the route is enforced by
+    tests/security/test_msp_003_orchestration.py::
+    test_inv_msp_creation_matches_the_canonical_route. The caller owns
+    authorization and the commit, and must have bound ``tenant_id``'s RLS
+    context.
+    """
+    eng = create_engagement(
+        db,
+        tenant_id=tenant_id,
+        client_name=client_name,
+        client_domain=client_domain,
+        assessor_id=assessor_id,
+        assessment_type=assessment_type,
+        scheduled_date=scheduled_date,
+        engagement_metadata=engagement_metadata,
+        actor=actor,
+    )
+    audit_payload: dict[str, Any] = {
+        "client_name": client_name,
+        "assessment_type": assessment_type,
+        "assessor_id": assessor_id,
+        **(audit_extra or {}),
+    }
+    emit_engagement_audit_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=eng.id,
+        event_type="engagement.created",
+        actor=actor,
+        reason_code="ENGAGEMENT_CREATED",
+        payload=audit_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=eng.id,
+        event_type="field_assessment.engagement.created",
+        occurred_at=eng.created_at,
+        payload=audit_payload,
+    )
+    return eng
+
+
 @router.post(
     "/engagements",
     response_model=EngagementResponse,

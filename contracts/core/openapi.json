@@ -3378,6 +3378,33 @@
         "title": "ApprovalVerifyRequest",
         "type": "object"
       },
+      "ApproveGrantBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ApproveGrantBody",
+        "type": "object"
+      },
       "ApproveRelationshipBody": {
         "additionalProperties": false,
         "properties": {
@@ -13203,6 +13230,21 @@
           }
         },
         "title": "CycleRunRequest",
+        "type": "object"
+      },
+      "DecisionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "DecisionBody",
         "type": "object"
       },
       "DecisionExplain": {
@@ -24122,6 +24164,13 @@
         "title": "InitiateBackupRequest",
         "type": "object"
       },
+      "InitiateBody": {
+        "additionalProperties": false,
+        "description": "Initiation takes no input: scope comes from the approved grant.",
+        "properties": {},
+        "title": "InitiateBody",
+        "type": "object"
+      },
       "InitiateRecoveryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27408,6 +27457,45 @@
         "title": "ObservationType",
         "type": "string"
       },
+      "OnboardingRequestBody": {
+        "additionalProperties": false,
+        "properties": {
+          "contact_email": {
+            "maxLength": 254,
+            "pattern": "^[^@\\s]{1,64}@[^@\\s]{1,189}\\.[^@\\s]{1,63}$",
+            "title": "Contact Email",
+            "type": "string"
+          },
+          "organization_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Organization Name",
+            "type": "string"
+          },
+          "request_key": {
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "title": "Request Key",
+            "type": "string"
+          },
+          "requested_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Requested Capabilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_key",
+          "organization_name",
+          "contact_email",
+          "requested_capabilities"
+        ],
+        "title": "OnboardingRequestBody",
+        "type": "object"
+      },
       "OptimizationAggregateResponse": {
         "additionalProperties": false,
         "properties": {
@@ -28294,6 +28382,35 @@
           "completed_at"
         ],
         "title": "PlanResponse",
+        "type": "object"
+      },
+      "PlatformOnboardingBody": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Tenant Id"
+          },
+          "msp_tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Msp Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "msp_tenant_id"
+        ],
+        "title": "PlatformOnboardingBody",
         "type": "object"
       },
       "PlaybookListResponse": {
@@ -36493,6 +36610,44 @@
           "session_id"
         ],
         "title": "ReproduceRequest",
+        "type": "object"
+      },
+      "RequestGrantBody": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_type": {
+            "$ref": "#/components/schemas/AssessmentType"
+          },
+          "assessor_id": {
+            "pattern": "^[A-Za-z0-9._@|:-]{1,128}$",
+            "title": "Assessor Id",
+            "type": "string"
+          },
+          "customer_tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Customer Tenant Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "request_key": {
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+            "title": "Request Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_tenant_id",
+          "request_key",
+          "assessment_type",
+          "assessor_id",
+          "expires_at"
+        ],
+        "title": "RequestGrantBody",
         "type": "object"
       },
       "RequirementImportItem": {

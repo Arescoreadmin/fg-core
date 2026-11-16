@@ -92,6 +92,25 @@ next_sequence:
       live charges, live subscriptions, processor dashboard changes or spending.
       Does not change the Customer-One critical path or any FG_RESULT_TRUTH_GATE
       acceptance gate.
+  - id: "MSP-003"
+    title: "MSP-003 — Partner-guided customer onboarding and assessment orchestration"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    authorized_by: "Founder (explicit decision in the MSP-006 post-merge session, 2026-11-15)"
+    freeze_law_basis: >
+      Founder authorization only. No contracted MSP customer and no Customer-One
+      blocker was cited, so criteria (1) and (2) are NOT claimed, and this entry is
+      not evidence of a contracted customer, operational acceptance or production
+      readiness.
+    scope: >
+      Development only: canonical authority audit, MSP onboarding referrals reviewed
+      by the platform, customer-approved single-assessment grants, idempotent MSP
+      initiation through the canonical Field Assessment creation path, Console MSP
+      and customer approval views, audit and RLS. Reuses MSP-001 relationships,
+      TENANT-ADMIN-001, CLIENT-LIFECYCLE, Field Assessment and MSP-006 billing
+      attribution. Does NOT authorize production deployment, processing of real
+      customer data, spending, live charges, MSP-led tenant creation, or any change
+      to the Customer-One critical path or FG_RESULT_TRUTH_GATE acceptance gates.
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"

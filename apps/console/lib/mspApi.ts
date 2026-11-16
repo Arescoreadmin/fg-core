@@ -222,3 +222,147 @@ export function selectCustomerContext(customerTenantId: string): Promise<SafeRes
     method: 'POST',
   });
 }
+
+// ---------------------------------------------------------------------------
+// MSP-003 — onboarding referrals and customer-approved assessment requests.
+// Same transport rules: the caller's tenant is never sent; a customer id is
+// only the target of a request. Core decides every action.
+// ---------------------------------------------------------------------------
+
+export interface GrantNextAction {
+  owner: 'customer' | 'msp' | 'platform' | 'assessor';
+  code: string;
+}
+
+export interface AssessmentGrant {
+  grant_id: string;
+  relationship_id: string;
+  msp_tenant_id: string;
+  customer_tenant_id: string;
+  party: 'customer' | 'msp';
+  request_key: string | null;
+  status: string;
+  effective_status: string;
+  capabilities: string[];
+  scope: { assessment_type: string; assessor_id: string };
+  requested_at: string | null;
+  expires_at: string | null;
+  decided_at: string | null;
+  initiated_at: string | null;
+  revoked_at: string | null;
+  engagement_id: string | null;
+  version: number;
+  blockers: string[];
+  progress: { state: string; engagement_status?: string; updated_at?: string };
+  next_actions: GrantNextAction[];
+}
+
+export interface AssessmentGrantPage {
+  tenant_id: string;
+  items: AssessmentGrant[];
+  total: number;
+  next_offset: number | null;
+}
+
+export interface OnboardingRequest {
+  onboarding_request_id: string;
+  msp_tenant_id: string;
+  request_key: string;
+  organization_name: string;
+  contact_email: string;
+  requested_capabilities: string[];
+  status: string;
+  stage: string;
+  next_actions: GrantNextAction[];
+  requested_at: string | null;
+  expires_at: string | null;
+  reviewed_at: string | null;
+  customer_tenant_id: string | null;
+  version: number;
+}
+
+export interface OnboardingPage {
+  msp_tenant_id: string;
+  items: OnboardingRequest[];
+  total: number;
+  next_offset: number | null;
+}
+
+/** Either side: assessment requests where the organization is a party. */
+export function listAssessmentGrants(
+  customerTenantId?: string,
+  offset = 0,
+): Promise<SafeResult<AssessmentGrantPage>> {
+  // The customer id is a display filter on the caller's own grants, never the caller's tenant.
+  const filter = customerTenantId ? `&${new URLSearchParams({ customer_tenant_id: customerTenantId })}` : '';
+  return call(`${BASE}/assessments/grants?${page(200, offset)}${filter}`);
+}
+
+/** Either side: every assessment request, following next_offset (fail-closed). */
+export function listAllAssessmentGrants(customerTenantId?: string): Promise<SafeResult<AssessmentGrantPage>> {
+  return collectAllPages((offset) => listAssessmentGrants(customerTenantId, offset));
+}
+
+/** MSP side: ask a customer to approve one assessment. Grants nothing yet. */
+export function requestAssessmentGrant(body: {
+  customer_tenant_id: string;
+  request_key: string;
+  assessment_type: string;
+  assessor_id: string;
+  expires_at: string;
+}): Promise<SafeResult<AssessmentGrant & { created: boolean }>> {
+  return call(`${BASE}/assessments/grants`, { method: 'POST', body: JSON.stringify(body) });
+}
+
+export type GrantDecision = 'approve' | 'reject' | 'revoke' | 'withdraw';
+
+/** Customer (approve, reject, revoke) or MSP (withdraw), bound to the version reviewed. */
+export function decideAssessmentGrant(
+  grantId: string,
+  action: GrantDecision,
+  expectedVersion: number,
+  expiresAt?: string,
+): Promise<SafeResult<AssessmentGrant>> {
+  const body: Record<string, unknown> = { expected_version: expectedVersion };
+  if (action === 'approve' && expiresAt) body.expires_at = expiresAt;
+  return call(`${BASE}/assessments/grants/${encodeURIComponent(grantId)}/${action}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** MSP side: start the approved assessment. Idempotent; never billable by itself. */
+export function initiateAssessment(
+  grantId: string,
+): Promise<SafeResult<AssessmentGrant & { engagement_id: string; created: boolean }>> {
+  return call(`${BASE}/assessments/grants/${encodeURIComponent(grantId)}/initiate`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** MSP side: the organization's own onboarding referrals. */
+export function listOnboardingRequests(offset = 0): Promise<SafeResult<OnboardingPage>> {
+  return call(`${BASE}/onboarding/requests?${page(200, offset)}`);
+}
+
+/** MSP side: refer a new organization for FrostGate review. Creates no account. */
+export function requestOnboarding(body: {
+  request_key: string;
+  organization_name: string;
+  contact_email: string;
+  requested_capabilities: string[];
+}): Promise<SafeResult<OnboardingRequest & { created: boolean }>> {
+  return call(`${BASE}/onboarding/requests`, { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** MSP side: cancel a referral that has not been reviewed. */
+export function cancelOnboarding(
+  requestId: string,
+  expectedVersion: number,
+): Promise<SafeResult<OnboardingRequest>> {
+  return call(`${BASE}/onboarding/requests/${encodeURIComponent(requestId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ expected_version: expectedVersion }),
+  });
+}

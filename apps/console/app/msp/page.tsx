@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/msp/ConfirmDialog';
 import { CapabilityPicker } from '@/components/msp/CapabilityPicker';
+import { AssessmentGrants } from '@/components/msp/AssessmentGrants';
+import { OnboardingRequests } from '@/components/msp/OnboardingRequests';
 import { RelationshipHistory } from '@/components/msp/RelationshipHistory';
 import {
   changeRelationship,
@@ -215,7 +217,8 @@ export default function MspPortfolioPage() {
         <h1 className="text-2xl font-semibold">MSP portfolio</h1>
         <p className="text-sm text-muted">
           Customers appear here only while they have approved your access. Everything shown is read-only and limited
-          to what each customer delegated. Access is checked again on every request.
+          to what each customer delegated. Starting an assessment needs the customer’s approval of that specific
+          request. Access is checked again on every request.
         </p>
       </header>
 
@@ -343,6 +346,12 @@ export default function MspPortfolioPage() {
             <p><span className="font-medium">Assessments:</span> <AssessmentCell item={selected.item} /></p>
             <p><span className="font-medium">Findings:</span> <FindingsCell item={selected.item} /></p>
             <p><span className="font-medium">Next step:</span> {nextAction(selected.item)}</p>
+            <AssessmentGrants
+              key={selected.item.customer_tenant_id}
+              party="msp"
+              customerTenantId={selected.item.customer_tenant_id}
+              onSessionExpired={() => setSessionExpired(true)}
+            />
             <div className="flex gap-2 pt-1">
               <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>
                 Close
@@ -445,6 +454,8 @@ export default function MspPortfolioPage() {
           ) : null}
         </form>
       </section>
+
+      {!notConfigured ? <OnboardingRequests onSessionExpired={() => setSessionExpired(true)} /> : null}
 
       <ConfirmDialog
         open={revokeTarget !== null}

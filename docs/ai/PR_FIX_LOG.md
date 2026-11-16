@@ -1,3 +1,33 @@
+## feat(msp): MSP-003 — partner-guided onboarding and assessment orchestration (branch feat/msp-003-onboarding-orchestration)
+
+- **Work item:** MSP-003, founder-authorized on 2026-11-15 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.
+  - Criteria (1) and (2) are not claimed.
+  - Development only: no production deployment, real customer data, spending or live charges.
+  - Base: `main` `295fde436`.
+- **Audit first:** `docs/msp/MSP_003_AUTHORITY_AUDIT.md` maps each capability to its canonical owner. No second tenant registry, lifecycle, engagement engine, RBAC or audit ledger is created.
+- **Added:**
+  - **Migration 0208 (forced RLS):**
+    - `msp_assessment_grants`: one customer-approved, expiring, single-use grant to initiate one engagement;
+    - `msp_onboarding_requests`: an MSP referral, reviewed by the platform; it creates nothing.
+  - **`api/msp_orchestration.py`:** grant request, approve, reject, revoke, withdraw and initiate; onboarding referral, cancel, and platform review (list, link, reject).
+  - **Canonical creation for MSP:** `create_engagement_with_audit` in `api/field_assessment.py` is used by MSP initiation. It calls the same store function and emits the same audit and timeline events as `create_engagement_route`, which is unchanged.
+  - **Final-validation fix:** an earlier draft had the route call the helper. That moved the route's audit call out of its body, and `tools/ci/check_audit_coverage.py` (through `fg-fast-ci` and `tests/security/test_audit_coverage_gate.py`) correctly flagged a violation. The route was restored byte-for-byte; the gate was not changed. `test_inv_msp_creation_matches_the_canonical_route` enforces parity.
+  - **Audit:** `emit_msp_audit(extra=...)`, 10 new event types, and new detail keys in the identity audit allowlist.
+  - **Console:** `/msp` gains referrals and per-customer assessment requests, start and progress; `/partners` gains customer approve, decline and revoke, rendered only when requests exist.
+  - **BFF:** two GET/POST prefixes.
+- **Not changed:** the MSP-001 read-only ceiling `MSP_DELEGABLE_PERMISSIONS`; Field Assessment statuses and gates; QA, report qualification and governed delivery; MSP-006 billing (the only charge is still the delivery producer).
+- **CI check configuration (called out):** `tools/ci/check_plane_registry.py`, +6 lines (3 entries plus a comment), no other change. It gains three exact `EXACT_TENANT_BINDING_EXCEPTIONS` for the platform review routes. The set is matched by exact `(method, path)` membership (`route_key not in EXACT_TENANT_BINDING_EXCEPTIONS`), with no wildcard or prefix: `GET /admin/msp/platform/onboarding`, and `POST .../{request_id}/link` and `.../reject`.
+  - **Why:** the MSP tenant they name is the queue being reviewed, not the caller.
+  - **Compensating control:** internal admin gateway + `platform.admin`; the named MSP's RLS context is bound and row ownership verified.
+  - Same pattern as MSP-001 and MSP-006. No check is disabled.
+- **Existing test updated (called out):** `apps/console/tests/msp-002-console.test.js` pins the exact set of proxied MSP prefixes. It now lists the two MSP-003 prefixes; the GET/POST-only and no-platform-route assertions are unchanged.
+- **Verification:**
+  - **Red on `295fde436`:** 43 of 44 tests fail (the 45th, the parity test, was added later and is a regression guard). The 1 that passes is the direct-customer creation guard (t02).
+  - **Green:** 45/45. This includes three invariant tests added in final validation: a grant is bound to its own relationship (C); referrals do not disclose existing tenants (E); payer assignments and grants are independent authorities (G/H).
+  - **Postgres probe:** `test_0208_msp_003_orchestration_rows_are_isolated_by_forced_rls` (CI only).
+  - **Console:** 19 new tests.
+- **Rollback:** revert. Migration 0208 is additive, and initiated engagements stay valid customer engagements.
+
 ## fix(msp): MSP-006 review — reserve the producer key namespace, end coverage at termination, protect legacy usage reads (PR #876)
 
 - **Codex P1, reserved idempotency namespace:**

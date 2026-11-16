@@ -89,6 +89,17 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.msp.payer_assignment_terminated",
         "tenant.msp.billing_usage_recorded",
         "tenant.msp.billing_usage_not_billable",
+        # MSP-003 partner-guided onboarding and assessment orchestration
+        "tenant.msp.onboarding_requested",
+        "tenant.msp.onboarding_canceled",
+        "tenant.msp.onboarding_rejected",
+        "tenant.msp.onboarding_linked",
+        "tenant.msp.assessment_grant_requested",
+        "tenant.msp.assessment_grant_approved",
+        "tenant.msp.assessment_grant_rejected",
+        "tenant.msp.assessment_grant_withdrawn",
+        "tenant.msp.assessment_grant_revoked",
+        "tenant.msp.assessment_initiated",
     }
 )
 INVITATION_TRANSITIONS = {
@@ -261,6 +272,14 @@ def emit_identity_audit_event(
         "operation",
         "capabilities",
         "result",
+        # MSP-003 workflow keys (identifiers and lifecycle states only)
+        "grant_id",
+        "engagement_id",
+        "onboarding_request_id",
+        "assessment_type",
+        "assessor_id",
+        "previous_state",
+        "new_state",
     }
     safe_details = {k: v for k, v in (details or {}).items() if k in safe_keys}
     created_at = _now()

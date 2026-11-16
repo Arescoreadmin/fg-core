@@ -8727,3 +8727,70 @@ There is no schema, RBAC or CI change.
 
 SOC review outcome: APPROVED as a review fix within PR #876.
 
+
+## 2026-11-15 - feat(msp): MSP-003 — partner-guided onboarding and assessment orchestration
+
+**Scope:** an approved MSP refers new organizations for platform review and starts customer-approved assessments, built on MSP-001 relationships, TENANT-ADMIN-001, CLIENT-LIFECYCLE, Field Assessment and MSP-006. Founder-authorized for development only.
+
+**Called out — schema:** migration 0208 adds two tables. It is additive, and no existing row changes.
+
+- `msp_assessment_grants`: forced RLS, customer or MSP only; unique `(msp, customer, request_key)` and unique `engagement_id`; state CHECKs.
+- `msp_onboarding_requests`: forced RLS, MSP only; unique `(msp, request_key)`.
+
+**Called out — authorization paths:**
+
+- **New MSP write path.** An MSP `tenant_admin` can create one engagement in a customer tenant, but only through an approved, unexpired, unused grant. It must also hold an active relationship, an active designation, an active customer tenant and a resolving MSP-006 payer.
+- **Read ceiling unchanged.** The MSP-001 read ceiling is not widened. A grant decodes only `assessment.create`.
+- **Field Assessment.** `create_engagement_route` is unchanged (zero diff), and the audit coverage gate still verifies it at 100%. MSP initiation uses the new `create_engagement_with_audit`, with the same store function and the same audit and timeline events. Parity is enforced by `test_inv_msp_creation_matches_the_canonical_route`, and t02 guards the direct path.
+
+**Called out — CI check configuration:** `tools/ci/check_plane_registry.py` gains three entries in `EXACT_TENANT_BINDING_EXCEPTIONS`:
+
+- `GET /admin/msp/platform/onboarding`;
+- `POST /admin/msp/platform/onboarding/{request_id}/link`;
+- `POST /admin/msp/platform/onboarding/{request_id}/reject`.
+
+**Why the exceptions are needed.** These are platform-only routes (internal admin gateway + `platform.admin`). The MSP tenant they name is the review queue, not the caller.
+
+**Exact change.** The diff is +6 lines: 3 tuples plus a 3-line comment, inserted after the MSP-006 entries. The set is checked by exact membership (`route_key not in EXACT_TENANT_BINDING_EXCEPTIONS`), with no wildcard, prefix or regex. No other line of the checker changed.
+
+**Compensating controls.** Each route binds that MSP's RLS context and verifies row ownership. The exceptions are exact method-and-path pairs; no check is disabled.
+
+**Called out — console BFF:** two new proxied prefixes, `admin/msp/assessments` and `admin/msp/onboarding`, GET and POST only. Each call is a delegated named-actor call for the session tenant. `admin/msp/platform/...` is never proxied.
+
+**Security analysis:**
+
+1. **Relationship is not assessment authority.** Write authority exists only in a per-assessment grant, approved by the customer's canonical `tenant_admin`.
+2. **Separation of duties.**
+   - The approver is not the requester and holds no MSP membership.
+   - MSP actors and the platform have no approval route.
+   - A forged tenant header is rejected.
+3. **Intersection, not union.** All seven dimensions are re-checked on every initiation; nothing is cached.
+4. **Idempotent and race-safe.**
+   - Request keys are unique.
+   - A grant is used at most once, and an engagement id is unique.
+   - Initiation uses a compare-and-set inside a savepoint that also holds the engagement.
+5. **Canonical authorities untouched.**
+   - No MSP route changes engagement status.
+   - MSP credentials cannot reach the Field Assessment status, QA or patch routes.
+   - Revocation never cancels an engagement.
+6. **No billing at initiation.** Delivery remains the only billable trigger, recorded once.
+7. **Isolation.**
+   - Unknown and foreign ids return identical 404s.
+   - Customer ids are never enumerable.
+   - Forced RLS applies to both tables, with no empty-context bypass.
+8. **Audit.**
+   - Both parties' identity chains record actor, MSP, customer, relationship, grant, engagement, previous and new state, and correlation id.
+   - The canonical `engagement.created` event marks the MSP origin.
+   - Contact emails are not written to audit.
+
+**Residual risks:**
+
+- MSP progress reads are not audited per read.
+- The assessor is a customer-approved identifier, not a bound membership.
+- There are no notifications.
+- Migration 0208 and the MSP-001/002/006 prerequisites are not evidenced in production.
+- Settlement is still NOT PROVEN (MSP-006 F10).
+
+**Verification:** 43 of 44 new tests fail on `main` `295fde436`; the only one that passes is the direct-customer guard. All 45 pass on the branch, including the parity guard added in final validation. The Postgres RLS probe for 0208 runs in CI Migrations Replay.
+
+SOC review outcome: APPROVED for merge as a synthetic, development-only orchestration foundation. Not approved for real customer use until it is deployed, migration 0208 is evidenced, and a live partner acceptance is run under separate authorization.
