@@ -19,6 +19,7 @@ All of these are checked at the moment of the call, with nothing cached:
 | B. Customer-approved delegation | Grant `approved`, `now < expires_at`, `engagement_id` empty | t09, t11, t12 |
 | C. MSP actor | `check_tenant_admin_authority` on the MSP tenant (DB-canonical, bound, active) | t13 |
 | C'. MSP designation | `msp_organization_active` | t14 |
+| C''. MSP entitlement | `require_capability("msp.multi_tenant")` on grant request, initiation and onboarding referral, the same gate as the MSP-001 proposal. Withdraw and cancel (retraction only) stay open. | `test_review_msp_entitlement_gates_orchestration_mutations` |
 | D. Customer tenant | `tenants.lifecycle_state == "active"` and kind `customer` | t15 |
 | E. Scope | `assessment_type` and `assessor_id` come from the grant; the initiate body accepts no fields | t08, t21 |
 | F. Lifecycle eligibility | Compare-and-set `approved` → `initiated`; the canonical creation path | t22–t24 |

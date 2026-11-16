@@ -346,6 +346,15 @@ export function listOnboardingRequests(offset = 0): Promise<SafeResult<Onboardin
   return call(`${BASE}/onboarding/requests?${page(200, offset)}`);
 }
 
+/**
+ * MSP side: every onboarding referral, following next_offset. Terminal
+ * referrals stay in the list, so a single page could hide older pending ones;
+ * an over-large or non-advancing list fails closed (collectAllPages).
+ */
+export function listAllOnboardingRequests(): Promise<SafeResult<OnboardingPage>> {
+  return collectAllPages((offset) => listOnboardingRequests(offset));
+}
+
 /** MSP side: refer a new organization for FrostGate review. Creates no account. */
 export function requestOnboarding(body: {
   request_key: string;
