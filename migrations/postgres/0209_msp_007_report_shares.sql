@@ -20,6 +20,9 @@
 --     second approval cannot create a duplicate authorization.
 --   - A revoked share names who revoked it and when; rows are never deleted,
 --     so the access history survives revocation.
+--   - An active share past its expiry stays 'active' until it is retired to
+--     'expired' (in the same transaction that shares the report again), which
+--     frees the one-active-share slot without deleting anything.
 --
 -- Tenant isolation: RLS is forced, with no empty-context bypass. A share is
 -- visible to its customer and its MSP only.
@@ -43,7 +46,7 @@ CREATE TABLE IF NOT EXISTS msp_report_shares (
     manifest_hash              VARCHAR(128),
     status                     VARCHAR(16)  NOT NULL
                                    CHECK (status IN ('requested', 'active', 'rejected',
-                                                     'withdrawn', 'revoked')),
+                                                     'withdrawn', 'revoked', 'expired')),
     requested_by_subject       TEXT         NOT NULL,
     requested_at               TIMESTAMPTZ  NOT NULL,
     decided_by_subject         TEXT,
@@ -57,7 +60,7 @@ CREATE TABLE IF NOT EXISTS msp_report_shares (
     updated_at                 TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT msp_share_distinct_parties CHECK (msp_tenant_id <> tenant_id),
     CONSTRAINT msp_share_bound_report CHECK (
-        status NOT IN ('active', 'revoked')
+        status NOT IN ('active', 'revoked', 'expired')
         OR (report_id IS NOT NULL AND report_version IS NOT NULL
             AND manifest_hash IS NOT NULL AND decided_by_subject IS NOT NULL
             AND decided_at IS NOT NULL AND expires_at IS NOT NULL

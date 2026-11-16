@@ -72,8 +72,7 @@ test('the integrity vocabulary is exactly what Core can report; a hash is never 
 test('the customer decides; the MSP never gets approve', () => {
   assert.deepEqual(rep.shareActions({ party: 'customer', status: 'requested' }), ['approve', 'reject']);
   assert.deepEqual(rep.shareActions({ party: 'customer', status: 'active' }), ['revoke']);
-  assert.deepEqual(rep.shareActions({ party: 'customer', status: 'expired' }), ['revoke']);
-  for (const s of ['rejected', 'withdrawn', 'revoked']) {
+  for (const s of ['rejected', 'withdrawn', 'revoked', 'expired']) {
     assert.deepEqual(rep.shareActions({ party: 'customer', status: s }), [], s);
   }
   assert.deepEqual(rep.shareActions({ party: 'msp', status: 'requested' }), ['withdraw']);

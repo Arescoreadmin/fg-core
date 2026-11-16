@@ -106,6 +106,7 @@ IDENTITY_AUDIT_EVENTS = frozenset(
         "tenant.msp.report_share_rejected",
         "tenant.msp.report_share_withdrawn",
         "tenant.msp.report_share_revoked",
+        "tenant.msp.report_share_expired",
         "tenant.msp.report_verified",
         "tenant.msp.report_downloaded",
         "tenant.msp.report_access_denied",

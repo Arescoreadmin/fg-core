@@ -167,7 +167,8 @@ function shareActions(share) {
   if (!share) return [];
   if (share.party === 'customer') {
     if (share.status === 'requested') return ['approve', 'reject'];
-    if (share.status === 'active' || share.status === 'expired') return ['revoke'];
+    // An expired share needs no revoke; sharing the report again retires it.
+    if (share.status === 'active') return ['revoke'];
     return [];
   }
   if (share.party === 'msp') {

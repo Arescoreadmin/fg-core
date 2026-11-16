@@ -688,6 +688,58 @@ def _refuse_msp_member(
     set_tenant_context(db, caller)
 
 
+def _retire_expired_share(
+    db: Session,
+    *,
+    caller: str,
+    msp_tenant_id: str,
+    report_id: str,
+    authority: TenantAdminAuthority,
+    correlation: Optional[str],
+) -> None:
+    """Retire an active-but-expired share of this report for this MSP, so it
+    can be shared again. Same transaction as the new share; the old row and
+    its history stay (status ``expired``). An unexpired active share is left
+    alone, so the one-active-share invariant still refuses a duplicate."""
+    now = utcnow()
+    rows = (
+        db.query(MspReportShare)
+        .filter(
+            MspReportShare.tenant_id == caller,
+            MspReportShare.msp_tenant_id == msp_tenant_id,
+            MspReportShare.report_id == report_id,
+            MspReportShare.status == "active",
+        )
+        .all()
+    )
+    for old in rows:
+        if _share_status(old, now) != "expired":
+            continue
+        share_id = str(old.id)
+        _transition_share(
+            db,
+            old,
+            expected_status=("active",),
+            expected_version=int(old.version),
+            values={"status": "expired"},
+        )
+        retired = _load_share(db, share_id, caller)
+        _audit_share(
+            db,
+            caller=caller,
+            row=retired,
+            event_type="tenant.msp.report_share_expired",
+            reason_code="MSP_REPORT_SHARE_EXPIRED",
+            actor_subject=authority.subject,
+            membership_id=authority.membership_id,
+            operation="report_share.expire",
+            previous_state="active",
+            new_state="expired",
+            correlation=correlation,
+            decision="expired",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Customer: shareable reports
 # ---------------------------------------------------------------------------
@@ -767,7 +819,7 @@ def list_report_shares(
     party: str = Query(..., pattern="^(customer|msp)$"),
     customer_tenant_id: Optional[str] = Query(None, max_length=128),
     status: Optional[str] = Query(
-        None, pattern="^(requested|active|rejected|withdrawn|revoked)$"
+        None, pattern="^(requested|active|rejected|withdrawn|revoked|expired)$"
     ),
     limit: int = Query(_DEFAULT_PAGE, ge=1, le=_MAX_PAGE),
     offset: int = Query(0, ge=0),
@@ -816,7 +868,12 @@ def list_report_shares(
 # a party sees only its own people.
 _ACCESS_OPERATIONS = frozenset({"report.verify", "report.download"})
 _CUSTOMER_SHARE_OPERATIONS = frozenset(
-    {"report_share.approve", "report_share.reject", "report_share.revoke"}
+    {
+        "report_share.approve",
+        "report_share.reject",
+        "report_share.revoke",
+        "report_share.expire",
+    }
 )
 
 
@@ -958,6 +1015,14 @@ def share_report(
     record, _ = _shareable_report(
         db, caller=caller, report_id=body.report_id, manifest_hash=body.manifest_hash
     )
+    _retire_expired_share(
+        db,
+        caller=caller,
+        msp_tenant_id=msp,
+        report_id=str(record.id),
+        authority=authority,
+        correlation=correlation_id(request),
+    )
     row = MspReportShare(
         id=str(uuid.uuid4()),
         tenant_id=caller,
@@ -1052,6 +1117,14 @@ def approve_report_share(
         report_id=body.report_id,
         manifest_hash=body.manifest_hash,
         engagement_id=str(row.engagement_id),
+    )
+    _retire_expired_share(
+        db,
+        caller=caller,
+        msp_tenant_id=str(row.msp_tenant_id),
+        report_id=str(record.id),
+        authority=authority,
+        correlation=correlation_id(request),
     )
     _transition_share(
         db,
@@ -1636,18 +1709,19 @@ def download_shared_report(
         decision="granted",
         integrity=integrity,
     )
+    # Read every header value before commit: commit expires ``record`` and
+    # clears the transaction-local tenant binding, so a later attribute access
+    # would reload the row under no RLS context and fail (forced RLS on
+    # governance_reports).
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="report-{record.engagement_id}'
+            f'-v{int(record.version)}.json"'
+        ),
+        "Cache-Control": "no-store, private",
+        "X-Manifest-Hash": str(record.manifest_hash),
+        "X-Report-Version": str(int(record.version)),
+        "X-Report-State": "FINAL",
+    }
     db.commit()
-    return Response(
-        content=payload,
-        media_type="application/json",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="report-{record.engagement_id}'
-                f'-v{int(record.version)}.json"'
-            ),
-            "Cache-Control": "no-store, private",
-            "X-Manifest-Hash": str(record.manifest_hash),
-            "X-Report-Version": str(int(record.version)),
-            "X-Report-State": "FINAL",
-        },
-    )
+    return Response(content=payload, media_type="application/json", headers=headers)

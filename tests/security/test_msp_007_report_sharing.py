@@ -1194,3 +1194,94 @@ def test_demo_customer_controlled_evidence_sharing_end_to_end(w):
     # 16-17. Sharing charged nothing (delivery remains the only producer).
     with _session() as db:
         assert db.execute(text("SELECT COUNT(*) FROM usage_events")).scalar_one() == 0
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (Codex review of PR #892)
+# ---------------------------------------------------------------------------
+
+
+def test_review_no_report_or_share_row_is_reloaded_after_commit(w):
+    """Forced RLS hides governance_reports and msp_report_shares rows once
+    commit clears the transaction-local tenant context, so any post-commit
+    reload of an expired row fails on Postgres (ObjectDeletedError). SQLite
+    has no RLS, so every post-commit reload is treated as that failure."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session, object_session
+
+    from api.db_models_governance_report import GovernanceReportRecord
+    from api.db_models_msp import MspReportShare
+
+    _, grant, eid = _initiated(w)
+    rep = _report(w.app, CUST_1, eid)
+    committed: set[int] = set()
+    reloads: list[str] = []
+
+    def _after_commit(session) -> None:
+        committed.add(id(session))
+
+    def _on_refresh(target, context, attrs) -> None:
+        sess = object_session(target)
+        if sess is not None and id(sess) in committed:
+            reloads.append(f"{type(target).__name__}:{target.id}")
+
+    event.listen(Session, "after_commit", _after_commit)
+    for model in (GovernanceReportRecord, MspReportShare):
+        event.listen(model, "refresh", _on_refresh, propagate=True)
+    try:
+        share = _request_share(w, grant["grant_id"]).json()
+        body = dict(report_id=rep["rid"], manifest_hash=rep["hash"], expires_at=_in(7))
+        assert _decide(w, w.c1_admin, share, "approve", **body).status_code == 200
+        assert _verify(w, share["share_id"]).status_code == 200
+        assert _download(w, share["share_id"]).status_code == 200
+        current = _list(w, w.c1_admin, "customer")["items"][0]
+        assert _decide(w, w.c1_admin, current, "revoke").status_code == 200
+        assert _download(w, share["share_id"]).status_code == 409
+    finally:
+        for model in (GovernanceReportRecord, MspReportShare):
+            event.remove(model, "refresh", _on_refresh)
+        event.remove(Session, "after_commit", _after_commit)
+    assert reloads == [], f"rows reloaded after commit: {reloads}"
+
+
+def test_review_an_expired_share_can_be_renewed_and_keeps_its_history(w):
+    rel, rep, share = _shared(w)
+    assert _download(w, share["share_id"]).status_code == 200
+    _set_share(
+        share["share_id"],
+        decided_at=_now() - timedelta(days=2),
+        expires_at=_now() - timedelta(minutes=1),
+    )
+    # Renewing the same report for the same partner is allowed.
+    renewed = _share(w, rel, rep)
+    assert renewed.status_code == 200, renewed.text
+    assert renewed.json()["status"] == "active"
+    assert renewed.json()["share_id"] != share["share_id"]
+    assert _download(w, renewed.json()["share_id"]).status_code == 200
+    # The expired authorization is retired, not deleted, and stays unusable.
+    rows = {r["share_id"]: r for r in _list(w, w.c1_admin, "customer")["items"]}
+    assert rows[share["share_id"]]["status"] == "expired"
+    assert _blockers(_download(w, share["share_id"])) == ["SHARE_EXPIRED"]
+    hist = w.call(w.c1_admin, "GET", f"{SHARES}/{share['share_id']}/events").json()
+    ops = [e["operation"] for e in hist["items"]]
+    assert "report_share.expire" in ops and "report.download" in ops
+    assert "tenant.msp.report_share_expired" in [e[0] for e in _events(MSP_A)]
+
+
+def test_review_an_expired_share_does_not_block_approving_a_new_request(w):
+    _, grant, eid = _initiated(w)
+    rep = _report(w.app, CUST_1, eid)
+    first = _request_share(w, grant["grant_id"]).json()
+    body = dict(report_id=rep["rid"], manifest_hash=rep["hash"], expires_at=_in(7))
+    assert _decide(w, w.c1_admin, first, "approve", **body).status_code == 200
+    _set_share(
+        first["share_id"],
+        decided_at=_now() - timedelta(days=2),
+        expires_at=_now() - timedelta(minutes=1),
+    )
+    second = _request_share(w, grant["grant_id"]).json()
+    ok = _decide(w, w.c1_admin, second, "approve", **body)
+    assert ok.status_code == 200, ok.text
+    # An active, unexpired share still blocks a duplicate.
+    third = _request_share(w, grant["grant_id"]).json()
+    assert _decide(w, w.c1_admin, third, "approve", **body).status_code == 409

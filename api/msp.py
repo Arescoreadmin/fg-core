@@ -388,6 +388,7 @@ _CUSTOMER_OPERATIONS = frozenset(
         "report_share.approve",
         "report_share.reject",
         "report_share.revoke",
+        "report_share.expire",
     }
 )
 _MSP_OPERATIONS = frozenset(

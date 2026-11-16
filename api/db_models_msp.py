@@ -332,14 +332,15 @@ class MspReportShare(Base):
             "origin IN ('customer', 'msp')", name="msp_report_shares_origin_check"
         ),
         CheckConstraint(
-            "status IN ('requested', 'active', 'rejected', 'withdrawn', 'revoked')",
+            "status IN ('requested', 'active', 'rejected', 'withdrawn', 'revoked', "
+            "'expired')",
             name="msp_report_shares_status_check",
         ),
         CheckConstraint(
             "msp_tenant_id <> tenant_id", name="msp_share_distinct_parties"
         ),
         CheckConstraint(
-            "status NOT IN ('active', 'revoked') OR (report_id IS NOT NULL AND "
+            "status NOT IN ('active', 'revoked', 'expired') OR (report_id IS NOT NULL AND "
             "report_version IS NOT NULL AND manifest_hash IS NOT NULL AND "
             "decided_by_subject IS NOT NULL AND decided_at IS NOT NULL AND "
             "expires_at IS NOT NULL AND expires_at > decided_at)",

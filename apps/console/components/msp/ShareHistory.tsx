@@ -17,6 +17,7 @@ const OPERATION_LABELS: Record<string, string> = {
   'report_share.reject': 'Request declined by the customer',
   'report_share.withdraw': 'Request withdrawn by the MSP',
   'report_share.revoke': 'Access revoked by the customer',
+  'report_share.expire': 'Expired share retired when the customer shared again',
   'report.verify': 'Verified by the MSP',
   'report.download': 'Downloaded by the MSP',
 };

@@ -1835,6 +1835,23 @@ def test_0209_msp_007_report_shares_are_isolated_by_forced_rls(
         finally:
             s.close()
 
+        # Retiring an expired share to 'expired' frees the active slot, and the
+        # retired row stays bound to its report version.
+        s = sm()
+        try:
+            _bind(s, cust)
+            n = (
+                s.query(MspReportShare)
+                .filter(MspReportShare.id == sid, MspReportShare.status == "active")
+                .update({"status": "expired", "version": 2}, synchronize_session=False)
+            )
+            assert n == 1
+            s.add(_active(str(uuid.uuid4()), cust, "probe-share-renewed"))
+            s.flush()
+            s.commit()
+        finally:
+            s.close()
+
         # An active share must be bound to an exact report version.
         s = sm()
         try:
