@@ -8794,3 +8794,24 @@ SOC review outcome: APPROVED as a review fix within PR #876.
 **Verification:** 43 of 44 new tests fail on `main` `295fde436`; the only one that passes is the direct-customer guard. All 45 pass on the branch, including the parity guard added in final validation. The Postgres RLS probe for 0208 runs in CI Migrations Replay.
 
 SOC review outcome: APPROVED for merge as a synthetic, development-only orchestration foundation. Not approved for real customer use until it is deployed, migration 0208 is evidenced, and a live partner acceptance is run under separate authorization.
+
+
+## 2026-11-16 - fix(msp): MSP-003 review — MSP entitlement on orchestration mutations; referral pagination
+
+**Called out — authorization path:** three MSP-side mutations in `api/msp_orchestration.py` now require the `msp.multi_tenant` entitlement through the existing `require_capability` dependency, the same gate as MSP-001's relationship proposal:
+
+- grant request;
+- initiation;
+- onboarding referral.
+
+**Why.** Before this, entitlement revocation could be bypassed by calling the new endpoints directly while the designation stayed active.
+
+**What stays open.** Retraction routes (grant withdraw, referral cancel) remain available, because they only reduce MSP activity.
+
+**Console.** Onboarding referrals now load every page through the fail-closed `collectAllPages`, so pending referrals are never silently hidden.
+
+**Tests:** `test_review_msp_entitlement_gates_orchestration_mutations` (red, then green) and a console contract test.
+
+There is no schema, RBAC or CI-configuration change.
+
+SOC review outcome: APPROVED as a review fix within PR #877.

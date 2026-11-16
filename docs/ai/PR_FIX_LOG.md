@@ -1,3 +1,16 @@
+## fix(msp): MSP-003 review — enforce the MSP entitlement on orchestration mutations; page all onboarding referrals (PR #877)
+
+- **Codex P2, MSP entitlement (`api/msp_orchestration.py` `_msp_admin`):**
+  - **Problem:** an MSP that kept its designation but lost the `msp.multi_tenant` entitlement could still request grants, initiate approved assessments and submit referrals. The new routes checked membership and designation only, unlike MSP-001's relationship-proposal and portfolio routes.
+  - **Fix:** `require_capability("msp.multi_tenant")`, the same dependency MSP-001 uses, now applies to `POST /assessments/grants`, `POST /assessments/grants/{grant_id}/initiate` and `POST /onboarding/requests`.
+  - **Not gated:** withdraw and cancel. They only retract the MSP's own pending request, so they stay available after the entitlement is lost.
+  - **Test:** `test_review_msp_entitlement_gates_orchestration_mutations`, under strict enforcement. Red before (the grant request returned 200), green after.
+- **Codex P2, referral pagination (`apps/console/components/msp/OnboardingRequests.tsx`):**
+  - **Problem:** the component loaded one 200-row page and ignored `next_offset`. Terminal referrals count toward that page, so older pending referrals could be hidden.
+  - **Fix:** a new `listAllOnboardingRequests()` follows every page through the existing fail-closed `collectAllPages`, as the grant list already does. An over-large or non-advancing list fails closed instead of showing a partial list.
+  - **Test:** a console contract test, which fails without the change.
+- **Unchanged:** schema, RBAC and CI configuration.
+
 ## feat(msp): MSP-003 — partner-guided onboarding and assessment orchestration (branch feat/msp-003-onboarding-orchestration)
 
 - **Work item:** MSP-003, founder-authorized on 2026-11-15 and recorded in `customer_one/roadmap_authority.yaml` `next_sequence`.

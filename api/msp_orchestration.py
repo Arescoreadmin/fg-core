@@ -62,7 +62,7 @@ from api.db import set_tenant_context
 from api.db_models_field_assessment import FaEngagement
 from api.db_models_msp import MspAssessmentGrant, MspOnboardingRequest
 from api.deps import auth_ctx_db_session
-from api.entitlements import _ensure_admin_gateway_tenant_bound
+from api.entitlements import _ensure_admin_gateway_tenant_bound, require_capability
 from api.msp_authority import (
     MSP_ACCESS_DENIED,
     MSP_APPROVAL_REQUIRES_CUSTOMER,
@@ -220,6 +220,13 @@ def _bind_console_gateway_tenant(request: Request) -> None:
 
 
 _CONSOLE_BIND = Depends(_bind_console_gateway_tenant)
+
+# The MSP-001 entitlement gate (api/msp.py relationship proposal, customers,
+# context, portfolio). Applied to every MSP-side mutation that creates or
+# expands MSP activity: grant request, initiation and onboarding referral.
+# Withdraw and cancel only retract the MSP's own pending request, so they
+# stay available after the entitlement is lost.
+_MSP_ENTITLED = Depends(require_capability("msp.multi_tenant"))
 
 
 def _caller_tenant_from_auth(request: Request, actor_ctx: ActorContext) -> str:
@@ -669,7 +676,7 @@ def list_assessment_grants(
 
 @router.post(
     "/assessments/grants",
-    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write")), _MSP_ENTITLED],
 )
 def request_assessment_grant(
     body: RequestGrantBody,
@@ -996,7 +1003,7 @@ def withdraw_assessment_grant(
 
 @router.post(
     "/assessments/grants/{grant_id}/initiate",
-    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write")), _MSP_ENTITLED],
 )
 def initiate_assessment(
     grant_id: str,
@@ -1225,7 +1232,7 @@ def _onboarding_page(db: Session, msp: str, *, limit: int, offset: int) -> dict:
 
 @router.post(
     "/onboarding/requests",
-    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write"))],
+    dependencies=[_CONSOLE_BIND, Depends(require_scopes("admin:write")), _MSP_ENTITLED],
 )
 def request_onboarding(
     body: OnboardingRequestBody,
