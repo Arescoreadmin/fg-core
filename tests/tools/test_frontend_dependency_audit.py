@@ -12,8 +12,14 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    # The module is loaded below by file path (as the CI job runs it); this
+    # import is for the type checker only.
+    from tools.ci.frontend_dependency_audit import AuditRun
 
 REPO = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location(
@@ -60,7 +66,7 @@ def _report(severity: str | None, *, pkg: str = "next") -> dict:
     }
 
 
-def _run(scope: str, severity: str | None, rc: int | None = None) -> "fda.AuditRun":
+def _run(scope: str, severity: str | None, rc: int | None = None) -> AuditRun:
     rep = _report(severity)
     code = rc if rc is not None else (1 if severity else 0)
     return fda.parse_audit_output(scope, code, json.dumps(rep), "")

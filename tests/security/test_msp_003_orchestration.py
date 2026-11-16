@@ -212,7 +212,12 @@ def _fa(w: World, who: Person, method: str, path: str, json=None, *, tenant=None
 
 def _code(resp) -> str:
     detail = resp.json().get("detail")
-    return detail.get("code") if isinstance(detail, dict) else str(detail)
+    if not isinstance(detail, dict):
+        return str(detail)
+    code = detail.get("code")
+    # An error body without a string code is itself a contract failure.
+    assert isinstance(code, str), detail
+    return code
 
 
 def _deliver_canonically(tenant: str, engagement_id: str) -> None:

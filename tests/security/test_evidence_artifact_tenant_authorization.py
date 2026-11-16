@@ -251,25 +251,32 @@ def test_tenant_cannot_claim_platform_evidence(env):
     assert _runs(env, "b") == [] and _anchors(env, "b") == []
 
 
-def _register_platform(env, authority: str, **overrides):
+def _register_platform(
+    env,
+    authority: str,
+    *,
+    plane_id: str = "ai_plane",
+    artifact_type: str = "ai_plane_evidence",
+):
+    """Register the platform artifact as an internal producer. Only the
+    plane and artifact type vary between tests (owner/artifact binding)."""
     from services.evidence_index import EvidenceIndexService
 
-    kwargs = dict(
-        tenant_id="tenant-dev",
-        plane_id="ai_plane",
-        artifact_type="ai_plane_evidence",
-        artifact_path=str(_platform_artifact(env)),
-        schema_version="v1",
-        git_sha="synthetic",
-        status="PASS",
-        summary_json={},
-        retention_class="hot",
-        anchor_status="none",
-        platform_authority=authority,
-    )
-    kwargs.update(overrides)
     with get_sessionmaker()() as db:
-        return EvidenceIndexService().register_run(db, **kwargs)
+        return EvidenceIndexService().register_run(
+            db,
+            tenant_id="tenant-dev",
+            plane_id=plane_id,
+            artifact_type=artifact_type,
+            artifact_path=str(_platform_artifact(env)),
+            schema_version="v1",
+            git_sha="synthetic",
+            status="PASS",
+            summary_json={},
+            retention_class="hot",
+            anchor_status="none",
+            platform_authority=authority,
+        )
 
 
 def test_internal_producer_with_grant_registers_platform_evidence(env):

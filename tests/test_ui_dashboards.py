@@ -20,7 +20,7 @@ from api.ui_dashboards import ui_audit_packet_download
 def _request_for_tenant(tenant_id: str):
     from starlette.requests import Request
 
-    request = Request(
+    request: Request = Request(
         {
             "type": "http",
             "method": "GET",
