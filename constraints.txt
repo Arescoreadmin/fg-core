@@ -2,11 +2,11 @@
 # CVE-2024-23342 was reported against ecdsa, which was pulled in via python-jose.
 # pip-audit lists no fix_versions for this CVE, so we hard-block ecdsa from being
 # installed until a fixed version is available.
-ecdsa==0
+ecdsa==0.19.2
 
 # GHSA-2h4p-vjrc-8xpq (mako, fixed in 1.3.12). Mako is a transitive dep of
 # alembic; pin the minimum here so all installs pick up the patched version.
-mako==1.3.12
+mako==1.4.3
 
 # P0-DEPENDENCY-REMEDIATION-001 — transitive production package floors.
 # These packages are not direct deps but are production-reachable and carry CVEs
