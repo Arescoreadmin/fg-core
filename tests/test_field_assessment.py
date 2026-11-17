@@ -1086,10 +1086,13 @@ def test_portal_engagement_wrong_session_denied_on_subresource(
     assert resp.status_code == 403
 
 
-def test_portal_list_engagements_no_session_required(portal_client: TestClient) -> None:
-    """List route is not gated by the middleware (only /{id}/* paths are)."""
+def test_portal_list_engagements_requires_session(portal_client: TestClient) -> None:
+    """Since L14-PORTAL-TRUTH-001 (#817) the engagement list is gated too: a
+    portal request without a session is refused, so a portal credential alone
+    cannot enumerate engagements."""
     resp = portal_client.get("/field-assessment/engagements")
-    assert resp.status_code == 200
+    assert resp.status_code == 403
+    assert resp.json().get("code") == "PORTAL_SESSION_REQUIRED"
 
 
 def test_operator_request_bypasses_portal_guard(client: TestClient) -> None:

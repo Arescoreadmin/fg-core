@@ -737,18 +737,26 @@ def test_rem_100_portal_audit_projection_only_portal_events(client, api_key, tas
 
 
 def test_rem_101_portal_source_without_session_returns_403(client, api_key):
-    """REM-101  x-portal-source: client-portal without a session token returns 403."""
+    """REM-101  x-portal-source: client-portal without a session token returns 403.
+
+    Since L14-PORTAL-TRUTH-001 (#817) the remediation workspace is not offered
+    to portal sessions at all, so the refusal comes before any session check.
+    """
     resp = client.get(
         "/portal/remediation",
         headers={**_auth(api_key), "x-portal-source": "client-portal"},
     )
     assert resp.status_code == 403
     body = resp.json()
-    assert body.get("code") == "PORTAL_SESSION_REQUIRED"
+    assert body.get("code") == "PORTAL_ENGAGEMENT_SCOPE_REQUIRED"
 
 
 def test_rem_102_portal_source_with_invalid_session_returns_403(client, api_key):
-    """REM-102  x-portal-source: client-portal with a bogus session token returns 403."""
+    """REM-102  x-portal-source: client-portal with a bogus session token returns 403.
+
+    The remediation workspace is closed to portal sessions (#817), so even a
+    bogus token is refused by that rule before any session lookup.
+    """
     resp = client.get(
         "/portal/remediation",
         headers={
@@ -759,11 +767,7 @@ def test_rem_102_portal_source_with_invalid_session_returns_403(client, api_key)
     )
     assert resp.status_code == 403
     body = resp.json()
-    assert body.get("code") in {
-        "PORTAL_SESSION_INVALID",
-        "PORTAL_ACCESS_DENIED",
-        "PORTAL_ACCESS_CHECK_FAILED",
-    }
+    assert body.get("code") == "PORTAL_ENGAGEMENT_SCOPE_REQUIRED"
 
 
 # ===========================================================================

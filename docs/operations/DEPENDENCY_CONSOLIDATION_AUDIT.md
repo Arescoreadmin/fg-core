@@ -86,6 +86,7 @@ Lockfile effect: 45 version changes. Ten nested `@radix-ui` copies are de-duplic
 
 - **`stripe>=10.0.0` is unbounded** in `requirements.txt`. A fresh install resolves `stripe` 17.0.0, while the long-lived local venv has 15.3.1, which is the version the MSP-006 billing audit (F10) recorded. CI installs fresh, so CI may already run a different Stripe SDK than the audit assumed.
   - **Recommendation:** pin `stripe` in its own PR, after re-checking MSP-006 finding F10 against the pinned version.
+- **Strict full suite:** `codex_gates.sh` exposed 8 stale tests, also failing on `main` and outside the CI lanes. Five are Portal tests stale after #817's fail-closed engagement scope. Three are trust tests stale after #816 moved the chain replay into `legacy_provenance_trust_inputs`. They are repaired as tests only, with no product change. See the PR fix log.
 - **Strict mypy repaired:** 18 pre-existing errors in 8 test and tool files were also present on `main` with the same mypy 1.5.1. They are repaired here with precise types; no ignore was added. See the PR fix log.
 
 ## CI performance (investigated, not changed)

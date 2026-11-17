@@ -8902,3 +8902,13 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 2. **`zod` kept out.** The high-severity `zod` GHSA-mrhx-c7xc-m3w5 does not enter the Console tree: no `@vercel/oidc` or `@vercel/cli-config` is present, and no `overrides` were used.
 3. **Supply chain.** No new package with install scripts (only `fsevents` and `unrs-resolver`, both already present). Lockfiles were regenerated with npm 10 together with their manifests, and no retired lockfile was touched.
 4. **mypy repairs are typing-only.** No security assertion, authorization function, tenant guard or test was weakened or removed.
+
+## 2026-11-17 - fix(tests): 8 stale portal and trust tests found by the strict full-suite gate
+
+**Scope:** test-only. These tests were stale against two merged security tightenings: L14-PORTAL-TRUTH-001 (#817) for the portal fail-closed scope, and L14-ASSESSMENT-ASSURANCE-001 (#816) for the canonical trust derivation. They fail on `main` too and sit outside the CI lanes.
+
+**Security analysis:**
+
+1. **Portal tests.** Each now asserts the stricter contract that is actually enforced. One previous allow (unbound membership) and one previous unauthenticated 200 (engagement list) become asserted denials. REM-102's accepted codes narrow to exactly one.
+2. **Trust tests.** The legacy chain-replay tests target the function that implements them, with the same assertions, and now exercise real logic. New tests cover canonical delegation and fail-closed behavior.
+3. **No product change.** No product code, authorization function, tenant guard or gate configuration changes.

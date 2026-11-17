@@ -1,3 +1,23 @@
+## fix(tests): repair 8 stale tests found by the strict full-suite gate (dependency consolidation branch)
+
+- **Found by:** strict `bash codex_gates.sh` on `92acf8b9a`: 8 failed, 25,518 passed and 117 skipped, exit 1. The same 8 fail on `main` (`0cf8955e`) with `main`'s own environment, so they are pre-existing. None is in the `fg-fast-ci` or `fg-security` lanes, which is why CI stayed green.
+- **Portal (5): stale after L14-PORTAL-TRUTH-001 (#817).** #817 deliberately made `api/middleware/portal_scope.py` fail closed:
+  - an engagement-unbound membership is refused (`PORTAL_ENGAGEMENT_SCOPE_REQUIRED`);
+  - `/portal/remediation` and the non-report `/portal/engagement/*` workspaces are closed to portal sessions;
+  - the engagement list requires a portal session.
+
+  It updated the Portal JS tests but not these Python tests. Each now asserts the current contract exactly; nothing is loosened.
+  - `test_middleware_allows_tenant_wide_membership` → `test_middleware_denies_unbound_membership`: `call_next` is not called, and the response is 403 `PORTAL_ENGAGEMENT_SCOPE_REQUIRED`.
+  - `test_pnu1_token_allowed_on_non_engagement_path_when_valid`: uses an engagement-bound membership. A valid session on a non-engagement path still passes.
+  - REM-101 and REM-102: 403 `PORTAL_ENGAGEMENT_SCOPE_REQUIRED`. REM-102's previous three-code set is narrowed to that one code.
+  - `test_portal_list_engagements_no_session_required` → `test_portal_list_engagements_requires_session`: 403 `PORTAL_SESSION_REQUIRED`, where it previously expected 200.
+- **Trust (3): stale after L14-ASSESSMENT-ASSURANCE-001 (#816).**
+  - **What changed:** #816 made `derive_engagement_trust_inputs` delegate to the canonical `evaluate_engagement_provenance` and moved the P0-6B chain replay into `legacy_provenance_trust_inputs`.
+  - **Effect:** the `TestDeriveEngagementTrustInputs` tests still mocked the legacy internals while calling `derive_...` with a fake database. So the three "valid chain" tests failed, and the "all False" tests passed only because the canonical path failed closed.
+  - **Fix:** the class is renamed `TestLegacyProvenanceTrustInputs` and calls `legacy_provenance_trust_inputs`, with every assertion unchanged. It now exercises real logic; that function had no direct test before.
+  - **New canonical tests:** a new `TestDeriveEngagementTrustInputs` proves the canonical function delegates to the assurance authority with the same tenant and engagement, and fails closed when that authority raises.
+- **No product code changed.** Both behaviours are the intended, already-merged security tightening. No test was deleted or skipped.
+
 ## fix(deps): consolidate Dependabot upgrades and repair compatibility (#879–#890; branch fix/deps/consolidated-remediation)
 
 - **Scope:** all 12 open Dependabot PRs, decided one by one in `docs/operations/DEPENDENCY_CONSOLIDATION_AUDIT.md`. None of the original PRs is closed by this change.
