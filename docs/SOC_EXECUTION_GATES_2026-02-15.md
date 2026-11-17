@@ -8879,3 +8879,36 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 **Why:** the job was cancelled at the 40-minute limit while running `pytest tests/security`, with no test failing. On `main` it already took 38.4 minutes (#878), and MSP-007 adds about 3 minutes of security tests.
 
 **Security analysis:** this is not a weakening. Every step still runs, and every test must still pass. `CI Required` still depends on the job, and the job still has a bounded timeout, as `check_github_repo_security.py` requires. The longer limit only gives headroom.
+
+## 2026-11-16 - fix(deps): consolidate Dependabot upgrades #879–#890 and repair compatibility
+
+**Scope:** one consolidated dependency baseline. Every decision is recorded in `docs/operations/DEPENDENCY_CONSOLIDATION_AUDIT.md`.
+
+**Called out — CI configuration:** `actions/checkout` v4 → v7 (37 uses) and `actions/setup-python` v5 → v7 (15 uses) across 11 workflows. These are version strings only. No job, step, trigger, permission, timeout or required check changes.
+
+- The only `workflow_run` workflow (`prod-auth-smoke.yml`) already restricts itself to same-repository runs. checkout v7's new fork-checkout block therefore does not affect it.
+- No workflow uses the `pip-install` input that setup-python v7 removed.
+
+**Called out — dependencies:**
+
+- Python: `mako` 1.4.3 (security), `psycopg` 3.3.9, `jsonschema` 4.26.0, `pre-commit` 4.7.0, `loguru` 0.8.0, and the `aiosqlite` floor.
+- Console: the routine group, with `@vercel/blob` held at `2.4.0` to keep the vulnerable `zod` out, plus `@hookform/resolvers` 7.
+- Portal: three unused packages removed.
+- Framework and toolchain majors deferred (#857, #858).
+
+**Security analysis:**
+
+1. **`ecdsa` block kept.** The `ecdsa==0` block for the unpatched CVE-2024-23342 stays. The Dependabot change that would have lifted it is rejected.
+2. **`zod` kept out.** The high-severity `zod` GHSA-mrhx-c7xc-m3w5 does not enter the Console tree: no `@vercel/oidc` or `@vercel/cli-config` is present, and no `overrides` were used.
+3. **Supply chain.** No new package with install scripts (only `fsevents` and `unrs-resolver`, both already present). Lockfiles were regenerated with npm 10 together with their manifests, and no retired lockfile was touched.
+4. **mypy repairs are typing-only.** No security assertion, authorization function, tenant guard or test was weakened or removed.
+
+## 2026-11-17 - fix(tests): 8 stale portal and trust tests found by the strict full-suite gate
+
+**Scope:** test-only. These tests were stale against two merged security tightenings: L14-PORTAL-TRUTH-001 (#817) for the portal fail-closed scope, and L14-ASSESSMENT-ASSURANCE-001 (#816) for the canonical trust derivation. They fail on `main` too and sit outside the CI lanes.
+
+**Security analysis:**
+
+1. **Portal tests.** Each now asserts the stricter contract that is actually enforced. One previous allow (unbound membership) and one previous unauthenticated 200 (engagement list) become asserted denials. REM-102's accepted codes narrow to exactly one.
+2. **Trust tests.** The legacy chain-replay tests target the function that implements them, with the same assertions, and now exercise real logic. New tests cover canonical delegation and fail-closed behavior.
+3. **No product change.** No product code, authorization function, tenant guard or gate configuration changes.

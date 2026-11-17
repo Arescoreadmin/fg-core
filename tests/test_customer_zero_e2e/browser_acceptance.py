@@ -664,13 +664,19 @@ def _browser_matrix(log: dict[str, Any], out: Path) -> None:
         ),
         None,
     )
-    identity_consistent = bool(canonical_allowed) and (
-        str(canonical_allowed.get("version"))
-        == str(allowed_pdf.get("report_version_forwarded"))
-        and canonical_allowed.get("manifest_hash")
-        == allowed_pdf.get("x_manifest_hash_forwarded")
-        and (canonical_allowed.get("report_state") or {}).get("state")
-        == allowed_pdf.get("x_report_state_forwarded")
+    # isinstance narrows for the type checker; bool() keeps an empty item
+    # (no identity fields) inconsistent, exactly as before.
+    identity_consistent = (
+        isinstance(canonical_allowed, dict)
+        and bool(canonical_allowed)
+        and (
+            str(canonical_allowed.get("version"))
+            == str(allowed_pdf.get("report_version_forwarded"))
+            and canonical_allowed.get("manifest_hash")
+            == allowed_pdf.get("x_manifest_hash_forwarded")
+            and (canonical_allowed.get("report_state") or {}).get("state")
+            == allowed_pdf.get("x_report_state_forwarded")
+        )
     )
     intact = intact and identity_consistent
     acc.record(

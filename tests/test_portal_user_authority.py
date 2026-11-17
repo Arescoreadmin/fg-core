@@ -1544,9 +1544,13 @@ def test_middleware_denies_when_portal_membership_id_is_none():
     assert body["code"] == "PORTAL_MEMBERSHIP_REQUIRED"
 
 
-def test_middleware_allows_tenant_wide_membership():
-    """P1-2 case C: real tenant-wide membership (engagement_id NULL on row) → allowed."""
+def test_middleware_denies_unbound_membership():
+    """P1-2 case C, as tightened by L14-PORTAL-TRUTH-001 (#817): a membership
+    with no engagement binding (engagement_id NULL on the row) is NOT a
+    tenant-wide entitlement. The portal role model has no canonical tenant-admin
+    entitlement, so the middleware fails closed before reaching the route."""
     import asyncio
+    import json
 
     from api.portal_user_authority import SessionValidationResult
 
@@ -1567,8 +1571,10 @@ def test_middleware_allows_tenant_wide_membership():
             validate_result=result,
         )
     )
-    assert called_next is True
-    assert resp.status_code == 204
+    assert called_next is False
+    assert resp.status_code == 403
+    body = json.loads(resp.body)
+    assert body["code"] == "PORTAL_ENGAGEMENT_SCOPE_REQUIRED"
 
 
 def test_middleware_denies_engagement_mismatch():
@@ -1749,8 +1755,10 @@ def test_pnu1_token_allowed_on_non_engagement_path_when_valid():
     """P1-A: a valid pnu1. token on a non-engagement portal path passes through.
 
     The catch-all validator must not accidentally block legitimate portal
-    traffic. When validate_session returns ok=True, the request proceeds and
-    portal identity is exposed on request.state (no engagement binding).
+    traffic. When validate_session returns ok=True for an engagement-bound
+    membership, the request proceeds and portal identity is exposed on
+    request.state. (An unbound membership is refused since #817; see
+    test_middleware_denies_unbound_membership.)
     """
     import asyncio
 
@@ -1762,7 +1770,7 @@ def test_pnu1_token_allowed_on_non_engagement_path_when_valid():
         portal_user_id="user-1",
         portal_membership_id="mem-1",
         tenant_id="tenant-a",
-        engagement_id=None,  # tenant-wide membership
+        engagement_id="eng-1",  # engagement-bound membership (#817)
         portal_role="viewer",
     )
 

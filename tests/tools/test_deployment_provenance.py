@@ -270,7 +270,13 @@ def test_wrong_branch_or_repo_is_drift(history: dict[str, Any]) -> None:
 
 
 def test_unresolved_alias_is_not_verified(history: dict[str, Any]) -> None:
-    for dep in (None, {}, {"error": {"code": "not_found"}}):
+    # The canonical type of evaluate()'s ``deployment`` argument.
+    unresolved: list[dict[str, Any] | None] = [
+        None,
+        {},
+        {"error": {"code": "not_found"}},
+    ]
+    for dep in unresolved:
         assert _eval(history, dep).status == "NOT_VERIFIED"
 
 

@@ -25,12 +25,28 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 REPO = Path(__file__).resolve().parents[2]
 ACTIVE = REPO / "apps/console"
 NESTED = "apps/console/console"
 OUT = REPO / "docs/security/dep_remediate_003_retirement_ledger.json"
 NESTED_REV = ""
+
+
+class LedgerEntry(TypedDict):
+    """One legacy nested-Console test and where its coverage lives now."""
+
+    legacy_file: str
+    legacy_test: str
+    security_relevant: bool
+    nested_assertions_hold_on_active_source: bool
+    state: str
+    canonical_file: str
+    canonical_test_source_title: str
+    # Evidence text while the ledger is built; replaced by ``evidence_id``.
+    evidence: NotRequired[str]
+    evidence_id: NotRequired[str]
 
 
 def run_tap(path: Path, cwd: Path) -> list[tuple[str, bool]]:
@@ -201,7 +217,7 @@ def main() -> int:
     tmp = tempfile.TemporaryDirectory(prefix="dep003-probe-")
     probe = Path(tmp.name)
     deleted = extract_probe(probe)
-    ledger = []
+    ledger: list[LedgerEntry] = []
     for f in sorted(probe.glob("*.test.js")):
         active_file = ACTIVE / "tests" / f.name
         asrc = active_file.read_text()
@@ -300,11 +316,12 @@ def main() -> int:
     evidence: dict[str, str] = {}
     for e in ledger:
         text = e.pop("evidence")
-        key = next((k for k, v in evidence.items() if v == text), None)
-        if key is None:
-            key = f"E{len(evidence) + 1:02d}"
-            evidence[key] = text
-        e["evidence_id"] = key
+        # ``key`` above is the (file, title) override key; this is an evidence id.
+        evidence_id = next((k for k, v in evidence.items() if v == text), None)
+        if evidence_id is None:
+            evidence_id = f"E{len(evidence) + 1:02d}"
+            evidence[evidence_id] = text
+        e["evidence_id"] = evidence_id
     by_state: dict[str, int] = {}
     for e in ledger:
         by_state[e["state"]] = by_state.get(e["state"], 0) + 1

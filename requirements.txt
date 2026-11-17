@@ -2,7 +2,7 @@
 python-multipart==0.0.33
 pydantic-settings==2.5.2
 msal==1.39.0
-loguru==0.7.3
+loguru==0.8.0
 python-dotenv==1.2.4
 redis==7.1.0
 sqlparse==0.6.1

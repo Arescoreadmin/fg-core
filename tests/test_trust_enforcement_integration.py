@@ -1104,12 +1104,19 @@ class TestModeEscalation:
 # ---------------------------------------------------------------------------
 
 
-class TestDeriveEngagementTrustInputs:
-    """Unit tests for derive_engagement_trust_inputs() — P0-6B."""
+class TestLegacyProvenanceTrustInputs:
+    """Unit tests for the P0-6B legacy chain replay.
+
+    L14-ASSESSMENT-ASSURANCE-001 (#816) moved this logic out of
+    ``legacy_provenance_trust_inputs`` into ``legacy_provenance_trust_inputs``
+    (the canonical function now delegates to the assurance authority), so these
+    tests target the function that implements the behaviour they describe.
+    Assertions are unchanged.
+    """
 
     def test_no_provenance_returns_all_false(self, monkeypatch):
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
 
         monkeypatch.setattr(
@@ -1127,7 +1134,7 @@ class TestDeriveEngagementTrustInputs:
             "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
             return_value=[],
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1140,7 +1147,7 @@ class TestDeriveEngagementTrustInputs:
 
     def test_perfect_chain_returns_all_true(self, monkeypatch):
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1159,7 +1166,7 @@ class TestDeriveEngagementTrustInputs:
                 return_value=perfect_result,
             ),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1171,7 +1178,7 @@ class TestDeriveEngagementTrustInputs:
 
     def test_broken_chain_returns_chain_false(self, monkeypatch):
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1194,7 +1201,7 @@ class TestDeriveEngagementTrustInputs:
                 return_value=broken_result,
             ),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1204,7 +1211,7 @@ class TestDeriveEngagementTrustInputs:
 
     def test_exception_returns_all_false(self, monkeypatch):
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1212,7 +1219,7 @@ class TestDeriveEngagementTrustInputs:
             "services.field_assessment.evidence_provenance.list_evidence_provenance_for_engagement",
             side_effect=RuntimeError("db error"),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1223,7 +1230,7 @@ class TestDeriveEngagementTrustInputs:
 
     def test_legacy_score_50_sets_is_legacy(self, monkeypatch):
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1242,7 +1249,7 @@ class TestDeriveEngagementTrustInputs:
                 return_value=legacy_result,
             ),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1253,7 +1260,7 @@ class TestDeriveEngagementTrustInputs:
     def test_two_independent_chains_and_combined(self, monkeypatch):
         """A broken branch in a multi-chain engagement makes combined chain_valid=False."""
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1288,7 +1295,7 @@ class TestDeriveEngagementTrustInputs:
                 side_effect=_replay,
             ),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
@@ -1298,7 +1305,7 @@ class TestDeriveEngagementTrustInputs:
     def test_single_chain_with_amendment_only_head_replayed(self, monkeypatch):
         """A chained amendment (previous_hash set) is detected as non-head."""
         from services.field_assessment.trust_enforcement_adapter import (
-            derive_engagement_trust_inputs,
+            legacy_provenance_trust_inputs,
         )
         import unittest.mock as mock
 
@@ -1329,13 +1336,68 @@ class TestDeriveEngagementTrustInputs:
                 side_effect=_replay,
             ),
         ):
-            inputs = derive_engagement_trust_inputs(
+            inputs = legacy_provenance_trust_inputs(
                 object(), tenant_id=_T, engagement_id=_E
             )
 
         assert inputs.chain_valid is True
         # Only the amendment (head) is replayed; genesis is not a head.
         assert replay_calls == ["prov-amendment"]
+
+
+class TestDeriveEngagementTrustInputs:
+    """``derive_engagement_trust_inputs`` reads the canonical engagement
+    provenance authority (L14-ASSESSMENT-ASSURANCE-001) and fails closed."""
+
+    def test_delegates_to_the_canonical_provenance_authority(self):
+        from services.field_assessment.trust_enforcement import TrustInputs
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        expected = TrustInputs(
+            chain_valid=True,
+            signature_valid=True,
+            link_valid=True,
+            replay_valid=True,
+            tenant_valid=True,
+            engagement_valid=True,
+        )
+        decision = mock.MagicMock()
+        decision.to_trust_inputs.return_value = expected
+        with mock.patch(
+            "services.field_assessment.assessment_assurance.evaluate_engagement_provenance",
+            return_value=decision,
+        ) as evaluate:
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        evaluate.assert_called_once()
+        assert evaluate.call_args.kwargs == {"tenant_id": _T, "engagement_id": _E}
+        assert inputs is expected
+
+    def test_authority_failure_fails_closed(self):
+        from services.field_assessment.trust_enforcement_adapter import (
+            derive_engagement_trust_inputs,
+        )
+        import unittest.mock as mock
+
+        with mock.patch(
+            "services.field_assessment.assessment_assurance.evaluate_engagement_provenance",
+            side_effect=RuntimeError("authority unavailable"),
+        ):
+            inputs = derive_engagement_trust_inputs(
+                object(), tenant_id=_T, engagement_id=_E
+            )
+
+        assert inputs.chain_valid is False
+        assert inputs.signature_valid is False
+        assert inputs.link_valid is False
+        assert inputs.replay_valid is False
+        assert inputs.tenant_valid is True
+        assert inputs.engagement_valid is True
 
 
 class TestAndTrustInputs:

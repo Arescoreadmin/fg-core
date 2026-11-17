@@ -4,9 +4,11 @@
 # installed until a fixed version is available.
 ecdsa==0
 
-# GHSA-2h4p-vjrc-8xpq (mako, fixed in 1.3.12). Mako is a transitive dep of
-# alembic; pin the minimum here so all installs pick up the patched version.
-mako==1.3.12
+# GHSA-2h4p-vjrc-8xpq (mako, fixed in 1.3.12) and GHSA-5639-2j2p-m4mx /
+# CVE-2026-102991 (mako <= 1.4.1, Windows drive-letter path traversal in
+# TemplateLookup, fixed in 1.4.2). Mako is a transitive dep of alembic; pin
+# here so all installs pick up the patched version.
+mako==1.4.3
 
 # P0-DEPENDENCY-REMEDIATION-001 — transitive production package floors.
 # These packages are not direct deps but are production-reachable and carry CVEs

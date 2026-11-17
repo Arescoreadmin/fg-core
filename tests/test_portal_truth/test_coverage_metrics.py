@@ -22,8 +22,9 @@ def test_coverage_percentage_uses_applicable_controls_only() -> None:
 
 
 def test_empty_or_all_not_applicable_coverage_is_unavailable() -> None:
-    for responses in (
+    cases: list[list[SimpleNamespace]] = [
         [],
         [SimpleNamespace(control_id="GOVERN-1.1", response_status="not_applicable")],
-    ):
+    ]
+    for responses in cases:
         assert _questionnaire_coverage_metrics(responses) == (0, None, set(), set())
