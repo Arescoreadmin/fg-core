@@ -1,4 +1,65 @@
 {
   "_policy": "L14-FRONTEND-DEPENDENCY-SEC-001. An entry suppresses a blocking frontend advisory ONLY when approval_status is APPROVED, approved_by names the approving founder/security owner, owner is set, and expires is a date no more than 90 days ahead. Unapproved or expired entries are ignored (the advisory keeps blocking). Required fields: id, app, package, advisory (GHSA id or npm advisory source id), owner, expires, approval_status, approved_by, runtime_exposure, compensating_controls, remediation_plan. See docs/security/DEPENDENCY_AUDIT_EXCEPTIONS.md.",
-  "exceptions": []
+  "exceptions": [
+    {
+      "id": "FE-EXC-001",
+      "app": "portal",
+      "package": "picomatch",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "cve": "CVE-2026-112366",
+      "severity": "high",
+      "advisory_source": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "vulnerable_range": "<=4.0.7 (no patched release; latest published 4.0.7)",
+      "owner": "Arescoreadmin",
+      "approval_status": "APPROVED",
+      "approved_by": "Arescoreadmin",
+      "approved_on": "2026-11-17",
+      "expires": "2026-12-17",
+      "renewal": "Requires separate founder approval; this record must not be extended in place.",
+      "dependency_paths": "node_modules/picomatch@2.3.2 (tailwindcss > micromatch; tailwindcss > fast-glob > micromatch; eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch) and node_modules/tinyglobby/node_modules/picomatch@4.0.4 (tailwindcss > sucrase > tinyglobby [> fdir]; eslint-config-next > @typescript-eslint/* and eslint-import-resolver-typescript > tinyglobby). Every lockfile entry is dev-only and reachable only from devDependencies roots.",
+      "runtime_exposure": "None in production. Both lockfile copies are flagged dev; npm ls --omit=dev lists no picomatch; no application source imports picomatch or any glob library; the production server traces (.nft.json, and the Console .next/standalone image) contain no copy of the affected npm packages. The trigger requires an attacker-supplied glob PATTERN (e.g. +(*)); the only patterns reaching these tools are repository config (tailwind content globs, ESLint and TypeScript config).",
+      "compensating_controls": "Affected tooling runs only at lint/build/dev time on repository-controlled patterns; PR code that could alter patterns can already execute arbitrary code in its own CI job, so no privilege is gained; the exception is scoped to this exact app, package and advisory, every other critical/high finding and any AUDIT_UNVERIFIED result still fails the gate; auto-expires in 30 days.",
+      "remediation_plan": "Track upstream micromatch/picomatch PR #194 and new releases. When a patched picomatch is published for the 4.x line (tinyglobby) and for the 2.x line or a micromatch/anymatch release that moves off it, update the lockfiles, confirm make frontend-audit passes with this entry removed, and delete the entry in the same PR. If not patched by 2026-12-17, the gate blocks again; renewal needs separate founder approval."
+    },
+    {
+      "id": "FE-EXC-002",
+      "app": "console",
+      "package": "picomatch",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "cve": "CVE-2026-112366",
+      "severity": "high",
+      "advisory_source": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "vulnerable_range": "<=4.0.7 (no patched release; latest published 4.0.7)",
+      "owner": "Arescoreadmin",
+      "approval_status": "APPROVED",
+      "approved_by": "Arescoreadmin",
+      "approved_on": "2026-11-17",
+      "expires": "2026-12-17",
+      "renewal": "Requires separate founder approval; this record must not be extended in place.",
+      "dependency_paths": "node_modules/picomatch@2.3.2 (tailwindcss > micromatch; tailwindcss > chokidar > anymatch; eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch) and node_modules/tinyglobby/node_modules/picomatch@4.0.7 (tailwindcss > sucrase > tinyglobby [> fdir]; eslint-config-next > @typescript-eslint/* and eslint-import-resolver-typescript > tinyglobby). Every lockfile entry is dev-only and reachable only from devDependencies roots.",
+      "runtime_exposure": "None in production. Both lockfile copies are flagged dev; npm ls --omit=dev lists no picomatch; no application source imports picomatch or any glob library; the production server traces (.nft.json, and the Console .next/standalone image) contain no copy of the affected npm packages. The trigger requires an attacker-supplied glob PATTERN (e.g. +(*)); the only patterns reaching these tools are repository config (tailwind content globs, ESLint and TypeScript config).",
+      "compensating_controls": "Affected tooling runs only at lint/build/dev time on repository-controlled patterns; PR code that could alter patterns can already execute arbitrary code in its own CI job, so no privilege is gained; the exception is scoped to this exact app, package and advisory, every other critical/high finding and any AUDIT_UNVERIFIED result still fails the gate; auto-expires in 30 days.",
+      "remediation_plan": "Track upstream micromatch/picomatch PR #194 and new releases. When a patched picomatch is published for the 4.x line (tinyglobby) and for the 2.x line or a micromatch/anymatch release that moves off it, update the lockfiles, confirm make frontend-audit passes with this entry removed, and delete the entry in the same PR. If not patched by 2026-12-17, the gate blocks again; renewal needs separate founder approval."
+    },
+    {
+      "id": "FE-EXC-003",
+      "app": "web",
+      "package": "picomatch",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "cve": "CVE-2026-112366",
+      "severity": "high",
+      "advisory_source": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "vulnerable_range": "<=4.0.7 (no patched release; latest published 4.0.7)",
+      "owner": "Arescoreadmin",
+      "approval_status": "APPROVED",
+      "approved_by": "Arescoreadmin",
+      "approved_on": "2026-11-17",
+      "expires": "2026-12-17",
+      "renewal": "Requires separate founder approval; this record must not be extended in place.",
+      "dependency_paths": "node_modules/picomatch@2.3.2 (tailwindcss > micromatch; tailwindcss > chokidar > anymatch) and node_modules/tinyglobby/node_modules/picomatch@4.0.4 (tailwindcss > sucrase > tinyglobby [> fdir]). Every lockfile entry is dev-only and reachable only from devDependencies roots.",
+      "runtime_exposure": "None in production. Both lockfile copies are flagged dev; npm ls --omit=dev lists no picomatch; no application source imports picomatch or any glob library; the production server traces (.nft.json, and the Console .next/standalone image) contain no copy of the affected npm packages. The trigger requires an attacker-supplied glob PATTERN (e.g. +(*)); the only patterns reaching these tools are repository config (tailwind content globs, ESLint and TypeScript config).",
+      "compensating_controls": "Affected tooling runs only at lint/build/dev time on repository-controlled patterns; PR code that could alter patterns can already execute arbitrary code in its own CI job, so no privilege is gained; the exception is scoped to this exact app, package and advisory, every other critical/high finding and any AUDIT_UNVERIFIED result still fails the gate; auto-expires in 30 days.",
+      "remediation_plan": "Track upstream micromatch/picomatch PR #194 and new releases. When a patched picomatch is published for the 4.x line (tinyglobby) and for the 2.x line or a micromatch/anymatch release that moves off it, update the lockfiles, confirm make frontend-audit passes with this entry removed, and delete the entry in the same PR. If not patched by 2026-12-17, the gate blocks again; renewal needs separate founder approval."
+    }
+  ]
 }
