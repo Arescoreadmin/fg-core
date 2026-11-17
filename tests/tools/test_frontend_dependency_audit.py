@@ -206,12 +206,244 @@ def test_unapproved_or_stale_exception_keeps_blocking(over, reason):
     assert res.status == fda.STATUS_FAIL
 
 
-def test_repository_exception_registry_is_valid_and_empty():
-    raw = json.loads(
+def _registry() -> dict:
+    return json.loads(
         (REPO / "tools/ci/frontend_dependency_exceptions.json").read_text()
     )
-    usable, problems = fda.validate_exceptions(raw, TODAY)
-    assert problems == [] and usable == [] and raw["exceptions"] == []
+
+
+# --- FE-EXC-001..003: picomatch GHSA-fc5q-39xc-vjpf (founder-approved) ------
+
+PICO_GHSA = "GHSA-fc5q-39xc-vjpf"
+PICO_APPROVED_ON = dt.date(2026, 11, 17)
+PICO_EXPIRES = dt.date(2026, 12, 17)
+
+
+def _pico_report(*extra: tuple[str, str, str]) -> dict:
+    """npm audit v2 shape for the real picomatch advisory.
+
+    Only ``picomatch`` carries the advisory object; the packages that depend
+    on it (micromatch, tailwindcss, ...) list it as a string edge, exactly as
+    ``npm audit --json`` reports them. ``extra`` adds (package, ghsa, severity)
+    advisories that must not be covered by the picomatch exception.
+    """
+
+    def adv(pkg: str, ghsa: str, severity: str, source: int) -> dict:
+        return {
+            "source": source,
+            "name": pkg,
+            "title": f"synthetic {ghsa}",
+            "url": f"https://github.com/advisories/{ghsa}",
+            "severity": severity,
+            "range": "<=4.0.7",
+        }
+
+    vulns: dict = {
+        "picomatch": {
+            "name": "picomatch",
+            "severity": "high",
+            "isDirect": False,
+            "via": [adv("picomatch", PICO_GHSA, "high", 1117001)],
+            "range": "<=4.0.7",
+            "nodes": [
+                "node_modules/picomatch",
+                "node_modules/tinyglobby/node_modules/picomatch",
+            ],
+            "fixAvailable": False,
+        },
+        "micromatch": {
+            "name": "micromatch",
+            "severity": "high",
+            "isDirect": False,
+            "via": ["picomatch"],
+            "range": "*",
+            "nodes": ["node_modules/micromatch"],
+            "fixAvailable": False,
+        },
+        "tailwindcss": {
+            "name": "tailwindcss",
+            "severity": "high",
+            "isDirect": True,
+            "via": ["micromatch", "picomatch"],
+            "range": "*",
+            "nodes": ["node_modules/tailwindcss"],
+            "fixAvailable": False,
+        },
+    }
+    for i, (pkg, ghsa, severity) in enumerate(extra):
+        entry = vulns.setdefault(
+            pkg,
+            {
+                "name": pkg,
+                "severity": severity,
+                "isDirect": True,
+                "via": [],
+                "range": "*",
+                "nodes": [f"node_modules/{pkg}"],
+                "fixAvailable": False,
+            },
+        )
+        entry["via"].append(adv(pkg, ghsa, severity, 2000000 + i))
+    counts = {"info": 0, "low": 0, "moderate": 0, "high": 0, "critical": 0}
+    for v in vulns.values():
+        counts[v["severity"]] += 1
+    counts["total"] = sum(counts.values())
+    return {
+        "auditReportVersion": 2,
+        "vulnerabilities": vulns,
+        "metadata": {"vulnerabilities": counts},
+    }
+
+
+def _pico_runs(*extra: tuple[str, str, str]) -> list:
+    clean = json.dumps(_report(None))
+    return [
+        fda.parse_audit_output("production", 0, clean, ""),
+        fda.parse_audit_output("all", 1, json.dumps(_pico_report(*extra)), ""),
+    ]
+
+
+def _pico_usable(today: dt.date = PICO_APPROVED_ON) -> list:
+    usable, problems = fda.validate_exceptions(_registry(), today)
+    assert problems == []
+    return usable
+
+
+def test_repository_registry_holds_only_the_approved_picomatch_records():
+    raw = _registry()
+    usable, problems = fda.validate_exceptions(raw, PICO_APPROVED_ON)
+    assert problems == [] and len(usable) == len(raw["exceptions"]) == 3
+    assert sorted(e["app"] for e in usable) == ["console", "portal", "web"]
+    for e in usable:
+        assert e["package"] == "picomatch"
+        assert e["advisory"] == PICO_GHSA
+        assert e["approval_status"] == "APPROVED"
+        assert e["approved_by"] == e["owner"] == "Arescoreadmin"
+        assert dt.date.fromisoformat(e["expires"]) == PICO_EXPIRES
+        for field in ("runtime_exposure", "compensating_controls", "remediation_plan"):
+            assert len(e[field]) > 40, field
+
+
+@pytest.mark.parametrize("app", ["portal", "console", "web"])
+def test_picomatch_advisory_is_excepted_only_while_approved(app):
+    res = fda.evaluate_app(app, _pico_runs(), _pico_usable())
+    assert res.status == fda.STATUS_PASS
+    assert [x["package"] for x in res.excepted] == ["picomatch"]
+    assert res.blocking == []
+    # The finding stays visible in the report; it is not dropped.
+    assert any(f["package"] == "picomatch" for f in res.findings["all"])
+    assert res.counts["all"]["high"] == 3
+
+
+@pytest.mark.parametrize("app", ["portal", "console", "web"])
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ("picomatch", "GHSA-aaaa-bbbb-cccc", "high"),  # other advisory, same pkg
+        ("micromatch", PICO_GHSA, "high"),  # same advisory, other pkg
+        ("next", "GHSA-dddd-eeee-ffff", "critical"),  # unrelated critical
+        ("zod", "GHSA-mrhx-c7xc-m3w5", "high"),  # unrelated high
+    ],
+    ids=["other-advisory", "other-package", "unrelated-critical", "unrelated-high"],
+)
+def test_unrelated_advisories_still_fail_with_picomatch_exception(app, extra):
+    res = fda.evaluate_app(app, _pico_runs(extra), _pico_usable())
+    assert res.status == fda.STATUS_FAIL
+    blocked = {(b["package"], fda.ghsa_of(b["url"])) for b in res.blocking}
+    assert blocked == {(extra[0], extra[1])}
+    assert [x["package"] for x in res.excepted] == ["picomatch"]
+
+
+def test_picomatch_exception_does_not_cover_an_unlisted_app():
+    res = fda.evaluate_app("admin", _pico_runs(), _pico_usable())
+    assert res.status == fda.STATUS_FAIL and res.excepted == []
+
+
+def test_picomatch_exception_lapses_after_expiry():
+    assert _pico_usable(PICO_EXPIRES) != []  # last valid day
+    usable, problems = fda.validate_exceptions(
+        _registry(), PICO_EXPIRES + dt.timedelta(days=1)
+    )
+    assert usable == [] and len(problems) == 3
+    assert all("expired 2026-12-17" in p for p in problems)
+    for app in ("portal", "console", "web"):
+        assert fda.evaluate_app(app, _pico_runs(), usable).status == fda.STATUS_FAIL
+
+
+@pytest.mark.parametrize(
+    "over,reason",
+    [
+        ({"approval_status": "PENDING_FOUNDER_APPROVAL"}, "approval_status"),
+        ({"approval_status": "approved"}, "approval_status"),
+        ({"approved_by": ""}, "missing fields"),
+        ({"owner": "  "}, "missing fields"),
+        ({"advisory": ""}, "missing fields"),
+        ({"runtime_exposure": ""}, "missing fields"),
+        ({"remediation_plan": ""}, "missing fields"),
+        ({"expires": "2026-11-16"}, "expired"),
+        ({"expires": "2027-03-01"}, "horizon"),
+        ({"expires": "17/12/2026"}, "invalid expires"),
+    ],
+)
+def test_altered_picomatch_record_fails_closed(over, reason):
+    records = []
+    for e in _registry()["exceptions"]:
+        bad = dict(e)
+        bad.update(over)
+        records.append(bad)
+    usable, problems = fda.validate_exceptions(
+        {"exceptions": records}, PICO_APPROVED_ON
+    )
+    assert usable == [] and len(problems) == 3
+    assert all(reason in p for p in problems)
+    for app in ("portal", "console", "web"):
+        assert fda.evaluate_app(app, _pico_runs(), usable).status == fda.STATUS_FAIL
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        None,
+        [],
+        {},
+        {"exceptions": None},
+        {"exceptions": "FE-EXC-001"},
+    ],
+    ids=["null", "list", "no-key", "null-list", "string-list"],
+)
+def test_malformed_registry_suppresses_nothing(raw):
+    usable, problems = fda.validate_exceptions(raw, PICO_APPROVED_ON)
+    assert usable == [] and problems and "malformed" in problems[0]
+    assert fda.evaluate_app("web", _pico_runs(), usable).status == fda.STATUS_FAIL
+
+
+def test_malformed_record_is_rejected_without_hiding_valid_ones():
+    records = ["picomatch", 7, *_registry()["exceptions"]]
+    usable, problems = fda.validate_exceptions(
+        {"exceptions": records}, PICO_APPROVED_ON
+    )
+    assert len(usable) == 3
+    assert problems == ["<invalid>: not an object", "<invalid>: not an object"]
+
+
+def test_unparseable_registry_file_fails_closed(tmp_path, monkeypatch):
+    bad = tmp_path / "frontend_dependency_exceptions.json"
+    bad.write_text("{not json")
+    monkeypatch.setattr(fda, "EXCEPTIONS_PATH", bad)
+    usable, problems = fda._load_exceptions(PICO_APPROVED_ON)
+    assert usable == [] and "invalid JSON" in problems[0]
+    monkeypatch.setattr(fda, "EXCEPTIONS_PATH", tmp_path / "missing.json")
+    usable, problems = fda._load_exceptions(PICO_APPROVED_ON)
+    assert usable == [] and "not found" in problems[0]
+
+
+@pytest.mark.parametrize("app", ["portal", "console", "web"])
+def test_incomplete_audit_is_never_excepted(app):
+    failed = fda.parse_audit_output("production", 1, "", "ECONNREFUSED")
+    runs = [failed, _pico_runs()[1]]
+    res = fda.evaluate_app(app, runs, _pico_usable())
+    assert res.status == fda.STATUS_UNVERIFIED
+    assert fda.overall_status([res]) == fda.STATUS_UNVERIFIED
 
 
 # --- redaction ------------------------------------------------------------
