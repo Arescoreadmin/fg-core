@@ -8912,3 +8912,24 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 1. **Portal tests.** Each now asserts the stricter contract that is actually enforced. One previous allow (unbound membership) and one previous unauthenticated 200 (engagement list) become asserted denials. REM-102's accepted codes narrow to exactly one.
 2. **Trust tests.** The legacy chain-replay tests target the function that implements them, with the same assertions, and now exercise real logic. New tests cover canonical delegation and fail-closed behavior.
 3. **No product change.** No product code, authorization function, tenant guard or gate configuration changes.
+
+## 2026-11-17 - security(deps): founder-approved exception FE-EXC-001..003 for picomatch GHSA-fc5q-39xc-vjpf
+
+**Scope:** security policy, not gate logic. Three records are added to `tools/ci/frontend_dependency_exceptions.json` (Portal, Console, Web; package `picomatch`; advisory `GHSA-fc5q-39xc-vjpf`). They were approved by `Arescoreadmin` on 2026-11-17 and expire on 2026-12-17. `tools/ci/frontend_dependency_audit.py`, the `frontend-dependency-security` workflow and `make frontend-audit` are unchanged.
+
+**Security analysis:**
+
+1. **No production exposure, verified per app.** The affected packages are dev-only: lockfile flags, `npm ls --omit=dev`, and the production server traces and Console standalone image all confirm it. The ReDoS requires an attacker-controlled glob pattern; only repository configuration supplies patterns.
+2. **Narrow suppression.** Matching requires app, package and advisory together. Every other critical or high finding, the same advisory on any other package, and any incomplete audit still fail. Regression tests prove each case, plus the expired, unapproved and malformed-record cases.
+3. **Self-expiring.** The records stop suppressing after 2026-12-17 without any further change. Renewal requires a separate founder approval.
+4. **Residual risk.** Next's vendored `picomatch` is outside `npm audit`'s view. Its runtime inputs are `next.config` image patterns, which none of the apps sets.
+
+## 2026-11-17 - ci(fg-required): harness step timeout 60 → 75 minutes, job 80 → 90 minutes
+
+**Scope:** CI configuration change in `.github/workflows/fg-required.yml`, limited to two `timeout-minutes` values. Lanes, tests, security checks, assertions, failure conditions, artifacts and evidence requirements are unchanged. `--global-budget-seconds 4400` and `--lane-timeout-seconds 2400` are unchanged.
+
+**Security analysis:**
+
+1. **No gate is weakened.** The harness still fails on any lane failure, lane timeout or exhausted budget. The step and job timeouts only stop Actions from killing the harness before its own budget applies.
+2. **Better evidence.** Previously a slow runner hit the 60-minute step limit mid-lane, and the run ended without `fg-required-summary.json`. Now the harness reaches its budget, stops lanes itself and records the outcome in its summary artifact.
+3. **Drift is enforced.** `tools/ci/check_timeout_hierarchy.py` reads the real workflow values and rejects a step timeout shorter than the global budget plus 60 seconds. It also rejects a job timeout with less than 600 seconds of overhead, and a workflow it cannot parse.

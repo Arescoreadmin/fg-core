@@ -67,7 +67,48 @@ Frontend advisories for `apps/portal`, `apps/console` and `apps/web` are gated b
 `make frontend-audit`). The machine-readable registry is
 `tools/ci/frontend_dependency_exceptions.json`.
 
-There are no active frontend exceptions; the registry is empty.
+### Active frontend exceptions
+
+#### FE-EXC-001 / FE-EXC-002 / FE-EXC-003: `picomatch` GHSA-fc5q-39xc-vjpf (Portal / Console / Web)
+
+| Field | Value |
+|---|---|
+| **Advisory** | [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) / CVE-2026-112366, high: ReDoS through single-branch repeated extglob patterns such as `+(*)` |
+| **Affected range** | `picomatch` <=4.0.7. **No patched release**: 4.0.7 (2026-08-24) is the latest. The upstream fix micromatch/picomatch#194 is open |
+| **Approved by / owner** | `Arescoreadmin` (founder / security owner), 2026-11-17 |
+| **Expires** | **2026-12-17**. Renewal requires separate founder approval; do not extend in place |
+| **Scope** | Exactly app + package `picomatch` + this advisory. Nothing else is suppressed |
+
+**Dependency paths** (every entry is `dev` in the lockfile):
+
+| App | `node_modules/picomatch` | `node_modules/tinyglobby/node_modules/picomatch` |
+|---|---|---|
+| Portal | 2.3.2, via `tailwindcss` > (`fast-glob` >) `micromatch`, and `eslint-config-next` > `@next/eslint-plugin-next` > `fast-glob` > `micromatch` | 4.0.4, via `tailwindcss` > `sucrase` > `tinyglobby` (> `fdir`), and `eslint-config-next` > `@typescript-eslint/*` and `eslint-import-resolver-typescript` > `tinyglobby` |
+| Console | 2.3.2, via `tailwindcss` > `micromatch`, `tailwindcss` > `chokidar` > `anymatch`, and `eslint-config-next` > `@next/eslint-plugin-next` > `fast-glob` > `micromatch` | 4.0.7, the same paths as Portal |
+| Web | 2.3.2, via `tailwindcss` > `micromatch`, and `tailwindcss` > `chokidar` > `anymatch` | 4.0.4, via `tailwindcss` > `sucrase` > `tinyglobby` (> `fdir`) |
+
+**Runtime exposure, verified 2026-11-17: none in production.**
+
+- `npm ls picomatch --omit=dev` is empty in all three apps.
+- No application source imports `picomatch`, `micromatch`, `minimatch`, `fast-glob`, `tinyglobby`, `anymatch`, `chokidar` or `glob`.
+- The production server traces (`.next/**/*.nft.json`, which Vercel packages) and the Console `.next/standalone` Docker image contain no copy of the affected npm packages.
+- The vulnerability needs an attacker-supplied glob **pattern**. The tools that load these copies (Tailwind, ESLint, the TypeScript resolver, the dev-server watcher) take patterns only from repository config.
+
+**Compensating controls:**
+
+- The affected code runs only during lint, build and local development, on repository-controlled patterns.
+- A pull request that changes those patterns can already run arbitrary code in its own CI job, so the advisory gives it no extra privilege.
+- Every other critical or high finding, the same advisory on any other package, and any `AUDIT_UNVERIFIED` result still fail the gate. `tests/tools/test_frontend_dependency_audit.py` proves each case.
+- Excepted findings remain listed in the audit evidence.
+
+**Residual, not covered by this exception:** Next vendors its own `next/dist/compiled/picomatch`, which `npm audit` cannot see. At runtime it compiles only `next.config` `images.remotePatterns` and `images.localPatterns`. None of the three apps configures these, and the request URL is only the matched string, never the pattern.
+
+**Remediation and removal:**
+
+1. Track micromatch/picomatch#194 and new `picomatch` releases.
+2. When a patched 4.x is published (for `tinyglobby`), and a patched 2.x or a `micromatch`/`anymatch` release that leaves 2.x is published, update the lockfiles.
+3. Confirm `make frontend-audit` passes with the records removed, and delete all three records in the same PR.
+4. If nothing is patched by 2026-12-17, the gate blocks again automatically.
 
 An entry suppresses a blocking (critical/high) advisory only when **all** hold:
 
@@ -93,4 +134,4 @@ An audit that cannot run (registry unreachable, malformed output, timeout) is
   flag(s) in `Makefile` in the same commit.
 - **Review:** any dependency PR must check whether active exceptions can be closed.
 
-_Last updated: 2026-10-28_
+_Last updated: 2026-11-17_

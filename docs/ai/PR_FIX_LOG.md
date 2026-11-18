@@ -1,3 +1,52 @@
+## ci(fg-required): align harness step and job timeouts with the 4400s harness budget
+
+- **Failure:** the first `fg-required` run on each of the last three PRs failed without a test failure.
+  - #893: `fg-security` lane at its 2400s lane limit.
+  - #894 and #899: "The action 'Run fg-required harness' has timed out after 60 minutes".
+
+  When the step limit fires, Actions kills the harness mid-lane, so `fg-required-summary.json` is never written for that run.
+- **Root cause:** the harness step `timeout-minutes: 60` (3600s) was shorter than the harness's own `--global-budget-seconds 4400`. The harness could never reach the budget that is meant to stop its lanes and record the outcome. `tools/ci/check_timeout_hierarchy.py` did not catch it because it compared hard-coded stale constants (lane 1500s, budget 2800s, step 60 min) instead of the workflow's real values.
+- **Change:**
+  - `.github/workflows/fg-required.yml`: job `timeout-minutes` 80 → 90, and harness step 60 → 75.
+  - `--global-budget-seconds 4400` and `--lane-timeout-seconds 2400` are unchanged, as are all lanes, tests, checks, artifacts and evidence steps.
+  - `_validate_fg_required_hierarchy` now reads the job timeout, step timeout and both harness flags from the workflow file. It enforces lane timeout ≤ global budget, step timeout ≥ budget + 60s, and job timeout ≥ step timeout + 600s. An unreadable workflow fails closed.
+- **Headroom:** the step allows 4500s against the 4400s budget, so the harness keeps about 100s to stop lanes and write its summary. The job allows 5400s, leaving 900s beyond the step for setup and post-steps, which took 60–80s in observed runs (#894 and #899 jobs).
+- **Tests:** `tests/tools/test_fg_required_timeout_alignment.py` is new. It pins the approved values and rejects:
+  - the previous 60/80 configuration;
+  - a step below or inside the budget headroom;
+  - a raised budget without a matching step;
+  - insufficient job overhead;
+  - a lane timeout above the budget;
+  - a workflow missing its timeouts, budget flag or step name.
+
+  The existing `test_timeout_hierarchy_validator_passes` now runs against the real values.
+- **Out of scope:** parallelising `tests/security` and the Hardening Gates workload is a separate follow-up. The fg-security section of the validator still compares against a hard-coded 2800s value, and that is left for the same follow-up.
+
+## security(deps): time-boxed exception for picomatch GHSA-fc5q-39xc-vjpf (FE-EXC-001..003)
+
+- **Trigger:** GHSA-fc5q-39xc-vjpf / CVE-2026-112366 (`picomatch` <=4.0.7, high ReDoS) entered npm audit data on 2026-11-17. The fail-closed `make frontend-audit` gate began failing for Portal, Console and Web on `main` (push run at 17:39 UTC; the 16:09 scheduled run had passed). No patched release exists: 4.0.7 is the latest, and upstream fix micromatch/picomatch#194 is open and unmerged.
+- **Approval:** founder/security owner `Arescoreadmin`, 2026-11-17, expiring 2026-12-17. Renewal requires separate founder approval.
+- **Exposure verification (all three apps):**
+  - Every `picomatch` lockfile entry is flagged `dev`. They are reached only from the `tailwindcss` and `eslint-config-next` dev roots (Web: `tailwindcss` only).
+  - `npm ls picomatch --omit=dev` is empty.
+  - No application source imports any glob library.
+  - The production server traces (`.nft.json`) and the Console `.next/standalone` image contain no copy of the affected npm packages.
+  - The trigger is an attacker-supplied glob **pattern**. Only repository config supplies patterns to these tools.
+- **Residual, outside this exception:** Next vendors its own `next/dist/compiled/picomatch`, which `npm audit` does not see. At runtime it is used only by `next/image` remote and local pattern matching, with patterns taken from `next.config`. None of the three apps configures image patterns, and request URLs are only the matched string.
+- **Change:** three APPROVED records in `tools/ci/frontend_dependency_exceptions.json`, one per app. Each is limited to package `picomatch` and advisory `GHSA-fc5q-39xc-vjpf`. Gate code and workflow are unchanged. Excepted findings stay listed in the audit evidence.
+- **Tests:** `tests/tools/test_frontend_dependency_audit.py` replaces the empty-registry assertion with a test pinning exactly these three records. It adds fail-closed tests for:
+  - other advisories on `picomatch`;
+  - the same advisory on other packages;
+  - unrelated critical and high findings;
+  - an unlisted app;
+  - expiry (day after 2026-12-17);
+  - altered, unapproved and malformed records;
+  - an unparseable or missing registry;
+  - incomplete audits (`AUDIT_UNVERIFIED`).
+
+  65 passed. Mutation checks confirm that weakening the match to package-only or advisory-only fails the new tests.
+- **Removal:** delete the three records in the PR that adopts a patched `picomatch` (4.x and 2.x lines, or `micromatch`/`anymatch` releases that move off 2.x), once `make frontend-audit` passes without them.
+
 ## fix(tests): repair 8 stale tests found by the strict full-suite gate (dependency consolidation branch)
 
 - **Found by:** strict `bash codex_gates.sh` on `92acf8b9a`: 8 failed, 25,518 passed and 117 skipped, exit 1. The same 8 fail on `main` (`0cf8955e`) with `main`'s own environment, so they are pre-existing. None is in the `fg-fast-ci` or `fg-security` lanes, which is why CI stayed green.
