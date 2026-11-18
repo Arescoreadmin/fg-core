@@ -1,3 +1,10 @@
+## fix(msgraph): CA-001 recognises Graph's block-policy shape
+
+- **Failure:** the Microsoft Graph connector reported CA-001 "No policy blocking legacy authentication protocols" (critical) for a tenant with an enabled legacy-auth block policy. The report's top remediation told the customer to create a policy they already had, and the Entra governance connector reported the same tenant correctly, so one report contradicted itself. Found while generating a synthetic prospect sample through the real pipeline.
+- **Root cause:** `_policy_blocks_legacy_auth` (`services/connectors/msgraph/analyzers/conditional_access.py`) treated a policy as a block when `grantControls.operator` was null or `builtInControls` was empty. Microsoft Graph represents a block policy as `{"operator": "OR", "builtInControls": ["block"]}`, so real block policies never matched. It also counted a legacy-scoped policy with no grant controls (e.g. session-only) as a block.
+- **Change:** a policy blocks legacy auth only when `"block"` is in `builtInControls`, the same rule the Entra governance connector already uses. Only enabled policies count, as before.
+- **Tests:** `test_legacy_auth_block_detected` used `grantControls: None` as its block fixture, a shape Graph never returns; it now uses the real Graph shape and also asserts CA-001 is absent. New: an MFA-grant legacy policy is not a block; a session-only legacy policy is not a block; a report-only block policy is not enforced. Against the old code, two of these fail.
+
 ## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
 
 - **Failure:** after #896 (pytest 9.2.0, pytest-asyncio 1.5.0), `pytest` aborted collection in environments that still had anyio 4.14.2: `PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec`, raised from `anyio/pytest_plugin.py`. `pytest.ini` sets `filterwarnings = error`, so the deprecation became a plugin-load error and no tests ran.
