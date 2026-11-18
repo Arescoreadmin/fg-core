@@ -17,7 +17,10 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    # Job 90 min = harness step (75 min) + up to 15 min for setup, artifact
+    # collection, upload and teardown (observed ~1-2 min). See
+    # tools/ci/check_timeout_hierarchy.py, which enforces this ordering.
+    timeout-minutes: 90
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -117,7 +120,11 @@ jobs:
 
       - name: Run fg-required harness
         id: fg_required
-        timeout-minutes: 60
+        # Must exceed --global-budget-seconds (4400s = 73.3 min) so the harness
+        # reaches its own budget, stops lanes cleanly and writes its summary
+        # artifacts. A 60-min step (3600s) killed the harness mid-lane before
+        # the budget applied (#893, #894, #899).
+        timeout-minutes: 75
         shell: bash
         run: |
           set -euo pipefail
