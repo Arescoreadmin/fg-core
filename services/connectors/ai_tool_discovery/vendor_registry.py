@@ -96,7 +96,7 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         "Gemini",
         ("google.com", "gemini.google.com", "ai.google"),
         ("google", "google llc", "google cloud"),
-        ("gemini", "google gemini", "bard"),
+        ("gemini", "google gemini", "bard", "google workspace ai"),
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),

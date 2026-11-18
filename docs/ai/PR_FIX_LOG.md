@@ -1,3 +1,11 @@
+## fix(ai-discovery): preserve explicit Google Workspace AI detection (PR #903 review)
+
+- **Failure:** the multi-product publisher guard rejected `Google Workspace AI` from `Google LLC`, including the principal ID fixture already in the Graph vendor database. The discovery runner then omitted the tool and its permission exposure.
+- **Repair:** add the explicit `google workspace ai` display-name alias to Google's existing signature. Keep `publisher_implies_ai=False`; do not treat a Google publisher, generic Workspace name, domain or fuzzy match alone as AI evidence. No application-ID trust is added.
+- **Regression proof:** three new focused cases failed before the repair: matching with and without the legacy database app ID, and runner discovery retaining tenant-wide `Files.Read.All` / `offline_access` exposure. The positive-product matrix also includes Workspace AI, and generic Google Workspace joins the non-AI negative cases.
+- **Scope:** REPAIR, same registry and existing scan pipeline; no authorization, tenant, schema, dependency or release-gate changes.
+- **Validation:** discovery precision and runner suites: 41 passed; Ruff lint and formatting checked.
+
 ## fix(ai-discovery): no AI label from a multi-product vendor's name alone; detect meeting note-takers
 
 - **Failure:** on a synthetic 348-employee Microsoft 365 tenant, AI tool discovery reported 139 AI tools: 130 Microsoft first-party service principals as "Microsoft Copilot (suspected)", the Salesforce app as "Salesforce AI", and so on. AI data-access mapping inherited the inflated list. An AI meeting note-taker with calendar and meeting scopes (11 users) was not detected by either AI discovery or the Microsoft Graph `ai_signals` analyzer.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from services.connectors.ai_tool_discovery import runner
 from services.connectors.ai_tool_discovery.vendor_registry import match_ai_vendor
 from services.connectors.msgraph.analyzers.ai_signals import _is_ai_app, _load_vendor_db
 
@@ -22,6 +23,7 @@ from services.connectors.msgraph.analyzers.ai_signals import _is_ai_app, _load_v
         ("Notion", "Notion Labs"),
         ("Canva", "Canva Pty Ltd"),
         ("Google Drive", "Google LLC"),
+        ("Google Workspace", "Google LLC"),
         ("GitHub", "GitHub, Inc."),
         # Substring traps for the new meeting-assistant names.
         ("Potter Logistics Portal", "Potter Freight"),
@@ -44,6 +46,7 @@ def test_multi_product_vendor_name_alone_is_not_ai(display_name, publisher) -> N
         ("Now Assist", "ServiceNow", "ServiceNow AI"),
         ("Notion AI", "Notion Labs", "Notion AI"),
         ("Gemini", "Google LLC", "Gemini"),
+        ("Google Workspace AI", "Google LLC", "Gemini"),
         ("GitHub Copilot", "GitHub, Inc.", "GitHub Copilot"),
     ],
 )
@@ -52,6 +55,65 @@ def test_ai_products_of_multi_product_vendors_still_match(
 ) -> None:
     match = match_ai_vendor(display_name=display_name, publisher=publisher, app_id=None)
     assert match is not None and match["product_name"] == product
+
+
+@pytest.mark.parametrize("app_id", [None, "1fec8e78-bce4-4aaf-ab1b-5451cc387264"])
+def test_google_workspace_ai_has_explicit_product_evidence(app_id) -> None:
+    match = match_ai_vendor(
+        display_name="Google Workspace AI", publisher="Google LLC", app_id=app_id
+    )
+    assert match is not None
+    assert match["vendor_name"] == "Google"
+    assert "display_name" in match["match_reasons"]
+    assert match["signature"]["publisher_implies_ai"] is False
+
+
+def test_runner_preserves_google_ai_permission_exposure(monkeypatch) -> None:
+    def fake_get_all(access_token, path, params=None):
+        rows = {
+            "/applications": [],
+            "/servicePrincipals": [
+                {
+                    "id": "sp-google-ai",
+                    "appId": "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+                    "displayName": "Google Workspace AI",
+                    "publisherName": "Google LLC",
+                },
+                {
+                    "id": "sp-google-drive",
+                    "appId": "non-ai-google-app",
+                    "displayName": "Google Drive",
+                    "publisherName": "Google LLC",
+                },
+            ],
+            "/oauth2PermissionGrants": [
+                {
+                    "clientId": "sp-google-ai",
+                    "scope": "Files.Read.All offline_access",
+                    "consentType": "AllPrincipals",
+                }
+            ],
+            "/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')/appRoleAssignedTo": [],
+            "/auditLogs/signIns": [],
+            "/auditLogs/directoryAudits": [],
+        }[path]
+        return rows, {"status": "collected", "count": len(rows), "path": path}
+
+    monkeypatch.setattr(runner, "_get_all", fake_get_all)
+    result = runner.run_ai_tool_discovery(
+        access_token="synthetic-token",
+        tenant_id="test-tenant",
+        engagement_id="test-eng",
+    )
+    assert result["summary"]["total_tools"] == 1
+    tool = result["tools"][0]
+    assert tool["service_principal_id"] == "sp-google-ai"
+    assert tool["vendor"] == "Google"
+    assert tool["delegated_permissions"] == ["Files.Read.All", "offline_access"]
+    assert tool["admin_consent"] is True
+    assert {"files_read_all", "sensitive_permissions", "tenant_wide_access"} <= set(
+        tool["risk_indicators"]
+    )
 
 
 def test_ai_only_vendor_publisher_still_matches_alone() -> None:
