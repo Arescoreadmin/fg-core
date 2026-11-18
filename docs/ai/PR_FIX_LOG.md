@@ -1,3 +1,16 @@
+## fix(ai-discovery): no AI label from a multi-product vendor's name alone; detect meeting note-takers
+
+- **Failure:** on a synthetic 348-employee Microsoft 365 tenant, AI tool discovery reported 139 AI tools: 130 Microsoft first-party service principals as "Microsoft Copilot (suspected)", the Salesforce app as "Salesforce AI", and so on. AI data-access mapping inherited the inflated list. An AI meeting note-taker with calendar and meeting scopes (11 users) was not detected by either AI discovery or the Microsoft Graph `ai_signals` analyzer.
+- **Root cause:** `match_ai_vendor` (`services/connectors/ai_tool_discovery/vendor_registry.py`) returns a match on any positive score, so a publisher match (35) alone was enough, and publisher "Microsoft Corporation" matched the Copilot signature. "Salesforce" fuzzy-matches "salesforce ai" (ratio 0.87 >= 0.82). Notion, Canva and ServiceNow listed their bare brand name as an AI product name. The registry and `msgraph/vendor_db/ai_vendors.json` had no meeting-assistant entries.
+- **Change:**
+  - `AiVendorSignature.publisher_implies_ai` (default `True`). Set `False` for Microsoft, Google, GitHub, Notion, Canva, Salesforce and ServiceNow: for these a match now needs a known app id or a product display name; publisher, domain or fuzzy name alone no longer match. AI-only vendors (OpenAI, Anthropic, Perplexity, ...) are unchanged.
+  - Removed the bare brand names "notion", "canva" and "servicenow" from those vendors' AI product names; added "microsoft 365 copilot" to Microsoft Copilot's names so the real product still matches.
+  - New signatures: Otter.ai, Fireflies.ai, Read AI, Fathom, and an unattributed "AI meeting assistant" signature for note-taker wording.
+  - `msgraph/vendor_db/ai_vendors.json`: meeting-assistant display-name patterns.
+  - `signature.to_dict()` gains `publisher_implies_ai` (additive).
+- **Tests:** `tests/test_ai_vendor_matching_precision.py`, 26 cases. 16 fail on the old code. 452 tests across `tests/connectors/msgraph` and every AI discovery/mapping/signal test pass. End-to-end on the synthetic tenant: 139 -> 7 discovered tools; note-taker detected.
+- **Not changed:** a third-party wrapper whose name contains "ChatGPT" is still attributed to OpenAI; vendor attribution for wrappers is a separate fix.
+
 ## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
 
 - **Failure:** after #896 (pytest 9.2.0, pytest-asyncio 1.5.0), `pytest` aborted collection in environments that still had anyio 4.14.2: `PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec`, raised from `anyio/pytest_plugin.py`. `pytest.ini` sets `filterwarnings = error`, so the deprecation became a plugin-load error and no tests ran.

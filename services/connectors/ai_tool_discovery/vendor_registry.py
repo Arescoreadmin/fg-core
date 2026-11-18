@@ -21,6 +21,10 @@ class AiVendorSignature:
     known_app_ids: tuple[str, ...]
     risk_tags: tuple[str, ...]
     confidence_hints: tuple[str, ...]
+    # False for vendors that also sell non-AI products (Microsoft, Google,
+    # Salesforce, ...): publisher, domain or a fuzzy name alone is then not AI
+    # evidence, and a known app id or product display name is required.
+    publisher_implies_ai: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +36,7 @@ class AiVendorSignature:
             "known_app_ids": list(self.known_app_ids),
             "risk_tags": list(self.risk_tags),
             "confidence_hints": list(self.confidence_hints),
+            "publisher_implies_ai": self.publisher_implies_ai,
         }
 
 
@@ -55,10 +60,16 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         "Microsoft Copilot",
         ("microsoft.com", "copilot.microsoft.com", "graph.microsoft.com"),
         ("microsoft", "microsoft corporation"),
-        ("microsoft copilot", "copilot for microsoft 365", "m365 copilot"),
+        (
+            "microsoft copilot",
+            "microsoft 365 copilot",
+            "copilot for microsoft 365",
+            "m365 copilot",
+        ),
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "OpenAI",
@@ -89,6 +100,7 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "Perplexity",
@@ -119,16 +131,18 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "Notion",
         "Notion AI",
         ("notion.so", "notion.com"),
         ("notion", "notion labs"),
-        ("notion ai", "notion"),
+        ("notion ai",),
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "Grammarly",
@@ -145,10 +159,11 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         "Canva AI",
         ("canva.com",),
         ("canva", "canva pty ltd"),
-        ("canva", "canva ai", "magic studio"),
+        ("canva ai", "magic studio"),
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "Salesforce",
@@ -159,16 +174,71 @@ AI_VENDOR_SIGNATURES: tuple[AiVendorSignature, ...] = (
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
     ),
     AiVendorSignature(
         "ServiceNow",
         "ServiceNow AI",
         ("servicenow.com",),
         ("servicenow", "service-now.com"),
-        ("servicenow ai", "now assist", "servicenow"),
+        ("servicenow ai", "now assist"),
         (),
         ("ai_vendor_detected",),
         ("publisher", "display_name", "domain"),
+        publisher_implies_ai=False,
+    ),
+    # AI meeting assistants: record and transcribe meetings, usually
+    # user-consented with calendar/meeting scopes.
+    AiVendorSignature(
+        "Otter.ai",
+        "Otter.ai",
+        ("otter.ai",),
+        ("otter.ai", "aisense"),
+        ("otter.ai", "otter ai", "otter assistant"),
+        (),
+        ("ai_vendor_detected",),
+        ("publisher", "display_name", "domain"),
+    ),
+    AiVendorSignature(
+        "Fireflies.ai",
+        "Fireflies.ai",
+        ("fireflies.ai",),
+        ("fireflies.ai", "fireflies"),
+        ("fireflies.ai", "fireflies ai", "fireflies notetaker"),
+        (),
+        ("ai_vendor_detected",),
+        ("publisher", "display_name", "domain"),
+    ),
+    AiVendorSignature(
+        "Read AI",
+        "Read AI",
+        ("read.ai",),
+        ("read ai", "read.ai"),
+        ("read.ai", "read ai meeting"),
+        (),
+        ("ai_vendor_detected",),
+        ("publisher", "display_name", "domain"),
+    ),
+    AiVendorSignature(
+        "Fathom",
+        "Fathom AI Notetaker",
+        ("fathom.video",),
+        ("fathom video", "fathom.video"),
+        ("fathom notetaker", "fathom ai notetaker", "fathom.video"),
+        (),
+        ("ai_vendor_detected",),
+        ("publisher", "display_name", "domain"),
+    ),
+    # Unattributed meeting recorders identified by product wording only.
+    AiVendorSignature(
+        "Unattributed",
+        "AI meeting assistant",
+        (),
+        (),
+        ("notetaker", "note taker", "ai meeting assistant", "meeting transcription"),
+        (),
+        ("ai_vendor_detected",),
+        ("display_name",),
     ),
 )
 
@@ -220,6 +290,10 @@ def match_ai_vendor(
                 score += 30
                 reasons.append("domain")
                 break
+        if not signature.publisher_implies_ai and not {"app_id", "display_name"} & set(
+            reasons
+        ):
+            continue
         if score and (best is None or score > best[0]):
             best = (score, sorted(set(reasons)), signature)
     if best is None:
