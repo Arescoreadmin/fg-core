@@ -1,7 +1,7 @@
 # Shared platform dependencies — single source of truth for packages common
 # to frostgate-core and admin_gateway. Update here; service-specific
 # additions belong in requirements.txt or admin_gateway/requirements.txt.
-fastapi==0.162.7
+fastapi==0.136.3
 starlette==1.10.0
 uvicorn[standard]==0.54.0
 pydantic==2.14.3
