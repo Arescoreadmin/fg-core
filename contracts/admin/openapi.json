@@ -349,6 +349,7 @@
             "additionalProperties": true,
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -410,6 +411,7 @@
             "additionalProperties": true,
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -1235,6 +1237,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Search Audit Events Admin Audit Search Get",
                   "type": "object"
                 }
@@ -1332,6 +1335,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Keys Admin Keys Get",
                   "type": "object"
                 }
@@ -1373,6 +1377,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Key Admin Keys Post",
                   "type": "object"
                 }
@@ -1428,6 +1433,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Revoke Key Admin Keys  Prefix  Revoke Post",
                   "type": "object"
                 }
@@ -1493,6 +1499,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Rotate Key Admin Keys  Prefix  Rotate Post",
                   "type": "object"
                 }
@@ -1747,6 +1754,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Scopes Admin Scopes Get",
                   "type": "object"
                 }
@@ -1770,6 +1778,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tenants Admin Tenants Get",
                   "type": "object"
                 }
@@ -1801,6 +1810,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Tenant Admin Tenants Post",
                   "type": "object"
                 }
@@ -1845,6 +1855,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tenant Admin Tenants  Tenant Id  Get",
                   "type": "object"
                 }
@@ -1889,6 +1900,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Usage Admin Tenants  Tenant Id  Usage Get",
                   "type": "object"
                 }
@@ -1939,6 +1951,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dashboard Api V1 Dashboard Get",
                   "type": "object"
                 }
@@ -1986,6 +1999,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Keys Api V1 Keys Get",
                   "type": "object"
                 }
@@ -2025,6 +2039,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Product Api V1 Products Post",
                   "type": "object"
                 }
@@ -2054,6 +2069,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tenants Api V1 Tenants Get",
                   "type": "object"
                 }
@@ -2483,6 +2499,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -2591,6 +2608,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Callback Identity Invitations  Invitation Id  Callback Post",
                   "type": "object"
                 }
@@ -2643,6 +2661,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Invitation Requirements Identity Invitations  Invitation Id  Requirements Get",
                   "type": "object"
                 }
@@ -2705,6 +2724,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Start Auth Identity Invitations  Invitation Id  Start Auth Post",
                   "type": "object"
                 }
@@ -2738,6 +2758,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Identity Provider Callback Identity Provider Callback Get",
                   "type": "object"
                 }
@@ -2760,6 +2781,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Current Session Identity Session Current Get",
                   "type": "object"
                 }
@@ -2801,6 +2823,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Version Version Get",
                   "type": "object"
                 }

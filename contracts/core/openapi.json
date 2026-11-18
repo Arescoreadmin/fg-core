@@ -1126,6 +1126,7 @@
             "type": "string"
           },
           "summary": {
+            "additionalProperties": true,
             "title": "Summary",
             "type": "object"
           },
@@ -1306,6 +1307,7 @@
             "type": "integer"
           },
           "summary": {
+            "additionalProperties": true,
             "title": "Summary",
             "type": "object"
           },
@@ -1920,6 +1922,7 @@
             "type": "string"
           },
           "summary": {
+            "additionalProperties": true,
             "title": "Summary",
             "type": "object"
           }
@@ -3001,6 +3004,7 @@
           "new_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3012,6 +3016,7 @@
           "old_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3750,6 +3755,7 @@
             "type": "string"
           },
           "assessment_metadata": {
+            "additionalProperties": true,
             "title": "Assessment Metadata",
             "type": "object"
           },
@@ -3860,6 +3866,7 @@
             "type": "string"
           },
           "evaluation_metadata": {
+            "additionalProperties": true,
             "title": "Evaluation Metadata",
             "type": "object"
           },
@@ -3901,6 +3908,7 @@
             "type": "string"
           },
           "scoring_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Metadata",
             "type": "object"
           },
@@ -4114,6 +4122,7 @@
             "title": "Last Attested At"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -4250,6 +4259,7 @@
             "type": "string"
           },
           "version_payload": {
+            "additionalProperties": true,
             "title": "Version Payload",
             "type": "object"
           },
@@ -4554,14 +4564,17 @@
             "title": "Evidence Classification"
           },
           "evidence_integrity_metadata": {
+            "additionalProperties": true,
             "title": "Evidence Integrity Metadata",
             "type": "object"
           },
           "evidence_ownership_metadata": {
+            "additionalProperties": true,
             "title": "Evidence Ownership Metadata",
             "type": "object"
           },
           "evidence_source_metadata": {
+            "additionalProperties": true,
             "title": "Evidence Source Metadata",
             "type": "object"
           },
@@ -4852,6 +4865,7 @@
           },
           "errors": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Errors",
@@ -5002,6 +5016,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -5082,6 +5097,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -5848,6 +5864,7 @@
           },
           "playbook_statistics": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Playbook Statistics",
@@ -6070,6 +6087,7 @@
             "title": "Average Priority Score"
           },
           "bridge_priority_stats": {
+            "additionalProperties": true,
             "title": "Bridge Priority Stats",
             "type": "object"
           },
@@ -6078,10 +6096,12 @@
             "type": "string"
           },
           "confidence_distribution": {
+            "additionalProperties": true,
             "title": "Confidence Distribution",
             "type": "object"
           },
           "control_priority_stats": {
+            "additionalProperties": true,
             "title": "Control Priority Stats",
             "type": "object"
           },
@@ -6094,10 +6114,12 @@
             "type": "string"
           },
           "recommendation_ranking_stats": {
+            "additionalProperties": true,
             "title": "Recommendation Ranking Stats",
             "type": "object"
           },
           "remediation_priority_stats": {
+            "additionalProperties": true,
             "title": "Remediation Priority Stats",
             "type": "object"
           },
@@ -6496,6 +6518,7 @@
             "$ref": "#/components/schemas/ObservationSeverity"
           },
           "structured_evidence": {
+            "additionalProperties": true,
             "title": "Structured Evidence",
             "type": "object"
           },
@@ -6927,6 +6950,7 @@
           "context": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7024,6 +7048,7 @@
         "additionalProperties": false,
         "properties": {
           "change_data": {
+            "additionalProperties": true,
             "title": "Change Data",
             "type": "object"
           },
@@ -7213,6 +7238,7 @@
             "type": "string"
           },
           "result": {
+            "additionalProperties": true,
             "title": "Result",
             "type": "object"
           },
@@ -7523,6 +7549,7 @@
             "title": "Engagement Id"
           },
           "validation_results": {
+            "additionalProperties": true,
             "title": "Validation Results",
             "type": "object"
           }
@@ -7642,6 +7669,7 @@
             "type": "object"
           },
           "evidence_data": {
+            "additionalProperties": true,
             "title": "Evidence Data",
             "type": "object"
           },
@@ -7686,10 +7714,12 @@
         "additionalProperties": false,
         "properties": {
           "period_a": {
+            "additionalProperties": true,
             "title": "Period A",
             "type": "object"
           },
           "period_b": {
+            "additionalProperties": true,
             "title": "Period B",
             "type": "object"
           },
@@ -7763,6 +7793,7 @@
             "type": "string"
           },
           "factors": {
+            "additionalProperties": true,
             "title": "Factors",
             "type": "object"
           },
@@ -7875,6 +7906,7 @@
       "ConfigWriteRequest": {
         "properties": {
           "config_payload": {
+            "additionalProperties": true,
             "title": "Config Payload",
             "type": "object"
           },
@@ -7940,9 +7972,6 @@
           },
           "connector_type": {
             "const": "microsoft_graph",
-            "enum": [
-              "microsoft_graph"
-            ],
             "title": "Connector Type",
             "type": "string"
           },
@@ -7952,6 +7981,7 @@
             "type": "string"
           },
           "scan_result": {
+            "additionalProperties": true,
             "title": "Scan Result",
             "type": "object"
           }
@@ -8316,6 +8346,7 @@
             "title": "Notes"
           },
           "sku_metadata": {
+            "additionalProperties": true,
             "title": "Sku Metadata",
             "type": "object"
           },
@@ -8407,6 +8438,7 @@
           "new_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -8418,6 +8450,7 @@
           "old_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -9310,10 +9343,12 @@
             "type": "string"
           },
           "new_state": {
+            "additionalProperties": true,
             "title": "New State",
             "type": "object"
           },
           "old_state": {
+            "additionalProperties": true,
             "title": "Old State",
             "type": "object"
           },
@@ -9981,6 +10016,7 @@
         "additionalProperties": false,
         "properties": {
           "baseline_data": {
+            "additionalProperties": true,
             "title": "Baseline Data",
             "type": "object"
           },
@@ -9993,12 +10029,14 @@
             "type": "string"
           },
           "parameters": {
+            "additionalProperties": true,
             "title": "Parameters",
             "type": "object"
           },
           "result": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -10475,6 +10513,7 @@
             "title": "Assessment Description"
           },
           "assessment_metadata": {
+            "additionalProperties": true,
             "title": "Assessment Metadata",
             "type": "object"
           },
@@ -10555,6 +10594,7 @@
             "title": "External Id"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -10658,6 +10698,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -10700,6 +10741,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -10794,6 +10836,7 @@
         "additionalProperties": false,
         "properties": {
           "change_data": {
+            "additionalProperties": true,
             "title": "Change Data",
             "type": "object"
           },
@@ -10862,6 +10905,7 @@
             "title": "Notes"
           },
           "sku_metadata": {
+            "additionalProperties": true,
             "title": "Sku Metadata",
             "type": "object"
           },
@@ -10955,10 +10999,12 @@
         "additionalProperties": false,
         "properties": {
           "baseline": {
+            "additionalProperties": true,
             "title": "Baseline",
             "type": "object"
           },
           "parameters": {
+            "additionalProperties": true,
             "title": "Parameters",
             "type": "object"
           },
@@ -11019,6 +11065,7 @@
             "title": "Artifact Hash"
           },
           "deployment_metadata": {
+            "additionalProperties": true,
             "title": "Deployment Metadata",
             "type": "object"
           },
@@ -11082,6 +11129,7 @@
             "type": "string"
           },
           "domain_metadata": {
+            "additionalProperties": true,
             "title": "Domain Metadata",
             "type": "object"
           },
@@ -11119,6 +11167,7 @@
             "type": "string"
           },
           "maturity_applicability": {
+            "additionalProperties": true,
             "title": "Maturity Applicability",
             "type": "object"
           }
@@ -11196,6 +11245,7 @@
             "type": "string"
           },
           "engagement_metadata": {
+            "additionalProperties": true,
             "title": "Engagement Metadata",
             "type": "object"
           },
@@ -11230,6 +11280,7 @@
             "$ref": "#/components/schemas/EvidenceLinkType"
           },
           "link_metadata": {
+            "additionalProperties": true,
             "title": "Link Metadata",
             "type": "object"
           },
@@ -11291,6 +11342,7 @@
           },
           "risk_factors": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Risk Factors",
@@ -11436,6 +11488,7 @@
         "additionalProperties": false,
         "properties": {
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -11451,6 +11504,7 @@
             "title": "Framework Description"
           },
           "framework_metadata": {
+            "additionalProperties": true,
             "title": "Framework Metadata",
             "type": "object"
           },
@@ -11485,6 +11539,7 @@
         "additionalProperties": false,
         "properties": {
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -11852,6 +11907,7 @@
             "type": "string"
           },
           "policy_data": {
+            "additionalProperties": true,
             "title": "Policy Data",
             "type": "object"
           },
@@ -11996,6 +12052,7 @@
             "type": "string"
           },
           "tier_metadata": {
+            "additionalProperties": true,
             "title": "Tier Metadata",
             "type": "object"
           },
@@ -12044,6 +12101,7 @@
             "title": "Idempotency Key"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -12225,6 +12283,7 @@
             "type": "string"
           },
           "playbook_data": {
+            "additionalProperties": true,
             "title": "Playbook Data",
             "type": "object"
           },
@@ -12278,6 +12337,7 @@
             "type": "string"
           },
           "data": {
+            "additionalProperties": true,
             "title": "Data",
             "type": "object"
           },
@@ -12360,6 +12420,7 @@
             "type": "boolean"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -12390,6 +12451,7 @@
         "additionalProperties": false,
         "properties": {
           "evidence_snapshot": {
+            "additionalProperties": true,
             "title": "Evidence Snapshot",
             "type": "object"
           },
@@ -12398,10 +12460,12 @@
             "type": "string"
           },
           "time_window": {
+            "additionalProperties": true,
             "title": "Time Window",
             "type": "object"
           },
           "transparency_snapshot": {
+            "additionalProperties": true,
             "title": "Transparency Snapshot",
             "type": "object"
           },
@@ -12710,6 +12774,7 @@
         "additionalProperties": false,
         "properties": {
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -12718,10 +12783,12 @@
             "type": "string"
           },
           "normalization_metadata": {
+            "additionalProperties": true,
             "title": "Normalization Metadata",
             "type": "object"
           },
           "scoring_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Metadata",
             "type": "object"
           },
@@ -12732,6 +12799,7 @@
             "type": "string"
           },
           "weighting_metadata": {
+            "additionalProperties": true,
             "title": "Weighting Metadata",
             "type": "object"
           }
@@ -12841,6 +12909,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -12990,6 +13059,7 @@
         "additionalProperties": false,
         "properties": {
           "context": {
+            "additionalProperties": true,
             "title": "Context",
             "type": "object"
           },
@@ -13073,6 +13143,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -13182,6 +13253,7 @@
         "properties": {
           "approved_targets": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "maxItems": 256,
@@ -13578,9 +13650,6 @@
           "schema_version": {
             "const": "v1",
             "default": "v1",
-            "enum": [
-              "v1"
-            ],
             "title": "Schema Version",
             "type": "string"
           },
@@ -14134,6 +14203,7 @@
             "title": "Fingerprint Hash"
           },
           "labels": {
+            "additionalProperties": true,
             "title": "Labels",
             "type": "object"
           },
@@ -14459,6 +14529,7 @@
             "type": "string"
           },
           "domain_metadata": {
+            "additionalProperties": true,
             "title": "Domain Metadata",
             "type": "object"
           },
@@ -14490,6 +14561,7 @@
             "type": "string"
           },
           "maturity_applicability": {
+            "additionalProperties": true,
             "title": "Maturity Applicability",
             "type": "object"
           },
@@ -14798,6 +14870,7 @@
           },
           "domain_subscores": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Domain Subscores",
@@ -14944,6 +15017,7 @@
             "title": "Engagement Id"
           },
           "properties": {
+            "additionalProperties": true,
             "title": "Properties",
             "type": "object"
           },
@@ -15167,6 +15241,7 @@
           "report_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -15271,6 +15346,7 @@
             "type": "string"
           },
           "engagement_metadata": {
+            "additionalProperties": true,
             "title": "Engagement Metadata",
             "type": "object"
           },
@@ -15577,6 +15653,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -15781,6 +15858,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -15927,6 +16005,7 @@
             "type": "string"
           },
           "event_metadata": {
+            "additionalProperties": true,
             "title": "Event Metadata",
             "type": "object"
           },
@@ -16040,6 +16119,7 @@
             "type": "array"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -16361,6 +16441,7 @@
           },
           "impact_chain": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Impact Chain",
@@ -16420,6 +16501,7 @@
             "type": "string"
           },
           "link_metadata": {
+            "additionalProperties": true,
             "title": "Link Metadata",
             "type": "object"
           },
@@ -16544,6 +16626,7 @@
             "type": "string"
           },
           "matrix_data": {
+            "additionalProperties": true,
             "title": "Matrix Data",
             "type": "object"
           },
@@ -16818,6 +16901,7 @@
             "type": "string"
           },
           "evidence_source_metadata": {
+            "additionalProperties": true,
             "title": "Evidence Source Metadata",
             "type": "object"
           },
@@ -16923,6 +17007,7 @@
             "type": "string"
           },
           "link_metadata": {
+            "additionalProperties": true,
             "title": "Link Metadata",
             "type": "object"
           },
@@ -17016,6 +17101,7 @@
             "type": "string"
           },
           "summary_json": {
+            "additionalProperties": true,
             "title": "Summary Json",
             "type": "object"
           }
@@ -17641,6 +17727,7 @@
       "EvidenceVerifyRequest": {
         "properties": {
           "bundle": {
+            "additionalProperties": true,
             "title": "Bundle",
             "type": "object"
           },
@@ -18634,10 +18721,12 @@
             "type": "string"
           },
           "evaluation": {
+            "additionalProperties": true,
             "title": "Evaluation",
             "type": "object"
           },
           "expected_impact": {
+            "additionalProperties": true,
             "title": "Expected Impact",
             "type": "object"
           },
@@ -18648,6 +18737,7 @@
           "observed_impact": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -18701,6 +18791,7 @@
         "properties": {
           "items": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Items",
@@ -18738,6 +18829,7 @@
             "type": "string"
           },
           "package_data": {
+            "additionalProperties": true,
             "title": "Package Data",
             "type": "object"
           },
@@ -18848,6 +18940,7 @@
             "title": "Occurred At"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -18885,6 +18978,7 @@
             "type": "string"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -19028,6 +19122,7 @@
             "title": "Last Sync At"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -19062,6 +19157,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -20400,6 +20496,7 @@
       "FrameworkVersionResponse": {
         "properties": {
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -22695,11 +22792,13 @@
             "type": "string"
           },
           "confidence": {
+            "additionalProperties": true,
             "title": "Confidence",
             "type": "object"
           },
           "evidence_appendix": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Evidence Appendix",
@@ -22707,6 +22806,7 @@
           },
           "findings": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Findings",
@@ -22736,6 +22836,7 @@
           },
           "remediations": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Remediations",
@@ -23940,6 +24041,7 @@
             "title": "Classification"
           },
           "event": {
+            "additionalProperties": true,
             "title": "Event",
             "type": "object"
           },
@@ -23960,6 +24062,7 @@
             "title": "Event Type"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -24031,6 +24134,7 @@
             "type": "string"
           },
           "decision": {
+            "additionalProperties": true,
             "title": "Decision",
             "type": "object"
           },
@@ -24114,6 +24218,7 @@
           "normalized_payload": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -24129,6 +24234,7 @@
             "type": "integer"
           },
           "raw_payload": {
+            "additionalProperties": true,
             "title": "Raw Payload",
             "type": "object"
           },
@@ -24174,6 +24280,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -24226,6 +24333,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -24402,6 +24510,7 @@
             "type": "string"
           },
           "policy_data": {
+            "additionalProperties": true,
             "title": "Policy Data",
             "type": "object"
           },
@@ -25180,6 +25289,7 @@
           },
           "category_snapshots": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Category Snapshots",
@@ -25720,6 +25830,7 @@
         "additionalProperties": false,
         "properties": {
           "link_metadata": {
+            "additionalProperties": true,
             "title": "Link Metadata",
             "type": "object"
           },
@@ -26054,6 +26165,7 @@
             "type": "string"
           },
           "tier_metadata": {
+            "additionalProperties": true,
             "title": "Tier Metadata",
             "type": "object"
           },
@@ -26102,6 +26214,7 @@
           },
           "proof_path": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Proof Path",
@@ -26284,6 +26397,7 @@
           "meta": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -26699,6 +26813,7 @@
           },
           "findings": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Findings",
@@ -27193,6 +27308,7 @@
             "type": "string"
           },
           "properties": {
+            "additionalProperties": true,
             "title": "Properties",
             "type": "object"
           },
@@ -27425,6 +27541,7 @@
             "type": "string"
           },
           "structured_evidence": {
+            "additionalProperties": true,
             "title": "Structured Evidence",
             "type": "object"
           },
@@ -28121,6 +28238,7 @@
           "engagement_metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28627,6 +28745,7 @@
           "params": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28776,6 +28895,7 @@
           "roe_update": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28787,6 +28907,7 @@
           "rule_definition": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28809,6 +28930,7 @@
         "properties": {
           "approvals": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Approvals",
@@ -28872,6 +28994,7 @@
           "roe_update": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28883,6 +29006,7 @@
           "rule_definition": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -28892,6 +29016,7 @@
             "title": "Rule Definition"
           },
           "simulation_results": {
+            "additionalProperties": true,
             "title": "Simulation Results",
             "type": "object"
           },
@@ -28941,6 +29066,7 @@
           },
           "approval_changes": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Approval Changes",
@@ -28951,6 +29077,7 @@
             "type": "string"
           },
           "governance_impact": {
+            "additionalProperties": true,
             "title": "Governance Impact",
             "type": "object"
           },
@@ -28965,6 +29092,7 @@
           },
           "threshold_changes": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Threshold Changes",
@@ -29233,6 +29361,7 @@
             "type": "string"
           },
           "policy_data": {
+            "additionalProperties": true,
             "title": "Policy Data",
             "type": "object"
           },
@@ -29498,6 +29627,7 @@
             "type": "string"
           },
           "event_metadata": {
+            "additionalProperties": true,
             "title": "Event Metadata",
             "type": "object"
           },
@@ -31377,6 +31507,7 @@
         "properties": {
           "assets": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Assets",
@@ -31526,6 +31657,7 @@
           },
           "edges": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Edges",
@@ -31537,6 +31669,7 @@
           },
           "nodes": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Nodes",
@@ -32016,6 +32149,7 @@
             "type": "string"
           },
           "inputs": {
+            "additionalProperties": true,
             "title": "Inputs",
             "type": "object"
           },
@@ -32430,6 +32564,7 @@
           },
           "mitigations": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Mitigations",
@@ -33198,6 +33333,7 @@
           "claims": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -33320,6 +33456,7 @@
           "evidence": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -33778,6 +33915,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -33813,6 +33951,7 @@
             "type": "string"
           },
           "evaluation_metadata": {
+            "additionalProperties": true,
             "title": "Evaluation Metadata",
             "type": "object"
           },
@@ -33849,6 +33988,7 @@
             "$ref": "#/components/schemas/AssessmentOutcome"
           },
           "scoring_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Metadata",
             "type": "object"
           }
@@ -33969,6 +34109,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -34278,6 +34419,7 @@
           "governance_policy": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -34391,6 +34533,7 @@
             "type": "boolean"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -35736,6 +35879,7 @@
           "delivery_blockers": {
             "default": [],
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Delivery Blockers",
@@ -36381,6 +36525,7 @@
             "title": "Actor"
           },
           "details": {
+            "additionalProperties": true,
             "title": "Details",
             "type": "object"
           },
@@ -36868,6 +37013,7 @@
         "additionalProperties": false,
         "properties": {
           "diff": {
+            "additionalProperties": true,
             "title": "Diff",
             "type": "object"
           },
@@ -36895,6 +37041,7 @@
       "ResolutionLayer": {
         "properties": {
           "detail": {
+            "additionalProperties": true,
             "title": "Detail",
             "type": "object"
           },
@@ -37490,6 +37637,7 @@
           "new_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -37501,6 +37649,7 @@
           "old_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -38123,6 +38272,7 @@
             "type": "string"
           },
           "factors": {
+            "additionalProperties": true,
             "title": "Factors",
             "type": "object"
           },
@@ -38501,6 +38651,7 @@
       "SaveResponsesRequest": {
         "properties": {
           "responses": {
+            "additionalProperties": true,
             "title": "Responses",
             "type": "object"
           }
@@ -38534,6 +38685,7 @@
         "properties": {
           "approved_targets": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Approved Targets",
@@ -38648,6 +38800,7 @@
           "normalized_payload": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -38661,6 +38814,7 @@
             "type": "integer"
           },
           "raw_payload": {
+            "additionalProperties": true,
             "title": "Raw Payload",
             "type": "object"
           },
@@ -38786,6 +38940,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -39124,6 +39279,7 @@
       "ScoringContractResponse": {
         "properties": {
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -39148,10 +39304,12 @@
             "type": "boolean"
           },
           "normalization_metadata": {
+            "additionalProperties": true,
             "title": "Normalization Metadata",
             "type": "object"
           },
           "scoring_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Metadata",
             "type": "object"
           },
@@ -39171,6 +39329,7 @@
             "title": "Tenant Id"
           },
           "weighting_metadata": {
+            "additionalProperties": true,
             "title": "Weighting Metadata",
             "type": "object"
           }
@@ -39514,6 +39673,7 @@
             "type": "string"
           },
           "comparison_data": {
+            "additionalProperties": true,
             "title": "Comparison Data",
             "type": "object"
           },
@@ -39608,6 +39768,7 @@
       "SimulationReplayResponse": {
         "properties": {
           "canonical_scenario_inputs": {
+            "additionalProperties": true,
             "title": "Canonical Scenario Inputs",
             "type": "object"
           },
@@ -39632,6 +39793,7 @@
             "type": "string"
           },
           "replay_contract_metadata": {
+            "additionalProperties": true,
             "title": "Replay Contract Metadata",
             "type": "object"
           },
@@ -39766,6 +39928,7 @@
             "title": "Framework Id"
           },
           "projection": {
+            "additionalProperties": true,
             "title": "Projection",
             "type": "object"
           },
@@ -40103,6 +40266,7 @@
             "title": "Idempotency Key"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           }
@@ -40390,6 +40554,7 @@
             "title": "Description"
           },
           "evidence_metadata": {
+            "additionalProperties": true,
             "title": "Evidence Metadata",
             "type": "object"
           },
@@ -40507,6 +40672,7 @@
             "title": "Classification"
           },
           "event": {
+            "additionalProperties": true,
             "title": "Event",
             "type": "object"
           },
@@ -40523,6 +40689,7 @@
             "title": "Event Type"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -40965,6 +41132,7 @@
             "type": "string"
           },
           "diff_data": {
+            "additionalProperties": true,
             "title": "Diff Data",
             "type": "object"
           },
@@ -41139,6 +41307,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "default": {},
             "title": "Metadata Json",
             "type": "object"
@@ -42010,6 +42179,7 @@
         "additionalProperties": false,
         "properties": {
           "details": {
+            "additionalProperties": true,
             "title": "Details",
             "type": "object"
           },
@@ -42428,6 +42598,7 @@
           },
           "data_points": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Data Points",
@@ -42684,6 +42855,7 @@
           "trust_manifest": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -42757,6 +42929,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -42818,6 +42991,7 @@
           "metadata_json": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -43268,6 +43442,7 @@
           "policy_data": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -43348,6 +43523,7 @@
           "structured_evidence": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -43486,6 +43662,7 @@
           "policy_data": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -43910,6 +44087,7 @@
           "parameters": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -43949,6 +44127,7 @@
           "metadata_json": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -44087,6 +44266,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -44191,6 +44371,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -45404,6 +45585,7 @@
             "type": "string"
           },
           "snapshot": {
+            "additionalProperties": true,
             "title": "Snapshot",
             "type": "object"
           }
@@ -45882,6 +46064,7 @@
             "default": "standard"
           },
           "deployment_policy": {
+            "additionalProperties": true,
             "title": "Deployment Policy",
             "type": "object"
           },
@@ -45974,6 +46157,7 @@
             "type": "string"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -46173,6 +46357,7 @@
           "display": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -46209,6 +46394,7 @@
             "type": "string"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -46274,6 +46460,7 @@
             "type": "string"
           },
           "payload": {
+            "additionalProperties": true,
             "title": "Payload",
             "type": "object"
           },
@@ -46579,6 +46766,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -46696,6 +46884,7 @@
       "api__readiness_manager__ControlResponse": {
         "properties": {
           "applicability_metadata": {
+            "additionalProperties": true,
             "title": "Applicability Metadata",
             "type": "object"
           },
@@ -46712,6 +46901,7 @@
             "type": "string"
           },
           "control_metadata": {
+            "additionalProperties": true,
             "title": "Control Metadata",
             "type": "object"
           },
@@ -46732,6 +46922,7 @@
             "type": "string"
           },
           "evidence_requirements": {
+            "additionalProperties": true,
             "title": "Evidence Requirements",
             "type": "object"
           },
@@ -46740,10 +46931,12 @@
             "type": "string"
           },
           "maturity_mapping_metadata": {
+            "additionalProperties": true,
             "title": "Maturity Mapping Metadata",
             "type": "object"
           },
           "scoring_compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Compatibility Metadata",
             "type": "object"
           },
@@ -46782,6 +46975,7 @@
         "additionalProperties": false,
         "properties": {
           "applicability_metadata": {
+            "additionalProperties": true,
             "title": "Applicability Metadata",
             "type": "object"
           },
@@ -46797,6 +46991,7 @@
             "type": "string"
           },
           "control_metadata": {
+            "additionalProperties": true,
             "title": "Control Metadata",
             "type": "object"
           },
@@ -46811,6 +47006,7 @@
             "type": "string"
           },
           "evidence_requirements": {
+            "additionalProperties": true,
             "title": "Evidence Requirements",
             "type": "object"
           },
@@ -46819,10 +47015,12 @@
             "type": "string"
           },
           "maturity_mapping_metadata": {
+            "additionalProperties": true,
             "title": "Maturity Mapping Metadata",
             "type": "object"
           },
           "scoring_compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Scoring Compatibility Metadata",
             "type": "object"
           }
@@ -46850,6 +47048,7 @@
             "title": "Activated At"
           },
           "compatibility_metadata": {
+            "additionalProperties": true,
             "title": "Compatibility Metadata",
             "type": "object"
           },
@@ -46888,6 +47087,7 @@
             "type": "string"
           },
           "framework_metadata": {
+            "additionalProperties": true,
             "title": "Framework Metadata",
             "type": "object"
           },
@@ -48548,6 +48748,7 @@
             "type": "string"
           },
           "parameters": {
+            "additionalProperties": true,
             "title": "Parameters",
             "type": "object"
           },
@@ -48583,6 +48784,7 @@
             "title": "Benchmark Tier"
           },
           "confidence": {
+            "additionalProperties": true,
             "title": "Confidence",
             "type": "object"
           },
@@ -48604,6 +48806,7 @@
           },
           "top_findings": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Top Findings",
@@ -48653,6 +48856,7 @@
           },
           "projected_values": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Projected Values",
@@ -48729,6 +48933,7 @@
           "result": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -48738,6 +48943,7 @@
             "title": "Result"
           },
           "snapshot_data": {
+            "additionalProperties": true,
             "title": "Snapshot Data",
             "type": "object"
           },
@@ -48746,6 +48952,7 @@
             "type": "string"
           },
           "time_window": {
+            "additionalProperties": true,
             "title": "Time Window",
             "type": "object"
           }
@@ -48772,6 +48979,7 @@
           },
           "results": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Results",
@@ -48839,12 +49047,14 @@
             "type": "string"
           },
           "parameters": {
+            "additionalProperties": true,
             "title": "Parameters",
             "type": "object"
           },
           "result": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -48929,6 +49139,7 @@
         "properties": {
           "items": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Items",
@@ -49085,6 +49296,7 @@
             "type": "string"
           },
           "policy_data": {
+            "additionalProperties": true,
             "title": "Policy Data",
             "type": "object"
           },
@@ -49105,6 +49317,7 @@
         "additionalProperties": false,
         "properties": {
           "change_data": {
+            "additionalProperties": true,
             "title": "Change Data",
             "type": "object"
           },
@@ -49287,6 +49500,7 @@
             "type": "string"
           },
           "playbook_data": {
+            "additionalProperties": true,
             "title": "Playbook Data",
             "type": "object"
           },
@@ -49379,6 +49593,7 @@
             "type": "string"
           },
           "policy_data": {
+            "additionalProperties": true,
             "title": "Policy Data",
             "type": "object"
           },
@@ -49493,6 +49708,7 @@
         "additionalProperties": false,
         "properties": {
           "change_data": {
+            "additionalProperties": true,
             "title": "Change Data",
             "type": "object"
           },
@@ -49513,6 +49729,7 @@
             "type": "string"
           },
           "result": {
+            "additionalProperties": true,
             "title": "Result",
             "type": "object"
           },
@@ -49651,6 +49868,7 @@
             "type": "string"
           },
           "event_metadata": {
+            "additionalProperties": true,
             "title": "Event Metadata",
             "type": "object"
           },
@@ -49722,6 +49940,7 @@
             "title": "Completed At"
           },
           "context": {
+            "additionalProperties": true,
             "title": "Context",
             "type": "object"
           },
@@ -50055,6 +50274,7 @@
             "type": "integer"
           },
           "details": {
+            "additionalProperties": true,
             "title": "Details",
             "type": "object"
           },
@@ -50227,6 +50447,7 @@
           "new_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -50238,6 +50459,7 @@
           "old_state": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -50336,6 +50558,7 @@
             "title": "Recommended Action"
           },
           "task_metadata": {
+            "additionalProperties": true,
             "title": "Task Metadata",
             "type": "object"
           },
@@ -50570,6 +50793,7 @@
             "type": "string"
           },
           "task_metadata": {
+            "additionalProperties": true,
             "title": "Task Metadata",
             "type": "object"
           },
@@ -50627,6 +50851,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -50729,6 +50954,7 @@
           "task_metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -51481,6 +51707,7 @@
             "type": "string"
           },
           "event_metadata": {
+            "additionalProperties": true,
             "title": "Event Metadata",
             "type": "object"
           },
@@ -52129,6 +52356,7 @@
           "branding_config": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -52705,6 +52933,7 @@
             "type": "string"
           },
           "metadata_json": {
+            "additionalProperties": true,
             "title": "Metadata Json",
             "type": "object"
           },
@@ -52862,6 +53091,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Recalculate Actor Assurance Actor Assurance Recalculate Post",
                   "type": "object"
                 }
@@ -52922,6 +53152,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Assurance Actor Assurance  Actor Id  Get",
                   "type": "object"
                 }
@@ -53005,6 +53236,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Assurance History Actor Assurance  Actor Id  History Get",
                   "type": "object"
                 }
@@ -53065,6 +53297,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Assurance Snapshot Actor Assurance  Actor Id  Snapshot Get",
                   "type": "object"
                 }
@@ -53125,6 +53358,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Trust Summary Actor Assurance  Actor Id  Trust Get",
                   "type": "object"
                 }
@@ -53185,6 +53419,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Actor Attribution Actor  Actor Id  Get",
                   "type": "object"
                 }
@@ -53284,6 +53519,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor Attribution Actor Attribution Actor  Actor Id  Attribution Get",
                   "type": "object"
                 }
@@ -53367,6 +53603,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Actor History Actor Attribution Actor  Actor Id  History Get",
                   "type": "object"
                 }
@@ -53427,6 +53664,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Evidence Actor Chain Actor Attribution Evidence  Evidence Id  Actor Chain Get",
                   "type": "object"
                 }
@@ -53487,6 +53725,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Report Actor Chain Actor Attribution Report  Report Id  Actor Chain Get",
                   "type": "object"
                 }
@@ -53565,6 +53804,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -53614,6 +53854,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Cert Status Agent Cert Status Get",
                   "type": "object"
                 }
@@ -53652,6 +53893,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ack Command Agent Commands Ack Post",
                   "type": "object"
                 }
@@ -53700,6 +53942,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Poll Commands Agent Commands Poll Post",
                   "type": "object"
                 }
@@ -53928,6 +54171,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Anchor Log Hash Agent Log Anchor Post",
                   "type": "object"
                 }
@@ -53966,6 +54210,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Fetch Policy Agent Policy Fetch Get",
                   "type": "object"
                 }
@@ -53994,6 +54239,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Manifest Agent Update Manifest Get",
                   "type": "object"
                 }
@@ -54023,6 +54269,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Manifest Agent Update Manifest Post",
                   "type": "object"
                 }
@@ -54064,6 +54311,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Report Update Event Agent Update Report Post",
                   "type": "object"
                 }
@@ -54178,6 +54426,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ai Plane Inference List Ai Plane Inference Get",
                   "type": "object"
                 }
@@ -54244,6 +54493,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ai Plane Policy Get Ai Plane Policies Get",
                   "type": "object"
                 }
@@ -54318,6 +54568,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ai Plane Policy Upsert Ai Plane Policies Post",
                   "type": "object"
                 }
@@ -54535,6 +54786,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ai Infer Ai Infer Post",
                   "type": "object"
                 }
@@ -54585,6 +54837,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Business Api Executive Business Get",
                   "type": "object"
                 }
@@ -54635,6 +54888,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Compliance Api Executive Compliance Get",
                   "type": "object"
                 }
@@ -54685,6 +54939,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Forecast Api Executive Forecast Get",
                   "type": "object"
                 }
@@ -54735,6 +54990,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Overview Api Executive Overview Get",
                   "type": "object"
                 }
@@ -54785,6 +55041,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Posture Api Executive Posture Get",
                   "type": "object"
                 }
@@ -54835,6 +55092,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Priorities Api Executive Priorities Get",
                   "type": "object"
                 }
@@ -54885,6 +55143,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Recommendations Api Executive Recommendations Get",
                   "type": "object"
                 }
@@ -54935,6 +55194,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Risk Api Executive Risk Get",
                   "type": "object"
                 }
@@ -54985,6 +55245,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Summary Api Executive Summary Get",
                   "type": "object"
                 }
@@ -55045,6 +55306,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Trends Api Executive Trends Get",
                   "type": "object"
                 }
@@ -55096,6 +55358,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Executive Workspace Api Executive Workspace Get",
                   "type": "object"
                 }
@@ -55156,6 +55419,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Approval Approvals Post",
                   "type": "object"
                 }
@@ -55216,6 +55480,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Verify Approvals Approvals Verify Post",
                   "type": "object"
                 }
@@ -55301,6 +55566,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Approvals Approvals  Subject Type   Subject Id  Get",
@@ -55416,6 +55682,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Exam Snapshot Audit Exam Snapshot Get",
                   "type": "object"
                 }
@@ -55466,6 +55733,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Exams Audit Exams Get",
                   "type": "object"
                 }
@@ -55588,6 +55856,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Exam Audit Exams  Exam Id  Export Get",
                   "type": "object"
                 }
@@ -55647,6 +55916,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reproduce Exam Audit Exams  Exam Id  Reproduce Post",
                   "type": "object"
                 }
@@ -55715,6 +55985,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Audit Export Audit Export Get",
                   "type": "object"
                 }
@@ -55775,6 +56046,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Audit Reproduce Audit Reproduce Post",
                   "type": "object"
                 }
@@ -55825,6 +56097,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Audit Sessions Audit Sessions Get",
                   "type": "object"
                 }
@@ -55875,6 +56148,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Validate Federated Identity Auth Federation Validate Post",
                   "type": "object"
                 }
@@ -55951,6 +56225,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Coverage Change Billing Coverage Change Post",
                   "type": "object"
                 }
@@ -56019,6 +56294,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Credit Note Evidence Billing Credits  Credit Note Id  Evidence Post",
                   "type": "object"
                 }
@@ -56088,6 +56364,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Sync Daily Counts Billing Daily Counts Sync Post",
                   "type": "object"
                 }
@@ -56163,6 +56440,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Devices Billing Devices Get",
                   "type": "object"
                 }
@@ -56239,6 +56517,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Record Device Activity Proof Billing Devices Activity Post",
                   "type": "object"
                 }
@@ -56315,6 +56594,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Enroll Device Billing Devices Enroll Post",
                   "type": "object"
                 }
@@ -56391,6 +56671,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Upsert Device Billing Devices Upsert Post",
                   "type": "object"
                 }
@@ -56459,6 +56740,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Coverage Timeline Billing Devices  Device Id  Coverage Timeline Get",
                   "type": "object"
                 }
@@ -56528,6 +56810,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Identity Disputes Billing Identity Disputes Get",
                   "type": "object"
                 }
@@ -56613,6 +56896,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Resolve Identity Dispute Billing Identity Disputes  Claim Id  Resolve Post",
                   "type": "object"
                 }
@@ -56672,6 +56956,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Invoices Billing Invoices Get",
                   "type": "object"
                 }
@@ -56746,6 +57031,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Invoice Billing Invoices Post",
                   "type": "object"
                 }
@@ -56814,6 +57100,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Invoice Details Billing Invoices  Invoice Id  Get",
                   "type": "object"
                 }
@@ -56882,6 +57169,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Credit Notes Billing Invoices  Invoice Id  Credits Get",
                   "type": "object"
                 }
@@ -56965,6 +57253,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Credit Note Billing Invoices  Invoice Id  Credits Post",
                   "type": "object"
                 }
@@ -57033,6 +57322,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Invoice Evidence Billing Invoices  Invoice Id  Evidence Get",
                   "type": "object"
                 }
@@ -57099,6 +57389,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Evidence Billing Invoices  Invoice Id  Evidence Post",
                   "type": "object"
                 }
@@ -57184,6 +57475,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Finalize Invoice Billing Invoices  Invoice Id  Finalize Post",
                   "type": "object"
                 }
@@ -57310,6 +57602,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Billing Runs Billing Runs Get",
                   "type": "object"
                 }
@@ -57384,6 +57677,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Billing Run Billing Runs Post",
                   "type": "object"
                 }
@@ -57476,6 +57770,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Billing Stripe Webhook Billing Webhooks Stripe Post",
                   "type": "object"
                 }
@@ -57542,6 +57837,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Breakglass Session Breakglass Sessions Post",
                   "type": "object"
                 }
@@ -58442,6 +58738,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Compliance Cp Controls Compliance Cp Controls Get",
                   "type": "object"
                 }
@@ -58502,6 +58799,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Compliance Cp Evidence Ingest Compliance Cp Evidence Ingest Post",
                   "type": "object"
                 }
@@ -58552,6 +58850,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Compliance Cp Portfolio Compliance Cp Portfolio Get",
                   "type": "object"
                 }
@@ -58602,6 +58901,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Compliance Cp Summary Compliance Cp Summary Get",
                   "type": "object"
                 }
@@ -58662,6 +58962,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Import Findings Compliance Findings Import Post",
                   "type": "object"
                 }
@@ -58721,6 +59022,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Requirements Diff Compliance Requirements Diff Get",
                   "type": "object"
                 }
@@ -58781,6 +59083,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Import Requirements Compliance Requirements Import Post",
                   "type": "object"
                 }
@@ -58831,6 +59134,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Updates Compliance Requirements Updates Get",
                   "type": "object"
                 }
@@ -59032,6 +59336,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Write Config Version Config Versions Post",
                   "type": "object"
                 }
@@ -60238,6 +60543,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Control Plane Audit Control Plane Audit Get",
                   "type": "object"
                 }
@@ -60289,6 +60595,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dependency Matrix Control Plane Dependency Matrix Get",
                   "type": "object"
                 }
@@ -60395,6 +60702,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Deployments Control Plane Deployments Get",
                   "type": "object"
                 }
@@ -60453,6 +60761,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Deployment Control Plane Deployments Post",
                   "type": "object"
                 }
@@ -60558,6 +60867,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Environments Control Plane Deployments Environments Get",
                   "type": "object"
                 }
@@ -60616,6 +60926,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Environment Control Plane Deployments Environments Post",
                   "type": "object"
                 }
@@ -60675,6 +60986,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Environment Control Plane Deployments Environments  Env Id  Get",
                   "type": "object"
                 }
@@ -60734,6 +61046,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Deployment Control Plane Deployments  Deployment Id  Get",
                   "type": "object"
                 }
@@ -60803,6 +61116,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Record Deployment Approval Control Plane Deployments  Deployment Id  Approval Post",
                   "type": "object"
                 }
@@ -60885,6 +61199,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Deployment Health Control Plane Deployments  Deployment Id  Health Get",
                   "type": "object"
                 }
@@ -60952,6 +61267,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Record Deployment Health Control Plane Deployments  Deployment Id  Health Post",
                   "type": "object"
                 }
@@ -61034,6 +61350,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Deployment History Control Plane Deployments  Deployment Id  History Get",
                   "type": "object"
                 }
@@ -61093,6 +61410,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Rollback Lineage Control Plane Deployments  Deployment Id  Rollback Lineage Get",
                   "type": "object"
                 }
@@ -61172,6 +61490,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Deployment State Control Plane Deployments  Deployment Id  Transition Post",
                   "type": "object"
                 }
@@ -61298,6 +61617,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Evidence Bundle Control Plane Evidence Bundle Get",
                   "type": "object"
                 }
@@ -61348,6 +61668,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Lockers Control Plane Lockers Get",
                   "type": "object"
                 }
@@ -61417,6 +61738,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Pause Locker Control Plane Lockers  Locker Id  Pause Post",
                   "type": "object"
                 }
@@ -61486,6 +61808,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Quarantine Locker Control Plane Lockers  Locker Id  Quarantine Post",
                   "type": "object"
                 }
@@ -61555,6 +61878,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Restart Locker Control Plane Lockers  Locker Id  Restart Post",
                   "type": "object"
                 }
@@ -61624,6 +61948,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Resume Locker Control Plane Lockers  Locker Id  Resume Post",
                   "type": "object"
                 }
@@ -61675,6 +62000,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Modules Control Plane Modules Get",
                   "type": "object"
                 }
@@ -61735,6 +62061,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Module Control Plane Modules  Module Id  Get",
                   "type": "object"
                 }
@@ -61794,6 +62121,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Boot Trace Control Plane Modules  Module Id  Boot Trace Get",
                   "type": "object"
                 }
@@ -61853,6 +62181,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Module Dependencies Control Plane Modules  Module Id  Dependencies Get",
                   "type": "object"
                 }
@@ -61942,6 +62271,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Backup Records Control Plane Ops Backups Get",
                   "type": "object"
                 }
@@ -62000,6 +62330,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Initiate Backup Control Plane Ops Backups Post",
                   "type": "object"
                 }
@@ -62059,6 +62390,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Backup Record Control Plane Ops Backups  Backup Id  Get",
                   "type": "object"
                 }
@@ -62148,6 +62480,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Environments Control Plane Ops Environments Get",
                   "type": "object"
                 }
@@ -62206,6 +62539,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Environment Control Plane Ops Environments Post",
                   "type": "object"
                 }
@@ -62265,6 +62599,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Environment Control Plane Ops Environments  Env Id  Get",
                   "type": "object"
                 }
@@ -62347,6 +62682,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Environment History Control Plane Ops Environments  Env Id  History Get",
                   "type": "object"
                 }
@@ -62416,6 +62752,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Environment Control Plane Ops Environments  Env Id  Transition Post",
                   "type": "object"
                 }
@@ -62485,6 +62822,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Issue Environment Validation Token Control Plane Ops Environments  Env Id  Validation Token Post",
                   "type": "object"
                 }
@@ -62590,6 +62928,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Export Requests Control Plane Ops Exports Get",
                   "type": "object"
                 }
@@ -62648,6 +62987,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Export Request Control Plane Ops Exports Post",
                   "type": "object"
                 }
@@ -62707,6 +63047,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Export Request Control Plane Ops Exports  Export Id  Get",
                   "type": "object"
                 }
@@ -62776,6 +63117,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Export Request Control Plane Ops Exports  Export Id  Transition Post",
                   "type": "object"
                 }
@@ -62881,6 +63223,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Recovery Records Control Plane Ops Recoveries Get",
                   "type": "object"
                 }
@@ -62939,6 +63282,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Initiate Recovery Control Plane Ops Recoveries Post",
                   "type": "object"
                 }
@@ -62998,6 +63342,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Recovery Record Control Plane Ops Recoveries  Recovery Id  Get",
                   "type": "object"
                 }
@@ -63067,6 +63412,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Recovery Control Plane Ops Recoveries  Recovery Id  Transition Post",
                   "type": "object"
                 }
@@ -63140,6 +63486,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Restore Records Control Plane Ops Restores Get",
                   "type": "object"
                 }
@@ -63198,6 +63545,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Initiate Restore Control Plane Ops Restores Post",
                   "type": "object"
                 }
@@ -63257,6 +63605,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Restore Record Control Plane Ops Restores  Restore Id  Get",
                   "type": "object"
                 }
@@ -63362,6 +63711,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Retention Policies Control Plane Ops Retention Policies Get",
                   "type": "object"
                 }
@@ -63420,6 +63770,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Retention Policy Control Plane Ops Retention Policies Post",
                   "type": "object"
                 }
@@ -63479,6 +63830,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Retention Policy Control Plane Ops Retention Policies  Policy Id  Get",
                   "type": "object"
                 }
@@ -63548,6 +63900,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Set Legal Hold Control Plane Ops Retention Policies  Policy Id  Legal Hold Post",
                   "type": "object"
                 }
@@ -63617,6 +63970,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Retention Policy Control Plane Ops Retention Policies  Policy Id  Transition Post",
                   "type": "object"
                 }
@@ -63686,6 +64040,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Record Rotation Outcome Control Plane Ops Rotations  Rotation Id  Outcome Post",
                   "type": "object"
                 }
@@ -63791,6 +64146,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Secret Governance Control Plane Ops Secrets Get",
                   "type": "object"
                 }
@@ -63849,6 +64205,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Register Secret Governance Control Plane Ops Secrets Post",
                   "type": "object"
                 }
@@ -63908,6 +64265,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Secret Governance Control Plane Ops Secrets  Secret Id  Get",
                   "type": "object"
                 }
@@ -63977,6 +64335,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Schedule Key Rotation Control Plane Ops Secrets  Secret Id  Rotations Post",
                   "type": "object"
                 }
@@ -64046,6 +64405,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Secret State Control Plane Ops Secrets  Secret Id  Transition Post",
                   "type": "object"
                 }
@@ -64135,6 +64495,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Organizations Control Plane Provisioning Organizations Get",
                   "type": "object"
                 }
@@ -64193,6 +64554,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Organization Control Plane Provisioning Organizations Post",
                   "type": "object"
                 }
@@ -64252,6 +64614,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Organization Control Plane Provisioning Organizations  Org Id  Get",
                   "type": "object"
                 }
@@ -64311,6 +64674,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Activate Organization Control Plane Provisioning Organizations  Org Id  Activate Post",
                   "type": "object"
                 }
@@ -64380,6 +64744,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Assign Environment Control Plane Provisioning Organizations  Org Id  Environment Post",
                   "type": "object"
                 }
@@ -64462,6 +64827,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Org History Control Plane Provisioning Organizations  Org Id  History Get",
                   "type": "object"
                 }
@@ -64521,6 +64887,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Onboarding State Control Plane Provisioning Organizations  Org Id  Onboarding Get",
                   "type": "object"
                 }
@@ -64590,6 +64957,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Start Provisioning Workflow Control Plane Provisioning Organizations  Org Id  Provision Post",
                   "type": "object"
                 }
@@ -64659,6 +65027,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Suspend Organization Control Plane Provisioning Organizations  Org Id  Suspend Post",
                   "type": "object"
                 }
@@ -64749,6 +65118,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Workflows Control Plane Provisioning Workflows Get",
                   "type": "object"
                 }
@@ -64808,6 +65178,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Workflow Control Plane Provisioning Workflows  Provisioning Id  Get",
                   "type": "object"
                 }
@@ -64877,6 +65248,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Complete Workflow Control Plane Provisioning Workflows  Provisioning Id  Complete Post",
                   "type": "object"
                 }
@@ -64946,6 +65318,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Fail Workflow Control Plane Provisioning Workflows  Provisioning Id  Fail Post",
                   "type": "object"
                 }
@@ -65015,6 +65388,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Retry Workflow Control Plane Provisioning Workflows  Provisioning Id  Retry Post",
                   "type": "object"
                 }
@@ -65266,6 +65640,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Apply Alert Lifecycle Transition Control Plane Readiness Alerting Alerts  Alert Instance Id  Lifecycle Post",
                   "type": "object"
                 }
@@ -65336,6 +65711,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Suppress Alert Control Plane Readiness Alerting Alerts  Alert Instance Id  Suppress Post",
                   "type": "object"
                 }
@@ -68137,6 +68513,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Ai Namespace Control Plane V2 Ai Namespace Get",
                   "type": "object"
                 }
@@ -68261,6 +68638,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Commands Control Plane V2 Commands Get",
                   "type": "object"
                 }
@@ -68319,6 +68697,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Command Control Plane V2 Commands Post",
                   "type": "object"
                 }
@@ -68388,6 +68767,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Cancel Command Control Plane V2 Commands  Command Id  Cancel Post",
                   "type": "object"
                 }
@@ -68458,6 +68838,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Submit Receipt Control Plane V2 Commands  Command Id  Receipt Post",
                   "type": "object"
                 }
@@ -68517,6 +68898,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Receipts Control Plane V2 Commands  Command Id  Receipts Get",
                   "type": "object"
                 }
@@ -68607,6 +68989,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Delegations Control Plane V2 Delegation Get",
                   "type": "object"
                 }
@@ -68666,6 +69049,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Delegation Control Plane V2 Delegation Post",
                   "type": "object"
                 }
@@ -68736,6 +69120,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Revoke Delegation Control Plane V2 Delegation  Delegation Id  Delete",
                   "type": "object"
                 }
@@ -68830,6 +69215,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Heartbeats Control Plane V2 Heartbeats Get",
                   "type": "object"
                 }
@@ -68888,6 +69274,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Upsert Heartbeat Control Plane V2 Heartbeats Post",
                   "type": "object"
                 }
@@ -68955,6 +69342,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Stale Heartbeats Control Plane V2 Heartbeats Stale Get",
                   "type": "object"
                 }
@@ -69098,6 +69486,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Query Ledger Control Plane V2 Ledger Get",
                   "type": "object"
                 }
@@ -69165,6 +69554,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Ledger Anchor Control Plane V2 Ledger Anchor Get",
                   "type": "object"
                 }
@@ -69233,6 +69623,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Verify Ledger Control Plane V2 Ledger Verify Get",
                   "type": "object"
                 }
@@ -69283,6 +69674,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Playbooks Control Plane V2 Playbooks Get",
                   "type": "object"
                 }
@@ -69352,6 +69744,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Trigger Playbook Control Plane V2 Playbooks  Playbook Name  Trigger Post",
                   "type": "object"
                 }
@@ -69413,6 +69806,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Pin Policy Version Control Plane V2 Policy Pin Post",
                   "type": "object"
                 }
@@ -69464,6 +69858,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Policy Pins Control Plane V2 Policy Pins Get",
                   "type": "object"
                 }
@@ -69525,6 +69920,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Rollback Policy Control Plane V2 Policy Rollback Post",
                   "type": "object"
                 }
@@ -69586,6 +69982,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Stage Policy Version Control Plane V2 Policy Stage Post",
                   "type": "object"
                 }
@@ -69637,6 +70034,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Terminal Allowlist Control Plane V2 Terminal Allowlist Get",
                   "type": "object"
                 }
@@ -69698,6 +70096,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Breakglass Session Control Plane V2 Terminal Breakglass Post",
                   "type": "object"
                 }
@@ -69759,6 +70158,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Terminal Execute Control Plane V2 Terminal Execute Post",
                   "type": "object"
                 }
@@ -72567,6 +72967,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Catalog Enterprise Controls Catalog Get",
                   "type": "object"
                 }
@@ -72633,6 +73034,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Crosswalk Enterprise Controls Crosswalk Get",
                   "type": "object"
                 }
@@ -72699,6 +73101,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Frameworks Enterprise Controls Frameworks Get",
                   "type": "object"
                 }
@@ -72775,6 +73178,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Upsert Tenant Control State Enterprise Controls Tenant State Post",
                   "type": "object"
                 }
@@ -73064,6 +73468,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Anchors Evidence Anchors Get",
                   "type": "object"
                 }
@@ -73138,6 +73543,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Anchor Evidence Anchors Post",
                   "type": "object"
                 }
@@ -73256,6 +73662,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Evidence Bundle Evidence Bundles  Bundle Id  Get",
                   "type": "object"
                 }
@@ -73620,6 +74027,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Evidence Runs Evidence Runs Get",
                   "type": "object"
                 }
@@ -73696,6 +74104,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Register Evidence Run Evidence Runs Register Post",
                   "type": "object"
                 }
@@ -73771,6 +74180,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Evidence Run Evidence Runs  Run Id  Get",
                   "type": "object"
                 }
@@ -75516,6 +75926,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Exception Request Exceptions Requests Post",
                   "type": "object"
                 }
@@ -75602,6 +76013,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Approve Exception Request Exceptions Requests  Request Id  Approve Post",
                   "type": "object"
                 }
@@ -76130,6 +76542,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Activate Emergency Stop Field Assessment Emergency Stop Post",
                   "type": "object"
                 }
@@ -76174,6 +76587,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Clear Scan Emergency Stop Field Assessment Emergency Stop  Stop Id  Clear Post",
                   "type": "object"
                 }
@@ -76397,6 +76811,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Certifications Route Field Assessment Engagements  Eid  Certifications Get",
                   "type": "object"
                 }
@@ -76628,6 +77043,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Certification Route Field Assessment Engagements  Eid  Certifications Post",
                   "type": "object"
                 }
@@ -76688,6 +77104,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Certification Dashboard Route Field Assessment Engagements  Eid  Certifications Dashboard Get",
                   "type": "object"
                 }
@@ -76756,6 +77173,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Certification Route Field Assessment Engagements  Eid  Certifications  Cert Id  Get",
                   "type": "object"
                 }
@@ -76853,6 +77271,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Add Attestation Route Field Assessment Engagements  Eid  Certifications  Cert Id  Attest Post",
                   "type": "object"
                 }
@@ -76921,6 +77340,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Health Route Field Assessment Engagements  Eid  Certifications  Cert Id  Health Get",
                   "type": "object"
                 }
@@ -76989,6 +77409,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get History Route Field Assessment Engagements  Eid  Certifications  Cert Id  History Get",
                   "type": "object"
                 }
@@ -77057,6 +77478,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Impact Route Field Assessment Engagements  Eid  Certifications  Cert Id  Impact Get",
                   "type": "object"
                 }
@@ -77125,6 +77547,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Lineage Route Field Assessment Engagements  Eid  Certifications  Cert Id  Lineage Get",
                   "type": "object"
                 }
@@ -77193,6 +77616,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Manifest Route Field Assessment Engagements  Eid  Certifications  Cert Id  Manifest Get",
                   "type": "object"
                 }
@@ -77271,6 +77695,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Initiate Renewal Route Field Assessment Engagements  Eid  Certifications  Cert Id  Renew Post",
                   "type": "object"
                 }
@@ -77374,6 +77799,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Add Review Route Field Assessment Engagements  Eid  Certifications  Cert Id  Review Post",
                   "type": "object"
                 }
@@ -77467,6 +77893,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Transition Certification Route Field Assessment Engagements  Eid  Certifications  Cert Id  Transition Post",
                   "type": "object"
                 }
@@ -79136,6 +79563,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Customer Authorizations Field Assessment Engagements  Engagement Id  Customer Authorizations Get",
                   "type": "object"
                 }
@@ -79188,6 +79616,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Request Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations Post",
                   "type": "object"
                 }
@@ -79240,6 +79669,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Get",
                   "type": "object"
                 }
@@ -79303,6 +79733,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Approve Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Approve Post",
                   "type": "object"
                 }
@@ -79365,6 +79796,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reject Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Reject Post",
                   "type": "object"
                 }
@@ -79428,6 +79860,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Revoke Customer Authorization Field Assessment Engagements  Engagement Id  Customer Authorizations  Receipt Id  Revoke Post",
                   "type": "object"
                 }
@@ -79808,6 +80241,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Board Reports Field Assessment Engagements  Engagement Id  Etcc Board Get",
                   "type": "object"
                 }
@@ -79910,6 +80344,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Generate Board Brief Field Assessment Engagements  Engagement Id  Etcc Board Generate Post",
                   "type": "object"
                 }
@@ -79979,6 +80414,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Board Report Field Assessment Engagements  Engagement Id  Etcc Board  Report Id  Get",
                   "type": "object"
                 }
@@ -80086,6 +80522,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Briefs Field Assessment Engagements  Engagement Id  Etcc Briefs Get",
                   "type": "object"
                 }
@@ -80188,6 +80625,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Generate Quarterly Brief Field Assessment Engagements  Engagement Id  Etcc Briefs Generate Post",
                   "type": "object"
                 }
@@ -80257,6 +80695,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Get",
                   "type": "object"
                 }
@@ -80326,6 +80765,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Approve Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Approve Post",
                   "type": "object"
                 }
@@ -80417,6 +80857,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Deliver Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Deliver Post",
                   "type": "object"
                 }
@@ -80486,6 +80927,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Explain Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Explain Get",
                   "type": "object"
                 }
@@ -80567,6 +81009,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Export Get",
                   "type": "object"
                 }
@@ -80636,6 +81079,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Brief Manifest Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Manifest Get",
                   "type": "object"
                 }
@@ -80705,6 +81149,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Review Brief Field Assessment Engagements  Engagement Id  Etcc Briefs  Brief Id  Review Post",
                   "type": "object"
                 }
@@ -80765,6 +81210,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Certification Field Assessment Engagements  Engagement Id  Etcc Certification Get",
                   "type": "object"
                 }
@@ -80836,6 +81282,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Certification History Field Assessment Engagements  Engagement Id  Etcc Certification History Get",
                   "type": "object"
                 }
@@ -80925,6 +81372,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Decisions Field Assessment Engagements  Engagement Id  Etcc Decisions Get",
                   "type": "object"
                 }
@@ -80994,6 +81442,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Drilldown Certification Field Assessment Engagements  Engagement Id  Etcc Drilldown Certification  Cert Id  Get",
                   "type": "object"
                 }
@@ -81063,6 +81512,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Drilldown Drift Field Assessment Engagements  Engagement Id  Etcc Drilldown Drift  Event Id  Get",
                   "type": "object"
                 }
@@ -81134,6 +81584,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Monitoring Field Assessment Engagements  Engagement Id  Etcc Monitoring Get",
                   "type": "object"
                 }
@@ -81194,6 +81645,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Posture Field Assessment Engagements  Engagement Id  Etcc Posture Get",
                   "type": "object"
                 }
@@ -81265,6 +81717,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Report Drift Field Assessment Engagements  Engagement Id  Etcc Reports Drift Get",
                   "type": "object"
                 }
@@ -81349,6 +81802,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Report Quarterly Field Assessment Engagements  Engagement Id  Etcc Reports Quarterly Get",
                   "type": "object"
                 }
@@ -81409,6 +81863,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Report Risk Field Assessment Engagements  Engagement Id  Etcc Reports Risk Get",
                   "type": "object"
                 }
@@ -81469,6 +81924,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Report Summary Field Assessment Engagements  Engagement Id  Etcc Reports Summary Get",
                   "type": "object"
                 }
@@ -81552,6 +82008,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Risks Field Assessment Engagements  Engagement Id  Etcc Risks Get",
                   "type": "object"
                 }
@@ -81677,6 +82134,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Timeline Field Assessment Engagements  Engagement Id  Etcc Timeline Get",
                   "type": "object"
                 }
@@ -81737,6 +82195,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Trends Field Assessment Engagements  Engagement Id  Etcc Trends Get",
                   "type": "object"
                 }
@@ -81920,6 +82379,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Governance Exceptions Route Field Assessment Engagements  Engagement Id  Exceptions Get",
                   "type": "object"
                 }
@@ -81972,6 +82432,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Governance Exception Route Field Assessment Engagements  Engagement Id  Exceptions Post",
                   "type": "object"
                 }
@@ -82024,6 +82485,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Governance Exception Route Field Assessment Engagements  Engagement Id  Exceptions  Exception Id  Get",
                   "type": "object"
                 }
@@ -82389,6 +82851,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Patch Finding Remediation Route Field Assessment Engagements  Engagement Id  Findings  Finding Id  Remediation Patch",
                   "type": "object"
                 }
@@ -82448,6 +82911,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Governance Decisions Route Field Assessment Engagements  Engagement Id  Governance Decisions Get",
                   "type": "object"
                 }
@@ -82500,6 +82964,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Governance Decision Route Field Assessment Engagements  Engagement Id  Governance Decisions  Decision Id  Get",
                   "type": "object"
                 }
@@ -83603,6 +84068,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Engagement Report Route Field Assessment Engagements  Engagement Id  Reports Post",
                   "type": "object"
                 }
@@ -84882,6 +85348,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Engagement Report Route Field Assessment Engagements  Engagement Id  Reports  Version  Get",
                   "type": "object"
                 }
@@ -85056,6 +85523,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Risk Acceptances Route Field Assessment Engagements  Engagement Id  Risk Acceptances Get",
                   "type": "object"
                 }
@@ -85108,6 +85576,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Risk Acceptance Route Field Assessment Engagements  Engagement Id  Risk Acceptances Post",
                   "type": "object"
                 }
@@ -85160,6 +85629,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Risk Acceptance Route Field Assessment Engagements  Engagement Id  Risk Acceptances  Acceptance Id  Get",
                   "type": "object"
                 }
@@ -85204,6 +85674,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Scan Authorizations Field Assessment Engagements  Engagement Id  Scan Authorizations Get",
                   "type": "object"
                 }
@@ -85256,6 +85727,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations Post",
                   "type": "object"
                 }
@@ -85300,6 +85772,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Effective Scan Authorization Status Field Assessment Engagements  Engagement Id  Scan Authorizations Effective Status Get",
                   "type": "object"
                 }
@@ -85363,6 +85836,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Activate Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations  Auth Id  Activate Post",
                   "type": "object"
                 }
@@ -85426,6 +85900,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Revoke Scan Authorization Field Assessment Engagements  Engagement Id  Scan Authorizations  Auth Id  Revoke Post",
                   "type": "object"
                 }
@@ -85486,6 +85961,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Scan Jobs Field Assessment Engagements  Engagement Id  Scan Jobs Get",
                   "type": "object"
                 }
@@ -85539,6 +86015,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Scan Job Field Assessment Engagements  Engagement Id  Scan Jobs  Job Id  Get",
                   "type": "object"
                 }
@@ -85772,6 +86249,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Cancel Scan Job Field Assessment Engagements  Engagement Id  Scans  Scan Id  Cancel Post",
                   "type": "object"
                 }
@@ -85926,6 +86404,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tim Certification Status Field Assessment Engagements  Engagement Id  Tim Certification Status Get",
                   "type": "object"
                 }
@@ -86006,6 +86485,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tim Drift Field Assessment Engagements  Engagement Id  Tim Drift Get",
                   "type": "object"
                 }
@@ -86075,6 +86555,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Acknowledge Tim Drift Field Assessment Engagements  Engagement Id  Tim Drift  Event Id  Acknowledge Post",
                   "type": "object"
                 }
@@ -86135,6 +86616,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Trigger Tim Evaluate Field Assessment Engagements  Engagement Id  Tim Evaluate Post",
                   "type": "object"
                 }
@@ -86195,6 +86677,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tim Posture Field Assessment Engagements  Engagement Id  Tim Posture Get",
                   "type": "object"
                 }
@@ -86255,6 +86738,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tim Risks Field Assessment Engagements  Engagement Id  Tim Risks Get",
                   "type": "object"
                 }
@@ -86325,6 +86809,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Tim Timeline Field Assessment Engagements  Engagement Id  Tim Timeline Get",
                   "type": "object"
                 }
@@ -86385,6 +86870,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Trust Certification Field Assessment Engagements  Engagement Id  Trust Arc Certification Get",
                   "type": "object"
                 }
@@ -86445,6 +86931,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Trust Intelligence Snapshot Field Assessment Engagements  Engagement Id  Trust Arc Intelligence Snapshot Get",
                   "type": "object"
                 }
@@ -86505,6 +86992,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Auditor Proof Package Field Assessment Engagements  Engagement Id  Trust Arc Proof Package Get",
                   "type": "object"
                 }
@@ -86565,6 +87053,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Rebuild Trust Arc Field Assessment Engagements  Engagement Id  Trust Arc Rebuild Post",
                   "type": "object"
                 }
@@ -86829,6 +87318,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Brief History Field Assessment Etcc Briefs History Get",
                   "type": "object"
                 }
@@ -86891,6 +87381,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Etcc Overview Field Assessment Etcc Overview Get",
                   "type": "object"
                 }
@@ -87090,6 +87581,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Audit Trail Forensics Audit Trail  Event Id  Get",
                   "type": "object"
                 }
@@ -87168,6 +87660,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Chain Verify Forensics Chain Verify Get",
                   "type": "object"
                 }
@@ -87243,6 +87736,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Snapshot Forensics Snapshot  Event Id  Get",
                   "type": "object"
                 }
@@ -93676,6 +94170,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Playbook Template Route Governance Orchestration Playbooks Templates  Playbook Type  Get",
                   "type": "object"
                 }
@@ -96403,6 +96898,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Shadow Assets Governance Assets Shadow Get",
                   "type": "object"
                 }
@@ -96453,6 +96949,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Registry Summary Governance Assets Summary Get",
                   "type": "object"
                 }
@@ -96776,6 +97273,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Blast Radius Governance Assets  Asset Id  Blast Radius Get",
                   "type": "object"
                 }
@@ -97583,6 +98081,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Verify Audit Chain Governance Audit Chain Verify Get",
                   "type": "object"
                 }
@@ -98556,6 +99055,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Coverage Governance Graph Coverage Get",
                   "type": "object"
                 }
@@ -98758,6 +99258,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Lineage Governance Graph Lineage  Node Id  Get",
                   "type": "object"
                 }
@@ -99020,6 +99521,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Find Graph Path Governance Graph Path Get",
                   "type": "object"
                 }
@@ -99138,6 +99640,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Stats Governance Graph Stats Get",
                   "type": "object"
                 }
@@ -99960,6 +100463,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Health Detailed Health Detailed Get",
                   "type": "object"
                 }
@@ -100001,6 +100505,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Health Ready Health Ready Get",
                   "type": "object"
                 }
@@ -101060,6 +101565,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Invitation Preflight Identity Invitations  Token  Get",
                   "type": "object"
                 }
@@ -101104,6 +101610,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Accept Invitation Identity Invitations  Token  Accept Post",
                   "type": "object"
                 }
@@ -101148,6 +101655,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Request Resend Identity Invitations  Token  Request Resend Post",
                   "type": "object"
                 }
@@ -102610,6 +103118,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Export Governance Report Manifest Ingest Assessment  Assessment Id  Governance Report  Report Id  Export Manifest Get",
                   "type": "object"
                 }
@@ -104159,6 +104668,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -107596,6 +108106,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Connector Ingest Internal Connectors  Connector Id  Ingest Post",
                   "type": "object"
                 }
@@ -107777,6 +108288,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Modules Modules Get",
@@ -107863,6 +108375,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Enforce Module Modules Enforce  Module Id  Get",
                   "type": "object"
                 }
@@ -107923,6 +108436,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Register Module Modules Register Post",
                   "type": "object"
                 }
@@ -107983,6 +108497,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Get Module Modules  Module Id  Get",
@@ -108035,6 +108550,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Planes Planes Get",
                   "type": "object"
                 }
@@ -111102,6 +111618,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Corpora Endpoint Rag Corpora Get",
@@ -111181,6 +111698,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Corpus Detail Rag Corpora  Corpus Id  Get",
                   "type": "object"
                 }
@@ -111334,6 +111852,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Corpus Documents Rag Corpora  Corpus Id  Documents Get",
                   "type": "object"
                 }
@@ -111412,6 +111931,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Document Detail Rag Documents  Document Id  Get",
                   "type": "object"
                 }
@@ -111490,6 +112010,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Document Ingestion Rag Documents  Document Id  Ingestion Get",
                   "type": "object"
                 }
@@ -111568,6 +112089,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Retry Document Ingestion Rag Documents  Document Id  Retry Ingestion Post",
                   "type": "object"
                 }
@@ -111637,6 +112159,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Retrieval Policy Endpoint Rag Retrieval Policy Get",
                   "type": "object"
                 }
@@ -111713,6 +112236,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Put Retrieval Policy Endpoint Rag Retrieval Policy Put",
                   "type": "object"
                 }
@@ -111791,6 +112315,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Upload Document Rag Upload Post",
                   "type": "object"
                 }
@@ -111925,6 +112450,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Uploads Rag Uploads Get",
                   "type": "object"
                 }
@@ -111985,6 +112511,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Get Assignments Rbac Assignments Get",
@@ -112027,6 +112554,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Assign Role Endpoint Rbac Assignments Post",
                   "type": "object"
                 }
@@ -112070,6 +112598,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Revoke Role Endpoint Rbac Assignments  Credential Id  Delete",
                   "type": "object"
                 }
@@ -112128,6 +112657,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Get Audit Log Rbac Audit Get",
@@ -115233,6 +115763,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Acknowledge Notification Remediation Tasks  Task Id  Notifications  Notification Id  Acknowledge Post",
                   "type": "object"
                 }
@@ -116569,6 +117100,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Verify Report Reports  Report Id  Verify Post",
                   "type": "object"
                 }
@@ -118284,6 +118816,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Expire Overdue Approvals Risk Governance Maintenance Expire Approvals Post",
                   "type": "object"
                 }
@@ -118334,6 +118867,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Mark Overdue Reviews Risk Governance Maintenance Mark Overdue Reviews Post",
                   "type": "object"
                 }
@@ -118626,6 +119160,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Report Signing Public Key Signing Public Key Get",
                   "type": "object"
                 }
@@ -118713,6 +119248,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Stats Debug Stats Debug Get",
                   "type": "object"
                 }
@@ -119596,6 +120132,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Own Entitlements Ui Entitlements Get",
                   "type": "object"
                 }
@@ -119630,6 +120167,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Capability Registry Ui Entitlements Registry Get",
                   "type": "object"
                 }
@@ -120658,6 +121196,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Alert Rules Workforce Alert Rules Get",
                   "type": "object"
                 }
@@ -120732,6 +121271,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Alert Rule Workforce Alert Rules Post",
                   "type": "object"
                 }
@@ -120807,6 +121347,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Alert Rule Workforce Alert Rules  Rule Id  Delete",
                   "type": "object"
                 }
@@ -120890,6 +121431,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Alert Rule Workforce Alert Rules  Rule Id  Patch",
                   "type": "object"
                 }
@@ -120976,6 +121518,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Alerts Workforce Alerts Get",
                   "type": "object"
                 }
@@ -121051,6 +121594,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dismiss Alert Workforce Alerts  Alert Id  Dismiss Post",
                   "type": "object"
                 }
@@ -121117,6 +121661,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Keywords Workforce Keywords Get",
                   "type": "object"
                 }
@@ -121191,6 +121736,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Keyword Workforce Keywords Post",
                   "type": "object"
                 }
@@ -121268,6 +121814,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Preview Keyword Workforce Keywords Preview Post",
                   "type": "object"
                 }
@@ -121343,6 +121890,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Keyword Workforce Keywords  Keyword Id  Delete",
                   "type": "object"
                 }
@@ -121409,6 +121957,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Risk Profiles Workforce Risk Profiles Get",
                   "type": "object"
                 }
@@ -121475,6 +122024,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Users Workforce Users Get",
                   "type": "object"
                 }
@@ -121549,6 +122099,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Invite User Workforce Users Post",
                   "type": "object"
                 }
@@ -121582,6 +122133,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Accept Invite Workforce Users Accept Invite Post",
                   "type": "object"
                 }
@@ -121657,6 +122209,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update User Workforce Users  User Id  Patch",
                   "type": "object"
                 }
@@ -121752,6 +122305,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get User Activity Workforce Users  User Id  Activity Get",
                   "type": "object"
                 }
@@ -121914,6 +122468,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Risk History Workforce Users  User Id  Risk History Get",
                   "type": "object"
                 }

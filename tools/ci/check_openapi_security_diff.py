@@ -75,6 +75,14 @@ def _normalize(obj: Any) -> Any:
         for k, v in sorted(obj.items()):
             if k in COSMETIC_KEYS:
                 continue
+            # Schema-equivalent spellings emitted by newer FastAPI/Pydantic:
+            # "additionalProperties": true is the JSON Schema default, and a
+            # one-item "enum" equal to "const" restates the const. Anything
+            # else (false, a schema, a different enum) is still compared.
+            if k == "additionalProperties" and v is True:
+                continue
+            if k == "enum" and "const" in obj and v == [obj["const"]]:
+                continue
             out[k] = _normalize(v)
         return out
     if isinstance(obj, list):

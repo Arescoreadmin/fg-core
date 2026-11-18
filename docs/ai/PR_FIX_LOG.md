@@ -1,3 +1,17 @@
+## chore(deps): python-routine group (#896): restore ecdsa block, add sqlalchemy[asyncio], hold ruff and fastapi, regenerate contracts
+
+- **Failure:** Dependabot's 14-package bump failed fg-required (`policy-validate`), Guard (`fg-contract`) and Docker Compose Validation (admin-gateway exited on start).
+- **Root cause:** SQLAlchemy 2.1 no longer installs `greenlet` by default, so `from sqlalchemy.ext.asyncio import AsyncSession` raised `ImportError` in `admin_gateway` and in `contracts-gen`.
+- **Changes beyond Dependabot's diff:**
+  - `requirements-shared.txt`: `sqlalchemy[asyncio]==2.1.8`. The extra pulls in `greenlet`.
+  - `constraints.txt`: back to `ecdsa==0`. Dependabot had rewritten the hard block for CVE-2024-23342 (no fixed version) to `ecdsa==0.19.2`.
+  - `requirements-dev.txt`, `admin_gateway/requirements-dev.txt`: `ruff` held at 0.15.11. Ruff 0.17.5 reports 360 findings in `admin_gateway` (`UP045`, `B008` on FastAPI `Depends()` defaults, and others) that would fail `admin-lint`. The ruff upgrade is deferred to its own PR rather than disabling rules.
+  - `requirements-shared.txt`: `fastapi` held at 0.136.3. FastAPI 0.162 no longer flattens included routers into `app.routes`; they appear as lazy `_IncludedRouter` entries (14 flat routes instead of 1275). Six route-inventory security tests failed, and `auth_gate._route_is_registered` and the route inventory endpoint in `api/main.py` iterate `app.router.routes`. Migrating to the new routing model is deferred to its own PR. 0.136.3 accepts the new `starlette` 1.10.0 and `pydantic` 2.14.3 and has no known advisories.
+  - `pytest.ini`: `asyncio_default_fixture_loop_scope = fixture-scope`. pytest-asyncio 1.5 warns when this is unset, and `filterwarnings = error` turned that into an `INTERNALERROR` before collection. The value keeps the previous behaviour.
+  - Contracts: `contracts/admin`, `contracts/core` and `schemas/api` regenerated with `make contract-authority-refresh`; the authority hash is updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`. Pydantic 2.14 only adds `"additionalProperties": true` (the JSON Schema default) and drop one-item `enum` lists that restate `const`. No route, parameter or response changes.
+  - `tools/ci/check_openapi_security_diff.py`: `_normalize` treats those two spellings as unchanged. Without this, 64 operations looked changed and 29 baseline routes were re-flagged. With it, the new contract gives the same result as `main`'s (956 changed operations, 0 violations). `additionalProperties: false`, an `additionalProperties` schema, an `enum` that differs from `const` and an `enum` without `const` are all still compared.
+- **Tests:** 5 new tests in `tests/security/test_openapi_security_diff_scoping.py`. One proves the equivalent spellings are not treated as changes; four prove each non-equivalent form still triggers the 401/403 check.
+
 ## ci(fg-required): align harness step and job timeouts with the 4400s harness budget
 
 - **Failure:** the first `fg-required` run on each of the last three PRs failed without a test failure.

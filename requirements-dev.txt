@@ -2,15 +2,15 @@ setuptools>=84.1.0
 # starlette 1.3.x TestClient uses httpx2 first; without it the fallback
 # emits StarletteDeprecationWarning which pytest treats as error (filterwarnings=error)
 httpx2==2.16.0
-pytest==9.0.3
-pytest-asyncio==1.3.0
-pytest-env==1.2.0
+pytest==9.2.0
+pytest-asyncio==1.5.0
+pytest-env==1.8.5
 pytest-cov==7.0.0
 ruff==0.15.11
 jsonschema==4.26.0
 # httpx is already in requirements.txt, but pin for tests too
-httpx==0.27.2
-pydantic-settings==2.5.2
+httpx==0.28.1
+pydantic-settings==2.16.3
 requests>=2.31
 pre-commit==4.7.0
 # Explicit (was only transitive via pre-commit): required by the repository
