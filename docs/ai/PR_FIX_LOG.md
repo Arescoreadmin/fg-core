@@ -1,3 +1,11 @@
+## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
+
+- **Failure:** after #896 (pytest 9.2.0, pytest-asyncio 1.5.0), `pytest` aborted collection in environments that still had anyio 4.14.2: `PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec`, raised from `anyio/pytest_plugin.py`. `pytest.ini` sets `filterwarnings = error`, so the deprecation became a plugin-load error and no tests ran.
+- **Root cause:** anyio is transitive (starlette, httpx, watchfiles) and had no floor. anyio <= 4.14.x imports `CallSpec2` unconditionally. anyio 4.15.0 imports `CallSpec` first and falls back to `CallSpec2` only on pytest < 9.2 (pytest-dev/pytest#14742). Fresh installs (CI) already resolve 4.16.0; existing venvs keep 4.14.2 because nothing required an upgrade.
+- **Change:** `constraints.txt`: `anyio>=4.15.0`. Floor only, no upper bound. `make venv` and `make admin-venv` both install with `-c constraints.txt`, and `constraints.txt` is a `DEPS_INPUTS` stamp input, so stale environments upgrade on the next `make venv`.
+- **Not changed:** pytest stays at 9.2.0; plugin autoloading stays on; `filterwarnings = error` and every existing ignore rule are unchanged. The `anyio.abc.BlockingPortal` ignore rule is kept: starlette 1.10.0 and the rest of the installed tree no longer reference the alias, so it appears obsolete, but removing it is out of scope.
+- **Validation:** reproduced in an isolated venv with anyio 4.14.2; `make venv` upgraded it to 4.16.0; anyio 4.15.0 (the floor) also collects; the constraint rejects 4.14.2 with `ResolutionImpossible`.
+
 ## chore(deps): python-routine group (#896): restore ecdsa block, add sqlalchemy[asyncio], hold ruff and fastapi, regenerate contracts
 
 - **Failure:** Dependabot's 14-package bump failed fg-required (`policy-validate`), Guard (`fg-contract`) and Docker Compose Validation (admin-gateway exited on start).

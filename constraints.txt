@@ -25,6 +25,12 @@ pillow>=13.0.0
 # requests and sentry-sdk, both direct production deps.
 urllib3>=2.8.0
 
+# anyio: pulled in via starlette/httpx. anyio <= 4.14.x's pytest plugin
+# imports _pytest.python.CallSpec2, which pytest 9.2 deprecates; with
+# filterwarnings = error that aborts collection. 4.15.0 imports CallSpec
+# first (agronholm/anyio, pytest-dev/pytest#14742). Floor only, no cap.
+anyio>=4.15.0
+
 # Dev-only transitive package floors (pulled in via pre-commit 4.0.1).
 # These are NOT in the production image but are audited in the full-venv
 # informational pip-audit step.
