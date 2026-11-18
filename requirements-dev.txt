@@ -6,7 +6,7 @@ pytest==9.2.0
 pytest-asyncio==1.5.0
 pytest-env==1.8.5
 pytest-cov==7.0.0
-ruff==0.17.5
+ruff==0.15.11
 jsonschema==4.26.0
 # httpx is already in requirements.txt, but pin for tests too
 httpx==0.28.1

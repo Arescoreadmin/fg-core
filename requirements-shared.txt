@@ -12,7 +12,7 @@ cryptography==50.0.2
 pygments==2.21.0
 itsdangerous>=2.1.2,<3.0.0
 python-json-logger>=2.0.0,<3.0.0
-sqlalchemy==2.1.8
+sqlalchemy[asyncio]==2.1.8
 alembic==1.20.1
 psycopg[binary]==3.3.9
 aiosqlite>=0.22.1,<1.0.0

@@ -8933,3 +8933,14 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 1. **No gate is weakened.** The harness still fails on any lane failure, lane timeout or exhausted budget. The step and job timeouts only stop Actions from killing the harness before its own budget applies.
 2. **Better evidence.** Previously a slow runner hit the 60-minute step limit mid-lane, and the run ended without `fg-required-summary.json`. Now the harness reaches its budget, stops lanes itself and records the outcome in its summary artifact.
 3. **Drift is enforced.** `tools/ci/check_timeout_hierarchy.py` reads the real workflow values and rejects a step timeout shorter than the global budget plus 60 seconds. It also rejects a job timeout with less than 600 seconds of overhead, and a workflow it cannot parse.
+
+## 2026-11-18 - chore(deps): python-routine group (#896) with OpenAPI diff normalization
+
+**Scope:** dependency upgrades (14 packages in the python-routine group) plus a narrow change to `tools/ci/check_openapi_security_diff.py`. Contracts and schemas are regenerated with `make contract-authority-refresh`.
+
+**Security analysis:**
+
+1. **ecdsa block kept.** Dependabot rewrote `constraints.txt` from `ecdsa==0` to `ecdsa==0.19.2`. That would have allowed installing a package with CVE-2024-23342, which has no fix. The block is restored, and an install with the new pins resolves without `ecdsa`.
+2. **OpenAPI security diff not weakened.** `_normalize` now skips only `"additionalProperties": true` (the JSON Schema default) and a one-item `enum` that equals the sibling `const`. Both are schema-equivalent. `additionalProperties: false` or a schema, a differing `enum`, and an `enum` without `const` are still compared, and regression tests prove each. On the regenerated contract the checker gives the same result as on `main` (956 changed operations, 0 violations).
+3. **No API surface change.** The regenerated contracts differ only in those two equivalent spellings; no route, parameter, response or security scheme changes.
+4. **Lint gate unchanged.** `ruff` stays at 0.15.11 instead of disabling rules that 0.17.5 enables. The upgrade is deferred to its own PR.
