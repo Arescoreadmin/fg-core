@@ -1,3 +1,12 @@
+## fix(msgraph): import route captures runtime evidence like the live scan path
+
+- **Failure:** every Microsoft Graph finding imported through `POST /field-assessment/engagements/{id}/connector-runs/msgraph/import` had no canonical evidence. On a synthetic tenant the report showed `findings_without_evidence: 28` (all Graph findings), confidence UNKNOWN for each, and the limitation "microsoft_graph scan: evidence capture failed or absent".
+- **Root cause:** the live scan path (`_msgraph_scan_background`) runs `_auto_link_scan_evidence` and `_c6_capture_runtime_evidence` after `import_msgraph_scan_result`. The import route calls the same bridge but never ran that post-import boundary, so no evidence envelope or custody record was created and findings could not be evidence-backed.
+- **Change:** the import route now calls both functions after a successful import, before commit, the same as the live path. Capture is idempotent (replay reuses envelopes) and never raises: on failure findings are marked UNKNOWN and `scan.evidence.capture_failed` is recorded.
+- **Confidence is not inflated:** confidence is still assigned by the existing `fg.finding_confidence.v1` policy. Graph export evidence is scan-level with collection status UNKNOWN, so findings become PROBABLE, not CONFIRMED; `SOURCE_AUTHENTICITY_NOT_ESTABLISHED` is still disclosed.
+- **Tests:** in `tests/test_field_assessment_msgraph_bridge.py`, two tests asserted exactly one evidence link; they now assert the bridge's finding link plus the engagement auto-link the live path already creates (assertions corrected, not removed). New: envelope captured and every finding linked, never CONFIRMED; replay reuses envelopes; a forced capture failure leaves findings UNKNOWN with no envelope and audits `scan.evidence.capture_failed`. Four fail on the old code.
+- **Not changed:** no route signature or contract change; the live scan path is unchanged.
+
 ## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
 
 - **Failure:** after #896 (pytest 9.2.0, pytest-asyncio 1.5.0), `pytest` aborted collection in environments that still had anyio 4.14.2: `PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec`, raised from `anyio/pytest_plugin.py`. `pytest.ini` sets `filterwarnings = error`, so the deprecation became a plugin-load error and no tests ran.
