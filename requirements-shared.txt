@@ -1,10 +1,10 @@
 # Shared platform dependencies — single source of truth for packages common
 # to frostgate-core and admin_gateway. Update here; service-specific
 # additions belong in requirements.txt or admin_gateway/requirements.txt.
-fastapi==0.136.3
+fastapi==0.165.0
 starlette==1.10.0
 uvicorn[standard]==0.54.0
-pydantic==2.14.3
+pydantic==2.14.4
 typing-extensions==4.16.0
 httpx==0.28.1
 PyJWT[crypto]==2.15.1
@@ -12,7 +12,7 @@ cryptography==50.0.2
 pygments==2.21.0
 itsdangerous>=2.1.2,<3.0.0
 python-json-logger>=2.0.0,<3.0.0
-sqlalchemy[asyncio]==2.1.8
+sqlalchemy[asyncio]==2.1.9
 alembic==1.20.1
 psycopg[binary]==3.3.9
 aiosqlite>=0.22.1,<1.0.0

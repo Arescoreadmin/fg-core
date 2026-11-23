@@ -1,5 +1,5 @@
 -r requirements-shared.txt
-python-multipart==0.0.33
+python-multipart==0.0.34
 pydantic-settings==2.16.3
 msal==1.39.0
 loguru==0.8.0
