@@ -8945,3 +8945,48 @@ SOC review outcome: APPROVED as a review fix within PR #877.
 3. **No API surface change.** The regenerated contracts differ only in those two equivalent spellings; no route, parameter, response or security scheme changes.
 4. **Lint gate unchanged.** `ruff` stays at 0.15.11 instead of disabling rules that 0.17.5 enables. The upgrade is deferred to its own PR.
 5. **Route enumeration preserved.** `fastapi` stays at 0.136.3. FastAPI 0.162 hides included routes behind lazy `_IncludedRouter` entries, which breaks the route-inventory security tests and the code in `api/middleware/auth_gate.py` and `api/main.py` that walks `app.router.routes`. The migration is deferred to its own PR rather than loosening those tests.
+
+## 2026-11-24 - fix(field-assessment): restore External AI Risk Register routes dropped by merge 5720043b5 (PR #905)
+
+**Scope:** REPAIR. The three External AI Risk Register routes shipped in the PR 3 commit `1413dbdcc` were dropped by merge `5720043b5` and never reached `main`. This PR restores them in `api/field_assessment.py`, with tighter authorization than the original. The original routes checked only the `governance:write` / `governance:read` API-key scope.
+
+**Called out — generated authority files under `tools/ci/`:** regenerated with `make route-inventory-generate`. Every change is one of the three restored routes or a `generated_at` timestamp:
+
+- `route_inventory.json`: +3 runtime entries, all `plane: control`, `tenant_bound: true`, `scoped: true`, and dependency categories `auth` + `tenant`:
+  - `POST /field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run` (`governance:write`)
+  - `GET /field-assessment/engagements/{engagement_id}/external-ai-risk-register` (`governance:read`)
+  - `PATCH /field-assessment/engagements/{engagement_id}/external-ai-risk-register/{risk_id}` (`governance:write`)
+- `contract_routes.json`: the same 3 routes from the contract.
+- `route_inventory_summary.json`: `contract_count` 1046 → 1049, `runtime_count` 1300 → 1303, `control` 983 → 986. `changed`, `removed` and `contract_only` are unchanged.
+- `plane_registry_snapshot.json`: timestamp only.
+- `topology.sha256`: the hashes of the three files above.
+
+No check, allowlist, plane-registry exception or gate configuration changes.
+
+**Called out — contracts and RBAC:**
+
+- `contracts/core/openapi.json` and `schemas/api/openapi.json` gain 3 paths and 5 schemas, regenerated with `make contract-authority-refresh`. The OpenAPI security diff reports 0 violations.
+- New permission `ai.vendor_governance.execute` (risk level medium) is added to `ALL_PERMISSIONS` and granted to the `assessor` role only. `platform_admin` holds it through `ALL_PERMISSIONS`.
+
+**Route ownership:** `api/field_assessment.py`, the Field Assessment router. Records are `ExternalAiRiskRecord` rows produced by `services/connectors/external_ai_risk_register` through the existing bridge.
+
+**Security analysis:**
+
+1. **Tenant-level authorization only.** Execution needs `ai.vendor_governance.execute` plus the `governance:write` scope. Any assessor in the tenant can run the register for any engagement in that tenant. Engagement-assignment isolation is **not** implemented and is not claimed: it is a separate, unauthorized capability.
+2. **Tenant ownership on every call.** The tenant comes from the credential. Every route loads the engagement by `(tenant_id, engagement_id)`, and records by `(id, tenant_id, engagement_id)`. A foreign or unknown engagement or record returns the same 404.
+3. **Named-human attribution.** POST run and PATCH require a canonical OIDC human actor. A service key or API key returns 403 `NAMED_HUMAN_REQUIRED`; a missing actor returns 401 `CANONICAL_ACTOR_REQUIRED`. The actor subject is recorded on the scan job and the audit events.
+4. **Immutable audit.** Each run writes scan-job and engagement audit events. Each PATCH writes `risk_record.updated` with the changed fields and before/after values. A run is refused when the engagement does not accept evidence (`_assert_engagement_accepts_evidence`). The 500 response no longer echoes the exception text.
+5. **Authorization denials.** Tests cover each denial:
+   - a viewer, QA reviewer or customer role trying to run gets `PERMISSION_DENIED`;
+   - a non-human actor gets `NAMED_HUMAN_REQUIRED`;
+   - a cross-tenant engagement or record gets 404;
+   - an invalid review status gets 422.
+
+   The tests are in `tests/test_external_ai_risk_register_routes.py` (23 tests).
+6. **Customer-admin boundaries unchanged.** `tenant_admin` does not get `ai.vendor_governance.execute`. It keeps:
+   - read access to the register (`assessment.read`);
+   - `governance.promote`, which still gates the existing AI Vendor Governance run;
+   - the existing consent and approval flows, none of which change.
+
+   Risk-record review decisions (PATCH) need `governance.decision`, held by `compliance_reviewer` and `platform_admin`.
+7. **MSP restrictions unchanged.** `ai.vendor_governance.execute` and `governance.decision` are not in `MSP_DELEGABLE_PERMISSIONS`, which stays read-only. A partner relationship cannot authorize execution or review decisions.
