@@ -626,9 +626,25 @@ def test_msgraph_import_captures_runtime_evidence_and_links_findings(
     assert findings
     for f in findings:
         assert f.evidence_envelope_id in env_ids
-        # Scan-level export evidence never yields CONFIRMED confidence.
-        assert f.confidence_level is not None
-        assert f.confidence_level.upper() != "CONFIRMED"
+        # The captured Graph payload is import metadata only (ids, hashes,
+        # counts), not the supporting observations: the link traces the
+        # finding to its import, but must not present it as evidence-backed.
+        assert (f.confidence_level or "").upper() == "UNKNOWN"
+        assert "basis=import_metadata" in (f.confidence_justification or "")
+    (scan_env,) = [e for e in envs if e.source_type == "scan_result"]
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaScanResult
+
+    db = get_sessionmaker()()
+    try:
+        raw = db.get(FaScanResult, scan_id).raw_payload
+    finally:
+        db.close()
+    # If the bridge ever persists the supporting evidence, revisit
+    # METADATA_ONLY_SCANNERS rather than leaving confidence understated.
+    assert raw.get("export_safe") is True
+    assert not {"findings", "evidence_references", "analyzer_outputs"} & set(raw)
+    assert scan_env.scan_result_id == scan_id
 
 
 def test_msgraph_import_replay_reuses_evidence(client: TestClient) -> None:
