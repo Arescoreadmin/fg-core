@@ -347,3 +347,67 @@ def test_patch_unknown_risk_is_404(app: Any) -> None:
         f"{_list_url(eid)}/does-not-exist", json={"review_status": "closed"}
     )
     assert resp.status_code == 404
+
+
+# ── Console client alignment ───────────────────────────────────────────────
+
+
+_CONSOLE_CLIENT = "apps/console/lib/fieldAssessmentApi.ts"
+
+
+def _console_risk_register_paths() -> list[str]:
+    """External AI Risk Register paths the console client requests, as route templates.
+
+    The client requests ``${BASE}${path}`` with ``BASE = '/api/core/field-assessment'``;
+    the console BFF strips ``/api/core``, so the core path is ``/field-assessment`` + path.
+    """
+    import re
+    from pathlib import Path
+
+    source = Path(_CONSOLE_CLIENT).read_text(encoding="utf-8")
+    assert "const BASE = '/api/core/field-assessment';" in source
+    paths = []
+    for raw in re.findall(
+        r"request\(`(/engagements/[^`]*external-ai-risk[^`]*)`", source
+    ):
+        path = raw.split("${qs", 1)[0]  # drop the optional query string
+        path = path.replace("${engagementId}", "{engagement_id}")
+        assert "$" not in path, path
+        paths.append(f"/field-assessment{path}")
+    return paths
+
+
+def test_console_client_urls_match_registered_routes(app: Any) -> None:
+    from fastapi.routing import APIRoute
+
+    registered = {
+        (method, route.path)
+        for route in app.router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods
+    }
+    paths = _console_risk_register_paths()
+    assert sorted(paths) == sorted(
+        [
+            "/field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run",
+            "/field-assessment/engagements/{engagement_id}/external-ai-risk-register",
+        ]
+    )
+    assert ("POST", paths[0]) in registered or ("POST", paths[1]) in registered
+    list_path = next(p for p in paths if not p.endswith("/run"))
+    assert ("GET", list_path) in registered
+
+
+def test_console_list_url_returns_generated_records(app: Any) -> None:
+    """The exact URL (and query parameter name) the console panel uses returns records."""
+    eid, risk_id = _seeded_register(app)
+    list_path = next(
+        p for p in _console_risk_register_paths() if not p.endswith("/run")
+    )
+    client = _client(app, _TENANT, **_human(_ASSESSOR, "assessor"))
+    url = list_path.replace("{engagement_id}", eid)
+    items = client.get(url).json()["items"]
+    risk_score = next(i["risk_score"] for i in items if i["risk_id"] == risk_id)
+    resp = client.get(url, params={"risk_score": risk_score})
+    assert resp.status_code == 200, resp.text
+    assert risk_id in {item["risk_id"] for item in resp.json()["items"]}

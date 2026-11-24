@@ -1198,7 +1198,7 @@ export const fieldAssessmentApi = {
     if (category) q.set('risk_category', category);
     if (status) q.set('review_status', status);
     const qs = q.toString();
-    return request(`/engagements/${engagementId}/external-ai-risk-records${qs ? `?${qs}` : ''}`);
+    return request(`/engagements/${engagementId}/external-ai-risk-register${qs ? `?${qs}` : ''}`);
   },
 
   // Audit events (read-only — append-only server-side)

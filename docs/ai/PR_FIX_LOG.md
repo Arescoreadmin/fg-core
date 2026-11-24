@@ -21,6 +21,7 @@
   - the reviewer PATCH is audited; assessor, tenant_admin and viewer cannot edit; immutable or invalid values give 422; an unknown risk gives 404.
 
   The existing RBAC, MSP and PR 3 suites pass (440 passed, 2 skipped).
+- **Review follow-up (console list URL):** the console client's `listExternalAiRiskRecords()` requested `/engagements/{id}/external-ai-risk-records`, a path no server version ever registered; PR 3's server path was `/external-ai-risk-register`. The panel caught the 404 silently, so a successful run never showed its records. The client now requests the registered path; the query parameters (`risk_score`, `risk_category`, `review_status`) and the `items` response were already aligned. The server contract is unchanged. Two tests read `apps/console/lib/fieldAssessmentApi.ts`: one asserts every risk-register path it requests is a registered route, and one loads the generated records through the console's exact list URL. Both fail on the old client URL.
 
 ## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
 
