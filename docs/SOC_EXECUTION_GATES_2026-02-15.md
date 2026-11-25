@@ -8990,3 +8990,17 @@ No check, allowlist, plane-registry exception or gate configuration changes.
 
    Risk-record review decisions (PATCH) need `governance.decision`, held by `compliance_reviewer` and `platform_admin`.
 7. **MSP restrictions unchanged.** `ai.vendor_governance.execute` and `governance.decision` are not in `MSP_DELEGABLE_PERMISSIONS`, which stays read-only. A partner relationship cannot authorize execution or review decisions.
+
+## 2026-11-25 - fix(billing): contain billing evidence artifact paths (AUDIT-REPAIR-BILLING-PATH-001)
+
+**Scope:** `api/billing.py` invoice and credit-note evidence exports; new tests in `tests/security/test_billing_artifact_path_containment.py`. No CI, gate, allowlist, contract, schema, migration or RBAC change.
+
+**Finding:** FG-ISSUE-FORENSIC-2026-001 X-01. Stored identifiers were joined into the tenant artifact path without a containment check. A stored invoice id `..` caused a signed evidence bundle to be written into the shared `artifacts/billing/` root, outside the tenant directory.
+
+**Security analysis:**
+
+1. **Containment.** Both exports build their directory through `_billing_artifact_dir`. It accepts only single plain path segments, reserves the invoice id `credits`, and requires the resolved directory to remain inside the resolved billing root, so symlinks that lead outside it are rejected.
+2. **Fail closed.** Validation runs before any file is written and before `evidence_path` or `export_path` is updated. An invalid identifier returns 400 `invalid_billing_artifact_identifier`; a symlink escape returns 500 `billing_artifact_path_not_contained` and is logged.
+3. **Tenant isolation unchanged.** The tenant still comes from `bind_tenant_id`, and rows are still loaded by `(tenant_id, id)`. The tenant component is now validated by the same helper. A cross-tenant export returns 404, as before.
+4. **Authorization unchanged.** Exports still require `admin:read`; no scope, permission or role changes.
+5. **Contracts unchanged.** Valid exports return the same fields and paths. Creation endpoints are unchanged, so the OpenAPI documents do not change.

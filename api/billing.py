@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import subprocess
 import sys
@@ -74,6 +75,52 @@ def _canonical_contract_hash(contract: TenantContract) -> str:
         "end_at": _as_utc(contract.end_at).isoformat() if contract.end_at else None,
     }
     return canonical_hash(payload)
+
+
+log = logging.getLogger("frostgate.billing")
+
+_BILLING_ARTIFACT_ROOT = Path("artifacts") / "billing"
+# Credit-note bundles live under <tenant>/credits/, so an invoice may not use
+# that name for its own bundle directory.
+_RESERVED_INVOICE_DIR_NAMES = frozenset({"credits"})
+_MAX_PATH_COMPONENT_BYTES = 255
+
+
+def _is_safe_path_component(value: str) -> bool:
+    if not isinstance(value, str) or value in {"", ".", ".."}:
+        return False
+    if any(sep in value for sep in ("/", "\\")):
+        return False
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return False
+    return len(value.encode("utf-8")) <= _MAX_PATH_COMPONENT_BYTES
+
+
+def _billing_artifact_dir(*components: str) -> Path:
+    """Return the bundle directory for ``components`` beneath the billing
+    artifact root, failing closed unless every component is a single plain
+    path segment and the resolved directory stays inside the root (which also
+    rejects symlinks that point elsewhere).
+
+    Identifiers are persisted from request bodies without format constraints,
+    so they are validated here, at the point they become a filesystem path.
+    """
+    if not all(_is_safe_path_component(c) for c in components):
+        raise HTTPException(
+            status_code=400, detail="invalid_billing_artifact_identifier"
+        )
+    candidate = _BILLING_ARTIFACT_ROOT.joinpath(*components)
+    root = _BILLING_ARTIFACT_ROOT.resolve()
+    resolved = candidate.resolve()
+    if resolved != root and not resolved.is_relative_to(root):
+        log.warning(
+            "billing artifact path escapes root",
+            extra={"event": "billing_artifact_path_escape"},
+        )
+        raise HTTPException(
+            status_code=500, detail="billing_artifact_path_not_contained"
+        )
+    return candidate
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:
@@ -1570,6 +1617,11 @@ def export_evidence(
         raise HTTPException(status_code=404, detail="invoice not found")
     if invoice.finalized_at is not None:
         raise HTTPException(status_code=409, detail="invoice_finalized_evidence_frozen")
+    if invoice_id in _RESERVED_INVOICE_DIR_NAMES:
+        raise HTTPException(
+            status_code=400, detail="invalid_billing_artifact_identifier"
+        )
+    out_dir = _billing_artifact_dir(effective_tenant, invoice_id)
 
     daily_counts = (
         db.query(BillingDailyCount)
@@ -1678,7 +1730,6 @@ def export_evidence(
     files["attestation.sig"] = sig.encode("utf-8")
     files["attestation.pub"] = pub.encode("utf-8")
 
-    out_dir = Path("artifacts") / "billing" / effective_tenant / invoice_id
     for name, payload in files.items():
         _atomic_write(out_dir / name, payload)
 
@@ -1838,9 +1889,7 @@ def export_credit_note_evidence(
     if note is None:
         raise HTTPException(status_code=404, detail="credit note not found")
 
-    out_dir = (
-        Path("artifacts") / "billing" / effective_tenant / "credits" / credit_note_id
-    )
+    out_dir = _billing_artifact_dir(effective_tenant, "credits", credit_note_id)
     credit_payload = canonical_json(note.credit_json)
     manifest = {
         "billing_evidence_spec_version": "v1",
