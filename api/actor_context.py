@@ -50,6 +50,8 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         "scan.read",
         "scan.scope.manage",
         "scan.emergency_stop",
+        # AI risk register execution (assessor; never tenant_admin or MSP-delegable)
+        "ai.vendor_governance.execute",
         "scan.emergency_stop.platform",
         # Customer scan consent (L14-SCAN-AUTH-HARDENING-001)
         "scan.consent.approve",
@@ -173,6 +175,11 @@ CAPABILITY_REGISTRY: dict[str, _CapabilityMeta] = {
         "display_name": "Manage Scan Authorization Scope",
         "description": "Create, activate, and revoke per-engagement authorized scan scope records (L14-SCAN-SAFETY-001)",
         "risk_level": "high",
+    },
+    "ai.vendor_governance.execute": {
+        "display_name": "Run AI Risk Register",
+        "description": "Generate the External AI Risk Register for an engagement in the actor's tenant (tenant-level; no engagement assignment)",
+        "risk_level": "medium",
     },
     "scan.emergency_stop": {
         "display_name": "Emergency Stop (Engagement/Tenant)",
@@ -377,6 +384,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             # may withdraw consent (reduces authority); can NEVER approve it
             "scan.consent.revoke",
             "report.generate",
+            # AI risk register execution — derived from collected evidence only
+            "ai.vendor_governance.execute",
             "bundle.generate",  # mechanical; approve requires qa_reviewer
         }
     ),

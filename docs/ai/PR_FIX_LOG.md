@@ -1,3 +1,28 @@
+## fix(field-assessment): restore External AI Risk Register routes dropped by merge 5720043b5
+
+- **Failure:** `POST /field-assessment/engagements/{id}/connector-runs/ai-vendor-governance/run` always returned `422 NO_EXTERNAL_AI_RISK_SCAN`, and nothing in the product could create an External AI Risk Register scan. The console (`apps/console/lib/fieldAssessmentApi.ts`) still called the missing run route.
+- **Root cause:** PR 3 (`1413dbdcc`) shipped three routes: run, list and PATCH. The merge `5720043b5` ("Merge origin/main into pr/3-external-ai-risk-register") dropped all three, along with their request and response models. The engine, bridge, ORM, migrations 0090/0091, the PATCH request model, its validators and the PR 3 test suite all survived. No route-level test existed to catch the loss.
+- **Change:** restored the three routes and their four response/request models in PR 3's original position, adapted to current conventions (`ActorContext`, `require_permission`, `authz_scope`):
+  - **run:** new permission `ai.vendor_governance.execute`, granted to `assessor` (and `platform_admin`, which holds every permission). A canonical named human is required; API keys and service principals get `403 NAMED_HUMAN_REQUIRED`. The run also requires that the engagement accepts evidence. A durable scan job is created, and `scan.initiated`, `scan.completed` and `scan.failed` are audited with the named human. The 500 response no longer echoes exception text.
+  - **list:** `assessment.read`, the same as the Vendor Governance list. Customer admins and viewers keep read oversight.
+  - **PATCH:** `governance.decision`, the same as the Vendor Governance PATCH, plus a named human. It validates every enumerated field on `main`'s current model, including the vendor review fields. `risk_record.updated` is audited with the changed fields and before/after values.
+  - Every route resolves the caller's tenant and filters by tenant and engagement. Cross-tenant requests return 404.
+- **Authority boundaries:**
+  - `ai.vendor_governance.execute` is not granted to `tenant_admin` and is not in `MSP_DELEGABLE_PERMISSIONS`, so a partner relationship cannot confer it.
+  - Customer-admin permissions are unchanged, including `governance.promote` and consent approval. The Vendor Governance routes and their permissions are unchanged.
+- **Limitation:** authorization is **tenant-level**. FrostGate has no per-engagement assessor-assignment authority, so any assessor in a tenant may run the register for any of that tenant's engagements. Engagement-level isolation is not implemented and is not claimed.
+- **Contract:** regenerated with `make contract-authority-refresh`. `contracts/core/openapi.json` and `schemas/api/openapi.json` gain exactly 3 paths and 5 schemas. No existing path changed. The authority hash is updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`.
+- **Tests:** `tests/test_external_ai_risk_register_routes.py`, 23 tests:
+  - permission registry and holders; MSP non-delegability; customer-admin oversight preserved;
+  - an assessor run audited with the named human; idempotent re-run;
+  - run denied with `PERMISSION_DENIED` for tenant_admin, viewer, compliance_reviewer and qa_reviewer, with no audit trace;
+  - an API key denied with `NAMED_HUMAN_REQUIRED`; a missing AI Tool Discovery scan gives 422; unknown body fields give 422;
+  - cross-tenant run, list and PATCH give 404; four tenant roles can read;
+  - the reviewer PATCH is audited; assessor, tenant_admin and viewer cannot edit; immutable or invalid values give 422; an unknown risk gives 404.
+
+  The existing RBAC, MSP and PR 3 suites pass (440 passed, 2 skipped).
+- **Review follow-up (console list URL):** the console client's `listExternalAiRiskRecords()` requested `/engagements/{id}/external-ai-risk-records`, a path no server version ever registered; PR 3's server path was `/external-ai-risk-register`. The panel caught the 404 silently, so a successful run never showed its records. The client now requests the registered path; the query parameters (`risk_score`, `risk_category`, `review_status`) and the `items` response were already aligned. The server contract is unchanged. Two tests read `apps/console/lib/fieldAssessmentApi.ts`: one asserts every risk-register path it requests is a registered route, and one loads the generated records through the console's exact list URL. Both fail on the old client URL.
+
 ## ci(fg-required): keep partial lane output on timeout; cut security-lane setup cost
 
 - **Failure:** fg-required's `fg-security` lane reached its 2400s lane timeout on slow runners (#903 once, #904 twice) with no failing test. The lane log contained only `$ make fg-security` and `[timeout]`, so there was no way to tell a stalled test from a slow run.

@@ -2234,6 +2234,12 @@
     },
     {
       "method": "POST",
+      "path": "/field-assessment/engagements/{engagement_id}/connector-runs/external-ai-risk-register/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "scopes": [],
       "source": "contract"
@@ -2559,6 +2565,18 @@
     {
       "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/execution-state",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/external-ai-risk-register",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/field-assessment/engagements/{engagement_id}/external-ai-risk-register/{risk_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -6277,7 +6295,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-11-09T19:07:33.324860+00:00",
+  "generated_at": "2026-11-18T17:13:48.089482+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
