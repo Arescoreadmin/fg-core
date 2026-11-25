@@ -262,6 +262,42 @@ class FgRequiredMinimalTests(unittest.TestCase):
                 self.assertEqual(rc, 1)
                 checker.assert_called_once_with("start")
 
+    def test_timed_out_lane_log_keeps_partial_output(self) -> None:
+        """A lane timeout must leave the output produced so far in lane.log
+        (redacted), so a stall can be told apart from a slow run."""
+        import sys
+
+        secret = "s3cr3t-lane-value"
+        script = (
+            "import sys, time\n"
+            "print('progress: 40% tests/security/test_slow.py', flush=False)\n"
+            # Built at runtime so the secret is not in the echoed argv.
+            "print('leaked ' + 's3cr3t' + '-lane-value')\n"
+            "sys.stderr.write('stderr-before-timeout\\n')\n"
+            "time.sleep(30)\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            commands = {"fg-security": ((sys.executable, "-c", script),)}
+            with mock.patch.object(fg_required, "ARTIFACT_ROOT", root):
+                with mock.patch.object(fg_required, "LANE_COMMANDS", commands):
+                    result = fg_required._run_lane(
+                        "fg-security", 2, 100, [secret], False, False
+                    )
+            log = (root / "lanes" / "fg-security" / "lane.log").read_text(
+                encoding="utf-8"
+            )
+        self.assertEqual(result.error, "lane_timeout")
+        self.assertTrue(result.timeout)
+        # Unbuffered lane env: output printed without an explicit flush survives.
+        self.assertIn("progress: 40% tests/security/test_slow.py", log)
+        self.assertIn("stderr-before-timeout", log)
+        self.assertIn("[timeout after 2s]", log)
+        self.assertNotIn(secret, log)
+
+    def test_lane_env_is_unbuffered(self) -> None:
+        self.assertEqual(fg_required._safe_env()["PYTHONUNBUFFERED"], "1")
+
 
 if __name__ == "__main__":
     unittest.main()

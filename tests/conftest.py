@@ -96,6 +96,63 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     yield
 
 
+def _app_reuse_key(auth_enabled: bool) -> tuple:
+    # Every FG_* setting except the per-test database path: any difference in
+    # the environment the app is built from gets its own app.
+    env = tuple(
+        sorted(
+            (k, v)
+            for k, v in os.environ.items()
+            if k.startswith("FG_") and k != "FG_SQLITE_PATH"
+        )
+    )
+    return (bool(auth_enabled), env)
+
+
+def _reuse_or_build_app(cache: dict, build, auth_enabled: bool):
+    """Return a cached app for an identical build environment, reset to its
+    just-built state; otherwise build one and cache it.
+
+    Building the full app (1270 routes) costs ~1s per test.  Reuse is opt-in
+    via ``module_app_cache``.  Per-test isolation is kept: the caller still
+    creates a fresh database, and every reuse clears dependency overrides,
+    discards the middleware stack (so middleware with in-memory state, such as
+    the DoS guard, is re-instantiated on the next request) and restores
+    ``app.state`` from a snapshot taken right after the build, with fresh
+    copies of mutable containers.
+    """
+    import copy
+
+    def _fresh(state: dict) -> dict:
+        # The live containers (e.g. the UI key-scope cache) are mutated by
+        # requests, so the snapshot and every restore must hold copies.
+        return {
+            k: copy.copy(v) if isinstance(v, (dict, list, set)) else v
+            for k, v in state.items()
+        }
+
+    key = _app_reuse_key(auth_enabled)
+    entry = cache.get(key)
+    if entry is None:
+        app = build()
+        cache[key] = (app, _fresh(app.state._state))
+        return app
+    app, snapshot = entry
+    app.dependency_overrides.clear()
+    app.middleware_stack = None
+    app.state._state.clear()
+    app.state._state.update(_fresh(snapshot))
+    return app
+
+
+@pytest.fixture(scope="module")
+def module_app_cache() -> Iterator[dict]:
+    """Opt-in: share one built app per test module (``build_app(reuse_from=...)``)."""
+    cache: dict = {}
+    yield cache
+    cache.clear()
+
+
 @pytest.fixture()
 def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """
@@ -108,6 +165,7 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         dev_events_enabled: bool = False,
         api_key: str | None = None,
         ui_token_get_enabled: bool = True,
+        reuse_from: dict | None = None,
     ):
         api_key_value = api_key or _require_api_key()
         db_path = sqlite_path or str(tmp_path / "fg-test.db")
@@ -147,7 +205,10 @@ def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         reset_engine_cache()
         init_db(sqlite_path=db_path)
 
-        app = _build_app()
+        if reuse_from is None:
+            app = _build_app()
+        else:
+            app = _reuse_or_build_app(reuse_from, _build_app, auth_enabled)
         # L14-ASSESSMENT-ASSURANCE-001: QA decisions require a named human
         # reviewer.  Inert unless a test sends the X-Test-Human-Actor header
         # (see tests/_assurance_actors.py); all other requests resolve normally.
