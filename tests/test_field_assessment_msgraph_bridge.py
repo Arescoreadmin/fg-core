@@ -220,7 +220,11 @@ def test_msgraph_import_creates_scan_findings_links_and_clears_gate(
         f"/field-assessment/engagements/{engagement['id']}/evidence-links"
     )
     assert links.status_code == 200
-    assert len(links.json()) == 1
+    # finding -> scan_result (bridge) + engagement -> scan_result (auto-link,
+    # same post-import boundary as the live scan path).
+    assert sorted(
+        (lnk["source_entity_type"], lnk["evidence_entity_type"]) for lnk in links.json()
+    ) == [("engagement", "scan_result"), ("finding", "scan_result")]
 
     execution = client.get(
         f"/field-assessment/engagements/{engagement['id']}/execution-state"
@@ -263,7 +267,8 @@ def test_msgraph_import_is_idempotent(client: TestClient) -> None:
     )
     assert len(scans.json()) == 1
     assert findings.json()["total_count"] == 1
-    assert len(links.json()) == 1
+    # Replay adds no links: one bridge link + one engagement auto-link.
+    assert len(links.json()) == 2
 
 
 def test_msgraph_import_wrong_tenant_fails_closed(build_app: object) -> None:
@@ -574,3 +579,124 @@ def test_rebuild_graph_runs_and_logs_failure_when_not_delivered() -> None:
         )
 
     mock_build.assert_called_once()
+
+
+def _graph_rows(engagement_id: str) -> tuple[list[Any], list[Any]]:
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import (
+        FaNormalizedFinding,
+        FaScanEvidenceEnvelope,
+    )
+
+    db = get_sessionmaker()()
+    try:
+        envs = (
+            db.query(FaScanEvidenceEnvelope)
+            .filter_by(tenant_id=_TENANT_ID, engagement_id=engagement_id)
+            .all()
+        )
+        findings = (
+            db.query(FaNormalizedFinding)
+            .filter_by(tenant_id=_TENANT_ID, engagement_id=engagement_id)
+            .all()
+        )
+        db.expunge_all()
+        return envs, findings
+    finally:
+        db.close()
+
+
+def test_msgraph_import_captures_runtime_evidence_and_links_findings(
+    client: TestClient,
+) -> None:
+    """The import route uses the live path's evidence boundary: a canonical
+    envelope is captured and every imported finding is linked to it."""
+    engagement = _create_engagement(client)
+    scan_result = _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=_import_payload(scan_result),
+    )
+    assert resp.status_code == 200, resp.text
+
+    envs, findings = _graph_rows(engagement["id"])
+    scan_id = resp.json()["scan_result_id"]
+    assert envs and all(e.scan_result_id == scan_id for e in envs)
+    env_ids = {e.id for e in envs}
+    assert findings
+    for f in findings:
+        assert f.evidence_envelope_id in env_ids
+        # The captured Graph payload is import metadata only (ids, hashes,
+        # counts), not the supporting observations: the link traces the
+        # finding to its import, but must not present it as evidence-backed.
+        assert (f.confidence_level or "").upper() == "UNKNOWN"
+        assert "basis=import_metadata" in (f.confidence_justification or "")
+    (scan_env,) = [e for e in envs if e.source_type == "scan_result"]
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaScanResult
+
+    db = get_sessionmaker()()
+    try:
+        raw = db.get(FaScanResult, scan_id).raw_payload
+    finally:
+        db.close()
+    # If the bridge ever persists the supporting evidence, revisit
+    # METADATA_ONLY_SCANNERS rather than leaving confidence understated.
+    assert raw.get("export_safe") is True
+    assert not {"findings", "evidence_references", "analyzer_outputs"} & set(raw)
+    assert scan_env.scan_result_id == scan_id
+
+
+def test_msgraph_import_replay_reuses_evidence(client: TestClient) -> None:
+    engagement = _create_engagement(client)
+    payload = _import_payload(
+        _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+    )
+    url = f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import"
+    assert client.post(url, json=payload).status_code == 200
+    first_envs, _ = _graph_rows(engagement["id"])
+    assert client.post(url, json=payload).status_code == 200
+    second_envs, _ = _graph_rows(engagement["id"])
+    assert {e.id for e in second_envs} == {e.id for e in first_envs}
+
+
+def test_msgraph_import_capture_failure_discloses_missing_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A capture failure never fails the import and never yields evidence-backed
+    confidence: findings stay UNKNOWN and the failure is audited."""
+    from services.field_assessment import runtime_evidence
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise runtime_evidence.EvidenceCaptureError("CAPTURE_TEST_FAILURE", "forced")
+
+    monkeypatch.setattr(runtime_evidence, "capture_with_retry", _boom)
+    engagement = _create_engagement(client)
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=_import_payload(
+            _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+        ),
+    )
+    assert resp.status_code == 200, resp.text
+    envs, findings = _graph_rows(engagement["id"])
+    assert envs == []
+    assert findings and all(
+        f.evidence_envelope_id is None
+        and (f.confidence_level or "").upper() == "UNKNOWN"
+        for f in findings
+    )
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaScanAuditEvent
+
+    db = get_sessionmaker()()
+    try:
+        events = {
+            e.event_type
+            for e in db.query(FaScanAuditEvent).filter_by(
+                tenant_id=_TENANT_ID, engagement_id=engagement["id"]
+            )
+        }
+    finally:
+        db.close()
+    assert "scan.evidence.capture_failed" in events
