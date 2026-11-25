@@ -39,7 +39,7 @@
     "react-hook-form": "^7.92.0",
     "recharts": "^2.14.1",
     "resend": "^6.39.0",
-    "tailwind-merge": "^2.6.0",
+    "tailwind-merge": "^3.7.1",
     "zod": "^4.6.7",
     "zustand": "^4.5.5"
   },
