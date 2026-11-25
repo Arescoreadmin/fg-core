@@ -99,6 +99,12 @@ SCANNER_VERIFICATION_METHOD: dict[str, VerificationMethod] = {
     "oauth_risk": _EXPORT,
     "ai_tool_discovery": _EXPORT,
 }
+# Scanners whose persisted raw payload is import metadata only (ids, hashes,
+# timestamps, counts): the Graph bridge stores an export-safe summary, not the
+# evidence references or analyzer observations.  Their envelope proves which
+# import a finding came from, not the finding's claim, so linked findings stay
+# UNKNOWN rather than being presented as evidence-backed.
+METADATA_ONLY_SCANNERS = frozenset({"microsoft_graph"})
 TARGET_SCANNERS = frozenset({"network_scan", "dns_email", "web_headers"})
 GRAPH_PROOF_LEVEL = "GRAPH_CUSTOMER_DEVICE_CODE_LOGIN_ONLY"
 
@@ -763,14 +769,18 @@ def _link_findings(
             for s in sorted(obs_map.get(finding.id, set()))
             if s in capture.observation_envelope_ids
         ]
+        metadata_only = False
         if obs_ids:
             env_ids = [capture.observation_envelope_ids[s] for s in obs_ids]
             coll = combine_statuses(statuses[s] for s in obs_ids)
+            basis = "observation"
         else:
             env_ids = [capture.scan_envelope_id]
             coll = capture.collection_status
+            metadata_only = scanner_id in METADATA_ONLY_SCANNERS
+            basis = "import_metadata" if metadata_only else "scan_result"
         level = classify_confidence(
-            evidence_present=True,
+            evidence_present=not metadata_only,
             collection_complete=coll == CollectionStatus.COMPLETE.value,
             verification_method=method,
             provenance_status=ProvenanceStatus.VERIFIED_INTEGRITY_ONLY,
@@ -782,7 +792,7 @@ def _link_findings(
         finding.confidence_justification = (
             f"policy={CONFIDENCE_POLICY_VERSION}; evidence={len(env_ids)}; "
             f"collection={coll}; provenance={ProvenanceStatus.VERIFIED_INTEGRITY_ONLY.value}; "
-            f"basis={'observation' if obs_ids else 'scan_result'}"
+            f"basis={basis}"
         )
         for env_id in env_ids:
             if not _normalized_event_exists(
