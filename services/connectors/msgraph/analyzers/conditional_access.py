@@ -44,8 +44,9 @@ def _policy_blocks_legacy_auth(policy: dict[str, Any]) -> bool:
     conditions = policy.get("conditions", {})
     client_apps = conditions.get("clientAppTypes", [])
     grant = policy.get("grantControls") or {}
-    # Block policy has no grant controls or explicit block
-    is_block = grant.get("operator") is None or grant.get("builtInControls", []) == []
+    # Graph represents a block policy as builtInControls == ["block"]; a policy
+    # with no grant controls (e.g. session-only) does not block sign-in.
+    is_block = "block" in (grant.get("builtInControls") or [])
     has_legacy_apps = any(a in _LEGACY_AUTH_CLIENT_APPS for a in client_apps)
     return has_legacy_apps and is_block
 

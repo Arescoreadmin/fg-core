@@ -7,6 +7,34 @@
 - **Tests:** in `tests/test_field_assessment_msgraph_bridge.py`, two tests asserted exactly one evidence link; they now assert the bridge's finding link plus the engagement auto-link the live path already creates (assertions corrected, not removed). New: envelope captured and every finding linked, UNKNOWN with `basis=import_metadata`, with an assertion that the stored payload holds no supporting evidence; replay reuses envelopes; a forced capture failure leaves findings UNKNOWN with no envelope and audits `scan.evidence.capture_failed`. Four fail on the old code.
 - **Not changed:** no route signature, contract or schema change. The live scan path's code is unchanged; only its Graph confidence outcome changes through the shared `_link_findings`.
 
+## fix(ai-discovery): preserve explicit Google Workspace AI detection (PR #903 review)
+
+- **Failure:** the multi-product publisher guard rejected `Google Workspace AI` from `Google LLC`, including the principal ID fixture already in the Graph vendor database. The discovery runner then omitted the tool and its permission exposure.
+- **Repair:** add the explicit `google workspace ai` display-name alias to Google's existing signature. Keep `publisher_implies_ai=False`; do not treat a Google publisher, generic Workspace name, domain or fuzzy match alone as AI evidence. No application-ID trust is added.
+- **Regression proof:** three new focused cases failed before the repair: matching with and without the legacy database app ID, and runner discovery retaining tenant-wide `Files.Read.All` / `offline_access` exposure. The positive-product matrix also includes Workspace AI, and generic Google Workspace joins the non-AI negative cases.
+- **Scope:** REPAIR, same registry and existing scan pipeline; no authorization, tenant, schema, dependency or release-gate changes.
+- **Validation:** discovery precision and runner suites: 41 passed; Ruff lint and formatting checked.
+
+## fix(ai-discovery): no AI label from a multi-product vendor's name alone; detect meeting note-takers
+
+- **Failure:** on a synthetic 348-employee Microsoft 365 tenant, AI tool discovery reported 139 AI tools: 130 Microsoft first-party service principals as "Microsoft Copilot (suspected)", the Salesforce app as "Salesforce AI", and so on. AI data-access mapping inherited the inflated list. An AI meeting note-taker with calendar and meeting scopes (11 users) was not detected by either AI discovery or the Microsoft Graph `ai_signals` analyzer.
+- **Root cause:** `match_ai_vendor` (`services/connectors/ai_tool_discovery/vendor_registry.py`) returns a match on any positive score, so a publisher match (35) alone was enough, and publisher "Microsoft Corporation" matched the Copilot signature. "Salesforce" fuzzy-matches "salesforce ai" (ratio 0.87 >= 0.82). Notion, Canva and ServiceNow listed their bare brand name as an AI product name. The registry and `msgraph/vendor_db/ai_vendors.json` had no meeting-assistant entries.
+- **Change:**
+  - `AiVendorSignature.publisher_implies_ai` (default `True`). Set `False` for Microsoft, Google, GitHub, Notion, Canva, Salesforce and ServiceNow: for these a match now needs a known app id or a product display name; publisher, domain or fuzzy name alone no longer match. AI-only vendors (OpenAI, Anthropic, Perplexity, ...) are unchanged.
+  - Removed the bare brand names "notion", "canva" and "servicenow" from those vendors' AI product names; added "microsoft 365 copilot" to Microsoft Copilot's names so the real product still matches.
+  - New signatures: Otter.ai, Fireflies.ai, Read AI, Fathom, and an unattributed "AI meeting assistant" signature for note-taker wording.
+  - `msgraph/vendor_db/ai_vendors.json`: meeting-assistant display-name patterns.
+  - `signature.to_dict()` gains `publisher_implies_ai` (additive).
+- **Tests:** `tests/test_ai_vendor_matching_precision.py`, 26 cases. 16 fail on the old code. 452 tests across `tests/connectors/msgraph` and every AI discovery/mapping/signal test pass. End-to-end on the synthetic tenant: 139 -> 7 discovered tools; note-taker detected.
+- **Not changed:** a third-party wrapper whose name contains "ChatGPT" is still attributed to OpenAI; vendor attribution for wrappers is a separate fix.
+
+## fix(msgraph): CA-001 recognises Graph's block-policy shape
+
+- **Failure:** the Microsoft Graph connector reported CA-001 "No policy blocking legacy authentication protocols" (critical) for a tenant with an enabled legacy-auth block policy. The report's top remediation told the customer to create a policy they already had, and the Entra governance connector reported the same tenant correctly, so one report contradicted itself. Found while generating a synthetic prospect sample through the real pipeline.
+- **Root cause:** `_policy_blocks_legacy_auth` (`services/connectors/msgraph/analyzers/conditional_access.py`) treated a policy as a block when `grantControls.operator` was null or `builtInControls` was empty. Microsoft Graph represents a block policy as `{"operator": "OR", "builtInControls": ["block"]}`, so real block policies never matched. It also counted a legacy-scoped policy with no grant controls (e.g. session-only) as a block.
+- **Change:** a policy blocks legacy auth only when `"block"` is in `builtInControls`, the same rule the Entra governance connector already uses. Only enabled policies count, as before.
+- **Tests:** `test_legacy_auth_block_detected` used `grantControls: None` as its block fixture, a shape Graph never returns; it now uses the real Graph shape and also asserts CA-001 is absent. New: an MFA-grant legacy policy is not a block; a session-only legacy policy is not a block; a report-only block policy is not enforced. Against the old code, two of these fail.
+
 ## fix(deps): floor anyio at 4.15.0 so pytest 9.2 collection does not abort
 
 - **Failure:** after #896 (pytest 9.2.0, pytest-asyncio 1.5.0), `pytest` aborted collection in environments that still had anyio 4.14.2: `PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec`, raised from `anyio/pytest_plugin.py`. `pytest.ini` sets `filterwarnings = error`, so the deprecation became a plugin-load error and no tests ran.

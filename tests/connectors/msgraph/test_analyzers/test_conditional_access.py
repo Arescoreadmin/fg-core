@@ -45,11 +45,49 @@ def test_legacy_auth_block_detected():
     policy = _policy(
         state="enabled",
         client_apps=["exchangeActiveSync", "other"],
-        grant_controls=None,
+        # Real Graph shape for a block policy.
+        grant_controls={"operator": "OR", "builtInControls": ["block"]},
     )
     client = make_client({"/identity/conditionalAccessPolicies": [policy]})
     result, findings, _ = conditional_access.run(client, TENANT_ID)
     assert result.has_legacy_auth_block is True
+    assert not any("No policy blocking legacy" in f.title for f in findings)
+
+
+def test_legacy_auth_policy_requiring_mfa_is_not_a_block():
+    policy = _policy(
+        state="enabled",
+        client_apps=["exchangeActiveSync", "other"],
+        grant_controls={"operator": "OR", "builtInControls": ["mfa"]},
+    )
+    client = make_client({"/identity/conditionalAccessPolicies": [policy]})
+    result, findings, _ = conditional_access.run(client, TENANT_ID)
+    assert result.has_legacy_auth_block is False
+    assert any("No policy blocking legacy" in f.title for f in findings)
+
+
+def test_legacy_auth_policy_without_grant_controls_is_not_a_block():
+    # Session-only policy: no grantControls means sign-in is not blocked.
+    policy = _policy(
+        state="enabled",
+        client_apps=["exchangeActiveSync", "other"],
+        grant_controls=None,
+        session_controls={"signInFrequency": {"value": 1, "type": "hours"}},
+    )
+    client = make_client({"/identity/conditionalAccessPolicies": [policy]})
+    result, findings, _ = conditional_access.run(client, TENANT_ID)
+    assert result.has_legacy_auth_block is False
+
+
+def test_report_only_legacy_block_is_not_enforced():
+    policy = _policy(
+        state="enabledForReportingButNotEnforced",
+        client_apps=["exchangeActiveSync", "other"],
+        grant_controls={"operator": "OR", "builtInControls": ["block"]},
+    )
+    client = make_client({"/identity/conditionalAccessPolicies": [policy]})
+    result, findings, _ = conditional_access.run(client, TENANT_ID)
+    assert result.has_legacy_auth_block is False
 
 
 def test_missing_legacy_auth_block_produces_finding():
