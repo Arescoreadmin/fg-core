@@ -3587,6 +3587,27 @@ def import_msgraph_connector_run_route(
         raise HTTPException(
             status_code=422, detail=api_error(exc.code, exc.message)
         ) from exc
+    # Same post-import evidence boundary as the live scan path
+    # (_msgraph_scan_background): link scan evidence and capture canonical
+    # runtime evidence.  Capture never raises; on failure findings stay
+    # UNKNOWN (never evidence-backed) and scan.evidence.capture_failed is
+    # recorded.  Capture is idempotent, so a replayed import reuses envelopes.
+    _auto_link_scan_evidence(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scan_result_id=result.scan_result_id,
+        source_type="microsoft_graph",
+    )
+    _c6_capture_runtime_evidence(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scan_result_id=result.scan_result_id,
+        scanner_type="microsoft_graph",
+        scan_job_id=None,
+        actor=actor,
+    )
     db.commit()
     return ConnectorImportResponse(**result.to_dict())
 
