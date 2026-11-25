@@ -35,8 +35,8 @@ RATE = 125_000  # USD 1,250.00 in minor units
 
 
 @pytest.fixture
-def app(build_app):
-    return build_app(auth_enabled=True, api_key="")
+def app(build_app, module_app_cache):
+    return build_app(auth_enabled=True, api_key="", reuse_from=module_app_cache)
 
 
 @pytest.fixture
