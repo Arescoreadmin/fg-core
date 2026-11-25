@@ -6,7 +6,7 @@ pytest==9.2.0
 pytest-asyncio==1.5.0
 pytest-env==1.8.7
 pytest-cov==7.0.0
-ruff==0.15.11
+ruff==0.17.6
 jsonschema==4.26.0
 # httpx is already in requirements.txt, but pin for tests too
 httpx==0.28.1
@@ -15,7 +15,7 @@ requests>=2.31
 pre-commit==4.7.0
 # Explicit (was only transitive via pre-commit): required by the repository
 # security policy checker tools/ci/check_github_repo_security.py.
-PyYAML==6.0.3
+PyYAML==6.0.4
 PyJWT[crypto]==2.15.1
 cryptography==50.0.2
 pygments==2.21.0
