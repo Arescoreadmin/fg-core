@@ -9004,3 +9004,4 @@ No check, allowlist, plane-registry exception or gate configuration changes.
 3. **Tenant isolation unchanged.** The tenant still comes from `bind_tenant_id`, and rows are still loaded by `(tenant_id, id)`. The tenant component is now validated by the same helper. A cross-tenant export returns 404, as before.
 4. **Authorization unchanged.** Exports still require `admin:read`; no scope, permission or role changes.
 5. **Contracts unchanged.** Valid exports return the same fields and paths. Creation endpoints are unchanged, so the OpenAPI documents do not change.
+6. **Environmental assumption (residual risk).** The resolved-path check runs before the writes, so there is a check-to-write window. Exploiting it requires existing write access inside `artifacts/billing/`, which the deployment must restrict to the service account. Descriptor-relative `O_NOFOLLOW` writes would close the window; they are a separate hardening item.
