@@ -1,3 +1,11 @@
+## ci(fg-required): keep partial lane output when a lane times out
+
+- **Failure:** fg-required's `fg-security` lane reached its 2400s lane timeout on slow runners (#903 once, #904 twice) with no failing test. The lane log contained only `$ make fg-security` and `[timeout]`, so there was no way to tell a stalled test from a slow run.
+- **Root cause:** `_run_lane` (`tools/testing/harness/fg_required.py`) caught `subprocess.TimeoutExpired` and wrote only `[timeout]`, discarding the partial stdout/stderr the exception carries. That partial output was empty anyway: `_safe_env()` does not pass `PYTHONUNBUFFERED`, so pytest's output into the capture pipe stayed block-buffered and nothing was flushed before the kill.
+- **Change:** `_safe_env()` sets `PYTHONUNBUFFERED=1` for lane subprocesses. On a lane timeout, the partial stdout and stderr (decoded from bytes, redacted with the same `_sanitize` as normal output, and capped by the existing log size limit) are written to `lane.log`, followed by `[timeout after Ns]`. The lane result (`lane_timeout`) and triage classification are unchanged.
+- **Not changed:** no timeout, budget, lane selection, test selection or pytest option changes.
+- **Tests:** `tests/tools_minimal/test_fg_required_minimal.py` gains two tests: a command that prints (without flushing) and then outlives its timeout leaves its stdout, stderr and the timeout marker in `lane.log` with the secret redacted; and the lane env is unbuffered. Both fail on the old harness.
+
 ## fix(msgraph): CA-001 recognises Graph's block-policy shape
 
 - **Failure:** the Microsoft Graph connector reported CA-001 "No policy blocking legacy authentication protocols" (critical) for a tenant with an enabled legacy-auth block policy. The report's top remediation told the customer to create a policy they already had, and the Entra governance connector reported the same tenant correctly, so one report contradicted itself. Found while generating a synthetic prospect sample through the real pipeline.
