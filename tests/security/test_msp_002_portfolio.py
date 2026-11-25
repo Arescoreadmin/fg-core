@@ -33,8 +33,8 @@ ASSESS_CAPS = ["assessment.read", "finding.read", "evidence.read"]
 
 
 @pytest.fixture
-def app(build_app):
-    return build_app(auth_enabled=True, api_key="")
+def app(build_app, module_app_cache):
+    return build_app(auth_enabled=True, api_key="", reuse_from=module_app_cache)
 
 
 @pytest.fixture

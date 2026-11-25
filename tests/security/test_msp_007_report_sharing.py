@@ -53,9 +53,9 @@ QA_SUBJECT = "auth0|msp7-independent-qa"
 
 
 @pytest.fixture
-def app(build_app, monkeypatch):
+def app(build_app, module_app_cache, monkeypatch):
     monkeypatch.setenv("FG_REPORT_SIGNING_KEY", S.SIGNING_KEY_HEX)
-    return build_app(auth_enabled=True, api_key="")
+    return build_app(auth_enabled=True, api_key="", reuse_from=module_app_cache)
 
 
 @pytest.fixture

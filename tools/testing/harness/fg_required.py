@@ -145,6 +145,10 @@ def _safe_env() -> dict[str, str]:
     # Determinism defaults.
     env.setdefault("PYTHONHASHSEED", "0")
     env.setdefault("TZ", "UTC")
+    # Lane output is captured through a pipe, where Python block-buffers
+    # stdout: without this a timed-out lane has flushed nothing, so its log
+    # cannot show how far the run got or whether it stalled.
+    env["PYTHONUNBUFFERED"] = "1"
 
     # Make sure repo modules resolve (without depending on caller shell).
     env["PYTHONPATH"] = str(REPO_ROOT)
@@ -331,6 +335,15 @@ def _write_lane_triage(lane_dir: Path, log_file: Path) -> Path:
     return triage_path
 
 
+def _partial_output_text(value: bytes | str | None) -> str:
+    """Output captured before a timeout (POSIX ``subprocess.run`` gives bytes)."""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def _run_one_command(
     lane: str,
     command: tuple[str, ...],
@@ -402,8 +415,13 @@ def _run_lane(
 
         try:
             proc = _run_one_command(lane, command, timeout, secrets, verbose)
-        except subprocess.TimeoutExpired:
-            _append_capped_log(log_file, f"$ {' '.join(command)}\n[timeout]\n")
+        except subprocess.TimeoutExpired as exc:
+            _append_capped_log(log_file, f"$ {' '.join(command)}\n")
+            for partial in (exc.stdout, exc.stderr):
+                text = _partial_output_text(partial)
+                if text:
+                    _append_capped_log(log_file, _sanitize(text, secrets) + "\n")
+            _append_capped_log(log_file, f"[timeout after {timeout}s]\n")
             triage_path = _write_lane_triage(lane_dir, log_file)
             return LaneResult(
                 lane=lane,
