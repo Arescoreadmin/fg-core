@@ -59,6 +59,10 @@ class ShardResult:
     manifest_file_count: int = 0
     # From shard-collection.json — exact pytest --collect-only count (-1 = absent).
     collected_tests: int = -1
+    # Modules skipped at collection (pytest.skip(allow_module_level=True)).
+    # JUnit records one skipped <testcase> per such module; collect-only does not
+    # count them, so expected JUnit tests = collected_tests + collection_skipped.
+    collection_skipped: int = 0
 
 
 def _parse_junit(path: Path) -> tuple[int, int, int, int, float]:
@@ -94,18 +98,23 @@ def _load_shard_manifest(shard_dir: Path, idx: int) -> tuple[int, int]:
         return 0, 0
 
 
-def _load_shard_collection(shard_dir: Path) -> int:
-    """Return collected_tests from shard-collection.json, or -1 if absent/invalid."""
+def _load_shard_collection(shard_dir: Path) -> tuple[int, int]:
+    """Return (collected_tests, collection_skipped) from shard-collection.json.
+
+    (-1, 0) if the file is absent or either field is missing or invalid.
+    """
     path = shard_dir / "shard-collection.json"
     if not path.exists():
-        return -1
+        return -1, 0
     try:
-        value = json.loads(path.read_text()).get("collected_tests")
+        data = json.loads(path.read_text())
+        values = (data.get("collected_tests"), data.get("collection_skipped"))
     except Exception:
-        return -1
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        return -1
-    return value
+        return -1, 0
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return -1, 0
+    return values[0], values[1]
 
 
 def aggregate(
@@ -132,7 +141,8 @@ def aggregate(
         r.manifest_expected_tests, r.manifest_file_count = _load_shard_manifest(
             shard_dir, idx
         )
-        r.collected_tests = _load_shard_collection(shard_dir)
+        r.collected_tests, r.collection_skipped = _load_shard_collection(shard_dir)
+        expected_junit = r.collected_tests + r.collection_skipped
 
         if not junit_path.exists():
             r.error_detail = f"JUnit XML missing: {junit_path}"
@@ -161,15 +171,17 @@ def aggregate(
                 "shard-collection.json missing or invalid — cannot prove every "
                 "collected test executed"
             )
-        elif require_collection and r.tests < r.collected_tests:
+        elif require_collection and r.tests < expected_junit:
             r.error_detail = (
-                f"shard collected {r.collected_tests} tests but JUnit reports "
-                f"{r.tests} — {r.collected_tests - r.tests} test(s) did not execute"
+                f"shard collected {r.collected_tests} tests (+{r.collection_skipped} "
+                f"module skip(s)) but JUnit reports {r.tests} — "
+                f"{expected_junit - r.tests} test(s) did not execute"
             )
-        elif require_collection and r.tests > r.collected_tests and r.errors == 0:
+        elif require_collection and r.tests > expected_junit and r.errors == 0:
             r.error_detail = (
-                f"shard collected {r.collected_tests} tests but JUnit reports "
-                f"{r.tests} with no errors — possible duplicate execution"
+                f"shard collected {r.collected_tests} tests (+{r.collection_skipped} "
+                f"module skip(s)) but JUnit reports {r.tests} with no errors — "
+                "possible duplicate execution"
             )
         elif r.manifest_expected_tests > 0:
             # Shard manifest present: check that JUnit count is within 10% of expected.
@@ -214,6 +226,7 @@ def aggregate(
                 "manifest_expected_tests": r.manifest_expected_tests,
                 "manifest_file_count": r.manifest_file_count,
                 "collected_tests": r.collected_tests,
+                "collection_skipped": r.collection_skipped,
                 "error_detail": r.error_detail,
             }
             for r in results

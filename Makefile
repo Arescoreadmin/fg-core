@@ -948,7 +948,7 @@ fg-full-shard: venv _require-pytest-venv
 		echo "ERROR: fg_full_shard returned no files for shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"; \
 		exit 1; \
 	fi; \
-	COLLECT_OUT="$$(FG_ENV=test $(PYTEST_ENV) $(PYTEST) --collect-only -q $$SHARD_FILES 2>&1)" || { \
+	COLLECT_OUT="$$(FG_ENV=test $(PYTEST_ENV) $(PYTEST) --collect-only -q -rs $$SHARD_FILES 2>&1)" || { \
 		printf '%s\n' "$$COLLECT_OUT" | tail -40; \
 		echo "ERROR: collection failed for shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"; \
 		exit 1; \
@@ -959,9 +959,11 @@ fg-full-shard: venv _require-pytest-venv
 		echo "ERROR: could not read collected test count for shard $(SHARD_INDEX)"; \
 		exit 1; \
 	fi; \
-	printf '{"shard_index": %s, "collected_tests": %s}\n' "$(SHARD_INDEX)" "$$COLLECTED" \
+	COLLECT_SKIPPED="$$(printf '%s\n' "$$COLLECT_OUT" | sed -n -E 's/^SKIPPED \[([0-9]+)\].*/\1/p' | awk '{s+=$$1} END {print s+0}')"; \
+	printf '{"shard_index": %s, "collected_tests": %s, "collection_skipped": %s}\n' \
+		"$(SHARD_INDEX)" "$$COLLECTED" "$$COLLECT_SKIPPED" \
 		> "$(dir $(SHARD_JUNIT))shard-collection.json"; \
-	echo "fg-full-shard $(SHARD_INDEX): collected $$COLLECTED tests"; \
+	echo "fg-full-shard $(SHARD_INDEX): collected $$COLLECTED tests, $$COLLECT_SKIPPED module(s) skipped at collection"; \
 	FG_ENV=test $(NIGHTLY_TIMEOUT_ENV) $(PYTEST_ENV) $(PYTEST) -q --durations=25 \
 		$(NIGHTLY_TIMEOUT_ARGS) --junitxml "$(SHARD_JUNIT)" \
 		$$SHARD_FILES

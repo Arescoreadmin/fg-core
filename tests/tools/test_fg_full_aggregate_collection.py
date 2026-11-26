@@ -19,7 +19,13 @@ pytestmark = pytest.mark.contract
 
 
 def _shard(
-    root: Path, idx: int, *, tests: int, collected: int | None, errors: int = 0
+    root: Path,
+    idx: int,
+    *,
+    tests: int,
+    collected: int | None,
+    errors: int = 0,
+    collection_skipped: int = 0,
 ) -> None:
     d = root / f"shard-{idx}"
     d.mkdir(parents=True, exist_ok=True)
@@ -29,7 +35,13 @@ def _shard(
     )
     if collected is not None:
         (d / "shard-collection.json").write_text(
-            json.dumps({"shard_index": idx, "collected_tests": collected})
+            json.dumps(
+                {
+                    "shard_index": idx,
+                    "collected_tests": collected,
+                    "collection_skipped": collection_skipped,
+                }
+            )
         )
 
 
@@ -65,7 +77,15 @@ def test_more_executed_than_collected_without_errors_fails(tmp_path: Path) -> No
 
 @pytest.mark.parametrize(
     "payload",
-    [None, "not json", '{"collected_tests": -1}', '{"collected_tests": true}', "{}"],
+    [
+        None,
+        "not json",
+        '{"collected_tests": -1, "collection_skipped": 0}',
+        '{"collected_tests": true, "collection_skipped": 0}',
+        '{"collected_tests": 100}',
+        '{"collected_tests": 100, "collection_skipped": -1}',
+        "{}",
+    ],
 )
 def test_missing_or_invalid_collection_record_fails(tmp_path: Path, payload) -> None:
     _shard(tmp_path, 0, tests=100, collected=None)
@@ -95,3 +115,21 @@ def test_cli_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert main() == 0
     monkeypatch.setattr("sys.argv", [*base, "--require-collection"])
     assert main() == 1
+
+
+def test_module_level_collection_skip_is_reconciled(tmp_path: Path) -> None:
+    # Run 45890327767: backend/tests/test_intel.py skips at module level; JUnit
+    # records it as one skipped testcase that --collect-only does not count.
+    _shard(tmp_path, 0, tests=2656, collected=2655, collection_skipped=1)
+    _shard(tmp_path, 1, tests=120, collected=120)
+    passed, _, summary = _run(tmp_path)
+    assert passed, summary["gate_errors"]
+    assert summary["shards"][0]["collection_skipped"] == 1
+
+
+def test_collection_skip_does_not_hide_a_missing_test(tmp_path: Path) -> None:
+    _shard(tmp_path, 0, tests=2655, collected=2655, collection_skipped=1)
+    _shard(tmp_path, 1, tests=120, collected=120)
+    passed, _, summary = _run(tmp_path)
+    assert not passed
+    assert any("1 test(s) did not execute" in e for e in summary["gate_errors"])
