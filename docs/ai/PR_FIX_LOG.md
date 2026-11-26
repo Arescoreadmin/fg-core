@@ -22,6 +22,11 @@
   - The operations runbook (provisioning, runtime validation, alerts, override, rollout and rollback) is in `docs/INFRASTRUCTURE_SETUP.md`.
   - A local mixed-version check (pre-repair and repaired workers sharing one store) showed disjoint key prefixes and no cross-consumption.
   - Wording corrected: the PTTL guard repairs v1 keys only; pre-repair keys use another prefix and are never touched.
+- **Deployment secret status (2026-11-25):**
+  - *Founder-confirmed:* `BFF_RATE_LIMIT_KEY_SECRET` is configured in the Vercel `console.frostgate.ai` project for Production and Preview, with separate values.
+  - *Not verified:* runtime validation is still pending. No deployment has been checked through `/api/health` (`rateLimit.identityKey == {ready: true, source: "dedicated"}`).
+  - *Not claimed:* that the variable is active in any existing deployment. Vercel applies env vars only to builds made after they are set.
+  - Secret values were never read, printed or modified by this work.
 - **Tests:**
   - `tests/bff-rate-limit-route.test.js`: 61 tests against the real route, real store, policy and `consoleAccess`, with a prod-like env. Covered: auth, spoofing, 14 store-failure modes, atomicity and concurrency, `PROXY_RULES` coverage, public invitation and privacy sentinels. The harness is `tests/helpers/bffRouteHarness.js`; it fakes only auth, the tenant key registry, ioredis (modelling ioredis connection state) and outbound fetch.
   - Against the `ceb011c29` route and store (via `FG849_HARNESS_ROOT`), 38 fail and 15 pass, with the three stall tests skipped. The 15 that pass are unchanged auth and tenant behaviour (A1–A6, A8, F5, G2) and six tests (E1, E2, E4–E6, H4) that exercise only the new policy module. With the stall tests included, the baseline C3 never resolved: the unbounded stall.
