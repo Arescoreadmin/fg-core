@@ -49,6 +49,25 @@ def _load_budgets() -> dict[str, object]:
     return data
 
 
+def _testing_module_job_timeout_seconds(job: str) -> int:
+    """Return a testing-module.yml job's timeout-minutes in seconds.
+
+    FG-CI-NIGHTLY-REPAIR-001: read from the workflow so this check cannot
+    validate a stale hardcoded value after the workflow changes.
+    """
+    import importlib
+
+    yaml = importlib.import_module("yaml")
+    path = REPO_ROOT / ".github/workflows/testing-module.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    minutes = ((data.get("jobs") or {}).get(job) or {}).get("timeout-minutes")
+    if not isinstance(minutes, int):
+        raise SystemExit(
+            f"testing-module.yml job {job!r} has no integer timeout-minutes"
+        )
+    return minutes * 60
+
+
 def _validate_fg_fast_hierarchy(budgets: dict[str, object]) -> list[str]:
     """fg-fast: command_hard_max < job_timeout."""
     violations: list[str] = []
@@ -100,8 +119,9 @@ def _validate_fg_security_hierarchy(budgets: dict[str, object]) -> list[str]:
     # fg-required global budget: 2800s
     global_budget = 2800
 
-    # Job timeout from testing-module.yml: 25 min = 1500s
-    job_timeout_seconds = 25 * 60
+    # Job timeout read from testing-module.yml (45 min = 2700s since
+    # FG-CI-NIGHTLY-REPAIR-001; was a hardcoded 25 min).
+    job_timeout_seconds = _testing_module_job_timeout_seconds("fg-security")
 
     checks = [
         (
