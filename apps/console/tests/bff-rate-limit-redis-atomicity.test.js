@@ -69,3 +69,27 @@ test('real Redis: concurrent first increments, atomic TTL, TTL-less counter repa
     await client.quit().catch(() => {});
   }
 });
+
+test('real Redis: /api/health probe reports ready against a reachable Redis and closes its client', { skip: !REDIS_URL && 'FG849_REAL_REDIS_URL not set' }, async () => {
+  // FG-849-REPAIR-001: the former probe sent PING on a lazy client with the
+  // offline queue disabled, which rejects before connecting, so a healthy
+  // Redis could be reported unavailable. The probe now connects explicitly.
+  const saved = { NODE_ENV: process.env.NODE_ENV, FG_ENV: process.env.FG_ENV, BFF_REDIS_URL: process.env.BFF_REDIS_URL };
+  Object.assign(process.env, { NODE_ENV: 'production', FG_ENV: 'prod', BFF_REDIS_URL: REDIS_URL });
+  try {
+    const rl = loadRealStoreModule();
+    const before = process.getActiveResourcesInfo().filter((r) => r === 'TCPSocketWrap').length;
+    for (let i = 0; i < 3; i += 1) {
+      const health = await rl.getRateLimitHealth();
+      assert.deepEqual({ ready: health.ready, reason: health.reason }, { ready: true, reason: null });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const after = process.getActiveResourcesInfo().filter((r) => r === 'TCPSocketWrap').length;
+    assert.ok(after <= before, `probe clients closed (${before} -> ${after})`);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

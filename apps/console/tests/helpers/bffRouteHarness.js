@@ -142,7 +142,9 @@ function assert1(cond, message) {
 function makeFakeIoredis(backend, state) {
   class FakeRedis {
     constructor(url, options) {
-      state.redisClients.push({ url, options });
+      this.listeners = {};
+      this.disconnected = false;
+      state.redisClients.push({ url, options, client: this });
       this.options = options || {};
       this.status = this.options.lazyConnect ? 'wait' : 'ready';
     }
@@ -187,6 +189,14 @@ function makeFakeIoredis(backend, state) {
     }
     async quit() {
       return 'OK';
+    }
+    on(event, listener) {
+      (this.listeners[event] = this.listeners[event] || []).push(listener);
+      return this;
+    }
+    disconnect() {
+      this.disconnected = true;
+      this.status = 'end';
     }
   }
   return { __esModule: true, default: FakeRedis };
@@ -256,6 +266,8 @@ function createHarness(options = {}) {
     },
     ioredis: makeFakeIoredis(backend, state),
   };
+  // realIoredis: use the real ioredis client (real network failure behaviour).
+  if (options.realIoredis) delete stubs.ioredis;
   const cache = new Map();
 
   function load(file) {

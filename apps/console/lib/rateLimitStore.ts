@@ -435,15 +435,22 @@ export async function buildRateLimitStore(): Promise<
   // command is sent at most once and fails fast while disconnected; ioredis
   // reconnects in the background with capped backoff, so enforcement recovers
   // without a restart once Redis is reachable again.
+  const client = new Redis(redisUrl!, {
+    lazyConnect: true,
+    connectTimeout: 2000,
+    commandTimeout: timeoutMs,
+    maxRetriesPerRequest: 0,
+    enableOfflineQueue: false,
+    retryStrategy: (times: number) => Math.min(times * 200, 2000),
+  });
+  // Without a listener ioredis prints every 'error' event (one per reconnect
+  // attempt, with host:port and a stack trace) — unbounded log output during
+  // an outage. The failure is not hidden: commands still reject, so the route
+  // returns 503 and emits the throttled bff_rate_limit_enforcement_unavailable
+  // event (FG-849-REPAIR-001).
+  client.on('error', () => {});
   return {
-    store: new RedisRateLimitStore(new Redis(redisUrl!, {
-      lazyConnect: true,
-      connectTimeout: 2000,
-      commandTimeout: timeoutMs,
-      maxRetriesPerRequest: 0,
-      enableOfflineQueue: false,
-      retryStrategy: (times: number) => Math.min(times * 200, 2000),
-    }) as unknown as RedisClientInterface, timeoutMs),
+    store: new RedisRateLimitStore(client as unknown as RedisClientInterface, timeoutMs),
     unavailable: false,
   };
 }
@@ -506,22 +513,45 @@ export async function getRateLimitHealth(): Promise<{
     if (isBffRedisUrlMissingOrPlaceholder(config.redisUrl)) {
       return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
     }
-    // Probe Redis directly — side-effect-free, does not touch the module singleton
+    // Probe Redis directly — side-effect-free, does not touch the module singleton.
+    // FG-849-REPAIR-001: one bounded attempt per probe. No reconnects
+    // (retryStrategy returns null), no raw error output, an explicit connect
+    // (a lazy client with no offline queue rejects a first command before it
+    // is connected), and the client is always closed — on success, refusal,
+    // auth failure, timeout or a construction error.
+    let probe: Redis | null = null;
     try {
       const RedisModule = await import('ioredis');
       const RedisClient = RedisModule.default;
-      const probe = new RedisClient(config.redisUrl!, {
+      probe = new RedisClient(config.redisUrl!, {
         lazyConnect: true,
         connectTimeout: 1500,
         commandTimeout: 1000,
         maxRetriesPerRequest: 0,
         enableOfflineQueue: false,
+        retryStrategy: () => null,
+        reconnectOnError: () => false,
       });
-      await probe.ping();
-      await probe.quit().catch(() => {}); // clean up probe connection
+      probe.on('error', () => {});
+      const client = probe;
+      await withDeadline(
+        (async () => {
+          await client.connect();
+          await client.ping();
+        })(),
+        config.timeoutMs + 1500,
+      );
       return { backend: 'redis', ready: true, required: true, reason: null };
     } catch {
       return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' };
+    } finally {
+      // disconnect() marks the close as manual, so ioredis never starts another
+      // reconnect cycle; destroying the stream also closes a socket that is
+      // still waiting for the server's first reply (timeout case) at once.
+      if (probe) {
+        probe.disconnect();
+        probe.stream?.destroy();
+      }
     }
   } else {
     // dev/test: memory fallback, always ready, not required
