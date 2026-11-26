@@ -9,7 +9,18 @@ import {
   resolveConsolePrincipal,
   resolveTenantRequestAuthority,
 } from '@/lib/consoleAccess';
-import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
+import { getRateLimitStore, getBffRateLimitConfig, classifyRateLimitFailure } from '@/lib/rateLimitStore';
+import {
+  BFF_RATE_LIMIT_POLICY_VERSION,
+  classifyBffRoute,
+  deriveAuthenticatedRateLimitKey,
+  derivePublicInvitationRateLimitKeys,
+  getPublicInvitationRateLimitConfig,
+  isWellFormedInvitationToken,
+  resolveLimiterKeyMaterial,
+  type BffRouteClassification,
+  type RateLimitScope,
+} from '@/lib/bffRateLimitPolicy';
 import { getTenantApiKey } from '@/lib/tenant-registry';
 import { internalGatewaySecret } from '@/lib/internal-gateway-secret';
 
@@ -247,53 +258,173 @@ function resolveConfiguredOperatorTenant(requestId: string): { tenantId: string 
   return { tenantId };
 }
 
-/**
- * Build the rate-limit key in the format:
- *   fg:bff:rl:{route_group}:{tenant_id}:{client_identity}
- *
- * - route_group: first path segment (e.g. "decisions", "keys")
- * - tenant_id: authorized tenant resolved from URL params or CORE_TENANT_ID env
- * - client_identity: session/user from x-frostgate-user header, else IP fallback
- *
- * Keys contain no secrets — only stable identity tokens already in headers.
- */
-function buildRateLimitKey(request: NextRequest, routeGroup: string, tenantId: string): string {
-  // x-frostgate-user is set by the session layer upstream (server-side only).
-  // Fall back to IP — never trust body-provided user identity.
-  const userOrSession =
-    request.headers.get('x-frostgate-user') ||
-    request.headers.get('x-real-ip') ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown';
-  // Sanitize: remove characters that could cause key collision (colon is delimiter)
-  const safeGroup = routeGroup.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
-  const safeTenant = (tenantId || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
-  const safeUser = userOrSession.replace(/[^a-zA-Z0-9_\-.:]/g, '_').slice(0, 128);
-  return `fg:bff:rl:${safeGroup}:${safeTenant}:${safeUser}`;
+type ClassifiedRoute = Extract<BffRouteClassification, { ok: true }>;
+
+type RateLimitOutcome = 'denied_quota' | 'denied_unavailable';
+
+// Audit events are emitted for deny decisions only, and at most once per
+// AUDIT_THROTTLE_MS per (outcome, reason, family) with a suppressed count, so a
+// prolonged outage cannot amplify logs. The map is bounded by the finite
+// family × outcome × reason space.
+const AUDIT_THROTTLE_MS = 10_000;
+const auditThrottle = new Map<string, { last: number; suppressed: number }>();
+
+function emitRateLimitEvent(fields: {
+  requestId: string;
+  route: ClassifiedRoute;
+  outcome: RateLimitOutcome;
+  backendHealth: string;
+  partitionRef?: string;
+}): void {
+  const throttleKey = `${fields.outcome}:${fields.backendHealth}:${fields.route.familyId}`;
+  const now = Date.now();
+  const entry = auditThrottle.get(throttleKey);
+  if (entry && now - entry.last < AUDIT_THROTTLE_MS) {
+    entry.suppressed += 1;
+    return;
+  }
+  const suppressed = entry?.suppressed ?? 0;
+  auditThrottle.set(throttleKey, { last: now, suppressed: 0 });
+  // Never includes tenant ids, subjects, tokens, client IPs, URLs or headers.
+  const event = {
+    event: fields.outcome === 'denied_unavailable'
+      ? 'bff_rate_limit_enforcement_unavailable'
+      : 'bff_rate_limit_quota_exceeded',
+    policy_version: BFF_RATE_LIMIT_POLICY_VERSION,
+    request_id: fields.requestId,
+    route_family: fields.route.familyId,
+    method: fields.route.method,
+    risk_tier: fields.route.tier,
+    outcome: fields.outcome,
+    backend_health: fields.backendHealth,
+    partition_ref: fields.partitionRef ?? null,
+    suppressed_since_last: suppressed,
+    ts: new Date(now).toISOString(),
+  };
+  console.warn(`[core-proxy] ${JSON.stringify(event)}`);
 }
 
-async function enforceRateLimit(request: NextRequest, requestId: string, routeGroup: string, tenantId: string): Promise<NextResponse | null> {
-  const { windowSec, maxRequests } = getBffRateLimitConfig();
+function rateLimitUnavailable(
+  requestId: string,
+  route: ClassifiedRoute,
+  backendHealth: string,
+  partitionRef?: string,
+): NextResponse {
+  emitRateLimitEvent({ requestId, route, outcome: 'denied_unavailable', backendHealth, partitionRef });
+  // FG-849-REPAIR-001: every tier fails closed. Stable, minimal body — no
+  // backend name, URL, credential or stack trace.
+  return NextResponse.json(
+    { detail: 'Rate-limit enforcement unavailable', code: 'BFF_RATE_LIMIT_UNAVAILABLE', request_id: requestId },
+    {
+      status: 503,
+      headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId, 'Retry-After': '5' },
+    },
+  );
+}
+
+/**
+ * Build the rate-limit key in the format:
+ *   fg:bff:rl:v1:{route_group}:{opaque partition}
+ *
+ * - route_group: first path segment of a classified route (e.g. "decisions")
+ * - tenantId: tenant resolved by resolveAuthorizedTenant (or a fixed
+ *   tenant-independent scope label) — never a browser-supplied value
+ * - principal: authenticated session subject (session.user.id)
+ *
+ * The partition is an HMAC under a server-only key (lib/bffRateLimitPolicy.ts).
+ * No request header — x-frostgate-user, x-real-ip, x-forwarded-for,
+ * x-tenant-id — contributes to the key, so rotating them cannot mint quota.
+ */
+function buildRateLimitKey(
+  limiterKey: Buffer,
+  routeGroup: string,
+  scope: RateLimitScope,
+  tenantId: string,
+  principal: string,
+): { key: string; partitionRef: string } {
+  return deriveAuthenticatedRateLimitKey(limiterKey, routeGroup, scope, tenantId, principal);
+}
+
+async function applyRateLimits(
+  requestId: string,
+  route: ClassifiedRoute,
+  checks: ReadonlyArray<{ key: string; maxRequests: number }>,
+  partitionRef: string,
+): Promise<NextResponse | null> {
+  const { windowSec } = getBffRateLimitConfig();
   const storeResult = await getRateLimitStore();
-
   if (storeResult.unavailable) {
-    // Rate store not configured or unreachable — fail open so a Redis/Upstash
-    // outage never takes down the entire console. Log and allow through.
-    console.warn(`[core-proxy] rate-limit store unavailable (${storeResult.errorCode}), allowing request — request_id=${requestId}`);
-    return null;
+    return rateLimitUnavailable(requestId, route, storeResult.errorCode, partitionRef);
   }
-
-  const key = buildRateLimitKey(request, routeGroup, tenantId);
+  let exceeded = false;
   try {
-    const result = await storeResult.store.increment(key, windowSec, maxRequests);
-    if (!result.allowed) {
-      return jsonError('Too many requests', 429, requestId);
+    for (const check of checks) {
+      const result = await storeResult.store.increment(check.key, windowSec, check.maxRequests);
+      if (!result.allowed) exceeded = true;
     }
-  } catch {
-    // Per-request failure (e.g. Upstash network error) — fail open, log and continue.
-    console.warn(`[core-proxy] rate-limit increment failed, allowing request — request_id=${requestId}`);
+  } catch (err) {
+    // Any store failure is an enforcement failure: deny, never allow.
+    return rateLimitUnavailable(requestId, route, classifyRateLimitFailure(err), partitionRef);
+  }
+  if (exceeded) {
+    emitRateLimitEvent({ requestId, route, outcome: 'denied_quota', backendHealth: 'healthy', partitionRef });
+    return jsonError('Too many requests', 429, requestId);
   }
   return null;
+}
+
+async function enforceRateLimit(
+  requestId: string,
+  routeGroup: string,
+  tenantId: string,
+  principal: string,
+  route: ClassifiedRoute,
+  scope: RateLimitScope = 'tenant',
+): Promise<NextResponse | null> {
+  const keyMaterial = resolveLimiterKeyMaterial();
+  if (!keyMaterial.ok) return rateLimitUnavailable(requestId, route, keyMaterial.reason);
+  const { maxRequests } = getBffRateLimitConfig();
+  const { key, partitionRef } = buildRateLimitKey(keyMaterial.key, routeGroup, scope, tenantId, principal);
+  return applyRateLimits(requestId, route, [{ key, maxRequests }], partitionRef);
+}
+
+/**
+ * Public invitation preflight: no session exists, and no client-IP header is
+ * trusted. Bounded by a deployment-wide budget plus a per-token budget, both
+ * in the shared store. Store failure denies (no unlimited token guessing).
+ */
+async function enforcePublicInvitationRateLimit(
+  requestId: string,
+  token: string,
+  route: ClassifiedRoute,
+): Promise<NextResponse | null> {
+  const keyMaterial = resolveLimiterKeyMaterial();
+  if (!keyMaterial.ok) return rateLimitUnavailable(requestId, route, keyMaterial.reason);
+  const { globalMaxRequests, perTokenMaxRequests } = getPublicInvitationRateLimitConfig();
+  const { globalKey, tokenKey, partitionRef } = derivePublicInvitationRateLimitKeys(keyMaterial.key, token);
+  return applyRateLimits(
+    requestId,
+    route,
+    [
+      { key: tokenKey, maxRequests: perTokenMaxRequests },
+      { key: globalKey, maxRequests: globalMaxRequests },
+    ],
+    partitionRef,
+  );
+}
+
+function invitationNotFound(requestId: string): NextResponse {
+  return NextResponse.json(
+    { detail: { code: 'INVITATION_NOT_FOUND' }, request_id: requestId },
+    { status: 404, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+  );
+}
+
+function resolveSessionPrincipal(session: Session): string | null {
+  const id = (session.user as { id?: unknown } | undefined)?.id;
+  if (typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  return trimmed.length > 0 && trimmed.length <= 512 ? trimmed : null;
 }
 
 /**
@@ -800,8 +931,11 @@ async function proxyToCore(
   const target = isTenantAdminPath
     ? buildAdminUrl(path, request, tenantId)
     : buildCoreUrl(path, request, tenantId);
+  // Invitation paths carry the one-time acceptance token: never log it.
+  const logSurface = isInvitationPath ? `identity/invitations/[redacted]${path.length > 3 ? `/${path.slice(3).join('/')}` : ''}` : path.join('/');
+  const logTarget = isInvitationPath ? '[redacted]' : target;
   console.info(
-    `[core-proxy] request_id=${requestId} method=${request.method} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'}`,
+    `[core-proxy] request_id=${requestId} method=${request.method} tenant_id=${tenantId || 'none'} surface=${logSurface} core_target=${logTarget} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'}`,
   );
 
   const response = await fetch(target, init);
@@ -811,7 +945,7 @@ async function proxyToCore(
   // key hints or internal detail. Always include request_id for traceability.
   if (response.status === 401) {
     console.warn(
-      `[core-proxy] CORE_AUTH_REJECTED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=401 normalized_error=CORE_AUTH_REJECTED`,
+      `[core-proxy] CORE_AUTH_REJECTED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${logSurface} core_target=${logTarget} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=401 normalized_error=CORE_AUTH_REJECTED`,
     );
     return credentialError('CORE_AUTH_REJECTED', 401, requestId, tenantId);
   }
@@ -827,7 +961,7 @@ async function proxyToCore(
       if (INVITATION_SAFE_CODES.has(raw as InvitationSafeCode)) detailCode = raw;
     } catch { /* parse failure: retain safe default */ }
     console.warn(
-      `[core-proxy] INVITATION_DENIED request_id=${requestId} surface=${path.join('/')} detail_code=${detailCode}`,
+      `[core-proxy] INVITATION_DENIED request_id=${requestId} surface=${logSurface} detail_code=${detailCode}`,
     );
     return NextResponse.json(
       { error: 'INVITATION_DENIED', detail_code: detailCode, request_id: requestId },
@@ -836,13 +970,13 @@ async function proxyToCore(
   }
   if (response.status === 403) {
     console.warn(
-      `[core-proxy] CORE_ACCESS_DENIED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=403 normalized_error=CORE_ACCESS_DENIED`,
+      `[core-proxy] CORE_ACCESS_DENIED request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${logSurface} core_target=${logTarget} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=403 normalized_error=CORE_ACCESS_DENIED`,
     );
     return credentialError('CORE_ACCESS_DENIED', 403, requestId, tenantId);
   }
   if (response.status === 502 || response.status === 503 || response.status === 504) {
     console.warn(
-      `[core-proxy] CORE_UNAVAILABLE request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${path.join('/')} core_target=${target} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=${response.status} normalized_error=CORE_UNAVAILABLE`,
+      `[core-proxy] CORE_UNAVAILABLE request_id=${requestId} tenant_id=${tenantId || 'none'} surface=${logSurface} core_target=${logTarget} authority=${isTenantAdminPath ? 'admin_gateway' : 'tenant_credential'} core_status=${response.status} normalized_error=CORE_UNAVAILABLE`,
     );
     return credentialError('CORE_UNAVAILABLE', response.status, requestId, tenantId);
   }
@@ -917,12 +1051,21 @@ async function handle(request: NextRequest, { params }: RouteCtx) {
   const requestId = getRequestId(request);
   const path = (await params).path || [];
   const routeGroup = path[0] || 'unknown';
+  // FG-849-REPAIR-001: deterministic risk classification; unknown routes,
+  // unknown methods and malformed segments are denied below, never defaulted.
+  const route = classifyBffRoute(path, request.method);
 
   // P-113.10: invitation preflight GET is public — proxy unauthenticated so the
   // acceptance page can fetch login_hint before triggering Auth0.  The Core
   // endpoint carries no auth requirement and returns no sensitive internal IDs.
   if (isInvitationPreflightGet(path, request.method)) {
-    const rate = await enforceRateLimit(request, requestId, routeGroup, 'invitation-preflight');
+    if (!route.ok) return invitationNotFound(requestId);
+    // Same response Core gives for an unknown token, without a Core call or a
+    // quota increment: malformed tokens and any query parameters are rejected.
+    if (!isWellFormedInvitationToken(path[2]) || new URL(request.url).search !== '') {
+      return invitationNotFound(requestId);
+    }
+    const rate = await enforcePublicInvitationRateLimit(requestId, path[2], route);
     if (rate) return rate;
     return proxyToCore(request, path, requestId, '', undefined);
   }
@@ -968,12 +1111,24 @@ async function handle(request: NextRequest, { params }: RouteCtx) {
   }
 
   if (!path.length) return jsonError('Missing path', 400, requestId);
+  if (!route.ok) {
+    return NextResponse.json(
+      { detail: 'Route/method is not classified by rate-limit policy', code: 'BFF_ROUTE_UNCLASSIFIED', request_id: requestId },
+      { status: 403, headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } },
+    );
+  }
+  // The limiter principal is the authenticated session subject only.
+  const principal = resolveSessionPrincipal(session);
+  if (!principal) return jsonError('Authenticated principal could not be resolved', 401, requestId);
+
   if (isAlignmentArtifact(path) && request.method === 'GET') {
     const rate = await enforceRateLimit(
-      request,
       requestId,
       routeGroup,
       tenantIndependentRateLimitTenant(path),
+      principal,
+      route,
+      'tenant-independent',
     );
     if (rate) return rate;
     return getAlignmentArtifact(requestId);
@@ -983,7 +1138,7 @@ async function handle(request: NextRequest, { params }: RouteCtx) {
   // named user. It is tenant-independent at the BFF and must never borrow the
   // configured operator tenant merely because no tenant_id is present.
   if (isInvitationAcceptancePath(path)) {
-    const rate = await enforceRateLimit(request, requestId, routeGroup, 'invitation');
+    const rate = await enforceRateLimit(requestId, routeGroup, 'invitation', principal, route, 'tenant-independent');
     if (rate) return rate;
     const namedUserSub = (session.user as { id?: string })?.id ?? undefined;
     return proxyToCore(request, path, requestId, '', namedUserSub);
@@ -992,7 +1147,7 @@ async function handle(request: NextRequest, { params }: RouteCtx) {
   if (tenantResolution instanceof NextResponse) return tenantResolution;
   const { tenantId } = tenantResolution;
 
-  const rate = await enforceRateLimit(request, requestId, routeGroup, tenantId);
+  const rate = await enforceRateLimit(requestId, routeGroup, tenantId, principal, route);
   if (rate) return rate;
 
   // Explicit 410 tombstone: legacy raw-token accept-invite endpoint removed in PR5

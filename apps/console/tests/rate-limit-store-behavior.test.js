@@ -11,9 +11,10 @@
  *   - CHANGE_ME placeholders and blank values count as missing;
  *   - dev/test fall back to the in-memory store;
  *   - a configured Redis URL builds a RedisRateLimitStore lazily (no eager
- *     connect, per 225d21c25) — the route then fails open on outage by design;
- *   - the counters allow up to the limit, block above it, and set EXPIRE only
- *     on the first increment of a window;
+ *     connect, per 225d21c25) — the route fails closed (503) on outage
+ *     (FG-849-REPAIR-001);
+ *   - the counters allow up to the limit, block above it, and increment and
+ *     expire in one atomic EVAL (FG-849-REPAIR-001);
  *   - the health probe never leaks the Redis URL.
  */
 
@@ -120,17 +121,22 @@ test('memory store allows up to the limit and blocks above it', async () => {
   assert.equal((await store.increment('tenant-b:core', 60, 3)).allowed, true);
 });
 
-test('redis store blocks above the limit and sets EXPIRE only on first increment', async () => {
+test('redis store blocks above the limit and increments+expires in one atomic EVAL', async () => {
+  // FG-849-REPAIR-001: the former INCR-then-EXPIRE pair could leave a counter
+  // without a TTL. The store now sends one EVAL of RATE_LIMIT_INCREMENT_LUA.
   const counters = new Map();
-  const expires = [];
+  const evals = [];
   const client = {
-    async incr(key) {
+    async eval(script, numKeys, key, windowSec) {
+      evals.push([script, numKeys, key, windowSec]);
       counters.set(key, (counters.get(key) || 0) + 1);
       return counters.get(key);
     },
-    async expire(key, seconds) {
-      expires.push([key, seconds]);
-      return 1;
+    async incr() {
+      throw new Error('non-atomic INCR must not be used');
+    },
+    async expire() {
+      throw new Error('non-atomic EXPIRE must not be used');
     },
     async quit() {},
   };
@@ -138,20 +144,32 @@ test('redis store blocks above the limit and sets EXPIRE only on first increment
   const results = [];
   for (let i = 0; i < 3; i += 1) results.push(await store.increment('k', 30, 2));
   assert.deepEqual(results.map((r) => r.allowed), [true, true, false]);
-  assert.deepEqual(expires, [['k', 30]]);
+  assert.equal(evals.length, 3);
+  for (const [script, numKeys, key, windowSec] of evals) {
+    assert.equal(script, rl.RATE_LIMIT_INCREMENT_LUA);
+    assert.equal(numKeys, 1);
+    assert.equal(key, 'k');
+    assert.equal(windowSec, '30');
+  }
 });
 
 test('redis store propagates client errors so the route can apply its outage policy', async () => {
   const store = new rl.RedisRateLimitStore({
-    async incr() {
+    async eval() {
       throw new Error('ECONNREFUSED');
-    },
-    async expire() {
-      return 1;
     },
     async quit() {},
   });
   await assert.rejects(store.increment('k', 30, 2), /ECONNREFUSED/);
+});
+
+test('redis store rejects malformed counts and stalled commands', async () => {
+  const malformed = new rl.RedisRateLimitStore({ async eval() { return 'OK'; }, async quit() {} });
+  await assert.rejects(malformed.increment('k', 30, 2), (err) => err.failure === 'malformed_response');
+  const stalled = new rl.RedisRateLimitStore({ eval: () => new Promise(() => {}), async quit() {} }, 50);
+  const started = Date.now();
+  await assert.rejects(stalled.increment('k', 30, 2), (err) => err.failure === 'timeout');
+  assert.ok(Date.now() - started < 1000);
 });
 
 test('health probe reports config-required without leaking the redis url', async () => {

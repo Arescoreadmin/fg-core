@@ -9005,3 +9005,20 @@ No check, allowlist, plane-registry exception or gate configuration changes.
 4. **Authorization unchanged.** Exports still require `admin:read`; no scope, permission or role changes.
 5. **Contracts unchanged.** Valid exports return the same fields and paths. Creation endpoints are unchanged, so the OpenAPI documents do not change.
 6. **Environmental assumption (residual risk).** The resolved-path check runs before the writes, so there is a check-to-write window. Exploiting it requires existing write access inside `artifacts/billing/`, which the deployment must restrict to the service account. Descriptor-relative `O_NOFOLLOW` writes would close the window; they are a separate hardening item.
+
+## 2026-11-25 - fix(console): fail-closed, session-bound Console BFF rate limiting (FG-849-REPAIR-001)
+
+**Scope:** Console BFF only. Covers `apps/console/app/api/core/[...path]/route.ts`, `apps/console/lib/rateLimitStore.ts` and the new `apps/console/lib/bffRateLimitPolicy.ts`, plus Console tests and `docs/INFRASTRUCTURE_SETUP.md`. No CI, gate, allowlist, Core contract, OpenAPI, schema, migration, RBAC or dependency change.
+
+**Finding:** issue #849. The limiter failed open on store outage. Its identity came from caller-controlled headers (`x-frostgate-user`, `x-real-ip`, `x-forwarded-for`). INCR and EXPIRE were separate commands, and Upstash calls had no deadline.
+
+**Security analysis:**
+
+1. **Fail closed.** Store unconfigured or unreachable, a timeout, an auth error, HTTP 5xx, a malformed reply, or missing key material all return `503 BFF_RATE_LIMIT_UNAVAILABLE` for every tier. Nothing is forwarded to Core, and no tenant credential is fetched. The response body reveals no backend detail.
+2. **Identity integrity.** The quota partition is an HMAC of (scope, server-resolved tenant, session subject) under a server-only, domain-separated key. Request headers, query parameters and body tenant aliases do not contribute. Distinct tenants and principals get distinct partitions.
+3. **Authorization ordering unchanged.** The order is session → role policy → tenant-admin checks → classification → principal → tenant resolution → limiter → Core. The limiter grants no authority.
+4. **Deny-by-default classification.** Every `PROXY_RULES` (prefix, method) is explicitly tiered, and a test fails if the two registries drift. Unknown routes, unknown methods and dot or separator segments are denied before Core.
+5. **Public invitation preflight.** Malformed tokens and query strings are rejected without a Core call. Valid ones are bounded per token and deployment-wide in the shared store, and fail closed on outage. No operator tenant or credential is attached.
+6. **Atomic, bounded store.** A single Lua EVAL does INCR+EXPIRE and repairs TTL-less keys, on both Redis and Upstash. Each call has a 1000 ms default deadline and no command retries. This was verified against a real Redis 7 (opt-in test).
+7. **Privacy.** Keys and limiter events contain no raw subject, tenant id, token, client IP or secret; sentinel tests assert this. Outage events are throttled. Invitation tokens are redacted from proxy logs.
+8. **Residual risk.** A limiter outage makes the Console BFF unavailable (503), by design. The shared preflight budget can be exhausted by one abuser. Production needs a usable `BFF_RATE_LIMIT_KEY_SECRET` or `AUTH_SECRET` (≥32 chars). Real-outage recovery depends on ioredis background reconnect and has not been exercised against a stopped Redis.

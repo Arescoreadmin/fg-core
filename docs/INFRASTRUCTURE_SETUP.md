@@ -445,8 +445,14 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 | `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Prod only* | Vercel KV/Upstash REST alias for rate limiting |
 | `BFF_RATE_LIMIT_WINDOW_S` | No | Rate limit window (default: 60) |
 | `BFF_RATE_LIMIT_MAX_REQUESTS` | No | Max requests per window (default: 100) |
+| `BFF_RATE_LIMIT_KEY_SECRET` | Recommended | Server-only HMAC key (≥32 chars) for opaque rate-limit partitions. If unset, a domain-separated subkey of `AUTH_SECRET` is used. Set but invalid → limiter unavailable (503) |
+| `BFF_RATE_LIMIT_TIMEOUT_MS` | No | Deadline for each limiter backend call (default: 1000, clamped 50-5000) |
+| `BFF_RATE_LIMIT_PUBLIC_INVITATION_MAX_REQUESTS` | No | Deployment-wide invitation-preflight budget per window (default: 120) |
+| `BFF_RATE_LIMIT_PUBLIC_INVITATION_TOKEN_MAX_REQUESTS` | No | Per-token invitation-preflight budget per window (default: 10) |
 
 *One production rate-limit store is required: Redis protocol, Upstash REST, or Vercel KV REST.
+
+**Fail closed (FG-849-REPAIR-001):** if the store is unconfigured or unreachable, or no usable limiter key exists, every Core BFF route returns `503 BFF_RATE_LIMIT_UNAVAILABLE` and nothing is forwarded to Core. Alert on the `bff_rate_limit_enforcement_unavailable` log event. `/api/health` is not behind the limiter and reports store readiness.
 
 ### Vercel (`apps/portal/`) — demo tenant variables
 

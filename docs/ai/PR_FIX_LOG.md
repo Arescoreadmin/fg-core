@@ -1,3 +1,34 @@
+## fix(console): FG-849-REPAIR-001 — fail-closed, session-bound Console BFF rate limiting
+
+- **Issue:** #849. Console Core BFF limiter (`apps/console/app/api/core/[...path]/route.ts`, `apps/console/lib/rateLimitStore.ts`).
+- **Defects (verified on `ceb011c29`):**
+  - A — fail open: `enforceRateLimit()` allowed the request when the store was unconfigured, unreachable or `increment()` threw.
+  - B — caller-controlled identity: the key used `x-frostgate-user`, then `x-real-ip`, then `x-forwarded-for`. Nothing in the Console sets `x-frostgate-user` server-side, so rotating these headers minted fresh quota. The key also stored tenant id and subject in plain text.
+  - C — non-atomic TTL: INCR then a separate EXPIRE, so a failure between them left a counter with no expiry.
+  - D — unbounded stall: Upstash `fetch` had no deadline.
+  - E — stale docs: the store header said callers return 503, but the route allowed the request.
+  - F — tests exercised inline mirrors and source regexes, not the route.
+- **Fix:**
+  - New `lib/bffRateLimitPolicy.ts` is the single policy authority. Every `PROXY_RULES` (prefix, method) has an explicit tier R0–R3, plus the public invitation preflight and alignment-artifact branches. Sub-actions escalate the tier (`export`, `download`, `verify`, `verification-bundle`, `manifest` → R2 for reads; `release`, `qa-approve`, `generate`, `rotate`, `revoke`, `accept`, `quarantine` … → R3 for mutations). Unknown routes, unknown methods and dot or separator segments are UNCLASSIFIED, and the route returns 403 `BFF_ROUTE_UNCLASSIFIED`. Every tier fails closed; no fail-open exception exists.
+  - The limiter identity is the session subject (`session.user.id`) plus the tenant resolved by `resolveAuthorizedTenant`, HMAC-partitioned under a server-only key. The key is `BFF_RATE_LIMIT_KEY_SECRET`, or an HKDF subkey of `AUTH_SECRET` with a distinct info label. A set-but-weak dedicated secret, or no usable secret in prod, means unavailable. Keys are `fg:bff:rl:v1:{route_group}:{32-hex}`. A session without a subject gets 401.
+  - Enforcement unavailable returns `503 BFF_RATE_LIMIT_UNAVAILABLE` with `Retry-After: 5`. Quota exceeded is still `429 HTTP_429`. The limiter decision precedes credential lookup, body read and every Core call.
+  - Public invitation preflight: the token must match `fgwi1.<64 hex>`, and no query string is allowed. Anything else gets 404 `INVITATION_NOT_FOUND` (Core's own response) with no Core call or quota use. Preflight is bounded by a per-token budget (HMAC of the token, default 10) and a deployment-wide budget (default 120), both in the shared store. No client-IP header is trusted.
+  - Store: one Lua `EVAL` does `INCR`, then `EXPIRE` when the count is 1 or the key has no TTL (repairing TTL-less legacy counters), on both Redis (ioredis) and Upstash REST. The Upstash transport is a JSON-array POST, the same one `lib/tenant-registry.ts` already uses. Every call is bounded by `BFF_RATE_LIMIT_TIMEOUT_MS` (default 1000 ms, clamped 50–5000). Upstash requests abort via `AbortSignal.timeout`. Redis uses `commandTimeout`, `maxRetriesPerRequest: 0`, no offline queue and capped reconnect backoff, and concurrent first requests share one lazy `connect()`. Malformed counts and non-JSON bodies are failures.
+  - Audit: privacy-safe JSON events `bff_rate_limit_enforcement_unavailable` and `bff_rate_limit_quota_exceeded`, with policy version, request id, family, method, tier, outcome, backend health and a 12-hex partition ref. They are throttled to one per 10 s per (outcome, reason, family) with a suppressed count. Proxy logs on invitation paths now redact the token.
+- **Tests:**
+  - `tests/bff-rate-limit-route.test.js`: 56 tests against the real route, real store, policy and `consoleAccess`, with a prod-like env. Covered: auth, spoofing, 14 store-failure modes, atomicity and concurrency, `PROXY_RULES` coverage, public invitation and privacy sentinels. The harness is `tests/helpers/bffRouteHarness.js`; it fakes only auth, the tenant key registry, ioredis (modelling ioredis connection state) and outbound fetch.
+  - Against the `ceb011c29` route and store (via `FG849_HARNESS_ROOT`), 38 fail and 15 pass, with the three stall tests skipped. The 15 that pass are unchanged auth and tenant behaviour (A1–A6, A8, F5, G2) and six tests (E1, E2, E4–E6, H4) that exercise only the new policy module. With the stall tests included, the baseline C3 never resolved: the unbounded stall.
+  - `tests/bff-rate-limit-redis-atomicity.test.js`: opt-in real Redis test (`FG849_REAL_REDIS_URL`), skipped in CI. Run locally against Redis 7 and passed: 50 concurrent first increments are unique 1..50, the TTL is set, later increments do not extend the window, and a TTL-less counter is repaired. That run found a concurrent lazy-connect race that the fakes had missed, which is fixed here.
+- **Updated tests (policy change, explained):** two tests that asserted fail-open (`rate_limit_store_outage_fails_open_not_503`, `route_fails_open_when_store_unavailable`) now assert fail-closed. The INCR/EXPIRE store tests now assert one atomic EVAL. Key-format tests now assert opaque partitions against the real derivation, not a plaintext mirror. Two source pins (`enforceRateLimit(...)` signature; `surface=${...}`) follow the new code. No assertion was removed without a stricter replacement, and no test was skipped.
+- **Also fixed (found during classification):** `decisions/%2E%2E/keys`-style dot segments were previously admitted under the parent prefix's role policy. Whether the upstream URL normalisation was exploitable through Next.js routing was not verified. They are now denied before Core.
+- **Not changed:** `PROXY_RULES`, `CORE_API_POLICIES`, RBAC, tenant resolution, Core contracts, OpenAPI, dependencies, CI, schema. The healthy-path request and response behaviour is unchanged.
+- **Residual / assumptions:**
+  - With the limiter down, every BFF route returns 503 (an availability trade-off accepted by the directive).
+  - The deployment-wide preflight budget can be exhausted by one abuser, denying invitation preflight to others for the rest of the window.
+  - The existing non-limiter proxy logs still include `tenant_id`.
+  - Production must have a usable `BFF_RATE_LIMIT_KEY_SECRET` or `AUTH_SECRET` (≥32 chars), or every route returns 503.
+  - Recovery after a real Redis outage relies on ioredis background reconnect. That was modelled in the fake, not exercised against a stopped Redis.
+
 ## fix(billing): AUDIT-REPAIR-BILLING-PATH-001 — contain billing evidence paths within the tenant artifact root
 
 - **Finding:** FG-ISSUE-FORENSIC-2026-001 X-01. `export_evidence` and `export_credit_note_evidence` (`api/billing.py`) joined `invoice_id` / `credit_note_id` into `artifacts/billing/<tenant>/…` without validation or a resolved-root check. Both identifiers are accepted unconstrained at creation (`InvoiceCreateRequest`, `CreditNoteCreateRequest`).

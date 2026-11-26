@@ -137,7 +137,11 @@ test('tenant-admin denials are normalized and diagnostically logged', () => {
   assert.match(ROUTE_SRC, /normalized_error=CORE_AUTH_REJECTED/);
   assert.match(ROUTE_SRC, /normalized_error=CORE_ACCESS_DENIED/);
   assert.match(ROUTE_SRC, /authority=\$\{isTenantAdminPath \? 'admin_gateway' : 'tenant_credential'\}/);
-  assert.match(ROUTE_SRC, /surface=\$\{path\.join\('\/'\)\}/);
+  // FG-849-REPAIR-001: the surface is still logged; on invitation paths the
+  // one-time token segment is redacted from the logged surface and target.
+  assert.match(ROUTE_SRC, /surface=\$\{logSurface\}/);
+  assert.match(ROUTE_SRC, /const logSurface = isInvitationPath \? `identity\/invitations\/\[redacted\]/);
+  assert.match(ROUTE_SRC, /: path\.join\('\/'\);/);
 });
 
 test('identity client appends tenant context, including invitation-id operations', () => {

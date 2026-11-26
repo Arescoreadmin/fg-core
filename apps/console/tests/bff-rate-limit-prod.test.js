@@ -204,8 +204,8 @@ test('memory_fallback_rejected_in_prod', async () => {
 });
 
 // ─── Test 7: redis_configured_returns_store_regardless_of_reachability ────────
-// Store is created without an eager connectivity check — per-request failures
-// are caught in enforceRateLimit so a transient outage doesn't brick the singleton.
+// Store is created without an eager connectivity check so a transient outage
+// doesn't brick the singleton; per-request failures fail closed (503) in the route.
 
 test('redis_configured_returns_store_regardless_of_reachability', async () => {
   const result = await simulateBuildRateLimitStore({
@@ -345,20 +345,21 @@ test('prod_enforcement_error_codes_defined_in_source', () => {
   assert.match(rateLimitSrc, /errorCode/);
 });
 
-// ─── Static source: route fails open when store unavailable ──────────────────
+// ─── Static source: route fails closed when store unavailable ────────────────
+// FG-849-REPAIR-001 replaced the former fail-open policy (see
+// bff-rate-limit-route.test.js for the behavioural proof on the real route).
 
-test('route_fails_open_when_store_unavailable', () => {
+test('route_fails_closed_when_store_unavailable', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
 
-  // Must check unavailable and reference errorCode (in the log line)
+  // Must check unavailable and reference errorCode (in the audit event)
   assert.match(routeSrc, /storeResult\.unavailable/);
   assert.match(routeSrc, /storeResult\.errorCode/);
 
-  // Must NOT return 503 — a rate-limit store outage must not block the console
-  assert.doesNotMatch(routeSrc, /status:\s*503/);
-
-  // Must return null (allow through) in the unavailable branch
-  assert.match(routeSrc, /allowing request/);
+  // Must return 503 BFF_RATE_LIMIT_UNAVAILABLE, never allow the request through
+  assert.match(routeSrc, /status:\s*503/);
+  assert.match(routeSrc, /BFF_RATE_LIMIT_UNAVAILABLE/);
+  assert.doesNotMatch(routeSrc, /allowing request/);
 });
 
 // ─── Static source: CHANGE_ME detection is present ───────────────────────────

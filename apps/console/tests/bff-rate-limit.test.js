@@ -7,11 +7,11 @@
  * Test naming follows the required spec:
  *   1. rate_limit_allows_request_under_limit
  *   2. rate_limit_blocks_request_over_limit
- *   3. rate_limit_key_includes_tenant_and_user
+ *   3. rate_limit_key_partitions_tenant_and_user_opaquely (FG-849-REPAIR-001)
  *   4. rate_limit_keys_do_not_collide_across_tenants
  *   5. redis_rate_limit_store_sets_ttl
  *   6. redis_outage_uses_memory_fallback_in_test
- *   7. redis_outage_does_not_fail_open_in_prod
+ *   7. rate_limit_store_outage_fails_closed_503 (FG-849-REPAIR-001)
  *   8. bff_rate_limit_does_not_expose_redis_url
  *   9. bff_rate_limit_does_not_use_next_public_secret_config
  *  10. bff_proxy_allowlist_remains_enforced
@@ -33,14 +33,30 @@ function read(relPath) {
 /**
  * Build a fake Redis client for unit tests.
  * Tracks INCR (per-key counter) and EXPIRE calls deterministically.
+ * eval() emulates RATE_LIMIT_INCREMENT_LUA (INCR, then EXPIRE when the
+ * counter is new or has no TTL) and records the EXPIRE it performs.
  */
 function makeFakeRedisClient({ failOnIncr = false } = {}) {
   const counters = new Map();
   const expireCalls = [];
+  const ttls = new Map();
 
   return {
     counters,
     expireCalls,
+    async eval(script, numKeys, key, windowSec) {
+      if (failOnIncr) throw new Error('Redis connection refused');
+      assert.equal(numKeys, 1);
+      assert.match(script, /INCR/);
+      assert.match(script, /EXPIRE/);
+      const next = (counters.get(key) || 0) + 1;
+      counters.set(key, next);
+      if (next === 1 || !ttls.has(key)) {
+        ttls.set(key, Number(windowSec));
+        expireCalls.push({ key, seconds: Number(windowSec) });
+      }
+      return next;
+    },
     async incr(key) {
       if (failOnIncr) throw new Error('Redis connection refused');
       const next = (counters.get(key) || 0) + 1;
@@ -96,34 +112,24 @@ class MemoryRateLimitStore {
   }
 }
 
-// ─── Inline mirror of RedisRateLimitStore (mirrors rateLimitStore.ts) ─────────
+// ─── Real RedisRateLimitStore (lib/rateLimitStore.ts) ────────────────────────
+// FG-849-REPAIR-001: the former inline mirror used a non-atomic INCR then
+// EXPIRE. The real store (one atomic EVAL) is exercised instead. Bound later,
+// after the harness is loaded.
 
-class RedisRateLimitStore {
-  constructor(client) {
-    this.client = client;
-  }
+// ─── Real key derivation (lib/bffRateLimitPolicy.ts) ──────────────────────────
+// FG-849-REPAIR-001: the former inline mirror built plaintext keys
+// (fg:bff:rl:{group}:{tenant}:{user}). Keys are now an HMAC partition under a
+// server-only key, so these tests exercise the real derivation.
 
-  async increment(key, windowSec, maxRequests) {
-    const count = await this.client.incr(key);
-    if (count === 1) {
-      await this.client.expire(key, windowSec);
-    }
-    return {
-      count,
-      allowed: count <= maxRequests,
-      windowSec,
-      available: true,
-    };
-  }
-}
-
-// ─── Inline mirror of buildRateLimitKey (mirrors route.ts) ────────────────────
+const { createHarness } = require('./helpers/bffRouteHarness');
+const harness = createHarness();
+const policy = harness.loadModule('@/lib/bffRateLimitPolicy');
+const { RedisRateLimitStore } = harness.loadModule('@/lib/rateLimitStore');
+const LIMITER_KEY = Buffer.alloc(32, 7);
 
 function buildRateLimitKey(tenantId, userOrSession, routeGroup) {
-  const safeGroup = routeGroup.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
-  const safeTenant = tenantId.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
-  const safeUser = userOrSession.replace(/[^a-zA-Z0-9_\-.:]/g, '_').slice(0, 128);
-  return `fg:bff:rl:${safeGroup}:${safeTenant}:${safeUser}`;
+  return policy.deriveAuthenticatedRateLimitKey(LIMITER_KEY, routeGroup, 'tenant', tenantId, userOrSession).key;
 }
 
 // ─── Test 1: rate_limit_allows_request_under_limit ────────────────────────────
@@ -156,12 +162,16 @@ test('rate_limit_blocks_request_over_limit', async () => {
 
 // ─── Test 3: rate_limit_key_includes_tenant_and_user ─────────────────────────
 
-test('rate_limit_key_includes_tenant_and_user', () => {
+test('rate_limit_key_partitions_tenant_and_user_opaquely', () => {
   const key = buildRateLimitKey('tenant-xyz', 'user-abc', 'decisions');
-  assert.match(key, /^fg:bff:rl:/);
-  assert.match(key, /tenant-xyz/);
-  assert.match(key, /user-abc/);
-  assert.match(key, /decisions/);
+  assert.match(key, /^fg:bff:rl:v1:decisions:[0-9a-f]{32}$/);
+  // Raw tenant and subject never appear in the persistent key ...
+  assert.doesNotMatch(key, /tenant-xyz/);
+  assert.doesNotMatch(key, /user-abc/);
+  // ... yet each still selects its own partition.
+  assert.notEqual(buildRateLimitKey('tenant-xyz', 'user-abd', 'decisions'), key);
+  assert.notEqual(buildRateLimitKey('tenant-xyy', 'user-abc', 'decisions'), key);
+  assert.equal(buildRateLimitKey('tenant-xyz', 'user-abc', 'decisions'), key);
 });
 
 // ─── Test 4: rate_limit_keys_do_not_collide_across_tenants ────────────────────
@@ -230,25 +240,24 @@ test('redis_outage_uses_memory_fallback_in_test', async () => {
   );
 });
 
-// ─── Test 7: rate_limit_store_outage_fails_open_not_503 ──────────────────────
+// ─── Test 7: rate_limit_store_outage_fails_closed_503 ────────────────────────
+// FG-849-REPAIR-001 replaced the former fail-open policy: an unavailable
+// limiter returns 503 BFF_RATE_LIMIT_UNAVAILABLE for every tier, so an outage
+// cannot disable abuse protection. Behaviour is proven against the real route
+// in bff-rate-limit-route.test.js (C1-C9); this pins the source shape.
 
-test('rate_limit_store_outage_fails_open_not_503', () => {
-  // A rate-limit store outage must never take down the entire console.
-  // The route logs a warning and allows the request through (fail open).
+test('rate_limit_store_outage_fails_closed_503', () => {
   const routeSrc = read('app/api/core/[...path]/route.ts');
   const rateLimitSrc = read('lib/rateLimitStore.ts');
 
-  // The route must check storeResult.unavailable
+  // The route must check storeResult.unavailable and pass its errorCode on
   assert.match(routeSrc, /storeResult\.unavailable/);
-
-  // Must NOT return 503 for a rate-limit store outage
-  assert.doesNotMatch(routeSrc, /status:\s*503/);
-
-  // Must reference errorCode in the log line
   assert.match(routeSrc, /storeResult\.errorCode/);
 
-  // Must allow the request through (return null) in the unavailable branch
-  assert.match(routeSrc, /allowing request/);
+  // Unavailable enforcement is a 503 with a stable code, never an allow
+  assert.match(routeSrc, /status:\s*503/);
+  assert.match(routeSrc, /BFF_RATE_LIMIT_UNAVAILABLE/);
+  assert.doesNotMatch(routeSrc, /allowing request/);
 
   // The stable error codes must still be defined in rateLimitStore.ts
   assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_UNAVAILABLE/);
@@ -335,9 +344,9 @@ test('bff_proxy_allowlist_remains_enforced', () => {
 // ─── Static source invariant: key format matches spec ─────────────────────────
 
 test('rate_limit_key_format_matches_spec', () => {
-  // Key must follow: fg:bff:rl:{route_group}:{tenant_id}:{user_or_session}
+  // Key must follow: fg:bff:rl:v1:{route_group}:{opaque partition} (FG-849-REPAIR-001)
   const key = buildRateLimitKey('tenant-abc', 'sess-xyz', 'decisions');
-  assert.equal(key, 'fg:bff:rl:decisions:tenant-abc:sess-xyz');
+  assert.match(key, /^fg:bff:rl:v1:decisions:[0-9a-f]{32}$/);
 });
 
 // ─── Static source: isDevOrTestEnv matches NODE_ENV and FG_ENV patterns ───────
