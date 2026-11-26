@@ -616,7 +616,9 @@ jobs:
   pt:
     name: PT (ci-pt)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 25 → 40 (FG-855-REPAIR-001): adds ci-assessment-security (~7 min local,
+    # up to ~2x on slow runners).
+    timeout-minutes: 40
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     permissions:
@@ -650,6 +652,14 @@ jobs:
 
       - name: Run PT lane
         run: make ci-pt
+
+      # FG-855-REPAIR-001: assessment/security regression tests the
+      # marker-selected fast lane skips (~7 min locally). This job has
+      # >25 min of slack before the Hardening job finishes, so CI Required
+      # wall time is unchanged. Membership enforced by
+      # tools/ci/check_required_ci_coverage.py.
+      - name: Assessment + security regression (ci-assessment-security)
+        run: make ci-assessment-security
 
       - name: Upload PT artifacts
         if: always()

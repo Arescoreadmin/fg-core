@@ -50,6 +50,15 @@ def test_v2_includes_canonicalization_version(monkeypatch):
     import hmac
     import json
 
+    from agent.app.config import EVENT_ID_CANON_VERSION
+
+    # FG-855-REPAIR-001: the shipped v2 canonical payload carries canon_v=2
+    # (EVENT_ID_CANON_VERSION, set in 5125a4522). The former golden used
+    # canon_v=1 from a superseded draft (492fae967) and was never updated
+    # because agent/tests ran in no CI lane. Pin both the constant and the
+    # golden so a canonicalization change must update this test deliberately.
+    assert EVENT_ID_CANON_VERSION == 2
+
     monkeypatch.setenv("FG_EVENT_ID_MODE", "hmac_v2")
     monkeypatch.setenv("FG_EVENT_ID_KEY_CURRENT", "key1")
     payload = {
@@ -59,10 +68,13 @@ def test_v2_includes_canonicalization_version(monkeypatch):
         "subject": "subject",
         "bucket": "100",
         "features": {"ok": True},
-        "canon_v": 1,
+        "canon_v": 2,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )
     expected = "ev2_" + hmac.new(b"key1", canonical, hashlib.sha256).hexdigest()
+    assert expected == (
+        "ev2_27598d1e0ea7b6a93348eb9a4401412b2df99b5fd9fd945e2cb21b0ce6861c3c"
+    )
     assert deterministic_event_id(*_args()) == expected
