@@ -99,7 +99,9 @@ test('rate limit and API key tenant authority are server resolved', () => {
   // Tenant resolved via authorized session check, not raw URL param trust
   assert.match(proxy, /resolveAuthorizedTenant/);
   // tenantId is threaded through to both rate limiting and API key lookup
-  assert.match(proxy, /enforceRateLimit\(request, requestId, routeGroup, tenantId\)/);
+  // FG-849-REPAIR-001: the limiter also takes the session principal and the
+  // route classification; no request object (so no request headers) reaches it.
+  assert.match(proxy, /enforceRateLimit\(requestId, routeGroup, tenantId, principal, route\)/);
   assert.match(proxy, /proxyToCore\(request, path, requestId, tenantId, namedUserSub, actorAuthority\)/);
   // API key lookup uses the server-resolved tenant and request_id
   assert.match(proxy, /resolveCoreAuth\(tenantId, requestId\)/);

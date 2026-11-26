@@ -2,8 +2,8 @@
  * BFF Redis Rate-Limit Storage Adapter
  *
  * Architecture:
- *   - RedisRateLimitStore: production — uses ioredis INCR+EXPIRE atomic pattern
- *   - UpstashRestRateLimitStore: production — uses Upstash/Vercel KV REST envs
+ *   - RedisRateLimitStore: production — ioredis EVAL of RATE_LIMIT_INCREMENT_LUA
+ *   - UpstashRestRateLimitStore: production — Upstash/Vercel KV REST EVAL of the same script
  *   - MemoryRateLimitStore: dev/test only — in-process sliding window
  *   - getRateLimitStore(): factory — server-side only, never called in browser
  *
@@ -13,14 +13,28 @@
  *
  * Redis unavailable behavior:
  *   - dev/test: falls back to MemoryRateLimitStore (deterministic)
- *   - prod-like: returns { unavailable: true, errorCode } — caller must return 503
+ *   - prod-like: returns { unavailable: true, errorCode } — the Core BFF route
+ *     returns 503 BFF_RATE_LIMIT_UNAVAILABLE (FG-849-REPAIR-001, fail closed)
+ *   - per-request backend failures (timeout, refusal, auth, HTTP 5xx,
+ *     malformed reply) reject from increment(); the route also returns 503
+ *
+ * Atomicity (FG-849-REPAIR-001): increment and expiry run as one Lua script,
+ * so no caller can observe a counter without a TTL, a failure cannot leave a
+ * TTL-less counter. The PTTL guard additionally repairs any v1 key found
+ * without a TTL (defence in depth). Pre-repair keys use a different prefix
+ * (fg:bff:rl:{group}:...) and are never read or repaired by this code.
+ *
+ * Bounded latency: every remote operation is bounded by
+ * BFF_RATE_LIMIT_TIMEOUT_MS (default 1000 ms, clamped 50-5000). Commands are
+ * never retried, so a timed-out command can increment at most once.
  *
  * Prod-like enforcement (NODE_ENV=production or FG_ENV=prod/staging/production):
  *   - Missing/blank/CHANGE_ME Redis/Upstash config → errorCode: BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED
  *   - Valid config but Redis/Upstash unreachable → errorCode: BFF_RATE_LIMIT_REDIS_UNAVAILABLE
  *   - Memory fallback is NEVER allowed in prod-like environments
  *
- * Key format: fg:bff:rl:{route_group}:{tenant_id}:{user_id_or_session}
+ * Key format: fg:bff:rl:v1:{route_group}:{opaque HMAC partition}
+ *   (derived in lib/bffRateLimitPolicy.ts; no raw subject, tenant or IP)
  * TTL: BFF_RATE_LIMIT_WINDOW_S (default 60s)
  */
 
@@ -49,11 +63,72 @@ export type BffRateLimitErrorCode =
   /** BFF_REDIS_URL is present but Redis is unreachable in prod-like env */
   | 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE';
 
+// ─── Atomic increment ─────────────────────────────────────────────────────────
+
+/**
+ * INCR and EXPIRE in one server-side script. The TTL is set on the first
+ * increment of a window, and also whenever the key has no TTL (PTTL < 0), so a
+ * v1 counter found without expiry (e.g. a key written by other tooling) is repaired.
+ * The window comes from server config only (ARGV[1]); callers cannot extend it.
+ */
+export const RATE_LIMIT_INCREMENT_LUA = [
+  "local c = redis.call('INCR', KEYS[1])",
+  "if c == 1 or redis.call('PTTL', KEYS[1]) < 0 then",
+  "  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))",
+  'end',
+  'return c',
+].join('\n');
+
+export type RateLimitBackendFailure = 'timeout' | 'malformed_response' | 'backend_error';
+
+/** Raised by stores so the route can classify the failure without parsing text. */
+export class RateLimitBackendError extends Error {
+  readonly failure: RateLimitBackendFailure;
+  constructor(failure: RateLimitBackendFailure, message: string) {
+    super(message);
+    this.name = 'RateLimitBackendError';
+    this.failure = failure;
+  }
+}
+
+export function classifyRateLimitFailure(err: unknown): RateLimitBackendFailure {
+  if (err instanceof RateLimitBackendError) return err.failure;
+  const name = (err as { name?: string } | null)?.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout';
+  return 'backend_error';
+}
+
+function parseCount(result: unknown): number {
+  const count = typeof result === 'string' && /^[0-9]+$/.test(result) ? Number(result) : result;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) {
+    throw new RateLimitBackendError('malformed_response', 'rate-limit backend returned a malformed count');
+  }
+  return count;
+}
+
+async function withDeadline<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new RateLimitBackendError('timeout', 'rate-limit backend deadline exceeded')),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
+
+export const DEFAULT_RATE_LIMIT_TIMEOUT_MS = 1000;
 
 export function getBffRateLimitConfig(): {
   windowSec: number;
   maxRequests: number;
+  timeoutMs: number;
   backend: 'redis' | 'upstash-rest' | 'memory';
   redisUrl: string | undefined;
   upstashRestUrl: string | undefined;
@@ -61,6 +136,10 @@ export function getBffRateLimitConfig(): {
 } {
   const windowSec = Math.max(1, parseInt(process.env.BFF_RATE_LIMIT_WINDOW_S || '60', 10) || 60);
   const maxRequests = Math.max(1, parseInt(process.env.BFF_RATE_LIMIT_MAX_REQUESTS || '100', 10) || 100);
+  const rawTimeout = parseInt(process.env.BFF_RATE_LIMIT_TIMEOUT_MS || '', 10);
+  const timeoutMs = Number.isFinite(rawTimeout)
+    ? Math.min(5000, Math.max(50, rawTimeout))
+    : DEFAULT_RATE_LIMIT_TIMEOUT_MS;
   const backend = (process.env.BFF_RATE_LIMIT_BACKEND || '').trim().toLowerCase();
   const rawRedisUrl = process.env.BFF_REDIS_URL || process.env.REDIS_URL || undefined;
   const redisUrlIsRest = rawRedisUrl ? /^https?:\/\//i.test(rawRedisUrl.trim()) : false;
@@ -89,7 +168,7 @@ export function getBffRateLimitConfig(): {
     resolvedBackend = upstashRestUrl || upstashRestToken ? 'upstash-rest' : redisUrl ? 'redis' : 'memory';
   }
 
-  return { windowSec, maxRequests, backend: resolvedBackend, redisUrl, upstashRestUrl, upstashRestToken };
+  return { windowSec, maxRequests, timeoutMs, backend: resolvedBackend, redisUrl, upstashRestUrl, upstashRestToken };
 }
 
 /** Returns true for NODE_ENV=development|test or FG_ENV=dev|development|local|test */
@@ -162,27 +241,47 @@ export class MemoryRateLimitStore implements RateLimitStore {
  * This lets tests inject a fake without importing ioredis.
  */
 export interface RedisClientInterface {
-  incr(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<0 | 1>;
-  quit(): Promise<void>;
+  eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown>;
+  quit(): Promise<unknown>;
+  /** ioredis connection state; 'wait' means lazyConnect has not connected yet. */
+  status?: string;
+  connect?(): Promise<unknown>;
 }
 
 export class RedisRateLimitStore implements RateLimitStore {
   private readonly client: RedisClientInterface;
+  private readonly timeoutMs: number;
+  private connecting: Promise<unknown> | null = null;
 
-  constructor(client: RedisClientInterface) {
+  constructor(client: RedisClientInterface, timeoutMs: number = DEFAULT_RATE_LIMIT_TIMEOUT_MS) {
     this.client = client;
+    this.timeoutMs = timeoutMs;
+  }
+
+  private ensureConnected(): Promise<unknown> | null {
+    // One shared connect attempt: concurrent first requests wait on the same
+    // promise (connect() moves status off 'wait' synchronously, so the status
+    // alone cannot tell later callers a connect is in flight). After a failed
+    // attempt the promise is cleared and ioredis reconnects in the background.
+    if (this.connecting) return this.connecting;
+    if (this.client.status !== 'wait' || !this.client.connect) return null;
+    this.connecting = this.client.connect().catch((err: unknown) => {
+      this.connecting = null;
+      throw err;
+    });
+    return this.connecting;
   }
 
   async increment(key: string, windowSec: number, maxRequests: number): Promise<RateLimitResult> {
-    // INCR + EXPIRE: atomic per-key counter with TTL
-    // INCR is idempotent and serialized server-side — safe under concurrency.
-    const count = await this.client.incr(key);
-    // Only set EXPIRE on the first increment (count === 1) to avoid resetting TTL.
-    // This implements a fixed window aligned to first request in the window.
-    if (count === 1) {
-      await this.client.expire(key, windowSec);
-    }
+    // Fixed window aligned to the first request; INCR+EXPIRE are atomic in
+    // RATE_LIMIT_INCREMENT_LUA. The whole operation, including a lazy first
+    // connect, shares one deadline.
+    const operation = (async () => {
+      const connecting = this.ensureConnected();
+      if (connecting) await connecting;
+      return this.client.eval(RATE_LIMIT_INCREMENT_LUA, 1, key, String(windowSec));
+    })();
+    const count = parseCount(await withDeadline(operation, this.timeoutMs));
     return {
       count,
       allowed: count <= maxRequests,
@@ -197,45 +296,58 @@ export class RedisRateLimitStore implements RateLimitStore {
 export class UpstashRestRateLimitStore implements RateLimitStore {
   private readonly baseUrl: string;
   private readonly token: string;
+  private readonly timeoutMs: number;
 
-  constructor(baseUrl: string, token: string) {
+  constructor(baseUrl: string, token: string, timeoutMs: number = DEFAULT_RATE_LIMIT_TIMEOUT_MS) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.token = token;
+    this.timeoutMs = timeoutMs;
   }
 
-  private async command(command: string, args: string[] = []): Promise<unknown> {
-    const encoded = args.map((arg) => encodeURIComponent(arg));
-    const url = `${this.baseUrl}/${command.toLowerCase()}${encoded.length ? `/${encoded.join('/')}` : ''}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-      cache: 'no-store',
-    });
-    if (!response.ok) {
-      throw new Error(`Upstash REST ${command} failed with HTTP ${response.status}`);
-    }
-    const payload = (await response.json()) as { result?: unknown; error?: string };
-    if (payload.error) {
-      throw new Error(`Upstash REST ${command} failed`);
-    }
-    return payload.result;
+  /**
+   * One command as a JSON array POSTed to the REST root (the same transport
+   * lib/tenant-registry.ts uses). The request is aborted at the deadline and
+   * never retried. Error messages never include the URL or token.
+   */
+  private async command(args: string[]): Promise<unknown> {
+    const name = args[0];
+    const operation = (async () => {
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(args),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!response.ok) {
+        throw new RateLimitBackendError('backend_error', `Upstash REST ${name} failed with HTTP ${response.status}`);
+      }
+      let payload: { result?: unknown; error?: string } | null;
+      try {
+        payload = (await response.json()) as { result?: unknown; error?: string } | null;
+      } catch {
+        throw new RateLimitBackendError('malformed_response', `Upstash REST ${name} returned a non-JSON body`);
+      }
+      if (!payload || typeof payload !== 'object') {
+        throw new RateLimitBackendError('malformed_response', `Upstash REST ${name} returned a malformed body`);
+      }
+      if (payload.error) {
+        throw new RateLimitBackendError('backend_error', `Upstash REST ${name} failed`);
+      }
+      return payload.result;
+    })();
+    return withDeadline(operation, this.timeoutMs);
   }
 
   async ping(): Promise<void> {
-    await this.command('PING');
+    await this.command(['PING']);
   }
 
   async increment(key: string, windowSec: number, maxRequests: number): Promise<RateLimitResult> {
-    const result = await this.command('INCR', [key]);
-    const count = Number(result);
-    if (!Number.isFinite(count)) {
-      throw new Error('Upstash REST INCR returned a non-numeric count');
-    }
-    if (count === 1) {
-      await this.command('EXPIRE', [key, String(windowSec)]);
-    }
+    const count = parseCount(await this.command(['EVAL', RATE_LIMIT_INCREMENT_LUA, '1', key, String(windowSec)]));
     return {
       count,
       allowed: count <= maxRequests,
@@ -265,7 +377,7 @@ export async function buildRateLimitStore(): Promise<
   | { store: RateLimitStore; unavailable: false }
   | { store: null; unavailable: true; errorCode: BffRateLimitErrorCode; required: true }
 > {
-  const { backend, redisUrl, upstashRestUrl, upstashRestToken } = getBffRateLimitConfig();
+  const { backend, redisUrl, upstashRestUrl, upstashRestToken, timeoutMs } = getBffRateLimitConfig();
   const devOrTest = isDevOrTestEnv();
 
   if (backend === 'memory') {
@@ -296,8 +408,8 @@ export async function buildRateLimitStore(): Promise<
 
     // No connectivity check at cold start — a transient Upstash failure during
     // initialization would permanently brick this singleton for the worker's lifetime.
-    // Failures are caught per-request in enforceRateLimit instead.
-    return { store: new UpstashRestRateLimitStore(upstashRestUrl!, upstashRestToken!), unavailable: false };
+    // Per-request failures reject from increment() and the route fails closed.
+    return { store: new UpstashRestRateLimitStore(upstashRestUrl!, upstashRestToken!, timeoutMs), unavailable: false };
   }
 
   // Redis backend
@@ -319,14 +431,26 @@ export async function buildRateLimitStore(): Promise<
   // because this file is never imported into browser/client components.
   // lazyConnect: true defers the TCP handshake to the first command; no eager
   // connect so a transient DNS/network issue at cold start doesn't brick the singleton.
+  // One client per worker. maxRetriesPerRequest: 0 and no offline queue mean a
+  // command is sent at most once and fails fast while disconnected; ioredis
+  // reconnects in the background with capped backoff, so enforcement recovers
+  // without a restart once Redis is reachable again.
+  const client = new Redis(redisUrl!, {
+    lazyConnect: true,
+    connectTimeout: 2000,
+    commandTimeout: timeoutMs,
+    maxRetriesPerRequest: 0,
+    enableOfflineQueue: false,
+    retryStrategy: (times: number) => Math.min(times * 200, 2000),
+  });
+  // Without a listener ioredis prints every 'error' event (one per reconnect
+  // attempt, with host:port and a stack trace) — unbounded log output during
+  // an outage. The failure is not hidden: commands still reject, so the route
+  // returns 503 and emits the throttled bff_rate_limit_enforcement_unavailable
+  // event (FG-849-REPAIR-001).
+  client.on('error', () => {});
   return {
-    store: new RedisRateLimitStore(new Redis(redisUrl!, {
-      lazyConnect: true,
-      connectTimeout: 2000,
-      commandTimeout: 1000,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    }) as unknown as RedisClientInterface),
+    store: new RedisRateLimitStore(client as unknown as RedisClientInterface, timeoutMs),
     unavailable: false,
   };
 }
@@ -339,7 +463,17 @@ let _storePromise: ReturnType<typeof buildRateLimitStore> | null = null;
 
 export function getRateLimitStore(): ReturnType<typeof buildRateLimitStore> {
   if (!_storePromise) {
-    _storePromise = buildRateLimitStore();
+    // A construction error must not cache a rejected promise for the worker's
+    // lifetime: report unavailable (the route fails closed) and retry next call.
+    _storePromise = buildRateLimitStore().catch(() => {
+      _storePromise = null;
+      return {
+        store: null,
+        unavailable: true as const,
+        errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' as const,
+        required: true as const,
+      };
+    });
   }
   return _storePromise;
 }
@@ -368,7 +502,7 @@ export async function getRateLimitHealth(): Promise<{
         return { backend: 'upstash-rest', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
       }
       try {
-        const probe = new UpstashRestRateLimitStore(config.upstashRestUrl!, config.upstashRestToken!);
+        const probe = new UpstashRestRateLimitStore(config.upstashRestUrl!, config.upstashRestToken!, config.timeoutMs);
         await probe.ping();
         return { backend: 'upstash-rest', ready: true, required: true, reason: null };
       } catch {
@@ -379,22 +513,45 @@ export async function getRateLimitHealth(): Promise<{
     if (isBffRedisUrlMissingOrPlaceholder(config.redisUrl)) {
       return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
     }
-    // Probe Redis directly — side-effect-free, does not touch the module singleton
+    // Probe Redis directly — side-effect-free, does not touch the module singleton.
+    // FG-849-REPAIR-001: one bounded attempt per probe. No reconnects
+    // (retryStrategy returns null), no raw error output, an explicit connect
+    // (a lazy client with no offline queue rejects a first command before it
+    // is connected), and the client is always closed — on success, refusal,
+    // auth failure, timeout or a construction error.
+    let probe: Redis | null = null;
     try {
       const RedisModule = await import('ioredis');
       const RedisClient = RedisModule.default;
-      const probe = new RedisClient(config.redisUrl!, {
+      probe = new RedisClient(config.redisUrl!, {
         lazyConnect: true,
         connectTimeout: 1500,
         commandTimeout: 1000,
         maxRetriesPerRequest: 0,
         enableOfflineQueue: false,
+        retryStrategy: () => null,
+        reconnectOnError: () => false,
       });
-      await probe.ping();
-      await probe.quit().catch(() => {}); // clean up probe connection
+      probe.on('error', () => {});
+      const client = probe;
+      await withDeadline(
+        (async () => {
+          await client.connect();
+          await client.ping();
+        })(),
+        config.timeoutMs + 1500,
+      );
       return { backend: 'redis', ready: true, required: true, reason: null };
     } catch {
       return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' };
+    } finally {
+      // disconnect() marks the close as manual, so ioredis never starts another
+      // reconnect cycle; destroying the stream also closes a socket that is
+      // still waiting for the server's first reply (timeout case) at once.
+      if (probe) {
+        probe.disconnect();
+        probe.stream?.destroy();
+      }
     }
   } else {
     // dev/test: memory fallback, always ready, not required
