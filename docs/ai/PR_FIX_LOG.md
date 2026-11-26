@@ -24,6 +24,7 @@
     - The pin test now drives a real TLS handshake (local server, self-signed cert trusted via `verify`, so only the pin can fail). A mismatched pin raises `SSLError` with 0 requests served; a positive control with the correct pin succeeds. A third test asserts `assert_fingerprint` normalization.
     - The event-id golden uses `canon_v=2` and pins `EVENT_ID_CANON_VERSION == 2` plus the literal digest.
   - `record_property` → `record_testsuite_property`, which is xunit2-compatible and keeps the measurements in JUnit. Assertions are unchanged.
+  - CodeQL autofix `dc741987e` (pushed to the PR branch by the repository owner): the test's local TLS server sets `minimum_version = TLSv1_2`. This is test-only hardening, and the pin tests are unchanged and pass. The offline evidence was regenerated afterwards, because the commit had made the earlier evidence stale.
 - **Coverage and cost:**
   - Existing tests newly in required CI: 57 (`agent/tests`) + 399 (assessment/security) = 456. New tests: 26 (19 guard, 5 timeout-plugin, 2 TLS pin).
   - No test removed, skipped, xfailed or deselected.
