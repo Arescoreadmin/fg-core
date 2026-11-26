@@ -1,3 +1,34 @@
+## ci(testing-module): FG-CI-NIGHTLY-REPAIR-001 — restore scheduled security and full-suite runs
+
+- **Finding:** audit gap 011 (`docs/audits` 2026-11-18, "Scheduled security timeout prevents full suite", P1 REPAIR). Roadmap check: `--work-class REPAIR` authorized.
+- **Verified baseline (`4d15cb820`, `testing-module` run history):**
+  - Every scheduled run from 2026-11-14 to 2026-11-26 (13 runs) ended `cancelled` about 25 min in. In each, `fg-security` hit its 25-min job timeout. In run 45818565829, pytest was at about 77% of 1,673 tests with no failures. So this was a budget defect, not a test regression.
+  - `fg-full-gates` needed `fg-security == success`, so all ten shards, the aggregate and flake detection were skipped. A timeout in one lane removed the whole full suite.
+  - Runs from 11-07 to 11-13 failed in shards. These were genuine stale tests that hardening PRs (#817, #893, #816) have since fixed: portal session/scope codes, portal user authority, trust enforcement, H14 P17, and the `record_property` errors fixed in #924. They all pass on `main`. The one test no longer present, `test_portal_list_engagements_no_session_required`, was renamed and tightened in #893 into `..._requires_session` (expects 403); it was not dropped.
+  - No runner-capacity failures were seen.
+  - Concurrency: schedule and `workflow_dispatch` on `main` shared the group `testing-module-refs/heads/main` with `cancel-in-progress: true`, so a manual run could cancel the nightly and vice versa.
+  - Silent gaps:
+    - `fg-security.xml` (in `JUNIT_DIR=artifacts/ci/junit`) was never uploaded.
+    - No job turned skipped lanes into a failing verdict.
+    - The shard truncation check compared against static `fg_test_counts.json` (23,947) with a 90% tolerance, so about 10% of a shard could vanish unnoticed.
+    - The aggregate maximum of 26,000 was within 162 tests of the live suite (25,838), so the nightly was about to fail for a non-defect.
+    - Artifact retention was 7 to 14 days.
+- **Fix:**
+  - `fg-security` timeout goes from 25 to 45 min (about 33 min observed). 45 min is the ceiling allowed by `check_timeout_hierarchy.py` (≤ 2800 s), which now reads the value from the workflow instead of a hardcoded 25 min.
+  - `fg-full-gates` no longer needs `fg-security`, so the two lanes run in parallel and the security result is enforced by the verdict.
+  - Concurrency: `cancel-in-progress` applies only to `pull_request`. Schedule and dispatch runs get per-run groups (`github.run_id`).
+  - New `workflow_dispatch` input `suite` (`all` | `security` | `full`), so each lane can be triggered on its own. `all` is the scheduled equivalent.
+  - New `testing-module-verdict` job (`if: always()`, needs every job). It fails if any job required for the event or suite is skipped, cancelled (which includes job timeouts), failed or missing. It also opens the now-uploaded `fg-security.xml` and requires at least 1650 tests with 0 failures and 0 errors. On PRs, the full suite remains optional but all-or-nothing.
+  - `make fg-full-shard` writes `shard-collection.json` (the `pytest --collect-only` count, failing closed on collection errors). `fg_full_aggregate.py --require-collection` then fails a shard that ran fewer tests than it collected, or more with no errors. The flag is opt-in, so existing callers and tests are unchanged. Bounds change from 22,500–26,000 to 25,000–32,000.
+  - Opt-in per-test timeout (`NIGHTLY_TEST_TIMEOUT_SECONDS`, 300 s in the scheduled `fg-security` and shard jobs, about 27× the slowest observed test phase of 11.4 s) reuses the #924 plugin. The default of 0 adds nothing, so required PR lanes that reuse `fg-security-pytest` (`fg-required`) are unchanged.
+  - Shard timeout goes from 55 to 75 min (observed 48–50 min and growing).
+  - Every `testing-module` upload is retained for 30 days.
+  - Guard: `tools/ci/check_testing_module_workflow.py` (`make testing-module-workflow-check`, a prerequisite of `fg-fast`, therefore run by required Guard and fg-required). It rejects the pre-repair workflow on 22 counts.
+- **Tests:** 23 workflow-guard, 45 verdict and 10 aggregate-collection contract tests. Existing aggregator, shard, timeout-hierarchy and required-coverage tests pass unchanged.
+- **`agent/ci/verify_*`:** not wired. They assert the contract headers and the rate-limit key format ("no raw key"), which `agent/tests/test_contract_envelope.py` and `test_rate_limiter.py` already assert in required Agent Linux. Running them would add no security evidence.
+- **Timeout platforms:** the `SIGALRM` per-phase layer works on Linux and macOS. On Windows only the faulthandler backstop applies (whole-process exit after 2× budget + 5 s). All `testing-module` jobs run on `ubuntu-latest`.
+- **CI config touched (called out):** `.github/workflows/testing-module.yml` (non-required workflow) and `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite). Required-check names, membership and `repository-policy.json` are unchanged.
+
 ## ci(required): FG-855-REPAIR-001 — Agent and assessment/security tests in required CI
 
 - **Issue:** #855 (audit gap 015, `docs/audits` 2026-11-18 inventory). Roadmap check: `--work-class REPAIR` authorized.
