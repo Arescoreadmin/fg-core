@@ -234,7 +234,9 @@ function resolveFile(base) {
 
 function createHarness(options = {}) {
   const root = options.root || process.env.FG849_HARNESS_ROOT || CONSOLE_ROOT;
-  const backend = new FakeRedisBackend();
+  // A shared backend models several workers (or deployments) using one
+  // Redis/Upstash database.
+  const backend = options.backend || new FakeRedisBackend();
   const state = {
     session: null,
     coreCalls: [],
@@ -306,7 +308,20 @@ function createHarness(options = {}) {
   }
 
   const routeFile = path.join(root, ROUTE_REL);
+  const healthFile = path.join(root, 'app', 'api', 'health', 'route.ts');
   const nextServer = consoleRequire('next/server');
+
+  async function callHealth() {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fakeFetch;
+    try {
+      const response = await load(healthFile).GET();
+      const text = await response.text();
+      return { status: response.status, text, json: JSON.parse(text) };
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
 
   async function call(method, segments, { query = '', headers = {}, body, rawPath } = {}) {
     const pathname = rawPath ?? segments.map((s) => encodeURIComponent(s)).join('/');
@@ -348,6 +363,7 @@ function createHarness(options = {}) {
     backend,
     state,
     call,
+    callHealth,
     loadModule(spec) {
       return load(resolveFile(path.join(root, spec.replace(/^@\//, ''))));
     },

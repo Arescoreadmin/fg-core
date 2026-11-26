@@ -32,7 +32,10 @@ const AUTH_SECRET = 'SENTINEL-AUTH-SECRET-0123456789abcdefghijklmnop';
 const UPSTASH_TOKEN = 'SENTINEL-UPSTASH-TOKEN-0123456789';
 const TOKEN_1 = `fgwi1.${'deadbeef'.repeat(8)}`;
 const TOKEN_2 = `fgwi1.${'cafebabe'.repeat(8)}`;
-const SENTINELS = [SUBJECT_A, SUBJECT_B, ADMIN_SUBJECT, 'SENTINELSUBJECT', TENANT_A, TENANT_B, CLIENT_IP, AUTH_SECRET, UPSTASH_TOKEN, TOKEN_1, TOKEN_2, 'deadbeefdeadbeef'];
+// 44-char padded base64 encodings of 32 bytes (synthetic, test-only).
+const DEDICATED_SECRET_PROD = 'U0VOVElORUwtUFJPRC1yYXRlLWxpbWl0LWtleS0wMDAx';
+const DEDICATED_SECRET_PREVIEW = 'U0VOVElORUwtUFJFVklFVy1yYXRlLWxpbWl0LWtleS0x';
+const SENTINELS = [DEDICATED_SECRET_PROD, DEDICATED_SECRET_PREVIEW, SUBJECT_A, SUBJECT_B, ADMIN_SUBJECT, 'SENTINELSUBJECT', TENANT_A, TENANT_B, CLIENT_IP, AUTH_SECRET, UPSTASH_TOKEN, TOKEN_1, TOKEN_2, 'deadbeefdeadbeef'];
 
 const BASE_ENV = {
   NODE_ENV: 'production',
@@ -729,8 +732,101 @@ test('H4 partition is deterministic within a key epoch and changes on rotation',
   // Scope separates tenant-independent partitions from a tenant literally named "invitation".
   assert.notEqual(policy.deriveAuthenticatedRateLimitKey(a.key, 'identity', 'tenant', 'invitation', SUBJECT_A).key,
     policy.deriveAuthenticatedRateLimitKey(a.key, 'identity', 'tenant-independent', 'invitation', SUBJECT_A).key);
-  process.env.BFF_RATE_LIMIT_KEY_SECRET = 'rotated-dedicated-secret-0123456789abcdef';
+  process.env.BFF_RATE_LIMIT_KEY_SECRET = DEDICATED_SECRET_PROD;
   const rotated = policy.resolveLimiterKeyMaterial();
   assert.equal(rotated.source, 'dedicated');
   assert.notEqual(policy.deriveAuthenticatedRateLimitKey(rotated.key, 'decisions', 'tenant', TENANT_A, SUBJECT_A).key, k1);
+});
+
+// ─── I. Founder release conditions (namespace, alerting, health, secret) ────
+
+test('I1 dedicated secret must be at least 43 chars (32 random bytes encoded); no silent fallback', async () => {
+  const h42 = setup({ BFF_RATE_LIMIT_KEY_SECRET: 'a'.repeat(42) });
+  h42.state.session = clientSession();
+  assertUnavailable(await h42.call('GET', ['decisions']), h42);
+  const h43 = setup({ BFF_RATE_LIMIT_KEY_SECRET: DEDICATED_SECRET_PROD });
+  h43.state.session = clientSession();
+  assert.equal((await h43.call('GET', ['decisions'])).status, 200);
+  const policy = h43.loadModule('@/lib/bffRateLimitPolicy');
+  assert.equal(policy.resolveLimiterKeyMaterial().source, 'dedicated');
+});
+
+test('I2 global preflight budget is shared by all workers of one deployment (same secret, same store)', async () => {
+  const { FakeRedisBackend } = require('./helpers/bffRouteHarness');
+  const shared = new FakeRedisBackend();
+  applyEnv({ ...BASE_ENV, BFF_RATE_LIMIT_KEY_SECRET: DEDICATED_SECRET_PROD });
+  const workerA = createHarness({ backend: shared });
+  const workerB = createHarness({ backend: shared });
+  const statuses = [];
+  for (let i = 0; i < 6; i += 1) {
+    const worker = i % 2 === 0 ? workerA : workerB;
+    const token = `fgwi1.${(i + 16).toString(16).repeat(32)}`;
+    statuses.push((await worker.call('GET', ['identity', 'invitations', token])).status);
+  }
+  assert.deepEqual(statuses, [200, 200, 200, 200, 200, 429], 'two workers consume one deployment-wide budget');
+  assert.equal(limiterKeys({ backend: shared }).filter((k) => k.includes(':global:')).length, 1);
+});
+
+test('I3 environments with different secrets never consume each other\'s quota in a shared store', async () => {
+  const { FakeRedisBackend } = require('./helpers/bffRouteHarness');
+  const shared = new FakeRedisBackend();
+  applyEnv({ ...BASE_ENV, BFF_RATE_LIMIT_KEY_SECRET: DEDICATED_SECRET_PROD });
+  const production = createHarness({ backend: shared });
+  for (let i = 0; i < 5; i += 1) {
+    await production.call('GET', ['identity', 'invitations', `fgwi1.${(i + 16).toString(16).repeat(32)}`]);
+  }
+  assert.equal((await production.call('GET', ['identity', 'invitations', TOKEN_2])).status, 429);
+  production.state.session = clientSession();
+  for (let i = 0; i < 3; i += 1) await production.call('GET', ['decisions']);
+  assert.equal((await production.call('GET', ['decisions'])).status, 429);
+
+  applyEnv({ ...BASE_ENV, BFF_RATE_LIMIT_KEY_SECRET: DEDICATED_SECRET_PREVIEW });
+  const preview = createHarness({ backend: shared });
+  assert.equal((await preview.call('GET', ['identity', 'invitations', TOKEN_2])).status, 200, 'preview global budget is separate');
+  preview.state.session = clientSession();
+  assert.equal((await preview.call('GET', ['decisions'])).status, 200, 'preview principal quota is separate');
+  const globals = limiterKeys({ backend: shared }).filter((k) => k.includes(':global:'));
+  assert.equal(globals.length, 2);
+  for (const key of globals) assert.match(key, /^fg:bff:rl:v1:invitation-preflight:global:[0-9a-f]{16}$/);
+});
+
+test('I4 quota events name the exhausted budget so global exhaustion is alertable', async () => {
+  const h = setup();
+  for (let i = 0; i < 3; i += 1) await h.call('GET', ['identity', 'invitations', TOKEN_1]);
+  for (let i = 0; i < 6; i += 1) {
+    await h.call('GET', ['identity', 'invitations', `fgwi1.${(i + 16).toString(16).repeat(32)}`]);
+  }
+  const events = h.state.logs
+    .filter((e) => e.text.includes('bff_rate_limit_quota_exceeded'))
+    .map((e) => JSON.parse(e.text.replace(/^\[core-proxy\] /, '')));
+  assert.ok(events.some((e) => e.budget === 'invitation_token'));
+  assert.ok(events.some((e) => e.budget === 'invitation_global'));
+  h.state.session = clientSession();
+  for (let i = 0; i < 4; i += 1) await h.call('GET', ['decisions']);
+  assert.ok(h.state.logs.some((e) => e.text.includes('"budget":"principal"')));
+});
+
+test('I5 /api/health stays 200 and meaningful while the limiter store is down; reports key readiness without the secret', async () => {
+  const h = setup({ BFF_RATE_LIMIT_KEY_SECRET: DEDICATED_SECRET_PROD });
+  h.backend.mode = 'refuse';
+  const down = await h.callHealth();
+  assert.equal(down.status, 200);
+  assert.equal(down.json.status, 'ok');
+  assert.equal(down.json.rateLimit.ready, false);
+  assert.equal(down.json.rateLimit.reason, 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE');
+  assert.deepEqual(down.json.rateLimit.identityKey, { ready: true, source: 'dedicated' });
+  for (const sentinel of SENTINELS) assert.ok(!down.text.includes(sentinel), `health leaks ${sentinel}`);
+  assert.doesNotMatch(down.text, /redis:\/\/|internal\.test/);
+
+  h.backend.mode = 'ok';
+  const up = await h.callHealth();
+  assert.equal(up.json.rateLimit.ready, true);
+
+  const noKey = setup({ AUTH_SECRET: undefined });
+  const missing = await noKey.callHealth();
+  assert.equal(missing.status, 200);
+  assert.deepEqual(missing.json.rateLimit.identityKey, { ready: false, source: null, reason: 'BFF_RATE_LIMIT_KEY_UNAVAILABLE' });
+
+  const fallback = await setup().callHealth();
+  assert.deepEqual(fallback.json.rateLimit.identityKey, { ready: true, source: 'derived-auth-secret' });
 });

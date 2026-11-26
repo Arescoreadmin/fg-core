@@ -20,8 +20,9 @@
  *
  * Atomicity (FG-849-REPAIR-001): increment and expiry run as one Lua script,
  * so no caller can observe a counter without a TTL, a failure cannot leave a
- * TTL-less counter, and a counter left without a TTL by an older release is
- * repaired on its next increment.
+ * TTL-less counter. The PTTL guard additionally repairs any v1 key found
+ * without a TTL (defence in depth). Pre-repair keys use a different prefix
+ * (fg:bff:rl:{group}:...) and are never read or repaired by this code.
  *
  * Bounded latency: every remote operation is bounded by
  * BFF_RATE_LIMIT_TIMEOUT_MS (default 1000 ms, clamped 50-5000). Commands are
@@ -67,7 +68,7 @@ export type BffRateLimitErrorCode =
 /**
  * INCR and EXPIRE in one server-side script. The TTL is set on the first
  * increment of a window, and also whenever the key has no TTL (PTTL < 0), so a
- * counter left without expiry by an interrupted non-atomic write is repaired.
+ * v1 counter found without expiry (e.g. a key written by other tooling) is repaired.
  * The window comes from server config only (ARGV[1]); callers cannot extend it.
  */
 export const RATE_LIMIT_INCREMENT_LUA = [

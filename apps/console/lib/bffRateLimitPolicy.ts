@@ -271,7 +271,14 @@ export function getPublicInvitationRateLimitConfig(): { globalMaxRequests: numbe
 // ─── Limiter identity key material ───────────────────────────────────────────
 
 const PROD_LIKE_FG_ENVS = new Set(['prod', 'production', 'staging']);
+/** AUTH_SECRET fallback minimum (the documented `openssl rand -base64 32` is 44 chars). */
 const MIN_SECRET_LENGTH = 32;
+/**
+ * Dedicated secret minimum: 43 characters is the shortest supported encoding
+ * of 32 random bytes (unpadded base64; padded base64 is 44, hex is 64).
+ * Entropy itself cannot be measured — generate with `openssl rand -base64 32`.
+ */
+const MIN_DEDICATED_SECRET_LENGTH = 43;
 const HKDF_SALT = 'frostgate-console-bff';
 const HKDF_INFO = 'fg-849/rate-limit-identity/v1';
 
@@ -281,9 +288,9 @@ function isProdLike(): boolean {
   return nodeEnv === 'production' || PROD_LIKE_FG_ENVS.has(fgEnv);
 }
 
-function usableSecret(raw: string | undefined): string | null {
+function usableSecret(raw: string | undefined, minLength: number = MIN_SECRET_LENGTH): string | null {
   const value = (raw || '').trim();
-  if (value.length < MIN_SECRET_LENGTH) return null;
+  if (value.length < minLength) return null;
   if (value.toUpperCase().startsWith('CHANGE_ME')) return null;
   return value;
 }
@@ -297,10 +304,11 @@ export type LimiterKeyMaterial =
 /**
  * Resolve the HMAC key for limiter partitions.
  *
- *   1. BFF_RATE_LIMIT_KEY_SECRET (preferred, dedicated). If it is set but
+ *   1. BFF_RATE_LIMIT_KEY_SECRET (the planned production configuration; at
+ *      least 43 characters, i.e. 32 random bytes encoded). If it is set but
  *      unusable the result is unavailable — a misconfigured dedicated secret
  *      never silently falls back.
- *   2. Otherwise a domain-separated HKDF subkey of AUTH_SECRET (already a
+ *   2. Emergency compatibility only: a domain-separated HKDF subkey of AUTH_SECRET (already a
  *      required server-only secret). The info label separates this purpose
  *      from session signing; the raw AUTH_SECRET is never used as the key.
  *   3. Dev/test only: a random per-process key.
@@ -312,7 +320,7 @@ export type LimiterKeyMaterial =
 export function resolveLimiterKeyMaterial(): LimiterKeyMaterial {
   const dedicatedRaw = process.env.BFF_RATE_LIMIT_KEY_SECRET;
   if (dedicatedRaw !== undefined && dedicatedRaw.trim() !== '') {
-    const dedicated = usableSecret(dedicatedRaw);
+    const dedicated = usableSecret(dedicatedRaw, MIN_DEDICATED_SECRET_LENGTH);
     if (!dedicated) return { ok: false, reason: 'BFF_RATE_LIMIT_KEY_UNAVAILABLE' };
     return { ok: true, key: Buffer.from(hkdfSync('sha256', dedicated, HKDF_SALT, HKDF_INFO, 32)), source: 'dedicated' };
   }
@@ -352,13 +360,23 @@ export function deriveAuthenticatedRateLimitKey(
   return { key: `fg:bff:rl:v1:${safeGroup(routeGroup)}:${partition}`, partitionRef: partition.slice(0, 12) };
 }
 
+/**
+ * Key namespace of the current key epoch. Every limiter key is derived under
+ * the limiter secret, so deployments with different secrets (Production vs
+ * Preview) never share a counter even when they share one Redis/Upstash
+ * database, while all workers of one deployment (same secret) do.
+ */
+export function deriveRateLimitNamespace(key: Buffer): string {
+  return deriveRateLimitPartition(key, ['namespace']).slice(0, 16);
+}
+
 export function derivePublicInvitationRateLimitKeys(
   key: Buffer,
   token: string,
 ): { globalKey: string; tokenKey: string; partitionRef: string } {
   const partition = deriveRateLimitPartition(key, ['public-invitation-token', token]);
   return {
-    globalKey: 'fg:bff:rl:v1:invitation-preflight:global',
+    globalKey: `fg:bff:rl:v1:invitation-preflight:global:${deriveRateLimitNamespace(key)}`,
     tokenKey: `fg:bff:rl:v1:invitation-preflight:tok:${partition}`,
     partitionRef: partition.slice(0, 12),
   };

@@ -445,14 +445,48 @@ The Anthropic API is called from the Railway backend. The Vercel frontend never 
 | `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Prod only* | Vercel KV/Upstash REST alias for rate limiting |
 | `BFF_RATE_LIMIT_WINDOW_S` | No | Rate limit window (default: 60) |
 | `BFF_RATE_LIMIT_MAX_REQUESTS` | No | Max requests per window (default: 100) |
-| `BFF_RATE_LIMIT_KEY_SECRET` | Recommended | Server-only HMAC key (≥32 chars) for opaque rate-limit partitions. If unset, a domain-separated subkey of `AUTH_SECRET` is used. Set but invalid → limiter unavailable (503) |
+| `BFF_RATE_LIMIT_KEY_SECRET` | Yes (prod/preview) | Server-only HMAC key for opaque rate-limit partitions: 32 random bytes, encoded (≥43 chars; `openssl rand -base64 32`). One value per environment, shared by every instance of that environment. Set but shorter → limiter unavailable (503). If unset, an `AUTH_SECRET` subkey is used as an emergency fallback only |
 | `BFF_RATE_LIMIT_TIMEOUT_MS` | No | Deadline for each limiter backend call (default: 1000, clamped 50-5000) |
 | `BFF_RATE_LIMIT_PUBLIC_INVITATION_MAX_REQUESTS` | No | Deployment-wide invitation-preflight budget per window (default: 120) |
 | `BFF_RATE_LIMIT_PUBLIC_INVITATION_TOKEN_MAX_REQUESTS` | No | Per-token invitation-preflight budget per window (default: 10) |
 
 *One production rate-limit store is required: Redis protocol, Upstash REST, or Vercel KV REST.
 
-**Fail closed (FG-849-REPAIR-001):** if the store is unconfigured or unreachable, or no usable limiter key exists, every Core BFF route returns `503 BFF_RATE_LIMIT_UNAVAILABLE` and nothing is forwarded to Core. Alert on the `bff_rate_limit_enforcement_unavailable` log event. `/api/health` is not behind the limiter and reports store readiness.
+**Fail closed (FG-849-REPAIR-001):** if the store is unconfigured or unreachable, or no usable limiter key exists, every Core BFF route returns `503 BFF_RATE_LIMIT_UNAVAILABLE` and nothing is forwarded to Core. `/api/health` does not go through the limiter (it requires a Console session, as before) and returns 200 during a limiter outage, reporting `rateLimit.ready` and `rateLimit.identityKey`.
+
+#### Console BFF rate-limit operations (FG-849-REPAIR-001)
+
+**Provisioning and runtime validation**
+
+1. Generate a separate value for each environment with `openssl rand -base64 32`. Store it as `BFF_RATE_LIMIT_KEY_SECRET` in Vercel Production and in Preview. Never paste the value into logs, PR comments or CI output.
+2. Vercel applies an env var only to deployments built after it is set. Set the secret **before** merging the change that requires it, then redeploy or let the merge build pick it up.
+3. Validate at runtime, not just in the dashboard. From an authenticated session on each deployment, call `GET /api/health` and require all of the following:
+   - `rateLimit.identityKey` equals `{ "ready": true, "source": "dedicated" }`. The source `derived-auth-secret` means the emergency fallback is in use; `ready: false` means every BFF route returns 503.
+   - `rateLimit.ready` is `true`.
+
+   The response never contains the secret or its length.
+
+**Namespace isolation**
+
+- Every limiter key is derived under the limiter secret, including the deployment-wide invitation key `fg:bff:rl:v1:invitation-preflight:global:<16 hex>`.
+- Instances of one environment, sharing one secret and one store, share the budgets.
+- Environments with different secrets never share counters, even in one Redis or Upstash database. Production and Preview must not share one secret.
+
+**Alerts** (events are JSON in the `[core-proxy]` log lines)
+
+- `bff_rate_limit_enforcement_unavailable`: page. The BFF is returning 503.
+- `bff_rate_limit_quota_exceeded` with `"budget":"invitation_global"`: alert when it repeats, for example in 3 or more consecutive minutes. It means the deployment-wide invitation-preflight budget is exhausted, so legitimate invitees get 429.
+- `"budget":"invitation_token"` and `"budget":"principal"`: informational.
+- Events are throttled to one per 10 s per (outcome, reason, family, budget); `suppressed_since_last` carries the count.
+
+**Override.** Raise `BFF_RATE_LIMIT_PUBLIC_INVITATION_MAX_REQUESTS` (default 120 per window) or `BFF_RATE_LIMIT_PUBLIC_INVITATION_TOKEN_MAX_REQUESTS` (default 10), then redeploy. Lowering `BFF_RATE_LIMIT_WINDOW_S` changes every budget. These defaults are an initial security policy, not measured thresholds; review them against real enrollment traffic before scaling customer onboarding.
+
+**Rollout and rollback**
+
+- New keys use the prefix `fg:bff:rl:v1:`, and pre-repair keys use `fg:bff:rl:{group}:…`. The two never collide, so mixed old and new instances during a rollout or rollback do not consume each other's counters.
+- While old instances are still serving, a principal can briefly hold one quota on each version, and old instances keep the old fail-open behaviour.
+- Rolling back needs no data or secret change: the old code ignores `BFF_RATE_LIMIT_KEY_SECRET`, and v1 counters expire within one window.
+- Rolling forward again requires the secret to be present, as in step 2.
 
 ### Vercel (`apps/portal/`) — demo tenant variables
 

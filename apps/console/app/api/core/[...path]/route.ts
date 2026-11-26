@@ -261,6 +261,11 @@ function resolveConfiguredOperatorTenant(requestId: string): { tenantId: string 
 type ClassifiedRoute = Extract<BffRouteClassification, { ok: true }>;
 
 type RateLimitOutcome = 'denied_quota' | 'denied_unavailable';
+/**
+ * Which budget denied the request. 'invitation_global' is the alert signal
+ * for deployment-wide preflight exhaustion (see docs/INFRASTRUCTURE_SETUP.md).
+ */
+type RateLimitBudget = 'principal' | 'invitation_token' | 'invitation_global';
 
 // Audit events are emitted for deny decisions only, and at most once per
 // AUDIT_THROTTLE_MS per (outcome, reason, family) with a suppressed count, so a
@@ -275,8 +280,9 @@ function emitRateLimitEvent(fields: {
   outcome: RateLimitOutcome;
   backendHealth: string;
   partitionRef?: string;
+  budget?: RateLimitBudget;
 }): void {
-  const throttleKey = `${fields.outcome}:${fields.backendHealth}:${fields.route.familyId}`;
+  const throttleKey = `${fields.outcome}:${fields.backendHealth}:${fields.route.familyId}:${fields.budget ?? '-'}`;
   const now = Date.now();
   const entry = auditThrottle.get(throttleKey);
   if (entry && now - entry.last < AUDIT_THROTTLE_MS) {
@@ -297,6 +303,7 @@ function emitRateLimitEvent(fields: {
     risk_tier: fields.route.tier,
     outcome: fields.outcome,
     backend_health: fields.backendHealth,
+    budget: fields.budget ?? null,
     partition_ref: fields.partitionRef ?? null,
     suppressed_since_last: suppressed,
     ts: new Date(now).toISOString(),
@@ -348,7 +355,7 @@ function buildRateLimitKey(
 async function applyRateLimits(
   requestId: string,
   route: ClassifiedRoute,
-  checks: ReadonlyArray<{ key: string; maxRequests: number }>,
+  checks: ReadonlyArray<{ key: string; maxRequests: number; budget: RateLimitBudget }>,
   partitionRef: string,
 ): Promise<NextResponse | null> {
   const { windowSec } = getBffRateLimitConfig();
@@ -356,18 +363,18 @@ async function applyRateLimits(
   if (storeResult.unavailable) {
     return rateLimitUnavailable(requestId, route, storeResult.errorCode, partitionRef);
   }
-  let exceeded = false;
+  let exceeded: RateLimitBudget | null = null;
   try {
     for (const check of checks) {
       const result = await storeResult.store.increment(check.key, windowSec, check.maxRequests);
-      if (!result.allowed) exceeded = true;
+      if (!result.allowed && !exceeded) exceeded = check.budget;
     }
   } catch (err) {
     // Any store failure is an enforcement failure: deny, never allow.
     return rateLimitUnavailable(requestId, route, classifyRateLimitFailure(err), partitionRef);
   }
   if (exceeded) {
-    emitRateLimitEvent({ requestId, route, outcome: 'denied_quota', backendHealth: 'healthy', partitionRef });
+    emitRateLimitEvent({ requestId, route, outcome: 'denied_quota', backendHealth: 'healthy', partitionRef, budget: exceeded });
     return jsonError('Too many requests', 429, requestId);
   }
   return null;
@@ -385,7 +392,7 @@ async function enforceRateLimit(
   if (!keyMaterial.ok) return rateLimitUnavailable(requestId, route, keyMaterial.reason);
   const { maxRequests } = getBffRateLimitConfig();
   const { key, partitionRef } = buildRateLimitKey(keyMaterial.key, routeGroup, scope, tenantId, principal);
-  return applyRateLimits(requestId, route, [{ key, maxRequests }], partitionRef);
+  return applyRateLimits(requestId, route, [{ key, maxRequests, budget: 'principal' }], partitionRef);
 }
 
 /**
@@ -406,8 +413,8 @@ async function enforcePublicInvitationRateLimit(
     requestId,
     route,
     [
-      { key: tokenKey, maxRequests: perTokenMaxRequests },
-      { key: globalKey, maxRequests: globalMaxRequests },
+      { key: tokenKey, maxRequests: perTokenMaxRequests, budget: 'invitation_token' },
+      { key: globalKey, maxRequests: globalMaxRequests, budget: 'invitation_global' },
     ],
     partitionRef,
   );
