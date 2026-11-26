@@ -43,7 +43,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Node (cached)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "npm"
