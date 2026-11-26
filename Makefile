@@ -733,8 +733,15 @@ coverage: venv _require-pytest-venv
 		--cov-report=term-missing
 
 .PHONY: agent-unit agent-build-windows agent-smoke
+# FG-855-REPAIR-001: agent/tests (the deployed Docker agent, agent.app.*) runs
+# here with tests/agent; whole directories, no selectors. Every test phase is
+# bounded so a hang fails fast (tools/ci/check_required_ci_coverage.py).
+AGENT_TEST_TIMEOUT_SECONDS ?= 60
 agent-unit: venv _require-pytest-venv
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/agent
+	@FG_ENV=test PYTHONPATH=. $(PYTEST_ENV) $(PYTEST) -q \
+		-p tools.testing.harness.pytest_per_test_timeout \
+		--fg-per-test-timeout=$(AGENT_TEST_TIMEOUT_SECONDS) \
+		tests/agent agent/tests
 
 agent-build-windows:
 ifeq ($(OS),Windows_NT)
@@ -882,7 +889,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log fg-required-summary
+	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log required-ci-coverage-check fg-required-summary
 	@$(MAKE) -s fg-fast-pytest
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
@@ -1181,6 +1188,25 @@ ci-evidence: venv itest-down itest-up
 
 ci-pt: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_security_hardening.py tests/test_security_middleware.py
+
+# FG-855-REPAIR-001: assessment/security regression tests outside tests/security
+# that the marker-selected fast lane never runs. Paths come from the coverage
+# checker (single source of truth; new matching files are picked up). Runs in
+# the required PT job (ci.yml).
+REGRESSION_TEST_TIMEOUT_SECONDS ?= 120
+.PHONY: ci-assessment-security required-ci-coverage-check
+ci-assessment-security: venv _require-pytest-venv
+	@mkdir -p $(JUNIT_DIR)
+	@set -euo pipefail; \
+	paths="$$($(PY) tools/ci/check_required_ci_coverage.py --print-paths regression)"; \
+	FG_ENV=test PYTHONPATH=. $(PYTEST_ENV) $(PYTEST) -q --durations=15 \
+		-p tools.testing.harness.pytest_per_test_timeout \
+		--fg-per-test-timeout=$(REGRESSION_TEST_TIMEOUT_SECONDS) \
+		--junitxml $(JUNIT_DIR)/ci-assessment-security.xml \
+		$$paths
+
+required-ci-coverage-check: venv
+	@$(PY) tools/ci/check_required_ci_coverage.py
 
 test-core-invariants: venv _require-pytest-venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."

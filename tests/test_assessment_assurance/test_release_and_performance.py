@@ -199,7 +199,13 @@ def _bulk_evidence(tenant: str, eid: str, n: int) -> None:
 
 
 @pytest.mark.parametrize("n", [14, 100, 500])
-def test_provenance_evaluation_is_batched_and_bounded(build_app, n, record_property):
+def test_provenance_evaluation_is_batched_and_bounded(
+    build_app, n, record_testsuite_property
+):
+    # FG-855-REPAIR-001: record_property raises PytestWarning (an error under
+    # filterwarnings=error) whenever --junitxml writes xunit2, so this test
+    # errored in every fg-full shard since #816. record_testsuite_property is
+    # xunit2-compatible and keeps the measurements in the JUnit report.
     from sqlalchemy import event
 
     from api.db import get_engine, get_sessionmaker
@@ -230,8 +236,8 @@ def test_provenance_evaluation_is_batched_and_bounded(build_app, n, record_prope
     assert d.evidence_count == n and d.integrity_failure_count == 0
     assert d.findings_without_evidence == 0 and d.scope_violation_count == 0
     queries = len([s for s in statements if s.lstrip().upper().startswith("SELECT")])
-    record_property("evaluation_ms", round(elapsed_ms, 1))
-    record_property("select_queries", queries)
+    record_testsuite_property(f"provenance_eval_n{n}_ms", round(elapsed_ms, 1))
+    record_testsuite_property(f"provenance_eval_n{n}_select_queries", queries)
     print(f"\nPERF n={n} evaluation_ms={elapsed_ms:.1f} select_queries={queries}")
     # Constant query count (envelopes, scan results, findings, custody, legacy).
     assert queries <= 6, statements

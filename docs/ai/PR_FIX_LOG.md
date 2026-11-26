@@ -1,3 +1,41 @@
+## ci(required): FG-855-REPAIR-001 — Agent and assessment/security tests in required CI
+
+- **Issue:** #855 (audit gap 015, `docs/audits` 2026-11-18 inventory). Roadmap check: `--work-class REPAIR` authorized.
+- **Verified baseline (`ef2022715`):**
+  - `agent/tests/` holds 14 tracked files and 57 tests (the issue's "19 files" is a miscount; its own table sums to 14). They test the deployed Docker agent (`agent.app.*`, `agent/Dockerfile`). `pytest.ini` testpaths, `make agent-unit` (`tests/agent` only) and every workflow skip the directory.
+  - The queue hangs are gone (#853 closed). Two failures remain, both stale tests:
+    - `test_core_transport_policy.py::test_cert_pin_mismatch_fails_closed` passed a pin list and mocked `send()` for a pinning adapter that no longer exists. `FingerprintPinningAdapter(fingerprint: str)` enforces through urllib3 `assert_fingerprint` in the TLS handshake.
+    - `test_event_id_security.py::test_v2_includes_canonicalization_version` used `canon_v=1` from a superseded draft (492fae967). The shipped constant is `EVENT_ID_CANON_VERSION = 2` (bdddefbad, kept in 5125a4522, which reformatted the test without updating the golden). No Core code recomputes `ev2_` ids.
+  - The original "85 omitted tests" is `tests/test_field_assessment.py` (85 tests today). The actual gap is larger: 21 files and 399 tests outside `tests/security/` whose path names assessment or security have no `smoke`/`contract`/`security` marker. Required fast selection (686 tests) picks none of them, so they ran only in `fg-full`, which is conditional on PRs and not a required check.
+  - `fg-full` last passed on 2026-11-06. It failed nightly from 11-07 to 11-13 and has been skipped since 11-14, because scheduled `fg-security` is cancelled (audit gap 011). In practice these tests have had no CI signal for about three weeks.
+  - Real defect found: `test_release_and_performance.py::test_provenance_evaluation_is_batched_and_bounded[14|100|500]` uses `record_property`. That raises `PytestWarning` under `--junitxml` (xunit2), an error under `filterwarnings=error`. It errored in every `fg-full` shard since #816. The other nightly failures (portal remediation/user authority, trust enforcement, H14 P17) pass on current `main`.
+- **Fix:**
+  - `make agent-unit` runs `tests/agent agent/tests` (whole directories, no selectors). The lane loads `tools/testing/harness/pytest_per_test_timeout.py` with `--fg-per-test-timeout=60`. That plugin is dependency-free and inert without the option. Per phase, `SIGALRM` → `pytest.fail` (the session continues). A backstop, `faulthandler.dump_traceback_later(exit=True)`, catches code that blocks signals.
+  - New `make ci-assessment-security` runs the 21 files (`--fg-per-test-timeout=120`, JUnit), as a new step in the existing required **PT (ci-pt)** job. PT timeout goes from 25 to 40 min. No new job and no required-check or repository-policy change.
+  - New `tools/ci/check_required_ci_coverage.py` (`make required-ci-coverage-check`, a prerequisite of `fg-fast`). It is the single source of truth for the selection (`--print-paths regression`; new matching files are included automatically). It fails closed if:
+    - either Agent directory leaves `agent-unit`;
+    - a `-m`/`-k`/`--deselect`/`--ignore` selector is added;
+    - the timeout plugin is removed;
+    - a file count falls below the recorded floor (14 Agent, 21 regression);
+    - an excluded file is no longer run by `ci-pt`;
+    - the CI step is removed, made `continue-on-error` or conditional;
+    - the job leaves `CI Required`.
+  - Stale tests rewritten against proven behaviour:
+    - The pin test now drives a real TLS handshake (local server, self-signed cert trusted via `verify`, so only the pin can fail). A mismatched pin raises `SSLError` with 0 requests served; a positive control with the correct pin succeeds. A third test asserts `assert_fingerprint` normalization.
+    - The event-id golden uses `canon_v=2` and pins `EVENT_ID_CANON_VERSION == 2` plus the literal digest.
+  - `record_property` → `record_testsuite_property`, which is xunit2-compatible and keeps the measurements in JUnit. Assertions are unchanged.
+- **Coverage and cost:**
+  - Existing tests newly in required CI: 57 (`agent/tests`) + 399 (assessment/security) = 456. New tests: 26 (19 guard, 5 timeout-plugin, 2 TLS pin).
+  - No test removed, skipped, xfailed or deselected.
+  - Local timings: `agent-unit` 2–3 min (was 621 tests; now 685 passed, 1 skipped as before). `ci-assessment-security` about 7.5 min (399 tests). `fg-fast` gains the guard script plus 19 contract tests (about 3 s).
+  - PR #923 CI timings: PT finished about 834 s into the run; the Hardening path took about 2560 s. With up to about 15 min added on a slow runner, PT still finishes well before Hardening, so `CI Required` wall time is unchanged. Added runner cost: about 8–15 runner-minutes per PR.
+- **Windows:** the Windows build (`agent/main.py`, stdlib-only, PyInstaller) is a different runtime from `agent.app.*`. Its contracts (`test_windows_service_*`, MSI and installer tests) already run in `tests/agent` on Linux. `agent/tests` covers the Linux Docker agent, so no Windows test execution is added.
+- **Mutation checks:** with pinning removed (`init_poolmanager` reverted to the base adapter), both pin tests fail and the positive control passes. Each guard regression is covered by a parametrized failing case.
+- **Out of scope / follow-up:**
+  - Restoring the scheduled `fg-security`/`fg-full` run (audit gap 011).
+  - `agent/ci/verify_agent_contracts.py` and `verify_rate_limit_keys.py` are wired nowhere; both pass and their assertions are covered by `agent/tests`.
+- **CI config touched (called out):** `.github/workflows/ci.yml` (PT step + timeout), `Makefile` (`agent-unit`, `ci-assessment-security`, `required-ci-coverage-check`, `fg-fast` prerequisite).
+
 ## fix(console): FG-849-REPAIR-001 — fail-closed, session-bound Console BFF rate limiting
 
 - **Issue:** #849. Console Core BFF limiter (`apps/console/app/api/core/[...path]/route.ts`, `apps/console/lib/rateLimitStore.ts`).

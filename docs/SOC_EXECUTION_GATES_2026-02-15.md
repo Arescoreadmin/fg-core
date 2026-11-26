@@ -9028,3 +9028,24 @@ No check, allowlist, plane-registry exception or gate configuration changes.
    - The limiter's ioredis client has an error listener. Raw reconnect errors (host:port, stack) are no longer printed; the throttled structured event remains, and requests still get 503.
    - The `/api/health` Redis probe is one bounded attempt with no reconnect. It is always closed (try/finally, `disconnect` plus stream destroy) and now connects explicitly, so a reachable Redis is no longer reported unavailable.
    - Covered by real-ioredis failure tests (refused, drop, silent, NOAUTH) that run in CI without a Redis service.
+
+## 2026-11-26 - ci(required): Agent and assessment/security tests in required CI (FG-855-REPAIR-001)
+
+**Scope:** CI coverage only. Covers `Makefile` (`agent-unit`, new `ci-assessment-security` and `required-ci-coverage-check`, `fg-fast` prerequisite), `.github/workflows/ci.yml` (one new step in the existing required PT job; job timeout 25 → 40 min), the new `tools/ci/check_required_ci_coverage.py` and `tools/testing/harness/pytest_per_test_timeout.py`, and tests. No product code, auth, tenant, contract, schema, migration, deployment or required-check membership changes.
+
+**Finding:** issue #855. `agent/tests/` (57 tests, the deployed Docker agent) ran in no CI lane. 21 assessment/security regression files (399 tests) outside `tests/security/` have no fast-lane marker and ran only in the conditional, non-required `fg-full`, which has produced no passing run since 2026-11-06.
+
+**Security analysis:**
+
+1. **Coverage only increases.** 456 existing tests now block merge through `CI Required`. No test is removed, skipped, xfailed or deselected, and no gate is weakened. The PT job keeps `ci-pt`; the new step has no `if` and no `continue-on-error`.
+2. **Fail closed on drift.** `check_required_ci_coverage.py` runs in `fg-fast` and fails if:
+   - an Agent directory or the per-test timeout leaves `agent-unit`;
+   - a selector is added;
+   - a file count drops below the recorded floor;
+   - the CI step is removed or made conditional or non-blocking;
+   - the job leaves `CI Required`.
+3. **Hangs fail, not stall.** Each Agent and regression test phase is bounded (60 s / 120 s). A timeout is always a failure. A faulthandler backstop exits non-zero, with stack dumps, when signals are blocked.
+4. **Transport pinning proven.** A real TLS handshake shows that a mismatched certificate fingerprint fails closed (`SSLError`, 0 requests served) and that the correct pin succeeds. A mutation removing pinning fails the tests.
+5. **Event-ID integrity pinned.** The v2 HMAC canonicalization version (2) and a literal golden digest are asserted, so any change to deterministic event IDs needs a reviewed test change.
+6. **Tenant isolation, authorization, credentials, auditability unchanged.** No application code changes. The assessment tests now required include cross-tenant provenance, draft-access denial and independent QA authority checks.
+7. **Residual risk.** The scheduled full suite (`fg-full`) is still not completing (audit gap 011). Tests outside the 21-file selection and outside the marker-selected lanes still depend on it.
