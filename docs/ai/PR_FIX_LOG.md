@@ -39,6 +39,14 @@
   - 25 other `api/field_assessment.py` routes do database work after a commit without re-binding (listed in the proposal doc).
   - Historical `queued` sibling jobs are not reconciled; they are production data.
   - The production database role is unverified. If it bypasses RLS, FA tables have no database-level isolation in production (inference, not claimed).
+- **Review follow-up (Codex P2: concurrent admission):**
+  - Reproduced on head `793859a81` with genuinely overlapping PostgreSQL sessions: two requests held after `has_live_running()` were both admitted, both created a running job and both executed (`[200, 500]`, the 500 only at the risk-record unique constraint).
+  - Fix: `_c6_sync_connector_admission_lock` locks the tenant's engagement row `FOR UPDATE` (canonical row-lock pattern) from the live-run check through the initiation commit, with a 5 s transaction-local `lock_timeout`. Waiters get 409 `SCAN_ALREADY_RUNNING`; timeouts get 409 `SCAN_ADMISSION_BUSY` with nothing written. PostgreSQL only.
+  - Also found on `793859a81`: persisted `failure_reason` / audit `rejection_reason` and logs carried exception text, including SQL and bound parameters for database errors. Now only a stable code and exception class are recorded or logged.
+  - 7 more PostgreSQL tests (21 connector tests; suite 48 passed on a fresh database): overlap reproduction, burst, bounded and released lock, tenant scoping, lease supersession, failure-detail exposure (×2). 4 fail on `793859a81`; the burst, tenant-scoping and lease tests are regression checks. Concurrency tests passed 5/5 repeated runs.
+  - Guard rule 4 (lock-first preflight; preflight before job creation) with 3 tests; it rejects `793859a81`'s source.
+  - `test_failed_run_marks_job_failed_with_audit` (#926) asserted the raw message was persisted; it now asserts the exact redacted code and the message's absence (stricter).
+  - Recorded, not changed: other `field_assessment` scanners persist `str(exc)` as `failure_reason`.
 - **Not changed:** CI configuration, migrations, schema, dependencies, production configuration and RLS policies.
 
 ## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)

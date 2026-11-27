@@ -162,7 +162,7 @@ All PostgreSQL tests live in `tests/test_migrations_postgres_replay.py`, which r
 | 6 | Rollback with no partial records; database errors still recorded | `test_connector_database_error_is_still_recorded`; `test_connector_failure_is_recorded_under_rls` |
 | 7 | Audit emitted only with a committed transition | Tests 4 and 6; `test_completion_audit_failure_rolls_back_the_transition` (crash consistency) |
 | 8 | Interrupted runs terminated deterministically, never re-run | `test_interrupted_run_is_terminated_not_rerun` (tenant-scoped); `test_recover_orphans_cannot_recover_under_enforced_rls` (evaluation) |
-| 9 | Idempotency and duplicate execution | `test_repeated_runs_are_idempotent`; `test_live_run_rejects_a_duplicate`; unique constraints on the record tables |
+| 9 | Idempotency and duplicate execution | `test_repeated_runs_are_idempotent`; `test_live_run_rejects_a_duplicate`; **concurrent admission** (see below): `test_overlapping_admissions_admit_exactly_one`, `test_concurrent_burst_admits_exactly_one`, `test_admission_lock_is_bounded_and_released`, `test_admission_lock_is_tenant_scoped`, `test_expired_lease_supersedes_an_in_flight_run`; unique constraints on the record tables |
 | 10 | Adjacent routes inventoried | See below (recorded, not changed) |
 | 11 | Tests in required CI | Migrations Replay and fg-fast are both members of `CI Required` / fg-required; no CI configuration change |
 | 12 | No weakening | One #926 simulation was refined: it now denies only database reloads, not in-session UPDATE synchronization. It still fails on the original route (mutation-checked) |
@@ -173,6 +173,30 @@ All PostgreSQL tests live in `tests/test_migrations_postgres_replay.py`, which r
 **Transaction and pooling semantics (clarifications):**
 - `test_tenant_binding_is_transaction_scoped`: commit, rollback and an aborted transaction each clear the binding, and re-binding restores access.
 - `test_pooled_connection_does_not_leak_tenant_context`: one physical connection, reused after tenant A, shows `''` or tenant B and never A's rows.
+
+### Concurrent admission (Codex P2 review on #929)
+
+**Pre-fix reproduction (head `793859a81`, real PostgreSQL, restricted role):** two requests for the same connector and engagement were held at a rendezvous immediately after `has_live_running()`. Both saw no live run, both created and committed a running job, and both executed. The second failed only on the risk-record unique constraint (500), after doing the work. A five-request burst with natural timing did not reproduce the race; the rendezvous test is the reproduction, the burst is a regression check.
+
+**Fix:** `_c6_sync_connector_admission_lock` is the first statement of `_c6_sync_connector_preflight`. It locks the tenant's `fa_engagements` row `FOR UPDATE` (the repo's canonical row-lock pattern, as in `portal`, `stripe_webhooks` and `assessments`) with a transaction-local `lock_timeout` of 5 s. The lock is held from the stale-run and live-run checks through the initiation commit, then released, so it is never held during the connector's work. A request that waits sees the first request's committed running job and gets 409 `SCAN_ALREADY_RUNNING`. A request that cannot get the lock in time gets 409 `SCAN_ADMISSION_BUSY`, with nothing written. Under RLS the row is visible only to its own tenant, so another tenant can neither take nor wait on it. SQLite (local development only) has no row locks and is not serialized. Guard rule 4 enforces the lock-first preflight and preflight-before-job ordering.
+
+| Property | Evidence |
+|---|---|
+| Exactly one of two overlapping requests is admitted; the other gets a controlled 409 | `test_overlapping_admissions_admit_exactly_one` (fails on `793859a81`: `[200, 500]`, two jobs) |
+| Exactly one of five simultaneous requests is admitted | `test_concurrent_burst_admits_exactly_one` |
+| Bounded wait, nothing written on contention; lock free during work and after success, 409 and failure | `test_admission_lock_is_bounded_and_released` |
+| Tenant isolation: another tenant is not blocked and cannot lock the row | `test_admission_lock_is_tenant_scoped` |
+| Lease: a run that outlives its lease is terminated by the next admission and is never also reported complete | `test_expired_lease_supersedes_an_in_flight_run` (outer run 409 `SCAN_JOB_SUPERSEDED`, `STALE_LEASE_EXPIRED` audited, one record) |
+
+The concurrency tests passed 5 of 5 repeated runs locally.
+
+### Failure-detail exposure
+
+**Pre-fix (head `793859a81`):** the failure helper persisted `f"{type(exc).__name__}: {exc}"` as the job's `failure_reason` and the audit `rejection_reason`, and the routes logged `str(exc)`. For a database error that included the SQL text and bound parameters: `[SQL: SELECT CAST(%(m)s AS integer)] [parameters: {'m': '…'}]`.
+
+**Fix:** `_c6_sync_connector_failure_reason` records only a stable code and the exception class (`CONNECTOR_FAILED: DataError`, `HTTP_409: SCAN_…`, `SCAN_JOB_SUPERSEDED`). The route and helper logs carry the job id and exception class only. `test_failure_details_never_persist_or_log` (×2: application and database exception) asserts that a marker in the exception text and bound parameter appears in neither the job record, any audit row (`row_to_json`), the captured log nor the response. It fails on `793859a81`. #926's `test_failed_run_marks_job_failed_with_audit` asserted the raw message was persisted; it now asserts the exact redacted code and the message's absence (stricter, not weaker).
+
+**Recorded, not changed:** other scanners in `api/field_assessment.py` on `main` also persist `str(exc)[:2000]` as `failure_reason` (for example the background scan workers). They are outside this item's routes and need separate authorization.
 
 ### `recover_orphans` evaluation
 
@@ -198,5 +222,7 @@ These are static candidates; runtime impact has not been verified per route. Und
 
 - Historical sibling-connector jobs left `queued` by the old code are not reconciled. They are production data, and changing them needs founder approval. They still count toward the `_c6_count_active_jobs` concurrency limits used by background scans.
 - The production database role and its RLS enforcement are unverified.
-- Lease expiry (300 s) during a very long synchronous run lets a concurrent run terminate the live job. The CAS check then rolls the first run back (409) rather than reporting a false completion.
+- Lease expiry (300 s) during a very long synchronous run lets a concurrent run terminate the live job. The CAS check then rolls the first run back (409) rather than reporting a false completion. Proven by `test_expired_lease_supersedes_an_in_flight_run`. Synchronous connectors do not renew their lease.
+- Admission serialization holds on PostgreSQL only; SQLite development databases are not serialized.
+- Exception text persisted by other `field_assessment` scanners (recorded above).
 

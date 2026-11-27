@@ -9091,4 +9091,6 @@ There are no auth, permission, tenant-resolution, contract, schema, migration, d
    - 25 other routes show the same unbound post-commit pattern (recorded).
    - The production database role is unverified. RLS may not be enforced there.
    - Historical `queued` connector jobs are unreconciled, and they count toward the background-scan concurrency limits.
+8. **Concurrent admission serialized (review follow-up).** Two overlapping requests could both pass the live-run check and both execute (reproduced on real PostgreSQL). The engagement row is now locked `FOR UPDATE` from that check through the initiation commit, with a bounded `lock_timeout`; the loser receives a controlled 409 and writes nothing. The lock is tenant-scoped by RLS and never held during the connector's work. Proven with overlapping sessions, a burst, lock release on every outcome, tenant scoping and lease supersession.
+9. **Failure details no longer persisted or logged.** Persisted failure reasons, audit rejection reasons and logs carry only a stable code and the exception class; previously a database error's SQL text and bound parameters were persisted. Proven for application and database exceptions. Other `field_assessment` scanners still persist exception text (recorded, separate authorization).
 

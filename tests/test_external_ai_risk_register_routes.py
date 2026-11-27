@@ -508,7 +508,10 @@ def test_failed_run_marks_job_failed_with_audit(
     # job to its terminal failure state rather than scheduling a retry.
     assert job.status == "dead_letter"
     assert job.completed_at and job.next_retry_at is None
-    assert "risk engine exploded" in (job.failure_reason or "")
+    # Exception text never persists (it can carry SQL, parameters or payload
+    # data); only a stable code and the exception class are recorded.
+    assert job.failure_reason == "CONNECTOR_FAILED: RuntimeError"
+    assert "risk engine exploded" not in (job.failure_reason or "")
     failed = [e for e in _scan_audit(_TENANT, eid) if e.event_type == "scan.failed"]
     assert [(e.scan_job_id, e.actor) for e in failed] == [(job.id, _ASSESSOR)]
 

@@ -20,6 +20,7 @@ import logging
 import os
 import secrets
 import threading
+import re
 import uuid as _uuid_module
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import delete, func, select, update
+from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -4898,6 +4900,12 @@ def _c6_update_job_status(
 #     a queued job that looks runnable or consumes concurrency slots.
 #   * every transition result is checked; scan.completed / scan.failed are
 #     written in the same transaction as the transition they report.
+#   * admission is serialized: the engagement row is locked FOR UPDATE from
+#     the live-run check through the initiation commit, so two overlapping
+#     requests cannot both see "no live run" and both start (Postgres).
+#   * persisted failure reasons, audit events and logs carry only a stable
+#     code and the exception class, never exception text (which can include
+#     SQL, bound parameters or payload data).
 # ---------------------------------------------------------------------------
 
 _SYNC_CONNECTOR_STALE_REASON = (
@@ -4908,6 +4916,79 @@ _SYNC_CONNECTOR_STALE_REASON = (
 
 class _SyncConnectorJobLost(Exception):
     """A synchronous connector's job was no longer running at completion."""
+
+
+# Bounded wait for the admission lock: the lock is held only for the short
+# initiation transaction, so a longer wait means contention, answered with a
+# controlled 409 rather than an unbounded block. Monkeypatchable in tests.
+_SYNC_CONNECTOR_LOCK_TIMEOUT_MS = 5000
+_PG_LOCK_NOT_AVAILABLE = "55P03"
+_SAFE_ERROR_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+
+
+def _c6_sync_connector_failure_reason(exc: BaseException) -> str:
+    """A persistable failure reason with no exception text.
+
+    Exception messages can carry SQL, bound parameters or payload data, so
+    only a stable code and the exception class are recorded; the full detail
+    never reaches the job record, the audit ledger or the log.
+    """
+    if isinstance(exc, HTTPException):
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = str(detail.get("code") or "")
+        suffix = f": {code}" if _SAFE_ERROR_CODE.fullmatch(code) else ""
+        return f"HTTP_{exc.status_code}{suffix}"
+    if isinstance(exc, _SyncConnectorJobLost):
+        return "SCAN_JOB_SUPERSEDED"
+    return f"CONNECTOR_FAILED: {type(exc).__name__}"
+
+
+def _c6_sync_connector_admission_lock(
+    db: Session, *, tenant_id: str, engagement_id: str
+) -> None:
+    """Serialize connector admission on the engagement row (Postgres).
+
+    Locks the tenant's engagement row FOR UPDATE in the caller's transaction;
+    the lock is released by the initiation commit (or any rollback), so it is
+    never held during the connector's work. Under RLS the row is visible only
+    to its own tenant, so another tenant can neither take nor wait on it.
+    SQLite (local development only) has no row locks and is not serialized.
+    """
+    from sqlalchemy.exc import OperationalError  # noqa: PLC0415
+
+    dialect = getattr(getattr(db.get_bind(), "dialect", None), "name", "")
+    if dialect != "postgresql":
+        return
+    timeout_ms = int(_SYNC_CONNECTOR_LOCK_TIMEOUT_MS)
+    db.execute(sa_text(f"SET LOCAL lock_timeout = '{timeout_ms}ms'"))
+    try:
+        locked = db.execute(
+            select(FaEngagement.id)
+            .where(
+                FaEngagement.id == engagement_id,
+                FaEngagement.tenant_id == tenant_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+    except OperationalError as exc:
+        orig = getattr(exc, "orig", None)
+        state = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+        if state != _PG_LOCK_NOT_AVAILABLE:
+            raise
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "SCAN_ADMISSION_BUSY",
+                "Another run of this connector is starting; retry shortly.",
+            ),
+        )
+    if locked is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ENGAGEMENT_NOT_FOUND", "Engagement not found."),
+        )
 
 
 def _c6_sync_connector_preflight(
@@ -4923,9 +5004,13 @@ def _c6_sync_connector_preflight(
     Interrupted runs (running, lease expired) for this tenant, engagement and
     connector move to the terminal dead_letter state with a scan.failed audit
     event, in the caller's transaction. They are never re-executed. A run
-    with a live lease yields 409 SCAN_ALREADY_RUNNING. Recorded outcomes are
-    also protected by the record tables' unique constraints.
+    with a live lease yields 409 SCAN_ALREADY_RUNNING. The check runs under
+    the engagement admission lock, held through the caller's initiation
+    commit, so an overlapping request waits and then sees the live run.
     """
+    _c6_sync_connector_admission_lock(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
     for stale_id in durable_job_svc.terminate_stale_running(
         db,
         tenant_id=tenant_id,
@@ -4982,10 +5067,10 @@ def _c6_sync_connector_record_failure(
 
     db.rollback()
     set_tenant_context(db, tenant_id)
-    reason = f"{type(exc).__name__}: {exc}"
+    reason = _c6_sync_connector_failure_reason(exc)
     try:
         if _c6_update_job_status(
-            db, job_id=job_id, status="failed", failure_reason=reason[:2000]
+            db, job_id=job_id, status="failed", failure_reason=reason
         ):
             _c6_write_audit_event(
                 db,
@@ -4995,7 +5080,7 @@ def _c6_sync_connector_record_failure(
                 actor=actor,
                 scan_job_id=job_id,
                 scanner_type=scanner_type,
-                rejection_reason=reason[:500],
+                rejection_reason=reason,
             )
         db.commit()
     except Exception as record_exc:  # pragma: no cover - logged, surfaced as 500
@@ -5003,7 +5088,7 @@ def _c6_sync_connector_record_failure(
             "%s: could not record failure for job %s — %s",
             scanner_type,
             job_id,
-            record_exc,
+            type(record_exc).__name__,
         )
         db.rollback()
 
@@ -14592,7 +14677,9 @@ def run_ai_data_access_mapping(
         )
 
     except Exception as exc:
-        log.error("ai_data_access_mapping: failed — %s", exc)
+        log.error(
+            "ai_data_access_mapping: job %s failed — %s", job_id, type(exc).__name__
+        )
         _c6_sync_connector_record_failure(
             db,
             tenant_id=tenant_id,
@@ -15531,7 +15618,11 @@ def run_external_ai_risk_register(
         )
 
     except Exception as exc:
-        log.error("external_ai_risk_register: failed — %s", exc)
+        log.error(
+            "external_ai_risk_register: job %s failed — %s",
+            job_id,
+            type(exc).__name__,
+        )
         _c6_sync_connector_record_failure(
             db,
             tenant_id=tenant_id,
@@ -15902,7 +15993,9 @@ def run_ai_vendor_governance(
         )
 
     except Exception as exc:
-        log.error("ai_vendor_governance: run failed — %s", exc)
+        log.error(
+            "ai_vendor_governance: job %s failed — %s", job_id, type(exc).__name__
+        )
         _c6_sync_connector_record_failure(
             db,
             tenant_id=tenant_id,

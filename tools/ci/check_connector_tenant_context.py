@@ -23,6 +23,10 @@ helpers in ``HELPERS``:
    must be checked).
 3. Discovery must find at least ``EXPECTED_ROUTES``, so the guard can never
    pass by covering nothing.
+4. Admission is serialized: ``_c6_sync_connector_preflight`` must take the
+   engagement admission lock as its first statement, and every route must
+   call the preflight before it creates its scan job (otherwise two
+   overlapping requests can both pass the live-run check).
 """
 
 from __future__ import annotations
@@ -42,6 +46,8 @@ EXPECTED_ROUTES = frozenset(
     }
 )
 HELPERS = frozenset({"_c6_sync_connector_record_failure"})
+PREFLIGHT = "_c6_sync_connector_preflight"
+ADMISSION_LOCK = "_c6_sync_connector_admission_lock"
 TRANSITION_CALLS = frozenset({"_c6_update_job_status"})
 SERVICE_TRANSITIONS = frozenset(
     {"mark_running", "mark_complete", "mark_failed", "terminate_stale_running"}
@@ -177,6 +183,51 @@ def check_source(text: str, filename: str = str(SOURCE)) -> tuple[list[str], set
     return errors, routes
 
 
+def _first_stmt_index(func: Func, name: str) -> int | None:
+    """Index of the first top-level statement of ``func`` that calls ``name``."""
+    for i, stmt in enumerate(func.body):
+        if any(
+            isinstance(n, ast.Call) and _call_name(n) == name for n in ast.walk(stmt)
+        ):
+            return i
+    return None
+
+
+def check_admission(tree: ast.Module, routes: set[str]) -> list[str]:
+    """Rule 4: the live-run check is serialized and precedes job creation."""
+    errors: list[str] = []
+    funcs = {
+        n.name: n
+        for n in tree.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    preflight = funcs.get(PREFLIGHT)
+    if preflight is None:
+        return [f"required helper {PREFLIGHT} is missing"]
+    body = [
+        s
+        for s in preflight.body
+        if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))
+    ]
+    first = body[0] if body else None
+    if not (isinstance(first, ast.Expr) and _call_name(first.value) == ADMISSION_LOCK):
+        errors.append(
+            f"{PREFLIGHT}: first statement must be {ADMISSION_LOCK}() (the "
+            "live-run check must run under the engagement admission lock)"
+        )
+    if ADMISSION_LOCK not in funcs:
+        errors.append(f"required helper {ADMISSION_LOCK} is missing")
+    for name in sorted(routes):
+        pre = _first_stmt_index(funcs[name], PREFLIGHT)
+        create = _first_stmt_index(funcs[name], "_c6_create_scan_job")
+        if pre is None or create is None or pre >= create:
+            errors.append(
+                f"{name}: must call {PREFLIGHT}() before _c6_create_scan_job() "
+                "(admission must be serialized before a job exists)"
+            )
+    return errors
+
+
 def check(repo: Path = REPO) -> list[str]:
     errors, routes = check_source((repo / SOURCE).read_text(encoding="utf-8"))
     missing = sorted(EXPECTED_ROUTES - routes)
@@ -189,6 +240,7 @@ def check(repo: Path = REPO) -> list[str]:
     defined = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
     for helper in sorted(HELPERS - defined):
         errors.append(f"required helper {helper} is missing")
+    errors.extend(check_admission(tree, routes & EXPECTED_ROUTES))
     return errors
 
 

@@ -2501,3 +2501,299 @@ def test_each_connector_failure_ends_terminal_with_one_audit(
     assert job.attempt_count == 1  # it was claimed (running) before failing
     events = [e for e in h.audit(a) if e[2] == job.id]
     assert sorted(e[1] for e in events) == ["scan.failed", "scan.initiated"]
+
+
+# ── Admission serialization (Codex P2 on #929) ──────────────────────────────
+# Two overlapping requests must not both pass the live-run check. Sessions are
+# genuinely concurrent: separate threads, separate pooled connections, real
+# Postgres row locks.
+
+
+def _slow_risk_engine(monkeypatch, seconds: float = 1.5) -> None:
+    """Keep an admitted run in its work phase long enough to overlap."""
+    import time
+
+    from services.connectors.external_ai_risk_register import risk_engine
+
+    real = risk_engine.generate_risk_records
+
+    def _slow(**kwargs: Any) -> Any:
+        time.sleep(seconds)
+        return real(**kwargs)
+
+    monkeypatch.setattr(risk_engine, "generate_risk_records", _slow)
+
+
+def _run_concurrently(h: _ConnectorRls, calls: list[tuple[str, str]]) -> list[Any]:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    start = threading.Barrier(len(calls))
+
+    def _one(call: tuple[str, str]) -> Any:
+        start.wait(timeout=10)
+        return h.run(*call)
+
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        return list(pool.map(_one, calls))
+
+
+def _engagement_lock_free(h: _ConnectorRls, tenant: str) -> bool:
+    """True if the tenant's engagement row can be locked without waiting."""
+    from sqlalchemy.exc import OperationalError
+
+    db = h.session(tenant)
+    try:
+        row = db.execute(
+            text("SELECT id FROM fa_engagements WHERE id = :e FOR UPDATE NOWAIT"),
+            {"e": h.eng[tenant]},
+        ).fetchone()
+        assert row is not None
+        return True
+    except OperationalError:
+        return False
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_overlapping_admissions_admit_exactly_one(_connector_rls, monkeypatch) -> None:
+    """Both requests evaluate the live-run check at the same moment; one wins.
+
+    A rendezvous after has_live_running() forces the race Codex described:
+    without serialization both requests see "no live run" and both start
+    (reproduced on the pre-fix head 793859a81). With the admission lock the
+    second request cannot reach the check until the first has committed its
+    running job, so it gets a controlled 409.
+    """
+    import contextlib
+    import threading
+
+    import api.field_assessment as fa
+
+    h = _connector_rls
+    a, _ = _tenant_pair(h)
+    _slow_risk_engine(monkeypatch)
+    real_live = fa.durable_job_svc.has_live_running
+    rendezvous = threading.Barrier(2, timeout=2)
+
+    def _check_then_meet(*args: Any, **kwargs: Any) -> bool:
+        live = real_live(*args, **kwargs)
+        with contextlib.suppress(threading.BrokenBarrierError):
+            rendezvous.wait()
+        return live
+
+    monkeypatch.setattr(fa.durable_job_svc, "has_live_running", _check_then_meet)
+    results = _run_concurrently(h, [("run_external_ai_risk_register", a)] * 2)
+    statuses = sorted(s for s, _ in results)
+    assert statuses == [200, 409], results
+    (rejected,) = [b for s, b in results if s == 409]
+    assert rejected["code"] == "SCAN_ALREADY_RUNNING"
+    (job,) = h.jobs(a)  # exactly one job was ever created
+    assert job.status == "complete" and job.attempt_count == 1
+    events = [e[1] for e in h.audit(a)]
+    assert events.count("scan.initiated") == 1 and events.count("scan.completed") == 1
+    assert _engagement_lock_free(h, a)
+
+
+def test_concurrent_burst_admits_exactly_one(_connector_rls, monkeypatch) -> None:
+    """Five simultaneous requests: one job, one result, four controlled 409s.
+
+    A regression check under natural timing, not the reproduction (the burst
+    alone did not reproduce the race on the pre-fix head; the rendezvous test
+    above does).
+    """
+    h = _connector_rls
+    a, _ = _tenant_pair(h)
+    _slow_risk_engine(monkeypatch)
+    results = _run_concurrently(h, [("run_external_ai_risk_register", a)] * 5)
+    assert sorted(s for s, _ in results) == [200, 409, 409, 409, 409], results
+    assert {b["code"] for s, b in results if s == 409} == {"SCAN_ALREADY_RUNNING"}
+    assert [j.status for j in h.jobs(a)] == ["complete"]
+    assert (
+        h.rows(
+            "SELECT count(*) AS n FROM fa_external_ai_risk_records WHERE tenant_id = :t",
+            t=a,
+        )[0].n
+        == 1
+    )
+    assert _engagement_lock_free(h, a)
+
+
+def test_admission_lock_is_bounded_and_released(_connector_rls, monkeypatch) -> None:
+    """Lock contention yields 409 with nothing written; the lock never outlives
+    the initiation commit (free during the work phase and after every outcome)."""
+    import api.field_assessment as fa
+    from services.connectors.external_ai_risk_register import risk_engine
+
+    h = _connector_rls
+    a, _ = _tenant_pair(h)
+    monkeypatch.setattr(fa, "_SYNC_CONNECTOR_LOCK_TIMEOUT_MS", 300)
+    holder = h.session(a)  # e.g. a concurrent engagement edit holding the row
+    try:
+        holder.execute(
+            text("SELECT id FROM fa_engagements WHERE id = :e FOR UPDATE"),
+            {"e": h.eng[a]},
+        )
+        status, body = h.run("run_external_ai_risk_register", a)
+        assert status == 409 and body["code"] == "SCAN_ADMISSION_BUSY"
+        assert h.jobs(a) == [] and h.audit(a) == []  # nothing admitted
+    finally:
+        holder.rollback()
+        holder.close()
+    assert _engagement_lock_free(h, a)
+
+    real = risk_engine.generate_risk_records
+    free_during_work: list[bool] = []
+
+    def _probe(**kwargs: Any) -> Any:
+        free_during_work.append(_engagement_lock_free(h, a))
+        return real(**kwargs)
+
+    monkeypatch.setattr(risk_engine, "generate_risk_records", _probe)
+    assert h.run("run_external_ai_risk_register", a)[0] == 200
+    assert free_during_work == [True]  # not held while the connector works
+    assert _engagement_lock_free(h, a)
+
+    live = _insert_running_job(h, a, "ai_data_access_mapping", "2999-01-01T00:00:00Z")
+    assert h.run("run_ai_data_access_mapping", a)[1]["code"] == "SCAN_ALREADY_RUNNING"
+    assert _engagement_lock_free(h, a)  # released on the 409 path
+    with h.su.begin() as conn:
+        conn.execute(text("DELETE FROM fa_scan_jobs WHERE id = :j"), {"j": live})
+
+    def _boom(**_: Any) -> Any:
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(risk_engine, "generate_risk_records", _boom)
+    assert h.run("run_external_ai_risk_register", a)[0] == 500
+    assert _engagement_lock_free(h, a)  # released on the failure path
+
+
+def test_admission_lock_is_tenant_scoped(_connector_rls) -> None:
+    """Tenant B is neither blocked by nor able to lock tenant A's engagement."""
+    h = _connector_rls
+    a, b = _tenant_pair(h)
+    holder = h.session(a)
+    try:
+        holder.execute(
+            text("SELECT id FROM fa_engagements WHERE id = :e FOR UPDATE"),
+            {"e": h.eng[a]},
+        )
+        assert h.run("run_external_ai_risk_register", b)[0] == 200  # not blocked
+        foreign = h.session(b)
+        try:
+            row = foreign.execute(
+                text("SELECT id FROM fa_engagements WHERE id = :e FOR UPDATE NOWAIT"),
+                {"e": h.eng[a]},
+            ).fetchone()
+            assert row is None  # RLS hides the row; no lock, no wait, no error
+        finally:
+            foreign.rollback()
+            foreign.close()
+    finally:
+        holder.rollback()
+        holder.close()
+    results = _run_concurrently(
+        h, [("run_ai_data_access_mapping", a), ("run_ai_data_access_mapping", b)]
+    )
+    assert [s for s, _ in results] == [200, 200]  # different tenants both run
+    assert {
+        j.tenant
+        for j in h.rows(
+            "SELECT tenant_id AS tenant FROM fa_scan_jobs WHERE scanner_type ="
+            " 'ai_data_access_mapping' AND tenant_id IN (:a, :b)",
+            a=a,
+            b=b,
+        )
+    } == {a, b}
+
+
+def test_expired_lease_supersedes_an_in_flight_run(_connector_rls, monkeypatch) -> None:
+    """A run that outlives its lease is terminated by the next admission and is
+    never also reported complete; exactly one run's outcome is recorded."""
+    from services.connectors.external_ai_risk_register import risk_engine
+
+    h = _connector_rls
+    a, _ = _tenant_pair(h)
+    real = risk_engine.generate_risk_records
+    second: list[Any] = []
+    nested = [False]
+
+    def _lease_expires_mid_run(**kwargs: Any) -> Any:
+        if not nested[0]:
+            nested[0] = True  # only the first (outer) run triggers this
+            with h.su.begin() as conn:
+                conn.execute(
+                    text(
+                        "UPDATE fa_scan_jobs SET lease_expires_at ="
+                        " '2000-01-01T00:00:00Z' WHERE tenant_id = :t"
+                        " AND status = 'running'"
+                    ),
+                    {"t": a},
+                )
+            second.append(h.run("run_external_ai_risk_register", a))
+        return real(**kwargs)
+
+    monkeypatch.setattr(risk_engine, "generate_risk_records", _lease_expires_mid_run)
+    status, body = h.run("run_external_ai_risk_register", a)
+    assert second[0][0] == 200  # the later admission ran to completion
+    assert status == 409 and body["code"] == "SCAN_JOB_SUPERSEDED", body
+    jobs = h.jobs(a)
+    assert sorted(j.status for j in jobs) == ["complete", "dead_letter"]
+    (stale,) = [j for j in jobs if j.status == "dead_letter"]
+    assert stale.scan_result_id is None
+    failed = [e for e in h.audit(a) if e[1] == "scan.failed"]
+    assert failed == [("external_ai_risk_register", "scan.failed", stale.id)]
+    (reason,) = h.rows(
+        "SELECT failure_reason FROM fa_scan_jobs WHERE id = :j", j=stale.id
+    )
+    assert reason.failure_reason.startswith("STALE_LEASE_EXPIRED")
+    assert (
+        h.rows(
+            "SELECT count(*) AS n FROM fa_external_ai_risk_records WHERE tenant_id = :t",
+            t=a,
+        )[0].n
+        == 1
+    )
+
+
+@pytest.mark.parametrize("kind", ["exception", "database"])
+def test_failure_details_never_persist_or_log(
+    _connector_rls, monkeypatch, caplog, kind: str
+) -> None:
+    """Exception text (SQL, bound parameters, payload data) reaches neither the
+    job record, the audit ledger, the log nor the response."""
+    import logging
+
+    import api.field_assessment as fa
+
+    h = _connector_rls
+    a, _ = _tenant_pair(h)
+    marker = f"SENSITIVE-{uuid.uuid4().hex}"
+    real = fa.import_ai_data_access_mapping_scan
+
+    def _fail(*, db, **kwargs: Any) -> Any:
+        real(db=db, **kwargs)
+        if kind == "database":  # the driver error embeds the bound parameter
+            db.execute(text("SELECT CAST(:m AS integer)"), {"m": marker})
+        raise RuntimeError(f"token={marker} payload={marker}")
+
+    monkeypatch.setattr(fa, "import_ai_data_access_mapping_scan", _fail)
+    caplog.set_level(logging.DEBUG)
+    status, body = h.run("run_ai_data_access_mapping", a)
+    assert status == 500 and body["code"] == "MAPPING_FAILED"
+    (job,) = h.jobs(a)
+    (reason,) = h.rows(
+        "SELECT failure_reason FROM fa_scan_jobs WHERE id = :j", j=job.id
+    )
+    expected = "DataError" if kind == "database" else "RuntimeError"
+    assert reason.failure_reason == f"CONNECTOR_FAILED: {expected}"
+    audit = h.rows(
+        "SELECT row_to_json(e)::text AS j FROM fa_scan_audit_events e"
+        " WHERE tenant_id = :t",
+        t=a,
+    )
+    assert audit and all(marker not in r.j for r in audit)
+    assert any("CONNECTOR_FAILED" in r.j for r in audit)  # the code is recorded
+    assert marker not in caplog.text
+    assert marker not in str(body)

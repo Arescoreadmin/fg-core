@@ -193,3 +193,36 @@ def test_real_source_copy_round_trips(tmp_path: Path) -> None:
     (tmp_path / "api").mkdir()
     shutil.copy(REPO / chk.SOURCE, tmp_path / chk.SOURCE)
     assert chk.check(tmp_path) == []
+
+
+def test_preflight_without_the_admission_lock_fails(tmp_path: Path) -> None:
+    text = (REPO / chk.SOURCE).read_text(encoding="utf-8")
+    call = "    _c6_sync_connector_admission_lock(\n        db, tenant_id=tenant_id, engagement_id=engagement_id\n    )\n"
+    assert text.count(call) == 1
+    errors = chk.check(_fake_repo(tmp_path, text.replace(call, "")))
+    assert any("must be _c6_sync_connector_admission_lock" in e for e in errors)
+
+
+def test_job_created_before_preflight_fails() -> None:
+    source = (REPO / chk.SOURCE).read_text(encoding="utf-8")
+    tree = chk.ast.parse(source)
+    route = next(
+        n
+        for n in tree.body
+        if isinstance(n, chk.ast.FunctionDef) and n.name == "run_ai_vendor_governance"
+    )
+    # Move the scan-job creation ahead of the preflight call.
+    create = next(
+        i for i, s in enumerate(route.body) if "_c6_create_scan_job" in chk.ast.dump(s)
+    )
+    route.body.insert(0, route.body.pop(create))
+    errors = chk.check_admission(tree, {"run_ai_vendor_governance"})
+    assert any(
+        "run_ai_vendor_governance: must call _c6_sync_connector_preflight" in e
+        for e in errors
+    )
+
+
+def test_real_source_satisfies_admission_rule() -> None:
+    source = (REPO / chk.SOURCE).read_text(encoding="utf-8")
+    assert chk.check_admission(chk.ast.parse(source), set(chk.EXPECTED_ROUTES)) == []
