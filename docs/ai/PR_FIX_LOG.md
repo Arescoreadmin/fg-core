@@ -1,3 +1,12 @@
+## fix(agent): FG-AGENT-QUEUE-INIT-LOCK-001 — SQLiteQueue first open is safe under concurrency (#930)
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #930.
+- **Defect:** `SQLiteQueue._init` ran `PRAGMA journal_mode=WAL` once. While a queue database is still in rollback-journal mode, the switch fails immediately with `database is locked` when another connection holds a write lock (`busy_timeout` is not consulted), or returns the old mode unchanged when it cannot take the lock. Concurrent first opens therefore raised. That failed required **Agent Linux** on #925 (`agent/tests/test_queue_capacity_race.py`, about 1 in 10 to 1 in 40 locally).
+- **Reproduced deterministically:** with another connection holding `BEGIN IMMEDIATE` on a fresh file, the WAL switch fails in 0.0 s; read and exclusive holders wait; already-WAL databases never fail.
+- **Fix:** `_enable_wal()` retries the switch with backoff until `wal` is confirmed, bounded by `WAL_INIT_TIMEOUT_SECONDS` (5 s, matching `busy_timeout`). A lock that never clears re-raises the last error; a mode that never becomes WAL is logged. No queue semantics, capacity logic or schema change.
+- **Tests:** `test_first_open_waits_for_a_concurrent_writer` (fails on `main`); `test_first_open_lock_wait_is_bounded` (control; fails loudly, no hang). The existing capacity-race assertions are unchanged. Race test after the fix: 100/100 passes. `tests/agent` + `agent/tests` (the `agent-unit` job): 687 passed, 1 skipped.
+- **Not changed:** CI configuration, dependencies, production configuration.
+
 ## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)
 
 - **What:** one `next_sequence` entry in `customer_one/roadmap_authority.yaml` (Level-2 authority). Work class `FOUNDER_AUTHORIZED`, status `NEXT`, with `authorized_by`, `freeze_law_basis`, `scope` and 13 acceptance criteria. This follows the MSP-003 and MSP-007 precedent. No code, test, CI, schema or deployment change.

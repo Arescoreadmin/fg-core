@@ -12,6 +12,9 @@ from typing import Iterable
 
 TERMINAL_REASONS = {"schema_invalid", "auth_invalid", "payload_too_large"}
 
+# Bounded wait for the first open to switch the database to WAL (#930).
+WAL_INIT_TIMEOUT_SECONDS = 5.0
+
 _log = logging.getLogger(__name__)
 
 
@@ -42,7 +45,7 @@ class SQLiteQueue:
         with self._lock, self._conn:
             # Concurrency and durability tradeoffs: stable for agent queue usage.
             self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._enable_wal()
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.execute("PRAGMA temp_store=MEMORY")
 
@@ -79,6 +82,40 @@ class SQLiteQueue:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_dead_events_last_failed ON dead_events(last_failed_at, event_id)"
             )
+
+    def _enable_wal(self) -> None:
+        """Switch the database to WAL, tolerating a concurrent first open (#930).
+
+        WAL is persistent, so this only matters while the file is still in
+        rollback-journal mode. Then the switch fails immediately with "database
+        is locked" if another connection holds a write lock (busy_timeout is
+        not consulted), or returns the old mode unchanged if it could not take
+        the lock. Retry with backoff until WAL is confirmed, within a bounded
+        deadline; the last lock error is raised if it never clears.
+        """
+        deadline = time.monotonic() + WAL_INIT_TIMEOUT_SECONDS
+        delay = 0.005
+        while True:
+            error: sqlite3.OperationalError | None = None
+            mode = ""
+            try:
+                row = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
+                mode = str(row[0]).lower() if row else ""
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                    raise
+                error = exc
+            if mode in ("wal", "memory"):  # in-memory databases cannot use WAL
+                return
+            if time.monotonic() >= deadline:
+                if error is not None:
+                    raise error
+                _log.warning(
+                    "sqlite queue %s: journal mode is %r, not WAL", self.path, mode
+                )
+                return
+            time.sleep(delay)
+            delay = min(delay * 2, 0.1)
 
     def close(self) -> None:
         with self._lock:
