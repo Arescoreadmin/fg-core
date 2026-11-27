@@ -15240,13 +15240,18 @@ def run_external_ai_risk_register(
         actor=actor,
         scanner_type="external_ai_risk_register",
     )
+    # D-T6-003: capture before commit. set_config('app.tenant_id', ..., true)
+    # is transaction-scoped, so a post-commit lazy-load of the expired job can
+    # fail RLS (ObjectDeletedError) and, in the failure path, leave the job
+    # unmarked. FG-NIGHTLY-REGRESSION-REPAIR-001.
+    job_id = job.id
     _c6_write_audit_event(
         db,
         tenant_id=tenant_id,
         engagement_id=engagement_id,
         event_type="scan.initiated",
         actor=actor,
-        scan_job_id=job.id,
+        scan_job_id=job_id,
         scanner_type="external_ai_risk_register",
         payload_summary={
             "pr1_scan_result_id": pr1_scan.id,
@@ -15257,6 +15262,8 @@ def run_external_ai_risk_register(
     db.commit()
 
     try:
+        # Durable transitions are compare-and-swap: complete requires running.
+        _c6_update_job_status(db, job_id=job_id, status="running")
         from api.db_models_external_ai_risk import FaExternalAiRiskRecord  # noqa: PLC0415
         from services.connectors.external_ai_risk_register.risk_engine import (  # noqa: PLC0415
             build_summary,
@@ -15314,7 +15321,7 @@ def run_external_ai_risk_register(
         )
         _c6_update_job_status(
             db,
-            job_id=job.id,
+            job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
         )
@@ -15324,7 +15331,7 @@ def run_external_ai_risk_register(
             engagement_id=engagement_id,
             event_type="scan.completed",
             actor=actor,
-            scan_job_id=job.id,
+            scan_job_id=job_id,
             scanner_type="external_ai_risk_register",
             scan_result_id=result.scan_result_id,
             payload_summary={
@@ -15349,7 +15356,7 @@ def run_external_ai_risk_register(
         db.rollback()
         try:
             _c6_update_job_status(
-                db, job_id=job.id, status="failed", failure_reason=str(exc)[:2000]
+                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
             )
             _c6_write_audit_event(
                 db,
@@ -15357,7 +15364,7 @@ def run_external_ai_risk_register(
                 engagement_id=engagement_id,
                 event_type="scan.failed",
                 actor=actor,
-                scan_job_id=job.id,
+                scan_job_id=job_id,
                 scanner_type="external_ai_risk_register",
                 rejection_reason=str(exc)[:500],
             )

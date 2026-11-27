@@ -739,10 +739,22 @@ def test_ai_infer_openapi_contract_remains_generic_for_additive_payload(
     response_schema = schema["paths"]["/ai/infer"]["post"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]
+    # FG-NIGHTLY-REGRESSION-REPAIR-001: Pydantic 2.14 (#896) spells an open
+    # dict response with an explicit "additionalProperties": true, the JSON
+    # Schema default. It validates exactly the same instances as the former
+    # {"type": "object"}; check_openapi_security_diff treats the two as equal.
+    # Pinned exactly so a closed model (properties/required/false) still fails.
     assert response_schema == {
+        "additionalProperties": True,
         "title": "Response Ai Infer Ai Infer Post",
         "type": "object",
     }
+    # The request side stays closed: the open response is not a loosened input.
+    request_ref = schema["paths"]["/ai/infer"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]["$ref"]
+    request_schema = schema["components"]["schemas"][request_ref.split("/")[-1]]
+    assert request_schema["additionalProperties"] is False
 
 
 def test_ai_infer_returns_evidence_aware_response_with_source_proof(
