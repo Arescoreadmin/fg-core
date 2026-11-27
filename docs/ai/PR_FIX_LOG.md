@@ -1,3 +1,11 @@
+## test(trust-graph): FG-TRUST-GRAPH-PERF-TIMING-001 — wall-clock performance tests robust to runner stalls (#931)
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #931.
+- **Defect (test, not product):** `TestPerformance` in `tests/test_trust_graph.py` timed one wall-clock sample (`time.monotonic()`), so a scheduler or GC pause on a shared runner counted as code time. `test_1000_nodes_verify_under_250ms` recorded 984.6 ms in nightly shard 6 (run 45925105134) for a verify that takes about 0.7 ms; `services/field_assessment/trust_graph.py` is unchanged since #424.
+- **Fix:** `_best_of_ms()` reports the fastest of 5 `perf_counter` runs (the `timeit` estimator) for the four wall-clock tests in the class. Every target is unchanged (50/250/50/250 ms); the timed functions are pure, so repetition is valid. The CPU-time manifest test is unchanged.
+- **No weakening:** `test_best_of_ms_still_catches_a_real_regression` (code slow on every run still exceeds the target) and `test_best_of_ms_ignores_a_single_runner_stall` (one 300 ms pause in five runs passes). `tests/test_trust_graph.py`: 123 passed.
+- **Not changed:** product code, CI configuration, dependencies.
+
 ## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)
 
 - **What:** one `next_sequence` entry in `customer_one/roadmap_authority.yaml` (Level-2 authority). Work class `FOUNDER_AUTHORIZED`, status `NEXT`, with `authorized_by`, `freeze_law_basis`, `scope` and 13 acceptance criteria. This follows the MSP-003 and MSP-007 precedent. No code, test, CI, schema or deployment change.
