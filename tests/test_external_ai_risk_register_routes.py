@@ -465,7 +465,11 @@ def test_run_never_reloads_the_job_after_commit(
     _seed_ai_tool_discovery(_TENANT, eid)
 
     def _refresh_denied(target: Any, context: Any, attrs: Any) -> None:
-        raise RuntimeError("simulated RLS: job row not visible after commit")
+        # Only a database load carries a query context. A bulk UPDATE
+        # synchronizing the in-session object (context None) is not a reload
+        # and cannot be hidden by RLS (FG-ASSESSMENT-CONNECTOR-RLS-001).
+        if context is not None:
+            raise RuntimeError("simulated RLS: job row not visible after commit")
 
     event.listen(FaScanJob, "refresh", _refresh_denied)
     try:

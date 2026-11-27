@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed workstream. Not authorized, not implemented. `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` is fail-closed until the item is registered. |
+| **Status** | Authorized by #927 (`e01c467e8`, `FOUNDER_AUTHORIZED` in `next_sequence`); implemented on branch `fix/fg-assessment-connector-rls-001`. See **Implementation and acceptance** below. The original findings are kept as recorded. |
 | **Proposed classification** | P0 customer readiness and tenant-isolation assurance (founder proposal; not a canonical roadmap assignment) |
 | **Recorded by** | FG-NIGHTLY-REGRESSION-REPAIR-001, 2026-11-26, on branch `fix/fg-nightly-regression-repair-001` (base `4d15cb820`) |
 | **Affected routes** | `run_external_ai_risk_register`, `run_ai_data_access_mapping`, `run_ai_vendor_governance` (all in `api/field_assessment.py`) |
@@ -112,3 +112,91 @@ Route tests run on SQLite, where `set_tenant_context` is a no-op. Neither `run_a
 10. **Adjacent routes.** Adjacent connector and synchronous routes are inventoried, and equivalent defects are fixed or recorded.
 11. **Required CI.** The Postgres RLS tests run in required CI, not only in nightly runs.
 12. **No weakening.** No existing test is weakened, and fail-closed behaviour is preserved.
+
+## Implementation and acceptance (FG-ASSESSMENT-CONNECTOR-RLS-001, 2026-11-27)
+
+### Pre-fix reproduction on real PostgreSQL
+
+The three routes were called directly under a login role that is `NOSUPERUSER NOBYPASSRLS` and not the table owner. The schema was built like production `init_db()` (ORM `create_all`, then all migrations), and every commit was real.
+
+| Route | Result | Cause |
+|---|---|---|
+| `run_ai_data_access_mapping` | 500 `MAPPING_FAILED` | `ObjectDeletedError`: the source `FaScanResult`, expired by the initiation commit, is reloaded with no tenant bound, and forced RLS hides it |
+| `run_external_ai_risk_register` (with #926) | 500 `RISK_REGISTER_FAILED` | Same cause, via `pr1_scan.id` |
+| `run_ai_vendor_governance` | 422 | Its prerequisite never completed |
+
+After these runs:
+- Both jobs stayed `queued`, with only `scan.initiated` audited.
+- No `scan.failed` was written, because the failure path's writes also ran unbound and the errors were swallowed.
+- The mapping 500 body exposed an ORM instance description.
+
+**Classification:** availability and data integrity, failing closed. RLS denied access; no cross-tenant access occurred.
+
+**Ground truth of the schema (resolves F4):** every touched table has RLS enabled **and forced** (from migrations 0094/0095, after ORM creation), with the fail-closed `app.tenant_id` policy from 0111. No RLS migration was needed.
+
+### Canonical ownership (criterion 1)
+
+Ownership follows the L14-ASSURANCE-P1-REPAIR-001 pattern; there is no new framework.
+- **Transaction-local binding:** `set_config('app.tenant_id', ..., true)` lasts only for the transaction. After every `db.commit()` or `db.rollback()` that is followed by more database work, the route calls `set_tenant_context(db, tenant_id)` with the server-resolved tenant.
+- **Job lifecycle:** `_c6_create_scan_job`, `_c6_update_job_status` (which now returns its compare-and-swap result) and `DurableJobService` remain the job authorities. The audit authority is still `_c6_write_audit_event`.
+- **Where the rules are recorded:** the `api/field_assessment.py` section header, enforced by `tools/ci/check_connector_tenant_context.py`.
+
+### Lifecycle after the fix
+
+1. **Preflight:** interrupted runs of this connector (`running`, lease expired) are moved to `dead_letter`, each with a `scan.failed` (`STALE_LEASE_EXPIRED`), tenant-scoped and never re-run. A run that holds a live lease returns 409 `SCAN_ALREADY_RUNNING`.
+2. **Initiation commit:** the job is created and claimed `queued → running` (lease set) in the same commit as `scan.initiated`. Then the tenant is re-bound.
+3. **Work transaction:** the results, then `complete` (checked), then `scan.completed`, in one commit. A lost transition (for example, the job was cancelled meanwhile) rolls back the results and returns 409 `SCAN_JOB_SUPERSEDED`.
+4. **Failure:** rollback, re-bind, then `failed` (checked; non-retryable types become `dead_letter`), with `scan.failed` only if that transition applied, in one commit. The response is a generic 500 with no internals.
+
+### Acceptance matrix
+
+All PostgreSQL tests live in `tests/test_migrations_postgres_replay.py`, which runs in the required **Migrations Replay** job. The guard runs in `fg-fast` (required Guard and fg-required).
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 1 | Canonical ownership documented and applied | Section above; guard; all three routes plus `_c6_sync_connector_record_failure` |
+| 2 | Postgres, RLS enabled and forced, non-owner non-BYPASSRLS role | `test_connector_rls_role_is_restricted_and_rls_is_enforced`. It asserts the role's `rolsuper` and `rolbypassrls` are false, that it owns no touched table, `relrowsecurity` and `relforcerowsecurity` on 10 tables, the fail-closed policy, and a control (unbound and foreign contexts see 0 rows) |
+| 3 | Cross-tenant negatives | `test_connector_records_are_isolated_across_tenants`: reads on 10 tables, an UPDATE (0 rows), an INSERT (RLS violation), and a route call against another tenant's engagement (404) |
+| 4 | Transitions; compare-and-swap results checked | `test_connectors_complete_under_enforced_rls` (complete, `attempt_count` 1); `test_each_connector_failure_ends_terminal_with_one_audit` (×3); `test_lost_completion_transition_is_detected` (unsuccessful CAS); guard fixtures (ignored results) |
+| 5 | `scan_result_id` matches the persisted result and the response | `test_connectors_complete_under_enforced_rls` |
+| 6 | Rollback with no partial records; database errors still recorded | `test_connector_database_error_is_still_recorded`; `test_connector_failure_is_recorded_under_rls` |
+| 7 | Audit emitted only with a committed transition | Tests 4 and 6; `test_completion_audit_failure_rolls_back_the_transition` (crash consistency) |
+| 8 | Interrupted runs terminated deterministically, never re-run | `test_interrupted_run_is_terminated_not_rerun` (tenant-scoped); `test_recover_orphans_cannot_recover_under_enforced_rls` (evaluation) |
+| 9 | Idempotency and duplicate execution | `test_repeated_runs_are_idempotent`; `test_live_run_rejects_a_duplicate`; unique constraints on the record tables |
+| 10 | Adjacent routes inventoried | See below (recorded, not changed) |
+| 11 | Tests in required CI | Migrations Replay and fg-fast are both members of `CI Required` / fg-required; no CI configuration change |
+| 12 | No weakening | One #926 simulation was refined: it now denies only database reloads, not in-session UPDATE synchronization. It still fails on the original route (mutation-checked) |
+| 13 | Static guard with negative fixtures | `tests/tools/test_connector_tenant_context.py`: 6 prohibited patterns fail; valid patterns pass; a real-source mutation fails; the guard cannot pass when it covers nothing. On `main` before the fix it reports 13 violations |
+
+**Mutation check:** against `main`'s pre-fix route and job-service code, the 9 behavioural PostgreSQL tests fail with the reproduced `ObjectDeletedError`. The 4 infrastructure controls pass, as they should: role and RLS, transaction scoping, pooled connections, and `recover_orphans`.
+
+**Transaction and pooling semantics (clarifications):**
+- `test_tenant_binding_is_transaction_scoped`: commit, rollback and an aborted transaction each clear the binding, and re-binding restores access.
+- `test_pooled_connection_does_not_leak_tenant_context`: one physical connection, reused after tenant A, shows `''` or tenant B and never A's rows.
+
+### `recover_orphans` evaluation
+
+| | |
+|---|---|
+| Restart recovery | Not provided. `recover_orphans` scans every tenant with no tenant bound, so under forced RLS and a non-BYPASSRLS role it sees nothing. It is also not invoked by application code. No startup recovery was added. |
+| Stale-job termination | Provided per connector, tenant-scoped, at the next run (`terminate_stale_running`). It is terminal (`dead_letter`) and audited. |
+| Safe retry | Not provided for these scanner types; they are not retryable. A new run is a new job, and the record tables' unique constraints make re-runs idempotent. |
+
+### Adjacent routes (criterion 10: recorded, not changed)
+
+The guard's re-bind rule was applied to all 122 routes in `api/field_assessment.py`. 25 do database work after a commit or rollback without re-binding:
+
+`patch_engagement_route`, `transition_engagement_route`, `ingest_scan_result_route`, `register_document_analysis_route`, `update_observation_route`, `patch_finding_status_route`, `patch_finding_remediation_route`, `create_evidence_link_route`, `create_scan_authorization`, `activate_scan_authorization`, `revoke_scan_authorization`, `approve_customer_authorization`, `promote_engagement_route`, `create_or_get_questionnaire`, `register_artifact_route`, `upload_artifact_route`, `generate_verification_bundle_route`, `update_external_ai_risk_record`, `create_report_version_route`, `submit_report_version_for_review_route`, `approve_report_version_route`, `deliver_report_version_route`, `governed_delivery_route`, `governed_delivery_execute_route`, `supersede_report_version_route`.
+
+These are static candidates; runtime impact has not been verified per route. Under enforced RLS (non-owner, or owner with FORCE, without BYPASSRLS), their post-commit work would fail closed in the same way.
+
+**Inference (unverified, not claimed):** core routes such as `patch_engagement_route` and `transition_engagement_route` would visibly fail under an enforced role. That suggests production connects as a superuser or BYPASSRLS role, in which case FA-table RLS gives no database-level isolation there. Confirming it needs the production database role, which this workstream is not authorized to inspect.
+
+**Recommendation:** a separate, authorized workstream, consisting of an audit of the production role plus the same re-bind repair and Postgres proof for these routes.
+
+### Remaining risks
+
+- Historical sibling-connector jobs left `queued` by the old code are not reconciled. They are production data, and changing them needs founder approval. They still count toward the `_c6_count_active_jobs` concurrency limits used by background scans.
+- The production database role and its RLS enforcement are unverified.
+- Lease expiry (300 s) during a very long synchronous run lets a concurrent run terminate the live job. The CAS check then rolls the first run back (409) rather than reporting a false completion.
+
