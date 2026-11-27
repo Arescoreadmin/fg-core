@@ -5,6 +5,7 @@
 - **Fix:** `_best_of_ms()` reports the fastest of 5 `perf_counter` runs (the `timeit` estimator) for the four wall-clock tests in the class. Every target is unchanged (50/250/50/250 ms); the timed functions are pure, so repetition is valid. The CPU-time manifest test is unchanged.
 - **No weakening:** `test_best_of_ms_still_catches_a_real_regression` (code slow on every run still exceeds the target) and `test_best_of_ms_ignores_a_single_runner_stall` (one 300 ms pause in five runs passes). `tests/test_trust_graph.py`: 123 passed.
 - **Not changed:** product code, CI configuration, dependencies.
+- **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):** `_best_of_ms` now returns every sample, and each performance assertion reports them on failure. The docstring records the assurance limitation: the minimum is a best-case cost. It detects sustained algorithmic regressions, not tail or intermittent latency, and makes no p95/p99 claim. The stall control also asserts that the stalled sample is retained. The regression control asserts that every sample exceeds the target. Thresholds are unchanged.
 
 ## fix(assessment): FG-ASSESSMENT-CONNECTOR-RLS-001 — connector job lifecycle and tenant context under enforced RLS
 
