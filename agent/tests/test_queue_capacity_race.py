@@ -91,3 +91,37 @@ def test_first_open_lock_wait_is_bounded(tmp_path, monkeypatch):
         assert time.monotonic() - started < 1.5
     finally:
         timer.join()
+
+
+def test_first_open_deadline_bounds_the_busy_handler(tmp_path, monkeypatch):
+    """An EXCLUSIVE holder makes each WAL attempt wait in SQLite's busy handler
+    (busy_timeout=5000). The deadline must bound the whole switch, not each
+    attempt, and the connection's busy_timeout must be restored afterwards."""
+    import sqlite3
+    import time
+
+    import pytest
+
+    import agent.app.queue.sqlite_queue as sq
+
+    monkeypatch.setattr(sq, "WAL_INIT_TIMEOUT_SECONDS", 0.3)
+    path = tmp_path / "exclusive.db"
+    holder = sqlite3.connect(str(path), isolation_level=None)
+    holder.execute("CREATE TABLE t(x)")
+    holder.execute("BEGIN EXCLUSIVE")
+    holder.execute("INSERT INTO t VALUES (1)")
+    started = time.monotonic()
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            SQLiteQueue(str(path))
+        assert time.monotonic() - started < 1.5
+    finally:
+        holder.rollback()
+        holder.close()
+
+    queue = SQLiteQueue(str(path))
+    try:
+        assert queue._conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+        assert queue._conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    finally:
+        queue.close()

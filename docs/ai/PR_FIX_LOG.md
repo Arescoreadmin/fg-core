@@ -5,6 +5,11 @@
 - **Reproduced deterministically:** with another connection holding `BEGIN IMMEDIATE` on a fresh file, the WAL switch fails in 0.0 s; read and exclusive holders wait; already-WAL databases never fail.
 - **Fix:** `_enable_wal()` retries the switch with backoff until `wal` is confirmed, bounded by `WAL_INIT_TIMEOUT_SECONDS` (5 s, matching `busy_timeout`). A lock that never clears re-raises the last error; a mode that never becomes WAL is logged. No queue semantics, capacity logic or schema change.
 - **Tests:** `test_first_open_waits_for_a_concurrent_writer` (fails on `main`); `test_first_open_lock_wait_is_bounded` (control; fails loudly, no hang). The existing capacity-race assertions are unchanged. Race test after the fix: 100/100 passes. `tests/agent` + `agent/tests` (the `agent-unit` job): 687 passed, 1 skipped.
+- **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):**
+  - **Deadline overrun (fixed):** an EXCLUSIVE lock holder makes each WAL attempt wait in SQLite's busy handler (`busy_timeout=5000`), so a lock that escalates near the deadline could stretch the first open to about deadline + 5 s.
+  - Each attempt's busy_timeout is now capped at the time left, and the connection's value is restored afterwards.
+  - `test_first_open_deadline_bounds_the_busy_handler` takes 5.0 s and fails on the previous implementation (0.3 s deadline); it passes after the fix.
+  - **Recorded for founder decision, not changed:** if the mode is still not WAL at the deadline and no lock error is pending, the queue logs a warning and runs in rollback-journal mode. `main` never checked the result of the pragma, so this is no weaker than `main`. Failing closed would be a product behaviour change, and it would also affect filesystems without WAL support.
 - **Not changed:** CI configuration, dependencies, production configuration.
 
 ## fix(assessment): FG-ASSESSMENT-CONNECTOR-RLS-001 — connector job lifecycle and tenant context under enforced RLS

@@ -92,30 +92,43 @@ class SQLiteQueue:
         not consulted), or returns the old mode unchanged if it could not take
         the lock. Retry with backoff until WAL is confirmed, within a bounded
         deadline; the last lock error is raised if it never clears.
+
+        An exclusive lock does go through the busy handler, so each attempt's
+        busy_timeout is capped at the time left: the deadline bounds the whole
+        switch, not each attempt. The connection's busy_timeout is restored.
         """
         deadline = time.monotonic() + WAL_INIT_TIMEOUT_SECONDS
         delay = 0.005
-        while True:
-            error: sqlite3.OperationalError | None = None
-            mode = ""
-            try:
-                row = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
-                mode = str(row[0]).lower() if row else ""
-            except sqlite3.OperationalError as exc:
-                if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
-                    raise
-                error = exc
-            if mode in ("wal", "memory"):  # in-memory databases cannot use WAL
-                return
-            if time.monotonic() >= deadline:
-                if error is not None:
-                    raise error
-                _log.warning(
-                    "sqlite queue %s: journal mode is %r, not WAL", self.path, mode
-                )
-                return
-            time.sleep(delay)
-            delay = min(delay * 2, 0.1)
+        busy_ms = int(self._conn.execute("PRAGMA busy_timeout").fetchone()[0])
+        try:
+            while True:
+                error: sqlite3.OperationalError | None = None
+                mode = ""
+                left_ms = int(max(0.0, deadline - time.monotonic()) * 1000)
+                self._conn.execute(f"PRAGMA busy_timeout={min(busy_ms, left_ms)}")
+                try:
+                    row = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
+                    mode = str(row[0]).lower() if row else ""
+                except sqlite3.OperationalError as exc:
+                    text = str(exc).lower()
+                    if "locked" not in text and "busy" not in text:
+                        raise
+                    error = exc
+                if mode in ("wal", "memory"):  # in-memory databases cannot use WAL
+                    return
+                if time.monotonic() >= deadline:
+                    if error is not None:
+                        raise error
+                    _log.warning(
+                        "sqlite queue %s: journal mode is %r, not WAL",
+                        self.path,
+                        mode,
+                    )
+                    return
+                time.sleep(delay)
+                delay = min(delay * 2, 0.1)
+        finally:
+            self._conn.execute(f"PRAGMA busy_timeout={busy_ms}")
 
     def close(self) -> None:
         with self._lock:
