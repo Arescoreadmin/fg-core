@@ -9067,3 +9067,26 @@ No check, allowlist, plane-registry exception or gate configuration changes.
 7. **Required PR gates unchanged.** The per-test timeout is opt-in (default off) for targets reused by `fg-required`. The new structure guard adds a read-only check to `fg-fast`.
 8. **Residual risk.** Shard wall time (about 50 min) is close to its 75-min limit as the suite grows. On Windows only the backstop timeout applies. Scheduled results are not required checks, so a red nightly needs an owner to act on it.
 
+## 2026-11-26 - fix(assurance): three pre-existing regressions exposed by restored nightly CI (FG-NIGHTLY-REGRESSION-REPAIR-001)
+
+**Scope:**
+- `api/field_assessment.py`: `run_external_ai_risk_register` only.
+- DEP-REMEDIATE-003 ledger, its generator overrides and the narrative doc.
+- Tests.
+
+There are no auth, permission, tenant-resolution, contract, schema, migration, dependency, CI or deployment changes.
+
+**Finding:** the first complete scheduled-equivalent run of the restored nightly suite (run 45890327767) failed closed on 3 tests that also fail on `main`.
+
+**Security analysis:**
+
+1. **Durable job integrity restored.** A successful External AI Risk Register run now leaves its durable job `complete` with the real `scan_result_id`. Before the fix it stayed `queued`, contradicting its own `scan.completed` audit event. Failure leaves the job in its terminal state, with a single named-human `scan.failed` event and no partial risk records.
+2. **RLS-safe identifiers.** The job id is captured before commit, so no post-commit reload can fail tenant RLS and lose failure handling (D-T6-003). Behaviour is unchanged on the success path, and no tenant check moved.
+3. **Tenant isolation unchanged.** Tenant resolution, the named-human requirement, the `ai.vendor_governance.execute` permission and the cross-tenant 404s are untouched. A new test also confirms no job is visible to another tenant.
+4. **Governance evidence truthful.** The retirement ledger now names the existing fail-closed Console tests. The retirement-time rationale is preserved with a dated supersession note, and runtime acceptance is still claimed pending under #849.
+5. **Contract unchanged.** The `/ai/infer` response `additionalProperties: true` is the JSON Schema default (instance-equivalent). Request schemas remain closed, generation is deterministic, and the test now also pins request closure.
+6. **Residual risk.**
+   - Two sibling connector routes never mark their job `running`.
+   - All three synchronous connector routes run post-commit work without re-binding tenant context, which matters under RLS.
+   - These are recommended as a separate REPAIR with a Postgres RLS proof.
+

@@ -411,3 +411,110 @@ def test_console_list_url_returns_generated_records(app: Any) -> None:
     resp = client.get(url, params={"risk_score": risk_score})
     assert resp.status_code == 200, resp.text
     assert risk_id in {item["risk_id"] for item in resp.json()["items"]}
+
+
+# ── Durable job lifecycle (FG-NIGHTLY-REGRESSION-REPAIR-001, D-T6-003) ───────
+
+
+def _jobs(tenant: str, eid: str) -> list[Any]:
+    from api.db import get_sessionmaker
+    from api.db_models_field_assessment import FaScanJob
+
+    db = get_sessionmaker()()
+    try:
+        rows = db.query(FaScanJob).filter_by(tenant_id=tenant, engagement_id=eid).all()
+        db.expunge_all()
+        return rows
+    finally:
+        db.close()
+
+
+def test_successful_run_completes_durable_job(app: Any) -> None:
+    # Before the repair the job was never marked running, so the
+    # compare-and-swap complete transition was a no-op: the durable job stayed
+    # "queued" with no scan_result_id while the audit said scan.completed.
+    eid = _engagement(app)
+    _seed_ai_tool_discovery(_TENANT, eid)
+    resp = _client(app, _TENANT, **_human(_ASSESSOR, "assessor")).post(
+        _run_url(eid), json={}
+    )
+    assert resp.status_code == 200, resp.text
+
+    (job,) = _jobs(_TENANT, eid)
+    assert job.scanner_type == "external_ai_risk_register"
+    assert job.status == "complete"
+    assert job.scan_result_id == resp.json()["scan_result_id"]
+    assert job.attempt_count == 1 and job.started_at and job.completed_at
+    assert _jobs(_OTHER, eid) == []
+
+    audited = {e.event_type: e.scan_job_id for e in _scan_audit(_TENANT, eid)}
+    assert audited["scan.initiated"] == audited["scan.completed"] == job.id
+
+
+def test_run_never_reloads_the_job_after_commit(
+    app: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On Postgres the tenant GUC is transaction-scoped, so reloading the
+    # expired job after the initiation commit can fail RLS. Simulate that: any
+    # refresh of a FaScanJob instance raises. The route must not need one.
+    from sqlalchemy import event
+
+    from api.db_models_field_assessment import FaScanJob
+
+    eid = _engagement(app)
+    _seed_ai_tool_discovery(_TENANT, eid)
+
+    def _refresh_denied(target: Any, context: Any, attrs: Any) -> None:
+        raise RuntimeError("simulated RLS: job row not visible after commit")
+
+    event.listen(FaScanJob, "refresh", _refresh_denied)
+    try:
+        resp = _client(app, _TENANT, **_human(_ASSESSOR, "assessor")).post(
+            _run_url(eid), json={}
+        )
+    finally:
+        event.remove(FaScanJob, "refresh", _refresh_denied)
+    assert resp.status_code == 200, resp.text
+    (job,) = _jobs(_TENANT, eid)
+    assert job.status == "complete"
+
+
+def test_failed_run_marks_job_failed_with_audit(
+    app: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.db import get_sessionmaker
+    from api.db_models_external_ai_risk import FaExternalAiRiskRecord
+    from services.connectors.external_ai_risk_register import risk_engine
+
+    eid = _engagement(app)
+    _seed_ai_tool_discovery(_TENANT, eid)
+
+    def _boom(**_: Any) -> Any:
+        raise RuntimeError("risk engine exploded")
+
+    monkeypatch.setattr(risk_engine, "generate_risk_records", _boom)
+    resp = _client(app, _TENANT, **_human(_ASSESSOR, "assessor")).post(
+        _run_url(eid), json={}
+    )
+    assert resp.status_code == 500
+    assert "RISK_REGISTER_FAILED" in resp.text
+
+    (job,) = _jobs(_TENANT, eid)
+    # Not a retryable scanner type, so DurableJobService.mark_failed moves the
+    # job to its terminal failure state rather than scheduling a retry.
+    assert job.status == "dead_letter"
+    assert job.completed_at and job.next_retry_at is None
+    assert "risk engine exploded" in (job.failure_reason or "")
+    failed = [e for e in _scan_audit(_TENANT, eid) if e.event_type == "scan.failed"]
+    assert [(e.scan_job_id, e.actor) for e in failed] == [(job.id, _ASSESSOR)]
+
+    db = get_sessionmaker()()
+    try:
+        assert (
+            db.query(FaExternalAiRiskRecord)
+            .filter_by(tenant_id=_TENANT, engagement_id=eid)
+            .count()
+            == 0
+        )
+    finally:
+        db.close()

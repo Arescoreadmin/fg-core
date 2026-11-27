@@ -37,6 +37,65 @@
 - **Timeout platforms:** the `SIGALRM` per-phase layer works on Linux and macOS. On Windows only the faulthandler backstop applies (whole-process exit after 2× budget + 5 s). All `testing-module` jobs run on `ubuntu-latest`.
 - **CI config touched (called out):** `.github/workflows/testing-module.yml` (non-required workflow) and `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite). Required-check names, membership and `repository-policy.json` are unchanged.
 
+## fix(assurance): FG-NIGHTLY-REGRESSION-REPAIR-001 — repair three pre-existing regressions exposed by restored nightly CI
+
+- **Source:** dispatched scheduled-equivalent run 45890327767 of the restored `testing-module` (FG-CI-NIGHTLY-REPAIR-001, PR #925). It executed all 10 shards (25,918 tests) and `fg-security`, and failed closed on 3 tests that also fail on `main` `4d15cb820`. Authorization: `check_customer_one_roadmap.py --work-class REPAIR` returned AUTHORIZED. The proposed work-item ID is not registered (`--work-item` → BLOCKED, fail-closed), so this is filed under the REPAIR class.
+
+### 1. Field assessment transaction lifecycle (`run_external_ai_risk_register`, restored in #905)
+
+**Root causes (confirmed):**
+- **(a) D-T6-003 violation.** `job.id` was read 4 times after `db.commit()`. `set_config('app.tenant_id', …, true)` is transaction-scoped, so on Postgres a post-commit lazy-load of the expired job runs without tenant context and can fail RLS (`fa_scan_jobs_tenant_isolation`), the same failure documented at `api/workforce.py:355`. In the failure path that reload sits inside the inner `try`, so a failed reload left the job unmarked and lost the `scan.failed` audit event.
+- **(b) Durable job never completed.** The route never marked the job `running`, and `DurableJobService.mark_complete` is a compare-and-swap on `status == 'running'`. Every successful run therefore left the durable job `queued` with no `scan_result_id`, while the audit trail recorded `scan.completed`. A probe on `main` confirmed this: `[('external_ai_risk_register', 'queued', None)]`.
+
+**Fix:**
+- `job_id = job.id` is captured right after `_c6_create_scan_job`, before the initiation commit, and is used for every later reference.
+- `_c6_update_job_status(..., status="running")` runs before the work, as in the other scan executors.
+
+**Tests (behavioural):**
+- Success: the durable job is `complete`, its `scan_result_id` equals the response's, `attempt_count` is 1, and no job is visible to the other tenant. The initiated and completed audit events carry the same job id.
+- Simulated RLS: any `FaScanJob` refresh raises, and the route still returns 200 with the job `complete`.
+- Failure: the risk engine raises. The response is 500 `RISK_REGISTER_FAILED`, the job is `dead_letter` (the designed terminal state for a non-retryable scanner) with `failure_reason` and `completed_at` set, there is exactly one `scan.failed` event for the named human, and no risk record persists.
+- **Mutation:** on the original route, 3 tests fail (D-T6-003 S1, the durable-complete test, and the simulated-RLS test, which returns 500).
+
+**Adjacent routes (reported, not changed):**
+- `run_ai_data_access_mapping` and `run_ai_vendor_governance` have defect (b): they create a job, mark it `complete`, and never mark it `running`.
+- All three synchronous connector routes, including this one, keep querying and inserting after the initiation commit with no tenant context re-bound. Background workers re-call `set_tenant_context` after each commit; these routes do not. Under a non-bypass Postgres role with RLS, that post-commit work would be denied.
+- Proving a fix for these needs a Postgres RLS run (related to audit gap 002). Recommended as a separate REPAIR.
+
+### 2. DEP-REMEDIATE-003 retirement ledger
+
+**Root cause (confirmed):** #923 (`ef2022715`, FG-849) made the Console limiter fail closed and renamed two canonical tests. The ledger still named the old titles:
+- `route_fails_open_when_store_unavailable` (2 entries);
+- `rate_limit_key_includes_tenant_and_user` (1 entry, which became `..._partitions_tenant_and_user_opaquely`, since keys are now opaque).
+
+Before, the test reported only the first mismatch.
+
+**Fix (surgical; the historical record is preserved):**
+- The 3 canonical titles are corrected in the ledger JSON and in the generator's `OVERRIDES`.
+- The E03/E04 retirement-time rationale (225d21c25, residual risk R1) is kept verbatim. A dated post-retirement note is appended: fail-closed reinstated by #923, R1 closed in code only, and production runtime acceptance still pending under #849.
+- The opaque-key entry gets its own evidence, E12, appended so that E01–E11 are not renumbered. The shared E01 text ("nested assertions also pass against the active source") no longer applies to it.
+- States, summary counts and the retirement-time `nested_assertions_hold_on_active_source` values (source_commit e5bcd96ed) are unchanged.
+- The ledger is deliberately not regenerated, because the generator re-executes the legacy tests against today's source and would rewrite the point-in-time record. The JSON evidence strings match the generator's byte-for-byte.
+- Fail-closed enforcement is untouched. #849 is not modified.
+
+### 3. `/ai/infer` OpenAPI response schema
+
+**Root cause (confirmed): intentional and compatible.**
+- Pydantic 2.14, from #896 (FastAPI stayed at 0.136.3), spells the open `dict[str, object]` response as `{"additionalProperties": true, "type": "object", …}`. In JSON Schema, `additionalProperties: true` is the default, so the instance set is identical.
+- #896 regenerated the contracts with `make contract-authority-refresh` (561 such additions) and taught `check_openapi_security_diff.py` to treat this spelling as equivalent, with 5 tests.
+- **Verified:**
+  - Generation is deterministic: `make contracts-core-diff` reports a match.
+  - Contract authority markers match.
+  - The request model `AIInferRequest` remains `additionalProperties: false`.
+  - The number of closed schemas did not fall (575 → 577).
+  - No generated client consumes the contract, and no frontend caller of `/ai/infer` exists.
+
+**Fix:** the assertion now pins the exact generated representation, which still fails on any closed model. A new assertion checks that the request schema stays closed. Production code and the contract are unchanged.
+
+### Scope
+
+No tests were skipped, deleted or weakened. There are no dependency, CI, schema, migration, contract or deployment changes.
+
 ## ci(required): FG-855-REPAIR-001 — Agent and assessment/security tests in required CI
 
 - **Issue:** #855 (audit gap 015, `docs/audits` 2026-11-18 inventory). Roadmap check: `--work-class REPAIR` authorized.

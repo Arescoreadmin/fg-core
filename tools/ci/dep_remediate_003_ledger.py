@@ -88,18 +88,48 @@ RL_EVID = (
     "opposite contract (bff-rate-limit-prod.test.js :: route_fails_open_when_store_unavailable, "
     "redis_configured_returns_store_regardless_of_reachability). Not reinstated: that would "
     "change canonical Console behaviour, out of scope. Recorded as residual risk R1."
+    # FG-NIGHTLY-REGRESSION-REPAIR-001: retirement-time rationale above is kept
+    # verbatim; the supersession by #923 is appended, not rewritten.
+    " Post-retirement reconciliation (2026-11-26, FG-NIGHTLY-REGRESSION-REPAIR-001): "
+    "#923 (ef2022715) reinstated the fail-closed policy — a store outage now returns "
+    "503 BFF_RATE_LIMIT_UNAVAILABLE — and renamed the canonical test "
+    "route_fails_open_when_store_unavailable to route_fails_closed_when_store_unavailable, "
+    "which asserts the legacy fail-closed contract. Residual risk R1 is closed in code only; "
+    "production runtime acceptance remains pending under #849. The state and "
+    "nested_assertions_hold_on_active_source values are the retirement-time record "
+    "(source_commit e5bcd96ed) and were not re-evaluated."
+)
+# FG-NIGHTLY-REGRESSION-REPAIR-001: #923 renamed and strengthened this test.
+# The committed ledger records this text as E12 (appended) so that the recorded
+# E01-E11 ids are not renumbered.
+KEY_EVID = (
+    "Same test ran in the active suite at retirement (source_commit e5bcd96ed) and it"
+    "s nested assertions held against the active source then. Post-retirement reconci"
+    "liation (2026-11-26, FG-NIGHTLY-REGRESSION-REPAIR-001): #923 (ef2022715) intenti"
+    "onally replaced plaintext rate-limit keys with opaque per-tenant/per-user partit"
+    "ions and renamed the test to rate_limit_key_partitions_tenant_and_user_opaquely."
+    " It asserts that raw tenant and subject never appear in the key while each still"
+    " selects its own partition — a stronger isolation and privacy contract. The lega"
+    "cy plaintext assertion no longer holds against current source by design; nested_"
+    "assertions_hold_on_active_source is the retirement-time value."
 )
 OVERRIDES = {
+    ("bff-rate-limit.test.js", "rate_limit_key_includes_tenant_and_user"): (
+        "ALREADY_COVERED",
+        "bff-rate-limit.test.js",
+        "rate_limit_key_partitions_tenant_and_user_opaquely",
+        KEY_EVID,
+    ),
     ("bff-rate-limit.test.js", "redis_outage_does_not_fail_open_in_prod"): (
         "OBSOLETE_WITH_EVIDENCE",
         "bff-rate-limit-prod.test.js",
-        "route_fails_open_when_store_unavailable",
+        "route_fails_closed_when_store_unavailable",
         RL_EVID,
     ),
     ("bff-rate-limit-prod.test.js", "route_passes_errorCode_through_to_503_response"): (
         "OBSOLETE_WITH_EVIDENCE",
         "bff-rate-limit-prod.test.js",
-        "route_fails_open_when_store_unavailable",
+        "route_fails_closed_when_store_unavailable",
         RL_EVID,
     ),
     ("bff-rate-limit-prod.test.js", "redis_unavailable_in_prod_returns_stable_error"): (

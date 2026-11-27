@@ -84,6 +84,7 @@ Method:
 - **6 are OBSOLETE_WITH_EVIDENCE:**
   - The three provenance placeholder-page tests. The page became the evidence explorer in PR 92, which the active `provenance-validation-panel.test.js` and `evidence-explorer.test.js` cover.
   - `redis_outage_does_not_fail_open_in_prod`, `route_passes_errorCode_through_to_503_response` and `redis_unavailable_in_prod_returns_stable_error`. These encoded a **fail-closed (503)** rate-limit outage policy. `225d21c25` (2026-07-17) deliberately reversed it, and the active suite asserts the reverse (`route_fails_open_when_store_unavailable`). They are **not** reinstated, because that would change canonical Console behaviour. They are recorded as residual risk R1.
+    - *Post-retirement reconciliation (2026-11-26, FG-NIGHTLY-REGRESSION-REPAIR-001):* #923 (`ef2022715`) reinstated fail-closed (store outage → 503 `BFF_RATE_LIMIT_UNAVAILABLE`) and renamed the canonical test to `route_fails_closed_when_store_unavailable`, which asserts the legacy contract. The ledger's canonical titles are updated to match. #923 also renamed `rate_limit_key_includes_tenant_and_user` to `rate_limit_key_partitions_tenant_and_user_opaquely`: raw tenant and subject identifiers are no longer in keys, and partitioning is unchanged. That entry now cites its own evidence, E12, appended so the recorded ids are not renumbered. The retirement-time states and evidence above are kept as recorded.
 
 No legacy assertion was found that holds on deployed code but is not already asserted by an active test. So nothing needed moving, and no test was weakened, skipped or replaced by a snapshot.
 
@@ -187,6 +188,7 @@ git branch -d chore/dep-remediate-003
 ## 11. Residual risks
 
 - **R1: Console rate limiting fails open in production.** This is a deliberate product decision (`225d21c25`): a Redis or Upstash outage disables BFF rate limiting rather than returning 503. Retiring the tree removes the last code that encoded fail-closed. This PR keeps the decision unchanged, so it needs explicit founder confirmation or a separate work item.
+  - *Update 2026-11-26:* closed in code by #923 (FG-849-REPAIR-001, `ef2022715`), which makes the limiter fail closed. Production runtime acceptance (`/api/health`, shared store) is still pending under #849, so R1 is not claimed closed in production.
 - **R2: BFF proxy route invariants are static source assertions only.** These cover cookie and Authorization non-forwarding and the tenant-parameter path in `app/api/core/[...path]/route.ts`. Executing the route needs `next/server` and `next-auth` harnessing, so it was not added here. Tenant authority itself is covered behaviourally through `lib/consoleAccess.js`.
 - **R3: Historical documents keep their nested-tree references.** These are the audits, the marketing source list and DEP-INV-001 §2 and §4. They are records of history and are intentionally unchanged.
 - **R4: Alert closure depends on GitHub's rescan.** The 20-alert target is a projection.
