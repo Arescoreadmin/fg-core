@@ -6,6 +6,57 @@
 - **No weakening:** `test_best_of_ms_still_catches_a_real_regression` (code slow on every run still exceeds the target) and `test_best_of_ms_ignores_a_single_runner_stall` (one 300 ms pause in five runs passes). `tests/test_trust_graph.py`: 123 passed.
 - **Not changed:** product code, CI configuration, dependencies.
 
+## fix(assessment): FG-ASSESSMENT-CONNECTOR-RLS-001 — connector job lifecycle and tenant context under enforced RLS
+
+- **Authorization:** #927 (`e01c467e8`, `FOUNDER_AUTHORIZED`). `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` returns AUTHORIZED on `main`. Prerequisite #926 (`857b717b0`) is in `main`.
+- **Pre-fix reproduction** (real PostgreSQL; a `NOSUPERUSER NOBYPASSRLS` non-owner role; schema built as in `init_db`; real commits):
+  - `run_ai_data_access_mapping` and `run_external_ai_risk_register` returned 500 with `ObjectDeletedError`: the expired source scan was reloaded with no tenant bound, and forced RLS hid it.
+  - `run_ai_vendor_governance` returned 422, because its prerequisite never completed.
+  - Jobs stayed `queued` and no `scan.failed` was written, because the failure path also ran unbound.
+  - Classification: availability and integrity, failing closed. No cross-tenant access occurred.
+  - Every touched table is RLS enabled and forced, with the fail-closed `app.tenant_id` policy, so no migration was needed.
+- **Fix** (canonical authorities only; no new framework):
+  - `set_tenant_context(db, tenant_id)` re-binds the server-resolved tenant after each commit and rollback that is followed by more work (the L14-ASSURANCE-P1-REPAIR-001 pattern).
+  - The job is claimed `queued → running` in the same commit as `scan.initiated`.
+  - `_c6_update_job_status` now returns its compare-and-swap result (existing callers are unaffected). A lost `complete` rolls back the results and returns 409 `SCAN_JOB_SUPERSEDED`.
+  - `scan.completed` / `scan.failed` are written only in the same transaction as their transition.
+  - Shared failure helper: rollback, re-bind, checked `failed`, then audit.
+  - Preflight:
+    - tenant-scoped `DurableJobService.terminate_stale_running` moves interrupted runs to `dead_letter`, audited, never re-run;
+    - `has_live_running` returns 409 `SCAN_ALREADY_RUNNING`.
+  - Generic 500 messages (the mapping and vendor routes previously echoed exception text and ORM state).
+- **Tests:**
+  - 14 real-PostgreSQL tests in `tests/test_migrations_postgres_replay.py` (required Migrations Replay job), covering:
+    - role and RLS assertions, including the owner check;
+    - transaction-scoped binding;
+    - pooled-connection reuse;
+    - all three routes completing;
+    - cross-tenant read, modify, create and route-call;
+    - failure per route;
+    - database-error failure;
+    - a lost compare-and-swap;
+    - crash consistency;
+    - interrupted-run termination;
+    - duplicate-run rejection;
+    - idempotency;
+    - `recover_orphans` evaluation.
+  - Mutation check: on `main`'s pre-fix code, 9 behavioural tests fail and 4 controls pass. Fresh-database run of the suite: 41 passed.
+- **Guard:** `tools/ci/check_connector_tenant_context.py` (`make connector-tenant-context-check`, an `fg-fast` prerequisite) with 13 tests, including negative fixtures. On `main` before the fix it reports 13 violations.
+- **Refined test (explained, not weakened):** #926's `test_run_never_reloads_the_job_after_commit` now denies only refreshes that carry a query context (database reloads). The pre-commit `running` UPDATE synchronizes the in-session object (context `None`), which is not a reload. Against the original route the test still fails.
+- **Recorded, not changed:**
+  - 25 other `api/field_assessment.py` routes do database work after a commit without re-binding (listed in the proposal doc).
+  - Historical `queued` sibling jobs are not reconciled; they are production data.
+  - The production database role is unverified. If it bypasses RLS, FA tables have no database-level isolation in production (inference, not claimed).
+- **Review follow-up (Codex P2: concurrent admission):**
+  - Reproduced on head `793859a81` with genuinely overlapping PostgreSQL sessions: two requests held after `has_live_running()` were both admitted, both created a running job and both executed (`[200, 500]`, the 500 only at the risk-record unique constraint).
+  - Fix: `_c6_sync_connector_admission_lock` locks the tenant's engagement row `FOR UPDATE` (canonical row-lock pattern) from the live-run check through the initiation commit, with a 5 s transaction-local `lock_timeout`. Waiters get 409 `SCAN_ALREADY_RUNNING`; timeouts get 409 `SCAN_ADMISSION_BUSY` with nothing written. PostgreSQL only.
+  - Also found on `793859a81`: persisted `failure_reason` / audit `rejection_reason` and logs carried exception text, including SQL and bound parameters for database errors. Now only a stable code and exception class are recorded or logged.
+  - 7 more PostgreSQL tests (21 connector tests; suite 48 passed on a fresh database): overlap reproduction, burst, bounded and released lock, tenant scoping, lease supersession, failure-detail exposure (×2). 4 fail on `793859a81`; the burst, tenant-scoping and lease tests are regression checks. Concurrency tests passed 5/5 repeated runs.
+  - Guard rule 4 (lock-first preflight; preflight before job creation) with 3 tests; it rejects `793859a81`'s source.
+  - `test_failed_run_marks_job_failed_with_audit` (#926) asserted the raw message was persisted; it now asserts the exact redacted code and the message's absence (stricter).
+  - Recorded, not changed: other `field_assessment` scanners persist `str(exc)` as `failure_reason`.
+- **Not changed:** CI configuration, migrations, schema, dependencies, production configuration and RLS policies.
+
 ## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)
 
 - **What:** one `next_sequence` entry in `customer_one/roadmap_authority.yaml` (Level-2 authority). Work class `FOUNDER_AUTHORIZED`, status `NEXT`, with `authorized_by`, `freeze_law_basis`, `scope` and 13 acceptance criteria. This follows the MSP-003 and MSP-007 precedent. No code, test, CI, schema or deployment change.

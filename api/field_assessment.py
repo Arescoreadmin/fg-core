@@ -20,6 +20,7 @@ import logging
 import os
 import secrets
 import threading
+import re
 import uuid as _uuid_module
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import delete, func, select, update
+from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -4838,7 +4840,15 @@ def _c6_update_job_status(
     status: str,
     scan_result_id: str | None = None,
     failure_reason: str | None = None,
-) -> None:
+) -> bool:
+    """Apply a durable job transition; return whether it took effect.
+
+    FG-ASSESSMENT-CONNECTOR-RLS-001: transitions are compare-and-swap, so a
+    False result means the job was not in the expected state (for example
+    cancelled or terminated). Synchronous connector routes check it instead
+    of reporting an outcome the job record never reached. Existing callers
+    that ignore the return value are unaffected.
+    """
     # Legacy unit tests use MagicMock sessions and assert object mutation.
     # Real sessions are updated by DurableJobService's SQL update statements.
     from unittest.mock import Mock
@@ -4856,18 +4866,231 @@ def _c6_update_job_status(
             if status == "failed":
                 job.failure_reason = failure_reason or "unknown error"
                 job.completed_at = utc_iso8601_z_now()
-        return
+        return job is not None
 
     # Durable transitions are compare-and-swap (L14-SCAN-AUTH-HARDENING-001):
     # a cancelled job is never revived or overwritten by a late result.
     if status == "running":
-        durable_job_svc.mark_running(db, job_id=job_id)
-    elif status == "complete":
-        durable_job_svc.mark_complete(db, job_id=job_id, scan_result_id=scan_result_id)
-    elif status == "failed":
-        durable_job_svc.mark_failed(
+        return durable_job_svc.mark_running(db, job_id=job_id)
+    if status == "complete":
+        return durable_job_svc.mark_complete(
+            db, job_id=job_id, scan_result_id=scan_result_id
+        )
+    if status == "failed":
+        return durable_job_svc.mark_failed(
             db, job_id=job_id, failure_reason=failure_reason or "unknown error"
         )
+    return False
+
+
+# ---------------------------------------------------------------------------
+# FG-ASSESSMENT-CONNECTOR-RLS-001 — synchronous connector job lifecycle.
+#
+# run_ai_data_access_mapping, run_external_ai_risk_register and
+# run_ai_vendor_governance create a durable job, commit it with scan.initiated,
+# then do their work in a second transaction within the same request.
+# Canonical rules (static guard: tools/ci/check_connector_tenant_context.py):
+#   * set_config('app.tenant_id', ..., true) is transaction-local, so after
+#     every db.commit()/db.rollback() that is followed by more database work
+#     the route re-binds the same server-resolved tenant with
+#     set_tenant_context (L14-ASSURANCE-P1-REPAIR-001 pattern). RLS stays
+#     fully enforced; the tenant is never caller-supplied.
+#   * the job moves queued -> running in the same commit as scan.initiated, so
+#     an interrupted request leaves a running job whose lease expires — never
+#     a queued job that looks runnable or consumes concurrency slots.
+#   * every transition result is checked; scan.completed / scan.failed are
+#     written in the same transaction as the transition they report.
+#   * admission is serialized: the engagement row is locked FOR UPDATE from
+#     the live-run check through the initiation commit, so two overlapping
+#     requests cannot both see "no live run" and both start (Postgres).
+#   * persisted failure reasons, audit events and logs carry only a stable
+#     code and the exception class, never exception text (which can include
+#     SQL, bound parameters or payload data).
+# ---------------------------------------------------------------------------
+
+_SYNC_CONNECTOR_STALE_REASON = (
+    "STALE_LEASE_EXPIRED: synchronous connector run was interrupted; "
+    "terminated, not re-executed"
+)
+
+
+class _SyncConnectorJobLost(Exception):
+    """A synchronous connector's job was no longer running at completion."""
+
+
+# Bounded wait for the admission lock: the lock is held only for the short
+# initiation transaction, so a longer wait means contention, answered with a
+# controlled 409 rather than an unbounded block. Monkeypatchable in tests.
+_SYNC_CONNECTOR_LOCK_TIMEOUT_MS = 5000
+_PG_LOCK_NOT_AVAILABLE = "55P03"
+_SAFE_ERROR_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
+
+
+def _c6_sync_connector_failure_reason(exc: BaseException) -> str:
+    """A persistable failure reason with no exception text.
+
+    Exception messages can carry SQL, bound parameters or payload data, so
+    only a stable code and the exception class are recorded; the full detail
+    never reaches the job record, the audit ledger or the log.
+    """
+    if isinstance(exc, HTTPException):
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = str(detail.get("code") or "")
+        suffix = f": {code}" if _SAFE_ERROR_CODE.fullmatch(code) else ""
+        return f"HTTP_{exc.status_code}{suffix}"
+    if isinstance(exc, _SyncConnectorJobLost):
+        return "SCAN_JOB_SUPERSEDED"
+    return f"CONNECTOR_FAILED: {type(exc).__name__}"
+
+
+def _c6_sync_connector_admission_lock(
+    db: Session, *, tenant_id: str, engagement_id: str
+) -> None:
+    """Serialize connector admission on the engagement row (Postgres).
+
+    Locks the tenant's engagement row FOR UPDATE in the caller's transaction;
+    the lock is released by the initiation commit (or any rollback), so it is
+    never held during the connector's work. Under RLS the row is visible only
+    to its own tenant, so another tenant can neither take nor wait on it.
+    SQLite (local development only) has no row locks and is not serialized.
+    """
+    from sqlalchemy.exc import OperationalError  # noqa: PLC0415
+
+    dialect = getattr(getattr(db.get_bind(), "dialect", None), "name", "")
+    if dialect != "postgresql":
+        return
+    timeout_ms = int(_SYNC_CONNECTOR_LOCK_TIMEOUT_MS)
+    db.execute(sa_text(f"SET LOCAL lock_timeout = '{timeout_ms}ms'"))
+    try:
+        locked = db.execute(
+            select(FaEngagement.id)
+            .where(
+                FaEngagement.id == engagement_id,
+                FaEngagement.tenant_id == tenant_id,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+    except OperationalError as exc:
+        orig = getattr(exc, "orig", None)
+        state = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+        if state != _PG_LOCK_NOT_AVAILABLE:
+            raise
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "SCAN_ADMISSION_BUSY",
+                "Another run of this connector is starting; retry shortly.",
+            ),
+        )
+    if locked is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("ENGAGEMENT_NOT_FOUND", "Engagement not found."),
+        )
+
+
+def _c6_sync_connector_preflight(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    scanner_type: str,
+    actor: str,
+) -> None:
+    """Terminate interrupted runs and reject a concurrent live run.
+
+    Interrupted runs (running, lease expired) for this tenant, engagement and
+    connector move to the terminal dead_letter state with a scan.failed audit
+    event, in the caller's transaction. They are never re-executed. A run
+    with a live lease yields 409 SCAN_ALREADY_RUNNING. The check runs under
+    the engagement admission lock, held through the caller's initiation
+    commit, so an overlapping request waits and then sees the live run.
+    """
+    _c6_sync_connector_admission_lock(
+        db, tenant_id=tenant_id, engagement_id=engagement_id
+    )
+    for stale_id in durable_job_svc.terminate_stale_running(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type=scanner_type,
+        failure_reason=_SYNC_CONNECTOR_STALE_REASON,
+    ):
+        _c6_write_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="scan.failed",
+            actor=actor,
+            scan_job_id=stale_id,
+            scanner_type=scanner_type,
+            rejection_reason=_SYNC_CONNECTOR_STALE_REASON,
+            rejection_code="STALE_LEASE_EXPIRED",
+        )
+    if durable_job_svc.has_live_running(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type=scanner_type,
+    ):
+        db.commit()  # keep any terminations; nothing else was written
+        raise HTTPException(
+            status_code=409,
+            detail=api_error(
+                "SCAN_ALREADY_RUNNING",
+                "This connector is already running for this engagement.",
+            ),
+        )
+
+
+def _c6_sync_connector_record_failure(
+    db: Session,
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    scanner_type: str,
+    actor: str,
+    job_id: str,
+    exc: BaseException,
+) -> None:
+    """Roll back the work, then durably record the failure for the same tenant.
+
+    The rollback ends the transaction, which clears the transaction-local
+    tenant binding, so it is re-bound before the job and audit writes. The
+    scan.failed event is written only if the failed transition applied (a
+    job that was cancelled or terminated meanwhile is left as it is), in the
+    same transaction as that transition.
+    """
+    from api.db import set_tenant_context  # noqa: PLC0415
+
+    db.rollback()
+    set_tenant_context(db, tenant_id)
+    reason = _c6_sync_connector_failure_reason(exc)
+    try:
+        if _c6_update_job_status(
+            db, job_id=job_id, status="failed", failure_reason=reason
+        ):
+            _c6_write_audit_event(
+                db,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                event_type="scan.failed",
+                actor=actor,
+                scan_job_id=job_id,
+                scanner_type=scanner_type,
+                rejection_reason=reason,
+            )
+        db.commit()
+    except Exception as record_exc:  # pragma: no cover - logged, surfaced as 500
+        log.error(
+            "%s: could not record failure for job %s — %s",
+            scanner_type,
+            job_id,
+            type(record_exc).__name__,
+        )
+        db.rollback()
 
 
 # ---------------------------------------------------------------------------
@@ -14304,6 +14527,8 @@ def run_ai_data_access_mapping(
     H13: scan.initiated and scan.completed audit events emitted directly in this route (H13.5 compliant).
     H15: FaScanResult enters collected lifecycle state automatically on creation.
     """
+    from api.db import set_tenant_context  # noqa: PLC0415
+
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
 
@@ -14333,8 +14558,20 @@ def run_ai_data_access_mapping(
             ),
         )
     tools: list[dict] = (source_scan.normalized_payload or {}).get("tools") or []
+    source_scan_id = source_scan.id  # capture before commit — session expire guard
+    # Stable timestamp for the payload hash, read before the commit expires it.
+    stable_ts = source_scan.collected_at or source_scan.created_at
 
-    # H12 — durable job record
+    # FG-ASSESSMENT-CONNECTOR-RLS-001: one live run per connector; interrupted
+    # runs are terminated (never re-run). See _c6_sync_connector_preflight.
+    _c6_sync_connector_preflight(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type="ai_data_access_mapping",
+        actor=actor,
+    )
+    # H12 — durable job record, claimed (running) in the initiation commit.
     job = _c6_create_scan_job(
         db,
         tenant_id=tenant_id,
@@ -14342,6 +14579,13 @@ def run_ai_data_access_mapping(
         actor=actor,
         scanner_type="ai_data_access_mapping",
     )
+    job_id = job.id  # capture before commit — session expire guard
+    if not _c6_update_job_status(db, job_id=job_id, status="running"):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("SCAN_JOB_NOT_CLAIMED", "Scan job could not be started."),
+        )
     # H13 — scan.initiated (direct call satisfies H13.5 AST coverage check)
     _c6_write_audit_event(
         db,
@@ -14349,16 +14593,17 @@ def run_ai_data_access_mapping(
         engagement_id=engagement_id,
         event_type="scan.initiated",
         actor=actor,
-        scan_job_id=job.id,
+        scan_job_id=job_id,
         scanner_type="ai_data_access_mapping",
         payload_summary={
-            "source_scan_result_id": source_scan.id,
+            "source_scan_result_id": source_scan_id,
             "tool_count": len(tools),
         },
     )
-    job_id = job.id  # capture before commit — session expire guard
-    source_scan_id = source_scan.id  # capture before commit — session expire guard
     db.commit()
+    # The tenant binding is transaction-local: re-bind the server-resolved
+    # tenant for the work transaction (FG-ASSESSMENT-CONNECTOR-RLS-001).
+    set_tenant_context(db, tenant_id)
 
     try:
         from services.connectors.ai_data_access_mapping.mapper import map_engagement
@@ -14370,9 +14615,9 @@ def run_ai_data_access_mapping(
             engagement_id=engagement_id,
         )
 
-        # Use the source scan's collected_at so the payload hash is stable on reruns
-        # against the same AI Tool Discovery evidence (idempotency via evidence_hash dedup).
-        stable_ts = source_scan.collected_at or source_scan.created_at
+        # The source scan's collected_at (stable_ts, read before the commit)
+        # keeps the payload hash stable on reruns against the same AI Tool
+        # Discovery evidence (idempotency via evidence_hash dedup).
         scan_payload: dict = {
             "scan_type": "ai_data_access_mapping_v1",
             "schema_version": "1.0",
@@ -14399,13 +14644,14 @@ def run_ai_data_access_mapping(
             scan_result_id=result.scan_result_id,
             source_type="ai_data_access_mapping",
         )
-        _c6_update_job_status(
+        if not _c6_update_job_status(
             db,
             job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
-        )
-        # H13 — scan.completed
+        ):
+            raise _SyncConnectorJobLost(job_id)
+        # H13 — scan.completed (same transaction as the complete transition)
         _c6_write_audit_event(
             db,
             tenant_id=tenant_id,
@@ -14430,34 +14676,33 @@ def run_ai_data_access_mapping(
             summary=summary,
         )
 
-    except HTTPException:
-        raise
     except Exception as exc:
-        log.error("ai_data_access_mapping: failed — %s", exc)
-        db.rollback()
-        try:
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+        log.error(
+            "ai_data_access_mapping: job %s failed — %s", job_id, type(exc).__name__
+        )
+        _c6_sync_connector_record_failure(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="ai_data_access_mapping",
+            actor=actor,
+            job_id=job_id,
+            exc=exc,
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, _SyncConnectorJobLost):
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "SCAN_JOB_SUPERSEDED",
+                    "The scan job was cancelled or terminated before it completed.",
+                ),
             )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="ai_data_access_mapping",
-                rejection_reason=str(exc)[:500],
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        # Generic message: internal details (ORM state, SQL) stay in the log.
         raise HTTPException(
             status_code=500,
-            detail=api_error(
-                "MAPPING_FAILED",
-                f"AI data access mapping failed: {str(exc)[:200]}",
-            ),
+            detail=api_error("MAPPING_FAILED", "AI data access mapping failed."),
         )
 
 
@@ -15194,6 +15439,8 @@ def run_external_ai_risk_register(
     begins and scan.initiated / scan.completed / scan.failed are audited with
     the named human actor.
     """
+    from api.db import set_tenant_context  # noqa: PLC0415
+
     _ = body
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _require_named_human_actor(actor_ctx)
@@ -15233,6 +15480,20 @@ def run_external_ai_risk_register(
         (pr2_scan.normalized_payload or {}).get("mappings") or [] if pr2_scan else []
     )
 
+    # Read before the initiation commit expires these rows.
+    pr1_scan_id = pr1_scan.id
+    pr2_scan_id = pr2_scan.id if pr2_scan else None
+    stable_ts = pr1_scan.collected_at or pr1_scan.created_at
+
+    # FG-ASSESSMENT-CONNECTOR-RLS-001: one live run per connector; interrupted
+    # runs are terminated (never re-run). See _c6_sync_connector_preflight.
+    _c6_sync_connector_preflight(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type="external_ai_risk_register",
+        actor=actor,
+    )
     job = _c6_create_scan_job(
         db,
         tenant_id=tenant_id,
@@ -15240,11 +15501,16 @@ def run_external_ai_risk_register(
         actor=actor,
         scanner_type="external_ai_risk_register",
     )
-    # D-T6-003: capture before commit. set_config('app.tenant_id', ..., true)
-    # is transaction-scoped, so a post-commit lazy-load of the expired job can
-    # fail RLS (ObjectDeletedError) and, in the failure path, leave the job
-    # unmarked. FG-NIGHTLY-REGRESSION-REPAIR-001.
+    # D-T6-003: capture before commit (FG-NIGHTLY-REGRESSION-REPAIR-001).
     job_id = job.id
+    # Claimed (running) in the initiation commit, so an interrupted request
+    # leaves a running job whose lease expires, never a queued one.
+    if not _c6_update_job_status(db, job_id=job_id, status="running"):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("SCAN_JOB_NOT_CLAIMED", "Scan job could not be started."),
+        )
     _c6_write_audit_event(
         db,
         tenant_id=tenant_id,
@@ -15254,16 +15520,17 @@ def run_external_ai_risk_register(
         scan_job_id=job_id,
         scanner_type="external_ai_risk_register",
         payload_summary={
-            "pr1_scan_result_id": pr1_scan.id,
-            "pr2_scan_result_id": pr2_scan.id if pr2_scan else None,
+            "pr1_scan_result_id": pr1_scan_id,
+            "pr2_scan_result_id": pr2_scan_id,
             "tool_count": len(tools),
         },
     )
     db.commit()
+    # The tenant binding is transaction-local: re-bind the server-resolved
+    # tenant for the work transaction (FG-ASSESSMENT-CONNECTOR-RLS-001).
+    set_tenant_context(db, tenant_id)
 
     try:
-        # Durable transitions are compare-and-swap: complete requires running.
-        _c6_update_job_status(db, job_id=job_id, status="running")
         from api.db_models_external_ai_risk import FaExternalAiRiskRecord  # noqa: PLC0415
         from services.connectors.external_ai_risk_register.risk_engine import (  # noqa: PLC0415
             build_summary,
@@ -15283,22 +15550,21 @@ def run_external_ai_risk_register(
         risk_records, raw_findings = generate_risk_records(
             tools=tools,
             mappings=mappings,
-            pr1_scan_result_id=pr1_scan.id,
-            pr2_scan_result_id=pr2_scan.id if pr2_scan else None,
+            pr1_scan_result_id=pr1_scan_id,
+            pr2_scan_result_id=pr2_scan_id,
             tenant_id=tenant_id,
             engagement_id=engagement_id,
             existing_risk_ids=existing_ids,
         )
         summary = build_summary(risk_records)
 
-        stable_ts = pr1_scan.collected_at or pr1_scan.created_at
         scan_payload: dict = {
             "scan_type": "external_ai_risk_register_v1",
             "schema_version": "1.0",
             "tenant_id": tenant_id,
             "engagement_id": engagement_id,
-            "pr1_scan_result_id": pr1_scan.id,
-            "pr2_scan_result_id": pr2_scan.id if pr2_scan else None,
+            "pr1_scan_result_id": pr1_scan_id,
+            "pr2_scan_result_id": pr2_scan_id,
             "scan_completed_at": stable_ts,
             "risk_records": risk_records,
             "findings": raw_findings,
@@ -15319,12 +15585,14 @@ def run_external_ai_risk_register(
             scan_result_id=result.scan_result_id,
             source_type="external_ai_risk_register",
         )
-        _c6_update_job_status(
+        if not _c6_update_job_status(
             db,
             job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
-        )
+        ):
+            raise _SyncConnectorJobLost(job_id)
+        # Same transaction as the complete transition.
         _c6_write_audit_event(
             db,
             tenant_id=tenant_id,
@@ -15349,28 +15617,31 @@ def run_external_ai_risk_register(
             summary=summary,
         )
 
-    except HTTPException:
-        raise
     except Exception as exc:
-        log.error("external_ai_risk_register: failed — %s", exc)
-        db.rollback()
-        try:
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+        log.error(
+            "external_ai_risk_register: job %s failed — %s",
+            job_id,
+            type(exc).__name__,
+        )
+        _c6_sync_connector_record_failure(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="external_ai_risk_register",
+            actor=actor,
+            job_id=job_id,
+            exc=exc,
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, _SyncConnectorJobLost):
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "SCAN_JOB_SUPERSEDED",
+                    "The scan job was cancelled or terminated before it completed.",
+                ),
             )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="external_ai_risk_register",
-                rejection_reason=str(exc)[:500],
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
         raise HTTPException(
             status_code=500,
             detail=api_error(
@@ -15561,6 +15832,8 @@ def run_ai_vendor_governance(
         generate_governance_records,
     )
 
+    from api.db import set_tenant_context  # noqa: PLC0415
+
     tenant_id = _resolve_caller_tenant(request, actor_ctx)
     actor = _actor_from_context(actor_ctx)
 
@@ -15593,7 +15866,21 @@ def run_ai_vendor_governance(
         "risk_records"
     ) or []
 
-    # H12 — durable job
+    source_scan_id = source_scan.id  # capture before commit — session expire guard
+    # stable_ts: the source scan's collected_at keeps evidence_hash deterministic;
+    # read before the initiation commit expires the row.
+    stable_ts = source_scan.collected_at or source_scan.created_at
+
+    # FG-ASSESSMENT-CONNECTOR-RLS-001: one live run per connector; interrupted
+    # runs are terminated (never re-run). See _c6_sync_connector_preflight.
+    _c6_sync_connector_preflight(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scanner_type="ai_vendor_governance",
+        actor=actor,
+    )
+    # H12 — durable job, claimed (running) in the initiation commit.
     job = _c6_create_scan_job(
         db,
         tenant_id=tenant_id,
@@ -15601,6 +15888,13 @@ def run_ai_vendor_governance(
         actor=actor,
         scanner_type="ai_vendor_governance",
     )
+    job_id = job.id  # capture before commit — session expire guard
+    if not _c6_update_job_status(db, job_id=job_id, status="running"):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=api_error("SCAN_JOB_NOT_CLAIMED", "Scan job could not be started."),
+        )
     # H13 — scan.initiated (direct call satisfies H13.5 AST coverage check)
     _c6_write_audit_event(
         db,
@@ -15608,24 +15902,22 @@ def run_ai_vendor_governance(
         engagement_id=engagement_id,
         event_type="scan.initiated",
         actor=actor,
-        scan_job_id=job.id,
+        scan_job_id=job_id,
         scanner_type="ai_vendor_governance",
         payload_summary={
-            "source_scan_result_id": source_scan.id,
+            "source_scan_result_id": source_scan_id,
             "risk_record_count": len(risk_records),
         },
     )
-    job_id = job.id  # capture before commit — session expire guard
-    source_scan_id = source_scan.id  # capture before commit — session expire guard
     db.commit()
+    # The tenant binding is transaction-local: re-bind the server-resolved
+    # tenant for the work transaction (FG-ASSESSMENT-CONNECTOR-RLS-001).
+    set_tenant_context(db, tenant_id)
 
     try:
         from services.canonical import utc_iso8601_z_now
 
         now_str = utc_iso8601_z_now()
-        # stable_ts: use source scan's collected_at for deterministic evidence_hash
-        stable_ts = source_scan.collected_at or source_scan.created_at
-
         governance_recs = generate_governance_records(
             risk_records,
             tenant_id=tenant_id,
@@ -15668,13 +15960,14 @@ def run_ai_vendor_governance(
             scan_result_id=result.scan_result_id,
             source_type="ai_vendor_governance",
         )
-        _c6_update_job_status(
+        if not _c6_update_job_status(
             db,
             job_id=job_id,
             status="complete",
             scan_result_id=result.scan_result_id,
-        )
-        # H13 — scan.completed
+        ):
+            raise _SyncConnectorJobLost(job_id)
+        # H13 — scan.completed (same transaction as the complete transition)
         _c6_write_audit_event(
             db,
             tenant_id=tenant_id,
@@ -15699,33 +15992,34 @@ def run_ai_vendor_governance(
             summary=summary,
         )
 
-    except HTTPException:
-        raise
     except Exception as exc:
-        log.error("ai_vendor_governance: run failed — %s", exc)
-        db.rollback()
-        try:
-            _c6_update_job_status(
-                db, job_id=job_id, status="failed", failure_reason=str(exc)[:2000]
+        log.error(
+            "ai_vendor_governance: job %s failed — %s", job_id, type(exc).__name__
+        )
+        _c6_sync_connector_record_failure(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            scanner_type="ai_vendor_governance",
+            actor=actor,
+            job_id=job_id,
+            exc=exc,
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, _SyncConnectorJobLost):
+            raise HTTPException(
+                status_code=409,
+                detail=api_error(
+                    "SCAN_JOB_SUPERSEDED",
+                    "The scan job was cancelled or terminated before it completed.",
+                ),
             )
-            _c6_write_audit_event(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                event_type="scan.failed",
-                actor=actor,
-                scan_job_id=job_id,
-                scanner_type="ai_vendor_governance",
-                rejection_reason=str(exc)[:500],
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        # Generic message: internal details (ORM state, SQL) stay in the log.
         raise HTTPException(
             status_code=500,
             detail=api_error(
-                "GOVERNANCE_RUN_FAILED",
-                f"AI vendor governance run failed: {str(exc)[:200]}",
+                "GOVERNANCE_RUN_FAILED", "AI vendor governance run failed."
             ),
         )
 
