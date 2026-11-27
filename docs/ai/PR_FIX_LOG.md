@@ -1,3 +1,21 @@
+## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)
+
+- **What:** one `next_sequence` entry in `customer_one/roadmap_authority.yaml` (Level-2 authority). Work class `FOUNDER_AUTHORIZED`, status `NEXT`, with `authorized_by`, `freeze_law_basis`, `scope` and 13 acceptance criteria. This follows the MSP-003 and MSP-007 precedent. No code, test, CI, schema or deployment change.
+- **Why this path:** the item was recorded as a proposal in FG-NIGHTLY-REGRESSION-REPAIR-001 (#926). `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` fails closed until the item is in `next_sequence`. A generic REPAIR classification is not substituted: this is scoped hardening (Postgres RLS harness, role model, lifecycle redesign) plus defect repair. The founder-approved merge of this entry is the authorization act; preparing it authorizes nothing.
+- **Freeze Law basis (honest):**
+  - Claimed: founder authorization, plus criterion (3), asserted with reproduced evidence (sibling connector jobs stay `queued` while the audit says `scan.completed`).
+  - Not claimed: criteria (1) and (2).
+  - Not claimed: any cross-tenant exposure, which has not been reproduced.
+  - Contributes evidence toward the `PRODUCTION_SCHEMA_AND_RLS` and `DURABLE_EXECUTION_AND_RECOVERY` gates without closing or replacing them (their `gate_policy` forbids treating them as independently authorized work).
+- **Proposal validation** (`docs/plans/FG_ASSESSMENT_CONNECTOR_RLS_001_PROPOSAL.md`, introduced by #926):
+  - Line references, reproduction output and the availability/integrity/isolation/assurance classification were re-checked.
+  - Two gaps were added to the authorized acceptance:
+    - (13) a static regression guard (synchronous connector routes must re-bind tenant context after a commit and check job-transition results);
+    - an explicit restart and recovery evaluation, because `DurableJobService.recover_orphans` is defined but never invoked by application code.
+  - The proposal's open question F6 is resolved: no worker claims `queued` jobs by status, so the stranded `queued` jobs are not re-executed. The risk is stale state, not duplicate execution.
+- **Dependencies:** `prerequisites` (informational) lists #926 to merge first. `blocked_by` is deliberately not used, because it only clears on `completed` IDs and REPAIR items are never listed there, so it would block the item permanently.
+- **Not authorized:** production database role, configuration or RLS changes, deployment, real customer data, spending, and any change to the Customer-One critical path or the FG_RESULT_TRUTH_GATE gates.
+
 ## ci(required): FG-855-REPAIR-001 — Agent and assessment/security tests in required CI
 
 - **Issue:** #855 (audit gap 015, `docs/audits` 2026-11-18 inventory). Roadmap check: `--work-class REPAIR` authorized.

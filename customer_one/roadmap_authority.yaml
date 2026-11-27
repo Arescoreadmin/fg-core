@@ -116,6 +116,67 @@ next_sequence:
       sharing, transmission of real customer reports, live payment settlement,
       operational acceptance, contracts or spending, or any change to the
       Customer-One critical path or FG_RESULT_TRUTH_GATE acceptance gates.
+  - id: "FG-ASSESSMENT-CONNECTOR-RLS-001"
+    title: "FG-ASSESSMENT-CONNECTOR-RLS-001 — Connector job lifecycle and tenant-context assurance under enforced RLS"
+    work_class: "FOUNDER_AUTHORIZED"
+    status: NEXT
+    priority: "P0 (founder-proposed classification)"
+    authorized_by: >
+      Founder (explicit instruction 2026-11-26 to prepare the canonical
+      authorization for this proposed P0 workstream). Effective only on the
+      founder-approved merge of this entry; preparing it is not authorization.
+    prerequisites:
+      - "FG-NIGHTLY-REGRESSION-REPAIR-001 (PR #926) merged first: it repairs
+        run_external_ai_risk_register's job-id capture and running transition
+        and adds docs/plans/FG_ASSESSMENT_CONNECTOR_RLS_001_PROPOSAL.md"
+    freeze_law_basis: >
+      Founder authorization, plus criterion (3), asserted for founder review:
+      the work measurably reduces delivery risk, with evidence. Reproduced:
+      run_ai_data_access_mapping and run_ai_vendor_governance return 200 and
+      audit scan.completed while their durable FaScanJob stays queued with no
+      scan_result_id (found after nightly run 45890327767; repro in the
+      proposal). Code-confirmed but not reproduced at runtime: all three
+      synchronous connector routes do database work after their first commit
+      without re-binding the transaction-scoped app.tenant_id (api/db.py
+      set_tenant_context). No PostgreSQL RLS test covers these paths.
+      Criteria (1) and (2) are NOT claimed. This entry is not evidence of a
+      cross-tenant exposure (none is reproduced), of a contracted customer, or
+      of operational acceptance. It contributes evidence toward the
+      PRODUCTION_SCHEMA_AND_RLS and DURABLE_EXECUTION_AND_RECOVERY gates of
+      FG_RESULT_TRUTH_GATE but does not close, replace or independently
+      authorize them.
+    scope: >
+      Development and test only: run_external_ai_risk_register,
+      run_ai_data_access_mapping and run_ai_vendor_governance in
+      api/field_assessment.py, plus adjacent synchronous routes with the same
+      commit-then-work pattern. One canonical owner for transaction
+      boundaries and tenant context. Real PostgreSQL integration tests with
+      RLS enabled and forced, under a non-owner, non-BYPASSRLS application
+      role. Cross-tenant negative tests. Correct
+      queued/running/complete/failed/dead_letter transitions, with checked
+      compare-and-swap results. Durable result persistence. Rollback and
+      exception handling. Audit events consistent with committed state.
+      Restart and recovery behaviour (DurableJobService.recover_orphans is
+      not invoked by application code today and must be evaluated).
+      Idempotency and duplicate-execution protection. Regression guards. Any
+      migration must be additive. Does NOT authorize production database
+      role, configuration or RLS changes, deployment, processing of real
+      customer data, spending, or any change to the Customer-One critical
+      path or FG_RESULT_TRUTH_GATE acceptance gates.
+    acceptance:
+      - "Canonical transaction and tenant-context ownership is documented and applied to every affected route"
+      - "PostgreSQL tests run with RLS enabled and FORCEd on the touched tables, under a non-owner, non-BYPASSRLS role"
+      - "Cross-tenant negative tests: tenant A cannot read, create or modify tenant B's jobs, records, findings, evidence links or audit events"
+      - "Each route asserts queued -> running -> complete on success and the designed failed/dead_letter state on failure; a no-op compare-and-swap is detected, not ignored"
+      - "The job's scan_result_id equals the persisted result and the API response"
+      - "Rollback leaves no partial records, and failure handling still records the failure when the original error was database-related"
+      - "scan.completed and scan.failed are emitted only when the matching job transition commits"
+      - "Jobs interrupted mid-route are recovered or terminated deterministically and never re-run unsafely"
+      - "Repeated runs neither duplicate records nor leave orphaned jobs"
+      - "Adjacent synchronous routes are inventoried; equivalent defects are fixed or recorded"
+      - "The PostgreSQL RLS tests run in required CI, not only in nightly runs"
+      - "No existing test is weakened, and fail-closed behaviour is preserved"
+      - "A static regression guard fails CI if a synchronous connector route works after a commit without re-binding tenant context or ignores a job-transition result"
 
 blocked:
   - id: "CUSTOMER-ZERO-TRUST-001"
