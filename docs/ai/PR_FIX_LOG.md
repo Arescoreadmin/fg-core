@@ -7,6 +7,32 @@
 - **Not changed:** product code, CI configuration, dependencies.
 - **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):** `_best_of_ms` now returns every sample, and each performance assertion reports them on failure. The docstring records the assurance limitation: the minimum is a best-case cost. It detects sustained algorithmic regressions, not tail or intermittent latency, and makes no p95/p99 claim. The stall control also asserts that the stalled sample is retained. The regression control asserts that every sample exceeds the target. Thresholds are unchanged.
 
+## fix(test): FG-MSP-SESSION-RELOAD-GUARD-001 — MSP post-commit reload observer tracks sessions by object identity
+
+- **Authorization:** `check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED (defect repairs are always authorized).
+- **Failure:** post-merge CI on `bfbb74ad7` (#929), run 46027398048, Hardening Gates job 140611419599: `tests/security/test_msp_001_foundation.py::test_18b_mutation_responses_never_reload_rows_after_commit`, `AssertionError: relationship rows reloaded after commit` (1 failed, 1671 passed, 1 skipped). Founder local reproduction: 2/30 independent runs.
+- **Root cause (test defect, not product):**
+  - The observer recorded committed sessions as `id(session)`. A request's session is freed after the response, and CPython reuses the freed memory, so the next request's fresh session can receive the same `id()`.
+  - Each mutation route (approve, suspend, resume, revoke) legitimately reloads the relationship inside its own open transaction, after the compare-and-set and before commit: `_transition` calls `expire_all()`, then `load_relationship` issues a real SELECT. Under `id()` reuse that refresh was misread as post-commit.
+  - Evidence:
+    - Traced runs show every refresh in an open transaction of a session object that had not committed, with the same SQL and call stack in every run.
+    - Forcing `id()` reuse fails the unchanged test 3/3 on `bfbb74ad7` and 3/3 on #929's parent `e01c467e8`.
+    - Natural full-file failures: 1/6 on `bfbb74ad7`, 1/11 on `e01c467e8`.
+    - Instrumentation in the request path suppresses the failure (0/114), consistent with allocator-dependent slot reuse.
+  - Predates #929: the test and the MSP code are unchanged since #872.
+- **Fix:** `tests/security/test_msp_001_foundation.py` only:
+  - A shared observer tracks committed sessions in a `WeakSet` (object identity), splits refreshes into `pre_commit` / `post_commit`, and removes its listeners in `finally`.
+  - 18b keeps its assertion and also requires at least 4 in-transaction reloads, so it cannot pass by observing nothing.
+  - New tests:
+    - 18c forces `id()` reuse: the old rule misfires, the new one does not.
+    - 18d (negative control) reports a genuine post-commit reload.
+    - 18e checks the listeners are removed when the body raises.
+- **Mutation check:**
+  - Reverting to `id()` fails 18c.
+  - An observer that records nothing fails 18b–18e.
+  - Removing the `finally` fails 18e.
+- **Recorded, not changed:** `tests/security/test_msp_007_report_sharing.py` (~1221) uses the same `id()` bookkeeping. No failure has been observed; separate follow-up.
+
 ## fix(assessment): FG-ASSESSMENT-CONNECTOR-RLS-001 — connector job lifecycle and tenant context under enforced RLS
 
 - **Authorization:** #927 (`e01c467e8`, `FOUNDER_AUTHORIZED`). `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` returns AUTHORIZED on `main`. Prerequisite #926 (`857b717b0`) is in `main`.
