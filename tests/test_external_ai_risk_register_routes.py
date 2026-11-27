@@ -465,7 +465,11 @@ def test_run_never_reloads_the_job_after_commit(
     _seed_ai_tool_discovery(_TENANT, eid)
 
     def _refresh_denied(target: Any, context: Any, attrs: Any) -> None:
-        raise RuntimeError("simulated RLS: job row not visible after commit")
+        # Only a database load carries a query context. A bulk UPDATE
+        # synchronizing the in-session object (context None) is not a reload
+        # and cannot be hidden by RLS (FG-ASSESSMENT-CONNECTOR-RLS-001).
+        if context is not None:
+            raise RuntimeError("simulated RLS: job row not visible after commit")
 
     event.listen(FaScanJob, "refresh", _refresh_denied)
     try:
@@ -504,7 +508,10 @@ def test_failed_run_marks_job_failed_with_audit(
     # job to its terminal failure state rather than scheduling a retry.
     assert job.status == "dead_letter"
     assert job.completed_at and job.next_retry_at is None
-    assert "risk engine exploded" in (job.failure_reason or "")
+    # Exception text never persists (it can carry SQL, parameters or payload
+    # data); only a stable code and the exception class are recorded.
+    assert job.failure_reason == "CONNECTOR_FAILED: RuntimeError"
+    assert "risk engine exploded" not in (job.failure_reason or "")
     failed = [e for e in _scan_audit(_TENANT, eid) if e.event_type == "scan.failed"]
     assert [(e.scan_job_id, e.actor) for e in failed] == [(job.id, _ASSESSOR)]
 

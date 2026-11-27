@@ -9073,3 +9073,24 @@ There are no auth, permission, tenant-resolution, contract, schema, migration, d
    - All three synchronous connector routes run post-commit work without re-binding tenant context, which matters under RLS.
    - These are recommended as a separate REPAIR with a Postgres RLS proof.
 
+## 2026-11-27 - fix(assessment): connector job lifecycle and tenant context under enforced RLS (FG-ASSESSMENT-CONNECTOR-RLS-001)
+
+**Scope:** `api/field_assessment.py` (the three synchronous connector routes, `_c6_update_job_status` return value, two lifecycle helpers), `services/field_assessment/durable_job_service.py` (two tenant-scoped methods), the new `tools/ci/check_connector_tenant_context.py`, a `Makefile` target (a `fg-fast` prerequisite), tests and documentation. No migration, schema, RLS policy, auth, permission, CI workflow, dependency or deployment change.
+
+**Finding:** under a non-owner, non-BYPASSRLS role with forced RLS, the connector routes lost their transaction-local tenant binding at the initiation commit. They returned 500, left durable jobs `queued`, and recorded no `scan.failed`. This was reproduced on real PostgreSQL. The failure was closed: no cross-tenant access occurred.
+
+**Security analysis:**
+
+1. **Tenant isolation strengthened, not loosened.** RLS policies are unchanged and still forced. The re-bind uses only the server-resolved tenant. Cross-tenant read, update, insert and route-call are proven denied under the restricted role.
+2. **No context leakage.** Commit, rollback and aborted transactions clear the binding, and a pooled connection reused after another tenant carries no context. Both are proven on real PostgreSQL.
+3. **Durable state and audit consistency.** Each transition's compare-and-swap result is checked. Audit events commit only with their transition (crash consistency proven), and a lost transition never reports completion.
+4. **Execution safety.** Interrupted runs are terminated, audited, and never re-executed. Concurrent duplicates are rejected, and the record tables' unique constraints keep re-runs idempotent. No automatic startup recovery was added. `recover_orphans` was evaluated: it is ineffective under enforced RLS and is not wired.
+5. **Information exposure reduced.** Failure responses no longer echo exception text or ORM state.
+6. **Regression guard.** A static check in `fg-fast` blocks a commit or rollback followed by unbound work, and blocks ignored transitions, in synchronous connector routes. The PostgreSQL tests run in the required Migrations Replay job.
+7. **Residual risk.**
+   - 25 other routes show the same unbound post-commit pattern (recorded).
+   - The production database role is unverified. RLS may not be enforced there.
+   - Historical `queued` connector jobs are unreconciled, and they count toward the background-scan concurrency limits.
+8. **Concurrent admission serialized (review follow-up).** Two overlapping requests could both pass the live-run check and both execute (reproduced on real PostgreSQL). The engagement row is now locked `FOR UPDATE` from that check through the initiation commit, with a bounded `lock_timeout`; the loser receives a controlled 409 and writes nothing. The lock is tenant-scoped by RLS and never held during the connector's work. Proven with overlapping sessions, a burst, lock release on every outcome, tenant scoping and lease supersession.
+9. **Failure details no longer persisted or logged.** Persisted failure reasons, audit rejection reasons and logs carry only a stable code and the exception class; previously a database error's SQL text and bound parameters were persisted. Proven for application and database exceptions. Other `field_assessment` scanners still persist exception text (recorded, separate authorization).
+
