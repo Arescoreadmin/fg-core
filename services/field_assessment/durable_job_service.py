@@ -350,6 +350,97 @@ class DurableJobService:
         return len(orphans)
 
     # ------------------------------------------------------------------
+    # Synchronous connector runs (FG-ASSESSMENT-CONNECTOR-RLS-001)
+    # ------------------------------------------------------------------
+    #
+    # recover_orphans() above scans every tenant's jobs. Under a non-owner,
+    # non-BYPASSRLS application role with forced RLS and no tenant bound it
+    # sees no rows, so it cannot serve as recovery there, and it is not wired
+    # to any startup or periodic task. Synchronous connector routes instead
+    # terminate their own interrupted runs, tenant-scoped, at the next run of
+    # the same connector: a terminal dead_letter, never a requeue, because
+    # these scanner types are not retryable and a re-run would repeat work.
+
+    def terminate_stale_running(
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        engagement_id: str,
+        scanner_type: str,
+        failure_reason: str,
+    ) -> list[str]:
+        """Dead-letter this connector's running jobs whose lease has expired.
+
+        Scoped to one tenant, engagement and scanner type. Returns the ids
+        terminated. Jobs with a live lease, other statuses, other connectors
+        and other tenants are untouched.
+        """
+        # Same format as the lease timestamps (no fractional seconds), so the
+        # string comparison below is exact.
+        now = _future_iso(0)
+        stale = list(
+            db.execute(
+                select(FaScanJob.id).where(
+                    FaScanJob.tenant_id == tenant_id,
+                    FaScanJob.engagement_id == engagement_id,
+                    FaScanJob.scanner_type == scanner_type,
+                    FaScanJob.status == "running",
+                    FaScanJob.lease_expires_at < now,
+                )
+            ).scalars()
+        )
+        terminated: list[str] = []
+        for job_id in stale:
+            result = db.execute(
+                update(FaScanJob)
+                .where(
+                    FaScanJob.id == job_id,
+                    FaScanJob.tenant_id == tenant_id,
+                    FaScanJob.status == "running",
+                    FaScanJob.lease_expires_at < now,
+                )
+                .values(
+                    status="dead_letter",
+                    failure_reason=failure_reason[:2000],
+                    completed_at=now,
+                    lease_owner=None,
+                    lease_acquired_at=None,
+                    lease_expires_at=None,
+                )
+            )
+            if result.rowcount:
+                terminated.append(job_id)
+        return terminated
+
+    def has_live_running(
+        self,
+        db: Session,
+        *,
+        tenant_id: str,
+        engagement_id: str,
+        scanner_type: str,
+    ) -> bool:
+        """True if this connector has a running job with an unexpired lease."""
+        # Same format as the lease timestamps (no fractional seconds), so the
+        # string comparison below is exact.
+        now = _future_iso(0)
+        return (
+            db.execute(
+                select(FaScanJob.id)
+                .where(
+                    FaScanJob.tenant_id == tenant_id,
+                    FaScanJob.engagement_id == engagement_id,
+                    FaScanJob.scanner_type == scanner_type,
+                    FaScanJob.status == "running",
+                    FaScanJob.lease_expires_at >= now,
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+    # ------------------------------------------------------------------
     # Serialization helper
     # ------------------------------------------------------------------
 
