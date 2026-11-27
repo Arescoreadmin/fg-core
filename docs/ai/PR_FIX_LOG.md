@@ -15,12 +15,13 @@
   - A shared observer tracks committed sessions in a `WeakSet` (object identity), splits refreshes into `pre_commit` / `post_commit`, and removes its listeners in `finally`.
   - 18b keeps its assertion and also requires at least 4 in-transaction reloads, so it cannot pass by observing nothing.
   - New tests:
-    - 18c forces `id()` reuse: the old rule misfires, the new one does not.
+    - 18c simulates `id()` reuse deterministically: it shadows `id` in the test module with a constant, so every session collides with every committed one, independent of the allocator and GC. The old rule misfires; the observer, which tracks real session objects, does not.
+      - Review follow-up (Codex, #935): the first version freed a committed ghost session and asserted that the next session took its address, which CPython does not guarantee.
     - 18d (negative control) reports a genuine post-commit reload.
     - 18e checks the listeners are removed when the body raises.
 - **Mutation check:**
   - Reverting to `id()` fails 18c.
-  - An observer that records nothing fails 18b–18e.
+  - An observer that records nothing fails 18b, 18c and 18d.
   - Removing the `finally` fails 18e.
 - **Recorded, not changed:** `tests/security/test_msp_007_report_sharing.py` (~1221) uses the same `id()` bookkeeping. No failure has been observed; separate follow-up.
 
