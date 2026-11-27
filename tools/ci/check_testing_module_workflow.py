@@ -227,6 +227,34 @@ def check(repo: Path = REPO) -> list[str]:
             for s in _steps(verdict)
         ):
             errors.append(f"{VERDICT_JOB}: must run tools/ci/testing_module_verdict.py")
+        # Codex review of #925: after "Re-run failed jobs" a successful
+        # fg-security keeps its attempt-1 result, outputs and artifact while
+        # run_attempt increments, so evidence is fetched by artifact id.
+        sec_output = ((jobs.get("fg-security") or {}).get("outputs") or {}).get(
+            "security_artifact_id", ""
+        )
+        if "steps.upload_security.outputs.artifact-id" not in str(sec_output):
+            errors.append(
+                "fg-security: outputs.security_artifact_id must expose the "
+                "upload's artifact-id"
+            )
+        downloads = [
+            s
+            for s in _steps(verdict)
+            if str(s.get("uses", "")).startswith("actions/download-artifact")
+        ]
+        by_id = any(
+            "needs.fg-security.outputs.security_artifact_id"
+            in str((s.get("with") or {}).get("artifact-ids", ""))
+            for s in downloads
+        )
+        if not by_id or any(
+            "github.run_attempt" in str(s.get("with")) for s in downloads
+        ):
+            errors.append(
+                f"{VERDICT_JOB}: download fg-security evidence by artifact id from "
+                "its producing attempt, never by run_attempt (re-run failed jobs)"
+            )
     return errors
 
 

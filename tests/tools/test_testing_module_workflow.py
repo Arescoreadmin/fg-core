@@ -253,3 +253,23 @@ def test_makefile_regressions_are_rejected(
     )
     mk.write_text(text.replace(old, replacement))
     _errors(fake_repo, needle)
+
+
+def test_verdict_download_by_run_attempt_is_rejected(fake_repo: Path) -> None:
+    # Codex review of #925: "Re-run failed jobs" keeps a successful
+    # fg-security's attempt-1 artifact while run_attempt increments.
+    def mutate(d: dict[Any, Any]) -> None:
+        for step in d["jobs"][chk.VERDICT_JOB]["steps"]:
+            if str(step.get("uses", "")).startswith("actions/download-artifact"):
+                step["with"] = {
+                    "name": "fg-security-artifacts-${{ github.run_attempt }}",
+                    "path": "artifacts/verdict/fg-security",
+                }
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, "never by run_attempt")
+
+
+def test_security_artifact_id_output_is_required(fake_repo: Path) -> None:
+    _edit(fake_repo, lambda d: d["jobs"]["fg-security"].pop("outputs"))
+    _errors(fake_repo, "outputs.security_artifact_id")

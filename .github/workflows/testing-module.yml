@@ -236,6 +236,11 @@ jobs:
       contents: read
     env:
       NIGHTLY_TEST_TIMEOUT_SECONDS: "300"
+    # Job outputs survive "Re-run failed jobs" when this job is not re-run, so
+    # the verdict downloads the producing attempt's artifact by id rather than
+    # by the verdict's own run_attempt.
+    outputs:
+      security_artifact_id: ${{ steps.upload_security.outputs.artifact-id }}
 
     steps:
       - name: Checkout (full history)
@@ -274,6 +279,7 @@ jobs:
           make fg-security
 
       - name: Upload artifacts (fg-security)
+        id: upload_security
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -687,10 +693,13 @@ jobs:
           python-version: "3.12"
 
       - name: Download fg-security artifacts
+        # By artifact id from the attempt that produced it (Codex review of
+        # #925): after "Re-run failed jobs", a successful fg-security keeps its
+        # attempt-1 result and outputs while run_attempt increments.
         if: ${{ needs.fg-security.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
-          name: fg-security-artifacts-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.fg-security.outputs.security_artifact_id }}
           path: artifacts/verdict/fg-security
 
       - name: Evaluate run verdict (fail closed)
