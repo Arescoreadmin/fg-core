@@ -49,6 +49,44 @@
 - **Timeout platforms:** the `SIGALRM` per-phase layer works on Linux and macOS. On Windows only the faulthandler backstop applies (whole-process exit after 2× budget + 5 s). All `testing-module` jobs run on `ubuntu-latest`.
 - **CI config touched (called out):** `.github/workflows/testing-module.yml` (non-required workflow) and `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite). Required-check names, membership and `repository-policy.json` are unchanged.
 
+## fix(test): FG-CONTROL-REGISTRY-FRESHNESS-CLOCK-001 — control-registry freshness tests run on a controlled clock
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed separate track from #925.
+- **Failure:** nightly acceptance run 46105295520 (dispatched on #925 head `864d9c592`), fg-full shard 5: `tests/test_control_registry.py::test_ccr_32_freshness_sweep_ignores_fresh`, `AssertionError: assert 'expired' == 'verified'`. It was the only failure among 26,041 full-suite results.
+- **Reproduced on unchanged `main` `6bbba0931`** (2026-11-28, isolated worktree): 1 failed, 83 passed. Independent of #925, which does not touch the control registry.
+- **Root cause (test defect, not product):**
+  - The fixture used a literal "recent" verification date, `_RECENT_VERIFIED = "2026-08-30T00:00:00+00:00"`, against the uncontrolled wall clock.
+  - The sweep (`fetch_verified_controls_for_freshness`) expires an ACTIVE, VERIFIED control when `(now - last_verified_at).days >= (review_frequency_days or 90)`. That fixture reached 90 whole days on 2026-11-28, and the sweep correctly expired it.
+  - The production policy, clock (`engine._now()` → `utc_iso8601_z_now()`, UTC "Z") and UTC normalization (naive timestamps read as UTC) are all correct. No product defect.
+- **Fix (`tests/test_control_registry.py` only):**
+  - A `frozen_clock` fixture pins `services.control_registry.engine._now` to a fixed reference (2026-09-09T12:00:00Z) with function-scoped `monkeypatch`. That is the single clock seam for both the sweep and the response `freshness` field.
+  - `_RECENT_VERIFIED` and `_OLD_VERIFIED` are now derived from that same reference: 10 and 200 days before it.
+  - CCR-30, 31, 32 and 83 use the fixture. Every existing assertion is unchanged.
+  - No new dependency: the repo has no freezegun or time-machine.
+- **New tests (15 cases):**
+  - CCR-84, threshold boundary. A control verified 10 days before, or 1 s before the 90-day threshold, stays verified. Exactly at the threshold, 1 s after it, or 1 day after it, it expires. Each case asserts the exact sweep count, `last_verified_at`, and a single `control_verification_expired` audit event (verified → expired, `event_at` on the controlled clock), or no audit event when nothing expires.
+  - CCR-85: a recent control reads `fresh`.
+  - CCR-86: a control that was already expired is left untouched, with no new audit event.
+  - CCR-87: a draft control is still exempt past the threshold.
+  - CCR-88: a tenant B sweep leaves tenant A's stale control alone; tenant A's own sweep then expires it.
+  - CCR-89, UTC normalization: the threshold instant written as +05:30, as Z and as naive UTC, and 1 s before it written as −08:00 and as naive UTC.
+  - CCR-90: the clock is real UTC again after the frozen tests.
+- **Mutation check (7 of 7 caught; all source restored):**
+  - `>=` changed to `>` (6 failures).
+  - Threshold moved one day early (3 failures).
+  - Timezone offsets ignored (2 failures).
+  - Tenant filter dropped (1 failure, CCR-88).
+  - Active filter dropped (2 failures, CCR-31 and 87).
+  - Verified filter dropped (1 failure, CCR-86).
+  - Clock control removed (9 failures).
+- **Temporal proof (simulated wall clock via a scratch plugin replacing `engine.utc_iso8601_z_now`; system clock untouched):**
+  - Original `main` freshness tests: pass on 2026-11-27, fail CCR-32 on 2026-11-28, 2027-06-15 and 2030-01-15.
+  - Repaired module: 98 passed on all four dates. CCR-90 was deselected because it asserts the real clock by design.
+- **Adjacent inventory (report only, not changed):**
+  - Recorded as latent risks: `_FUTURE_DUE` / `2099-*` review dates (until 2099); wall-clock-relative fixtures in `test_governance_portal.py`, `test_asset_continuity.py` and `test_trust_confidence.py` (low risk, only near a day boundary).
+  - Intentionally fixed historical data: `test_governance_digital_twin.py` and `test_governance_timeline_adapters.py`.
+- **Not changed:** product code, the 90-day threshold, CI configuration, dependencies.
+
 ## test(trust-graph): FG-TRUST-GRAPH-PERF-TIMING-001 — wall-clock performance tests robust to runner stalls (#931)
 
 - **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #931.
