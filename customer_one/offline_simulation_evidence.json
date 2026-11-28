@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "simulation_id": "5a17f87f-4d60-498f-b3aa-9ae8b91d2154",
-  "source_sha": "7f82bb0b4d2f7b24b86b3b159d808849a0f4042d",
-  "source_tree_hash": "5e1b8449a32d5f7bd9a8db617e7ac6dc8c045f92458121e6cb7c9448e7939959",
+  "simulation_id": "452cd2e3-8a57-4fae-a393-dafa78f09cfa",
+  "source_sha": "a450a0e1158e85f3615ff07a243b7c18a60ddae5",
+  "source_tree_hash": "0c21a68a51c45c0455729d4d211b0e9d1b13ed84cc0a8e2b59e122f310478e37",
   "simulation_contract_version": "1.0",
   "result": "GREEN",
   "checks_executed": [
@@ -16,7 +16,7 @@
   "checks_passed": 6,
   "checks_failed": 0,
   "failed_checks": [],
-  "generated_at": "2026-11-27T01:40:58.269730Z",
+  "generated_at": "2026-11-28T00:29:01.997414Z",
   "evidence_reference": "customer_one/offline_simulation_evidence.json",
   "test_only": true,
   "paid_infrastructure_required": false

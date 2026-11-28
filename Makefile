@@ -897,7 +897,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log required-ci-coverage-check testing-module-workflow-check fg-required-summary
+	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log required-ci-coverage-check connector-tenant-context-check testing-module-workflow-check fg-required-summary
 	@$(MAKE) -s fg-fast-pytest
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
@@ -1218,7 +1218,7 @@ ci-pt: venv _require-pytest-venv
 # checker (single source of truth; new matching files are picked up). Runs in
 # the required PT job (ci.yml).
 REGRESSION_TEST_TIMEOUT_SECONDS ?= 120
-.PHONY: ci-assessment-security required-ci-coverage-check testing-module-workflow-check
+.PHONY: ci-assessment-security required-ci-coverage-check connector-tenant-context-check testing-module-workflow-check
 ci-assessment-security: venv _require-pytest-venv
 	@mkdir -p $(JUNIT_DIR)
 	@set -euo pipefail; \
@@ -1231,6 +1231,11 @@ ci-assessment-security: venv _require-pytest-venv
 
 required-ci-coverage-check: venv
 	@$(PY) tools/ci/check_required_ci_coverage.py
+
+# FG-ASSESSMENT-CONNECTOR-RLS-001: synchronous connector routes re-bind the
+# transaction-local tenant after every commit/rollback and check transitions.
+connector-tenant-context-check: venv
+	@$(PY) tools/ci/check_connector_tenant_context.py
 
 # FG-CI-NIGHTLY-REPAIR-001: scheduled security + full-suite reachability guard.
 testing-module-workflow-check: venv

@@ -38,6 +38,124 @@
 - **Timeout platforms:** the `SIGALRM` per-phase layer works on Linux and macOS. On Windows only the faulthandler backstop applies (whole-process exit after 2× budget + 5 s). All `testing-module` jobs run on `ubuntu-latest`.
 - **CI config touched (called out):** `.github/workflows/testing-module.yml` (non-required workflow) and `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite). Required-check names, membership and `repository-policy.json` are unchanged.
 
+## test(trust-graph): FG-TRUST-GRAPH-PERF-TIMING-001 — wall-clock performance tests robust to runner stalls (#931)
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #931.
+- **Defect (test, not product):** `TestPerformance` in `tests/test_trust_graph.py` timed one wall-clock sample (`time.monotonic()`), so a scheduler or GC pause on a shared runner counted as code time. `test_1000_nodes_verify_under_250ms` recorded 984.6 ms in nightly shard 6 (run 45925105134) for a verify that takes about 0.7 ms; `services/field_assessment/trust_graph.py` is unchanged since #424.
+- **Fix:** `_best_of_ms()` reports the fastest of 5 `perf_counter` runs (the `timeit` estimator) for the four wall-clock tests in the class. Every target is unchanged (50/250/50/250 ms); the timed functions are pure, so repetition is valid. The CPU-time manifest test is unchanged.
+- **No weakening:** `test_best_of_ms_still_catches_a_real_regression` (code slow on every run still exceeds the target) and `test_best_of_ms_ignores_a_single_runner_stall` (one 300 ms pause in five runs passes). `tests/test_trust_graph.py`: 123 passed.
+- **Not changed:** product code, CI configuration, dependencies.
+- **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):** `_best_of_ms` now returns every sample, and each performance assertion reports them on failure. The docstring records the assurance limitation: the minimum is a best-case cost. It detects sustained algorithmic regressions, not tail or intermittent latency, and makes no p95/p99 claim. The stall control also asserts that the stalled sample is retained. The regression control asserts that every sample exceeds the target. Thresholds are unchanged.
+
+## fix(agent): FG-AGENT-QUEUE-INIT-LOCK-001 — SQLiteQueue first open is safe under concurrency (#930)
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #930.
+- **Defect:** `SQLiteQueue._init` ran `PRAGMA journal_mode=WAL` once. While a queue database is still in rollback-journal mode, the switch fails immediately with `database is locked` when another connection holds a write lock (`busy_timeout` is not consulted), or returns the old mode unchanged when it cannot take the lock. Concurrent first opens therefore raised. That failed required **Agent Linux** on #925 (`agent/tests/test_queue_capacity_race.py`, about 1 in 10 to 1 in 40 locally).
+- **Reproduced deterministically:** with another connection holding `BEGIN IMMEDIATE` on a fresh file, the WAL switch fails in 0.0 s; read and exclusive holders wait; already-WAL databases never fail.
+- **Fix:** `_enable_wal()` retries the switch with backoff until `wal` is confirmed, bounded by `WAL_INIT_TIMEOUT_SECONDS` (5 s, matching `busy_timeout`). A lock that never clears re-raises the last error; a mode that never becomes WAL is logged. No queue semantics, capacity logic or schema change.
+- **Tests:** `test_first_open_waits_for_a_concurrent_writer` (fails on `main`); `test_first_open_lock_wait_is_bounded` (control; fails loudly, no hang). The existing capacity-race assertions are unchanged. Race test after the fix: 100/100 passes. `tests/agent` + `agent/tests` (the `agent-unit` job): 687 passed, 1 skipped.
+- **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):**
+  - **Deadline overrun (fixed):** an EXCLUSIVE lock holder makes each WAL attempt wait in SQLite's busy handler (`busy_timeout=5000`), so a lock that escalates near the deadline could stretch the first open to about deadline + 5 s.
+  - Each attempt's busy_timeout is now capped at the time left, and the connection's value is restored afterwards.
+  - `test_first_open_deadline_bounds_the_busy_handler` takes 5.0 s and fails on the previous implementation (0.3 s deadline); it passes after the fix.
+  - **Recorded for founder decision, not changed:** if the mode is still not WAL at the deadline and no lock error is pending, the queue logs a warning and runs in rollback-journal mode. `main` never checked the result of the pragma, so this is no weaker than `main`. Failing closed would be a product behaviour change, and it would also affect filesystems without WAL support.
+- **Not changed:** CI configuration, dependencies, production configuration.
+
+## fix(test): FG-MSP-SESSION-RELOAD-GUARD-001 — MSP post-commit reload observer tracks sessions by object identity
+
+- **Authorization:** `check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED (defect repairs are always authorized).
+- **Failure:** post-merge CI on `bfbb74ad7` (#929), run 46027398048, Hardening Gates job 140611419599: `tests/security/test_msp_001_foundation.py::test_18b_mutation_responses_never_reload_rows_after_commit`, `AssertionError: relationship rows reloaded after commit` (1 failed, 1671 passed, 1 skipped). Founder local reproduction: 2/30 independent runs.
+- **Root cause (test defect, not product):**
+  - The observer recorded committed sessions as `id(session)`. A request's session is freed after the response, and CPython reuses the freed memory, so the next request's fresh session can receive the same `id()`.
+  - Each mutation route (approve, suspend, resume, revoke) legitimately reloads the relationship inside its own open transaction, after the compare-and-set and before commit: `_transition` calls `expire_all()`, then `load_relationship` issues a real SELECT. Under `id()` reuse that refresh was misread as post-commit.
+  - Evidence:
+    - Traced runs show every refresh in an open transaction of a session object that had not committed, with the same SQL and call stack in every run.
+    - Forcing `id()` reuse fails the unchanged test 3/3 on `bfbb74ad7` and 3/3 on #929's parent `e01c467e8`.
+    - Natural full-file failures: 1/6 on `bfbb74ad7`, 1/11 on `e01c467e8`.
+    - Instrumentation in the request path suppresses the failure (0/114), consistent with allocator-dependent slot reuse.
+  - Predates #929: the test and the MSP code are unchanged since #872.
+- **Fix:** `tests/security/test_msp_001_foundation.py` only:
+  - A shared observer tracks committed sessions in a `WeakSet` (object identity), splits refreshes into `pre_commit` / `post_commit`, and removes its listeners in `finally`.
+  - 18b keeps its assertion and also requires at least 4 in-transaction reloads, so it cannot pass by observing nothing.
+  - New tests:
+    - 18c simulates `id()` reuse deterministically: it shadows `id` in the test module with a constant, so every session collides with every committed one, independent of the allocator and GC. The old rule misfires; the observer, which tracks real session objects, does not.
+      - Review follow-up (Codex, #935): the first version freed a committed ghost session and asserted that the next session took its address, which CPython does not guarantee.
+    - 18d (negative control) reports a genuine post-commit reload.
+    - 18e checks the listeners are removed when the body raises.
+- **Mutation check:**
+  - Reverting to `id()` fails 18c.
+  - An observer that records nothing fails 18b, 18c and 18d.
+  - Removing the `finally` fails 18e.
+- **Recorded, not changed:** `tests/security/test_msp_007_report_sharing.py` (~1221) uses the same `id()` bookkeeping. No failure has been observed; separate follow-up.
+
+## fix(assessment): FG-ASSESSMENT-CONNECTOR-RLS-001 — connector job lifecycle and tenant context under enforced RLS
+
+- **Authorization:** #927 (`e01c467e8`, `FOUNDER_AUTHORIZED`). `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` returns AUTHORIZED on `main`. Prerequisite #926 (`857b717b0`) is in `main`.
+- **Pre-fix reproduction** (real PostgreSQL; a `NOSUPERUSER NOBYPASSRLS` non-owner role; schema built as in `init_db`; real commits):
+  - `run_ai_data_access_mapping` and `run_external_ai_risk_register` returned 500 with `ObjectDeletedError`: the expired source scan was reloaded with no tenant bound, and forced RLS hid it.
+  - `run_ai_vendor_governance` returned 422, because its prerequisite never completed.
+  - Jobs stayed `queued` and no `scan.failed` was written, because the failure path also ran unbound.
+  - Classification: availability and integrity, failing closed. No cross-tenant access occurred.
+  - Every touched table is RLS enabled and forced, with the fail-closed `app.tenant_id` policy, so no migration was needed.
+- **Fix** (canonical authorities only; no new framework):
+  - `set_tenant_context(db, tenant_id)` re-binds the server-resolved tenant after each commit and rollback that is followed by more work (the L14-ASSURANCE-P1-REPAIR-001 pattern).
+  - The job is claimed `queued → running` in the same commit as `scan.initiated`.
+  - `_c6_update_job_status` now returns its compare-and-swap result (existing callers are unaffected). A lost `complete` rolls back the results and returns 409 `SCAN_JOB_SUPERSEDED`.
+  - `scan.completed` / `scan.failed` are written only in the same transaction as their transition.
+  - Shared failure helper: rollback, re-bind, checked `failed`, then audit.
+  - Preflight:
+    - tenant-scoped `DurableJobService.terminate_stale_running` moves interrupted runs to `dead_letter`, audited, never re-run;
+    - `has_live_running` returns 409 `SCAN_ALREADY_RUNNING`.
+  - Generic 500 messages (the mapping and vendor routes previously echoed exception text and ORM state).
+- **Tests:**
+  - 14 real-PostgreSQL tests in `tests/test_migrations_postgres_replay.py` (required Migrations Replay job), covering:
+    - role and RLS assertions, including the owner check;
+    - transaction-scoped binding;
+    - pooled-connection reuse;
+    - all three routes completing;
+    - cross-tenant read, modify, create and route-call;
+    - failure per route;
+    - database-error failure;
+    - a lost compare-and-swap;
+    - crash consistency;
+    - interrupted-run termination;
+    - duplicate-run rejection;
+    - idempotency;
+    - `recover_orphans` evaluation.
+  - Mutation check: on `main`'s pre-fix code, 9 behavioural tests fail and 4 controls pass. Fresh-database run of the suite: 41 passed.
+- **Guard:** `tools/ci/check_connector_tenant_context.py` (`make connector-tenant-context-check`, an `fg-fast` prerequisite) with 13 tests, including negative fixtures. On `main` before the fix it reports 13 violations.
+- **Refined test (explained, not weakened):** #926's `test_run_never_reloads_the_job_after_commit` now denies only refreshes that carry a query context (database reloads). The pre-commit `running` UPDATE synchronizes the in-session object (context `None`), which is not a reload. Against the original route the test still fails.
+- **Recorded, not changed:**
+  - 25 other `api/field_assessment.py` routes do database work after a commit without re-binding (listed in the proposal doc).
+  - Historical `queued` sibling jobs are not reconciled; they are production data.
+  - The production database role is unverified. If it bypasses RLS, FA tables have no database-level isolation in production (inference, not claimed).
+- **Review follow-up (Codex P2: concurrent admission):**
+  - Reproduced on head `793859a81` with genuinely overlapping PostgreSQL sessions: two requests held after `has_live_running()` were both admitted, both created a running job and both executed (`[200, 500]`, the 500 only at the risk-record unique constraint).
+  - Fix: `_c6_sync_connector_admission_lock` locks the tenant's engagement row `FOR UPDATE` (canonical row-lock pattern) from the live-run check through the initiation commit, with a 5 s transaction-local `lock_timeout`. Waiters get 409 `SCAN_ALREADY_RUNNING`; timeouts get 409 `SCAN_ADMISSION_BUSY` with nothing written. PostgreSQL only.
+  - Also found on `793859a81`: persisted `failure_reason` / audit `rejection_reason` and logs carried exception text, including SQL and bound parameters for database errors. Now only a stable code and exception class are recorded or logged.
+  - 7 more PostgreSQL tests (21 connector tests; suite 48 passed on a fresh database): overlap reproduction, burst, bounded and released lock, tenant scoping, lease supersession, failure-detail exposure (×2). 4 fail on `793859a81`; the burst, tenant-scoping and lease tests are regression checks. Concurrency tests passed 5/5 repeated runs.
+  - Guard rule 4 (lock-first preflight; preflight before job creation) with 3 tests; it rejects `793859a81`'s source.
+  - `test_failed_run_marks_job_failed_with_audit` (#926) asserted the raw message was persisted; it now asserts the exact redacted code and the message's absence (stricter).
+  - Recorded, not changed: other `field_assessment` scanners persist `str(exc)` as `failure_reason`.
+- **Not changed:** CI configuration, migrations, schema, dependencies, production configuration and RLS policies.
+
+## chore(authority): FG-ASSESSMENT-CONNECTOR-RLS-001 — canonical authorization entry (prepared for founder approval)
+
+- **What:** one `next_sequence` entry in `customer_one/roadmap_authority.yaml` (Level-2 authority). Work class `FOUNDER_AUTHORIZED`, status `NEXT`, with `authorized_by`, `freeze_law_basis`, `scope` and 13 acceptance criteria. This follows the MSP-003 and MSP-007 precedent. No code, test, CI, schema or deployment change.
+- **Why this path:** the item was recorded as a proposal in FG-NIGHTLY-REGRESSION-REPAIR-001 (#926). `check_customer_one_roadmap.py --work-item FG-ASSESSMENT-CONNECTOR-RLS-001` fails closed until the item is in `next_sequence`. A generic REPAIR classification is not substituted: this is scoped hardening (Postgres RLS harness, role model, lifecycle redesign) plus defect repair. The founder-approved merge of this entry is the authorization act; preparing it authorizes nothing.
+- **Freeze Law basis (honest):**
+  - Claimed: founder authorization, plus criterion (3), asserted with reproduced evidence (sibling connector jobs stay `queued` while the audit says `scan.completed`).
+  - Not claimed: criteria (1) and (2).
+  - Not claimed: any cross-tenant exposure, which has not been reproduced.
+  - Contributes evidence toward the `PRODUCTION_SCHEMA_AND_RLS` and `DURABLE_EXECUTION_AND_RECOVERY` gates without closing or replacing them (their `gate_policy` forbids treating them as independently authorized work).
+- **Proposal validation** (`docs/plans/FG_ASSESSMENT_CONNECTOR_RLS_001_PROPOSAL.md`, introduced by #926):
+  - Line references, reproduction output and the availability/integrity/isolation/assurance classification were re-checked.
+  - Two gaps were added to the authorized acceptance:
+    - (13) a static regression guard (synchronous connector routes must re-bind tenant context after a commit and check job-transition results);
+    - an explicit restart and recovery evaluation, because `DurableJobService.recover_orphans` is defined but never invoked by application code.
+  - The proposal's open question F6 is resolved: no worker claims `queued` jobs by status, so the stranded `queued` jobs are not re-executed. The risk is stale state, not duplicate execution.
+- **Dependencies:** `prerequisites` (informational) lists #926 to merge first. `blocked_by` is deliberately not used, because it only clears on `completed` IDs and REPAIR items are never listed there, so it would block the item permanently.
+- **Not authorized:** production database role, configuration or RLS changes, deployment, real customer data, spending, and any change to the Customer-One critical path or the FG_RESULT_TRUTH_GATE gates.
 ## fix(assurance): FG-NIGHTLY-REGRESSION-REPAIR-001 — repair three pre-existing regressions exposed by restored nightly CI
 
 - **Source:** dispatched scheduled-equivalent run 45890327767 of the restored `testing-module` (FG-CI-NIGHTLY-REPAIR-001, PR #925). It executed all 10 shards (25,918 tests) and `fg-security`, and failed closed on 3 tests that also fail on `main` `4d15cb820`. Authorization: `check_customer_one_roadmap.py --work-class REPAIR` returned AUTHORIZED. The proposed work-item ID is not registered (`--work-item` → BLOCKED, fail-closed), so this is filed under the REPAIR class.

@@ -1350,6 +1350,54 @@ class TestSecurityInvariants:
 # ---------------------------------------------------------------------------
 
 
+def _best_of_ms(fn, runs: int = 5) -> tuple[float, list[float]]:
+    """Fastest of ``runs`` wall-clock timings of ``fn()`` in milliseconds, and
+    every sample (reported in failure messages as evidence).
+
+    #931: a single wall-clock sample measures runner scheduling and GC pauses
+    as well as the code (a 0.7 ms verify was recorded as 984.6 ms late in a
+    nightly shard). The minimum of a few runs is the standard benchmark
+    estimator (as in ``timeit``); the targets are unchanged, and a real
+    regression fails every run.
+
+    Assurance limitation: the minimum is a best-case cost. It detects a
+    sustained algorithmic regression, not tail latency or intermittent slow
+    runs; these tests make no claim about p95/p99 latency.
+    """
+    samples: list[float] = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        fn()
+        samples.append((time.perf_counter() - t0) * 1000)
+    return min(samples), samples
+
+
+def _ms(samples: list[float]) -> str:
+    return "[" + ", ".join(f"{x:.1f}" for x in samples) + "] ms"
+
+
+def test_best_of_ms_ignores_a_single_runner_stall() -> None:
+    calls: list[int] = []
+
+    def _once_stalled() -> None:
+        calls.append(1)
+        if len(calls) == 1:
+            time.sleep(0.3)  # one scheduler/GC-sized pause
+
+    best, samples = _best_of_ms(_once_stalled)
+    assert best < 250
+    assert len(calls) == len(samples) == 5
+    assert max(samples) >= 300  # the stall is retained as evidence
+    assert best == min(samples)
+
+
+def test_best_of_ms_still_catches_a_real_regression() -> None:
+    # Code that is slow on every run still exceeds the target.
+    best, samples = _best_of_ms(lambda: time.sleep(0.3))
+    assert best >= 250
+    assert len(samples) == 5 and all(x >= 250 for x in samples)
+
+
 class TestPerformance:
     def _build_linear_chain(self, n: int) -> tuple[TrustGraph, str, str]:
         """Build alternating ev→fi chain of length n. Return graph + first/last node_id."""
@@ -1405,11 +1453,9 @@ class TestPerformance:
         assert fi0 is not None
         _edge(g, fi0, ri, EdgeType.FINDING_TO_RISK)
         _edge(g, ri, re, EdgeType.RISK_TO_REPORT)
-        t0 = time.monotonic()
-        get_report_lineage(g, re.node_id)
-        elapsed_ms = (time.monotonic() - t0) * 1000
+        elapsed_ms, samples = _best_of_ms(lambda: get_report_lineage(g, re.node_id))
         assert elapsed_ms < 50, (
-            f"100-node traversal took {elapsed_ms:.1f}ms (target <50ms)"
+            f"100-node traversal took {elapsed_ms:.1f}ms (target <50ms); samples {_ms(samples)}"
         )
 
     def test_1000_nodes_verify_under_250ms(self) -> None:
@@ -1418,11 +1464,9 @@ class TestPerformance:
             ev = _ev(g, f"ev-{i}")
             fi = _fi(g, f"fi-{i}")
             _edge(g, ev, fi, EdgeType.EVIDENCE_TO_FINDING)
-        t0 = time.monotonic()
-        verify_trust_graph(g)
-        elapsed_ms = (time.monotonic() - t0) * 1000
+        elapsed_ms, samples = _best_of_ms(lambda: verify_trust_graph(g))
         assert elapsed_ms < 250, (
-            f"1000-node verify took {elapsed_ms:.1f}ms (target <250ms)"
+            f"1000-node verify took {elapsed_ms:.1f}ms (target <250ms); samples {_ms(samples)}"
         )
 
     def test_10000_nodes_manifest_under_1000ms(self) -> None:
@@ -1440,10 +1484,8 @@ class TestPerformance:
 
     def test_100_node_manifest_under_50ms(self) -> None:
         g = self._build_flat_evidence(100)
-        t0 = time.monotonic()
-        generate_trust_graph_manifest(g)
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        assert elapsed_ms < 50
+        elapsed_ms, samples = _best_of_ms(lambda: generate_trust_graph_manifest(g))
+        assert elapsed_ms < 50, f"100-node manifest samples {_ms(samples)}"
 
     def test_1000_node_path_under_250ms(self) -> None:
         g = _graph()
@@ -1460,10 +1502,8 @@ class TestPerformance:
                 prev = ev
         re = _re(g, "re-0")
         _edge(g, prev_ri, re, EdgeType.RISK_TO_REPORT)
-        t0 = time.monotonic()
-        get_report_lineage(g, re.node_id)
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        assert elapsed_ms < 250
+        elapsed_ms, samples = _best_of_ms(lambda: get_report_lineage(g, re.node_id))
+        assert elapsed_ms < 250, f"1000-node path samples {_ms(samples)}"
 
 
 # ---------------------------------------------------------------------------

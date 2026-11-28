@@ -13,6 +13,8 @@ deliberately ignored, and one test proves it.
 from __future__ import annotations
 
 import uuid
+import weakref
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -618,40 +620,145 @@ def test_18_idempotency_rules(w):
     assert w.propose(w.msp_a_admin, CUST_1).json()["created"] is True
 
 
-def test_18b_mutation_responses_never_reload_rows_after_commit(w):
-    """Forced RLS hides a relationship once commit clears the transaction-local
-    tenant context, so a post-commit reload of an expired row 500s on Postgres.
-    SQLite has no RLS, so any post-commit reload is treated as that failure."""
+@contextmanager
+def _relationship_reload_observer():
+    """Record every database refresh of a relationship row, split by whether
+    the owning session had already committed.
+
+    Committed sessions are tracked by object identity (a WeakSet), never by
+    ``id()``: once a request's session is freed, CPython can hand its memory,
+    and therefore its ``id()``, to the next request's fresh session, which
+    would then be misread as "already committed" (FG-MSP-SESSION-RELOAD-GUARD-001).
+    """
     from sqlalchemy import event
     from sqlalchemy.orm import Session, object_session
 
     from api.db_models_msp import MspServiceRelationship
 
-    committed: set[int] = set()
-    reloads: list[str] = []
+    committed: weakref.WeakSet = weakref.WeakSet()
+    seen: dict[str, list[str]] = {"pre_commit": [], "post_commit": []}
 
     def _after_commit(session) -> None:
-        committed.add(id(session))
+        committed.add(session)
 
     def _on_refresh(target, context, attrs) -> None:
         sess = object_session(target)
-        if sess is not None and id(sess) in committed:
-            reloads.append(str(target.id))
+        if sess is not None:
+            key = "post_commit" if sess in committed else "pre_commit"
+            seen[key].append(str(target.id))
 
     event.listen(Session, "after_commit", _after_commit)
     event.listen(MspServiceRelationship, "refresh", _on_refresh, propagate=True)
     try:
-        rid = w.propose(w.msp_a_admin, CUST_1).json()["relationship_id"]
-        assert w.approve(w.c1_admin, rid).status_code == 200
-        assert w.act(w.c1_admin, rid, "suspend").status_code == 200
-        assert w.act(w.c1_admin, rid, "resume").status_code == 200
-        revoked = w.act(w.c1_admin, rid, "revoke")
-        assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
+        yield seen
     finally:
         event.remove(MspServiceRelationship, "refresh", _on_refresh)
         event.remove(Session, "after_commit", _after_commit)
 
-    assert reloads == [], "relationship rows reloaded after commit"
+
+def _run_relationship_lifecycle(w) -> str:
+    rid = w.propose(w.msp_a_admin, CUST_1).json()["relationship_id"]
+    assert w.approve(w.c1_admin, rid).status_code == 200
+    assert w.act(w.c1_admin, rid, "suspend").status_code == 200
+    assert w.act(w.c1_admin, rid, "resume").status_code == 200
+    revoked = w.act(w.c1_admin, rid, "revoke")
+    assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
+    return rid
+
+
+def test_18b_mutation_responses_never_reload_rows_after_commit(w):
+    """Forced RLS hides a relationship once commit clears the transaction-local
+    tenant context, so a post-commit reload of an expired row 500s on Postgres.
+    SQLite has no RLS, so any post-commit reload is treated as that failure."""
+    with _relationship_reload_observer() as seen:
+        rid = _run_relationship_lifecycle(w)
+
+    assert seen["post_commit"] == [], "relationship rows reloaded after commit"
+    # Not vacuous: approve, suspend, resume and revoke each reload the row
+    # inside their transaction (after the compare-and-set), before commit.
+    assert seen["pre_commit"].count(rid) >= 4, seen
+
+
+def test_18c_reload_observer_ignores_a_fresh_session_with_a_reused_id(w, monkeypatch):
+    """Regression for the post-merge CI failure on bfbb74ad7, made deterministic.
+
+    In CI a fresh request session sometimes received the id() of a session
+    that had committed and been freed. Rather than depend on the allocator,
+    this test shadows ``id`` in this module with a constant, so every session
+    collides with every committed one for any id()-based bookkeeping here. The
+    legacy rule then misreads the in-transaction reloads as post-commit; the
+    observer, which tracks real session objects, does not. If the observer
+    were reverted to id() bookkeeping it would see the collision and fail.
+    """
+    import sys
+
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session, object_session
+
+    from api.db_models_msp import MspServiceRelationship
+
+    monkeypatch.setattr(sys.modules[__name__], "id", lambda obj: 0, raising=False)
+
+    committed_ids: set[int] = set()
+    id_based: list[str] = []
+
+    def _after_commit(session) -> None:
+        committed_ids.add(id(session))
+
+    def _on_refresh(target, context, attrs) -> None:
+        sess = object_session(target)
+        if sess is not None and id(sess) in committed_ids:
+            id_based.append(str(target.id))
+
+    event.listen(Session, "after_commit", _after_commit)
+    event.listen(MspServiceRelationship, "refresh", _on_refresh, propagate=True)
+    try:
+        with _relationship_reload_observer() as seen:
+            rid = _run_relationship_lifecycle(w)
+    finally:
+        event.remove(MspServiceRelationship, "refresh", _on_refresh)
+        event.remove(Session, "after_commit", _after_commit)
+
+    assert id_based.count(rid) >= 4, "the id()-based rule should misfire"
+    assert seen["post_commit"] == []
+    assert seen["pre_commit"].count(rid) >= 4
+
+
+def _reload_relationship_after_commit(rid: str) -> None:
+    """The forbidden shape: commit, then touch the expired row (a real SELECT)."""
+    from api.db import set_tenant_context
+    from api.deps import get_sessionmaker
+    from api.msp_authority import load_relationship
+
+    db = get_sessionmaker()()
+    try:
+        set_tenant_context(db, CUST_1)
+        row = load_relationship(db, rid)
+        db.commit()
+        assert str(row.status) == "approved"  # expired: reloads after commit
+    finally:
+        db.close()
+
+
+def test_18d_reload_observer_detects_a_genuine_post_commit_reload(w):
+    """Negative control: touching an expired relationship after commit is a
+    real database reload and must be reported."""
+    rid = w.establish(w.msp_a_admin, w.c1_admin)
+    with _relationship_reload_observer() as seen:
+        _reload_relationship_after_commit(rid)
+
+    assert seen["post_commit"] == [rid]
+
+
+def test_18e_reload_observer_removes_its_listeners_even_on_error(w):
+    """A failing body must not leave listeners behind to observe later tests."""
+    rid = w.establish(w.msp_a_admin, w.c1_admin)
+    with pytest.raises(RuntimeError, match="observer body failed"):
+        with _relationship_reload_observer() as seen:
+            raise RuntimeError("observer body failed")
+
+    _reload_relationship_after_commit(rid)
+    assert seen == {"pre_commit": [], "post_commit": []}
 
 
 # ---------------------------------------------------------------------------
