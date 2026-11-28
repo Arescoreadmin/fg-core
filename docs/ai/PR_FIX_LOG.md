@@ -1,3 +1,12 @@
+## test(trust-graph): FG-TRUST-GRAPH-PERF-TIMING-001 — wall-clock performance tests robust to runner stalls (#931)
+
+- **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #931.
+- **Defect (test, not product):** `TestPerformance` in `tests/test_trust_graph.py` timed one wall-clock sample (`time.monotonic()`), so a scheduler or GC pause on a shared runner counted as code time. `test_1000_nodes_verify_under_250ms` recorded 984.6 ms in nightly shard 6 (run 45925105134) for a verify that takes about 0.7 ms; `services/field_assessment/trust_graph.py` is unchanged since #424.
+- **Fix:** `_best_of_ms()` reports the fastest of 5 `perf_counter` runs (the `timeit` estimator) for the four wall-clock tests in the class. Every target is unchanged (50/250/50/250 ms); the timed functions are pure, so repetition is valid. The CPU-time manifest test is unchanged.
+- **No weakening:** `test_best_of_ms_still_catches_a_real_regression` (code slow on every run still exceeds the target) and `test_best_of_ms_ignores_a_single_runner_stall` (one 300 ms pause in five runs passes). `tests/test_trust_graph.py`: 123 passed.
+- **Not changed:** product code, CI configuration, dependencies.
+- **Reconciliation follow-up (merge of `main` at `bfbb74ad7`):** `_best_of_ms` now returns every sample, and each performance assertion reports them on failure. The docstring records the assurance limitation: the minimum is a best-case cost. It detects sustained algorithmic regressions, not tail or intermittent latency, and makes no p95/p99 claim. The stall control also asserts that the stalled sample is retained. The regression control asserts that every sample exceeds the target. Thresholds are unchanged.
+
 ## fix(agent): FG-AGENT-QUEUE-INIT-LOCK-001 — SQLiteQueue first open is safe under concurrency (#930)
 
 - **Authorization:** REPAIR (`check_customer_one_roadmap.py --work-class REPAIR` returns AUTHORIZED); founder-directed as a separate track. Closes #930.
