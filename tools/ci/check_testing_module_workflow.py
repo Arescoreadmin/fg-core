@@ -269,6 +269,13 @@ def _check_evidence_provenance(
                 )
             elif "run_attempt" in str(with_):
                 errors.append(f"{jid}: download-artifact must not use run_attempt")
+            elif with_.get("merge-multiple") is not True:
+                # Without it a by-id download extracts into <path>/<name>/,
+                # so evidence is not where verify and its readers expect it
+                # (testing-module run 46105295520).
+                errors.append(
+                    f"{jid}: download-artifact by artifact-ids must set merge-multiple: true"
+                )
 
     producers = {"fg-security": "--kind security", "fg-full-shard": "--kind shard"}
     for jid, kind in producers.items():

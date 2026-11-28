@@ -445,3 +445,24 @@ def test_evidence_used_before_verify_is_rejected(
 
     _edit(fake_repo, mutate)
     _errors(fake_repo, message)
+
+
+@pytest.mark.parametrize(
+    "job", [chk.VERDICT_JOB, "fg-full-complete", "fg-flake-detect"]
+)
+def test_download_by_id_without_merge_multiple_is_rejected(
+    fake_repo: Path, job: str
+) -> None:
+    # Run 46105295520: the verdict's by-id download landed in
+    # artifacts/verdict/fg-security/fg-security-artifacts-1/ and verify (correctly)
+    # found no provenance at the expected root.
+    def mutate(d: dict[Any, Any]) -> None:
+        for step in _job_steps(d, job):
+            if str(step.get("uses", "")).startswith("actions/download-artifact"):
+                step["with"].pop("merge-multiple", None)
+
+    _edit(fake_repo, mutate)
+    _errors(
+        fake_repo,
+        f"{job}: download-artifact by artifact-ids must set merge-multiple: true",
+    )

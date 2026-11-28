@@ -675,6 +675,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.fg-full-complete.outputs.aggregate_artifact_id }}
           path: artifacts/fg-full-shards
+          merge-multiple: true
 
       - name: Collect JUnit files for flake detection
         run: |
@@ -785,6 +786,9 @@ jobs:
         with:
           artifact-ids: ${{ steps.security_evidence.outputs.artifact_ids }}
           path: artifacts/verdict/fg-security
+          # By-id downloads otherwise extract into <path>/<artifact-name>/
+          # (run 46105295520), and verify expects the artifact root at <path>.
+          merge-multiple: true
 
       - name: Verify fg-security evidence provenance (fail closed)
         if: ${{ needs.fg-security.result == 'success' }}

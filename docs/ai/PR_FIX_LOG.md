@@ -39,7 +39,12 @@
   - `verify` rejects a missing or unreadable provenance file, another run, commit, kind, shard index or attempt, any missing, unlisted, altered or symlinked file, and missing or extra shard directories. The aggregate and the verdict run only after it.
   - flake-detect downloads the aggregate by `fg-full-complete`'s `artifact-id` output.
   - Tests: 49 evidence tests (mutation-checked: 6 mutations each caught) and 20 new guard cases. The guard rejects any `download-artifact` using `name`, `pattern` or `run_attempt`.
-  - Not live-proven: the partial-rerun success path needs a paid rerun experiment, which was not authorized. The fail-closed paths are unchanged.
+  - Not live-proven: the partial-rerun success path needs a deliberate rerun experiment, which was not authorized. The fail-closed paths are unchanged.
+- **Dispatched run 46105295520 (`864d9c592`, `suite=all`, attempt 1): FAIL, both causes found.**
+  - Provenance worked live for all 10 shards: each resolved to its attempt-1 artifact id and verified against tree `bdedaa0ba`.
+  - `fg-security` passed (24 min); 9 of 10 shards passed (26–42 min).
+  - Defect in this PR: the verdict's by-id download extracted into `artifacts/verdict/fg-security/fg-security-artifacts-1/`, so `verify` correctly rejected the root as having no provenance. Fixed with `merge-multiple: true` on every by-id download, and the guard now requires it (3 new cases; they fail on the previous guard).
+  - Pre-existing on `main`, separate REPAIR: shard 5 failed `tests/test_control_registry.py::test_ccr_32_freshness_sweep_ignores_fresh`. The test hard-codes `last_verified_at = 2026-08-30`, and the sweep expires a control at ≥ 90 elapsed days, so the test began failing on 2026-11-28. Reproduced on `main` `6bbba0931` (1 failed, 83 passed). Not changed here.
 - **`agent/ci/verify_*`:** not wired. They assert the contract headers and the rate-limit key format ("no raw key"), which `agent/tests/test_contract_envelope.py` and `test_rate_limiter.py` already assert in required Agent Linux. Running them would add no security evidence.
 - **Timeout platforms:** the `SIGALRM` per-phase layer works on Linux and macOS. On Windows only the faulthandler backstop applies (whole-process exit after 2× budget + 5 s). All `testing-module` jobs run on `ubuntu-latest`.
 - **CI config touched (called out):** `.github/workflows/testing-module.yml` (non-required workflow) and `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite). Required-check names, membership and `repository-policy.json` are unchanged.
