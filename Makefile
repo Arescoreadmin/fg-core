@@ -839,10 +839,18 @@ fg-fast-budget-check: venv
 	echo "fg-fast budget check: duration=$$dur s warn=$$warn s nominal_max=$$max_s s hard_max=$$hard_max s"; \
 	test "$$dur" -le "$$hard_max"
 
+# FG-CI-NIGHTLY-REPAIR-001: opt-in per-test timeout for the scheduled
+# testing-module lanes (fg-security, fg-full-shard). The default 0 adds nothing,
+# so required PR lanes that reuse these targets run exactly as before.
+NIGHTLY_TEST_TIMEOUT_SECONDS ?= 0
+NIGHTLY_TIMEOUT_ON = $(filter-out 0,$(NIGHTLY_TEST_TIMEOUT_SECONDS))
+NIGHTLY_TIMEOUT_ENV = $(if $(NIGHTLY_TIMEOUT_ON),PYTHONPATH=.)
+NIGHTLY_TIMEOUT_ARGS = $(if $(NIGHTLY_TIMEOUT_ON),-p tools.testing.harness.pytest_per_test_timeout --fg-per-test-timeout=$(NIGHTLY_TEST_TIMEOUT_SECONDS))
+
 fg-security-pytest: venv _require-pytest-venv
 	@mkdir -p $(JUNIT_DIR)
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security -m "not slow" --durations=25 \
-		--junitxml $(JUNIT_DIR)/fg-security.xml
+	@FG_ENV=test $(NIGHTLY_TIMEOUT_ENV) $(PYTEST_ENV) $(PYTEST) -q tests/security -m "not slow" --durations=25 \
+		$(NIGHTLY_TIMEOUT_ARGS) --junitxml $(JUNIT_DIR)/fg-security.xml
 
 fg-full-pytest: venv _require-pytest-venv
 	@mkdir -p $(JUNIT_DIR)
@@ -889,7 +897,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log required-ci-coverage-check connector-tenant-context-check fg-required-summary
+	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log required-ci-coverage-check connector-tenant-context-check testing-module-workflow-check fg-required-summary
 	@$(MAKE) -s fg-fast-pytest
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
@@ -940,8 +948,24 @@ fg-full-shard: venv _require-pytest-venv
 		echo "ERROR: fg_full_shard returned no files for shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"; \
 		exit 1; \
 	fi; \
-	FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q --durations=25 \
-		--junitxml "$(SHARD_JUNIT)" \
+	COLLECT_OUT="$$(FG_ENV=test $(PYTEST_ENV) $(PYTEST) --collect-only -q -rs $$SHARD_FILES 2>&1)" || { \
+		printf '%s\n' "$$COLLECT_OUT" | tail -40; \
+		echo "ERROR: collection failed for shard $(SHARD_INDEX)/$(TOTAL_SHARDS)"; \
+		exit 1; \
+	}; \
+	COLLECTED="$$(printf '%s\n' "$$COLLECT_OUT" | sed -n -E 's/^([0-9]+) tests? collected.*/\1/p' | tail -1)"; \
+	if [ -z "$$COLLECTED" ]; then \
+		printf '%s\n' "$$COLLECT_OUT" | tail -40; \
+		echo "ERROR: could not read collected test count for shard $(SHARD_INDEX)"; \
+		exit 1; \
+	fi; \
+	COLLECT_SKIPPED="$$(printf '%s\n' "$$COLLECT_OUT" | sed -n -E 's/^SKIPPED \[([0-9]+)\].*/\1/p' | awk '{s+=$$1} END {print s+0}')"; \
+	printf '{"shard_index": %s, "collected_tests": %s, "collection_skipped": %s}\n' \
+		"$(SHARD_INDEX)" "$$COLLECTED" "$$COLLECT_SKIPPED" \
+		> "$(dir $(SHARD_JUNIT))shard-collection.json"; \
+	echo "fg-full-shard $(SHARD_INDEX): collected $$COLLECTED tests, $$COLLECT_SKIPPED module(s) skipped at collection"; \
+	FG_ENV=test $(NIGHTLY_TIMEOUT_ENV) $(PYTEST_ENV) $(PYTEST) -q --durations=25 \
+		$(NIGHTLY_TIMEOUT_ARGS) --junitxml "$(SHARD_JUNIT)" \
 		$$SHARD_FILES
 
 ## fg-full-aggregate: verify all shards completed and aggregate results.
@@ -1194,7 +1218,7 @@ ci-pt: venv _require-pytest-venv
 # checker (single source of truth; new matching files are picked up). Runs in
 # the required PT job (ci.yml).
 REGRESSION_TEST_TIMEOUT_SECONDS ?= 120
-.PHONY: ci-assessment-security required-ci-coverage-check connector-tenant-context-check
+.PHONY: ci-assessment-security required-ci-coverage-check connector-tenant-context-check testing-module-workflow-check
 ci-assessment-security: venv _require-pytest-venv
 	@mkdir -p $(JUNIT_DIR)
 	@set -euo pipefail; \
@@ -1212,6 +1236,10 @@ required-ci-coverage-check: venv
 # transaction-local tenant after every commit/rollback and check transitions.
 connector-tenant-context-check: venv
 	@$(PY) tools/ci/check_connector_tenant_context.py
+
+# FG-CI-NIGHTLY-REPAIR-001: scheduled security + full-suite reachability guard.
+testing-module-workflow-check: venv
+	@$(PY) tools/ci/check_testing_module_workflow.py
 
 test-core-invariants: venv _require-pytest-venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."

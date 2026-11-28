@@ -11,6 +11,11 @@ Failure modes (all fail closed):
   - Any shard reported zero tests collected (empty shard guard).
   - Total collected tests falls outside tolerance of expected inventory.
   - Expected shards do not match the shard directories found.
+  - With --require-collection (FG-CI-NIGHTLY-REPAIR-001): a shard's
+    shard-collection.json (pytest --collect-only count, written by
+    `make fg-full-shard` before the run) is missing, or the shard's JUnit
+    reports fewer tests than were collected (tests disappeared from
+    execution) or, with no errors, more (duplicate execution).
 
 Usage
 -----
@@ -52,6 +57,12 @@ class ShardResult:
     # From shard-manifest.json — present when the manifest was written pre-run.
     manifest_expected_tests: int = 0
     manifest_file_count: int = 0
+    # From shard-collection.json — exact pytest --collect-only count (-1 = absent).
+    collected_tests: int = -1
+    # Modules skipped at collection (pytest.skip(allow_module_level=True)).
+    # JUnit records one skipped <testcase> per such module; collect-only does not
+    # count them, so expected JUnit tests = collected_tests + collection_skipped.
+    collection_skipped: int = 0
 
 
 def _parse_junit(path: Path) -> tuple[int, int, int, int, float]:
@@ -87,11 +98,31 @@ def _load_shard_manifest(shard_dir: Path, idx: int) -> tuple[int, int]:
         return 0, 0
 
 
+def _load_shard_collection(shard_dir: Path) -> tuple[int, int]:
+    """Return (collected_tests, collection_skipped) from shard-collection.json.
+
+    (-1, 0) if the file is absent or either field is missing or invalid.
+    """
+    path = shard_dir / "shard-collection.json"
+    if not path.exists():
+        return -1, 0
+    try:
+        data = json.loads(path.read_text())
+        values = (data.get("collected_tests"), data.get("collection_skipped"))
+    except Exception:
+        return -1, 0
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return -1, 0
+    return values[0], values[1]
+
+
 def aggregate(
     artifacts_dir: Path,
     total_shards: int,
     expected_min_tests: int,
     expected_max_tests: int,
+    require_collection: bool = False,
 ) -> tuple[bool, list[ShardResult], dict[str, Any]]:
     results: list[ShardResult] = []
 
@@ -110,6 +141,8 @@ def aggregate(
         r.manifest_expected_tests, r.manifest_file_count = _load_shard_manifest(
             shard_dir, idx
         )
+        r.collected_tests, r.collection_skipped = _load_shard_collection(shard_dir)
+        expected_junit = r.collected_tests + r.collection_skipped
 
         if not junit_path.exists():
             r.error_detail = f"JUnit XML missing: {junit_path}"
@@ -132,6 +165,23 @@ def aggregate(
         if r.tests == 0:
             r.error_detail = (
                 "shard collected zero tests (empty shard or collection failure)"
+            )
+        elif require_collection and r.collected_tests < 0:
+            r.error_detail = (
+                "shard-collection.json missing or invalid — cannot prove every "
+                "collected test executed"
+            )
+        elif require_collection and r.tests < expected_junit:
+            r.error_detail = (
+                f"shard collected {r.collected_tests} tests (+{r.collection_skipped} "
+                f"module skip(s)) but JUnit reports {r.tests} — "
+                f"{expected_junit - r.tests} test(s) did not execute"
+            )
+        elif require_collection and r.tests > expected_junit and r.errors == 0:
+            r.error_detail = (
+                f"shard collected {r.collected_tests} tests (+{r.collection_skipped} "
+                f"module skip(s)) but JUnit reports {r.tests} with no errors — "
+                "possible duplicate execution"
             )
         elif r.manifest_expected_tests > 0:
             # Shard manifest present: check that JUnit count is within 10% of expected.
@@ -162,6 +212,7 @@ def aggregate(
         "total_duration_seconds": round(total_duration, 1),
         "expected_min_tests": expected_min_tests,
         "expected_max_tests": expected_max_tests,
+        "require_collection": require_collection,
         "shards": [
             {
                 "shard_index": r.shard_index,
@@ -174,6 +225,8 @@ def aggregate(
                 "duration_seconds": round(r.duration_seconds, 1),
                 "manifest_expected_tests": r.manifest_expected_tests,
                 "manifest_file_count": r.manifest_file_count,
+                "collected_tests": r.collected_tests,
+                "collection_skipped": r.collection_skipped,
                 "error_detail": r.error_detail,
             }
             for r in results
@@ -218,6 +271,11 @@ def main() -> int:
     parser.add_argument("--expected-min-tests", type=int, default=22000)
     parser.add_argument("--expected-max-tests", type=int, default=26000)
     parser.add_argument(
+        "--require-collection",
+        action="store_true",
+        help="Fail unless each shard's JUnit count matches its shard-collection.json.",
+    )
+    parser.add_argument(
         "--out-json", type=Path, default=None, help="Write summary JSON to this path."
     )
     args = parser.parse_args()
@@ -227,6 +285,7 @@ def main() -> int:
         args.total_shards,
         args.expected_min_tests,
         args.expected_max_tests,
+        require_collection=args.require_collection,
     )
 
     # Always print the summary

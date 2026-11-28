@@ -9050,6 +9050,24 @@ No check, allowlist, plane-registry exception or gate configuration changes.
 6. **Tenant isolation, authorization, credentials, auditability unchanged.** No application code changes. The assessment tests now required include cross-tenant provenance, draft-access denial and independent QA authority checks.
 7. **Residual risk.** The scheduled full suite (`fg-full`) is still not completing (audit gap 011). Tests outside the 21-file selection and outside the marker-selected lanes still depend on it.
 
+## 2026-11-26 - ci(testing-module): restore scheduled security and full-suite runs (FG-CI-NIGHTLY-REPAIR-001)
+
+**Scope:** scheduled CI assurance only. Covers `.github/workflows/testing-module.yml` (a non-required workflow), `Makefile` (`fg-security-pytest`, `fg-full-shard`, new `testing-module-workflow-check`, `fg-fast` prerequisite), `tools/ci/fg_full_aggregate.py`, `tools/ci/check_timeout_hierarchy.py`, the new `tools/ci/check_testing_module_workflow.py` and `tools/ci/testing_module_verdict.py`, and tests. No product code, auth, tenant, contract, schema, migration, deployment, required-check or repository-policy changes.
+
+**Finding:** audit gap 011. From 2026-11-14, every scheduled `testing-module` run was cancelled at `fg-security`'s 25-min job timeout. Because the full-suite shards depended on `fg-security`, none ran, and there was no scheduled regression evidence for about three weeks.
+
+**Security analysis:**
+
+1. **Security lane restored, not weakened.** All 1,673 `tests/security` (not slow) tests run with a 45-min budget. Every test is still executed, and no marker, path or assertion changed.
+2. **No false green.** `testing-module-verdict` fails the run when any lane required for the event or suite is skipped, cancelled (including by timeout), failed or missing. It also fails when the uploaded `fg-security` JUnit shows fewer than 1650 tests or any failure or error.
+3. **No silent test loss.** Each shard records its collected count before running. The aggregate fails if the executed count differs. Shard inventory validation (no omissions or duplicates) and the total floor remain.
+4. **Bounded execution.** A 300-s per-test timeout (signal layer on POSIX, faulthandler backstop on every platform) turns hangs into failures instead of job cancellations. The job timeouts stay finite.
+5. **Independent and non-cancelling.** Scheduled and manual runs can no longer cancel each other. Security and the full suite run in parallel and can be dispatched separately.
+6. **Auditability.** Results, including `fg-security.xml`, shard JUnit and collection records, the aggregate and the verdict JSON, are retained for 30 days for every run.
+6a. **Evidence provenance (2026-11-27).** Security and shard evidence carry `evidence-provenance.json`, which binds them to the run, the producing job attempt, the tested commit and tree, and per-file SHA-256. Consumers resolve the producing attempt from the run's job listing, download by explicit artifact id only (no name, wildcard or `run_attempt`), and reject evidence that is missing, foreign, stale, mismatched or altered before any verdict or aggregate uses it. The verdict and `fg-full-complete` gain `actions: read` (read-only) for this purpose.
+7. **Required PR gates unchanged.** The per-test timeout is opt-in (default off) for targets reused by `fg-required`. The new structure guard adds a read-only check to `fg-fast`.
+8. **Residual risk.** Shard wall time (about 50 min) is close to its 75-min limit as the suite grows. On Windows only the backstop timeout applies. Scheduled results are not required checks, so a red nightly needs an owner to act on it.
+
 ## 2026-11-26 - fix(assurance): three pre-existing regressions exposed by restored nightly CI (FG-NIGHTLY-REGRESSION-REPAIR-001)
 
 **Scope:**

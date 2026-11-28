@@ -2,15 +2,25 @@ name: testing-module
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        # FG-CI-NIGHTLY-REPAIR-001: run security and full suite independently.
+        description: "all = scheduled-equivalent; security = fg-security only; full = full-suite shards only"
+        type: choice
+        default: all
+        options: [all, security, full]
   pull_request:
     paths:
       - "tools/testing/policy/**"
   schedule:
     - cron: "15 3 * * *"
 
+# FG-CI-NIGHTLY-REPAIR-001: only pull_request runs supersede each other. Scheduled
+# and manual runs get a per-run group, so a dispatch can never cancel the
+# nightly (or vice versa) — they previously shared testing-module-refs/heads/main.
 concurrency:
-  group: testing-module-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: testing-module-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.event_name, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -115,7 +125,7 @@ jobs:
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
 
   detect-high-risk-paths:
     name: detect-high-risk-paths
@@ -211,14 +221,26 @@ jobs:
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
 
   fg-security:
     name: fg-security
     runs-on: ubuntu-latest
-    timeout-minutes: 25  # raised from 15→20→25: make fg-security (policy-validate + soc-invariants + security pytest ~701 tests) needs ~20 min in CI
+    # FG-CI-NIGHTLY-REPAIR-001: 25→45. tests/security grew to 1,673 tests; every
+    # scheduled run since 2026-11-14 was cancelled at 25 min with pytest at ~77%
+    # and no failures (run 45818565829). ~33 min needed; hangs are bounded by the
+    # per-test timeout below. Must stay <= 2800 s (check_timeout_hierarchy.py).
+    timeout-minutes: 45
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.suite != 'full' }}
     permissions:
       contents: read
+    env:
+      NIGHTLY_TEST_TIMEOUT_SECONDS: "300"
+    # Job outputs survive "Re-run failed jobs" when this job is not re-run, so
+    # the verdict downloads the producing attempt's artifact by id rather than
+    # by the verdict's own run_attempt.
+    outputs:
+      security_artifact_id: ${{ steps.upload_security.outputs.artifact-id }}
 
     steps:
       - name: Checkout (full history)
@@ -256,16 +278,33 @@ jobs:
           set -euo pipefail
           make fg-security
 
+      - name: Stage fg-security evidence + provenance
+        # Binds the evidence to this run, this job's own attempt and the
+        # checked-out tree, with a SHA-256 for every file (verified by the
+        # verdict). artifacts/ci/junit holds fg-security.xml (JUNIT_DIR); it
+        # was never uploaded before FG-CI-NIGHTLY-REPAIR-001.
+        if: always()
+        run: |
+          set -euo pipefail
+          EV=artifacts/evidence/fg-security
+          mkdir -p "$EV"
+          for d in testing ci/junit; do
+            if [ -d "artifacts/$d" ]; then
+              mkdir -p "$EV/$d"
+              cp -R "artifacts/$d/." "$EV/$d/"
+            fi
+          done
+          python3 tools/ci/testing_module_evidence.py write --dir "$EV" --kind security
+
       - name: Upload artifacts (fg-security)
+        id: upload_security
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fg-security-artifacts-${{ github.run_attempt }}
-          path: |
-            artifacts/testing/**
-            artifacts/**/_upload_notice.txt
-          if-no-files-found: warn
-          retention-days: 7
+          path: artifacts/evidence/fg-security/
+          if-no-files-found: error
+          retention-days: 30
 
   # ---------------------------------------------------------------------------
   # fg-full: replaced with three-job sharded execution (POST-777).
@@ -289,7 +328,8 @@ jobs:
   #   * Every test file in tests/ belongs to exactly one shard (no omissions,
   #     no duplicates) — enforced by fg_full_shard.py --validate.
   #   * fg-full-complete fails if any shard directory or JUnit is absent.
-  #   * fg-full-complete fails if total test count is outside [22000, 26000].
+  #   * fg-full-complete fails if total test count is outside [25000, 32000], or
+  #     if any shard ran fewer tests than it collected (--require-collection).
   #   * fg-flake-detect depends on fg-full-complete, not individual shards.
   # ---------------------------------------------------------------------------
 
@@ -299,10 +339,14 @@ jobs:
     timeout-minutes: 30  # billing/OPA/compliance/audit gates only (fg-fast already ran in prior lane)
     permissions:
       contents: read
-    needs: [fg-fast, fg-contract, fg-security, detect-high-risk-paths]
+    # FG-CI-NIGHTLY-REPAIR-001: fg-security is no longer a prerequisite. Its
+    # timeout used to skip every shard; it now runs in parallel and its result
+    # is enforced by testing-module-verdict instead.
+    needs: [fg-fast, fg-contract, detect-high-risk-paths]
     if: |
       ${{
-        (needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success' && needs.fg-security.result == 'success')
+        (needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success')
+        && (github.event_name != 'workflow_dispatch' || inputs.suite != 'security')
         && (
           github.event_name == 'schedule'
           || github.event_name == 'workflow_dispatch'
@@ -370,7 +414,7 @@ jobs:
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
 
   fg-full-shard:
     name: "fg-full-shard (${{ matrix.shard_index }})"
@@ -379,7 +423,10 @@ jobs:
     # (run 40720279440, all 10 shards). Duration-imbalance = 1.00x; max predicted = 2269 s (~38 min).
     # 55 min gives 17-min headroom for the heaviest shard. Empirical max before fix: 3033 s (50 min,
     # shard 7 with 2832 tests, all on 0.5 s/test fallback). Cancelled run 40765517264 shard 9: 55 min.
-    timeout-minutes: 55
+    # FG-CI-NIGHTLY-REPAIR-001: 55→75. Observed shard jobs reached 48-50 min on
+    # 2026-11-06/13 (shard 0: 2820 s of pytest) and the suite has grown since
+    # (25,838 tests). Hangs are bounded per test by NIGHTLY_TEST_TIMEOUT_SECONDS.
+    timeout-minutes: 75
     permissions:
       contents: read
     needs: [fg-full-gates]
@@ -391,6 +438,7 @@ jobs:
 
     env:
       TOTAL_SHARDS: "10"
+      NIGHTLY_TEST_TIMEOUT_SECONDS: "300"
 
     steps:
       - name: Checkout (full history)
@@ -456,6 +504,14 @@ jobs:
           TOTAL_SHARDS=${TOTAL_SHARDS} \
           make fg-full-shard
 
+      - name: Write shard evidence provenance
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py write \
+            --dir "artifacts/fg-full-shards/shard-${{ matrix.shard_index }}" \
+            --kind shard --shard-index ${{ matrix.shard_index }}
+
       - name: Upload shard artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -468,7 +524,7 @@ jobs:
           path: |
             artifacts/fg-full-shards/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
 
   fg-full-complete:
     name: fg-full-complete
@@ -476,7 +532,10 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read  # list this run's jobs and artifacts to resolve shard evidence
     needs: [fg-full-shard]
+    outputs:
+      aggregate_artifact_id: ${{ steps.upload_aggregate.outputs.artifact-id }}
     # Run even when some shards failed so the aggregator can report all failures.
     if: ${{ always() && needs.fg-full-shard.result != 'skipped' }}
 
@@ -501,12 +560,44 @@ jobs:
           python -m venv .venv
           make venv
 
-      - name: Download all shard artifacts
+      # Each shard's evidence comes from the attempt that produced that
+      # shard's result, by artifact id: after "Re-run failed jobs" the
+      # shards that were not re-run keep their earlier attempt's artifact.
+      - name: Resolve shard evidence by producing attempt (fail closed)
+        id: shard_evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          PROV=artifacts/fg-full-shards/provenance
+          mkdir -p "$PROV"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[]' > "$PROV/run-artifacts.jsonl"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '.jobs[]' > "$PROV/run-jobs.jsonl"
+          python3 tools/ci/testing_module_evidence.py resolve --kind shard \
+            --total-shards 10 --run-id "$RUN_ID" --head-sha "$HEAD_SHA" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --artifacts-json "$PROV/run-artifacts.jsonl" --jobs-json "$PROV/run-jobs.jsonl" \
+            --out-json "$PROV/resolved.json" --github-output "$GITHUB_OUTPUT"
+
+      - name: Download shard artifacts by id
         uses: actions/download-artifact@v4
         with:
-          pattern: fg-full-shard-*-${{ github.run_attempt }}
+          artifact-ids: ${{ steps.shard_evidence.outputs.artifact_ids }}
           path: artifacts/fg-full-shards
           merge-multiple: true
+
+      - name: Verify shard evidence provenance (fail closed)
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py verify --kind shard \
+            --dir artifacts/fg-full-shards \
+            --resolved-json artifacts/fg-full-shards/provenance/resolved.json \
+            --run-id "${{ github.run_id }}" --sha "${{ github.sha }}"
 
       - name: Aggregate shard results (fail closed)
         run: |
@@ -514,8 +605,9 @@ jobs:
           .venv/bin/python tools/ci/fg_full_aggregate.py \
             --artifacts-dir artifacts/fg-full-shards \
             --total-shards 10 \
-            --expected-min-tests 22500 \
-            --expected-max-tests 26000 \
+            --expected-min-tests 25000 \
+            --expected-max-tests 32000 \
+            --require-collection \
             --out-json artifacts/fg-full-shards/aggregate-result.json
 
       - name: Update runtime baseline (main only)
@@ -529,6 +621,7 @@ jobs:
             --event "${{ github.event_name }}"
 
       - name: Upload aggregate artifacts
+        id: upload_aggregate
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -536,7 +629,7 @@ jobs:
           path: |
             artifacts/fg-full-shards/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
 
   fg-flake-detect:
     name: fg-flake-detect
@@ -577,10 +670,12 @@ jobs:
             echo "flake-detect artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Download aggregate artifacts
+        # By id from the attempt that produced it (see fg-full-complete).
         uses: actions/download-artifact@v4
         with:
-          name: fg-full-complete-artifacts-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.fg-full-complete.outputs.aggregate_artifact_id }}
           path: artifacts/fg-full-shards
+          merge-multiple: true
 
       - name: Collect JUnit files for flake detection
         run: |
@@ -622,4 +717,111 @@ jobs:
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # FG-CI-NIGHTLY-REPAIR-001: single fail-closed verdict for the whole run.
+  # A skipped, cancelled or failed job that the event/suite requires fails
+  # here, so a timed-out or skipped lane can never read as a green run. It
+  # also proves fg-security executed at least SECURITY_MIN_TESTS tests.
+  # ---------------------------------------------------------------------------
+  testing-module-verdict:
+    name: testing-module-verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read  # list this run's jobs and artifacts to resolve security evidence
+    needs:
+      - detect-high-risk-paths
+      - fg-fast
+      - fg-contract
+      - fg-security
+      - fg-full-gates
+      - fg-full-shard
+      - fg-full-complete
+      - fg-flake-detect
+    if: ${{ always() }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Codex review of #925: after "Re-run failed jobs", a successful
+      # fg-security keeps its earlier attempt's result, outputs and artifact
+      # while run_attempt increments. Evidence is resolved to the producing
+      # attempt, cross-checked against the job's artifact-id output,
+      # downloaded by id only, then provenance- and hash-verified.
+      - name: Resolve fg-security evidence (fail closed)
+        id: security_evidence
+        if: ${{ needs.fg-security.result == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          OUTPUT_ID: ${{ needs.fg-security.outputs.security_artifact_id }}
+        run: |
+          set -euo pipefail
+          PROV=artifacts/verdict/provenance
+          mkdir -p "$PROV"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[]' > "$PROV/run-artifacts.jsonl"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '.jobs[]' > "$PROV/run-jobs.jsonl"
+          python3 tools/ci/testing_module_evidence.py resolve --kind security \
+            --run-id "$RUN_ID" --head-sha "$HEAD_SHA" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --artifact-id "$OUTPUT_ID" \
+            --artifacts-json "$PROV/run-artifacts.jsonl" --jobs-json "$PROV/run-jobs.jsonl" \
+            --out-json "$PROV/resolved.json" --github-output "$GITHUB_OUTPUT"
+
+      - name: Download fg-security artifacts by id
+        if: ${{ needs.fg-security.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.security_evidence.outputs.artifact_ids }}
+          path: artifacts/verdict/fg-security
+          # By-id downloads otherwise extract into <path>/<artifact-name>/
+          # (run 46105295520), and verify expects the artifact root at <path>.
+          merge-multiple: true
+
+      - name: Verify fg-security evidence provenance (fail closed)
+        if: ${{ needs.fg-security.result == 'success' }}
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py verify --kind security \
+            --dir artifacts/verdict/fg-security \
+            --resolved-json artifacts/verdict/provenance/resolved.json \
+            --run-id "${{ github.run_id }}" --sha "${{ github.sha }}"
+
+      - name: Evaluate run verdict (fail closed)
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          SUITE: ${{ inputs.suite || 'all' }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/verdict
+          printf '%s' "$NEEDS_JSON" > artifacts/verdict/needs.json
+          python tools/ci/testing_module_verdict.py \
+            --needs-json artifacts/verdict/needs.json \
+            --event "$EVENT_NAME" \
+            --suite "$SUITE" \
+            --security-artifacts artifacts/verdict/fg-security \
+            --security-min-tests 1650 \
+            --out-json artifacts/verdict/verdict.json \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testing-module-verdict-${{ github.run_attempt }}
+          path: artifacts/verdict/
+          if-no-files-found: warn
+          retention-days: 30
