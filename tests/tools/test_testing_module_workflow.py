@@ -267,9 +267,181 @@ def test_verdict_download_by_run_attempt_is_rejected(fake_repo: Path) -> None:
                 }
 
     _edit(fake_repo, mutate)
-    _errors(fake_repo, "never by run_attempt")
+    _errors(fake_repo, "never the run_attempt")
 
 
 def test_security_artifact_id_output_is_required(fake_repo: Path) -> None:
     _edit(fake_repo, lambda d: d["jobs"]["fg-security"].pop("outputs"))
     _errors(fake_repo, "outputs.security_artifact_id")
+
+
+# --- Evidence provenance (Codex review of #925, extended to shards) ---------
+
+
+def _job_steps(d: dict[Any, Any], job: str) -> list[dict[str, Any]]:
+    return d["jobs"][job]["steps"]
+
+
+def _find(steps: list[dict[str, Any]], needle: str) -> int:
+    return next(
+        i
+        for i, s in enumerate(steps)
+        if needle in str(s.get("run", "")) + str(s.get("uses", ""))
+    )
+
+
+def _set_download(job: str, with_: dict[str, Any]) -> Callable[[dict[Any, Any]], None]:
+    def mutate(d: dict[Any, Any]) -> None:
+        for step in _job_steps(d, job):
+            if str(step.get("uses", "")).startswith("actions/download-artifact"):
+                step["with"] = with_
+
+    return mutate
+
+
+@pytest.mark.parametrize(
+    ("job", "with_"),
+    [
+        # The pre-fix shard download: misses every shard not re-run.
+        (
+            "fg-full-complete",
+            {
+                "pattern": "fg-full-shard-*-${{ github.run_attempt }}",
+                "path": "artifacts/fg-full-shards",
+                "merge-multiple": True,
+            },
+        ),
+        # A wildcard over every attempt could mix stale evidence in.
+        ("fg-full-complete", {"pattern": "fg-full-shard-*", "path": "x"}),
+        (
+            "fg-flake-detect",
+            {
+                "name": "fg-full-complete-artifacts-${{ github.run_attempt }}",
+                "path": "x",
+            },
+        ),
+        ("fg-flake-detect", {"artifact-ids": "${{ github.run_attempt }}", "path": "x"}),
+    ],
+)
+def test_download_by_name_pattern_or_attempt_is_rejected(
+    fake_repo: Path, job: str, with_: dict[str, Any]
+) -> None:
+    _edit(fake_repo, _set_download(job, with_))
+    _errors(fake_repo, f"{job}: download-artifact must")
+
+
+@pytest.mark.parametrize("job", ["fg-security", "fg-full-shard"])
+def test_missing_provenance_write_is_rejected(fake_repo: Path, job: str) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, job)
+        del steps[_find(steps, "testing_module_evidence.py write")]
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, f"{job}: must write evidence provenance")
+
+
+@pytest.mark.parametrize("job", ["fg-security", "fg-full-shard"])
+def test_provenance_write_without_always_is_rejected(fake_repo: Path, job: str) -> None:
+    # A failed or timed-out lane must still upload verifiable partial evidence.
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, job)
+        steps[_find(steps, "testing_module_evidence.py write")].pop("if")
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, f"{job}: must write evidence provenance")
+
+
+@pytest.mark.parametrize("job", ["fg-security", "fg-full-shard"])
+def test_provenance_written_after_upload_is_rejected(fake_repo: Path, job: str) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, job)
+        steps.append(steps.pop(_find(steps, "testing_module_evidence.py write")))
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, f"{job}: evidence provenance must be written before upload")
+
+
+def test_security_upload_outside_staged_evidence_is_rejected(fake_repo: Path) -> None:
+    # Unhashed files would ride along with the hashed evidence.
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, "fg-security")
+        steps[_find(steps, "actions/upload-artifact")]["with"]["path"] = "artifacts/**"
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, "fg-security: upload exactly the provenance-staged")
+
+
+@pytest.mark.parametrize(
+    ("job", "step_needle"),
+    [
+        (chk.VERDICT_JOB, "testing_module_evidence.py verify"),
+        (chk.VERDICT_JOB, "testing_module_evidence.py resolve"),
+        ("fg-full-complete", "testing_module_evidence.py verify"),
+        ("fg-full-complete", "testing_module_evidence.py resolve"),
+    ],
+)
+def test_missing_resolve_or_verify_is_rejected(
+    fake_repo: Path, job: str, step_needle: str
+) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, job)
+        del steps[_find(steps, step_needle)]
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, f"{job}: must resolve")
+
+
+@pytest.mark.parametrize("job", [chk.VERDICT_JOB, "fg-full-complete"])
+def test_consumer_without_actions_read_is_rejected(fake_repo: Path, job: str) -> None:
+    _edit(fake_repo, lambda d: d["jobs"][job]["permissions"].pop("actions"))
+    _errors(fake_repo, f"{job}: needs permissions.actions: read")
+
+
+def test_security_resolve_without_output_cross_check_is_rejected(
+    fake_repo: Path,
+) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, chk.VERDICT_JOB)
+        step = steps[_find(steps, "testing_module_evidence.py resolve")]
+        step["env"].pop("OUTPUT_ID")
+        step["run"] = step["run"].replace('--artifact-id "$OUTPUT_ID"', "")
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, "resolve must cross-check fg-security's artifact-id output")
+
+
+def test_shard_resolve_count_mismatch_is_rejected(fake_repo: Path) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, "fg-full-complete")
+        step = steps[_find(steps, "testing_module_evidence.py resolve")]
+        step["run"] = step["run"].replace("--total-shards 10", "--total-shards 9")
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, "fg-full-complete: resolve must use --total-shards 10")
+
+
+@pytest.mark.parametrize(
+    ("job", "needle", "message"),
+    [
+        (
+            "fg-full-complete",
+            "fg_full_aggregate.py",
+            "aggregate must run after provenance verify",
+        ),
+        (
+            chk.VERDICT_JOB,
+            "testing_module_verdict.py",
+            "verdict must run after provenance verify",
+        ),
+    ],
+)
+def test_evidence_used_before_verify_is_rejected(
+    fake_repo: Path, job: str, needle: str, message: str
+) -> None:
+    def mutate(d: dict[Any, Any]) -> None:
+        steps = _job_steps(d, job)
+        moved = steps.pop(_find(steps, needle))
+        steps.insert(_find(steps, "testing_module_evidence.py resolve"), moved)
+
+    _edit(fake_repo, mutate)
+    _errors(fake_repo, message)

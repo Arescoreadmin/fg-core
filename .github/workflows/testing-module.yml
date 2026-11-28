@@ -278,19 +278,32 @@ jobs:
           set -euo pipefail
           make fg-security
 
+      - name: Stage fg-security evidence + provenance
+        # Binds the evidence to this run, this job's own attempt and the
+        # checked-out tree, with a SHA-256 for every file (verified by the
+        # verdict). artifacts/ci/junit holds fg-security.xml (JUNIT_DIR); it
+        # was never uploaded before FG-CI-NIGHTLY-REPAIR-001.
+        if: always()
+        run: |
+          set -euo pipefail
+          EV=artifacts/evidence/fg-security
+          mkdir -p "$EV"
+          for d in testing ci/junit; do
+            if [ -d "artifacts/$d" ]; then
+              mkdir -p "$EV/$d"
+              cp -R "artifacts/$d/." "$EV/$d/"
+            fi
+          done
+          python3 tools/ci/testing_module_evidence.py write --dir "$EV" --kind security
+
       - name: Upload artifacts (fg-security)
         id: upload_security
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fg-security-artifacts-${{ github.run_attempt }}
-          # artifacts/ci/junit holds fg-security.xml (JUNIT_DIR); it was never
-          # uploaded before FG-CI-NIGHTLY-REPAIR-001.
-          path: |
-            artifacts/testing/**
-            artifacts/ci/junit/**
-            artifacts/**/_upload_notice.txt
-          if-no-files-found: warn
+          path: artifacts/evidence/fg-security/
+          if-no-files-found: error
           retention-days: 30
 
   # ---------------------------------------------------------------------------
@@ -491,6 +504,14 @@ jobs:
           TOTAL_SHARDS=${TOTAL_SHARDS} \
           make fg-full-shard
 
+      - name: Write shard evidence provenance
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py write \
+            --dir "artifacts/fg-full-shards/shard-${{ matrix.shard_index }}" \
+            --kind shard --shard-index ${{ matrix.shard_index }}
+
       - name: Upload shard artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -511,7 +532,10 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read  # list this run's jobs and artifacts to resolve shard evidence
     needs: [fg-full-shard]
+    outputs:
+      aggregate_artifact_id: ${{ steps.upload_aggregate.outputs.artifact-id }}
     # Run even when some shards failed so the aggregator can report all failures.
     if: ${{ always() && needs.fg-full-shard.result != 'skipped' }}
 
@@ -536,12 +560,44 @@ jobs:
           python -m venv .venv
           make venv
 
-      - name: Download all shard artifacts
+      # Each shard's evidence comes from the attempt that produced that
+      # shard's result, by artifact id: after "Re-run failed jobs" the
+      # shards that were not re-run keep their earlier attempt's artifact.
+      - name: Resolve shard evidence by producing attempt (fail closed)
+        id: shard_evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          PROV=artifacts/fg-full-shards/provenance
+          mkdir -p "$PROV"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[]' > "$PROV/run-artifacts.jsonl"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '.jobs[]' > "$PROV/run-jobs.jsonl"
+          python3 tools/ci/testing_module_evidence.py resolve --kind shard \
+            --total-shards 10 --run-id "$RUN_ID" --head-sha "$HEAD_SHA" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --artifacts-json "$PROV/run-artifacts.jsonl" --jobs-json "$PROV/run-jobs.jsonl" \
+            --out-json "$PROV/resolved.json" --github-output "$GITHUB_OUTPUT"
+
+      - name: Download shard artifacts by id
         uses: actions/download-artifact@v4
         with:
-          pattern: fg-full-shard-*-${{ github.run_attempt }}
+          artifact-ids: ${{ steps.shard_evidence.outputs.artifact_ids }}
           path: artifacts/fg-full-shards
           merge-multiple: true
+
+      - name: Verify shard evidence provenance (fail closed)
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py verify --kind shard \
+            --dir artifacts/fg-full-shards \
+            --resolved-json artifacts/fg-full-shards/provenance/resolved.json \
+            --run-id "${{ github.run_id }}" --sha "${{ github.sha }}"
 
       - name: Aggregate shard results (fail closed)
         run: |
@@ -565,6 +621,7 @@ jobs:
             --event "${{ github.event_name }}"
 
       - name: Upload aggregate artifacts
+        id: upload_aggregate
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -613,9 +670,10 @@ jobs:
             echo "flake-detect artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Download aggregate artifacts
+        # By id from the attempt that produced it (see fg-full-complete).
         uses: actions/download-artifact@v4
         with:
-          name: fg-full-complete-artifacts-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.fg-full-complete.outputs.aggregate_artifact_id }}
           path: artifacts/fg-full-shards
 
       - name: Collect JUnit files for flake detection
@@ -672,6 +730,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read  # list this run's jobs and artifacts to resolve security evidence
     needs:
       - detect-high-risk-paths
       - fg-fast
@@ -692,15 +751,49 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Download fg-security artifacts
-        # By artifact id from the attempt that produced it (Codex review of
-        # #925): after "Re-run failed jobs", a successful fg-security keeps its
-        # attempt-1 result and outputs while run_attempt increments.
+      # Codex review of #925: after "Re-run failed jobs", a successful
+      # fg-security keeps its earlier attempt's result, outputs and artifact
+      # while run_attempt increments. Evidence is resolved to the producing
+      # attempt, cross-checked against the job's artifact-id output,
+      # downloaded by id only, then provenance- and hash-verified.
+      - name: Resolve fg-security evidence (fail closed)
+        id: security_evidence
+        if: ${{ needs.fg-security.result == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          OUTPUT_ID: ${{ needs.fg-security.outputs.security_artifact_id }}
+        run: |
+          set -euo pipefail
+          PROV=artifacts/verdict/provenance
+          mkdir -p "$PROV"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts[]' > "$PROV/run-artifacts.jsonl"
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '.jobs[]' > "$PROV/run-jobs.jsonl"
+          python3 tools/ci/testing_module_evidence.py resolve --kind security \
+            --run-id "$RUN_ID" --head-sha "$HEAD_SHA" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --artifact-id "$OUTPUT_ID" \
+            --artifacts-json "$PROV/run-artifacts.jsonl" --jobs-json "$PROV/run-jobs.jsonl" \
+            --out-json "$PROV/resolved.json" --github-output "$GITHUB_OUTPUT"
+
+      - name: Download fg-security artifacts by id
         if: ${{ needs.fg-security.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
-          artifact-ids: ${{ needs.fg-security.outputs.security_artifact_id }}
+          artifact-ids: ${{ steps.security_evidence.outputs.artifact_ids }}
           path: artifacts/verdict/fg-security
+
+      - name: Verify fg-security evidence provenance (fail closed)
+        if: ${{ needs.fg-security.result == 'success' }}
+        run: |
+          set -euo pipefail
+          python3 tools/ci/testing_module_evidence.py verify --kind security \
+            --dir artifacts/verdict/fg-security \
+            --resolved-json artifacts/verdict/provenance/resolved.json \
+            --run-id "${{ github.run_id }}" --sha "${{ github.sha }}"
 
       - name: Evaluate run verdict (fail closed)
         env:
