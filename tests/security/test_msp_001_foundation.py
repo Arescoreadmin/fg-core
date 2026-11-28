@@ -680,35 +680,24 @@ def test_18b_mutation_responses_never_reload_rows_after_commit(w):
 
 
 def test_18c_reload_observer_ignores_a_fresh_session_with_a_reused_id(w, monkeypatch):
-    """Regression for the post-merge CI failure on bfbb74ad7: each request
-    session is made to inherit the id() of a session that has just committed
-    and been freed. The old id()-based bookkeeping reports those in-transaction
-    reloads as post-commit; object identity does not."""
-    import api.deps as deps
+    """Regression for the post-merge CI failure on bfbb74ad7, made deterministic.
+
+    In CI a fresh request session sometimes received the id() of a session
+    that had committed and been freed. Rather than depend on the allocator,
+    this test shadows ``id`` in this module with a constant, so every session
+    collides with every committed one for any id()-based bookkeeping here. The
+    legacy rule then misreads the in-transaction reloads as post-commit; the
+    observer, which tracks real session objects, does not. If the observer
+    were reverted to id() bookkeeping it would see the collision and fail.
+    """
+    import sys
+
     from sqlalchemy import event
     from sqlalchemy.orm import Session, object_session
 
     from api.db_models_msp import MspServiceRelationship
 
-    real = deps.get_sessionmaker
-    inherited: list[bool] = []
-
-    def _get_sessionmaker():
-        sm = real()
-
-        def _factory(*a, **k):
-            ghost = sm()
-            ghost.commit()
-            ghost_id = id(ghost)
-            ghost.close()
-            del ghost
-            session = sm(*a, **k)
-            inherited.append(id(session) == ghost_id)
-            return session
-
-        return _factory
-
-    monkeypatch.setattr(deps, "get_sessionmaker", _get_sessionmaker)
+    monkeypatch.setattr(sys.modules[__name__], "id", lambda obj: 0, raising=False)
 
     committed_ids: set[int] = set()
     id_based: list[str] = []
@@ -725,15 +714,14 @@ def test_18c_reload_observer_ignores_a_fresh_session_with_a_reused_id(w, monkeyp
     event.listen(MspServiceRelationship, "refresh", _on_refresh, propagate=True)
     try:
         with _relationship_reload_observer() as seen:
-            _run_relationship_lifecycle(w)
+            rid = _run_relationship_lifecycle(w)
     finally:
         event.remove(MspServiceRelationship, "refresh", _on_refresh)
         event.remove(Session, "after_commit", _after_commit)
 
-    assert any(inherited), "id() reuse was not reproduced; test proves nothing"
-    assert id_based, "the id()-based check should misfire under id() reuse"
+    assert id_based.count(rid) >= 4, "the id()-based rule should misfire"
     assert seen["post_commit"] == []
-    assert len(seen["pre_commit"]) >= 4
+    assert seen["pre_commit"].count(rid) >= 4
 
 
 def _reload_relationship_after_commit(rid: str) -> None:
