@@ -82,11 +82,19 @@ Coverage:
   CCR-78  Non-existent control GET → 404
   CCR-79  Non-existent control PATCH → 404
   CCR-80  Verify non-existent control → 404
+  CCR-84  Freshness sweep threshold boundary (controlled clock)
+  CCR-85  Freshness sweep: recent control reads FRESH (controlled clock)
+  CCR-86  Freshness sweep leaves previously EXPIRED controls unchanged
+  CCR-87  Freshness sweep: DRAFT exemption holds past the threshold
+  CCR-88  Freshness sweep is tenant-scoped
+  CCR-89  Freshness sweep: UTC normalization of offset/Z/naive timestamps
+  CCR-90  Controlled clock does not escape test scope
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -101,10 +109,21 @@ _TENANT_B = "tenant-cr-b"
 
 _FUTURE_DUE = "2099-06-01T00:00:00+00:00"
 _PAST_DUE = "2020-06-01T00:00:00+00:00"
-# Verified 200 days ago with 90-day cycle = expired
-_OLD_VERIFIED = "2026-03-23T00:00:00+00:00"
-# Verified 10 days ago with 90-day cycle = fresh
-_RECENT_VERIFIED = "2026-08-30T00:00:00+00:00"
+
+# FG-CONTROL-REGISTRY-FRESHNESS-CLOCK-001: freshness-sweep tests run against a
+# controlled reference clock (see the ``frozen_clock`` fixture) instead of the
+# wall clock. Every verification timestamp below is derived from that same
+# reference, so the tests mean the same thing on any execution date. The
+# previous literal "recent" date (2026-08-30) silently became 90 days old on
+# 2026-11-28 and the sweep correctly expired it.
+_REFERENCE_NOW = datetime(2026, 9, 9, 12, 0, 0, tzinfo=UTC)
+# Canonical freshness period: _control_body() review_frequency_days, which is
+# also the engine/repository default (``review_frequency_days or 90``).
+_FRESHNESS_PERIOD = timedelta(days=90)
+# Verified 200 days before the reference clock with 90-day cycle = expired
+_OLD_VERIFIED = (_REFERENCE_NOW - timedelta(days=200)).isoformat()
+# Verified 10 days before the reference clock with 90-day cycle = fresh
+_RECENT_VERIFIED = (_REFERENCE_NOW - timedelta(days=10)).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +220,22 @@ def db_session(build_app):
     engine = get_engine()
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture()
+def frozen_clock(monkeypatch):
+    """Pin the control-registry engine clock to ``_REFERENCE_NOW``.
+
+    ``services.control_registry.engine._now`` is the single clock seam for the
+    freshness sweep (``fetch_verified_controls_for_freshness`` receives it as
+    ``now_iso``) and for the response ``freshness`` field. ``monkeypatch``
+    restores it at teardown, so the pinned clock never escapes the test.
+    """
+    from services.control_registry import engine as cr_engine
+
+    frozen = _REFERENCE_NOW.isoformat().replace("+00:00", "Z")
+    monkeypatch.setattr(cr_engine, "_now", lambda: frozen)
+    return _REFERENCE_NOW
 
 
 # ---------------------------------------------------------------------------
@@ -620,7 +655,7 @@ def test_ccr_29_audit_on_verify(client):
 # ---------------------------------------------------------------------------
 
 
-def test_ccr_30_freshness_sweep_expires_stale(client, db_session):
+def test_ccr_30_freshness_sweep_expires_stale(client, db_session, frozen_clock):
     from api.db_models_control_registry import ControlRegistry
 
     ctl_id = _json(client.post("/controls", json=_control_body()).json())["id"]
@@ -646,7 +681,7 @@ def test_ccr_30_freshness_sweep_expires_stale(client, db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_ccr_31_freshness_sweep_ignores_draft(client, db_session):
+def test_ccr_31_freshness_sweep_ignores_draft(client, db_session, frozen_clock):
     from api.db_models_control_registry import ControlRegistry
 
     ctl_id = _json(client.post("/controls", json=_control_body()).json())["id"]
@@ -669,7 +704,7 @@ def test_ccr_31_freshness_sweep_ignores_draft(client, db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_ccr_32_freshness_sweep_ignores_fresh(client, db_session):
+def test_ccr_32_freshness_sweep_ignores_fresh(client, db_session, frozen_clock):
     from api.db_models_control_registry import ControlRegistry
 
     ctl_id = _json(client.post("/controls", json=_control_body()).json())["id"]
@@ -1447,7 +1482,9 @@ def test_ccr_82_complete_overdue_review(client, db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_ccr_83_freshness_sweep_downgrades_highly_effective(client, db_session):
+def test_ccr_83_freshness_sweep_downgrades_highly_effective(
+    client, db_session, frozen_clock
+):
     from api.db_models_control_registry import ControlRegistry as ControlModel
 
     # Create with EFFECTIVE (highest allowed at creation), activate, then
@@ -1473,6 +1510,201 @@ def test_ccr_83_freshness_sweep_downgrades_highly_effective(client, db_session):
     updated = _json(client.get(f"/controls/{ctl_id}").json())
     assert updated["verification_status"] == "expired"
     assert updated["effectiveness_rating"] == "effective"
+
+
+# ---------------------------------------------------------------------------
+# CCR-84..CCR-89: Freshness sweep threshold under a controlled clock
+# (FG-CONTROL-REGISTRY-FRESHNESS-CLOCK-001)
+#
+# Canonical policy (services/control_registry/repository.py
+# fetch_verified_controls_for_freshness): an ACTIVE, VERIFIED control expires
+# when the whole elapsed days ``(now - last_verified_at).days`` reach
+# ``review_frequency_days or 90``. ``timedelta.days`` floors, so a control is
+# still verified one second before the 90-day instant and expired at exactly
+# that instant. Naive timestamps are treated as UTC; aware ones are compared
+# as instants.
+# ---------------------------------------------------------------------------
+
+_EXPIRY_EVENT = "control_verification_expired"
+_THRESHOLD = _REFERENCE_NOW - _FRESHNESS_PERIOD  # 2026-06-11T12:00:00+00:00
+_ONE_SECOND = timedelta(seconds=1)
+
+
+def _seed_verified_control(
+    client, last_verified_at: str, *, status: str = "active", verification="verified"
+) -> str:
+    from api.db_models_control_registry import ControlRegistry
+
+    ctl_id = _json(client.post("/controls", json=_control_body()).json())["id"]
+    if status != "draft":
+        r = client.patch(f"/controls/{ctl_id}", json={"control_status": status})
+        assert r.status_code == 200
+    with Session(get_engine()) as db:
+        ctrl = db.query(ControlRegistry).filter(ControlRegistry.id == ctl_id).first()
+        assert ctrl is not None
+        ctrl.verification_status = verification
+        ctrl.last_verified_at = last_verified_at
+        db.commit()
+    return ctl_id
+
+
+def _expiry_events(client, ctl_id: str) -> list[dict[str, Any]]:
+    items = _json(client.get(f"/controls/{ctl_id}/audit").json())["items"]
+    return [e for e in items if e["event_type"] == _EXPIRY_EVENT]
+
+
+@pytest.mark.parametrize(
+    ("verified_at", "expected_status"),
+    [
+        pytest.param(_REFERENCE_NOW - timedelta(days=10), "verified", id="recent"),
+        pytest.param(_THRESHOLD + _ONE_SECOND, "verified", id="one_second_before"),
+        pytest.param(_THRESHOLD, "expired", id="exactly_at_threshold"),
+        pytest.param(_THRESHOLD - _ONE_SECOND, "expired", id="one_second_after"),
+        pytest.param(_THRESHOLD - timedelta(days=1), "expired", id="one_day_after"),
+    ],
+)
+def test_ccr_84_freshness_sweep_threshold_boundary(
+    client, db_session, frozen_clock, verified_at, expected_status
+):
+    ctl_id = _seed_verified_control(client, verified_at.isoformat())
+
+    r = client.post("/controls/maintenance/freshness")
+    assert r.status_code == 200
+    expect_expired = expected_status == "expired"
+    assert _json(r.json())["expired"] == (1 if expect_expired else 0)
+
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["verification_status"] == expected_status
+    assert updated["last_verified_at"] == verified_at.isoformat()
+
+    events = _expiry_events(client, ctl_id)
+    if expect_expired:
+        assert len(events) == 1
+        evt = events[0]
+        assert evt["old_state"]["verification_status"] == "verified"
+        assert evt["new_state"]["verification_status"] == "expired"
+        assert evt["event_at"] == frozen_clock.isoformat().replace("+00:00", "Z")
+    else:
+        assert events == []
+
+
+def test_ccr_85_freshness_sweep_recent_control_reads_fresh(
+    client, db_session, frozen_clock
+):
+    # Proves the controlled clock reaches the response path too: 10 days of a
+    # 90-day cycle is < 50% → FRESH, independent of the execution date.
+    ctl_id = _seed_verified_control(client, _RECENT_VERIFIED)
+    client.post("/controls/maintenance/freshness")
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["verification_status"] == "verified"
+    assert updated["freshness"] == "fresh"
+
+
+def test_ccr_86_freshness_sweep_leaves_previously_expired_unchanged(
+    client, db_session, frozen_clock
+):
+    ctl_id = _seed_verified_control(client, _OLD_VERIFIED, verification="expired")
+
+    r = client.post("/controls/maintenance/freshness")
+    assert _json(r.json())["expired"] == 0
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["verification_status"] == "expired"
+    assert _expiry_events(client, ctl_id) == []
+
+
+def test_ccr_87_freshness_sweep_draft_exempt_at_threshold(
+    client, db_session, frozen_clock
+):
+    ctl_id = _seed_verified_control(
+        client, (_THRESHOLD - _ONE_SECOND).isoformat(), status="draft"
+    )
+
+    r = client.post("/controls/maintenance/freshness")
+    assert _json(r.json())["expired"] == 0
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["control_status"] == "draft"
+    assert updated["verification_status"] == "verified"
+    assert _expiry_events(client, ctl_id) == []
+
+
+def test_ccr_88_freshness_sweep_is_tenant_scoped(
+    client, client_b, db_session, frozen_clock
+):
+    ctl_id = _seed_verified_control(client, (_THRESHOLD - _ONE_SECOND).isoformat())
+
+    r_b = client_b.post("/controls/maintenance/freshness")
+    assert r_b.status_code == 200
+    assert _json(r_b.json())["expired"] == 0
+    assert (
+        _json(client.get(f"/controls/{ctl_id}").json())["verification_status"]
+        == "verified"
+    )
+    assert _expiry_events(client, ctl_id) == []
+
+    r_a = client.post("/controls/maintenance/freshness")
+    assert _json(r_a.json())["expired"] == 1
+    assert (
+        _json(client.get(f"/controls/{ctl_id}").json())["verification_status"]
+        == "expired"
+    )
+
+
+_IST = timezone(timedelta(hours=5, minutes=30))
+_PST = timezone(timedelta(hours=-8))
+
+
+@pytest.mark.parametrize(
+    ("last_verified_at", "expected_status"),
+    [
+        # The threshold instant written with a non-UTC offset is still the
+        # threshold instant (a naive reading would be 5h30m "younger").
+        pytest.param(
+            _THRESHOLD.astimezone(_IST).isoformat(), "expired", id="threshold_ist"
+        ),
+        # One second before the threshold, written at UTC-8 (a naive reading
+        # would be 8h "older" and wrongly expire).
+        pytest.param(
+            (_THRESHOLD + _ONE_SECOND).astimezone(_PST).isoformat(),
+            "verified",
+            id="before_threshold_pst",
+        ),
+        pytest.param(
+            _THRESHOLD.isoformat().replace("+00:00", "Z"),
+            "expired",
+            id="threshold_z_suffix",
+        ),
+        # Naive timestamps are normalized as UTC.
+        pytest.param(
+            (_THRESHOLD + _ONE_SECOND).replace(tzinfo=None).isoformat(),
+            "verified",
+            id="before_threshold_naive_utc",
+        ),
+        pytest.param(
+            _THRESHOLD.replace(tzinfo=None).isoformat(),
+            "expired",
+            id="threshold_naive_utc",
+        ),
+    ],
+)
+def test_ccr_89_freshness_sweep_utc_normalization(
+    client, db_session, frozen_clock, last_verified_at, expected_status
+):
+    ctl_id = _seed_verified_control(client, last_verified_at)
+    client.post("/controls/maintenance/freshness")
+    updated = _json(client.get(f"/controls/{ctl_id}").json())
+    assert updated["verification_status"] == expected_status
+
+
+def test_ccr_90_frozen_clock_does_not_escape_test_scope():
+    # Runs after the frozen-clock tests in this module: the engine clock must
+    # be the real UTC wall clock again once ``frozen_clock`` has torn down.
+    from services.control_registry import engine as cr_engine
+
+    observed = datetime.fromisoformat(cr_engine._now())
+    assert observed.tzinfo is not None
+    assert observed.utcoffset() == timedelta(0)
+    assert observed != _REFERENCE_NOW
+    assert abs(datetime.now(UTC) - observed) < timedelta(minutes=5)
 
 
 def test_framework_authority_and_enterprise_controls_routes_coexist() -> None:
